@@ -1248,6 +1248,9 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
     out.push_str("declare void @nts_objc_register_class(ptr, ptr, ptr, i32)\n");
+    if classes.iter().any(|class| !class.protocols.is_empty()) {
+        out.push_str("declare void @nts_objc_adopt(ptr, ptr)\n");
+    }
     let text = |out: &mut String, name: &str, value: &str| {
         let _ = writeln!(out, "@{name} = private unnamed_addr constant [{} x i8] c\"{value}\\00\"", value.len() + 1);
     };
@@ -1323,6 +1326,10 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
             "  call void @nts_objc_register_class(ptr @{table}.name, ptr @{table}.super, ptr @{table}, i32 {})",
             class.methods.len()
         ));
+        for (at, protocol) in class.protocols.iter().enumerate() {
+            text(&mut out, &format!("{table}.protocol{at}"), protocol);
+            registrations.push(format!("  call void @nts_objc_adopt(ptr @{table}.name, ptr @{table}.protocol{at})"));
+        }
     }
     let _ = writeln!(out, "define internal void @nts_objc_register_classes() {{\n{}\n  ret void\n}}", registrations.join("\n"));
     out.push_str("@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @nts_objc_register_classes, ptr null }]\n");

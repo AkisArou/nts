@@ -2,8 +2,19 @@
 // inherited init, and a class method Swift imports as an init), methods,
 // properties read and written, a class property, and `instanceof`. Checked
 // against the same program in Objective-C (`reference/classes.m`).
-import { FileManager, NSMutableArray, NSNumber, NSObject, NSOperation, NSProcessInfo, NSString } from "objc:Foundation";
+import {
+  FileManager,
+  NSMutableArray,
+  NSNumber,
+  NSObject,
+  NSOperation,
+  NSProcessInfo,
+  NSString,
+  XMLParser,
+  type NSXMLParserDelegate,
+} from "objc:Foundation";
 import { report, weak_alive, weak_watch } from "c:support";
+import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
 import type { c_int } from "c:types";
 
 let watch = 0 as c_int;
@@ -42,6 +53,35 @@ function arrays(): void {
   objects[0] = new NSObject();
   report(`replaced ${weak_alive(replaced) ? "alive" : "gone"}`);
   held = weak_watch(objects[0]);
+}
+
+let elements = "";
+
+// Swift's `class Elements: NSObject, XMLParserDelegate`: the parser sends the
+// protocol's five-argument selector, which only the protocol can name.
+class Elements extends NSObject implements NSXMLParserDelegate {
+  parserDidStartElement(parser: NSObject, elementName: NSString, namespaceURI: NSString | null, qualifiedName: NSString | null, attributes: NSObject): void {
+    elements += (elements === "" ? "" : ",") + elementName.appending("");
+  }
+}
+
+// What `implements` told the runtime: the class conforms, as `class_addProtocol`
+// makes it, and `conformsToProtocol:` answers.
+function adopted(name: string, protocolName: string): string {
+  const cls = objc_getClass(name);
+  const protocol = objc_getProtocol(protocolName);
+  return cls !== null && protocol !== null && class_conformsToProtocol(cls, protocol) ? "adopted" : "not adopted";
+}
+
+function parsed(): string {
+  const data = new NSString("<a><b/><c><d/></c></a>").data({ using: 4 });
+  if (data === null) {
+    return "no data";
+  }
+  const parser = new XMLParser({ data });
+  const delegate = new Elements();
+  parser.delegate = delegate;
+  return `${parser.parse()} ${elements} ${adopted("Elements", "NSXMLParserDelegate")}`;
 }
 
 function optional(operation: NSOperation | null): string {
@@ -94,6 +134,8 @@ function main(): void {
   } catch (error) {
     report(`thrown ${(error as Error).message}`);
   }
+
+  report(`parsed ${parsed()}`);
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.

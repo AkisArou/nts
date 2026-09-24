@@ -79,8 +79,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 20 ] ||
-  { echo "macos-classes: the oracle printed $(wc -l <"$out/expected.txt") lines, not 20" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 21 ] ||
+  { echo "macos-classes: the oracle printed $(wc -l <"$out/expected.txt") lines, not 21" >&2; exit 1; }
 
 run_quietly "$out/classes/macos-13-x86_64/classes" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"

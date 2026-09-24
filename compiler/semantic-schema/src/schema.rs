@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 26;
+pub const SCHEMA_VERSION: u32 = 27;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -751,6 +751,11 @@ pub struct NativeAttributes {
     /// makes the function a class method.
     #[serde(default)]
     pub class: Option<String>,
+    /// `@ntsProtocol NSXMLParserDelegate`, on an interface an `objc:` module
+    /// declares: the Objective-C protocol it is, by the runtime's name, where
+    /// TypeScript may say `XMLParserDelegate` as Swift does.
+    #[serde(default)]
+    pub protocol: Option<String>,
     /// `@ntsFramework Foundation AppKit`: the frameworks a binding **module**
     /// needs at link time. A module tag, like `@ntsHeader`. There is no header
     /// here, because an Objective-C header cannot be included from C.

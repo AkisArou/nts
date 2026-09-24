@@ -5740,7 +5740,20 @@ fn register_objc_class(
     ) else {
         return;
     };
-    lowered.program.objc_classes.push(super::ObjcClass { name, superclass, methods });
+    // By the runtime's name: the one `@ntsProtocol` gives, else the
+    // interface's own.
+    let protocols = probe
+        .objc_protocols(class)
+        .into_iter()
+        .filter_map(|protocol| {
+            probe.node(protocol).native.as_ref().and_then(|native| native.protocol.clone()).or_else(|| {
+                probe.children(protocol).into_iter().find_map(|child| {
+                    (probe.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| probe.node(child).text.clone()).flatten()
+                })
+            })
+        })
+        .collect();
+    lowered.program.objc_classes.push(super::ObjcClass { name, superclass, methods, protocols });
 }
 
 fn lower_class(
@@ -13345,15 +13358,40 @@ impl<'a> FuncBuilder<'a> {
         let imp = super::native::imp_signature(self.snapshot, receiver, &signature)
             .map_err(|why| self.unsupported(member, &format!("an Objective-C method's {why}")))?;
         let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
+        // The selector: the one `@ntsSelector` gives the method, else the one
+        // a protocol the class adopts declares for a member of its name, else
+        // Swift's `@objc` rule for its name.
         let selector = self
             .node(member)
             .native
             .as_ref()
             .and_then(|native| native.selector.clone())
+            .or_else(|| self.protocol_selector(class, &name))
             .unwrap_or_else(|| objc_selector(&name, signature.parameters.len()));
         let func = self.lower_method_of(class, member, instance)?;
         let method = super::ObjcMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
         Ok((func, method))
+    }
+
+    /// The Objective-C protocols a class the program writes adopts: each
+    /// interface its heritage names that an `objc:` module declares, by the
+    /// name the runtime knows it by, which is the interface's.
+    fn objc_protocols(&self, class: NodeId) -> Vec<NodeId> {
+        super::native::implemented(self.snapshot, class)
+            .into_iter()
+            .filter(|interface| self.in_objc_module(*interface))
+            .collect()
+    }
+
+    /// The selector a protocol the class adopts declares for member `name`.
+    fn protocol_selector(&self, class: NodeId, name: &str) -> Option<String> {
+        self.objc_protocols(class).into_iter().find_map(|protocol| {
+            self.children(protocol).into_iter().find_map(|member| {
+                (self.kind_of(member) == Some(syntax::METHOD_SIGNATURE) && self.member_name(member).as_deref() == Some(name))
+                    .then(|| self.node(member).native.as_ref().and_then(|native| native.selector.clone()))
+                    .flatten()
+            })
+        })
     }
 
     fn lower_method_of(
@@ -41255,12 +41293,17 @@ impl<'a> FuncBuilder<'a> {
                     let key = self.node(name).text.clone().ok_or_else(|| self.unsupported(name, "a label whose name is computed"))?;
                     (key, self.lower_expression(initializer)?)
                 }
+                // `{ data }`: the value the name holds, found as an object
+                // literal's shorthand finds it -- the name's own symbol is the
+                // *property*'s, not the value's.
                 Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
-                    let key = self.node(property).text.clone().or_else(|| {
-                        self.syntax_children_of(property).first().and_then(|name| self.node(*name).text.clone())
-                    });
-                    let key = key.ok_or_else(|| self.unsupported(property, "a label whose name is computed"))?;
-                    (key, self.lower_identifier(property)?)
+                    let parts = self.syntax_children_of(property);
+                    let [name] = parts[..] else {
+                        return Err(self.unsupported(property, "a shorthand label of unexpected shape"));
+                    };
+                    let key = self.node(name).text.clone().ok_or_else(|| self.unsupported(name, "a label whose name is computed"))?;
+                    let symbol = self.shorthand_value_symbol(name, &key)?;
+                    (key, self.lower_named_value(name, symbol)?)
                 }
                 _ => return Err(self.unsupported(property, "a spread, a method or an accessor among labels")),
             };

@@ -4,6 +4,18 @@
 #include <stdio.h>
 
 static __weak id watched;
+
+/* Swift's `class Elements: NSObject, XMLParserDelegate`. */
+@interface Elements : NSObject <NSXMLParserDelegate>
+@property NSMutableString *names;
+@end
+@implementation Elements
+- (void)parser:(NSXMLParser *)parser didStartElement:(NSString *)name namespaceURI:(NSString *)uri qualifiedName:(NSString *)qname attributes:(NSDictionary *)attributes {
+  if (!self.names) self.names = [NSMutableString string];
+  if (self.names.length) [self.names appendString:@","];
+  [self.names appendString:name];
+}
+@end
 static __weak id replaced;
 static __weak id held;
 
@@ -65,6 +77,12 @@ int main(void) {
     } else {
       printf("thrown %s\n", error.localizedDescription.UTF8String);
     }
+    NSXMLParser *parser = [[NSXMLParser alloc] initWithData:[@"<a><b/><c><d/></c></a>" dataUsingEncoding:NSUTF8StringEncoding]];
+    Elements *elements = [[Elements alloc] init];
+    parser.delegate = elements;
+    BOOL ok = [parser parse];
+    printf("parsed %s %s %s\n", ok ? "true" : "false", elements.names.UTF8String,
+           class_conformsToProtocol([Elements class], @protocol(NSXMLParserDelegate)) ? "adopted" : "not adopted");
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.
     [operation cancel];

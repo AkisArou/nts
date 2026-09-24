@@ -158,6 +158,9 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 class.methods.len()
             ),
         );
+        for protocol in &class.protocols {
+            writer.line(origin, format!("    nts_objc_adopt(\"{}\", \"{protocol}\");", class.name));
+        }
     }
     writer.line(origin, "}");
     Ok(())

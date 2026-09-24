@@ -30,6 +30,8 @@ declare module "objc:Foundation" {
     components(labels: { separatedBy: string }): string[];
     /** @ntsSelector pathWithComponents: */
     static path(labels: { withComponents: string[] }): string;
+    /** @ntsSelector dataUsingEncoding: */
+    data(labels: { using: UInt }): NSData | null;
   }
 
   /** @ntsClass NSNumber */
@@ -89,6 +91,29 @@ declare module "objc:Foundation" {
      * @ntsThrows error nts_nserror_message
      */
     contentsOfDirectory(labels: { atPath: string }): string[];
+  }
+
+  /** @ntsClass NSData */
+  export class NSData extends NSObject {
+    readonly length: UInt;
+  }
+
+  /**
+   * Swift's `XMLParserDelegate`: a protocol, which a class the program writes
+   * adopts with `implements`, each method at the selector declared here.
+   */
+  export interface NSXMLParserDelegate {
+    /** @ntsSelector parser:didStartElement:namespaceURI:qualifiedName:attributes: */
+    parserDidStartElement?(parser: NSObject, elementName: NSString, namespaceURI: NSString | null, qualifiedName: NSString | null, attributes: NSObject): void;
+  }
+
+  /** @ntsClass NSXMLParser */
+  export class XMLParser extends NSObject {
+    /** @ntsSelector initWithData: */
+    constructor(labels: { data: NSData });
+    delegate: NSObject | null;
+    /** @ntsSelector parse */
+    parse(): boolean;
   }
 
   /** @ntsClass NSProcessInfo */

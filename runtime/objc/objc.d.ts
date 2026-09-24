@@ -92,11 +92,15 @@ declare module "objc:runtime" {
   export type Selector = Opaque<"objc_selector">;
   /** A method implementation: `IMP`. */
   export type Implementation = Opaque<"objc_imp">;
+  /** A protocol: `Protocol *`. Not counted; a protocol lives as long as the process. */
+  export type ProtocolObject = Opaque<"objc_protocol">;
 
   export function objc_getClass(name: string): ClassObject | null;
   export function objc_allocateClassPair(superclass: ClassObject, name: string, extraBytes: c_size_t): ClassObject | null;
   export function objc_registerClassPair(cls: ClassObject): void;
   export function sel_registerName(name: string): Selector;
+  export function objc_getProtocol(name: string): ProtocolObject | null;
+  export function class_conformsToProtocol(cls: ClassObject, protocol: ProtocolObject): boolean;
   /** `types` is the method's type encoding: `v@:@` for `- (void)name:(id)sender`. */
   export function class_addMethod(cls: ClassObject, name: Selector, implementation: Implementation, types: string): boolean;
 }

@@ -65,6 +65,9 @@ pub(crate) struct Request {
     /// The classes to bind. Their ancestors are bound too, since a method a
     /// class inherits is one a program calls on it.
     pub(crate) classes: Vec<String>,
+    /// The protocols to declare, each an interface a class the program writes
+    /// can adopt: `NSWindowDelegate`.
+    pub(crate) protocols: Vec<String>,
     /// The macOS SDK.
     pub(crate) sdk: String,
     /// The clang target, `x86_64-apple-macos13`, whose version is the
@@ -92,7 +95,8 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     let unit = translation_unit(request)?;
     let headers = dump(request, &unit, &Wanted::Headers)?;
     let bound = closure(&request.classes, &headers.supers)?;
-    let bodies = dump(request, &unit, &Wanted::Bodies(&bound))?;
+    let protocols: BTreeSet<String> = request.protocols.iter().cloned().collect();
+    let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols))?;
     let symbols = match &request.symbols {
         Some(directory) => directory.clone(),
         None => default_symbols(&request.sdk)?,
@@ -187,8 +191,9 @@ fn closure(classes: &[String], supers: &BTreeMap<String, Option<String>>) -> Res
 enum Wanted<'a> {
     /// Headers only: supers, enum widths, and struct definitions.
     Headers,
-    /// The bodies of these classes, and of the categories on them.
-    Bodies(&'a BTreeSet<String>),
+    /// The bodies of these classes, and of the categories on them, and of
+    /// these protocols.
+    Bodies(&'a BTreeSet<String>, &'a BTreeSet<String>),
 }
 
 /// What one pass read.
@@ -206,6 +211,8 @@ struct Dumped {
     bodies: BTreeMap<String, Vec<Value>>,
     /// The `NSObject` protocol's methods, which `NSObject` adopts.
     root_protocol: Vec<Value>,
+    /// The requested protocols' methods, by protocol.
+    protocols: BTreeMap<String, Vec<Value>>,
 }
 
 fn dump(request: &Request, unit: &tempfile_path::TempFile, wanted: &Wanted<'_>) -> Result<Dumped> {
@@ -324,13 +331,15 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                 "inner" => {
                     let keep = match self.wanted {
                         Wanted::Headers => (kind == "RecordDecl" && complete) || kind == "EnumDecl",
-                        Wanted::Bodies(bound) => match kind.as_str() {
+                        Wanted::Bodies(bound, protocols) => match kind.as_str() {
                             "ObjCInterfaceDecl" => name.as_ref().is_some_and(|n| bound.contains(n)),
                             // A category on NSObject is every framework's
                             // extension of every object, hundreds of methods;
                             // the root is bound as the runtime declares it.
                             "ObjCCategoryDecl" => interface.as_ref().is_some_and(|n| bound.contains(n) && n != "NSObject"),
-                            "ObjCProtocolDecl" => name.as_deref() == Some("NSObject") && bound.contains("NSObject"),
+                            "ObjCProtocolDecl" => name.as_ref().is_some_and(|n| {
+                                (n == "NSObject" && bound.contains("NSObject")) || protocols.contains(n)
+                            }),
                             _ => false,
                         },
                     };
@@ -362,9 +371,14 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                     out.bodies.entry(class).or_default().extend(members);
                 }
             }
-            ("ObjCProtocolDecl", Some(_)) => {
+            ("ObjCProtocolDecl", Some(name)) => {
                 if let Some(Value::Array(members)) = body {
-                    out.root_protocol.extend(members);
+                    if name == "NSObject" {
+                        out.root_protocol.extend(members.iter().cloned());
+                    }
+                    if matches!(self.wanted, Wanted::Bodies(_, protocols) if protocols.contains(&name)) {
+                        out.protocols.entry(name).or_default().extend(members);
+                    }
                 }
             }
             ("EnumDecl", Some(name)) => {
@@ -474,18 +488,31 @@ struct Version {
 #[derive(serde::Deserialize)]
 struct Graph {
     symbols: Vec<Symbol>,
+    #[serde(default)]
+    relationships: Vec<Relationship>,
+}
+
+/// One relationship of a symbol graph: `optionalRequirementOf` says a
+/// protocol's member is `@optional`, which clang's dump does not.
+#[derive(serde::Deserialize)]
+struct Relationship {
+    kind: String,
+    source: String,
 }
 
 /// Swift's names, by the clang USR of the declaration each names -- read from
 /// `tooling/apple/symbolgraph.sh`'s files, so every name is the importer's own.
 pub(crate) struct Swift {
     by_usr: BTreeMap<String, Symbol>,
+    /// The protocol members Swift marks optional, by USR.
+    optional: BTreeSet<String>,
 }
 
 impl Swift {
     /// The graphs of `modules` and of `ObjectiveC`, which declares `NSObject`.
     pub(crate) fn read(directory: &std::path::Path, modules: &[String]) -> Result<Self> {
         let mut by_usr = BTreeMap::new();
+        let mut optional = BTreeSet::new();
         let mut modules: Vec<&str> = modules.iter().map(String::as_str).collect();
         modules.push("ObjectiveC");
         for module in modules {
@@ -498,8 +525,9 @@ impl Swift {
             by_usr.extend(
                 graph.symbols.into_iter().filter(|s| s.identifier.identifier.starts_with("c:")).map(|s| (s.identifier.identifier.clone(), s)),
             );
+            optional.extend(graph.relationships.into_iter().filter(|r| r.kind == "optionalRequirementOf").map(|r| r.source));
         }
-        Ok(Self { by_usr })
+        Ok(Self { by_usr, optional })
     }
 
     fn get(&self, usr: &str) -> Option<&Symbol> {
@@ -521,6 +549,26 @@ struct Class {
     skipped: Vec<String>,
     /// Every message a bound member sends, for the witness.
     sent: Vec<Sent>,
+}
+
+/// One requested protocol, as the interface a TypeScript class implements:
+/// its methods are the ones the class writes and Objective-C sends.
+struct Protocol {
+    objc: String,
+    swift: String,
+    members: Vec<String>,
+    skipped: Vec<String>,
+}
+
+/// One method a protocol requires or offers, before it is named.
+struct Requirement {
+    selector: String,
+    base: String,
+    labels: Vec<String>,
+    optional: bool,
+    /// The parameter list and result, as the TypeScript method is written.
+    parameters: String,
+    result: String,
 }
 
 /// One message the binding sends, as the witness checks it against the
@@ -563,6 +611,7 @@ struct Model<'a> {
     /// deprecated by it, is not bound.
     target: Version,
     classes: Vec<Class>,
+    protocols: Vec<Protocol>,
     /// Classes a signature names that are not bound, by Objective-C name,
     /// with their nearest bound ancestor's.
     mentioned: BTreeMap<String, Option<String>>,
@@ -600,6 +649,7 @@ impl<'a> Model<'a> {
             bound,
             target,
             classes: Vec::new(),
+            protocols: Vec::new(),
             mentioned: BTreeMap::new(),
             records: BTreeSet::new(),
             enums: BTreeMap::new(),
@@ -643,7 +693,92 @@ impl<'a> Model<'a> {
             read.insert(class, reading);
             model.classes.push(bound);
         }
+        for (name, decls) in &bodies.protocols {
+            let protocol = model.protocol(name, decls);
+            model.protocols.push(protocol);
+        }
         model
+    }
+
+    /// A protocol as Swift imports it: an interface of the methods a class
+    /// adopting it implements, each tagged with the selector it answers and
+    /// marked `?` where Swift marks it `optional`. Delegate protocols name
+    /// most methods alike -- `parser(_:didStartElement:...)`,
+    /// `parser(_:foundCharacters:)` -- and TypeScript one member per name, so
+    /// a shared base name takes its first label: `parserDidStartElement`.
+    fn protocol(&mut self, objc: &str, decls: &[Value]) -> Protocol {
+        let container = format!("c:objc(pl){objc}");
+        let swift = self.swift.get(&container).map_or_else(|| objc.to_owned(), |s| s.names.title.clone());
+        let adopter = Class { objc: objc.to_owned(), swift: swift.clone(), parent: None, members: Vec::new(), skipped: Vec::new(), sent: Vec::new() };
+        let mut requirements = Vec::new();
+        let mut skipped = Vec::new();
+        for decl in decls.iter().filter(|d| d.get("isImplicit").and_then(Value::as_bool) != Some(true)) {
+            let Some(name) = named(decl) else { continue };
+            match decl.get("kind").and_then(Value::as_str) {
+                Some("ObjCMethodDecl") if decl.get("instance").and_then(Value::as_bool) == Some(false) => {
+                    skipped.push(format!("+{name}: a class-side requirement, which a TypeScript class cannot write"));
+                }
+                Some("ObjCMethodDecl") => {
+                    let usr = format!("{container}(im){name}");
+                    let Some(symbol) = self.swift.get(&usr).cloned() else { continue };
+                    match self.available(&symbol).and_then(|()| self.requirement(&adopter, decl, &symbol, self.swift.optional.contains(&usr))) {
+                        Ok(requirement) => requirements.push(requirement),
+                        Err(why) => skipped.push(format!("-{name}: {why}")),
+                    }
+                }
+                Some("ObjCPropertyDecl") => skipped.push(format!("@property {name}: a property requirement, which a class implements as accessors")),
+                _ => {}
+            }
+        }
+        let mut bases: BTreeMap<&str, usize> = BTreeMap::new();
+        for requirement in &requirements {
+            *bases.entry(requirement.base.as_str()).or_default() += 1;
+        }
+        // Swift's own names are reserved before any is derived, so a derived
+        // `applicationDidUpdate` (`application(_:didUpdate:)`) never takes
+        // the name of the method Swift calls that.
+        let unique = |requirement: &Requirement| bases.get(requirement.base.as_str()) == Some(&1);
+        let mut taken: BTreeSet<String> = requirements.iter().filter(|r| unique(r)).map(|r| r.base.clone()).collect();
+        let mut members = Vec::new();
+        for requirement in &requirements {
+            let name = if unique(requirement) {
+                requirement.base.clone()
+            } else {
+                let first = requirement.labels.iter().find(|l| *l != "_").map(|l| format!("{}{}", requirement.base, capitalized(l)));
+                first.filter(|name| !taken.contains(name)).unwrap_or_else(|| selector_name(&requirement.selector))
+            };
+            if !unique(requirement) && !taken.insert(name.clone()) {
+                skipped.push(format!("-{}: named `{name}` as another requirement is", requirement.selector));
+                continue;
+            }
+            members.push(format!(
+                "    /** @ntsSelector {} */\n    {}{}({}): {};",
+                requirement.selector,
+                quoted(&name),
+                if requirement.optional { "?" } else { "" },
+                requirement.parameters,
+                requirement.result
+            ));
+        }
+        Protocol { objc: objc.to_owned(), swift, members, skipped }
+    }
+
+    /// A protocol method as the adopting class writes it: every argument
+    /// positional, as Objective-C hands it over -- an object as itself, a
+    /// string as the `NSString` it is.
+    fn requirement(&mut self, adopter: &Class, decl: &Value, symbol: &Symbol, optional: bool) -> std::result::Result<Requirement, String> {
+        if decl.get("variadic").and_then(Value::as_bool) == Some(true) {
+            return Err("variadic".to_owned());
+        }
+        let (base, labels) = swift_name(&symbol.names.title);
+        let mut parameters = Vec::new();
+        for (at, parameter) in parameters_of(decl).into_iter().enumerate() {
+            let spelled = self.spell(adopter, parameter.get("type").ok_or("a parameter with no type")?, Position::Block)?;
+            let name = named(parameter).filter(|n| !n.is_empty() && !reserved(n)).unwrap_or_else(|| format!("arg{at}"));
+            parameters.push(format!("{name}: {spelled}"));
+        }
+        let result = self.spell(adopter, decl.get("returnType").ok_or("no return type")?, Position::Block)?;
+        Ok(Requirement { selector: named(decl).unwrap_or_default(), base, labels, optional, parameters: parameters.join(", "), result })
     }
 
     fn import(&mut self, module: &'static str, name: &'static str) {
@@ -755,11 +890,7 @@ impl<'a> Model<'a> {
         if decl.get("variadic").and_then(Value::as_bool) == Some(true) {
             return Err("variadic".to_owned());
         }
-        let parameters: Vec<&Value> = decl
-            .get("inner")
-            .and_then(Value::as_array)
-            .map(|inner| inner.iter().filter(|p| p.get("kind").and_then(Value::as_str) == Some("ParmVarDecl")).collect())
-            .unwrap_or_default();
+        let parameters = parameters_of(decl);
         let result = decl.get("returnType").ok_or("no return type")?;
         let (base, labels) = swift_name(&symbol.names.title);
         let kind = symbol.kind.identifier.as_str();
@@ -918,7 +1049,9 @@ impl<'a> Model<'a> {
                 }
                 return self.array_element(pointee).map(|element| format!("{element}[]"));
             }
-            if matches!(base, "NSMutableArray" | "NSDictionary" | "NSMutableDictionary" | "NSSet" | "NSMutableSet" | "NSOrderedSet") {
+            if position != Position::Block
+                && matches!(base, "NSMutableArray" | "NSDictionary" | "NSMutableDictionary" | "NSSet" | "NSMutableSet" | "NSOrderedSet")
+            {
                 return Err(format!("a collection, `{base}`, which crosses as an object when it is bound"));
             }
             if self.headers.supers.contains_key(base) {
@@ -1065,6 +1198,22 @@ impl<'a> Model<'a> {
 
 /// The messages a bound declaration sends: a method's selector, or a
 /// property's getter and, unless it is read-only, its setter.
+/// A method declaration's parameters, in order.
+fn parameters_of(decl: &Value) -> Vec<&Value> {
+    decl.get("inner")
+        .and_then(Value::as_array)
+        .map(|inner| inner.iter().filter(|p| p.get("kind").and_then(Value::as_str) == Some("ParmVarDecl")).collect())
+        .unwrap_or_default()
+}
+
+/// A selector as one name, each piece after the first capitalized:
+/// `parser:didStartElement:` is `parserDidStartElement`.
+fn selector_name(selector: &str) -> String {
+    let mut pieces = selector.split(':').filter(|p| !p.is_empty());
+    let first = pieces.next().unwrap_or_default().to_owned();
+    pieces.fold(first, |name, piece| name + &capitalized(piece))
+}
+
 fn sent_by(decl: &Value) -> Vec<Sent> {
     let Some(name) = named(decl) else { return Vec::new() };
     match decl.get("kind").and_then(Value::as_str) {
@@ -1260,7 +1409,13 @@ fn render(request: &Request, model: &Model) -> String {
          // nts bind-objc --module {} {} {}",
         request.module,
         request.frameworks.iter().map(|f| format!("--framework {f}")).collect::<Vec<_>>().join(" "),
-        request.classes.iter().map(|c| format!("--class {c}")).collect::<Vec<_>>().join(" ")
+        request
+            .classes
+            .iter()
+            .map(|c| format!("--class {c}"))
+            .chain(request.protocols.iter().map(|p| format!("--protocol {p}")))
+            .collect::<Vec<_>>()
+            .join(" ")
     );
     let _ = writeln!(out, "/**");
     for framework in &request.frameworks {
@@ -1302,6 +1457,22 @@ fn render(request: &Request, model: &Model) -> String {
         if !class.skipped.is_empty() {
             let _ = writeln!(text, "    // Not bound, each for the reason given:");
             for line in &class.skipped {
+                let _ = writeln!(text, "    //   {line}");
+            }
+        }
+        let _ = writeln!(text, "  }}");
+        nest(&mut out, &path, &text);
+    }
+    for protocol in &model.protocols {
+        let path: Vec<String> = protocol.swift.split('.').map(str::to_owned).collect();
+        let mut text = String::new();
+        let _ = writeln!(text, "  /** @ntsProtocol {} */\n  export interface {} {{", protocol.objc, path.last().map_or("", String::as_str));
+        for line in &protocol.members {
+            let _ = writeln!(text, "{line}");
+        }
+        if !protocol.skipped.is_empty() {
+            let _ = writeln!(text, "    // Not bound, each for the reason given:");
+            for line in &protocol.skipped {
                 let _ = writeln!(text, "    //   {line}");
             }
         }
@@ -1416,6 +1587,15 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 @interface Circle : Shape
 @end
+@protocol ShapeDelegate
+- (void)shapeDidMove:(Shape *)shape;
+@optional
+- (void)shapeDidRename:(Shape *)shape;
+- (void)shape:(Shape *)shape didRenameTo:(NSString *)name;
+- (BOOL)shape:(Shape *)shape shouldHide:(BOOL)hide;
++ (void)classSide;
+@property int size;
+@end
 NS_ASSUME_NONNULL_END
 "#;
 
@@ -1454,8 +1634,19 @@ NS_ASSUME_NONNULL_END
             symbol("c:@E@Mode@ModeB", "swift.enum.case", "Shape.Mode.b", &["Shape", "Mode", "b"], ""),
             // Swift's own, which no message reaches.
             symbol("s:4Fake5ShapeC5swiftyyF", "swift.method", "swifty()", &["Shape", "swifty()"], ""),
+            // A protocol, renamed; `shape:didRenameTo:` renamed as
+            // `NS_SWIFT_NAME` renames, onto a name a sibling derives.
+            symbol("c:objc(pl)ShapeDelegate", "swift.protocol", "ShapeWatching", &["ShapeWatching"], ""),
+            symbol("c:objc(pl)ShapeDelegate(im)shapeDidMove:", "swift.method", "shapeDidMove(_:)", &["ShapeWatching", "shapeDidMove(_:)"], ""),
+            symbol("c:objc(pl)ShapeDelegate(im)shapeDidRename:", "swift.method", "shapeDidRename(_:)", &["ShapeWatching", "shapeDidRename(_:)"], ""),
+            symbol("c:objc(pl)ShapeDelegate(im)shape:didRenameTo:", "swift.method", "shape(_:didRename:)", &["ShapeWatching", "shape(_:didRename:)"], ""),
+            symbol("c:objc(pl)ShapeDelegate(im)shape:shouldHide:", "swift.method", "shape(_:shouldHide:)", &["ShapeWatching", "shape(_:shouldHide:)"], ""),
         ];
-        format!(r#"{{"symbols":[{}]}}"#, symbols.join(","))
+        let optional = ["shapeDidRename:", "shape:didRenameTo:", "shape:shouldHide:"].map(|selector| {
+            format!(r#"{{"kind":"optionalRequirementOf","source":"c:objc(pl)ShapeDelegate(im){selector}","target":"c:objc(pl)ShapeDelegate"}}"#)
+        });
+        let required = r#"{"kind":"requirementOf","source":"c:objc(pl)ShapeDelegate(im)shapeDidMove:","target":"c:objc(pl)ShapeDelegate"}"#;
+        format!(r#"{{"symbols":[{}],"relationships":[{},{required}]}}"#, symbols.join(","), optional.join(","))
     }
 
     /// Every rule the binding applies, on real clang output.
@@ -1473,6 +1664,7 @@ NS_ASSUME_NONNULL_END
             frameworks: vec!["Fake".to_owned()],
             module: "objc:Fake".to_owned(),
             classes: vec!["Circle".to_owned()],
+            protocols: vec!["ShapeDelegate".to_owned()],
             sdk: root.to_string_lossy().into_owned(),
             target: "x86_64-apple-macos13".to_owned(),
             symbols: Some(symbols),
@@ -1524,6 +1716,18 @@ NS_ASSUME_NONNULL_END
             "-old: deprecated in macOS 10.10",
             // Swift's `throws`: the `NSError **` left out, and `BOOL` nothing.
             "    /**\n     * @ntsSelector saveTo:error:\n     * @ntsThrows error nts_nserror_message\n     */\n    save(labels: { to: Shape }): void;",
+            // A protocol is an interface under Swift's name, its methods as
+            // the adopting class writes them: required, or `?` where Swift
+            // says `optional`, every argument positional and an object as
+            // itself. A shared base name takes its first label, and one that
+            // still collides with a name Swift gave is named by its selector.
+            "  /** @ntsProtocol ShapeDelegate */\n  export interface ShapeWatching {\n\
+             \x20   /** @ntsSelector shapeDidMove: */\n    shapeDidMove(shape: Shape): void;\n\
+             \x20   /** @ntsSelector shapeDidRename: */\n    shapeDidRename?(shape: Shape): void;\n\
+             \x20   /** @ntsSelector shape:didRenameTo: */\n    shapeDidRenameTo?(shape: Shape, name: NSString): void;\n\
+             \x20   /** @ntsSelector shape:shouldHide: */\n    shapeShouldHide?(shape: Shape, hide: boolean): boolean;\n",
+            "+classSide: a class-side requirement",
+            "@property size: a property requirement",
         ] {
             assert!(text.contains(expected), "no `{expected}` in:\n{text}");
         }

@@ -398,7 +398,9 @@ fn decode_nodes(
             //
             // And a class and its members, which is how a binding declares an
             // Objective-C class as TypeScript sees it: `@ntsClass NSTimer` on
-            // `class Timer`, and each member's `@ntsSelector`.
+            // `class Timer`, and each member's `@ntsSelector`. And an
+            // interface, an Objective-C protocol: `@ntsProtocol
+            // NSXMLParserDelegate` on `interface XMLParserDelegate`.
             native: if matches!(
                 kind,
                 NodeKind::Syntax(
@@ -407,6 +409,7 @@ fn decode_nodes(
                         | nts_semantic_schema::syntax::PROPERTY_SIGNATURE
                         | nts_semantic_schema::syntax::CONSTRUCT_SIGNATURE
                         | nts_semantic_schema::syntax::CLASS_DECLARATION
+                        | nts_semantic_schema::syntax::INTERFACE_DECLARATION
                         | nts_semantic_schema::syntax::METHOD_DECLARATION
                         | nts_semantic_schema::syntax::PROPERTY_DECLARATION
                         | nts_semantic_schema::syntax::CONSTRUCTOR
@@ -448,6 +451,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let construct = leading_tag(source, "@ntsConstruct");
     let selector = leading_tag(source, "@ntsSelector");
     let class = leading_tag(source, "@ntsClass");
+    let protocol = leading_tag(source, "@ntsProtocol");
     let frameworks = leading_tag(source, "@ntsFramework")
         .map(|names| names.split_whitespace().map(str::to_owned).collect());
     let libraries = leading_tag(source, "@ntsLibrary")
@@ -469,6 +473,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && construct.is_none()
         && selector.is_none()
         && class.is_none()
+        && protocol.is_none()
         && frameworks.is_none()
         && libraries.is_none()
         && vtable.is_none()
@@ -492,6 +497,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         construct,
         selector,
         class,
+        protocol,
         frameworks,
         libraries,
         vtable,

@@ -1721,6 +1721,11 @@ typedef struct NtsObjcMethod {
 } NtsObjcMethod;
 void nts_objc_register_class(const char *name, const char *superclass,
                              const NtsObjcMethod *methods, uint32_t count);
+/* That a registered class adopts `protocol` (`implements NSWindowDelegate`),
+ * so `conformsToProtocol:` answers for it. A protocol no loaded image
+ * mentions has no runtime object, and adopting it is skipped: nothing could
+ * ask for it either. */
+void nts_objc_adopt(const char *name, const char *protocol);
 void *nts_nsstring_of(const NtsString *string);
 NtsString *nts_string_of_nsstring(const void *string);
 void *nts_nsarray_of_objects(const NtsArray *array);

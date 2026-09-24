@@ -213,6 +213,27 @@ fn base_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<NodeId
         .find_map(|symbol| class_declaration(snapshot, symbol))
 }
 
+/// The interfaces a class declaration names in its heritage clauses: those an
+/// `implements` lists, and any an `extends` names that is not a class.
+pub(crate) fn implemented(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<NodeId> {
+    let node = |id: NodeId| snapshot.nodes.get(id.0 as usize);
+    let is = |id: NodeId, kind: u16| matches!(node(id).map(|n| &n.kind), Some(NodeKind::Syntax(k)) if *k == kind);
+    syntax_children(snapshot, declaration)
+        .into_iter()
+        .filter(|child| is(*child, syntax::HERITAGE_CLAUSE))
+        .flat_map(|clause| syntax_children(snapshot, clause))
+        .filter_map(|expression| syntax_children(snapshot, expression).first().copied())
+        .filter_map(|name| node(name)?.symbol)
+        .filter_map(|symbol| {
+            let mut record = snapshot.symbols.get(symbol.0 as usize)?;
+            while let Some(aliased) = record.aliased {
+                record = snapshot.symbols.get(aliased.0 as usize)?;
+            }
+            record.declarations.iter().copied().find(|declaration| is(*declaration, syntax::INTERFACE_DECLARATION))
+        })
+        .collect()
+}
+
 /// A node's children, with the lists between them seen through: a class's
 /// heritage clauses, and a clause's types, sit in list nodes of no syntax kind.
 fn syntax_children(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {

@@ -55,7 +55,7 @@ mkdir -p "$out"
 # NTS_REGENERATE=1 writes it instead.
 "$nts" bind-objc --sdk "$sdk" --module objc:AppKit --framework AppKit --framework Foundation \
   --class NSApplication --class NSWindow --class NSButton --class NSString --class NSTimer --class NSEvent \
-  --out "$out/appkit.d.ts" --witness "$out/witness.c" >/dev/null
+  --protocol NSWindowDelegate --out "$out/appkit.d.ts" --witness "$out/witness.c" >/dev/null
 if [ "${NTS_REGENERATE:-}" = 1 ]; then
   command cp -f "$out/appkit.d.ts" "$source/types/appkit.d.ts"
 fi

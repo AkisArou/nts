@@ -272,3 +272,11 @@ void nts_objc_register_class(const char *name, const char *superclass,
   }
   objc_registerClassPair(made);
 }
+
+void nts_objc_adopt(const char *name, const char *protocol) {
+  Protocol *adopted = objc_getProtocol(protocol);
+  Class made = objc_getClass(name);
+  if (adopted && made) {
+    class_addProtocol(made, adopted);
+  }
+}

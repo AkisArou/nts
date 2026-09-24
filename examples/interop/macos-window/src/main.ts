@@ -11,7 +11,18 @@
 // The control (`WINDOW_CONTROL=detached`) takes libuv's sources off the run
 // loop. The presses and the stop still happen, since Cocoa drives them, but no
 // timeout may fire before the application has stopped.
-import { NSApplication, NSButton, NSEvent, NSObject, NSWindow, Timer, type CGPoint, type CGRect } from "objc:AppKit";
+import {
+  NSApplication,
+  NSButton,
+  NSEvent,
+  NSObject,
+  NSWindow,
+  Timer,
+  type CGPoint,
+  type CGRect,
+  type NSNotification,
+  type NSWindowDelegate,
+} from "objc:AppKit";
 import { nested_while_readable, report, window_control } from "c:support";
 import { sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
@@ -34,10 +45,10 @@ function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: nu
   r.size.height = height;
 }
 
-// The button's target: an Objective-C class of the program's own, as Swift's
-// `class Controller: NSObject { @objc func pressed(_ sender: Any) }` is, whose
-// `pressed:` AppKit sends when the button is pressed.
-class Controller extends NSObject {
+// The button's target and the window's delegate: an Objective-C class of the
+// program's own, as Swift's `class Controller: NSObject, NSWindowDelegate` is.
+// AppKit sends it `pressed:` when the button is pressed.
+class Controller extends NSObject implements NSWindowDelegate {
   pressed(sender: NSObject): void {
     presses++;
     const press = presses;
@@ -49,9 +60,9 @@ class Controller extends NSObject {
     }
   }
 
-  // Swift's `windowWillClose(_:)`: the window's delegate, sent `windowWillClose:`
-  // when the timer closes it.
-  windowWillClose(notification: NSObject): void {
+  // `NSWindowDelegate`'s `windowWillClose(_:)`, sent `windowWillClose:` when the
+  // timer closes the window.
+  windowWillClose(notification: NSNotification): void {
     report("closing");
   }
 }

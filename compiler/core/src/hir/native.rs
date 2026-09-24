@@ -3183,7 +3183,7 @@ fn branded_members(
 
 pub(crate) mod schema;
 pub use schema::{is_layout, pointer, storage};
-pub(crate) use schema::{extends_objc, is_objc_class, objc_meta, objc_name, superclass};
+pub(crate) use schema::{extends_objc, implemented, is_objc_class, objc_meta, objc_name, superclass};
 
 /// Whether a declared parameter is TypeScript's `object`, or `object | null`.
 ///

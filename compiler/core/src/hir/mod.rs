@@ -2107,6 +2107,9 @@ pub struct ObjcClass {
     /// The runtime's name for the class it extends.
     pub superclass: String,
     pub methods: Vec<ObjcMethod>,
+    /// The protocols it adopts (`implements NSWindowDelegate`), by the name
+    /// the runtime knows each by, so `conformsToProtocol:` answers for them.
+    pub protocols: Vec<String>,
 }
 
 /// One method of an [`ObjcClass`]: the selector the runtime dispatches on,

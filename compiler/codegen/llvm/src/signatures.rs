@@ -257,6 +257,8 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_number_to_string", returns: "ptr", params: &["double"], attributes: &[] },
     Signature { name: "nts_number_to_string_into", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_number_to_string_radix", returns: "ptr", params: &["double", "double"], attributes: &[] },
+    Signature { name: "nts_objc_adopt", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_objc_register_class", returns: "void", params: &["ptr", "ptr", "ptr", "i32"], attributes: &[] },
     Signature { name: "nts_object_new", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_parse_float", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_parse_int", returns: "double", params: &["ptr", "double"], attributes: &[] },

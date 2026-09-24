@@ -382,8 +382,13 @@ correctness does not depend on arm64 running by luck.
        - Sets and maps of objects.
        - Dictionaries.
        - Each element *read* retains and releases around its use, where ARC
-         passes a +0 borrow. That costs a count per read and holds the
-         element to the end of the scope.
+         passes a +0 borrow. That costs a count per read, and holds the
+         element to the end of its *block*. Measured (2026-09-25): neither
+         `own.rs` nor the callee's retention decides it (`@ntsNoEscape`
+         changes nothing), but `rc.rs`'s placement. A value that dies
+         mid-block is released at the block's end, which in straight-line
+         code is the function's. Reported to MainClaude as an `rc.rs`
+         placement change.
    - **S5a, closures as Swift's, landed.** In a message, a plain function
      type is a block, as a Swift closure passed to one is. It is lent for the
      call and copied by a callee that keeps it. `Block<F>` is no longer needed
@@ -446,8 +451,42 @@ correctness does not depend on arm64 running by luck.
        protocols, whose declarations name the selector.
      - Refused by name until the second half: a field (the runtime's object
        has no room for one yet), a constructor, a static member, an accessor,
-       `super` calls, and protocols (`implements NSWindowDelegate`), which
-       will build on GTK's `__c_implements`.
+       and `super` calls.
+   - **S6, protocols landed (2026-09-25).** `class Elements extends NSObject
+     implements XMLParserDelegate` is Swift's `class Elements: NSObject,
+     XMLParserDelegate`.
+     - A method named in an implemented `objc:` interface answers the
+       selector the protocol declares (`@ntsSelector`). So
+       `parserDidStartElement` is `parser:didStartElement:namespaceURI:qualifiedName:attributes:`,
+       which no naming rule could give it.
+     - The class adopts the protocol at registration (`nts_objc_adopt`, which
+       calls `class_addProtocol`), under the Objective-C name that
+       `@ntsProtocol` gives the interface.
+     - `nts bind-objc --protocol NSWindowDelegate` writes the interface.
+       - Each method is required, or `?` where Swift's graph says
+         `optionalRequirementOf`.
+       - Every argument is positional. An object, a string included, crosses
+         as itself, as at a block.
+       - A method keeps its Swift base name when that name is unique in the
+         protocol. Delegate protocols share one (`parser(_:...)` twenty times
+         over), so the rest take the first label (`parserFoundCharacters`),
+         or the selector when that collides with a name Swift gave.
+     - `macos-classes` parses XML through a delegate and asserts the
+       conformance against the Objective-C oracle. The control, with
+       `class_addProtocol` stubbed out, fails on that line.
+     - `macos-window`'s controller now implements the generated
+       `NSWindowDelegate`.
+     - Not yet: property requirements and class-side requirements. Both are
+       listed as not bound, with the reason.
+     - **Not GTK's `__c_implements`.** The two answer different questions.
+       `@ntsProtocol` is an attribute naming a runtime protocol: which
+       selectors a method is sent under, and what `class_addProtocol` adopts.
+       `__c_implements` is a type-level marker: which interface handle a
+       GObject handle is assignable to. An Objective-C protocol needs no
+       assignability, because a parameter typed `id<P>` is spelled as the
+       object it is (`NSObject`), and TypeScript's structural check does the
+       rest. If one program ever wants both, they meet at the `implements`
+       clause and at nothing else.
    - **Every LLVM arm is `nts build`'s (2026-09-25).** Each macOS fixture's
      LLVM arm was `emit-llvm`, clang and a hand link against the C build's
      units. Now each fixture declares a second product for the LLVM backend
