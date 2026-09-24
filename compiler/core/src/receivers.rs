@@ -252,6 +252,9 @@ pub struct Site {
     /// Some class in the program has a same-named member for each of this
     /// interface's required members.
     pub satisfied: bool,
+    /// The interface's declared type carried no member list, so neither proxy
+    /// could look at it. Counted as *possibly* inhabited, never as not.
+    pub unexamined: bool,
     pub location: nts_diagnostics::Location,
 }
 
@@ -350,6 +353,51 @@ impl Census {
     #[must_use]
     pub fn through_satisfied(&self) -> u32 {
         self.fields_where(|site| site.shape == Shape::Interface && (site.satisfied || site.implemented))
+    }
+
+    /// Interface accesses a **sound** narrow rule could not spare.
+    ///
+    /// This is the figure the design decision actually needs, and it is not
+    /// either arm of the bracket. A narrow rule is safe exactly when its set of
+    /// possibly-inhabited interfaces is an **over**-approximation, and
+    /// [`Site::satisfied`] is one: it compares member *names*, so a class whose
+    /// names match and whose types do not is counted as able to inhabit — which
+    /// is conservative and therefore safe. What is *not* safe is an interface
+    /// neither proxy could look at, so [`Site::unexamined`] joins the set rather
+    /// than being read as "no class can inhabit it".
+    ///
+    /// Record 0294 rules out the *complete* satisfier set — "the classes that
+    /// work by accident are exactly the ones producing no layout evidence" — and
+    /// that ruling stands. A complete set is needed to decide which interfaces
+    /// are *safe to leave alone*; a sound over-approximation is needed to decide
+    /// which must be made indirect, and those are different questions. This
+    /// answers the second.
+    ///
+    /// The argument in full, because "sound" is a claim and not a hope. If a
+    /// class `C` is assignable to interface `I`, then `C` declares every
+    /// **required** member of `I` — assignability demands it — so `C`'s member
+    /// names cover `I`'s required names and `I` is in the set. The comparison is
+    /// on names alone, so it also admits classes that are *not* assignable, which
+    /// is the safe direction. `properties` is flattened by the checker, so an
+    /// inherited member counts for both sides, and a subclass has a superset of
+    /// its base's members and so cannot escape a set its base is in.
+    ///
+    /// **The bound of the claim: classes this program declares.** `class_members`
+    /// enumerates `CLASS_DECLARATION` and `CLASS_EXPRESSION` nodes in the decoded
+    /// files, so a *library* class inhabiting one of these interfaces is invisible
+    /// to it — `Error` declares `name`, so it could inhabit an
+    /// `interface Named { name: string }` and nothing here would say so. That is
+    /// the right population for this question rather than an oversight: a library
+    /// class reaches a **provided** representation, not a generated struct, so it
+    /// refuses for a different reason and indirection over struct offsets is not
+    /// what would repair it. But it is a bound, and a narrow rule built on this
+    /// owes a decision about library classes rather than inheriting one.
+    #[must_use]
+    pub fn through_possibly_inhabited(&self) -> u32 {
+        self.fields_where(|site| {
+            site.shape == Shape::Interface
+                && (site.implemented || site.satisfied || site.unexamined)
+        })
     }
 
     /// Every counted field access: the widest denominator.
@@ -553,7 +601,7 @@ fn spread(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mu
         // is unknown. One is the floor, and the `Unclear` row carries the doubt.
         _ => 1,
     };
-    let (receiver, implemented, satisfied) = receiver_of(snapshot, ty, known);
+    let (receiver, implemented, satisfied, unexamined) = receiver_of(snapshot, ty, known);
     out.spread_sites.push(Site {
         shape,
         owner: owner_of(snapshot, id),
@@ -564,6 +612,7 @@ fn spread(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mu
         fields,
         implemented,
         satisfied,
+        unexamined,
         location: snapshot.nodes[id.0 as usize].origin.location,
     });
 }
@@ -630,7 +679,7 @@ fn record(
             Some(_) => {},
         }
     }
-    let (receiver, implemented, satisfied) = receiver_of(snapshot, ty, known);
+    let (receiver, implemented, satisfied, unexamined) = receiver_of(snapshot, ty, known);
     out.sites.push(Site {
         shape,
         owner: owner_of(snapshot, access),
@@ -641,6 +690,7 @@ fn record(
         fields: 1,
         implemented,
         satisfied,
+        unexamined,
         location: snapshot.nodes[access.0 as usize].origin.location,
     });
 }
@@ -653,7 +703,7 @@ fn receiver_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     known: &Inhabitable,
-) -> (String, bool, bool) {
+) -> (String, bool, bool, bool) {
     let symbol = snapshot
         .types
         .get(ty.0 as usize)
@@ -666,6 +716,7 @@ fn receiver_of(
         name,
         symbol.is_some_and(|symbol| known.implemented.contains(&symbol.0)),
         symbol.is_some_and(|symbol| known.satisfied.contains(&symbol.0)),
+        symbol.is_some_and(|symbol| known.unexamined.contains(&symbol.0)),
     )
 }
 
@@ -833,11 +884,15 @@ struct Inhabitable {
     /// names and not types, because assignability is the checker's and this does
     /// not have it — so it both over- and under-counts against the real relation.
     satisfied: FxHashSet<u32>,
+    /// Interface symbols neither proxy could examine. Counted as *possibly*
+    /// inhabited, which is the direction that keeps a narrow rule sound.
+    unexamined: FxHashSet<u32>,
 }
 
 impl Inhabitable {
     fn of(snapshot: &SemanticSnapshot) -> Self {
         let mut implemented = FxHashSet::default();
+        let mut unexamined: FxHashSet<u32> = FxHashSet::default();
         let mut class_members: Vec<FxHashSet<&str>> = Vec::new();
         let mut interfaces_unexamined = 0;
         let mut classes_unexamined = 0;
@@ -890,6 +945,7 @@ impl Inhabitable {
                 .map(|record| &record.kind)
             else {
                 interfaces_unexamined += 1;
+                unexamined.insert(u32::try_from(index).unwrap_or(u32::MAX));
                 continue;
             };
             let required: Vec<&str> = properties
@@ -915,6 +971,7 @@ impl Inhabitable {
             classes_unexamined,
             implemented,
             satisfied,
+            unexamined,
         }
     }
 }

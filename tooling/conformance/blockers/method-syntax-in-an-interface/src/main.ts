@@ -185,6 +185,38 @@
 //      first, and `node-utf8` -- the only case `benches/README.md` calls real
 //      code rather than a probe -- is 2 of 2, which is where to start.
 //
+//      # A sound narrow rule is reachable, and costs 883 rather than 4,174
+//
+//      This is the part that changes the decision, and it took the census to see.
+//
+//      A narrow rule -- indirection only where a class could inhabit the
+//      interface -- is **safe exactly when its set over-approximates**. And an
+//      over-approximation is computable: if a class `C` is assignable to `I` then
+//      `C` declares every *required* member of `I`, so `C`'s member **names**
+//      cover `I`'s required names and `I` is in the set. Comparing names alone
+//      also admits classes that are not assignable, which is the safe direction.
+//      An interface neither proxy could examine joins the set rather than being
+//      read as uninhabitable.
+//
+//      That set costs **883 of 17,521 accesses -- 5.0%, or 5.6% of the 15,681
+//      this program lays out.** Against 4,174 for the broad rule: a **4.7x
+//      reduction**, and 3,334 accesses go through interfaces *nothing in the
+//      program can inhabit*, which a sound rule leaves at a fixed offset.
+//
+//      **Record 0294's ruling stands and does not block this**, because it
+//      answers a different question. A *complete* satisfier set is what you need
+//      to decide which interfaces are **safe to leave alone**; a sound
+//      over-approximation is what you need to decide which **must be made
+//      indirect**. 0294 rules out the first. This is the second.
+//
+//      One bound, stated rather than glossed: the set covers **classes this
+//      program declares**. A library class is invisible to it -- `Error` declares
+//      `name` and could inhabit an `interface Named { name: string }`. That is
+//      arguably the right population, since a library class reaches a *provided*
+//      representation rather than a generated struct and so refuses for a
+//      different reason; but a narrow rule built on this owes a decision about
+//      library classes rather than inheriting one.
+//
 //      **And the broad rule's waste is between 4x and 26x its useful work.** Of
 //      the 4,174, only 158 are through an interface some class names in an
 //      `implements` clause, and at most 883 through one whose required members

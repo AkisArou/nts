@@ -87,13 +87,44 @@ name. 344 interfaces carry the accesses, and the heaviest are records and option
 bags that no class can inhabit: `UrlRecord` 158, `URLRecord` 154, `Key` 144,
 `StoredCookie` 132, `Context` 111, `TransportRequest` 96.
 
-Neither of those two is the real relation and neither is implementable — the
-first misses a structural satisfier, the second compares names and not types, and
-0294 still rules out the complete set. They bracket the argument rather than
-settling it. But **the bracket says the set a narrow rule needs is small**, and
-that is a different question from the one 0294 answered: not "can the complete
-set be had" but "is a sound over-approximation of a few hundred interfaces
-reachable". That question did not exist before these numbers.
+Neither of those two is the real relation — the first misses a structural
+satisfier, the second compares names and not types. But the second one is
+**sound**, and that is the finding.
+
+## 4. A sound narrow rule costs 883, not 4,174
+
+A narrow rule is safe exactly when its set of possibly-inhabited interfaces
+**over-approximates**. The structural proxy is one: if a class `C` is assignable
+to interface `I` then `C` declares every *required* member of `I` — assignability
+demands it — so `C`'s member **names** cover `I`'s required names and `I` is in
+the set. Comparing names alone also admits classes that are *not* assignable,
+which is the safe direction. An interface neither proxy could examine joins the
+set rather than being read as uninhabitable, which closes the one unsound gap.
+
+| rule | accesses made indirect | of 17,521 | of the 15,681 laid out here |
+|---|---|---|---|
+| broad — every interface slot | 4,174 | 23.8% | 26.6% |
+| **sound narrow** | **883** | **5.0%** | **5.6%** |
+
+A **4.7x reduction**, and **3,334 accesses go through interfaces nothing in the
+program can inhabit** — those a sound rule leaves at a fixed offset, paying
+nothing.
+
+**Record 0294's ruling stands and does not block this**, because the two answer
+different questions. A *complete* satisfier set is what you need to decide which
+interfaces are **safe to leave alone**; a sound over-approximation is what you
+need to decide which **must be made indirect**. 0294 ruled out the first — "the
+classes that work by accident are exactly the ones producing no layout evidence"
+— and that is still true. It says nothing about the second, and the second is
+computable from the snapshot in 3.8 seconds.
+
+One bound, stated rather than glossed: the set covers **classes this program
+declares**. `class_members` enumerates class nodes in the decoded files, so a
+library class is invisible to it — `Error` declares `name` and could inhabit an
+`interface Named { name: string }`. That is arguably the right population, since a
+library class reaches a *provided* representation rather than a generated struct
+and refuses for a different reason; but a narrow rule built on this owes a
+decision about library classes rather than inheriting one. That question did not exist before these numbers.
 
 **3. The `schema.rs` comment on `node_types` is stale, and it was load-bearing.**
 The census keys on receiver expressions, which is only sound if a receiver

@@ -1654,6 +1654,13 @@ fn receivers_summary(census: &nts_core::receivers::Census) {
         f64::from(spared_least) * 100.0 / f64::from(interface),
         f64::from(spared_most) * 100.0 / f64::from(interface)
     );
+    let sound = census.through_possibly_inhabited();
+    println!(
+        "a *sound* narrow rule costs {sound}: every interface a class could inhabit by member"
+    );
+    println!(
+        "name, plus the ones nothing could examine. names over-approximate, so that set is safe."
+    );
     println!(
         "neither bound is implementable: record 0294 rules that the complete set of classes"
     );

@@ -202,6 +202,30 @@ fn the_two_inhabitability_proxies_disagree() {
     );
 }
 
+/// The sound figure is smaller than the broad one and larger than zero.
+///
+/// This is the number the design decision needs, and it is neither arm of the
+/// bracket: every interface a class could inhabit **by member name**, plus any
+/// the proxies could not examine. Names over-approximate real assignability, so
+/// the set is safe; an unexamined interface joins it rather than being read as
+/// uninhabitable.
+///
+/// `Named` is covered by `Quiet` without either saying so, and `Declared` is
+/// named in `Sayer`'s heritage clause, so both are in. `Mixed` and
+/// `Uninhabitable` are in no class, so they are out — and they are what makes
+/// this assertion a check rather than a restatement of `through_interfaces`.
+#[test]
+fn the_sound_narrow_figure_is_between_zero_and_the_broad_one() {
+    let Some(census) = counted() else { return };
+    let sound = census.through_possibly_inhabited();
+    assert_eq!(sound, 8);
+    assert!(sound < census.through_interfaces());
+    assert!(sound > census.through_implemented());
+    // Nothing unexamined here, so the sound set is exactly the structural one.
+    assert_eq!(sound, census.through_satisfied());
+    assert_eq!(census.excluded.interfaces_unexamined, 0);
+}
+
 /// A class receiver reads at a fixed offset today and would keep doing so.
 #[test]
 fn a_class_receiver_is_not_in_the_numerator() {
