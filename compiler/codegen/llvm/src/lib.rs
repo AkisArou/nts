@@ -43,6 +43,9 @@
 mod aggregate;
 mod native;
 mod objc;
+mod indirect;
+/// How many sixteen-byte arguments a Win64 runtime call can pass; see `indirect`.
+pub use indirect::SLOTS as WIN64_INDIRECT_SLOTS;
 pub mod signatures;
 pub mod signatures_win64;
 
@@ -133,7 +136,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     // program's own calls use -- one source of signatures, and the attributes
     // come with them.
     for helper in ALWAYS_DECLARED {
-        if let Some(line) = declaration(helper) {
+        if let Some(line) = declaration(helper, platform) {
             let _ = writeln!(text, "{line}");
         }
     }
@@ -157,7 +160,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
         "@nts_closure_call_slot = constant i32 {}",
         nts_core::hir::closure_call_slot(program)
     );
-    for line in externals(program) {
+    for line in externals(program, platform) {
         let _ = writeln!(text, "{line}");
     }
     let _ = writeln!(text, "\n{}", descriptors(program));
@@ -422,6 +425,18 @@ fn refused_declaration(func: &Func) -> Option<String> {
 
 /// An erased value: the tag, and the union's eightbyte as an integer.
 const ERASED_TYPE: &str = "{ i32, i64 }";
+
+/// An erased value handed to a runtime helper as operand `at` of one call:
+/// its two scalars on System V, where clang splits sixteen bytes into two
+/// registers, and a pointer to its copy on Win64 (`indirect`).
+fn erased_argument(platform: Platform, value: &str, out: &str, at: usize, lines: &mut Vec<String>) -> String {
+    if indirect::applies(platform) {
+        return indirect::argument(ERASED_TYPE, value, at, lines);
+    }
+    lines.push(format!("{out}.t{at} = extractvalue {ERASED_TYPE} {value}, 0"));
+    lines.push(format!("{out}.p{at} = extractvalue {ERASED_TYPE} {value}, 1"));
+    format!("i32 {out}.t{at}, i64 {out}.p{at}")
+}
 
 /// The tags, which are `typeof`'s answers in `typeof`'s order.
 ///
@@ -1210,12 +1225,20 @@ fn instance_of(
     out: &str,
     operand: nts_core::hir::ValueId,
     classes: &[nts_core::hir::ClassId],
+    platform: Platform,
 ) -> String {
     let subject = name(operand);
-    let mut lines = vec![
-        format!("{out}.t = extractvalue {ERASED_TYPE} {subject}, 0"),
-        format!("{out}.p = extractvalue {ERASED_TYPE} {subject}, 1"),
-    ];
+    // System V takes the two scalars, extracted once for every class; Win64 a
+    // copy, stored again before each call because the callee owns it.
+    let win64 = indirect::applies(platform);
+    let mut lines = if win64 {
+        Vec::new()
+    } else {
+        vec![
+            format!("{out}.t = extractvalue {ERASED_TYPE} {subject}, 0"),
+            format!("{out}.p = extractvalue {ERASED_TYPE} {subject}, 1"),
+        ]
+    };
     let mut answers: Vec<String> = Vec::new();
     for class in classes {
         let Some(layout) = program
@@ -1226,8 +1249,13 @@ fn instance_of(
             continue;
         };
         let at = format!("{out}.c{}", answers.len());
+        let argument = if win64 {
+            indirect::argument(ERASED_TYPE, &subject, 0, &mut lines)
+        } else {
+            format!("i32 {out}.t, i64 {out}.p")
+        };
         lines.push(format!(
-            "{at} = call zeroext i1 @nts_is_class(i32 {out}.t, i64 {out}.p, ptr @nts_desc_{})",
+            "{at} = call zeroext i1 @nts_is_class({argument}, ptr @nts_desc_{})",
             descriptor_for(program, layout, Some(*class))
         ));
         answers.push(at);
@@ -1577,8 +1605,8 @@ fn into_form(target: &str) -> String {
 }
 
 /// One `declare` line for a runtime helper, from the generated table.
-fn declaration(name: &str) -> Option<String> {
-    let known = signatures::signature(name)?;
+fn declaration(name: &str, platform: Platform) -> Option<String> {
+    let known = signatures::signature_on(name, platform)?;
     // Nothing in this language unwinds -- there is no exception mechanism to
     // unwind *with* -- so every call is `nounwind` whatever else it is. Saying
     // so lets LLVM stop reasoning about paths that cannot exist.
@@ -1604,7 +1632,7 @@ fn declaration(name: &str) -> Option<String> {
 /// double went into an SSE register, the callee read an integer one, and
 /// `typeof v` answered "undefined" for a number. Found by the cross-backend
 /// test, which is the only thing that could have.
-fn externals(program: &Program) -> Vec<String> {
+fn externals(program: &Program, platform: Platform) -> Vec<String> {
     let mut seen: Vec<String> = ALWAYS_DECLARED
         .iter()
         .map(|name| (*name).to_owned())
@@ -1635,7 +1663,7 @@ fn externals(program: &Program) -> Vec<String> {
             if seen.contains(&target) {
                 continue;
             }
-            let Some(line) = declaration(&target) else {
+            let Some(line) = declaration(&target, platform) else {
                 continue;
             };
             seen.push(target);
@@ -1648,7 +1676,7 @@ fn externals(program: &Program) -> Vec<String> {
     let once = program.funcs.iter().flat_map(|func| &func.values).any(|op| matches!(op.kind, OpKind::NativeBridge { once: true, .. }));
     let unlend = "nts_closure_unlend_once".to_owned();
     if once && !seen.contains(&unlend)
-        && let Some(line) = declaration(&unlend)
+        && let Some(line) = declaration(&unlend, platform)
     {
         seen.push(unlend);
         lines.push(line);
@@ -1659,7 +1687,7 @@ fn externals(program: &Program) -> Vec<String> {
         for helper in ["nts_is_owner_thread", "nts_closure_lend", "nts_closure_unlend"] {
             let helper = helper.to_owned();
             if !seen.contains(&helper)
-                && let Some(line) = declaration(&helper)
+                && let Some(line) = declaration(&helper, platform)
             {
                 seen.push(helper);
                 lines.push(line);
@@ -1793,6 +1821,7 @@ fn symbol(raw: &str) -> String {
 }
 
 fn function(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
+    indirect::unexportable(func, platform).map_or(Ok(()), |why| Err(refuse(func, why)))?;
     let mut out = String::new();
     let returns = ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
@@ -1827,6 +1856,7 @@ fn function(program: &Program, func: &Func, platform: Platform) -> Result<String
     prologue.extend(frame_storage(program, func));
     prologue.extend(native::stack_arguments(func, platform));
     prologue.extend(native_memory::stack_storage(func, platform));
+    prologue.extend(indirect::scratch(platform));
     let linkage = if func.exported { "" } else { "internal " };
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
@@ -2106,13 +2136,13 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform)
             format!("{out} = add i1 0, {}", u8::from(*flag))
         }
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
-            return tagging(func, value, &out);
+            return tagging(func, value, &out, platform);
         }
         // See `instance_of`, which is where the reasoning is.
         OpKind::InstanceOf {
             value: operand,
             classes,
-        } => return Ok(instance_of(program, &out, *operand, classes)),
+        } => return Ok(instance_of(program, &out, *operand, classes, platform)),
         // Before the general binary arm, because it *is* a binary and the
         // general one would match it first -- and an `icmp` on a sixteen-byte
         // aggregate is not an instruction.
@@ -2127,7 +2157,7 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform)
         } if func.values[lhs.0 as usize].ty == HirType::Erased
             || func.values[rhs.0 as usize].ty == HirType::Erased =>
         {
-            return tagging(func, value, &out);
+            return tagging(func, value, &out, platform);
         }
         // And before it again, for the same reason one step over: two strings
         // are equal when their *contents* are, and `icmp eq` compares the
@@ -2148,8 +2178,8 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform)
         // reference. Splitting them was what pushed `operation` over its line
         // limit, and the guard was written twice to do it.
         OpKind::Binary { op: bin, lhs, rhs } => string_binary(func, &out, *bin, *lhs, *rhs)
-            .map_or_else(|| arithmetic(func, &out, *bin, *lhs, *rhs), Ok)?,
-        OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand)?,
+            .map_or_else(|| arithmetic(func, &out, *bin, *lhs, *rhs, platform), Ok)?,
+        OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand, platform)?,
         // A representation change specialization decided on. The C backend
         // spells it as a cast; LLVM makes the direction explicit, which is the
         // same instruction and a better record of what was meant.
@@ -2697,11 +2727,10 @@ fn mixed_equality(
     erased: ValueId,
     against: ValueId,
     other: &HirType,
+    platform: Platform,
 ) -> Result<Vec<String>, Diagnostic> {
-    let mut lines = vec![
-        format!("{out}.t0 = extractvalue {ERASED_TYPE} {}, 0", name(erased)),
-        format!("{out}.p0 = extractvalue {ERASED_TYPE} {}, 1", name(erased)),
-    ];
+    let mut lines = Vec::new();
+    let receiver = erased_argument(platform, &name(erased), out, 0, &mut lines);
     // An integer is compared as the number it is, which is what the erased side
     // holds: the tag says `number` and the payload is a double whatever width
     // the other side was proved into.
@@ -2731,9 +2760,7 @@ fn mixed_equality(
             ));
         }
     };
-    lines.push(format!(
-        "{same} = call zeroext i1 @{helper}(i32 {out}.t0, i64 {out}.p0, {argument})"
-    ));
+    lines.push(format!("{same} = call zeroext i1 @{helper}({receiver}, {argument})"));
     Ok(lines)
 }
 
@@ -2743,7 +2770,7 @@ fn mixed_equality(
 /// only a tag can answer, and the runtime answers them. The payload eightbyte
 /// holds the union's first member, the `double`, so an integer is converted
 /// before it is stored -- the same conversion `nts_value_of_number(x)` makes.
-fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
+fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -2770,22 +2797,11 @@ fn tagging(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic>
             let same = format!("{out}.eq");
             let mut lines = Vec::new();
             if let Some((erased, against, other)) = mixed {
-                lines.extend(mixed_equality(func, &out, &same, erased, against, other)?);
+                lines.extend(mixed_equality(func, &out, &same, erased, against, other, platform)?);
             } else {
-                for (at, held) in [lhs, rhs].iter().enumerate() {
-                    lines.push(format!(
-                        "{out}.t{at} = extractvalue {ERASED_TYPE} {}, 0",
-                        name(**held)
-                    ));
-                    lines.push(format!(
-                        "{out}.p{at} = extractvalue {ERASED_TYPE} {}, 1",
-                        name(**held)
-                    ));
-                }
-                lines.push(format!(
-                    "{same} = call zeroext i1 @nts_value_strict_eq(i32 {out}.t0, i64 {out}.p0, \
-                     i32 {out}.t1, i64 {out}.p1)"
-                ));
+                let left = erased_argument(platform, &name(*lhs), &out, 0, &mut lines);
+                let right = erased_argument(platform, &name(*rhs), &out, 1, &mut lines);
+                lines.push(format!("{same} = call zeroext i1 @nts_value_strict_eq({left}, {right})"));
             }
             lines.push(if matches!(bin, BinOp::Ne) {
                 format!("{out} = xor i1 {same}, true")
@@ -2880,13 +2896,21 @@ fn arguments(
     before: &mut Vec<String>,
 ) -> Result<Vec<String>, Diagnostic> {
     let mut rendered: Vec<String> = Vec::new();
-    for arg in args {
+    for (at, arg) in args.iter().enumerate() {
         let arg_ty = &func.values[arg.0 as usize].ty;
         // Two scalars, because that is how the platform passes a
         // sixteen-byte struct and how clang emits the same call.
         if *arg_ty == HirType::Erased {
             let tag = format!("{}.a{}", out, arg.0);
             let bits = format!("{}.b{}", out, arg.0);
+            // The same value twice in one call -- `map.set(v, v)` -- is
+            // extracted once: the names are the value's, and a second
+            // extraction defined them again, which LLVM rejects.
+            if args[..at].contains(arg) {
+                rendered.push(format!("i32 {tag}"));
+                rendered.push(format!("i64 {bits}"));
+                continue;
+            }
             before.push(format!(
                 "{tag} = extractvalue {ERASED_TYPE} {}, 0",
                 name(*arg)
@@ -2915,6 +2939,63 @@ fn arguments(
         rendered.push(format!("{ty} {}{}", extension(arg_ty), name(*arg)));
     }
     Ok(rendered)
+}
+
+/// The arguments of a call into the C runtime: [`arguments`]' spelling,
+/// except that under Win64 an erased value or an `i128` is a pointer to its
+/// copy (`indirect`), which is how that platform's C takes sixteen bytes.
+fn runtime_arguments(
+    func: &Func,
+    out: &str,
+    args: &[ValueId],
+    before: &mut Vec<String>,
+    platform: Platform,
+) -> Result<Vec<String>, Diagnostic> {
+    if !indirect::applies(platform) {
+        return arguments(func, out, args, before);
+    }
+    let mut rendered = Vec::new();
+    let mut slot = 0;
+    for arg in args {
+        let ty = &func.values[arg.0 as usize].ty;
+        if indirect::is_indirect(ty) {
+            if slot == indirect::SLOTS {
+                return Err(refuse(func, "a runtime call passing more sixteen-byte values than Win64's scratch slots hold"));
+            }
+            rendered.push(indirect::argument(ty_of(ty, func)?, &name(*arg), slot, before));
+            slot += 1;
+        } else {
+            rendered.extend(arguments(func, out, &[*arg], before)?);
+        }
+    }
+    Ok(rendered)
+}
+
+/// A declared result split into the extension a call site repeats and the
+/// type: `zeroext i1` is `("zeroext ", "i1")`, `{ i32, i64 }` is all type.
+/// `noalias` and `nonnull` stay on the declaration, where they already say
+/// what they say.
+///
+/// A runtime helper is called at the result its declaration says, with the
+/// extension its platform's C promises: Win64 widens no narrow result for its
+/// caller, so an `i8` there carries no `signext`. A result the program does not
+/// use is still called for at its type and dropped -- a `void` call to a
+/// function returning `ptr` is undefined, which `opt -passes=lint` reports.
+fn declared_result(returns: &str) -> (String, &str) {
+    let mut attribute = String::new();
+    let mut rest = returns;
+    while let Some((word, after)) = rest.split_once(' ') {
+        match word {
+            "zeroext" | "signext" => {
+                attribute.push_str(word);
+                attribute.push(' ');
+            }
+            "noalias" | "nonnull" => {}
+            _ => break,
+        }
+        rest = after;
+    }
+    (attribute, rest)
 }
 
 /// A call, direct or into the runtime.
@@ -2982,7 +3063,11 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
                 // See `frame_storage`.
                 rendered.push(format!("ptr {out}.frame"));
             }
-            rendered.extend(arguments(func, &out, args, &mut before)?);
+            // Into C for a runtime helper, which follows the platform's
+            // convention; between two of this program's functions, which
+            // follow this backend's.
+            let into_c = matches!(callee, Callee::External(_));
+            rendered.extend(if into_c { runtime_arguments(func, &out, args, &mut before, platform)? } else { arguments(func, &out, args, &mut before)? });
             // A helper the table does not carry is one this backend cannot
             // call. `nts_to_uint8` is `static inline` in the header, so there
             // is no symbol to link against and no signature to read -- and
@@ -3018,12 +3103,18 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
                 None => symbol(&called),
                 Some(slot) => method_pointer(&out, args, slot, &mut before),
             };
-            let call = format!(
-                "call {}{call_returns} {callable}({})",
-                extension(&op.ty),
-                rendered.join(", ")
-            );
-            let call = if returns == "void" {
+            // A runtime helper is called at its declared result (`declared_result`).
+            let declared = if into_c { signatures::signature_on(&called, platform) } else { None };
+            if declared.is_some() && indirect::applies(platform) && indirect::is_indirect(&op.ty) {
+                before.push(indirect::call_returning(&out, &callable, rendered, &op.ty));
+                return Ok(before.join("\n  "));
+            }
+            let (attribute, call_returns) =
+                declared.map_or_else(|| (extension(&op.ty).to_owned(), call_returns), |known| declared_result(known.returns));
+            let call = format!("call {attribute}{call_returns} {callable}({})", rendered.join(", "));
+            let call = if returns == "void" && call_returns != "void" {
+                format!("{out}.unused = {call}")
+            } else if returns == "void" {
                 call
             } else if call_returns == returns {
                 format!("{out} = {call}")
@@ -3300,6 +3391,7 @@ fn arithmetic(
     op: BinOp,
     lhs: ValueId,
     rhs: ValueId,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     // Two operators wear the `+` token and this is the other one. The lowering
     // already decided which, from the result type.
@@ -3311,7 +3403,7 @@ fn arithmetic(
         ));
     }
     if matches!(op, BinOp::Shl | BinOp::Shr) && func.values[lhs.0 as usize].ty == HirType::BigInt {
-        return Ok(wide_shift(out, op, lhs, rhs));
+        return Ok(wide_shift(out, op, lhs, rhs, platform));
     }
     if matches!(op, BinOp::Min | BinOp::Max) {
         return extremum(func, out, op, lhs, rhs);
@@ -3409,12 +3501,22 @@ fn float_bitwise(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId) -> String {
 ///
 /// `>>>` has no `bigint` form: JavaScript throws for it, so there is nothing
 /// here to route.
-fn wide_shift(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId) -> String {
+fn wide_shift(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId, platform: Platform) -> String {
     let helper = if matches!(op, BinOp::Shl) {
         "nts_bigint_shl"
     } else {
         "nts_bigint_shr"
     };
+    if indirect::applies(platform) {
+        // Win64's C takes each `__int128` as a pointer to a copy and hands one
+        // back in XMM0.
+        let mut lines = Vec::new();
+        let left = indirect::argument("i128", &name(lhs), 0, &mut lines);
+        let right = indirect::argument("i128", &name(rhs), 1, &mut lines);
+        lines.push(format!("{out}.v = call <2 x i64> @{helper}({left}, {right})"));
+        lines.push(format!("{out} = bitcast <2 x i64> {out}.v to i128"));
+        return lines.join("\n  ");
+    }
     format!(
         "{out} = call i128 @{helper}(i128 {}, i128 {})",
         name(lhs),
@@ -3795,6 +3897,7 @@ fn unary(
     value: ValueId,
     op: UnOp,
     operand: ValueId,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     let ty = ty_of(&func.values[operand.0 as usize].ty, func)?;
     let float = matches!(func.values[operand.0 as usize].ty, HirType::Float { .. });
@@ -3841,6 +3944,12 @@ fn unary(
             // against a float. clang said "floating point constant invalid for
             // type", and three examples could not be built through this
             // backend.
+            HirType::Erased if indirect::applies(platform) => {
+                let mut lines = Vec::new();
+                let argument = indirect::argument(ERASED_TYPE, &name(operand), 0, &mut lines);
+                lines.push(format!("{out} = call zeroext i1 @nts_value_truthy_fn({argument})"));
+                lines.join("\n  ")
+            }
             HirType::Erased => {
                 let tag = format!("{out}.t");
                 let bits = format!("{out}.p");

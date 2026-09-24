@@ -507,7 +507,7 @@ BUILDING
 
 EMITTING ONE BACKEND
   emit-c       render the program as C, to --out or stdout
-  emit-llvm    render the program as textual LLVM IR, to stdout
+  emit-llvm    render the program as textual LLVM IR, to stdout (--os windows)
   emit-jvm     render the program as class files, to --out
 
 BINDINGS
@@ -649,9 +649,12 @@ fn main() -> Result<()> {
         // The second backend, reading the same HIR. Textual, so it can be read
         // the way `program.c` can -- which is how three bugs were found in the
         // week before it existed.
+        // `--os windows` renders it for another OS's calling convention, which
+        // is how that convention is read without a machine that runs it.
         Some("emit-llvm") => {
             let rest: Vec<String> = args.collect();
-            emit_llvm(&project(&rest)?, Emission::from_flags())
+            let os = rest.windows(2).find(|pair| pair[0] == "--os").map_or(host_os(), |pair| pair[1].as_str());
+            emit_llvm(&project(&rest)?, Emission::from_flags(), llvm_platform(os, host_arch()))
         }
         // The third backend. Not textual, so `--text` renders the listing that
         // stands in for reading `program.c` -- disassembled from the bytes
@@ -6564,7 +6567,7 @@ fn emit_options<'a>(
     }
 }
 
-fn emit_llvm(tsconfig: &Utf8Path, emission: Emission) -> Result<()> {
+fn emit_llvm(tsconfig: &Utf8Path, emission: Emission, platform: nts_codegen_llvm::Platform) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
@@ -6601,8 +6604,7 @@ fn emit_llvm(tsconfig: &Utf8Path, emission: Emission) -> Result<()> {
             diagnostic.message
         );
     }
-    // `emit-llvm` names no target, so the program is for this machine.
-    let emitted = nts_codegen_llvm::emit(&prepared.program, llvm_platform(host_os(), host_arch()));
+    let emitted = nts_codegen_llvm::emit(&prepared.program, platform);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
     }

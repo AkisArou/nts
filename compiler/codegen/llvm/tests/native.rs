@@ -3349,11 +3349,16 @@ export async function both(): Promise<void> {
 /// after it.
 ///
 /// **What runs where.**
-/// - **LLVM's Win64 program runs here**, against helpers declared with
-///   `int32_t`/`uint32_t`, which is the slot a Win64 `long` is.
+/// - **LLVM's Win64 program runs on Windows** (`tooling/windows/run.sh`,
+///   the lane's VM), built with its runtime for `x86_64-windows-gnu` against
+///   helpers declared with `int32_t`/`uint32_t`, the slot a Win64 `long` is.
+///   It used to run here, against Linux's runtime, which stopped being the
+///   same program once Win64 calls the runtime by Win64's convention: a
+///   `bigint` comes back in XMM0 there. With no Windows reachable the arm says
+///   so by name.
 /// - **C's Win64 program is compiled for `x86_64-w64-windows-gnu`**, where
 ///   its `sizeof(long) == 4` and offset assertions are checked by a real
-///   LLP64 compiler. It runs only on Windows.
+///   LLP64 compiler.
 /// - **The control** is the same program on `SysV` against `long` helpers:
 ///   nothing truncates there, so the truncation check fails and the bitmask
 ///   differs. That shows the ABI decided the answer.
@@ -3383,6 +3388,11 @@ export function probe(seed: number): number {
     // widened either side. LLVM rejected the module and C hid it behind an
     // implicit conversion. `relational_operands` now widens to the bigint.
     if (slot[0].value === low && slot[0].before === 1 && slot[0].after === 7) mask |= 8;
+    // A bigint whose halves differ, through the runtime's shifts: Win64 hands
+    // an `i128` back as `<2 x i64>`, and a lane-swapped reinterpretation of one
+    // is invisible to every value below 2^64.
+    const split = (BigInt(seed) << 80n) | 0xdeadbeefn;
+    if (split >> 16n === ((BigInt(seed) << 64n) | 0xdeadn)) mask |= 16;
     return mask;
 }
 "#;
@@ -3415,9 +3425,36 @@ export function probe(seed: number): number {
         assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
         String::from_utf8_lossy(&out.stdout).trim().to_owned()
     };
-    assert_eq!(run(win64, win64_helpers, "llvm-win64"), "15", "the Win64 slot did not round-trip");
     // The control: on SysV nothing truncates, so `2^32 + 5` comes back whole.
-    assert_eq!(run(sysv, sysv_helpers, "llvm-sysv"), "11", "the SysV control did not differ in exactly the truncation");
+    assert_eq!(run(sysv, sysv_helpers, "llvm-sysv"), "27", "the SysV control did not differ in exactly the truncation");
+
+    let zig = Command::new("zig").arg("env").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+    let Some(lib) = zig.as_deref().and_then(|env| env.split_once("lib_dir")).and_then(|(_, rest)| rest.split('"').nth(1).map(str::to_owned)) else {
+        eprintln!("skipping the Win64 arms: no zig for mingw headers");
+        return;
+    };
+
+    // LLVM's Win64 program, with the runtime it calls, on Windows.
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "llvm-win64: {:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let c = nts_codegen_c::emit(&prepared.program, win64);
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("helpers.c"), win64_helpers).unwrap();
+    let built = Command::new("zig")
+        .current_dir(&dir)
+        .args(["cc", "-target", "x86_64-windows-gnu", "-O2", "-Wno-override-module", "program.ll", "helpers.c", "caller.c", "nts_runtime.c", "-o", "llvm-win64.exe"])
+        .output()
+        .unwrap();
+    assert!(built.status.success(), "llvm-win64: {}", String::from_utf8_lossy(&built.stderr));
+    let runner = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tooling/windows/run.sh");
+    let ran = Command::new(runner).arg(dir.join("llvm-win64.exe")).output().unwrap();
+    if ran.status.code() == Some(77) {
+        eprintln!("llvm-win64: not run -- no Windows reachable (tooling/windows/vm.md)");
+    } else {
+        assert!(ran.status.success(), "llvm-win64 on Windows: {}", String::from_utf8_lossy(&ran.stderr));
+        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "31", "the Win64 slot did not round-trip on Windows");
+    }
 
     // C's Win64 program, checked by an LLP64 compiler. Its assertions state
     // `sizeof(long) == 4` and the slot's offsets (`after` at 8, not 16).
@@ -3427,11 +3464,6 @@ export function probe(seed: number): number {
     assert!(text.contains("offsetof(struct slot, after) == 8u"), "the C program placed `after` for LP64");
     std::fs::write(dir.join("program.c"), text).unwrap();
     for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    let zig = Command::new("zig").arg("env").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
-    let Some(lib) = zig.as_deref().and_then(|env| env.split_once("lib_dir")).and_then(|(_, rest)| rest.split('"').nth(1).map(str::to_owned)) else {
-        eprintln!("skipping the Win64 C compile: no zig for mingw headers");
-        return;
-    };
     let headers = format!("{lib}/libc/include");
     clang(&dir, &[
         "--target=x86_64-w64-windows-gnu", "-nostdlibinc",

@@ -317,6 +317,21 @@ fn the_table_still_matches_the_header() {
     check(&SYSV, &[]);
 }
 
+/// Every Win64 helper fits the scratch slots a call site passes sixteen-byte
+/// values through (`indirect.rs`): one that needed a third would have it
+/// written over the second.
+#[test]
+fn no_win64_helper_takes_more_indirect_arguments_than_there_are_slots() {
+    for row in SIGNATURES_WIN64 {
+        let indirect = row.params.iter().filter(|param| param.starts_with("ptr dead_on_return")).count();
+        assert!(
+            indirect <= nts_codegen_llvm::WIN64_INDIRECT_SLOTS,
+            "`{}` takes {indirect} sixteen-byte values by copy; raise `indirect::SLOTS`",
+            row.name
+        );
+    }
+}
+
 /// The same for `x86_64` Windows. Skips without zig, whose mingw headers are
 /// the ones the runtime is compiled against there; the gate has it.
 #[test]
