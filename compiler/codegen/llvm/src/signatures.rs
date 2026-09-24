@@ -375,6 +375,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_view_set", returns: "void", params: &["ptr", "ptr", "double"], attributes: &[] },
     Signature { name: "nts_view_slice", returns: "noalias ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_view_subarray", returns: "noalias ptr", params: &["ptr", "double", "double"], attributes: &[] },
+    Signature { name: "nts_view_unlend", returns: "void", params: &["ptr"], attributes: &[] },
 ];
 
 /// The signature of a runtime function, if the runtime declares one.

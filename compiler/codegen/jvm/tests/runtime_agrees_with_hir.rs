@@ -213,4 +213,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 81 for `nts_strings_from_cstrings`, which reads a `char **` a C function
 /// returned into a `string[]`: native calls again.
-const REFUSED_FLOOR: usize = 81;
+///
+/// 82 for `nts_view_unlend`, which ends a `Uint8Array`'s loan to a C function:
+/// native calls again.
+const REFUSED_FLOOR: usize = 82;

@@ -1951,6 +1951,64 @@ int might(int ok, int *out, struct _GError **error) {
     }
 }
 
+/// A program and the C library it calls, built for `provider` on both
+/// backends and run: the C text, to assert spellings on, and each backend's
+/// output.
+///
+/// Under reference counting everything is compiled with `NTS_PROVIDER_RC`,
+/// so a `caller` can ask `nts_live_count` -- and a lent or copied array that
+/// leaks, or is freed early, shows there rather than nowhere.
+fn run_on_both_backends(
+    name: &str,
+    source: &str,
+    provider: hir::Provider,
+    library: &str,
+    caller: &str,
+) -> Option<(String, Vec<String>)> {
+    let label = if provider == hir::Provider::ReferenceCounting { "rc" } else { "nogc" };
+    let (dir, prepared) = prepare_with_provider(&format!("{name}-{label}"), source, provider)?;
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), library).unwrap();
+    std::fs::write(dir.join("caller.c"), caller).unwrap();
+    let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
+    for file in ["native.c", "caller.c"] {
+        clang(&dir, &[&["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file][..], counted].concat());
+    }
+    clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
+    let mut outputs = Vec::new();
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
+        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        let run = Command::new(dir.join(executable)).output().unwrap();
+        assert!(run.status.success(), "{name}/{executable}: {}", String::from_utf8_lossy(&run.stderr));
+        outputs.push(String::from_utf8_lossy(&run.stdout).trim().to_owned());
+    }
+    Some((c.writer.text().to_owned(), outputs))
+}
+
+/// A caller printing `line`'s values, and under reference counting the live
+/// objects `repeat` leaves behind after fifty more runs: ` leak=0` expected.
+fn counted_caller(line: &str, repeat: &str) -> String {
+    format!(
+        "#include \"program.h\"\n#include <stdio.h>\n\
+         int main(void) {{\n  {line}\n\
+         #ifdef NTS_PROVIDER_RC\n  size_t before = nts_live_count();\n  for (int i = 0; i < 50; i++) {{ {repeat} }}\n\
+         \x20 printf(\" leak=%zu\", nts_live_count() - before);\n#endif\n  printf(\"\\n\");\n  return 0;\n}}\n"
+    )
+}
+
+/// The expected output, with ` leak=0` under reference counting.
+fn expect(values: &str, provider: hir::Provider) -> String {
+    if provider == hir::Provider::ReferenceCounting { format!("{values} leak=0") } else { values.to_owned() }
+}
+
 /// C's array of strings, `char **`, on both backends.
 const STRINGS_LIBRARY: &str = r"
 #include <stddef.h>
@@ -2006,35 +2064,19 @@ export function many(): number {
     return joined(values);
 }
 "#;
-    let Some((dir, prepared)) = prepare("strings", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let c = nts_codegen_c::emit(&prepared.program);
-    assert!(c.is_complete(), "{:?}", c.diagnostics);
-    assert!(c.writer.text().contains("int walked(const char * const *)"), "`CStrings` is not `const char * const *`");
-    assert!(c.writer.text().contains("int joined(int, char * *)"), "the length is not the slot before the array");
-    let llvm = nts_codegen_llvm::emit(&prepared.program);
-    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
-    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    std::fs::write(dir.join("native.c"), STRINGS_LIBRARY).unwrap();
-    std::fs::write(
-        dir.join("caller.c"),
-        "#include \"program.h\"\n#include <stdio.h>\n\
-         int main(void) { printf(\"%.0f %.0f %.0f %.0f %.0f\\n\", empty(), absent(), text(), counted(), many()); return 0; }\n",
-    )
-    .unwrap();
-    for file in ["native.c", "caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
-    }
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
-        let run = Command::new(dir.join(executable)).output().unwrap();
-        assert!(run.status.success(), "{executable}");
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(
+            r#"printf("%.0f %.0f %.0f %.0f %.0f", empty(), absent(), text(), counted(), many());"#,
+            "empty(); absent(); text(); counted(); many();",
+        );
+        let Some((text, outputs)) = run_on_both_backends("strings", source, provider, STRINGS_LIBRARY, &caller) else { return; };
+        assert!(text.contains("int walked(const char * const *)"), "`CStrings` is not `const char * const *`");
+        assert!(text.contains("int joined(int, char * *)"), "the length is not the slot before the array");
         // `absent`: NULL for `null` (-1), `(0, NULL)` for a counted `null`
         // (-2), and a counted array that is present (1001).
-        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "0 100088 2006 3007 100190", "{executable}");
+        for output in outputs {
+            assert_eq!(output, expect("0 100088 2006 3007 100190", provider), "{provider:?}");
+        }
     }
 
     let kept = r#"
@@ -2096,35 +2138,19 @@ export function run(): number {
         + (none === null ? 9 : none.length) + (borrowed(0 as c_int) === null ? 0 : 5000000);
 }
 "#;
-    let Some((dir, prepared)) = prepare("returned-strings", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let c = nts_codegen_c::emit(&prepared.program);
-    assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let text = c.writer.text();
-    assert!(text.contains("char * * owned(void)"), "an owned array is not `char **`");
-    assert!(text.contains("const char * const * borrowed(int)"), "a borrowed array is not `const char * const *`");
-    let llvm = nts_codegen_llvm::emit(&prepared.program);
-    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
-    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    std::fs::write(dir.join("native.c"), RETURNED_STRINGS_LIBRARY).unwrap();
-    std::fs::write(
-        dir.join("caller.c"),
-        "#include \"program.h\"\n#include <stdio.h>\nint main(void) { printf(\"%.0f\\n\", run()); return 0; }\n",
-    )
-    .unwrap();
-    for file in ["native.c", "caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
-    }
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
-        let run = Command::new(dir.join(executable)).output().unwrap();
-        assert!(run.status.success(), "{executable}");
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("returned-strings", source, provider, RETURNED_STRINGS_LIBRARY, &caller)
+        else {
+            return;
+        };
+        assert!(text.contains("char * * owned(void)"), "an owned array is not `char **`");
+        assert!(text.contains("const char * const * borrowed(int)"), "a borrowed array is not `const char * const *`");
         // Two elements; "βeta" is 4 units; freed twice; one borrowed "one";
         // an empty array; NULL for `null`.
-        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "242110", "{executable}");
+        for output in outputs {
+            assert_eq!(output, expect("242110", provider), "{provider:?}");
+        }
     }
 }
 
@@ -2166,33 +2192,17 @@ export function run(): string {
         out[1] * 100 + out[3] * 10 + out[4]].join(" ");
 }
 "#;
-    let Some((dir, prepared)) = prepare("bytes", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let c = nts_codegen_c::emit(&prepared.program);
-    assert!(c.is_complete(), "{:?}", c.diagnostics);
-    let text = c.writer.text();
-    assert!(text.contains("int bytes_sum(const uint8_t *, size_t)"), "`CBytes` is not `const uint8_t *` with its length after");
-    assert!(text.contains("void bytes_fill(uint8_t *, int)"), "`CBytes<\"uint8_t\">` is not writable");
-    let llvm = nts_codegen_llvm::emit(&prepared.program);
-    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
-    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    std::fs::write(dir.join("native.c"), BYTES_LIBRARY).unwrap();
-    std::fs::write(
-        dir.join("caller.c"),
-        "#include \"program.h\"\n#include <stdio.h>\n\
-         int main(void) { NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i)); putchar('\\n'); return 0; }\n",
-    )
-    .unwrap();
-    for file in ["native.c", "caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
-    }
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
-        let run = Command::new(dir.join(executable)).output().unwrap();
-        assert!(run.status.success(), "{executable}");
-        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "25604 25302 0 -1 390", "{executable}");
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(
+            "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
+            // `run` hands back a string the caller owns.
+            "nts_release((NtsHeader *)run());",
+        );
+        let Some((text, outputs)) = run_on_both_backends("bytes", source, provider, BYTES_LIBRARY, &caller) else { return; };
+        assert!(text.contains("int bytes_sum(const uint8_t *, size_t)"), "`CBytes` is not `const uint8_t *` with its length after");
+        assert!(text.contains("void bytes_fill(uint8_t *, int)"), "`CBytes<\"uint8_t\">` is not writable");
+        for output in outputs {
+            assert_eq!(output, expect("25604 25302 0 -1 390", provider), "{provider:?}");
+        }
     }
 }

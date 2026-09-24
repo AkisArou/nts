@@ -4482,6 +4482,8 @@ char **nts_strings_to_cstrings(const NtsArray *array) {
 
 void nts_cstrings_release(char **c) { free((void *)c); }
 
+void nts_view_unlend(const NtsView *view) { (void)view; }
+
 NtsArray *nts_strings_from_cstrings(const char *const *c, bool required) {
   if (c == NULL) {
     if (required) {

@@ -1621,6 +1621,15 @@ void nts_cstrings_release(char **c);
  * says the declaration promised an array, and then the process ends naming
  * the broken promise, as `nts_string_from_required_cstring` does. */
 NtsArray *nts_strings_from_cstrings(const char *const *c, bool required);
+/* The end of a `Uint8Array`'s loan to a C function (`CBytes`), called after
+ * the call returns. It does nothing, and that is the point: it is the view's
+ * last use, so reference counting releases the view *after* the call reads
+ * its bytes. Without it the release followed `nts_view_byte_length`, and a
+ * temporary `subarray` could free the buffer C was about to read. A real call
+ * to an empty function, on both backends: `const` would let it be deleted,
+ * and C does not allow that of a `void` function, which the LLVM table
+ * mirrors. */
+void nts_view_unlend(const NtsView *view);
 /* A C string a foreign function returned, as a string: the copy is the
  * program's, and C's pointer is not kept. NULL is `null` -- for a binding
  * declared `string | null`. */

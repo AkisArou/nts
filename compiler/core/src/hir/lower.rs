@@ -11190,6 +11190,9 @@ enum Lent {
     String { string: ValueId, pointer: ValueId },
     /// A `char **` made from a `string[]`.
     Strings { pointer: ValueId },
+    /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
+    /// view must outlive the call.
+    View { view: ValueId },
     /// A closure's context, for a `ScopedClosure`.
     Closure { context: ValueId },
 }
@@ -39081,6 +39084,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::Strings { pointer } => {
                     self.runtime_call("nts_cstrings_release", vec![pointer], HirType::Void, origin.clone());
                 }
+                Lent::View { view } => {
+                    self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
+                }
             }
         }
     }
@@ -39231,13 +39237,16 @@ impl<'a> FuncBuilder<'a> {
                 // The array's element count, into the slot C reads it from --
                 // before the array's own slot as often as after, so it is read
                 // from the arguments rather than from what was pushed.
-                // A `Uint8Array` in place: its bytes, for the call. Nothing is
-                // lent, so nothing is given back -- the view is the caller's
-                // argument, alive across the call.
+                // A `Uint8Array` in place: its bytes, for the call, and the
+                // view given back after it. The give-back does nothing at run
+                // time; it is the view's last use, without which reference
+                // counting released a temporary view -- and with it the only
+                // reference to the buffer -- before C read the bytes.
                 Role::Bytes => {
                     let Some(view) = argument else { continue };
                     let want = target.parameters[at].representation();
                     c_args.push(self.borrow_bytes(view, want, &origin));
+                    lent.push(Lent::View { view });
                 }
                 Role::Length { array, nullable } => {
                     let fed = target.slots().find(|(slot, _, _)| *slot == array).and_then(|(_, _, fed)| fed);

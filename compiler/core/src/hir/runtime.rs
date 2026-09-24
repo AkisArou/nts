@@ -250,6 +250,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_value_to_number", &[None], Some(HirType::Float { bits: 64 })),
     ("nts_value_truthy", &[None], Some(HirType::Bool)),
     ("nts_value_truthy_fn", &[None], Some(HirType::Bool)),
+    ("nts_view_unlend", &[None], None),
 ];
 
 #[must_use]
