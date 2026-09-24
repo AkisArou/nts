@@ -395,6 +395,10 @@ fn decode_nodes(
             // is not its name, `@ntsSelector isVisible` on `visible`, or a
             // binding's property read and written through the methods its
             // `@ntsGet`/`@ntsSet` name.
+            //
+            // And a class and its members, which is how a binding declares an
+            // Objective-C class as TypeScript sees it: `@ntsClass NSTimer` on
+            // `class Timer`, and each member's `@ntsSelector`.
             native: if matches!(
                 kind,
                 NodeKind::Syntax(
@@ -402,6 +406,10 @@ fn decode_nodes(
                         | nts_semantic_schema::syntax::METHOD_SIGNATURE
                         | nts_semantic_schema::syntax::PROPERTY_SIGNATURE
                         | nts_semantic_schema::syntax::CONSTRUCT_SIGNATURE
+                        | nts_semantic_schema::syntax::CLASS_DECLARATION
+                        | nts_semantic_schema::syntax::METHOD_DECLARATION
+                        | nts_semantic_schema::syntax::PROPERTY_DECLARATION
+                        | nts_semantic_schema::syntax::CONSTRUCTOR
                         | nts_semantic_schema::syntax::MODULE_DECLARATION
                         | nts_semantic_schema::syntax::SOURCE_FILE
                 )

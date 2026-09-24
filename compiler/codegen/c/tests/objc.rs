@@ -403,3 +403,70 @@ fn a_property_reads_and_writes_by_message() {
     }
     assert!(!text.contains("sel_registerName(\"visible\")"), "the getter override was ignored:\n{text}");
 }
+
+const CLASSES_AS_CLASSES: &str = r#"/**
+ * @ntsFramework Foundation
+ */
+declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+    /** @ntsSelector isEqual: */
+    isEqual(object: NSObject | null): boolean;
+  }
+  /** @ntsClass NSTimer */
+  export class Timer extends NSObject {
+    /** @ntsSelector invalidate */
+    invalidate(): void;
+    static readonly current: Timer;
+  }
+}
+"#;
+
+/// An Objective-C class a binding declares is a TypeScript class: `new` is
+/// `+alloc` then the constructor's `init`, sent to what `alloc` answered; a
+/// method is a message to the object and a `static` member one to the class,
+/// by its Objective-C name (`Timer` is `NSTimer`); `instanceof` asks
+/// `isKindOfClass:`.
+#[test]
+fn an_objective_c_class_is_a_typescript_class() {
+    let source = "import { NSObject, Timer } from \"objc:Foundation\";\n\
+                  export function run(): boolean {\n  const made = new Timer();\n  made.invalidate();\n  return Timer.current.isEqual(made) && made instanceof NSObject;\n}\n";
+    let Some((_, prepared)) = prepare("objc-classes", CLASSES_AS_CLASSES, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    let line = |needle: &str| text.lines().find(|line| line.contains(needle)).unwrap_or_default().trim().to_owned();
+    // `alloc` goes to the class the program named, by its Objective-C name.
+    let alloc = line("nts_objc_sel_alloc()");
+    assert!(alloc.contains("(nts_objc_class_NSTimer(), nts_objc_sel_alloc())"), "{text}");
+    // `init` goes to exactly what `alloc` answered.
+    let allocated = alloc.split(" = ").next().unwrap_or_default();
+    assert!(line("nts_objc_sel_init()").contains(&format!("({allocated}, nts_objc_sel_init())")), "{text}");
+    // A class property's getter goes to the class.
+    assert!(text.contains("(nts_objc_class_NSTimer(), nts_objc_sel_current())"), "{text}");
+    assert!(text.contains("nts_objc_sel_invalidate()"), "{text}");
+    assert!(text.contains("sel_registerName(\"isKindOfClass:\")"), "{text}");
+}
+
+/// A class the program writes over an Objective-C class is refused, naming
+/// why, rather than laid out as an object of ours with an Objective-C base.
+#[test]
+fn a_program_class_extending_an_objective_c_class_is_refused_by_name() {
+    let source = "import { NSObject } from \"objc:Foundation\";\n\
+                  export class Controller extends NSObject {\n  tick(): number { return 1; }\n}\n";
+    let Some((_, prepared)) = prepare("objc-subclass", CLASSES_AS_CLASSES, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("a class extending an Objective-C class")),
+        "{:?}",
+        prepared.diagnostics
+    );
+}

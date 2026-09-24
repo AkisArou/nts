@@ -40,6 +40,7 @@
     "macos-subclass/nts.config.ts",
     "macos-geometry/nts.config.ts",
     "macos-window/nts.config.ts",
+    "macos-classes/nts.config.ts",
     "native-string/nts.config.ts",
     "native-closure/nts.config.ts",
     "android-shape/nts.config.ts",

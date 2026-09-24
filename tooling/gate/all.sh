@@ -1835,7 +1835,9 @@ interop() {
   #     included). The second SKIPs without a macOS SDK.
   # 30: `macos-window` (A2's window), an NSWindow whose button's action is a
   #     TypeScript closure, run inside `[NSApp run]` in the Mac's GUI session.
-  interop_floor=30
+  # 31: `macos-classes` (the Swift-shaped surface's first step), Foundation's
+  #     classes as TypeScript classes against an ARC oracle.
+  interop_floor=31
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"

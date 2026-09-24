@@ -1,6 +1,6 @@
 //! Decode only authored native storage. An unsupported layout remains refused;
 //! it must not fall back to managed-object layout or guessed member offsets.
-use nts_semantic_schema::{LiteralValue, MemberKind, PropertyRecord, SemanticSnapshot, TypeId, TypeKind};
+use nts_semantic_schema::{LiteralValue, MemberKind, NodeId, NodeKind, PropertyRecord, SemanticSnapshot, SymbolId, TypeId, TypeKind, syntax};
 use super::{Field, Pointee, Record, RecordKind, scalar};
 
 /// A member of `ty` by name, through an intersection's parts.
@@ -77,6 +77,100 @@ pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::s
     }
 }
 
+/// The Objective-C class a class type's instances are: a class a binding
+/// declares with `@ntsClass NSTimer` -- the name Objective-C knows, where
+/// TypeScript may say `Timer` as Swift does -- with every ancestor's, root
+/// first. The instance side only: the class as a value is a `Function` type.
+///
+/// **Decided by the declaration, not by structure.** A class type carries no
+/// marker, and needs none: the tag says what the class is, and it is on the
+/// declaration the checker resolved the type to.
+///
+/// A class the *program* declares that extends one of these has no tag, and
+/// is not one of these; `extends_objc` is how lowering refuses it until such a
+/// subclass is built as an Objective-C class of its own.
+fn objc_class(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
+    let record = snapshot.types.get(ty.0 as usize)?;
+    if !matches!(record.kind, TypeKind::Object { .. }) {
+        return None;
+    }
+    let declaration = class_declaration(snapshot, record.symbol?)?;
+    let tag = objc_tag(snapshot, declaration)?.to_owned();
+    let mut ancestors = Vec::new();
+    let mut at = base_class(snapshot, declaration);
+    while let Some(base) = at {
+        ancestors.push(objc_tag(snapshot, base)?.to_owned());
+        at = base_class(snapshot, base);
+    }
+    ancestors.reverse();
+    Some(Pointee::Opaque(super::Handle { tag, ancestors, family: super::Family::Objc }))
+}
+
+/// Whether a class declaration has an Objective-C class among its ancestors
+/// while not being one itself: a subclass the program writes.
+pub(crate) fn extends_objc(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
+    if objc_tag(snapshot, declaration).is_some() {
+        return false;
+    }
+    let mut at = base_class(snapshot, declaration);
+    while let Some(base) = at {
+        if objc_tag(snapshot, base).is_some() {
+            return true;
+        }
+        at = base_class(snapshot, base);
+    }
+    false
+}
+
+/// Whether a class declaration binds an Objective-C class (`@ntsClass`).
+pub(crate) fn is_objc_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
+    objc_tag(snapshot, declaration).is_some()
+}
+
+/// The `@ntsClass` a class declaration carries.
+fn objc_tag(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<&str> {
+    snapshot.nodes.get(declaration.0 as usize)?.native.as_ref()?.class.as_deref()
+}
+
+/// The class declaration a symbol names, through an import.
+fn class_declaration(snapshot: &SemanticSnapshot, symbol: SymbolId) -> Option<NodeId> {
+    let mut record = snapshot.symbols.get(symbol.0 as usize)?;
+    while let Some(aliased) = record.aliased {
+        record = snapshot.symbols.get(aliased.0 as usize)?;
+    }
+    record.declarations.iter().copied().find(|declaration| {
+        matches!(snapshot.nodes.get(declaration.0 as usize).map(|n| &n.kind), Some(NodeKind::Syntax(syntax::CLASS_DECLARATION)))
+    })
+}
+
+/// The class a class declaration extends. Of its heritage clauses, the one
+/// naming a class: `implements` names interfaces.
+fn base_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<NodeId> {
+    let node = |id: NodeId| snapshot.nodes.get(id.0 as usize);
+    let is = |id: NodeId, kind: u16| matches!(node(id).map(|n| &n.kind), Some(NodeKind::Syntax(k)) if *k == kind);
+    syntax_children(snapshot, declaration)
+        .into_iter()
+        .filter(|child| is(*child, syntax::HERITAGE_CLAUSE))
+        .flat_map(|clause| syntax_children(snapshot, clause))
+        .filter_map(|expression| syntax_children(snapshot, expression).first().copied())
+        .filter_map(|name| node(name)?.symbol)
+        .find_map(|symbol| class_declaration(snapshot, symbol))
+}
+
+/// A node's children, with the lists between them seen through: a class's
+/// heritage clauses, and a clause's types, sit in list nodes of no syntax kind.
+fn syntax_children(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
+    let mut out = Vec::new();
+    for &child in snapshot.nodes.get(id.0 as usize).map(|n| n.children.as_slice()).unwrap_or_default() {
+        if matches!(snapshot.nodes.get(child.0 as usize).map(|n| &n.kind), Some(NodeKind::Syntax(_))) {
+            out.push(child);
+        } else {
+            out.extend(syntax_children(snapshot, child));
+        }
+    }
+    out
+}
+
 /// `ObjcMeta<Tag>`: the name of the Objective-C class whose class object a
 /// value of this type is.
 pub(crate) fn objc_meta(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
@@ -104,6 +198,9 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         let is_null = |id: TypeId| matches!(snapshot.types[id.0 as usize].kind, TypeKind::Null);
         let payload = if is_null(*a) { *b } else if is_null(*b) { *a } else { return None; };
         return pointer_within(snapshot, payload, visiting);
+    }
+    if let Some(class) = objc_class(snapshot, ty) {
+        return Some(class);
     }
     if let Some(handle) = handle(snapshot, ty) {
         // `Const<H>` -- the same handle, read-only through this view: C's

@@ -278,7 +278,25 @@ correctness does not depend on arm64 running by luck.
    run-time value, so this cannot be refused statically. It is ObjC's own
    hazard, and A3's generated bindings, which know each method's real result,
    leave `performSelector:` as the one untyped escape hatch.
-4. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
+4. **The Swift-shaped surface (2026-09-24), replacing the NativeScript one.**
+   The user's call, and it supersedes A4's naming. Names come from Apple's own
+   importer (`swift-symbolgraph-extract` on the VM, joined to clang by USR),
+   bindings are real classes, and labels are one trailing object that the
+   compiler removes. Plan: S1 through S7 in the lane's plan file.
+   - **S1, classes, landed.** A class a binding declares with `@ntsClass
+     NSTimer` (TypeScript may call it `Timer`) is that Objective-C class. Its
+     instances are ARC-counted handles, with the chain taken from `extends`.
+     - `new C(...)` is `+alloc` then the constructor's `init`, or one class
+       send for a factory constructor (`@ntsSelector +numberWithInt:`).
+     - Methods, properties and `static` members are messages.
+     - `instanceof` is `isKindOfClass:`.
+     - A class the program writes over one is refused by name until S6 builds
+       it as an Objective-C class of its own.
+     - `examples/interop/macos-classes` matches an ARC oracle on both
+       backends, and its NoGc control differs only in `new`'s object living
+       on.
+
+5. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.
 
 ## Rules this lane keeps

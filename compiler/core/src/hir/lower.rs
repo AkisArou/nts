@@ -5480,6 +5480,12 @@ fn members_of(
     foreign: &super::runtime::ForeignTable,
     id: NodeId,
 ) -> Vec<NodeId> {
+    // An Objective-C class a binding declares is the framework's: every
+    // member is a message, sent where it is called, and none is a function
+    // of this program -- as a bound Java member is not, below.
+    if super::native::is_objc_class(snapshot, id) {
+        return Vec::new();
+    }
     let probe = FuncBuilder::probe(snapshot);
     probe
         .children(id)
@@ -5700,6 +5706,20 @@ fn lower_class(
             // call resolving to a signature is built against that one -- so
             // there is nothing here to lower and nothing absent to report.
             if builder.is_an_overload_signature(class, member) {
+                continue;
+            }
+            // A class the program writes over an Objective-C class is an
+            // Objective-C class of its own, built at run time with its methods
+            // as the runtime's -- not an object of ours with an Objective-C
+            // base inside it, which would put two representations on one
+            // chain. Until that is built, refused by name.
+            if super::native::extends_objc(snapshot, class) {
+                let diagnostic = builder.unsupported(
+                    member,
+                    "a class extending an Objective-C class, which is built as an Objective-C class of its own",
+                );
+                note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                lowered.diagnostics.push(diagnostic);
                 continue;
             }
             match builder.lower_method_of(class, member, instance) {
@@ -10246,6 +10266,12 @@ enum Decided {
 ///
 /// `None` means "not one of these, carry on"; the two `Decided` arms are the
 /// ones a chain of early-outs could not tell apart without repeating itself.
+/// A native pointer comes first, and that includes an Objective-C class a
+/// binding declares (`@ntsClass`): its instances are the framework's objects,
+/// counted by ARC, whatever TypeScript calls the class. A class the *program*
+/// writes over one is not given a second representation on the same chain --
+/// it is refused (`native::extends_objc`) until it is built as an Objective-C
+/// class of its own, as Swift builds one.
 fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Decided> {
     if let Some(brand) = super::native::scalar(snapshot, ty) {
         return Some(Decided::As(brand_representation(brand)));
@@ -24497,6 +24523,9 @@ impl<'a> FuncBuilder<'a> {
         // the alias's symbol, found nothing, and reported it as a class this
         // compiler does not have -- of a class it had laid out.
         let symbol = self.denoted_symbol(symbol);
+        if let Some(sent) = self.lower_objc_instanceof(id, lhs, rhs, symbol)? {
+            return Ok(sent);
+        }
         // The class's *instance* type. The right operand names the constructor,
         // whose type is not the type of what `new` produces, so it is found by
         // the symbol both share -- and by the symbol rather than by the name,
@@ -28127,9 +28156,14 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::CONDITIONAL_EXPRESSION) => self.lower_conditional(id),
             Some(syntax::ARRAY_LITERAL_EXPRESSION) => self.lower_array_literal(id),
             Some(syntax::OBJECT_LITERAL_EXPRESSION) => self.lower_object_literal(id),
+            // A C constructor a binding declares, or an Objective-C class,
+            // which is built by messages: neither is a layout of ours.
             Some(syntax::NEW_EXPRESSION) => match self.native_construct(id) {
                 Some(constructed) => constructed,
-                None => self.lower_new(id),
+                None => match self.lower_objc_new(id)? {
+                    Some(object) => Ok(object),
+                    None => self.lower_new(id),
+                },
             },
             Some(syntax::ARROW_FUNCTION) => self.lower_arrow(id),
             Some(syntax::NULL_KEYWORD) => self.lower_absent(id),
@@ -37901,7 +37935,7 @@ impl<'a> FuncBuilder<'a> {
         // or one of the program's own functions that `@ntsCall` names.
         if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_)) {
             if let Some(method) = self.native_method(id) {
-                return self.lower_native_method_call(id, receiver, method, member, arguments);
+                return self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments);
             }
             if let Some(function) = self.called_method(id)? {
                 return self.lower_called_method(id, receiver, function, arguments);
@@ -39693,13 +39727,14 @@ impl<'a> FuncBuilder<'a> {
         // `@ntsSelector` as well as `@ntsSymbol`: an Objective-C instance
         // method is the same shape, a method whose instance is its first
         // argument. Only the call differs.
-        (self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE)
-            && self
-                .node(declaration)
-                .native
-                .as_ref()
-                .is_some_and(|n| n.symbol.is_some() || n.selector.is_some())
-            && signature.this_type.is_some())
+        let tagged = self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.selector.is_some());
+        // Or a method of an Objective-C class a binding declares, whose
+        // receiver is the object it is called on, or the class when `static`.
+        let objc_member = self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
+            && self.objc_class_member(declaration).is_some();
+        (tagged
+            && ((self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE) && signature.this_type.is_some())
+                || objc_member))
         .then_some((declaration, target.signature))
     }
 
@@ -39817,18 +39852,30 @@ impl<'a> FuncBuilder<'a> {
     fn lower_native_method_call(
         &mut self,
         id: NodeId,
-        receiver: ValueId,
+        (receiver, receiver_node): (ValueId, NodeId),
         (declaration, signature): (NodeId, nts_semantic_schema::SignatureId),
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let mut with_this = self.snapshot.signatures[signature.0 as usize].clone();
-        let this = with_this.this_type.ok_or_else(|| self.unsupported(id, "a C method with no `this` type"))?;
+        let name = self.node(member).text.clone().unwrap_or_default();
+        // A class method is sent to the class, which the send looks up
+        // itself: the receiver the program wrote is the class, as a value.
+        if self.objc_class_member(declaration).is_some_and(|member| member.is_static) {
+            let callee = self.native_callee(id, Some(declaration), name, &with_this)?;
+            let (args, lent) = self.lower_call_arguments(id, &callee, arguments, None)?;
+            return self.finish_call(id, callee, args, lent, Some(declaration));
+        }
+        // An Objective-C class's method has no written `this`: it is the
+        // object the method is called on, at the type the program has it.
+        let this = with_this
+            .this_type
+            .or_else(|| self.snapshot.node_types.get(&receiver_node).copied())
+            .ok_or_else(|| self.unsupported(id, "a C method with no `this` type"))?;
         with_this.parameters.insert(
             0,
             nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false },
         );
-        let name = self.node(member).text.clone().unwrap_or_default();
         let callee = self.native_callee(id, Some(declaration), name, &with_this)?;
         let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
         self.finish_call(id, callee, args, lent, Some(declaration))
@@ -40362,7 +40409,7 @@ impl<'a> FuncBuilder<'a> {
         name: String,
         signature: &nts_semantic_schema::SignatureRecord,
     ) -> Result<Callee, Diagnostic> {
-        self.native_callee_with(call, declaration, name, signature, None)
+        self.native_callee_with(call, declaration, name, signature, None, None)
     }
 
     /// The message one accessor of an Objective-C property sends: the
@@ -40375,11 +40422,13 @@ impl<'a> FuncBuilder<'a> {
         selector: &str,
         signature: &nts_semantic_schema::SignatureRecord,
     ) -> Result<Callee, Diagnostic> {
-        self.native_callee_with(call, Some(declaration), selector.to_owned(), signature, Some(selector.to_owned()))
+        self.native_callee_with(call, Some(declaration), selector.to_owned(), signature, Some(selector.to_owned()), None)
     }
 
     /// [`Self::native_callee`], with the selector given when `selector` is,
-    /// and otherwise the one the declaration's `@ntsSelector` names.
+    /// and otherwise the one the declaration's `@ntsSelector` names; and sent
+    /// to the class `class_send` names when it names one, rather than to the
+    /// receiver the declaration's kind implies.
     fn native_callee_with(
         &self,
         call: NodeId,
@@ -40387,6 +40436,7 @@ impl<'a> FuncBuilder<'a> {
         name: String,
         signature: &nts_semantic_schema::SignatureRecord,
         selector: Option<String>,
+        class_send: Option<String>,
     ) -> Result<Callee, Diagnostic> {
         // `@ntsSymbol`: the C function a declaration binds, when its own name
         // is another -- one typed view per GObject signal of the one
@@ -40432,7 +40482,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decl) = declaration
             && let Some(selector) = selector
         {
-            let send = self.objc_send(call, decl, &native, selector)?;
+            let send = self.objc_send(call, decl, &native, selector, class_send)?;
             // A family is a claim about the returned *object*, so it applies
             // only where the result is a pointer, as in clang: a `newValue`
             // returning a number owns nothing.
@@ -40545,6 +40595,17 @@ impl<'a> FuncBuilder<'a> {
     /// at module scope for having no storage -- right for a variable, and this
     /// is not one.
     fn objc_class_object(&mut self, id: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
+        // A class a binding declares with `@ntsClass`, named as a value.
+        if let Some(class) = self.snapshot.symbols.get(symbol.0 as usize).and_then(|record| {
+            record.declarations.iter().copied().find(|declaration| {
+                self.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION) && super::native::is_objc_class(self.snapshot, *declaration)
+            })
+        }) {
+            let name = self.node(class).native.as_ref().and_then(|n| n.class.clone()).unwrap_or_default();
+            let frameworks = self.declared_names(id, class, LinkTag::FRAMEWORK)?;
+            let ty = HirType::NativePointer(super::native::Pointee::Opaque("objc_class".into()));
+            return Ok(Some(self.push(OpKind::ObjcClass { name, frameworks }, ty, self.origin(id))));
+        }
         let Some(ty) = self.snapshot.node_types.get(&id).copied() else { return Ok(None) };
         let Some(name) = super::native::objc_meta(self.snapshot, ty) else { return Ok(None) };
         let Some(declaration) = self.snapshot.symbols.get(symbol.0 as usize).and_then(|record| {
@@ -40574,25 +40635,42 @@ impl<'a> FuncBuilder<'a> {
     /// The setter is `set` and the name capitalized, with a colon, which is
     /// the one Cocoa's `@property` makes unless it says `setter=`; a
     /// `readonly` property has none.
-    fn objc_property(&self, member: NodeId) -> Option<ObjcProperty> {
-        let symbol = self.node(member).symbol?;
-        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
-        let declaration = record.declarations.iter().copied().find(|declaration| {
-            self.kind_of(*declaration) == Some(syntax::PROPERTY_SIGNATURE) && self.in_objc_module(*declaration)
-        })?;
-        let name = record.name.clone();
+    fn objc_property(&self, object: NodeId, member: NodeId) -> Option<ObjcProperty> {
+        // A property signature of an `objc:` interface, or a property of an
+        // Objective-C class a binding declares -- a class property when
+        // `static`, whose accessors are sent to the class.
+        let objc = |declaration: &NodeId| match self.kind_of(*declaration) {
+            Some(syntax::PROPERTY_SIGNATURE) => self.in_objc_module(*declaration),
+            Some(syntax::PROPERTY_DECLARATION) => self.objc_class_member(*declaration).is_some(),
+            _ => false,
+        };
+        let name = self.node(member).text.clone()?;
+        // By the member's symbol, and otherwise by name on the receiver's
+        // type: a property *written* is given a symbol with no declarations,
+        // while the type still lists the property it names.
+        let declaration = self
+            .node(member)
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .and_then(|record| record.declarations.iter().copied().find(objc))
+            .or_else(|| {
+                let ty = self.snapshot.node_types.get(&object)?;
+                let TypeKind::Object { properties } = &self.snapshot.types.get(ty.0 as usize)?.kind else { return None };
+                properties.iter().find(|p| p.name == name).and_then(|p| p.declaration).filter(objc)
+            })?;
+        let is_static = self.objc_class_member(declaration).is_some_and(|member| member.is_static);
         let getter = self.node(declaration).native.as_ref().and_then(|n| n.selector.clone()).unwrap_or_else(|| name.clone());
         let setter = (!self.node(declaration).modifiers.contains(nts_semantic_schema::DeclarationModifiers::READONLY)).then(|| {
             let mut letters = name.chars();
             let first = letters.next().map(|c| c.to_ascii_uppercase()).into_iter();
             format!("set{}:", first.chain(letters).collect::<String>())
         });
-        Some(ObjcProperty { declaration, getter, setter })
+        Some(ObjcProperty { declaration, is_static, getter, setter })
     }
 
     /// `object.property` as a message: the getter, sent to the object.
     fn lower_objc_property_get(&mut self, id: NodeId, object: NodeId, member: NodeId) -> Result<Option<ValueId>, Diagnostic> {
-        let Some(property) = self.objc_property(member) else { return Ok(None) };
+        let Some(property) = self.objc_property(object, member) else { return Ok(None) };
         // The access's type is the property's: the checker gives the member's
         // symbol none of its own.
         let (Some(receiver_ty), Some(ty)) =
@@ -40600,10 +40678,10 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Ok(None);
         };
-        let receiver = self.lower_expression(object)?;
-        let signature = accessor_signature(receiver_ty, None, ty);
+        let receiver = if property.is_static { None } else { Some(self.lower_expression(object)?) };
+        let signature = accessor_signature(receiver.map(|_| receiver_ty), None, ty);
         let callee = self.native_callee_sending(id, property.declaration, &property.getter, &signature)?;
-        let (args, lent) = self.lower_call_arguments(id, &callee, &[], Some(receiver))?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, &[], receiver)?;
         self.finish_call(id, callee, args, lent, Some(property.declaration)).map(Some)
     }
 
@@ -40615,7 +40693,7 @@ impl<'a> FuncBuilder<'a> {
             return Ok(None);
         }
         let [object, member] = self.children(target)[..] else { return Ok(None) };
-        let Some(property) = self.objc_property(member) else { return Ok(None) };
+        let Some(property) = self.objc_property(object, member) else { return Ok(None) };
         // Defensive: TypeScript refuses the assignment first (TS2540), and a
         // cast to write it anyway names a different property, which is not
         // this one. Kept because a binding could still be wrong about which
@@ -40629,11 +40707,11 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Ok(None);
         };
-        let receiver = self.lower_expression(object)?;
-        let signature = accessor_signature(receiver_ty, Some(ty), self.void_type()?);
+        let receiver = if property.is_static { None } else { Some(self.lower_expression(object)?) };
+        let signature = accessor_signature(receiver.map(|_| receiver_ty), Some(ty), self.void_type()?);
         let callee = self.native_callee_sending(id, property.declaration, &setter, &signature)?;
-        let (args, lent) = self.lower_call_arguments(id, &callee, &[source], Some(receiver))?;
-        let written = *args.get(1).ok_or_else(|| self.unsupported(id, "a property setter with no value"))?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, &[source], receiver)?;
+        let written = *args.get(usize::from(receiver.is_some())).ok_or_else(|| self.unsupported(id, "a property setter with no value"))?;
         self.finish_call(id, callee, args, lent, Some(property.declaration))?;
         let want = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "an assignment"))?;
         if self.values[written.0 as usize].ty == want {
@@ -40653,6 +40731,124 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|at| u32::try_from(at).ok())
             .map(TypeId)
             .ok_or_else(|| Diagnostic::error("NTS1001", "a property setter in a program the checker gave no `void`", self.origin(NodeId(0)).location))
+    }
+
+    /// A member of an Objective-C class a binding declares (`@ntsClass`):
+    /// the class Objective-C knows it by, and whether the member is `static`.
+    fn objc_class_member(&self, declaration: NodeId) -> Option<ObjcClassMember> {
+        // Past the member list, which is a node of its own with no syntax kind.
+        let mut class = self.node(declaration).parent?;
+        while self.kind_of(class).is_none() {
+            class = self.node(class).parent?;
+        }
+        if self.kind_of(class) != Some(syntax::CLASS_DECLARATION) {
+            return None;
+        }
+        let name = self.node(class).native.as_ref()?.class.clone()?;
+        let is_static = self.node(declaration).modifiers.contains(nts_semantic_schema::DeclarationModifiers::STATIC);
+        Some(ObjcClassMember { class: name, is_static })
+    }
+
+    /// `new C(...)` for an Objective-C class: `+alloc` sent to the class, then
+    /// the constructor's `init...` sent to what it answered, which is ARC's
+    /// own pair -- the first hands over an object, the second consumes it and
+    /// hands over one. A constructor whose selector is a class method
+    /// (`@ntsSelector +buttonWithTitle:target:action:`, which Swift imports as
+    /// an `init`) is that one message instead.
+    fn lower_objc_new(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(HirType::NativePointer(super::native::Pointee::Opaque(handle))) = self.type_of(id) else {
+            return Ok(None);
+        };
+        if handle.family != super::native::Family::Objc {
+            return Ok(None);
+        }
+        let Some(target) = self.snapshot.call_targets.get(&id).copied() else {
+            return Err(self.unsupported(id, "a `new` of an Objective-C class the checker resolved to no constructor"));
+        };
+        let Some(constructor) = target.callee.filter(|c| self.objc_class_member(*c).is_some()) else {
+            return Err(self.unsupported(id, "a `new` of an Objective-C class whose constructor the binding does not declare"));
+        };
+        let Some(selector) = self.node(constructor).native.as_ref().and_then(|n| n.selector.clone()) else {
+            return Err(self.unsupported(id, "an Objective-C constructor with no `@ntsSelector`"));
+        };
+        let Some(instance) = self.snapshot.node_types.get(&id).copied() else {
+            return Err(self.unrepresentable(id, "a `new`"));
+        };
+        let arguments = self.arguments_of(id);
+        let signature = self.snapshot.signatures[target.signature.0 as usize].clone();
+        if let Some(factory) = selector.strip_prefix('+') {
+            let mut sent = signature;
+            sent.is_construct = false;
+            sent.return_type = instance;
+            let callee = self.native_callee_with(id, Some(constructor), factory.to_owned(), &sent, Some(factory.to_owned()), Some(handle.tag.clone()))?;
+            let (args, lent) = self.lower_call_arguments(id, &callee, &arguments, None)?;
+            return self.finish_call(id, callee, args, lent, Some(constructor)).map(Some);
+        }
+        let alloc = nts_semantic_schema::SignatureRecord {
+            parameters: Vec::new(),
+            return_type: instance,
+            type_parameters: Vec::new(),
+            is_construct: false,
+            type_predicate: None,
+            this_type: None,
+        };
+        let callee = self.native_callee_with(id, Some(constructor), "alloc".to_owned(), &alloc, Some("alloc".to_owned()), Some(handle.tag.clone()))?;
+        let allocated = self.finish_call(id, callee, Vec::new(), Vec::new(), Some(constructor))?;
+        let mut init = signature;
+        init.is_construct = false;
+        init.return_type = instance;
+        init.parameters.insert(0, nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: instance, optional: false, rest: false });
+        let callee = self.native_callee_with(id, Some(constructor), selector.clone(), &init, Some(selector), None)?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, &arguments, Some(allocated))?;
+        self.finish_call(id, callee, args, lent, Some(constructor)).map(Some)
+    }
+
+    /// `object instanceof C` for an Objective-C class `C`: `isKindOfClass:`,
+    /// which asks the runtime, so a subclass the program never names answers
+    /// as it does in Objective-C. A nil object answers `NO`, as any message to
+    /// nil does.
+    fn lower_objc_instanceof(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
+        let is_objc = self.snapshot.symbols.get(symbol.0 as usize).is_some_and(|record| {
+            record.declarations.iter().any(|declaration| {
+                self.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION) && super::native::is_objc_class(self.snapshot, *declaration)
+            })
+        });
+        if !is_objc {
+            return Ok(None);
+        }
+        let object = self.lower_expression(lhs)?;
+        let HirType::NativePointer(pointee) = self.values[object.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "an `instanceof` of an Objective-C class on something that is not an Objective-C object"));
+        };
+        let class = self.lower_expression(rhs)?;
+        let class_type = self.values[class.0 as usize].ty.clone();
+        let HirType::NativePointer(class_pointee) = class_type else {
+            return Err(self.unsupported(rhs, "an Objective-C class that is not a class object"));
+        };
+        let is_kind = super::native::Function {
+            name: "isKindOfClass:".to_owned(),
+            convention: super::native::Convention::C,
+            parameters: vec![super::native::Type::Pointer(pointee), super::native::Type::Pointer(class_pointee)],
+            result: super::native::Type::Bool,
+            retention: vec![super::native::Retention::Unknown; 2],
+            variadic: None,
+            declared_at: None,
+            roles: vec![super::native::Role::Plain; 2],
+            returns_string: None,
+            send: Some(super::native::Send { selector: "isKindOfClass:".to_owned(), class: None }),
+            returns_owned: false,
+            consumes: Vec::new(),
+            frameworks: Vec::new(),
+            libraries: Vec::new(),
+            defaults: Vec::new(),
+            result_as: None,
+        };
+        let origin = self.origin(id);
+        Ok(Some(self.push(
+            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(is_kind)), args: vec![object, class], frame: None },
+            HirType::Bool,
+            origin,
+        )))
     }
 
     /// Whether `declaration` sits inside `declare module "objc:..."`.
@@ -40694,6 +40890,7 @@ impl<'a> FuncBuilder<'a> {
         declaration: NodeId,
         native: &super::native::Function,
         selector: String,
+        class_send: Option<String>,
     ) -> Result<super::native::Send, Diagnostic> {
         let attributes = self.node(declaration).native.as_deref();
         if attributes.is_some_and(|n| n.symbol.is_some()) {
@@ -40702,9 +40899,19 @@ impl<'a> FuncBuilder<'a> {
         if !super::native::Send::is_selector(&selector) {
             return Err(self.unsupported(call, "@ntsSelector names one selector, as in `@ntsSelector initWithUTF8String:`"));
         }
-        // A property's accessors send to `this` as a method does.
-        let method = matches!(self.kind_of(declaration), Some(syntax::METHOD_SIGNATURE | syntax::PROPERTY_SIGNATURE));
-        let class = attributes.and_then(|n| n.class.clone());
+        // A property's accessors send to `this` as a method does. A member of
+        // an Objective-C class a binding declares sends to its instance, or
+        // to its class when it is `static`; and an explicit class send -- the
+        // `alloc` of a `new` -- goes to the class it names.
+        let (method, class) = match (class_send, self.objc_class_member(declaration)) {
+            (Some(class), _) => (false, Some(class)),
+            (None, Some(member)) if member.is_static => (false, Some(member.class)),
+            (None, Some(_)) => (true, None),
+            (None, None) => (
+                matches!(self.kind_of(declaration), Some(syntax::METHOD_SIGNATURE | syntax::PROPERTY_SIGNATURE)),
+                attributes.and_then(|n| n.class.clone()),
+            ),
+        };
         match (method, &class) {
             (true, Some(_)) => {
                 return Err(self.unsupported(call, "@ntsClass on a method, whose receiver is already `this`"));
@@ -41029,6 +41236,15 @@ impl<'a> FuncBuilder<'a> {
         let member_name = self.member_name(member).ok_or_else(|| {
             self.unsupported(member, "a static method whose name the program computes")
         })?;
+        // A class method of an Objective-C class: a message to the class.
+        if let Some(target) = self.snapshot.call_targets.get(&id).copied()
+            && let Some(declaration) = target.callee.filter(|d| self.objc_class_member(*d).is_some_and(|m| m.is_static))
+        {
+            let signature = self.snapshot.signatures[target.signature.0 as usize].clone();
+            let callee = self.native_callee(id, Some(declaration), member_name, &signature)?;
+            let (args, lent) = self.lower_call_arguments(id, &callee, arguments, None)?;
+            return self.finish_call(id, callee, args, lent, Some(declaration));
+        }
 
         let args = self.lower_arguments(id, arguments)?;
         let ty = self
@@ -47649,22 +47865,25 @@ mod native_memory;
 /// write it. `setter` is `None` for a `readonly` one.
 struct ObjcProperty {
     declaration: NodeId,
+    /// A class property, sent to the class.
+    is_static: bool,
     getter: String,
     setter: Option<String>,
 }
 
 /// The signature one accessor sends with: the receiver first, as
-/// `lower_native_method_call` puts a method's `this`, then the value for a
-/// setter, and what it returns.
-fn accessor_signature(receiver: TypeId, value: Option<TypeId>, result: TypeId) -> nts_semantic_schema::SignatureRecord {
+/// `lower_native_method_call` puts a method's `this` -- none for a class
+/// property, which is sent to the class -- then the value for a setter, and
+/// what it returns.
+fn accessor_signature(receiver: Option<TypeId>, value: Option<TypeId>, result: TypeId) -> nts_semantic_schema::SignatureRecord {
     let parameter = |name: &str, ty| nts_semantic_schema::ParameterRecord { name: name.to_owned(), ty, optional: false, rest: false };
     nts_semantic_schema::SignatureRecord {
-        parameters: std::iter::once(parameter("this", receiver)).chain(value.map(|ty| parameter("value", ty))).collect(),
+        parameters: receiver.map(|ty| parameter("this", ty)).into_iter().chain(value.map(|ty| parameter("value", ty))).collect(),
         return_type: result,
         type_parameters: Vec::new(),
         is_construct: false,
         type_predicate: None,
-        this_type: Some(receiver),
+        this_type: receiver,
     }
 }
 
@@ -47696,4 +47915,11 @@ impl LinkTag {
         rule: "@ntsLibrary names libraries as `-l` takes them, as in `@ntsLibrary gdi32` or `@ntsLibrary glib-2.0` \
                (letters, digits, `_`, `-`, `+`, `.`)",
     };
+}
+
+/// A member of an Objective-C class a binding declares.
+struct ObjcClassMember {
+    /// The class's Objective-C name.
+    class: String,
+    is_static: bool,
 }
