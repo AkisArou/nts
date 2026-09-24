@@ -39486,18 +39486,42 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expecting(*argument, &ty)?;
             args.push(self.coerce(value, &ty, *argument)?);
         }
-        // Each left out, its default, evaluated here: the defaults a binding
-        // writes are constants, and one that read an earlier parameter would
-        // find no binding for it and be refused, not guessed at.
+        // Each left out, its default -- only a constant one. These are
+        // lowered after every written argument, which for an arbitrary
+        // default would run it out of order with an argument to its right,
+        // and in a scope where the parameters before it are not bound. A
+        // constant has neither problem, and it is what a binding writes.
         for parameter in parameters.iter().skip(1 + arguments.len()) {
             let default = self.default_of(*parameter).ok_or_else(|| {
                 self.unsupported(id, "an argument left out where the @ntsCall function has no default for it")
             })?;
+            if !self.is_constant(default) {
+                return Err(self.unsupported(default, "an @ntsCall default that is not a constant, which this lowering cannot evaluate at the call"));
+            }
             let ty = want(self, *parameter)?;
             let value = self.lower_expecting(default, &ty)?;
             args.push(self.coerce(value, &ty, default)?);
         }
         self.push_call(id, Callee::Direct(name), args, Some(function))
+    }
+
+    /// A literal, `null`, or one of those negated, parenthesized or cast --
+    /// `0 as c_uint`: an expression whose value does not depend on where or
+    /// when it is evaluated.
+    fn is_constant(&self, node: NodeId) -> bool {
+        match self.kind_of(node) {
+            Some(
+                syntax::NUMERIC_LITERAL
+                | syntax::STRING_LITERAL
+                | syntax::TRUE_KEYWORD
+                | syntax::FALSE_KEYWORD
+                | syntax::NULL_KEYWORD,
+            ) => true,
+            Some(syntax::AS_EXPRESSION | syntax::PARENTHESIZED_EXPRESSION | syntax::PREFIX_UNARY_EXPRESSION) => {
+                self.children(node).first().is_some_and(|inner| self.is_constant(*inner))
+            }
+            _ => false,
+        }
     }
 
     /// `handle.method(args)` as the C call `symbol(handle, args)`: the

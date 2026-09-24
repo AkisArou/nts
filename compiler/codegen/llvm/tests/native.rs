@@ -2670,6 +2670,19 @@ export function run(): number {
             assert_eq!(output, expect("420794127", provider), "{provider:?}");
         }
     }
+    // A default that is not a constant is refused: it would be evaluated
+    // after every written argument, so one with an effect runs out of order
+    // with an argument to its right. A call reading no parameter, which the
+    // lowering before this accepted.
+    let computed = source
+        .replace("by: c_int = 7 as c_int", "by: c_int = seven()")
+        .replace("export function run()", "let calls = 0;\nfunction seven(): c_int { calls++; return 7 as c_int; }\nexport function run()");
+    let Some((_, prepared)) = prepare("ntscall-computed", &computed) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("an @ntsCall default that is not a constant")),
+        "a computed default was accepted: {:?}",
+        prepared.diagnostics
+    );
 }
 
 /// A promise that settles with a C handle, awaited: GIO's
