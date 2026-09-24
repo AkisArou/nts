@@ -111,7 +111,9 @@ function main(): void {
   const pressable = button.frame;
   const width = pressable.size.width;
   const height = button.frame.size.height;
-  report(`window ${shown.size.width} button ${width}x${height}`);
+  // `subviews` is Swift's `[NSView]`: an array copied out of the NSArray.
+  const views = window.contentView?.subviews.length ?? 0;
+  report(`window ${shown.size.width} button ${width}x${height} views ${views}`);
 
   Timer.scheduledTimer({ timeInterval: 0.05, target: controller, selector: sel_registerName("tick:"), userInfo: null, repeats: true });
   app.run();

@@ -55,6 +55,10 @@ pub struct Function {
     /// Set when the declaration returns a TypeScript `string`: the `result`
     /// is then C's `const char *`, which the call site copies into a string.
     pub returns_string: Option<ReturnedString>,
+    /// Set when an Objective-C message returns an `NSArray *` the program
+    /// reads as a TypeScript array (Swift's `[T]`): the `result` is then the
+    /// `NSArray`, which the call site copies into an array of its elements.
+    pub returns_array: Option<Bridged>,
     /// Set when the declaration is an Objective-C message (`@ntsSelector`)
     /// rather than a C symbol. `name` is then the TypeScript name, which no
     /// backend links against. The call is `objc_msgSend` cast to exactly this
@@ -334,7 +338,10 @@ pub enum Role {
     /// Swift's `setFrame(_:display:)`. Every label of one parameter is fed by
     /// that one TypeScript argument, and `last` closes the group. The object
     /// is never built: each property is lowered on its own and passed here.
-    Label { key: String, last: bool },
+    ///
+    /// `inner` is how the property crosses, as a positional parameter of its
+    /// type would: `Plain`, a `String`, an `NSString` or an `NSArray`.
+    Label { key: String, last: bool, inner: Box<Role> },
     /// A TypeScript `string` where an Objective-C message takes an
     /// `NSString *`, as Swift's `String` crosses: its UTF-16 lent for the
     /// call, an `NSString` made of it (`CFStringCreateWithCharacters`, +1, so
@@ -343,6 +350,20 @@ pub enum Role {
     /// string in a message is `CString`, and a C function's `string` is
     /// still one.
     NSString,
+    /// A TypeScript array where an Objective-C message takes an `NSArray *`,
+    /// as Swift's `[T]` crosses: an array made of the elements for the call
+    /// (+1, so the program's count releases it after), each an object as it
+    /// is or, for a `string[]`, an `NSString` made of each string.
+    NSArray(Bridged),
+}
+
+/// What an array crossing an Objective-C message holds, as Swift bridges
+/// `[T]`: objects of a class a binding declares, or strings, each of which is
+/// an `NSString` on the other side.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Bridged {
+    Object(Pointee),
+    String,
 }
 
 /// The labels of a parameter declared as an object type literal --
@@ -352,7 +373,7 @@ pub enum Role {
 /// an interface names a type a program builds and passes around, where a label
 /// list is the call's own spelling, as Swift's is. Such a parameter had no
 /// native ABI before, so nothing that compiled reads differently.
-fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(String, TypeId)>> {
+pub(crate) fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(String, TypeId)>> {
     let record = snapshot.types.get(ty.0 as usize)?;
     let TypeKind::Object { properties } = &record.kind else { return None };
     if record.symbol.is_some() || properties.is_empty() {
@@ -416,6 +437,7 @@ impl Function {
                 Role::ClosureData | Role::ClosureNotify | Role::Length { .. } => None,
                 Role::Plain
                 | Role::NSString
+                | Role::NSArray(_)
                 | Role::String(_)
                 | Role::Closure { .. }
                 | Role::Block { .. }
@@ -927,7 +949,14 @@ impl Handle {
     /// message as.
     #[must_use]
     pub fn ns_string() -> Self {
-        Self { tag: "NSString".to_owned(), ancestors: vec!["NSObject".to_owned()], family: Family::Objc, interface: false }
+        Self::objc("NSString")
+    }
+
+    /// A Foundation class a bridge makes or reads -- `NSString`, `NSArray` --
+    /// which the program only ever holds as an `NSObject`.
+    #[must_use]
+    pub fn objc(tag: &str) -> Self {
+        Self { tag: tag.to_owned(), ancestors: vec!["NSObject".to_owned()], family: Family::Objc, interface: false }
     }
 }
 
@@ -1645,6 +1674,7 @@ impl Function {
             declared_at: None,
             roles,
             returns_string: returned.string,
+            returns_array: returned.array,
             send: None,
             returns_owned: returned.owned,
             consumes,
@@ -2110,6 +2140,8 @@ fn tags_name_parameters(
 struct Returned {
     /// C's result type.
     result: Type,
+    /// An `NSArray` read back as a TypeScript array.
+    array: Option<Bridged>,
     /// A string, or a `NULL`-terminated array of them, copied at the call.
     string: Option<ReturnedString>,
     /// `Owned<T>`: the reference comes with the handle.
@@ -2122,6 +2154,19 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
     let string = if abi.is_none() { returned_string(snapshot, ty) } else { None };
     let array = if abi.is_none() { returned_strings(snapshot, ty) } else { None };
     let declared = declared_result(snapshot, name, ty)?;
+    // Only an array of objects here: a `string[]` result is a C function's
+    // NULL-terminated `char **` too, and is an `NSArray` only where the callee
+    // turns out to be a message (`bridge_strings`).
+    let bridged = if abi.is_none() { bridged_array(snapshot, ty).filter(|element| *element != Bridged::String) } else { None };
+    if bridged.is_some() {
+        return Ok(Returned {
+            result: Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))),
+            array: bridged,
+            string: None,
+            owned: false,
+            program: None,
+        });
+    }
     let result = match (returned_text(array.is_some(), string.is_some()), &declared) {
         (Some(text), _) => text,
         (None, Some((c, _))) => c.clone(),
@@ -2130,6 +2175,7 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
     };
     Ok(Returned {
         result,
+        array: None,
         string: array.map(|nullable| ReturnedString { nullable, free: None, array: true }).or(string),
         owned: owned_result(snapshot, name, ty)?,
         // A `CBool`'s integer, read back as a boolean.
@@ -2360,13 +2406,25 @@ fn c_parameter(
             .iter()
             .enumerate()
             .map(|(at, (key, ty))| {
-                let ty = abi_type(snapshot, *ty)
-                    .filter(|ty| *ty != Type::Void)
-                    .ok_or_else(|| no_abi_type(name, Some(&format!("{}.{key}", parameter.name))))?;
-                Ok((ty, Role::Label { key: key.clone(), last: at + 1 == labels.len() }))
+                // A property crosses as a positional parameter of its type
+                // would: an array Swift bridges, a string, or its C type.
+                let (ty, inner) = if let Some(element) = bridged_array(snapshot, *ty) {
+                    (Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))), Role::NSArray(element))
+                } else if let Some(encoding) = string_encoding(snapshot, *ty) {
+                    (encoding.c_type(), Role::String(encoding))
+                } else {
+                    let ty = abi_type(snapshot, *ty)
+                        .filter(|ty| *ty != Type::Void)
+                        .ok_or_else(|| no_abi_type(name, Some(&format!("{}.{key}", parameter.name))))?;
+                    (ty, Role::Plain)
+                };
+                Ok((ty, Role::Label { key: key.clone(), last: at + 1 == labels.len(), inner: Box::new(inner) }))
             })
             .collect::<Result<Vec<_>, String>>()
             .map(Some);
+    }
+    if let Some(element) = bridged_array(snapshot, parameter.ty) {
+        return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))), Role::NSArray(element))]));
     }
     if let Some(array) = native_array(snapshot, parameter.ty) {
         return array_slots(snapshot, name, &parameter.name, &array, at).map(Some);
@@ -2386,6 +2444,21 @@ fn c_parameter(
     }
 }
 
+
+/// An array Swift bridges as `[T]` (`Role::NSArray`, `Function::returns_array`):
+/// a `T[]` of a class a binding declares, or a `string[]`. Only a message
+/// takes or returns one; a C function given one is refused where its callee is
+/// built. An element that may be null is not one: an `NSArray` holds no nil.
+fn bridged_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
+    let TypeKind::Array(element) = snapshot.types.get(ty.0 as usize)?.kind else { return None };
+    if matches!(snapshot.types.get(element.0 as usize)?.kind, TypeKind::String) {
+        return Some(Bridged::String);
+    }
+    match pointer(snapshot, element)? {
+        Pointee::Opaque(handle) if handle.family == Family::Objc => Some(Bridged::Object(Pointee::Opaque(handle))),
+        _ => None,
+    }
+}
 
 /// Whether a declared parameter is a TypeScript `string`, or `string | null`.
 ///

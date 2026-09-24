@@ -97,7 +97,7 @@ if [ -s "$out/main.err" ]; then
   exit 1
 fi
 cat >"$out/expected.txt" <<'EXPECTED'
-window 320 button 100x32
+window 320 button 100x32 views 1
 pressed 1
 micro 1
 timeout 1

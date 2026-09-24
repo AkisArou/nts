@@ -365,9 +365,22 @@ correctness does not depend on arm64 running by luck.
        changes no count.
      - `macos-classes` checks it against ARC on both backends, and its NoGc
        control differs in exactly the three lifetime lines.
+     - **Bridging, as Swift's `[T]`.** A message's `NSArray` parameter takes a
+       TypeScript array. It is copied into an `NSMutableArray` made for the
+       call and released after it, with each string an `NSString` given up
+       once added. An `NSArray` result is copied into a new array, each object
+       counted by it and each string copied. Labels cross the same way, since
+       a label now carries the role its type has (`Role::Label { inner }`).
+       - `bind-objc` writes `NSView[]`, `string[]`, and `NSObject[]` for an
+         untyped `NSArray`. Collection skips dropped from 46 to 10.
+       - A nullable array *result* is still skipped, because Swift reads it
+         as `[T]?`.
+       - `macos-classes` checks all four directions against ARC, and
+         `macos-window` reads `window.contentView?.subviews.length` in the
+         running window.
      - Still owed:
-       - Bridging an `NSArray` result into a TypeScript array, and back.
        - Sets and maps of objects.
+       - Dictionaries.
        - Each element *read* retains and releases around its use, where ARC
          passes a +0 borrow. That costs a count per read and holds the
          element to the end of the scope.
@@ -375,11 +388,18 @@ correctness does not depend on arm64 running by luck.
      and `operation?.name ?? "unnamed"` send nothing to an absent receiver, and
      the chain is `undefined`. The checker adds that `undefined` to every
      link's type. A message has none, so the link is sent at the method's own
-     type and the branch around it makes the chain's. Still refused: a link
-     whose value is an object (`a?.b?.c`), since `NSView | null | undefined`
-     will be lowered as one short-circuit over the whole chain, so an
-     intermediate never forms a union with two absences (MainClaude's call:
-     no new tags).
+     type and the branch around it makes the chain's. A longer chain
+     (`a?.b?.c`) is lowered as one short-circuit, so an intermediate never
+     forms a union with two absences (MainClaude's call: no new tags).
+     - `a?.b.c`, `a?.b?.c()` and `xs?.[1]?.[0]` all work. Each `?.` tests its
+       receiver innermost first, and what follows is lowered in the arm where
+       it is present, so every merge is at the chain's own type.
+     - Twelve chain shapes agree with node (`tooling/sweep/probe.sh`), and the
+       receiver is evaluated once.
+     - `f?.()` inside a longer chain is refused by name.
+     - The probes found a pre-existing wrong answer in `erase` of a nullable
+       reference (`t?.mid?.leaf === null` is `false`), which is reported to
+       MainClaude.
    - **Objective-C handles narrow and assert.** `instanceof` narrows an
      Objective-C object to a subclass, and `as` asserts one, unchecked as every
      TypeScript assertion is. Any other opaque pointer is still refused.

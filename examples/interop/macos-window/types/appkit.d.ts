@@ -731,6 +731,7 @@ declare module "objc:AppKit" {
     readonly undoManager: UndoManager | null;
     userActivity: NSUserActivity;
     touchBar: NSTouchBar;
+    static readonly restorableStateKeyPaths: string[];
     /** @ntsSelector init */
     constructor();
     /** @ntsSelector initWithCoder: */
@@ -811,6 +812,8 @@ declare module "objc:AppKit" {
     becomeFirstResponder(): boolean;
     /** @ntsSelector resignFirstResponder */
     resignFirstResponder(): boolean;
+    /** @ntsSelector interpretKeyEvents: */
+    interpretKeyEvents(eventArray: NSEvent[]): void;
     /** @ntsSelector flushBufferedKeyEvents */
     flushBufferedKeyEvents(): void;
     /** @ntsSelector showContextHelp: */
@@ -850,13 +853,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector self */
     self(): NSResponder;
     // Not bound, each for the reason given:
-    //   @property restorableStateKeyPaths: a collection, `NSArray` (arrays come with S3c)
     //   -mouseCancelled:: introduced in macOS 26.0
     //   -contextMenuKeyDown:: introduced in macOS 15.0
-    //   -interpretKeyEvents:: a collection, `NSArray` (arrays come with S3c)
     //   -presentError:modalForWindow:delegate:didPresentSelector:contextInfo:: a `void *`
     //   -showWritingTools:: introduced in macOS 15.2
-    //   +allowedClassesForRestorableStateKeyPath:: a collection, `NSArray` (arrays come with S3c)
+    //   +allowedClassesForRestorableStateKeyPath:: an array of `Class`
   }
 
   /** @ntsClass NSString */
@@ -889,6 +890,7 @@ declare module "objc:AppKit" {
     readonly precomposedStringWithCompatibilityMapping: string;
     readonly description: string;
     readonly hash: UInt;
+    readonly pathComponents: string[];
     readonly isAbsolutePath: boolean;
     readonly lastPathComponent: string;
     /** @ntsSelector stringByDeletingLastPathComponent */
@@ -992,6 +994,10 @@ declare module "objc:AppKit" {
     lengthOfBytes(labels: { using: UInt }): UInt;
     /** @ntsSelector localizedNameOfStringEncoding: */
     static localizedName(labels: { of: UInt }): string;
+    /** @ntsSelector componentsSeparatedByString: */
+    components(labels: { separatedBy: string }): string[];
+    /** @ntsSelector componentsSeparatedByCharactersInSet: */
+    components(labels: { separatedBy: NSCharacterSet }): string[];
     /** @ntsSelector stringByTrimmingCharactersInSet: */
     trimmingCharacters(labels: { in: NSCharacterSet }): string;
     /** @ntsSelector stringByPaddingToLength:withString:startingAtIndex: */
@@ -1018,10 +1024,14 @@ declare module "objc:AppKit" {
     propertyList(): NSObject;
     /** @ntsSelector variantFittingPresentationWidth: */
     variantFittingPresentationWidth(width: Int): string;
+    /** @ntsSelector pathWithComponents: */
+    static path(labels: { withComponents: string[] }): string;
     /** @ntsSelector stringByAppendingPathComponent: */
     appendingPathComponent(str: string): string;
     /** @ntsSelector stringByAppendingPathExtension: */
     appendingPathExtension(str: string): string | null;
+    /** @ntsSelector stringsByAppendingPaths: */
+    strings(labels: { byAppendingPaths: string[] }): string[];
     /** @ntsSelector getFileSystemRepresentation:maxLength: */
     getFileSystemRepresentation(cname: CString, labels: { maxLength: UInt }): boolean;
     /** @ntsSelector stringByAddingPercentEncodingWithAllowedCharacters: */
@@ -1033,7 +1043,6 @@ declare module "objc:AppKit" {
     // Not bound, each for the reason given:
     //   @property UTF8String: a `const char *`
     //   @property availableStringEncodings: a `const NSStringEncoding *`
-    //   @property pathComponents: a collection, `NSArray` (arrays come with S3c)
     //   @property fileSystemRepresentation: a `const char *`
     //   -getCharacters:range:: a `unichar *`
     //   -uppercaseStringWithLocale:: Swift's `uppercased` is also a property here
@@ -1043,8 +1052,6 @@ declare module "objc:AppKit" {
     //   -enumerateLinesUsingBlock:: a block (closures come with S5)
     //   -cStringUsingEncoding:: a `const char *`
     //   -getBytes:maxLength:usedLength:encoding:options:range:remainingRange:: a `void *`
-    //   -componentsSeparatedByString:: a collection, `NSArray` (arrays come with S3c)
-    //   -componentsSeparatedByCharactersInSet:: a collection, `NSArray` (arrays come with S3c)
     //   -writeToURL:atomically:encoding:error:: Swift's `write(to:atomically:encoding:)` passes 3 of its 4 arguments (throws or async)
     //   -writeToFile:atomically:encoding:error:: Swift's `write(toFile:atomically:encoding:)` passes 3 of its 4 arguments (throws or async)
     //   -initWithCharactersNoCopy:length:freeWhenDone:: a `unichar *`
@@ -1059,15 +1066,13 @@ declare module "objc:AppKit" {
     //   -initWithContentsOfFile:encoding:error:: Swift's `init(contentsOfFile:encoding:)` passes 2 of its 3 arguments (throws or async)
     //   -initWithContentsOfURL:usedEncoding:error:: Swift's `init(contentsOf:usedEncoding:)` passes 2 of its 3 arguments (throws or async)
     //   -initWithContentsOfFile:usedEncoding:error:: Swift's `init(contentsOfFile:usedEncoding:)` passes 2 of its 3 arguments (throws or async)
-    //   +stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:: a collection, `NSDictionary` (arrays come with S3c)
-    //   -propertyListFromStringsFileFormat: a collection, `NSDictionary` (arrays come with S3c)
+    //   +stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:: a collection, `NSDictionary`, which crosses as an object when it is bound
+    //   -propertyListFromStringsFileFormat: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -getCharacters:: a `unichar *`
-    //   +pathWithComponents:: a collection, `NSArray` (arrays come with S3c)
-    //   -stringsByAppendingPaths:: a collection, `NSArray` (arrays come with S3c)
     //   -completePathIntoString:caseSensitive:matchesIntoArray:filterTypes:: a `NSString * _Nullable *`
     //   -stringByAddingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
     //   -stringByReplacingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
-    //   -linguisticTagsInRange:scheme:options:orthography:tokenRanges:: a collection, `NSArray` (arrays come with S3c)
+    //   -linguisticTagsInRange:scheme:options:orthography:tokenRanges:: an array of `NSValue *> * _Nullable`
     //   -enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock:: a block (closures come with S5)
   }
 
@@ -1106,6 +1111,7 @@ declare module "objc:AppKit" {
   export class NSView extends NSResponder {
     readonly window: NSWindow | null;
     readonly superview: NSView | null;
+    subviews: NSView[];
     readonly opaqueAncestor: NSView | null;
     /** @ntsSet setHidden: */
     isHidden: boolean;
@@ -1140,7 +1146,9 @@ declare module "objc:AppKit" {
     needsLayout: boolean;
     alphaValue: CGFloat;
     layerUsesCoreImageFilters: boolean;
+    backgroundFilters: CIFilter[];
     compositingFilter: CIFilter;
+    contentFilters: CIFilter[];
     shadow: NSShadow;
     clipsToBounds: boolean;
     postsBoundsChangedNotifications: boolean;
@@ -1170,12 +1178,14 @@ declare module "objc:AppKit" {
     readonly printJobTitle: string;
     readonly isInFullScreenMode: boolean;
     readonly isDrawingFindIndicator: boolean;
+    gestureRecognizers: NSGestureRecognizer[];
     allowedTouchTypes: CEnum<NSTouch.TouchTypeMask | 0, UInt>;
     readonly safeAreaInsets: ByValue<NSEdgeInsets>;
     additionalSafeAreaInsets: ByValue<NSEdgeInsets>;
     readonly safeAreaLayoutGuide: NSLayoutGuide;
     readonly safeAreaRect: ByValue<CGRect>;
     readonly layoutMarginsGuide: NSLayoutGuide;
+    readonly trackingAreas: NSTrackingArea[];
     readonly enclosingMenuItem: NSMenuItem;
     readonly candidateListTouchBarItem: NSCandidateListTouchBarItem;
     readonly leadingAnchor: NSLayoutXAxisAnchor;
@@ -1190,6 +1200,7 @@ declare module "objc:AppKit" {
     readonly centerYAnchor: NSLayoutYAxisAnchor;
     readonly firstBaselineAnchor: NSLayoutYAxisAnchor;
     readonly lastBaselineAnchor: NSLayoutYAxisAnchor;
+    readonly constraints: NSLayoutConstraint[];
     needsUpdateConstraints: boolean;
     translatesAutoresizingMaskIntoConstraints: boolean;
     static readonly requiresConstraintBasedLayout: boolean;
@@ -1204,6 +1215,7 @@ declare module "objc:AppKit" {
     isVerticalContentSizeConstraintActive: boolean;
     readonly fittingSize: ByValue<CGSize>;
     readonly hasAmbiguousLayout: boolean;
+    readonly layoutGuides: NSLayoutGuide[];
     pressureConfiguration: NSPressureConfiguration;
     /** @ntsSelector initWithFrame: */
     constructor(labels: { frame: ByValue<CGRect> });
@@ -1411,6 +1423,8 @@ declare module "objc:AppKit" {
     beginPage(labels: { in: ByValue<CGRect>; atPlacement: ByValue<CGPoint> }): void;
     /** @ntsSelector endPage */
     endPage(): void;
+    /** @ntsSelector beginDraggingSessionWithItems:event:source: */
+    beginDraggingSession(labels: { with: NSDraggingItem[]; event: NSEvent; source: NSObject }): NSDraggingSession;
     /** @ntsSelector unregisterDraggedTypes */
     unregisterDraggedTypes(): void;
     /** @ntsSelector showDefinitionForAttributedString:atPoint: */
@@ -1441,8 +1455,12 @@ declare module "objc:AppKit" {
     scroll(clipView: NSClipView, labels: { to: ByValue<CGPoint> }): void;
     /** @ntsSelector addConstraint: */
     addConstraint(constraint: NSLayoutConstraint): void;
+    /** @ntsSelector addConstraints: */
+    addConstraints(constraints: NSLayoutConstraint[]): void;
     /** @ntsSelector removeConstraint: */
     removeConstraint(constraint: NSLayoutConstraint): void;
+    /** @ntsSelector removeConstraints: */
+    removeConstraints(constraints: NSLayoutConstraint[]): void;
     /** @ntsSelector updateConstraintsForSubtreeIfNeeded */
     updateConstraintsForSubtreeIfNeeded(): void;
     /** @ntsSelector updateConstraints */
@@ -1459,6 +1477,8 @@ declare module "objc:AppKit" {
     contentCompressionResistancePriority(labels: { for: CEnum<NSLayoutConstraint.Orientation, Int> }): Float;
     /** @ntsSelector setContentCompressionResistancePriority:forOrientation: */
     setContentCompressionResistancePriority(priority: Float, labels: { for: CEnum<NSLayoutConstraint.Orientation, Int> }): void;
+    /** @ntsSelector constraintsAffectingLayoutForOrientation: */
+    constraintsAffectingLayout(labels: { for: CEnum<NSLayoutConstraint.Orientation, Int> }): NSLayoutConstraint[];
     /** @ntsSelector exerciseAmbiguityInLayout */
     exerciseAmbiguityInLayout(): void;
     /** @ntsSelector addLayoutGuide: */
@@ -1496,18 +1516,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector rotateWithEvent: */
     rotate(labels: { with: NSEvent }): void;
     // Not bound, each for the reason given:
-    //   @property subviews: a collection, `NSArray` (arrays come with S3c)
     //   @property canDraw: deprecated in macOS 10.14
     //   @property acceptsTouchEvents: deprecated in macOS 10.12
-    //   @property backgroundFilters: a collection, `NSArray` (arrays come with S3c)
-    //   @property contentFilters: a collection, `NSArray` (arrays come with S3c)
-    //   @property registeredDraggedTypes: a collection, `NSArray` (arrays come with S3c)
-    //   @property gestureRecognizers: a collection, `NSArray` (arrays come with S3c)
+    //   @property registeredDraggedTypes: an array of `NSPasteboardType`
     //   @property prefersCompactControlSizeMetrics: introduced in macOS 26.0
-    //   @property trackingAreas: a collection, `NSArray` (arrays come with S3c)
     //   @property writingToolsCoordinator: introduced in macOS 15.2
-    //   @property constraints: a collection, `NSArray` (arrays come with S3c)
-    //   @property layoutGuides: a collection, `NSArray` (arrays come with S3c)
     //   @property wantsBestResolutionOpenGLSurface: deprecated in macOS 10.14
     //   @property wantsExtendedDynamicRangeOpenGLSurface: deprecated in macOS 10.14
     //   -getRectsBeingDrawn:count:: a `const NSRect * _Nullable *`
@@ -1522,11 +1535,10 @@ declare module "objc:AppKit" {
     //   -getRectsExposedDuringLiveResize:count:: a `NSRect *`
     //   -knowsPageRange:: a `NSRange *`
     //   -drawSheetBorderWithSize:: deprecated in macOS 10.14
-    //   -beginDraggingSessionWithItems:event:source:: a collection, `NSArray` (arrays come with S3c)
-    //   -registerForDraggedTypes:: a collection, `NSArray` (arrays come with S3c)
-    //   -enterFullScreenMode:withOptions:: a collection, `NSDictionary` (arrays come with S3c)
-    //   -exitFullScreenModeWithOptions:: a collection, `NSDictionary` (arrays come with S3c)
-    //   -showDefinitionForAttributedString:range:options:baselineOriginProvider:: a collection, `NSDictionary` (arrays come with S3c)
+    //   -registerForDraggedTypes:: an array of `NSPasteboardType`
+    //   -enterFullScreenMode:withOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
+    //   -exitFullScreenModeWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
+    //   -showDefinitionForAttributedString:range:options:baselineOriginProvider:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -addTrackingRect:owner:userData:assumeInside:: a `void *`
     //   -displayLinkWithTarget:selector:: introduced in macOS 14.0
     //   -dragFile:fromRect:slideBack:event:: deprecated in macOS 10.13
@@ -1537,10 +1549,7 @@ declare module "objc:AppKit" {
     //   -releaseGState: deprecated in macOS 10.10
     //   -setUpGState: deprecated in macOS 10.10
     //   -renewGState: deprecated in macOS 10.10
-    //   -addConstraints:: a collection, `NSArray` (arrays come with S3c)
-    //   -removeConstraints:: a collection, `NSArray` (arrays come with S3c)
     //   -frameForAlignmentRect:: Swift's `frame` is also a property here
-    //   -constraintsAffectingLayoutForOrientation:: a collection, `NSArray` (arrays come with S3c)
   }
 
   /** @ntsClass NSWindow */
@@ -1553,6 +1562,7 @@ declare module "objc:AppKit" {
     toolbarStyle: CEnum<NSWindow.ToolbarStyle, Int>;
     readonly contentLayoutRect: ByValue<CGRect>;
     readonly contentLayoutGuide: NSObject;
+    titlebarAccessoryViewControllers: NSTitlebarAccessoryViewController[];
     representedURL: NSURL;
     representedFilename: string;
     /** @ntsSet setExcludedFromWindowsMenu: */
@@ -1625,6 +1635,7 @@ declare module "objc:AppKit" {
     minFullScreenContentSize: ByValue<CGSize>;
     maxFullScreenContentSize: ByValue<CGSize>;
     windowController: NSWindowController | null;
+    readonly sheets: NSWindow[];
     readonly attachedSheet: NSWindow | null;
     readonly isSheet: boolean;
     readonly sheetParent: NSWindow;
@@ -1645,6 +1656,7 @@ declare module "objc:AppKit" {
     static readonly userTabbingPreference: CEnum<NSWindow.UserTabbingPreference, Int>;
     tabbingMode: CEnum<NSWindow.TabbingMode, Int>;
     tabbingIdentifier: string;
+    readonly tabbedWindows: NSWindow[];
     readonly tab: NSWindowTab;
     readonly tabGroup: NSWindowTabGroup;
     readonly windowTitlebarLayoutDirection: CEnum<NSUserInterfaceLayoutDirection, Int>;
@@ -1895,6 +1907,8 @@ declare module "objc:AppKit" {
     anchorAttribute(labels: { for: CEnum<NSLayoutConstraint.Orientation, Int> }): CEnum<NSLayoutConstraint.Attribute, Int>;
     /** @ntsSelector setAnchorAttribute:forOrientation: */
     setAnchorAttribute(attr: CEnum<NSLayoutConstraint.Attribute, Int>, labels: { for: CEnum<NSLayoutConstraint.Orientation, Int> }): void;
+    /** @ntsSelector visualizeConstraints: */
+    visualizeConstraints(constraints: NSLayoutConstraint[]): void;
     /** @ntsSelector setIsMiniaturized: */
     setIsMiniaturized(flag: boolean): void;
     /** @ntsSelector setIsVisible: */
@@ -1916,12 +1930,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector self */
     self(): NSWindow;
     // Not bound, each for the reason given:
-    //   @property titlebarAccessoryViewControllers: a collection, `NSArray` (arrays come with S3c)
     //   @property cascadingReferenceFrame: introduced in macOS 15.0
-    //   @property deviceDescription: a collection, `NSDictionary` (arrays come with S3c)
-    //   @property sheets: a collection, `NSArray` (arrays come with S3c)
-    //   @property childWindows: a collection, `NSArray` (arrays come with S3c)
-    //   @property tabbedWindows: a collection, `NSArray` (arrays come with S3c)
+    //   @property deviceDescription: a collection, `NSDictionary`, which crosses as an object when it is bound
+    //   @property childWindows: a nullable array, which Swift reads as `[T]?`
     //   @property hasActiveWindowSharingSession: introduced in macOS 13.3
     //   @property flushWindowDisabled: deprecated in macOS 10.14
     //   @property autodisplay: deprecated in macOS 10.14
@@ -1933,13 +1944,13 @@ declare module "objc:AppKit" {
     //   @property drawers: deprecated in macOS 10.13
     //   -beginSheet:completionHandler:: Swift's `beginSheet(_:)` passes 1 of its 2 arguments (throws or async)
     //   -beginCriticalSheet:completionHandler:: Swift's `beginCriticalSheet(_:)` passes 1 of its 2 arguments (throws or async)
-    //   +windowNumbersWithOptions:: a collection, `NSArray` (arrays come with S3c)
+    //   +windowNumbersWithOptions:: a nullable array, which Swift reads as `[T]?`
     //   -transferWindowSharingToWindow:completionHandler:: introduced in macOS 13.3
     //   -requestSharingOfWindow:completionHandler:: introduced in macOS 15.0
     //   -requestSharingOfWindowUsingPreview:title:completionHandler:: introduced in macOS 15.0
     //   -trackEventsMatchingMask:timeout:mode:handler:: a block (closures come with S5)
     //   -beginDraggingSessionWithItems:event:source:: introduced in macOS 15.0
-    //   -registerForDraggedTypes:: a collection, `NSArray` (arrays come with S3c)
+    //   -registerForDraggedTypes:: an array of `NSPasteboardType`
     //   -displayLinkWithTarget:selector:: introduced in macOS 14.0
     //   -cacheImageInRect:: deprecated in macOS 10.13
     //   -restoreCachedImage: deprecated in macOS 10.13
@@ -1953,7 +1964,6 @@ declare module "objc:AppKit" {
     //   -flushWindow: deprecated in macOS 10.14
     //   -flushWindowIfNeeded: deprecated in macOS 10.14
     //   -initWithWindowRef:: a `void *`
-    //   -visualizeConstraints:: a collection, `NSArray` (arrays come with S3c)
   }
 
   /** @ntsClass NSApplication */
@@ -1967,6 +1977,7 @@ declare module "objc:AppKit" {
     readonly isHidden: boolean;
     readonly isRunning: boolean;
     readonly modalWindow: NSWindow | null;
+    readonly windows: NSWindow[];
     mainMenu: NSMenu | null;
     helpMenu: NSMenu;
     applicationIconImage: NSImage;
@@ -1987,6 +1998,8 @@ declare module "objc:AppKit" {
     readonly enabledRemoteNotificationTypes: CEnum<NSApplication.RemoteNotificationType | 0, UInt>;
     /** @ntsSet setAutomaticCustomizeTouchBarMenuItemEnabled: */
     isAutomaticCustomizeTouchBarMenuItemEnabled: boolean;
+    readonly orderedDocuments: NSDocument[];
+    readonly orderedWindows: NSWindow[];
     /** @ntsSelector hide: */
     hide(sender: NSObject | null): void;
     /** @ntsSelector unhide: */
@@ -2111,10 +2124,7 @@ declare module "objc:AppKit" {
     self(): NSApplication;
     // Not bound, each for the reason given:
     //   @property applicationShouldSuppressHighDynamicRangeContent: introduced in macOS 26.0
-    //   @property windows: a collection, `NSArray` (arrays come with S3c)
     //   @property context: deprecated in macOS 10.12
-    //   @property orderedDocuments: a collection, `NSArray` (arrays come with S3c)
-    //   @property orderedWindows: a collection, `NSArray` (arrays come with S3c)
     //   -activate: introduced in macOS 14.0
     //   -yieldActivationToApplication:: introduced in macOS 14.0
     //   -yieldActivationToApplicationWithBundleIdentifier:: introduced in macOS 14.0
@@ -2122,8 +2132,8 @@ declare module "objc:AppKit" {
     //   -runModalSession:: a `struct _NSModalSession *`
     //   -endModalSession:: a `struct _NSModalSession *`
     //   -enumerateWindowsWithOptions:usingBlock:: a block (closures come with S5)
-    //   -registerServicesMenuSendTypes:returnTypes:: a collection, `NSArray` (arrays come with S3c)
-    //   -orderFrontStandardAboutPanelWithOptions:: a collection, `NSDictionary` (arrays come with S3c)
+    //   -registerServicesMenuSendTypes:returnTypes:: an array of `NSPasteboardType`
+    //   -orderFrontStandardAboutPanelWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -beginSheet:modalForWindow:modalDelegate:didEndSelector:contextInfo:: deprecated in macOS 10.10
     //   -endSheet:: deprecated in macOS 10.10
     //   -endSheet:returnCode:: deprecated in macOS 10.10
@@ -2296,6 +2306,8 @@ declare module "objc:AppKit" {
     static readonly doubleClickInterval: TimeInterval;
     static readonly keyRepeatDelay: TimeInterval;
     static readonly keyRepeatInterval: TimeInterval;
+    /** @ntsSelector coalescedTouchesForTouch: */
+    coalescedTouches(labels: { for: NSTouch }): NSTouch[];
     /** @ntsSelector startPeriodicEventsAfterDelay:withPeriod: */
     static startPeriodicEvents(labels: { afterDelay: TimeInterval; withPeriod: TimeInterval }): void;
     /** @ntsSelector stopPeriodicEvents */
@@ -2320,10 +2332,9 @@ declare module "objc:AppKit" {
     //   -charactersByApplyingModifiers:: Swift's `characters` is also a property here
     //   +eventWithEventRef:: a `const void *`
     //   +eventWithCGEvent:: a `struct __CGEvent *`
-    //   -touchesMatchingPhase:inView:: a collection, `NSSet` (arrays come with S3c)
-    //   -allTouches: a collection, `NSSet` (arrays come with S3c)
-    //   -touchesForView:: a collection, `NSSet` (arrays come with S3c)
-    //   -coalescedTouchesForTouch:: a collection, `NSArray` (arrays come with S3c)
+    //   -touchesMatchingPhase:inView:: a collection, `NSSet`, which crosses as an object when it is bound
+    //   -allTouches: a collection, `NSSet`, which crosses as an object when it is bound
+    //   -touchesForView:: a collection, `NSSet`, which crosses as an object when it is bound
     //   -trackSwipeEventWithOptions:dampenAmountThresholdMin:max:usingHandler:: a block (closures come with S5)
     //   +enterExitEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:trackingNumber:userData:: a `void *`
     //   +addGlobalMonitorForEventsMatchingMask:handler:: a block (closures come with S5)
@@ -2380,6 +2391,10 @@ declare module "objc:AppKit" {
     highlight(flag: boolean): void;
     /** @ntsSelector performKeyEquivalent: */
     performKeyEquivalent(labels: { with: NSEvent }): boolean;
+    /** @ntsSelector compressWithPrioritizedCompressionOptions: */
+    compress(labels: { withPrioritizedCompressionOptions: NSUserInterfaceCompressionOptions[] }): void;
+    /** @ntsSelector minimumSizeWithPrioritizedCompressionOptions: */
+    minimumSize(labels: { withPrioritizedCompressionOptions: NSUserInterfaceCompressionOptions[] }): ByValue<CGSize>;
     /** @ntsSelector initWithFrame: */
     constructor(labels: { frame: ByValue<CGRect> });
     /** @ntsSelector initWithCoder: */
@@ -2392,8 +2407,6 @@ declare module "objc:AppKit" {
     //   @property tintProminence: introduced in macOS 26.0
     //   @property borderShape: introduced in macOS 26.0
     //   -getPeriodicDelay:interval:: a `float *`
-    //   -compressWithPrioritizedCompressionOptions:: a collection, `NSArray` (arrays come with S3c)
-    //   -minimumSizeWithPrioritizedCompressionOptions:: a collection, `NSArray` (arrays come with S3c)
   }
 
   /** Named by a signature here, and not bound: its ancestors' members only.
@@ -2467,6 +2480,18 @@ declare module "objc:AppKit" {
   /** Named by a signature here, and not bound: its ancestors' members only.
    * @ntsClass NSDockTile */
   export class NSDockTile extends NSObject {}
+
+  /** Named by a signature here, and not bound: its ancestors' members only.
+   * @ntsClass NSDocument */
+  export class NSDocument extends NSObject {}
+
+  /** Named by a signature here, and not bound: its ancestors' members only.
+   * @ntsClass NSDraggingItem */
+  export class NSDraggingItem extends NSObject {}
+
+  /** Named by a signature here, and not bound: its ancestors' members only.
+   * @ntsClass NSDraggingSession */
+  export class NSDraggingSession extends NSObject {}
 
   /** Named by a signature here, and not bound: its ancestors' members only.
    * @ntsClass NSError */

@@ -74,6 +74,15 @@ function main(): void {
     report(`name ${name} ${name.length}`);
   }
 
+  // Swift's `[String]` and `[Any]` at a message: copied into an `NSArray`
+  // for the call, and out of the one it returns.
+  const parts = new NSString("a,b,c").components({ separatedBy: "," });
+  report(`parts ${parts.length} ${parts.join("+")} ${NSString.path({ withComponents: ["usr", "lib"] })}`);
+  const more = new NSMutableArray();
+  more.addObjects({ from: [new NSNumber(7), new NSNumber(8)] });
+  const both = more.adding({ contentsOf: [new NSNumber(9)] });
+  report(`bridged ${more.count} ${both.length} ${(both[2] as NSNumber).intValue}`);
+
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.
   report(`optional ${optional(operation)} ${optional(null)}`);

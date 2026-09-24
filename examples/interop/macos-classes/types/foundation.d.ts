@@ -23,6 +23,13 @@ declare module "objc:Foundation" {
     readonly uppercaseString: string;
     /** @ntsSelector stringByAppendingString: */
     appending(other: string): string;
+    /**
+     * Swift's `[String]`, both ways: an `NSArray` of `NSString`s.
+     * @ntsSelector componentsSeparatedByString:
+     */
+    components(labels: { separatedBy: string }): string[];
+    /** @ntsSelector pathWithComponents: */
+    static path(labels: { withComponents: string[] }): string;
   }
 
   /** @ntsClass NSNumber */
@@ -45,6 +52,13 @@ declare module "objc:Foundation" {
      * @ntsSelector insertObject:atIndex:
      */
     insert(object: NSObject, labels: { at: UInt }): void;
+    /**
+     * Swift's `[Any]`, both ways.
+     * @ntsSelector addObjectsFromArray:
+     */
+    addObjects(labels: { from: NSObject[] }): void;
+    /** @ntsSelector arrayByAddingObjectsFromArray: */
+    adding(labels: { contentsOf: NSObject[] }): NSObject[];
     /** @ntsSelector objectAtIndex: */
     object(at: UInt): NSObject;
     readonly count: UInt;

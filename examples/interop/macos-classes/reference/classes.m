@@ -48,6 +48,13 @@ int main(void) {
     NSOperation *operation = [[NSOperation alloc] init];
     operation.name = @"worker";
     if (operation.name) printf("name %s %lu\n", operation.name.UTF8String, (unsigned long)operation.name.length);
+    NSArray<NSString *> *parts = [@"a,b,c" componentsSeparatedByString:@","];
+    printf("parts %lu %s %s\n", (unsigned long)parts.count, [parts componentsJoinedByString:@"+"].UTF8String,
+           [NSString pathWithComponents:@[ @"usr", @"lib" ]].UTF8String);
+    NSMutableArray *more = [[NSMutableArray alloc] init];
+    [more addObjectsFromArray:@[ @7, @8 ]];
+    NSArray *both = [more arrayByAddingObjectsFromArray:@[ @9 ]];
+    printf("bridged %lu %lu %d\n", (unsigned long)more.count, (unsigned long)both.count, [both[2] intValue]);
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.
     [operation cancel];

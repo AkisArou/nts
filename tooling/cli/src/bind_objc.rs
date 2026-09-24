@@ -821,8 +821,17 @@ impl<'a> Model<'a> {
             if base == "NSString" {
                 return Ok(or_null("string".to_owned()));
             }
-            if matches!(base, "NSArray" | "NSMutableArray" | "NSDictionary" | "NSMutableDictionary" | "NSSet" | "NSMutableSet" | "NSOrderedSet") {
-                return Err(format!("a collection, `{base}` (arrays come with S3c)"));
+            // Swift's `[T]`: an `NSArray` is copied into a TypeScript array and
+            // out of one, its elements objects or strings. Not a mutable one,
+            // which Swift keeps as the object it is.
+            if base == "NSArray" {
+                if position == Position::Result && written.contains("_Nullable") {
+                    return Err("a nullable array, which Swift reads as `[T]?`".to_owned());
+                }
+                return self.array_element(pointee).map(|element| format!("{element}[]"));
+            }
+            if matches!(base, "NSMutableArray" | "NSDictionary" | "NSMutableDictionary" | "NSSet" | "NSMutableSet" | "NSOrderedSet") {
+                return Err(format!("a collection, `{base}`, which crosses as an object when it is bound"));
             }
             if self.headers.supers.contains_key(base) {
                 return Ok(or_null(self.object(base)));
@@ -839,6 +848,25 @@ impl<'a> Model<'a> {
             return Ok(format!("ByValue<{name}>"));
         }
         Err(format!("a `{desugared}`"))
+    }
+
+    /// What an `NSArray<T *>` holds, as the element of a TypeScript array:
+    /// a class's objects, strings for `NSString`, and `NSObject` where the
+    /// header says only `id`.
+    fn array_element(&mut self, pointee: &str) -> Spelled {
+        let argument = pointee.split_once('<').map_or("id", |(_, rest)| rest.trim_end_matches('>').trim());
+        let argument = argument.trim_start_matches("__kindof ").trim();
+        if argument == "id" || argument.starts_with("id<") {
+            return Ok(self.object("NSObject"));
+        }
+        let class = argument.trim_end_matches('*').trim();
+        if class == "NSString" {
+            return Ok("string".to_owned());
+        }
+        if self.headers.supers.contains_key(class) {
+            return Ok(self.object(class));
+        }
+        Err(format!("an array of `{argument}`"))
     }
 
     /// A C enum as the Swift type it is imported as, carrying its width:
@@ -1177,6 +1205,8 @@ struct Opaque;
 @end
 @interface NSString : Root
 @end
+@interface NSArray<ObjectType> : Root
+@end
 @interface Root (Continued)
 - (instancetype)init;
 - (BOOL)isEqual:(Root *)other;
@@ -1191,6 +1221,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)saveTo:(Shape *)other error:(id _Nullable * _Nullable)error;
 - (BOOL)isEqualToShape:(Shape *)other;
 - (NSString *)describe;
+- (NSArray<NSString *> *)names;
+- (nullable NSArray *)maybe;
+- (void)adopt:(NSArray<Shape *> *)shapes;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
 @property (class, readonly) Shape *unit;
@@ -1227,6 +1260,9 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)isEqualToShape:", "swift.method", "isEqual(to:)", &["Shape", "isEqual(to:)"], ""),
             symbol("c:objc(cs)Shape(im)describe", "swift.property", "describe", &["Shape", "describe"], ""),
             symbol("c:objc(cs)Shape(im)renameTo:count:", "swift.method", "rename(to:count:)", &["Shape", "rename(to:count:)"], ""),
+            symbol("c:objc(cs)Shape(im)names", "swift.method", "names()", &["Shape", "names()"], ""),
+            symbol("c:objc(cs)Shape(im)maybe", "swift.method", "maybe()", &["Shape", "maybe()"], ""),
+            symbol("c:objc(cs)Shape(im)adopt:", "swift.method", "adopt(_:)", &["Shape", "adopt(_:)"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
             symbol("c:objc(cs)Shape(cpy)unit", "swift.type.property", "unit", &["Shape", "unit"], ""),
@@ -1292,6 +1328,10 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector isEqual: */\n    isEqual(other: Root): boolean;",
             // The enum, nested where Swift nests it, with clang's values.
             "  export namespace Shape {\n    export const enum Mode {\n      a = 1,\n      b = 2,\n    }\n  }",
+            // Swift's `[T]`: an `NSArray` of strings or of a class's objects.
+            "    /** @ntsSelector names */\n    names(): string[];",
+            "    /** @ntsSelector adopt: */\n    adopt(shapes: Shape[]): void;",
+            "-maybe: a nullable array, which Swift reads as `[T]?`",
             // A struct passed by value is declared, in Swift's numbers.
             "export type CGPoint = Struct<{ x: Double; y: Double }, \"CGPoint\">;",
             // And what is not bound is said, with why.

@@ -11295,6 +11295,10 @@ struct FuncBuilder<'a> {
     /// What each labels literal lowered to, by the placeholder that stood for
     /// it among the arguments: each property's value, by key.
     labels_lowered: rustc_hash::FxHashMap<ValueId, Vec<(String, ValueId)>>,
+    /// The `?.` links of the optional chain being lowered whose receiver has
+    /// been tested and found present, each with that receiver
+    /// ([`Self::lower_chain`]): lowered as the plain link it is in that arm.
+    chain_present: rustc_hash::FxHashMap<NodeId, ValueId>,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -11489,6 +11493,7 @@ impl<'a> FuncBuilder<'a> {
             omitting_for: None,
             labels_pending: rustc_hash::FxHashSet::default(),
             labels_lowered: rustc_hash::FxHashMap::default(),
+            chain_present: rustc_hash::FxHashMap::default(),
         }
     }
 
@@ -11926,6 +11931,87 @@ impl<'a> FuncBuilder<'a> {
                 .and_then(|at| u32::try_from(at).ok())
                 .map_or(ty, TypeId),
         }
+    }
+
+    /// The `?.` links under `id` along its chain (through each access's object
+    /// and each call's callee) whose receiver is not yet known present,
+    /// innermost first. Parentheses end a chain, as they end one in the
+    /// language: `(a?.b).c` reads `c` of whatever `a?.b` was.
+    fn chain_links(&self, id: NodeId) -> Vec<NodeId> {
+        let mut links = Vec::new();
+        let mut at = id;
+        while matches!(
+            self.kind_of(at),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION | syntax::CALL_EXPRESSION)
+        ) {
+            let children = self.children(at);
+            if children.iter().any(|child| self.kind_of(*child) == Some(syntax::QUESTION_DOT_TOKEN))
+                && !self.chain_present.contains_key(&at)
+            {
+                links.push(at);
+            }
+            let Some(&base) = children.first() else { break };
+            at = base;
+        }
+        links.reverse();
+        links
+    }
+
+    /// Whether `id` is, or ends in, a `?.` link still to be tested.
+    fn pending_chain(&self, id: NodeId) -> bool {
+        !self.chain_links(id).is_empty()
+    }
+
+    /// `a?.b.c`, `a?.b?.c()`: an optional chain with a link after a `?.`, as
+    /// the one short-circuit the language makes of it. Each `?.` tests its
+    /// receiver, innermost first, and an absence makes the whole chain
+    /// `undefined` at once; what follows it is lowered in the arm where the
+    /// receiver is present, on the receiver the test read. Every merge is at
+    /// the chain's own type, so an intermediate link -- `a?.b` of `a?.b?.c`,
+    /// which holds both `null` and `undefined` when `b` is nullable -- is never
+    /// formed as a value.
+    fn lower_chain(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let links = self.chain_links(id);
+        self.chain_step(id, &links)
+    }
+
+    fn chain_step(&mut self, id: NodeId, links: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let Some((&link, rest)) = links.split_first() else {
+            return self.lower_expression(id);
+        };
+        if self.kind_of(link) == Some(syntax::CALL_EXPRESSION) {
+            return Err(self.unsupported(link, "an optional call `f?.()` inside a longer chain"));
+        }
+        let Some(&object) = self.children(link).first() else {
+            return Err(self.unsupported(link, "an optional link with no receiver"));
+        };
+        let receiver = self.lower_expression(object)?;
+        let Some(absent) = self.absence_of(object, receiver) else {
+            // Never absent: the link is a plain one.
+            self.chain_present.insert(link, receiver);
+            let value = self.chain_step(id, rest);
+            self.chain_present.remove(&link);
+            return value;
+        };
+        let present = self.present_of(object, receiver);
+        self.lower_branching_value(
+            id,
+            absent,
+            Branch::Absent,
+            Branch::Chain { link, receiver, present, rest: rest.to_vec() },
+        )
+    }
+
+    /// Member `member` of a receiver an optional chain found present: an
+    /// Objective-C property's getter, or the program's own member.
+    fn member_on_present(&mut self, id: NodeId, object: NodeId, member: NodeId, receiver: ValueId) -> Result<ValueId, Diagnostic> {
+        if let Some(property) = self.objc_property(object, member)
+            && let Some(read) = self.read_objc_property(id, object, &property, (!property.is_static).then_some(receiver))?
+        {
+            return Ok(read);
+        }
+        let name = self.literal_name(member).ok_or_else(|| self.unsupported(member, "a computed property name"))?;
+        self.member_of(id, receiver, &name)
     }
 
     fn ends_an_optional_chain(&self, id: NodeId) -> bool {
@@ -33679,9 +33765,9 @@ impl<'a> FuncBuilder<'a> {
         // So the chain question goes first. What kind of index it is only
         // matters once it is established that the index runs at all.
         if let Some(object) = self.children(id).first()
-            && self.ends_an_optional_chain(*object)
+            && self.pending_chain(*object)
         {
-            return Err(self.unsupported(id, "a link after an optional access"));
+            return self.lower_chain(id);
         }
         if let Some(name) = self.enum_reverse_member(id)? {
             return Ok(name);
@@ -34717,8 +34803,8 @@ impl<'a> FuncBuilder<'a> {
         // of being lowered as `(a?.b).c`, which would read a member of the
         // absent value. All twenty-six optional accesses in the node profile
         // are a single link.
-        if self.ends_an_optional_chain(*object) {
-            return Err(self.unsupported(id, "a link after an optional access"));
+        if self.pending_chain(*object) {
+            return self.lower_chain(id);
         }
         // `C.x` where `C` is a module: the checker resolved the member to the
         // export's own symbol, so this is a name and lowers as one -- through
@@ -34783,6 +34869,12 @@ impl<'a> FuncBuilder<'a> {
         object: NodeId,
         member: NodeId,
     ) -> Result<ValueId, Diagnostic> {
+        if let Some(&receiver) = self.chain_present.get(&id) {
+            return self.member_on_present(id, object, member, receiver);
+        }
+        if self.pending_chain(object) {
+            return self.lower_chain(id);
+        }
         let receiver = self.lower_expression(object)?;
         let Some(absent) = self.absence_of(object, receiver) else {
             // A receiver with no room for an absence is never absent, so this
@@ -34812,6 +34904,13 @@ impl<'a> FuncBuilder<'a> {
         object: NodeId,
         index: NodeId,
     ) -> Result<ValueId, Diagnostic> {
+        if let Some(&receiver) = self.chain_present.get(&id) {
+            let index = self.lower_expression(index)?;
+            return self.element_of(id, receiver, index);
+        }
+        if self.pending_chain(object) {
+            return self.lower_chain(id);
+        }
         let receiver = self.lower_expression(object)?;
         let Some(absent) = self.absence_of(object, receiver) else {
             // A receiver with no room for an absence is never absent, so this
@@ -36066,10 +36165,20 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 ))
             }
+            Branch::Chain { link, receiver, present, rest } => {
+                let receiver = match present {
+                    Some(ty) => {
+                        let origin = self.origin(link);
+                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                    }
+                    None => receiver,
+                };
+                self.chain_present.insert(link, receiver);
+                let value = self.chain_step(id, &rest);
+                self.chain_present.remove(&link);
+                value
+            }
             Branch::Member(receiver, member, present) => {
-                let name = self
-                    .literal_name(member)
-                    .ok_or_else(|| self.unsupported(member, "a computed property name"))?;
                 // Here and not before the branch. Reading the payload of a
                 // value that may be absent is the thing the test exists to
                 // prevent, and `evaluate` runs with the arm's block current.
@@ -36080,15 +36189,8 @@ impl<'a> FuncBuilder<'a> {
                     }
                     None => receiver,
                 };
-                // An Objective-C property: its getter, sent to the receiver
-                // this arm knows is there.
-                if let Some(&object) = self.children(id).first()
-                    && let Some(property) = self.objc_property(object, member)
-                    && let Some(read) = self.read_objc_property(id, object, &property, (!property.is_static).then_some(receiver))?
-                {
-                    return Ok(read);
-                }
-                self.member_of(id, receiver, &name)
+                let object = self.children(id).first().copied().unwrap_or(member);
+                self.member_on_present(id, object, member, receiver)
             }
             // At the type the whole expression has, which is what `id` is.
             // Without this, `const chosen: number = limit || 1` handed a
@@ -38225,6 +38327,12 @@ impl<'a> FuncBuilder<'a> {
             && self.node(*dot).kind == NodeKind::Syntax(syntax::QUESTION_DOT_TOKEN)
         {
             let (receiver_node, member) = (*receiver_node, *member);
+            if let Some(&receiver) = self.chain_present.get(&callee_node) {
+                return self.lower_method_on(id, receiver, receiver_node, member, arguments);
+            }
+            if self.pending_chain(receiver_node) {
+                return self.lower_chain(id);
+            }
             return self.lower_optional_method_call(id, receiver_node, member, arguments);
         }
 
@@ -38238,8 +38346,8 @@ impl<'a> FuncBuilder<'a> {
         // A **call** is a link too, and it short-circuits with the rest of the
         // chain. Without this, `a?.p.m()` and `a?.m().m2()` lowered as a call
         // on the absent value and aborted the compiled program.
-        if self.ends_an_optional_chain(receiver_node) {
-            return Err(self.unsupported(id, "a link after an optional access"));
+        if self.pending_chain(receiver_node) {
+            return self.lower_chain(id);
         }
         let receiver = self.lower_expression(receiver_node)?;
         self.lower_method_on(id, receiver, receiver_node, member, arguments)
@@ -40038,6 +40146,14 @@ impl<'a> FuncBuilder<'a> {
             Callee::Native(target) => target.returns_string.clone().map(|string| (target.clone(), string)),
             _ => None,
         };
+        // A bridged array's call is the `NSArray` the message returns; the
+        // program's array is read out of it below.
+        let (bridged, sent) = match &callee {
+            Callee::Native(target) if target.returns_array.is_some() => {
+                (target.returns_array.clone(), Some(target.result.representation()))
+            }
+            _ => (None, None),
+        };
         let result_as = match &callee {
             Callee::Native(target) => target.result_as.as_ref().map(super::native::Type::representation),
             _ => None,
@@ -40049,7 +40165,7 @@ impl<'a> FuncBuilder<'a> {
             _ => None,
         };
         let typed = ty.clone();
-        let call = self.push_call(id, callee, args, declaration, ty)?;
+        let call = self.push_call(id, callee, args, declaration, sent.or(ty))?;
         // A failure is checked *before* the result is read: a function that
         // reports one returns nothing meaningful -- GLib returns NULL where it
         // promised a string -- and reading that would end the process rather
@@ -40067,6 +40183,10 @@ impl<'a> FuncBuilder<'a> {
             self.throw_if_reported(id, slot, &converter, &lent)?;
         }
         let value = match (returned, result_as) {
+            _ if bridged.is_some() => {
+                let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned array"))?;
+                self.read_ns_array(id, call, bridged.as_ref().unwrap_or(&super::native::Bridged::String), ty)?
+            }
             (Some((target, string)), _) => self.read_native_string(id, call, &target, &string, typed)?,
             // The handle GIR says it is, from the ancestor C declares.
             (None, Some(ty)) => self.push(OpKind::Convert(call), ty, self.origin(id)),
@@ -40156,6 +40276,7 @@ impl<'a> FuncBuilder<'a> {
             declared_at: None,
             roles: vec![super::native::Role::Plain],
             returns_string: None,
+            returns_array: None,
             send: None,
             returns_owned: false,
             consumes: Vec::new(),
@@ -40188,6 +40309,7 @@ impl<'a> FuncBuilder<'a> {
             declared_at: None,
             roles: vec![super::native::Role::Plain],
             returns_string: None,
+            returns_array: None,
             send: None,
             returns_owned: false,
             consumes: Vec::new(),
@@ -40372,6 +40494,113 @@ impl<'a> FuncBuilder<'a> {
         self.finish_call_typed(id, callee, args, lent, Some(declaration), typed)
     }
 
+    /// `for (let i = 0; i < length; i++) body(i)`, built rather than written:
+    /// the loop a bridge copies an array's elements with. The index is the
+    /// only name it carries.
+    fn index_loop(
+        &mut self,
+        id: NodeId,
+        length: ValueId,
+        origin: &Origin,
+        body: &mut dyn FnMut(&mut Self, ValueId) -> Result<(), Diagnostic>,
+    ) -> Result<(), Diagnostic> {
+        let index = self.synthetic_symbol();
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.bindings.insert(index, zero);
+        let record = self.begin_loop(id, &[index], true, origin)?;
+        let at = self.bindings[&index];
+        let cond = self.still_walking(at, length, false, origin);
+        self.test_loop(cond, &record);
+        self.switch_to(record.body);
+        body(self, at)?;
+        self.end_loop(&record, Step::Count { name: index, by: 1.0 })?;
+        self.bindings.remove(&index);
+        Ok(())
+    }
+
+    /// A message the lowering sends itself, as a value of `result`'s type.
+    fn send_bridge(&mut self, message: super::native::Function, args: Vec<ValueId>, origin: &Origin) -> ValueId {
+        let ty = message.result.representation();
+        self.push(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(message)), args, frame: None }, ty, origin.clone())
+    }
+
+    /// A TypeScript array as the `NSArray` an Objective-C message takes, as
+    /// Swift's `[T]` crosses: an `NSMutableArray` made for the call
+    /// (`alloc`, `initWithCapacity:`, so +1, and the program's count releases
+    /// it after the send) and each element added -- an object as it is, a
+    /// string as an `NSString` made of it and given up once added.
+    fn ns_array_of(&mut self, id: NodeId, array: ValueId, element: &super::native::Bridged, origin: &Origin) -> Result<ValueId, Diagnostic> {
+        use super::native::{Bridged, Handle, Pointee, Scalar, Type};
+        let HirType::Managed(ManagedType::Array(of)) = self.values[array.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "an `NSArray` argument that is not an array"));
+        };
+        let mutable = Type::Pointer(Pointee::Opaque(Handle::objc("NSMutableArray")));
+        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
+        let allocated = self.send_bridge(bridge_send("alloc", Some("NSMutableArray"), Vec::new(), mutable.clone()), Vec::new(), origin);
+        let made = self.send_bridge(
+            bridge_send("initWithCapacity:", None, vec![mutable.clone(), Type::Scalar(Scalar::ULong)], mutable.clone()),
+            vec![allocated, length],
+            origin,
+        );
+        let object = match element {
+            Bridged::Object(pointee) => Type::Pointer(pointee.clone()),
+            Bridged::String => Type::Pointer(Pointee::Opaque(Handle::ns_string())),
+        };
+        let add = bridge_send("addObject:", None, vec![mutable, object], Type::Void);
+        self.index_loop(id, length, origin, &mut |this, at| {
+            let item = this.push(OpKind::ArrayGet { array, index: at, checked: false }, (*of).clone(), origin.clone());
+            let mut lent = Vec::new();
+            let object = match element {
+                Bridged::Object(_) => item,
+                Bridged::String => this.ns_string_of(item, &mut lent, origin),
+            };
+            this.send_bridge(add.clone(), vec![made, object], origin);
+            this.give_back(id, lent);
+            Ok(())
+        })?;
+        Ok(made)
+    }
+
+    /// The `NSArray` a message returned, as the TypeScript array the program
+    /// reads (Swift's `[T]`): a new array of `count` elements, each
+    /// `objectAtIndex:` -- an object the array then holds a count of, or a
+    /// string copied out of its `NSString`.
+    fn read_ns_array(&mut self, id: NodeId, returned: ValueId, element: &super::native::Bridged, ty: HirType) -> Result<ValueId, Diagnostic> {
+        use super::native::{Bridged, Handle, Pointee, Scalar, Type};
+        let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Array(of)) = ty.clone() else {
+            return Err(self.unsupported(id, "an `NSArray` result the program does not read as an array"));
+        };
+        let array = Type::Pointer(Pointee::Opaque(Handle::objc("NSArray")));
+        let count = self.send_bridge(bridge_send("count", None, vec![array.clone()], Type::Scalar(Scalar::ULong)), vec![returned], &origin);
+        let length = self.coerce(count, &HirType::NUMBER, id)?;
+        let out = self.push(OpKind::ArrayNew { length, zeroed: true }, ty, origin.clone());
+        let object = match element {
+            Bridged::Object(pointee) => Type::Pointer(pointee.clone()),
+            Bridged::String => Type::Pointer(Pointee::Opaque(Handle::ns_string())),
+        };
+        let at_index = bridge_send("objectAtIndex:", None, vec![array, Type::Scalar(Scalar::ULong)], object.clone());
+        let utf8 = bridge_send(
+            "UTF8String",
+            None,
+            vec![object],
+            Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char)))),
+        );
+        self.index_loop(id, length, &origin, &mut |this, at| {
+            let item = this.send_bridge(at_index.clone(), vec![returned, at], &origin);
+            let value = match element {
+                Bridged::Object(_) => item,
+                Bridged::String => {
+                    let text = this.send_bridge(utf8.clone(), vec![item], &origin);
+                    this.runtime_call("nts_string_from_required_cstring", vec![text], (*of).clone(), origin.clone())
+                }
+            };
+            this.push(OpKind::ArraySet { array: out, index: at, value, checked: false }, HirType::Void, origin.clone());
+            Ok(())
+        })?;
+        Ok(out)
+    }
+
     /// The string a native function returned: C's `const char *`, copied,
     /// then released with the declaration's `@ntsFree` if it names one.
     ///
@@ -40382,13 +40611,35 @@ impl<'a> FuncBuilder<'a> {
     /// which C's string is never read after it is released.
     /// A labelled argument: the property of the labels literal its key names,
     /// at the slot's type. `placeholder` is what the literal lowered to.
-    fn label_argument(&mut self, id: NodeId, placeholder: Option<ValueId>, key: &str, slot: &super::native::Type) -> Result<ValueId, Diagnostic> {
-        let value = placeholder
+    /// A label's value as the C argument its role makes of it.
+    fn label_argument(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        inner: &super::native::Role,
+        slot: &super::native::Type,
+        lent: &mut Vec<Lent>,
+    ) -> Result<ValueId, Diagnostic> {
+        use super::native::Role;
+        let origin = self.origin(id);
+        Ok(match inner {
+            Role::NSString => self.ns_string_of(value, lent, &origin),
+            Role::NSArray(element) => self.ns_array_of(id, value, element, &origin)?,
+            Role::String(encoding) => {
+                let pointer = self.runtime_call(encoding.to_c(), vec![value], slot.representation(), origin);
+                lent.push(Lent::String { string: value, pointer, encoding: *encoding });
+                pointer
+            }
+            _ => self.coerce(value, &slot.representation(), id)?,
+        })
+    }
+
+    fn label_value(&self, id: NodeId, placeholder: Option<ValueId>, key: &str) -> Result<ValueId, Diagnostic> {
+        placeholder
             .and_then(|placeholder| self.labels_lowered.get(&placeholder))
             .and_then(|values| values.iter().find(|(named, _)| named == key))
             .map(|(_, value)| *value)
-            .ok_or_else(|| self.unsupported(id, &format!("a call missing its `{key}` label")))?;
-        self.coerce(value, &slot.representation(), id)
+            .ok_or_else(|| self.unsupported(id, &format!("a call missing its `{key}` label")))
     }
 
     /// A `string` as the `NSString` an Objective-C message takes: its UTF-16
@@ -40476,6 +40727,7 @@ impl<'a> FuncBuilder<'a> {
                 declared_at: target.declared_at,
                 roles: vec![super::native::Role::Plain],
                 returns_string: None,
+                returns_array: None,
                 send: None,
                 returns_owned: false,
                 consumes: Vec::new(),
@@ -40811,7 +41063,12 @@ impl<'a> FuncBuilder<'a> {
             let argument = fed.and_then(|ts| args.get(ts).copied());
             match role {
                 Role::Plain => c_args.extend(argument),
-                Role::Label { key, .. } => c_args.push(self.label_argument(id, argument, &key, &target.parameters[at])?),
+                // A label crosses as its own role says, with the value the
+                // literal gave that property.
+                Role::Label { key, inner, .. } => {
+                    let value = self.label_value(id, argument, &key)?;
+                    c_args.push(self.label_argument(id, value, &inner, &target.parameters[at], &mut lent)?);
+                }
                 // A slot the caller passed is theirs to read; one they left out
                 // is a zeroed local of ours, checked after the call.
                 Role::ErrorSlot { converter } => {
@@ -40854,6 +41111,10 @@ impl<'a> FuncBuilder<'a> {
                     c_args.push(count);
                 }
                 Role::NSString => c_args.extend(argument.map(|string| self.ns_string_of(string, &mut lent, &origin))),
+                Role::NSArray(element) => {
+                    let Some(array) = argument else { continue };
+                    c_args.push(self.ns_array_of(id, array, &element, &origin)?);
+                }
                 Role::String(encoding) => {
                     let Some(string) = argument else { continue };
                     let pointer = self.runtime_call(
@@ -41133,6 +41394,7 @@ impl<'a> FuncBuilder<'a> {
             }
             native.send = Some(send);
         }
+        self.refuse_unbridged(call, &native)?;
         if let Some(free) = declaration
             .and_then(|decl| self.node(decl).native.as_ref())
             .and_then(|n| n.free.as_deref())
@@ -41248,6 +41510,21 @@ impl<'a> FuncBuilder<'a> {
         let frameworks = self.declared_names(id, declaration, LinkTag::FRAMEWORK)?;
         let ty = HirType::NativePointer(super::native::Pointee::Opaque("objc_class".into()));
         Ok(Some(self.push(OpKind::ObjcClass { name, frameworks }, ty, self.origin(id))))
+    }
+
+    /// An array a C function would take or return as Swift's `[T]`, which only
+    /// a message can: the `NSArray` it crosses as is a Foundation object.
+    fn refuse_unbridged(&self, call: NodeId, native: &super::native::Function) -> Result<(), Diagnostic> {
+        let bridged = native.returns_array.is_some()
+            || native.roles.iter().any(|role| match role {
+                super::native::Role::NSArray(_) => true,
+                super::native::Role::Label { inner, .. } => matches!(**inner, super::native::Role::NSArray(_)),
+                _ => false,
+            });
+        if native.send.is_none() && bridged {
+            return Err(self.unsupported(call, "an array of objects or strings, which crosses an Objective-C message as an `NSArray` and a C function as nothing"));
+        }
+        Ok(())
     }
 
     /// The Objective-C property `member` names: one an `objc:` module
@@ -41570,6 +41847,10 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(call, "an Objective-C message with a variadic tail or a managed ABI, which a cast to one C function type cannot carry"));
         }
         if native.roles.iter().any(|role| {
+            let role = match role {
+                super::native::Role::Label { inner, .. } => inner.as_ref(),
+                role => role,
+            };
             !matches!(
                 role,
                 super::native::Role::Plain
@@ -41577,6 +41858,7 @@ impl<'a> FuncBuilder<'a> {
                     | super::native::Role::Block { .. }
                     | super::native::Role::Label { .. }
                     | super::native::Role::NSString
+                    | super::native::Role::NSArray(_)
             )
         }) {
             return Err(self.unsupported(call, "an Objective-C message taking a C callback, an array or an error slot; a callback crosses as a `Block<F>`"));
@@ -48187,6 +48469,11 @@ enum Branch {
     /// before anything can ask for a member. See
     /// [`FuncBuilder::present_of`].
     Member(ValueId, NodeId, Option<HirType>),
+    /// The rest of an optional chain, in the arm where the `?.` link `link`
+    /// found its receiver present: the link is lowered as a plain one on that
+    /// receiver (read back as the third field says, as [`Self::Member`]'s),
+    /// and `rest` are the `?.` links above it still to test.
+    Chain { link: NodeId, receiver: ValueId, present: Option<HirType>, rest: Vec<NodeId> },
     /// `f?.(x)`'s call, in the arm where the callee is present.
     ///
     /// The arguments are lowered *here* rather than before the branch: `f?.(g())`
@@ -48641,6 +48928,7 @@ fn synthesized(
         variadic: None,
         declared_at: None,
         returns_string: None,
+        returns_array: None,
         send,
         returns_owned: false,
         consumes: Vec::new(),
@@ -48649,6 +48937,26 @@ fn synthesized(
         defaults: Vec::new(),
         result_as: None,
     }
+}
+
+/// A message the lowering makes itself -- a bridge's `alloc`, `count`,
+/// `addObject:` -- with the ownership ARC's method families give it, as
+/// `native_callee_with` gives a declared one: a pointer from `alloc`, `init`,
+/// `new` or `copy` is the caller's, and `init` consumes its receiver.
+fn bridge_send(
+    selector: &str,
+    class: Option<&str>,
+    parameters: Vec<super::native::Type>,
+    result: super::native::Type,
+) -> super::native::Function {
+    let send = super::native::Send { selector: selector.to_owned(), class: class.map(str::to_owned) };
+    let pointer = matches!(result, super::native::Type::Pointer(_));
+    let mut message = synthesized(selector, parameters, result, Some(send), vec!["Foundation".to_owned()]);
+    message.returns_owned = pointer && super::native::Send::returns_owned(selector);
+    if class.is_none() && super::native::Send::consumes_receiver(selector) {
+        message.consumes = vec![0];
+    }
+    message
 }
 
 /// Swift's `String` at an Objective-C message: a plain `string` parameter is
@@ -48667,16 +48975,38 @@ fn bridge_strings(native: &mut super::native::Function, signature: &nts_semantic
             _ => false,
         }
     };
+    let utf8 = super::native::Role::String(super::native::Encoding::Utf8);
+    let ns_string = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::ns_string()));
     let slots: Vec<(usize, Option<usize>)> = native.slots().map(|(at, _, fed)| (at, fed)).collect();
     for (at, fed) in slots {
-        if native.roles[at] == super::native::Role::String(super::native::Encoding::Utf8)
-            && fed.and_then(|ts| signature.parameters.get(ts)).is_some_and(|parameter| plain(parameter.ty))
-        {
-            native.roles[at] = super::native::Role::NSString;
-            native.parameters[at] = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::ns_string()));
+        let Some(parameter) = fed.and_then(|ts| signature.parameters.get(ts)) else { continue };
+        match &mut native.roles[at] {
+            role if *role == utf8 && plain(parameter.ty) => {
+                *role = super::native::Role::NSString;
+                native.parameters[at] = ns_string.clone();
+            }
+            // A label is the property of the parameter's object type that
+            // its key names, and crosses as that property's type says.
+            super::native::Role::Label { key, inner, .. } if **inner == utf8 => {
+                let key = key.clone();
+                let label = super::native::labels_of(snapshot, parameter.ty)
+                    .and_then(|labels| labels.into_iter().find(|(named, _)| *named == key));
+                if label.is_some_and(|(_, ty)| plain(ty)) {
+                    **inner = super::native::Role::NSString;
+                    native.parameters[at] = ns_string.clone();
+                }
+            }
+            _ => {}
         }
     }
     if native.returns_string.as_ref().is_some_and(|returned| !returned.array) && plain(signature.return_type) {
         native.result = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::ns_string()));
+    }
+    // A message's `string[]` is Swift's `[String]`, an `NSArray` of
+    // `NSString`s, where a C function's is a NULL-terminated `char **`.
+    if native.returns_string.as_ref().is_some_and(|returned| returned.array) {
+        native.returns_string = None;
+        native.returns_array = Some(super::native::Bridged::String);
+        native.result = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::objc("NSArray")));
     }
 }

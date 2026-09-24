@@ -1491,6 +1491,7 @@ mod foreign_contracts {
             declared_at: None,
             roles: vec![crate::hir::native::Role::Plain; 2],
             returns_string: None,
+            returns_array: None,
             send: None,
             returns_owned: false,
             consumes: Vec::new(),
