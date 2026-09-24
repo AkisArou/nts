@@ -303,6 +303,13 @@ correctness does not depend on arm64 running by luck.
      they are written, as JavaScript evaluates them, and passed in the
      selector's order. Only a literal is accepted. It works for C functions
      too.
+   - **S3a, numbers without casts, landed.** `objc:types` exports Swift's
+     numbers (`Double`, `CGFloat`, `Int`, `UInt`, `Int32` and the rest,
+     `TimeInterval`) as optional brands, `number & { readonly __c_double?:
+     true }`. A plain `number` passes, and the call carries the brand's C type.
+     `Int` is 64 bits over a `number`, so a value past 2^53 rounds as it does in
+     any JavaScript bridge; the `bigint` brands in `c:types` keep every bit.
+     `macos-classes` has no cast left.
    - **Objective-C handles narrow and assert.** `instanceof` narrows an
      Objective-C object to a subclass, and `as` asserts one, unchecked as every
      TypeScript assertion is. Any other opaque pointer is still refused.

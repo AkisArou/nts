@@ -40268,7 +40268,13 @@ impl<'a> FuncBuilder<'a> {
             };
             values.push((key, value));
         }
-        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "labels"))?;
+        // At the parameter's type rather than the literal's own: `{ at: 0 }`
+        // is `{ at: number }`, the parameter `{ at: UInt }`, and the argument
+        // is converted to the parameter's type before any role sees it.
+        let ty = self
+            .contextual_type(id, 0)
+            .or_else(|| self.type_of(id))
+            .ok_or_else(|| self.unrepresentable(id, "labels"))?;
         let origin = self.origin(id);
         let placeholder = self.push(OpKind::ConstNull, ty, origin);
         self.labels_lowered.insert(placeholder, values);

@@ -2743,18 +2743,30 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     }
     let mut base = None;
     let mut brand = None;
+    let mut optional = false;
     for part in parts {
         match &snapshot.types.get(part.0 as usize)?.kind {
             TypeKind::Number => base = Some(false),
             TypeKind::BigInt => base = Some(true),
             TypeKind::Object { properties } if properties.len() == 1 => {
                 let property = &properties[0];
-                if !property.readonly || property.optional || property.kind != MemberKind::Field {
+                if !property.readonly || property.kind != MemberKind::Field {
                     return None;
+                }
+                // `number & { readonly __c_double?: true }`: the brand as an
+                // optional `true`, which is how `objc:types` spells Swift's
+                // `Double`, `Int` and `CGFloat`. A plain `number` is assignable
+                // to it, so no cast is written, and it crosses as the brand's
+                // C type all the same.
+                if property.optional {
+                    if !is_true(snapshot, property.ty) {
+                        return None;
+                    }
+                    optional = true;
                 }
                 // The snapshot preserves the checker's unique-symbol flag;
                 // accepting ordinary `symbol` would also accept a real slot.
-                if !matches!(snapshot.types.get(property.ty.0 as usize)?.kind,
+                else if !matches!(snapshot.types.get(property.ty.0 as usize)?.kind,
                     TypeKind::Structured { flags } if flags == 1 << 14)
                 {
                     return None;
@@ -2772,7 +2784,26 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     // it would still emit a correct `int64_t` prototype, so nothing downstream
     // would notice.
     let brand = brand?;
+    // A Swift-shaped number is a `number` whatever C's width is: Swift's `Int`
+    // is 64 bits, and a program writes `list.count / 2` without a `bigint` in
+    // sight. What a `number` cannot hold exactly -- an integer past 2^53 --
+    // rounds, as it does in every bridge to JavaScript; the required brands
+    // above keep `bigint` for code that needs every bit.
+    if optional {
+        return (!base?).then_some(brand);
+    }
     (base? == brand.needs_exact_integer()).then_some(brand)
+}
+
+/// Whether a brand's type is `true`, or the `true | undefined` an optional
+/// property of it reads as.
+fn is_true(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    let is = |ty: TypeId| matches!(snapshot.types.get(ty.0 as usize).map(|t| &t.kind), Some(TypeKind::Literal(LiteralValue::Boolean(true))));
+    match snapshot.types.get(ty.0 as usize).map(|t| &t.kind) {
+        Some(TypeKind::Union(parts)) => parts.iter().any(|part| is(*part))
+            && parts.iter().all(|part| is(*part) || matches!(snapshot.types.get(part.0 as usize).map(|t| &t.kind), Some(TypeKind::Undefined))),
+        _ => is(ty),
+    }
 }
 
 /// `CEnum<E, B>`: an enum that C takes as the integer brand `B`.

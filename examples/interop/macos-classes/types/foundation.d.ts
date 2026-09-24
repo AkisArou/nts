@@ -4,7 +4,7 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { c_int, c_ulong } from "c:types";
+  import type { Int32, UInt } from "objc:types";
 
   /** @ntsClass NSObject */
   export class NSObject {
@@ -18,7 +18,7 @@ declare module "objc:Foundation" {
   export class NSString extends NSObject {
     /** @ntsSelector initWithUTF8String: */
     constructor(text: string);
-    readonly length: c_ulong;
+    readonly length: UInt;
     readonly uppercaseString: NSString;
   }
 
@@ -28,8 +28,8 @@ declare module "objc:Foundation" {
      * A class method, which Swift imports as `init(value:)`.
      * @ntsSelector +numberWithInt:
      */
-    constructor(value: c_int);
-    readonly intValue: c_int;
+    constructor(value: Int32);
+    readonly intValue: Int32;
   }
 
   /** @ntsClass NSMutableArray */
@@ -41,10 +41,10 @@ declare module "objc:Foundation" {
      * object the compiler never builds.
      * @ntsSelector insertObject:atIndex:
      */
-    insert(object: NSObject, labels: { at: c_ulong }): void;
+    insert(object: NSObject, labels: { at: UInt }): void;
     /** @ntsSelector objectAtIndex: */
-    object(at: c_ulong): NSObject;
-    readonly count: c_ulong;
+    object(at: UInt): NSObject;
+    readonly count: UInt;
   }
 
   /** @ntsClass NSOperation */
@@ -55,6 +55,6 @@ declare module "objc:Foundation" {
   /** @ntsClass NSProcessInfo */
   export class NSProcessInfo extends NSObject {
     static readonly processInfo: NSProcessInfo;
-    readonly processorCount: c_ulong;
+    readonly processorCount: UInt;
   }
 }

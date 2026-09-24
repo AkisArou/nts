@@ -41,6 +41,29 @@ declare module "objc:types" {
   // required, so a class that is not loaded ends the process by name rather
   // than answering every message with nil. A class object is never counted.
   export type ObjcMeta<Tag extends string> = ClassObject & { readonly __objc_meta: Tag };
+
+  // Swift's numbers, as a binding spells a parameter or a property: a plain
+  // `number` passes with no cast, and crosses as the C type the brand names.
+  // An integer past 2^53 rounds, as it does in any bridge to JavaScript; the
+  // `bigint` brands in `c:types` keep every bit where that matters.
+  export type Double = number & { readonly __c_double?: true };
+  export type Float = number & { readonly __c_float?: true };
+  /** `CGFloat` is `double` on every 64-bit Apple target. */
+  export type CGFloat = Double;
+  /** `NSTimeInterval`, seconds. */
+  export type TimeInterval = Double;
+  /** `NSInteger`, 64 bits. */
+  export type Int = number & { readonly __c_long?: true };
+  /** `NSUInteger`, 64 bits. */
+  export type UInt = number & { readonly __c_ulong?: true };
+  export type Int8 = number & { readonly __c_int8?: true };
+  export type UInt8 = number & { readonly __c_uint8?: true };
+  export type Int16 = number & { readonly __c_int16?: true };
+  export type UInt16 = number & { readonly __c_uint16?: true };
+  export type Int32 = number & { readonly __c_int32?: true };
+  export type UInt32 = number & { readonly __c_uint32?: true };
+  export type Int64 = number & { readonly __c_int64?: true };
+  export type UInt64 = number & { readonly __c_uint64?: true };
 }
 
 // Hand-written. The Objective-C runtime's C API: what defining a class at run

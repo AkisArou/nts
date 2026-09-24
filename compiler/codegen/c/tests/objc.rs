@@ -542,3 +542,33 @@ fn labels_that_are_not_a_literal_are_refused_by_name() {
         prepared.diagnostics
     );
 }
+
+/// Swift's numbers: a binding says `Int`, `UInt` or `CGFloat`, a program
+/// passes a plain `number`, and the send carries the brand's C type --
+/// `long`, `unsigned long`, `double` -- with no cast written anywhere.
+#[test]
+fn swift_numbers_take_plain_numbers_and_cross_as_c_types() {
+    let binding = r#"declare module "objc:Foundation" {
+  import type { CGFloat, Int, UInt } from "objc:types";
+  /** @ntsClass NSScaler */
+  export class NSScaler {
+    /** @ntsSelector scale:by:at: */
+    scale(count: Int, labels: { by: CGFloat; at: UInt }): Int;
+  }
+}
+"#;
+    let source = "import { NSScaler } from \"objc:Foundation\";\n\
+                  export function run(s: NSScaler, n: number): number {\n  return s.scale(n + 1, { by: 1.5, at: 2 }) * 2;\n}\n";
+    let Some((_, prepared)) = prepare("swift-numbers", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert!(
+        text.contains("((long (*)(const void *, struct objc_selector *, long, double, unsigned long))objc_msgSend)("),
+        "the send does not carry long, double and unsigned long:\n{text}"
+    );
+}
