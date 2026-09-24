@@ -124,26 +124,31 @@ fn tidy(text: &str) -> String {
 /// A probe directory per call (see where it is read).
 static PROBES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-/// Reference every runtime function so clang has to declare it, then read the
-/// declarations back.
-fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>> {
-    // **Both** headers. `nts_unicode.h` declares `nts_str_to_lower_case` and
-    // `nts_str_to_upper_case`, and reading only `nts_runtime.h` made this
-    // generator delete them on every run -- they had been added to the table by
-    // hand, which is what the sortedness test above already records as having
-    // cost "the LLVM column of a whole benchmark row, with a refusal message
-    // pointing at the wrong file".
-    //
-    // It cost it a second time on 2026-09-05, to `examples/strings`, because
-    // regenerating for an unrelated addition silently dropped both. A generator
-    // whose source of truth is narrower than the table it generates is a trap
-    // that springs on whoever next has a reason to run it.
-    let header = root.join("runtime/c/nts_runtime.h");
-    let unicode = root.join("runtime/c/nts_unicode.h");
-    let text = std::fs::read_to_string(&header).ok()?;
-    let unicode_text = std::fs::read_to_string(&unicode).ok()?;
+/// The `nts_` functions the headers in `dir` declare for the target `flags`
+/// name -- declarations, not `static inline` definitions, which have no symbol.
+fn declared_names(dir: &std::path::Path, flags: &[String]) -> Option<Vec<String>> {
+    // **The target's declarations, preprocessed**, not the headers' text: a
+    // Windows-only helper sits under `#if defined(_WIN32)`, so it is in the
+    // Win64 table and not System V's -- each table is what its target's
+    // compiler sees. Read as text, the System V probe named the Windows
+    // helpers and failed to compile, on the one box that cannot build them.
+    // Comments go too, so one mentioning `nts_foo(` is no longer a candidate.
+    std::fs::write(dir.join("names.c"), "#include \"nts_runtime.h\"\n#include \"nts_unicode.h\"\n").ok()?;
+    let preprocessed = std::process::Command::new("clang")
+        .args(flags)
+        .args(["-E", "-P", "-w", "-I"])
+        .arg(dir)
+        .arg(dir.join("names.c"))
+        .output()
+        .ok()?;
+    assert!(
+        preprocessed.status.success(),
+        "the headers did not preprocess:\n{}",
+        String::from_utf8_lossy(&preprocessed.stderr)
+    );
+    let text = String::from_utf8_lossy(&preprocessed.stdout).into_owned();
     let mut names: Vec<String> = Vec::new();
-    for line in text.lines().chain(unicode_text.lines()) {
+    for line in text.lines() {
         // A declaration, not a `static inline` definition: the second has no
         // symbol for anything to link against, which is the whole distinction
         // this table exists to respect.
@@ -185,10 +190,25 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
         }
         names.push(name.to_owned());
     }
-    if names.is_empty() {
-        return None;
-    }
+    Some(names)
+}
 
+/// Reference every runtime function so clang has to declare it, then read the
+/// declarations back.
+fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>> {
+    // **Both** headers. `nts_unicode.h` declares `nts_str_to_lower_case` and
+    // `nts_str_to_upper_case`, and reading only `nts_runtime.h` made this
+    // generator delete them on every run -- they had been added to the table by
+    // hand, which is what the sortedness test above already records as having
+    // cost "the LLVM column of a whole benchmark row, with a refusal message
+    // pointing at the wrong file".
+    //
+    // It cost it a second time on 2026-09-05, to `examples/strings`, because
+    // regenerating for an unrelated addition silently dropped both. A generator
+    // whose source of truth is narrower than the table it generates is a trap
+    // that springs on whoever next has a reason to run it.
+    let header = root.join("runtime/c/nts_runtime.h");
+    let unicode = root.join("runtime/c/nts_unicode.h");
     // One directory per call, not per process: the SysV and Win64 checks run
     // this at once, and one copying the header over the other's mid-compile
     // failed as "nts_runtime.h is broken" one run in a few.
@@ -197,6 +217,11 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
     std::fs::create_dir_all(&dir).ok()?;
     std::fs::copy(&header, dir.join("nts_runtime.h")).ok()?;
     std::fs::copy(&unicode, dir.join("nts_unicode.h")).ok()?;
+    let names = declared_names(&dir, flags)?;
+    if names.is_empty() {
+        return None;
+    }
+
     let mut source = String::from(
         "#include \"nts_runtime.h\"\n#include \"nts_unicode.h\"\nvoid *nts_all[] = {\n",
     );

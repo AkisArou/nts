@@ -71,6 +71,9 @@ pub const GOBJECT_HEADER_NAME: &str = "nts_gobject.h";
 pub const GOBJECT_HEADER: &str = include_str!("../../../../runtime/c/nts_gobject.h");
 pub const GOBJECT_SOURCE_NAME: &str = "nts_gobject.c";
 pub const GOBJECT_SOURCE: &str = include_str!("../../../../runtime/c/nts_gobject.c");
+/// The Windows Runtime at the boundary: HSTRING, COM counts, activation.
+pub const WINRT_SOURCE_NAME: &str = "nts_winrt.c";
+pub const WINRT_SOURCE: &str = include_str!("../../../../runtime/c/nts_winrt.c");
 pub const CF_HOST_HEADER_NAME: &str = "nts_cf_host.h";
 pub const CF_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_cf_host.h");
 pub const CF_HOST_SOURCE_NAME: &str = "nts_cf_host.c";
@@ -241,6 +244,19 @@ impl Support<'_> {
         Ok(path)
     }
 }
+
+/// The helpers `nts_winrt.c` defines, any one of which a program calling it
+/// names in its C.
+const WINRT_HELPERS: [&str; 8] = [
+    "nts_string_to_hstring(",
+    "nts_hstring_release(",
+    "nts_string_from_hstring(",
+    "nts_com_take(",
+    "nts_com_addref(",
+    "nts_com_release(",
+    "nts_winrt_factory(",
+    "nts_hresult_message(",
+];
 
 /// Every file a program needs beside `program.c`, given whether it converts case.
 #[must_use]
@@ -539,6 +555,11 @@ impl Emitted {
         }
         if connects {
             files.push(Support { name: GOBJECT_SOURCE_NAME, contents: GOBJECT_SOURCE, compiled: true });
+        }
+        // Where the program calls the Windows Runtime's helpers, whichever
+        // backend renders it: both lower the same calls.
+        if WINRT_HELPERS.iter().any(|helper| self.writer.text().contains(helper)) {
+            files.push(Support { name: WINRT_SOURCE_NAME, contents: WINRT_SOURCE, compiled: true });
         }
         files.push(Support {
             name: "program.h",
@@ -1162,6 +1183,9 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
                 // A message has no symbol of its own to declare: its call is a
                 // cast of `objc_msgSend`, which `objc::declarations` declares.
                 Callee::Native(target) if target.send.is_some() => continue,
+                // Nor does a COM method: its call is through the receiver's
+                // table.
+                Callee::Native(target) if target.vtable.is_some() => continue,
                 Callee::Native(target) => target,
                 Callee::External(name) if !runtime_declares(name) => {
                     refusals.push(Diagnostic::error(
@@ -1627,6 +1651,8 @@ fn native_call_expression(
     // the whole of it.
     let call = if let Some(send) = &target.send {
         objc::send_expression(target, send, arguments)
+    } else if let Some(vtable) = &target.vtable {
+        com::vtable_expression(target, vtable, arguments)
     } else if matches!(target.result, nts_core::hir::native::Type::Managed(_)) {
         let wanted = c_type_of(program, result, origin)?;
         format!("({wanted}){}({})", target.name, arguments.join(", "))
@@ -5724,6 +5750,7 @@ mod tests {
     }
 }
 
+mod com;
 mod native_memory;
 mod objc;
 

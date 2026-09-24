@@ -1499,6 +1499,8 @@ mod foreign_contracts {
             libraries: Vec::new(),
             defaults: Vec::new(),
             result_as: None,
+            vtable: None,
+            hresult: false,
         }))
     }
 

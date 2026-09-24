@@ -107,6 +107,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_date_value", &[None], Some(HirType::Float { bits: 64 })),
     ("nts_delay", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_has_pending_work", &[], Some(HirType::Bool)),
+    ("nts_hresult_message", &[Some(HirType::Int { bits: 32, signed: true })], None),
     ("nts_index", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
     ("nts_index_fn", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
     ("nts_is_array", &[None], Some(HirType::Bool)),
@@ -461,6 +462,9 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // measure. The helpers are `static inline` in C, so the call the
         // analysis was reasoning about is not even emitted there.
         name if name.starts_with("nts_presence_") => Some(&[]),
+        // Reads the result slot an `@ntsHresult` call wrote, which is the
+        // caller's local, and keeps nothing of it.
+        "nts_com_take" => Some(&[]),
         _ => None,
     }
 }

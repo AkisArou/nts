@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 25;
+pub const SCHEMA_VERSION: u32 = 26;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -762,6 +762,21 @@ pub struct NativeAttributes {
     /// program links only the libraries of the functions it calls.
     #[serde(default)]
     pub libraries: Option<Vec<String>>,
+    /// `@ntsVtable 6 Parse`: the declaration is a COM method, called through
+    /// slot 6 of the receiver's function table rather than a symbol, and the
+    /// name the metadata gives that slot -- the second half of the claim, so
+    /// that a slot number and a method cannot disagree without it showing.
+    #[serde(default)]
+    pub vtable: Option<String>,
+    /// `@ntsHresult`: the C function returns an HRESULT, and the declared
+    /// result is written through one more parameter; a failure is thrown.
+    #[serde(default)]
+    pub hresult: Option<String>,
+    /// `@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-...`: a static of a
+    /// runtime class, whose receiver is the class's activation factory as that
+    /// interface.
+    #[serde(default)]
+    pub factory: Option<String>,
 }
 
 /// Why a snapshot was rejected.

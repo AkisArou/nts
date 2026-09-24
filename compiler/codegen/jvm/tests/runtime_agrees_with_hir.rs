@@ -231,4 +231,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// `set_length`, `slice`), which count an array's elements through a foreign
 /// family's operations: an array of Objective-C objects or `GObject`s, which
 /// only a binding's handles produce.
-const REFUSED_FLOOR: usize = 93;
+///
+/// 94 for `nts_hresult_message`, the text of a failed HRESULT, which only a
+/// COM or Windows Runtime call returns: Windows, and native calls again.
+const REFUSED_FLOOR: usize = 94;

@@ -198,6 +198,9 @@ fn borrowed(func: &Func, root: ValueId, summaries: &Borrows) -> bool {
                         match callee {
                             Callee::Native(target) => matches!(target.retention.get(at), Some(crate::hir::native::Retention::NotRetained)),
                             Callee::Direct(name) => summaries.get(name).and_then(|s| s.get(at)).copied().unwrap_or(false),
+                            // The runtime's own answer, which `escape` reads
+                            // too: a helper that keeps none of this slot.
+                            Callee::External(name) => super::runtime::keeps(name).is_some_and(|kept| !kept.contains(&at)),
                             _ => false,
                         }
                     }),

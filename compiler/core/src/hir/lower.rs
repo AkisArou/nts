@@ -11494,6 +11494,8 @@ struct ParameterTags {
 enum Lent {
     /// A C string, beside the string it was made from and how it was encoded.
     String { string: ValueId, pointer: ValueId, encoding: super::native::Encoding },
+    /// The slot an `@ntsHresult` call writes its result to, read after it.
+    Result { slot: ValueId, string: bool },
     /// A `char **` made from a `string[]`.
     Strings { pointer: ValueId },
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
@@ -40332,7 +40334,13 @@ impl<'a> FuncBuilder<'a> {
             self.native_callee(id, declaration, name, signature)?
         };
 
-        let (args, lent) = self.lower_call_arguments(id, &callee, &arguments, None)?;
+        // A runtime class's static is called on its factory.
+        let factory = match &callee {
+            Callee::Native(target) => target.vtable.as_ref().and_then(|vtable| vtable.factory.clone()),
+            _ => None,
+        };
+        let receiver = factory.map(|factory| self.factory_receiver(&factory, id));
+        let (args, lent) = self.lower_call_arguments(id, &callee, &arguments, receiver)?;
         self.finish_call(id, callee, args, lent, declaration)
     }
 
@@ -40386,6 +40394,10 @@ impl<'a> FuncBuilder<'a> {
             _ => None,
         };
         let typed = ty.clone();
+        let hresult = matches!(&callee, Callee::Native(target) if target.hresult);
+        if hresult {
+            return self.finish_hresult_call(id, callee, args, lent, declaration, typed);
+        }
         let call = self.push_call(id, callee, args, declaration, sent.or(ty))?;
         // A failure is checked *before* the result is read: a function that
         // reports one returns nothing meaningful -- GLib returns NULL where it
@@ -40416,6 +40428,102 @@ impl<'a> FuncBuilder<'a> {
         let value = destination.unwrap_or(value);
         self.give_back(id, lent);
         Ok(value)
+    }
+
+    /// An `@ntsHresult` call: the HRESULT checked -- a negative one gives back
+    /// what was lent and throws an `Error` carrying the system's text for it --
+    /// and then the result read out of the slot C wrote it to.
+    ///
+    /// **What the slot holds decides how it is read**, and each reading is one
+    /// the rest of the compiler already knows: a counted handle through
+    /// `nts_com_take`, a runtime call, whose result the ownership pass reads
+    /// as produced -- the `+1` a Windows Runtime `[out]` object is -- and
+    /// releases; an
+    /// `HSTRING` copied into a `string` and deleted; a scalar loaded.
+    fn finish_hresult_call(
+        &mut self,
+        id: NodeId,
+        callee: Callee,
+        args: Vec<ValueId>,
+        lent: Vec<Lent>,
+        declaration: Option<NodeId>,
+        typed: Option<HirType>,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let status_type = HirType::Int { bits: 32, signed: true };
+        let status = self.push_call(id, callee, args, declaration, Some(status_type.clone()))?;
+        let zero = self.push(OpKind::ConstInt(0), status_type, origin.clone());
+        let failed = self.push(OpKind::Binary { op: BinOp::Lt, lhs: status, rhs: zero }, HirType::Bool, origin.clone());
+        let raise = self.new_block();
+        let after = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: failed,
+            then_target: raise,
+            then_args: Vec::new(),
+            else_target: after,
+            else_args: Vec::new(),
+        });
+        self.switch_to(raise);
+        self.give_back(id, lent.clone());
+        let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
+        let message = self.runtime_call("nts_hresult_message", vec![status], char_pointer.representation(), origin.clone());
+        self.throw_c_message(id, message, &origin)?;
+        self.switch_to(after);
+        let written = lent.iter().find_map(|lent| match lent {
+            Lent::Result { slot, string } => Some((*slot, *string)),
+            _ => None,
+        });
+        let value = match written {
+            None => self.push(OpKind::ConstUndefined, typed.unwrap_or(HirType::Void), origin.clone()),
+            Some((slot, true)) => {
+                let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                let hstring = self.push(OpKind::NativeLoad { pointer: slot, index: first }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
+                self.runtime_call("nts_string_from_hstring", vec![hstring], HirType::Managed(ManagedType::String), origin.clone())
+            }
+            Some((slot, false)) => {
+                let HirType::NativePointer(super::native::Pointee::Pointer(held)) = self.values[slot.0 as usize].ty.clone() else {
+                    let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                    let HirType::NativePointer(super::native::Pointee::Scalar(scalar)) = self.values[slot.0 as usize].ty.clone() else {
+                        return Err(self.unsupported(id, "an @ntsHresult result slot that holds neither a pointer nor a C scalar"));
+                    };
+                    let value = self.push(
+                        OpKind::NativeLoad { pointer: slot, index: first },
+                        super::native::Type::Scalar(scalar).representation(),
+                        origin.clone(),
+                    );
+                    self.give_back(id, lent);
+                    return Ok(value);
+                };
+                let handle = super::native::Type::Pointer((*held).clone());
+                if held.counting().is_some() {
+                    // A runtime call, which the ownership pass reads as
+                    // producing its result: the `+1` the object came with.
+                    self.runtime_call("nts_com_take", vec![slot], handle.representation(), origin.clone())
+                } else {
+                    let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                    self.push(OpKind::NativeLoad { pointer: slot, index: first }, handle.representation(), origin.clone())
+                }
+            }
+        };
+        self.give_back(id, lent);
+        Ok(value)
+    }
+
+    /// Throw an `Error` whose message is a `malloc`'d C string, which is
+    /// copied and then freed: what `@ntsThrows`' converter and a failed
+    /// HRESULT both hand back.
+    fn throw_c_message(&mut self, id: NodeId, message: ValueId, origin: &Origin) -> Result<(), Diagnostic> {
+        // Copied into the `Error`'s message, then C's freed. Not through
+        // `read_native_string`, which types its copy as the *call's* result.
+        let text = self.runtime_call(
+            "nts_string_from_required_cstring",
+            vec![message],
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        let release = synthesized("free", vec![super::native::Type::Pointer(super::native::Pointee::Void)], super::native::Type::Void, None, Vec::new());
+        self.push(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(release)), args: vec![message], frame: None }, HirType::Void, origin.clone());
+        self.throw_provided_error_text(id, "Error", text)
     }
 
     /// A record result's storage: a local of the caller's, so the local's
@@ -40505,6 +40613,8 @@ impl<'a> FuncBuilder<'a> {
             libraries: Vec::new(),
             defaults: Vec::new(),
             result_as: None,
+            vtable: None,
+            hresult: false,
         });
         let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
         let message = self.push(
@@ -40512,35 +40622,7 @@ impl<'a> FuncBuilder<'a> {
             char_pointer.representation(),
             origin.clone(),
         );
-        // Copied into the `Error`'s message, then C's freed. Not through
-        // `read_native_string`, which types its copy as the *call's* result.
-        let text = self.runtime_call(
-            "nts_string_from_required_cstring",
-            vec![message],
-            HirType::Managed(ManagedType::String),
-            origin.clone(),
-        );
-        let release = std::sync::Arc::new(super::native::Function {
-            name: "free".to_owned(),
-            convention: super::native::Convention::C,
-            parameters: vec![super::native::Type::Pointer(super::native::Pointee::Void)],
-            result: super::native::Type::Void,
-            retention: vec![super::native::Retention::Unknown],
-            variadic: None,
-            declared_at: None,
-            roles: vec![super::native::Role::Plain],
-            returns_string: None,
-            returns_array: None,
-            send: None,
-            returns_owned: false,
-            consumes: Vec::new(),
-            frameworks: Vec::new(),
-            libraries: Vec::new(),
-            defaults: Vec::new(),
-            result_as: None,
-        });
-        self.push(OpKind::Call { callee: Callee::Native(release), args: vec![message], frame: None }, HirType::Void, origin);
-        self.throw_provided_error_text(id, "Error", text)?;
+        self.throw_c_message(id, message, &origin)?;
         self.switch_to(after);
         Ok(())
     }
@@ -40556,7 +40638,11 @@ impl<'a> FuncBuilder<'a> {
         // `@ntsSelector` as well as `@ntsSymbol`: an Objective-C instance
         // method is the same shape, a method whose instance is its first
         // argument. Only the call differs.
-        let tagged = self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.selector.is_some());
+        let tagged = self
+            .node(declaration)
+            .native
+            .as_ref()
+            .is_some_and(|n| n.symbol.is_some() || n.selector.is_some() || n.vtable.is_some());
         // Or a method of an Objective-C class a binding declares, whose
         // receiver is the object it is called on, or the class when `static`.
         let objc_member = self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
@@ -40909,6 +40995,8 @@ impl<'a> FuncBuilder<'a> {
                 libraries: Vec::new(),
                 defaults: Vec::new(),
                 result_as: None,
+                vtable: None,
+                hresult: false,
             };
             self.push(
                 OpKind::Call { callee: Callee::Native(std::sync::Arc::new(release)), args: vec![pointer], frame: None },
@@ -40947,8 +41035,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
-                // Checked by `finish_call`, after everything else is given back.
-                Lent::Error { .. } => {}
+                // Checked, or read, by `finish_call` after everything else is
+                // given back; each is a local of the caller's own.
+                Lent::Error { .. } | Lent::Result { .. } => {}
             }
         }
     }
@@ -41289,6 +41378,13 @@ impl<'a> FuncBuilder<'a> {
                     let Some(array) = argument else { continue };
                     c_args.push(self.ns_array_of(id, array, &element, &origin)?);
                 }
+                // Where C writes the result (`@ntsHresult`): a zeroed local,
+                // read by `finish_call` once the HRESULT says it was written.
+                Role::Result { string } => {
+                    let slot = self.push(OpKind::NativeLocal { count: 1 }, target.parameters[at].representation(), origin.clone());
+                    lent.push(Lent::Result { slot, string });
+                    c_args.push(slot);
+                }
                 Role::String(encoding) => {
                     let Some(string) = argument else { continue };
                     let pointer = self.runtime_call(
@@ -41312,19 +41408,8 @@ impl<'a> FuncBuilder<'a> {
                 ),
                 Role::ClosureData => {
                     let Some((closure, lifetime)) = lending else { continue };
-                    // Once: counted as a callback C still owes until the
-                    // bridge gives it back, which keeps a GLib loop turning.
-                    let helper = if lifetime == super::native::Lifetime::Once { "nts_closure_lend_once" } else { "nts_closure_lend" };
-                    let context = self.runtime_call(
-                        helper,
-                        vec![closure],
-                        target.parameters[at].representation(),
-                        origin.clone(),
-                    );
-                    if lifetime == super::native::Lifetime::Call {
-                        lent.push(Lent::Closure { context });
-                    }
-                    c_args.push(context);
+                    let want = target.parameters[at].representation();
+                    c_args.push(self.lend_context(closure, lifetime, want, &mut lent, &origin));
                 }
                 Role::ClosureNotify => {
                     let want = target.parameters[at].representation();
@@ -41338,6 +41423,25 @@ impl<'a> FuncBuilder<'a> {
         c_args.extend(self.record_destination(&target, &origin));
         self.bridge_callback_arguments(id, &target, &mut c_args)?;
         Ok((c_args, lent))
+    }
+
+    /// The context C hands back to a closure's bridge: the closure, lent for
+    /// as long as `lifetime` says. Once: counted as a callback C still owes
+    /// until the bridge gives it back, which keeps a `GLib` loop turning.
+    fn lend_context(
+        &mut self,
+        closure: ValueId,
+        lifetime: super::native::Lifetime,
+        want: HirType,
+        lent: &mut Vec<Lent>,
+        origin: &Origin,
+    ) -> ValueId {
+        let helper = if lifetime == super::native::Lifetime::Once { "nts_closure_lend_once" } else { "nts_closure_lend" };
+        let context = self.runtime_call(helper, vec![closure], want, origin.clone());
+        if lifetime == super::native::Lifetime::Call {
+            lent.push(Lent::Closure { context });
+        }
+        context
     }
 
     /// Turn each argument for a C function pointer parameter into a bridge.
@@ -41527,6 +41631,7 @@ impl<'a> FuncBuilder<'a> {
             abi,
             throws.as_ref().map(|(slot, converter)| (slot.as_str(), converter.as_str())),
             &defaults,
+            declaration.and_then(|decl| self.node(decl).native.as_ref()).is_some_and(|n| n.hresult.is_some()),
         )
         .map_err(|why| self.unsupported(call, &why))?;
         if let Some(converter) = hidden {
@@ -41540,6 +41645,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decl) = declaration {
             native.frameworks = self.declared_names(call, decl, LinkTag::FRAMEWORK)?;
             native.libraries = self.declared_names(call, decl, LinkTag::LIBRARY)?;
+            native.vtable = self.vtable_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?;
         }
         if let Some(decl) = declaration
             && let Some(selector) = selector
@@ -41603,6 +41709,91 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(call, "a `CStrings` or `CBytes` parameter without `@ntsNoEscape`, which is what says C does not keep the array it is lent"));
         }
         Ok(Callee::Native(std::sync::Arc::new(native)))
+    }
+
+    /// What `@ntsVtable` and `@ntsFactory` say of a declaration: the slot of
+    /// the receiver's table the call goes through, the method the binding says
+    /// that slot is, and for a static the runtime class whose factory receives
+    /// it -- which then becomes the call's first parameter, as a method's
+    /// instance is.
+    ///
+    /// **The method name is checked against the declaration's**, so that a
+    /// slot and a method cannot be edited apart: `@ntsVtable 7 Parse` on
+    /// `Parse` is refused rather than a quiet call to `TryParse`. What the
+    /// slot *is* is the metadata's, and `bind-winmd` writes both from it.
+    fn vtable_of(
+        &self,
+        call: NodeId,
+        decl: NodeId,
+        signature: &nts_semantic_schema::SignatureRecord,
+        otherwise_bound: bool,
+        native: &mut super::native::Function,
+    ) -> Result<Option<super::native::Vtable>, Diagnostic> {
+        let tags = self.node(decl).native.as_deref();
+        let Some(text) = tags.and_then(|n| n.vtable.as_deref()) else {
+            if tags.is_some_and(|n| n.factory.is_some()) {
+                return Err(self.unsupported(call, "`@ntsFactory` without the `@ntsVtable` slot it calls through the factory"));
+            }
+            return Ok(None);
+        };
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let [slot, method] = words.as_slice() else {
+            return Err(self.unsupported(call, "@ntsVtable names the slot and the method the metadata gives it, as in `@ntsVtable 6 Parse`"));
+        };
+        let slot: u32 = slot.parse().map_err(|_| self.unsupported(call, "@ntsVtable naming a slot that is not a number"))?;
+        if slot < 3 {
+            return Err(self.unsupported(call, "@ntsVtable on slots 0 to 2, which are IUnknown's and called by the compiler itself"));
+        }
+        if otherwise_bound {
+            return Err(self.unsupported(call, "@ntsVtable beside @ntsSymbol or @ntsSelector, which name another way to call it"));
+        }
+        if self.declared_name(decl).as_deref() != Some(*method) {
+            return Err(self.unsupported(
+                call,
+                &format!("@ntsVtable {slot} {method} on a declaration of another name: the slot's method and the declaration disagree"),
+            ));
+        }
+        if native.variadic.is_some() || native.convention != super::native::Convention::C {
+            return Err(self.unsupported(call, "@ntsVtable on a variadic or non-C function"));
+        }
+        let factory = match tags.and_then(|n| n.factory.as_deref()) {
+            None => None,
+            Some(text) => {
+                let words: Vec<&str> = text.split_whitespace().collect();
+                let [class, iid] = words.as_slice() else {
+                    return Err(self.unsupported(call, "@ntsFactory names the runtime class and the interface ID, as in `@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C`"));
+                };
+                if !is_interface_id(iid) {
+                    return Err(self.unsupported(call, "@ntsFactory with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
+                }
+                Some(super::native::Factory { class: (*class).to_owned(), iid: iid.trim_matches(['{', '}']).to_owned() })
+            }
+        };
+        let method_of_instance = self.kind_of(decl) == Some(syntax::METHOD_SIGNATURE) && signature.this_type.is_some();
+        match (&factory, method_of_instance) {
+            (None, false) => {
+                return Err(self.unsupported(call, "@ntsVtable on a function with neither an instance (`this`) nor an @ntsFactory to call it on"));
+            }
+            (Some(_), true) => return Err(self.unsupported(call, "@ntsFactory on a method, whose instance is already its receiver")),
+            // The factory is the receiver: a first parameter the call supplies.
+            (Some(_), false) => {
+                native.parameters.insert(0, super::native::Type::Pointer(super::native::Pointee::Void));
+                native.roles.insert(0, super::native::Role::Plain);
+                native.retention.insert(0, super::native::Retention::Unknown);
+            }
+            (None, true) => {}
+        }
+        Ok(Some(super::native::Vtable { slot, method: (*method).to_owned(), factory }))
+    }
+
+    /// The receiver of a runtime class's static: its activation factory as the
+    /// interface the binding names, activated once and cached by the runtime.
+    fn factory_receiver(&mut self, factory: &super::native::Factory, id: NodeId) -> ValueId {
+        let origin = self.origin(id);
+        let text = HirType::Managed(ManagedType::String);
+        let class = self.push(OpKind::ConstString(factory.class.clone()), text.clone(), origin.clone());
+        let iid = self.push(OpKind::ConstString(factory.iid.clone()), text, origin.clone());
+        self.runtime_call("nts_winrt_factory", vec![class, iid], HirType::NativePointer(super::native::Pointee::Void), origin)
     }
 
     /// The names a link tag (`@ntsFramework`, `@ntsLibrary`) gives on the
@@ -49131,6 +49322,8 @@ fn synthesized(
         libraries: Vec::new(),
         defaults: Vec::new(),
         result_as: None,
+        vtable: None,
+        hresult: false,
     }
 }
 
@@ -49259,4 +49452,18 @@ fn bridge_strings(native: &mut super::native::Function, signature: &nts_semantic
         native.returns_array = Some(super::native::Bridged::String);
         native.result = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::objc("NSArray")));
     }
+}
+
+/// Whether a declaration names another way to be called: a C symbol
+/// (`@ntsSymbol`) or an Objective-C message (`@ntsSelector`).
+fn symbol_tagged(lowerer: &FuncBuilder<'_>, decl: NodeId) -> bool {
+    lowerer.node(decl).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.selector.is_some())
+}
+
+/// `5F6B544A-2F53-48E1-91A3-F78B50A6345C`, with or without braces.
+fn is_interface_id(text: &str) -> bool {
+    let bare = text.strip_prefix('{').and_then(|t| t.strip_suffix('}')).unwrap_or(text);
+    let groups: Vec<&str> = bare.split('-').collect();
+    groups.len() == 5
+        && groups.iter().zip([8, 4, 4, 4, 12]).all(|(group, length)| group.len() == length && group.chars().all(|c| c.is_ascii_hexdigit()))
 }

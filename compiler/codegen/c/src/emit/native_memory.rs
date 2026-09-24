@@ -615,6 +615,7 @@ fn collect_opaque_pointee<'a>(
 /// whose every parameter and result names only what a header defines.
 fn witnessable(target: &nts_core::hir::native::Function) -> bool {
     target.send.is_none()
+        && target.vtable.is_none()
         && target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign)
 }
 

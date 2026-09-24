@@ -91,6 +91,13 @@ pub struct Function {
     /// `Declared<T, D>`: the handle the program receives, `T`, where `result`
     /// is the ancestor `D` C declares. The call's value is converted to it.
     pub result_as: Option<Type>,
+    /// `@ntsVtable`: a COM method, called through a slot of the receiver's
+    /// function table rather than a symbol. `parameters[0]` is the receiver.
+    pub vtable: Option<Vtable>,
+    /// `@ntsHresult`: C returns an HRESULT (`result` is `int32_t`) and writes
+    /// the declared result through a `Role::Result` parameter. A negative
+    /// HRESULT is thrown, and the call's value is what was written.
+    pub hresult: bool,
 }
 
 /// What `@ntsDefault` gives an optional parameter: an integer for a C integer
@@ -129,6 +136,24 @@ pub fn parse_defaults(text: &str) -> Result<Vec<(String, ParameterDefault)>, Str
         defaults.push((name.to_owned(), value));
     }
     Ok(defaults)
+}
+
+/// A COM method: the slot of the receiver's function table it is, and the
+/// name the metadata gives that slot, which the binding states beside it so a
+/// wrong number is a wrong claim rather than a quiet call to the neighbour.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Vtable {
+    pub slot: u32,
+    pub method: String,
+    /// `@ntsFactory`: a static of a runtime class, whose receiver is the
+    /// class's activation factory as the interface this IID names.
+    pub factory: Option<Factory>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Factory {
+    pub class: String,
+    pub iid: String,
 }
 
 /// An Objective-C message: `[receiver selector:arguments]`.
@@ -248,6 +273,9 @@ pub enum Encoding {
     /// `Utf16String`: `const uint16_t *`, UTF-16 (`nts_string_to_utf16`) --
     /// Windows' `LPCWSTR`. A two-byte string is lent in place.
     Utf16,
+    /// `HString`: the Windows Runtime's `HSTRING`, made for the call and
+    /// deleted after it (`nts_string_to_hstring`). An opaque pointer in C.
+    HString,
 }
 
 impl Encoding {
@@ -257,6 +285,7 @@ impl Encoding {
         match self {
             Self::Utf8 => "nts_string_to_cstring",
             Self::Utf16 => "nts_string_to_utf16",
+            Self::HString => "nts_string_to_hstring",
         }
     }
 
@@ -266,15 +295,19 @@ impl Encoding {
         match self {
             Self::Utf8 => "nts_cstring_release",
             Self::Utf16 => "nts_utf16_release",
+            Self::HString => "nts_hstring_release",
         }
     }
 
     /// The C parameter type: a pointer to const code units.
     #[must_use]
     pub fn c_type(self) -> Type {
+        if self == Self::HString {
+            return Type::Pointer(Pointee::Void);
+        }
         let unit = match self {
             Self::Utf8 => Scalar::Char,
-            Self::Utf16 => Scalar::UInt16,
+            Self::Utf16 | Self::HString => Scalar::UInt16,
         };
         Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(unit))))
     }
@@ -355,6 +388,11 @@ pub enum Role {
     /// (+1, so the program's count releases it after), each an object as it
     /// is or, for a `string[]`, an `NSString` made of each string.
     NSArray(Bridged),
+    /// Where C writes the call's declared result, returning a status instead
+    /// (`@ntsHresult`): a slot of the compiler's, read after the call once the
+    /// status says it succeeded. `string` when what is written is an `HSTRING`
+    /// the caller owns. Hidden from TypeScript.
+    Result { string: bool },
 }
 
 /// What an array crossing an Objective-C message holds, as Swift bridges
@@ -434,7 +472,7 @@ impl Function {
         let mut ts = 0;
         self.roles.iter().enumerate().map(move |(at, role)| {
             let fed = match role {
-                Role::ClosureData | Role::ClosureNotify | Role::Length { .. } => None,
+                Role::ClosureData | Role::ClosureNotify | Role::Length { .. } | Role::Result { .. } => None,
                 Role::Plain
                 | Role::NSString
                 | Role::NSArray(_)
@@ -803,6 +841,10 @@ pub enum Family {
     /// A `GObject`: `GObjectClass<Tag, Parent>`, counted with `GLib`'s own
     /// pair under the reference-counting provider.
     GObject,
+    /// A COM object (`ComClass`): counted by `IUnknown::AddRef` and
+    /// `Release`, which are slots 1 and 2 of its table rather than symbols,
+    /// so the pair is the runtime's shims (`nts_com_addref`/`nts_com_release`).
+    Com,
 }
 
 /// The two functions a counted handle is retained and released with. Both
@@ -853,7 +895,7 @@ impl Family {
     pub const fn runtime_id(self) -> u32 {
         match self {
             Self::GObject => 1,
-            Self::C | Self::Objc => 0,
+            Self::C | Self::Objc | Self::Com => 0,
         }
     }
 
@@ -871,6 +913,7 @@ impl Family {
             // back transfer-none -- the floating reference itself, which
             // otherwise nothing would ever drop.
             Self::GObject => Some(Counting { retain: "g_object_ref_sink", release: "g_object_unref", null_safe: false }),
+            Self::Com => Some(Counting { retain: "nts_com_addref", release: "nts_com_release", null_safe: true }),
         }
     }
 }
@@ -1581,6 +1624,7 @@ impl Function {
         abi: Option<&str>,
         throws: Option<(&str, &str)>,
         defaults: &[(String, ParameterDefault)],
+        hresult: bool,
     ) -> Result<Self, String> {
         let abi_type = |ty| {
             if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
@@ -1656,7 +1700,11 @@ impl Function {
             parameters.push(ty);
             roles.push(Role::Plain);
         }
-        let returned = returned(snapshot, &name, signature.return_type, abi)?;
+        let returned = if hresult {
+            hresult_result(snapshot, &name, signature.return_type, abi, &mut parameters, &mut roles)?
+        } else {
+            returned(snapshot, &name, signature.return_type, abi)?
+        };
         let result = records_checked(&name, &parameters, variadic.is_some(), returned.result)?;
         Ok(Self {
             name,
@@ -1682,6 +1730,8 @@ impl Function {
             libraries: Vec::new(),
             defaults: given,
             result_as: returned.program,
+            vtable: None,
+            hresult,
         })
     }
 }
@@ -1767,6 +1817,12 @@ fn retention_of(roles: &[Role]) -> Vec<Retention> {
                     Retention::NotRetained
                 }
                 Role::ClosureData if *scoped => Retention::NotRetained,
+                // C writes the result there during the call, and the slot is
+                // the caller's local, read once it returns.
+                Role::Result { .. } => {
+                    *scoped = false;
+                    Retention::NotRetained
+                }
                 _ => {
                     *scoped = false;
                     Retention::Unknown
@@ -2179,6 +2235,54 @@ fn tags_name_parameters(
     Ok(())
 }
 
+/// What an `@ntsHresult` function hands back: an HRESULT, with the declared
+/// result moved to a `Role::Result` slot at the end of the C parameters --
+/// where a Windows Runtime method's `[out, retval]` is.
+///
+/// The slot holds what C writes: a pointer to a handle, a scalar, or an
+/// `HSTRING` for an `HString` result. What reading it means -- a `+1` handle,
+/// a string the caller must delete -- is the lowering's, where the call is.
+fn hresult_result(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    ty: TypeId,
+    abi: Option<&str>,
+    parameters: &mut Vec<Type>,
+    roles: &mut Vec<Role>,
+) -> Result<Returned, String> {
+    let (written, string) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
+        (Type::Pointer(Pointee::Void), true)
+    } else {
+        let declared = returned(snapshot, name, ty, abi)?;
+        if declared.string.is_some() {
+            return Err(format!(
+                "foreign function `{name}` is `@ntsHresult` and returns a C `string`; a Windows Runtime string is `HString`"
+            ));
+        }
+        if declared.program.is_some() || declared.owned {
+            return Err(format!(
+                "foreign function `{name}` is `@ntsHresult` and its result is `Declared`, `Owned` or a `CBool`, which a written result does not take"
+            ));
+        }
+        (declared.result, false)
+    };
+    let pointee = match written {
+        Type::Void => None,
+        Type::Pointer(pointee) => Some(Pointee::Pointer(Box::new(pointee))),
+        Type::Scalar(scalar) => Some(Pointee::Scalar(scalar)),
+        _ => {
+            return Err(format!(
+                "foreign function `{name}` is `@ntsHresult` with a result written through a pointer as something other than a handle, a string or a C scalar"
+            ));
+        }
+    };
+    if let Some(pointee) = pointee {
+        parameters.push(Type::Pointer(pointee));
+        roles.push(Role::Result { string });
+    }
+    Ok(Returned { result: Type::Scalar(Scalar::Int32), array: None, string: None, owned: false, program: None })
+}
+
 /// What a foreign function hands back, read from its declared return type.
 struct Returned {
     /// C's result type.
@@ -2571,6 +2675,9 @@ fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> 
             match properties.as_slice() {
                 [property] if property.name == "___c_utf16" && property.optional && property.readonly => {
                     Some(Encoding::Utf16)
+                }
+                [property] if property.name == "___c_hstring" && property.optional && property.readonly => {
+                    Some(Encoding::HString)
                 }
                 // `CString`: UTF-8 said out loud, where a plain `string` would
                 // be an `NSString` -- in an Objective-C message.

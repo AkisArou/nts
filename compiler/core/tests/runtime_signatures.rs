@@ -38,15 +38,32 @@ fn scalar(spelling: &str) -> Option<HirType> {
 /// One helper as clang reports it: name, parameters, result.
 type Reported = (String, Vec<Option<HirType>>, Option<HirType>);
 
-/// Every `nts_` function the header declares, with its C types.
-fn from_clang(root: &std::path::Path) -> Option<Vec<Reported>> {
+/// clang's flags for `x86_64` Windows against zig's mingw headers, where the
+/// helpers under `#if defined(_WIN32)` are declared. `None` without zig.
+fn windows_flags() -> Option<Vec<String>> {
+    let env = std::process::Command::new("zig").arg("env").output().ok()?;
+    let text = String::from_utf8_lossy(&env.stdout);
+    let lib = text.lines().find_map(|line| line.trim().strip_prefix(".lib_dir = \"")?.strip_suffix("\","))?;
+    let headers = std::path::Path::new(lib).join("libc/include");
+    let mut flags = vec!["--target=x86_64-w64-windows-gnu".to_owned(), "-nostdlibinc".to_owned()];
+    for directory in ["x86_64-windows-gnu", "generic-mingw", "x86_64-windows-any", "any-windows-any"] {
+        flags.push("-isystem".to_owned());
+        flags.push(headers.join(directory).to_string_lossy().into_owned());
+    }
+    Some(flags)
+}
+
+/// Every `nts_` function the header declares for the target `flags` name,
+/// with its C types.
+fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Reported>> {
     let header = root.join("runtime/c/nts_runtime.h");
-    let dir = std::env::temp_dir().join(format!("nts-runtime-sigs-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("nts-runtime-sigs-{}-{}", std::process::id(), flags.len()));
     std::fs::create_dir_all(&dir).ok()?;
     std::fs::copy(&header, dir.join("nts_runtime.h")).ok()?;
     std::fs::write(dir.join("probe.c"), "#include \"nts_runtime.h\"\n").ok()?;
 
     let output = std::process::Command::new("clang")
+        .args(flags)
         .args(["-Xclang", "-ast-dump", "-fsyntax-only", "-I"])
         .arg(&dir)
         .arg(dir.join("probe.c"))
@@ -95,16 +112,39 @@ fn from_clang(root: &std::path::Path) -> Option<Vec<Reported>> {
 #[test]
 fn the_table_still_matches_the_header() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let Some(fresh) = from_clang(&root) else {
+    let Some(mut fresh) = from_clang(&root, &[]) else {
         eprintln!("SKIP: clang or the runtime header is unavailable");
         return;
     };
+    // And what only Windows declares (`#if defined(_WIN32)`): the table is the
+    // middle end's, which is the same for every target, so it carries both.
+    let host: Vec<String> = fresh.iter().map(|(name, _, _)| name.clone()).collect();
+    match windows_flags().and_then(|flags| from_clang(&root, &flags)) {
+        Some(windows) => {
+            for (name, params, returns) in windows {
+                if host.contains(&name) {
+                    continue;
+                }
+                // **A Windows-only helper taking a scalar must be here**, since
+                // nothing on the host notices it missing. Absent, the middle end
+                // converts its arguments as it would a `number`:
+                // `nts_hresult_message(int32_t)` was handed a `double`, which
+                // C's implicit conversion put right and LLVM passed in the
+                // wrong register.
+                assert!(
+                    params.iter().all(Option::is_none) || runtime::parameters(&name).is_some(),
+                    "`{name}` is declared only for Windows, takes a scalar, and is not in src/hir/runtime.rs"
+                );
+                fresh.push((name, params, returns));
+            }
+        }
+        None => eprintln!("SKIP the Windows-only helpers: no zig for mingw headers"),
+    }
     let mut checked = 0;
     for (name, params, returns) in &fresh {
         let Some(known) = runtime::parameters(name) else {
-            // A helper the table does not carry is one the middle end will not
-            // convert for. That is conservative -- the backend still adapts --
-            // rather than wrong.
+            // A helper the table does not carry has its scalar arguments
+            // converted as numbers, which is right only for a `double`.
             continue;
         };
         assert_eq!(

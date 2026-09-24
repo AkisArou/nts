@@ -1772,6 +1772,24 @@ void nts_cstring_release(const NtsString *s, const char *c);
  * naming the index, as it does there. */
 const uint16_t *nts_string_to_utf16(const NtsString *s);
 void nts_utf16_release(const NtsString *s, const uint16_t *units);
+#if defined(_WIN32)
+/* The Windows Runtime at the boundary (`nts_winrt.c`, compiled into a Windows
+ * program only). A `string` as an HSTRING for one call and back; a COM
+ * object's reference count, which is two slots of its table and not a symbol;
+ * a runtime class's cached activation factory; and a failed HRESULT's message
+ * for the `Error` it throws. `void *` for HSTRING and every interface, so that
+ * nothing here needs <windows.h>. */
+void *nts_string_to_hstring(const NtsString *s);
+void nts_hstring_release(const NtsString *s, void *h);
+NtsString *nts_string_from_hstring(void *h);
+void *nts_com_take(void *slot);
+void *nts_com_addref(void *object);
+void nts_com_release(void *object);
+uint32_t nts_com_releases(void);
+void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid);
+uint32_t nts_winrt_activations(void);
+char *nts_hresult_message(int32_t hr);
+#endif
 /* A `string[]` as C's NULL-terminated array of strings, for a parameter
  * declared `CStrings`: each element converted as `nts_string_to_cstring`
  * converts one, in one allocation with the table, and handed back to

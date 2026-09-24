@@ -5508,6 +5508,11 @@ fn loop_host_link_flags(sources: &[String], format: ObjectFormat) -> Vec<String>
     if sources.iter().any(|s| s == nts_codegen_c::CF_HOST_SOURCE_NAME) {
         flags.extend(["-framework".to_owned(), "CoreFoundation".to_owned()]);
     }
+    // The Windows Runtime's API sets, which every Windows 10 and 11 has: no
+    // redistributable, and nothing but `api-ms-win-core-winrt-*` imported.
+    if sources.iter().any(|s| s == nts_codegen_c::WINRT_SOURCE_NAME) {
+        flags.extend(["-lapi-ms-win-core-winrt-l1-1-0".to_owned(), "-lapi-ms-win-core-winrt-string-l1-1-0".to_owned()]);
+    }
     flags
 }
 

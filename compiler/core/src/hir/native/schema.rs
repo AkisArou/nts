@@ -72,6 +72,8 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         super::Family::Objc
     } else if marker(snapshot, ty, "___gobject").is_some() {
         super::Family::GObject
+    } else if marker(snapshot, ty, "___com").is_some() {
+        super::Family::Com
     } else {
         super::Family::C
     };
