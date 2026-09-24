@@ -5081,8 +5081,12 @@ fn check_witness(
         return Ok(());
     }
     let mut command = tools.command();
+    // `-Wno-deprecated-declarations`: a deprecated declaration is still the
+    // declaration, and the witness asks only whether the binding matches it.
+    // Under `-Werror` it failed any program that reached one of GIO's
+    // deprecated `_finish`es -- `g_drive_eject_finish` -- as a mismatch.
     command
-        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only"])
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-deprecated-declarations", "-fsyntax-only"])
         .arg("-I")
         .arg(out.as_str());
     // **The package's own headers too.** The witness includes what the binding
