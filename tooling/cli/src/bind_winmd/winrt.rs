@@ -45,7 +45,9 @@ pub(crate) fn default_metadata() -> Utf8PathBuf {
 
 /// Whether a namespace is the Windows Runtime's rather than Win32's.
 pub(crate) fn is_winrt(namespace: &str) -> bool {
-    namespace.starts_with("Windows.") && !namespace.starts_with("Windows.Win32.")
+    // `Microsoft.*` is the Windows App SDK's: WinUI 3 (`Microsoft.UI.Xaml`),
+    // its windowing and dispatching (`Microsoft.UI`), described the same way.
+    (namespace.starts_with("Windows.") && !namespace.starts_with("Windows.Win32.")) || namespace.starts_with("Microsoft.")
 }
 
 /// Every contract `.winmd` in `directory`, as one index.
@@ -356,16 +358,31 @@ impl Writer<'_> {
         // Statics, and constructors that take arguments: both are methods of
         // an interface the class's factory answers as.
         for attribute in def.attributes().filter(|attribute| {
-            matches!(attribute.ctor().parent().name(), "StaticAttribute" | "ActivatableAttribute")
+            matches!(attribute.ctor().parent().name(), "StaticAttribute" | "ActivatableAttribute" | "ComposableAttribute")
         }) {
-            let Some((_, Value::TypeName(interface))) = attribute.value().into_iter().next() else { continue };
+            let values: Vec<Value> = attribute.value().into_iter().map(|(_, value)| value).collect();
+            let Some(Value::TypeName(interface)) = values.first() else { continue };
+            // A composable class's factory: `CreateInstance(..., outer, out
+            // inner)`, which a subclass calls with itself as the outer object.
+            // Only a public one constructs the class as it is; a protected one
+            // is for subclasses alone.
+            let composable = attribute.ctor().parent().name() == "ComposableAttribute";
+            // `CompositionType.Public` is 2.
+            if composable && !matches!(values.get(1), Some(Value::EnumValue(_, public)) if **public == Value::I32(2)) {
+                continue;
+            }
             let Some(statics_def) = self.index.get(&interface.namespace, &interface.name).next() else {
                 self.refuse(&format!("{name} statics"), &format!("`{}` is not in the metadata read", interface.name));
                 continue;
             };
             let Some(iid) = iid(statics_def) else { continue };
             for (index, method) in statics_def.methods().enumerate() {
-                match self.method(method, 6 + index, Receiver::Factory { class: &class_name, iid: &iid }) {
+                let receiver = if composable {
+                    Receiver::Composable { class: &class_name, iid: &iid }
+                } else {
+                    Receiver::Factory { class: &class_name, iid: &iid }
+                };
+                match self.method(method, 6 + index, receiver) {
                     Ok(text) => {
                         statics.push_str(&text);
                         self.methods += 1;
@@ -409,6 +426,11 @@ impl Writer<'_> {
         let name = def.name();
         // One `int64`, spelled as the integer it is passed as (`winrt:types`).
         if def.namespace() == "Windows.Foundation" && name == "EventRegistrationToken" {
+            return;
+        }
+        // An API contract is described as a struct with no fields, and is no
+        // type a program holds.
+        if def.fields().next().is_none() {
             return;
         }
         let mut fields = Vec::new();
@@ -496,11 +518,26 @@ impl Writer<'_> {
             .collect();
         let signature = method.signature(&parameters);
         let named = method.params_by_sequence(signature.types.len()).map_err(|_| "a method whose parameters the metadata numbers wrongly".to_owned())?;
+        let out = |at: usize| named.params().get(at).copied().flatten().is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out));
+        let declared = if matches!(receiver, Receiver::Composable { .. }) {
+            let count = signature.types.len();
+            let composed = count >= 2
+                && matches!(signature.types[count - 2], Type::Object)
+                && matches!(&signature.types[count - 1], Type::Object | Type::RefMut(_) if match &signature.types[count - 1] { Type::RefMut(inner) => matches!(**inner, Type::Object), _ => true })
+                && !out(count - 2)
+                && out(count - 1);
+            if !composed {
+                return Err("a composable factory method not ending in the outer and inner objects".to_owned());
+            }
+            count - 2
+        } else {
+            signature.types.len()
+        };
         let mut parameters: Vec<String> = Vec::new();
         if let Receiver::Instance(this) = receiver {
             parameters.push(format!("this: {this}"));
         }
-        for (at, ty) in signature.types.iter().enumerate() {
+        for (at, ty) in signature.types.iter().enumerate().take(declared) {
             let row = named.params().get(at).copied().flatten();
             if row.is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out)) {
                 return Err("an `out` parameter".to_owned());
@@ -515,12 +552,21 @@ impl Writer<'_> {
         let mut text = String::new();
         let _ = writeln!(text, "    /**");
         let _ = writeln!(text, "     * @ntsVtable {slot} {}", method_name(method));
-        let _ = writeln!(text, "     * @ntsHresult");
-        if let Receiver::Factory { class, iid } = receiver {
-            let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
+        match receiver {
+            Receiver::Composable { class, iid } => {
+                let _ = writeln!(text, "     * @ntsHresult composable");
+                let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
+            }
+            Receiver::Factory { class, iid } => {
+                let _ = writeln!(text, "     * @ntsHresult");
+                let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
+            }
+            Receiver::Instance(_) => {
+                let _ = writeln!(text, "     * @ntsHresult");
+            }
         }
         let _ = writeln!(text, "     */");
-        let keyword = if matches!(receiver, Receiver::Factory { .. }) { "function " } else { "" };
+        let keyword = if matches!(receiver, Receiver::Instance(_)) { "" } else { "function " };
         let _ = writeln!(text, "    {keyword}{}({}): {result};", method_name(method), parameters.join(", "));
         Ok(text)
     }
@@ -754,6 +800,11 @@ fn generic_base(name: &str) -> &str {
 enum Receiver<'a> {
     Instance(&'a str),
     Factory { class: &'a str, iid: &'a str },
+    /// A composable class's factory: the method's last two parameters are the
+    /// outer object and the inner one it answers, which the compiler supplies
+    /// (`@ntsHresult composable`) -- a class constructed as itself has no
+    /// outer object, and nothing of the program holds the inner.
+    Composable { class: &'a str, iid: &'a str },
 }
 
 /// The name the metadata gives a method's slot: its `OverloadAttribute` where

@@ -100,6 +100,18 @@ pub struct Function {
     pub hresult: bool,
 }
 
+/// What an `@ntsHresult` says of the C function beyond its HRESULT.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hresult {
+    /// The declared parameters, then the result slot.
+    Plain,
+    /// `@ntsHresult composable`: a composable class's factory, whose C
+    /// function takes the outer object and the inner one it answers between
+    /// the declared parameters and the result slot (`Role::Outer`,
+    /// `Role::Inner`).
+    Composable,
+}
+
 /// What `@ntsDefault` gives an optional parameter: an integer for a C integer
 /// or boolean, `null` for a pointer that admits it. Nothing else -- a string
 /// would be a managed value the binding writes for the caller, and a float
@@ -399,6 +411,15 @@ pub enum Role {
     /// (`@ntsHresult`): a slot of the compiler's, read after the call once the
     /// status says it succeeded, as `written` says. Hidden from TypeScript.
     Result { written: Written },
+    /// A composable factory's outer object: NULL, since the class is made as
+    /// itself and not as the base of an object of the program's. Hidden from
+    /// TypeScript.
+    Outer,
+    /// Where a composable factory writes the inner object: a slot of the
+    /// compiler's, whose object -- if the factory wrote one -- is released
+    /// after the call, as nothing of the program holds it. Hidden from
+    /// TypeScript.
+    Inner,
 }
 
 /// What C writes to an `@ntsHresult` call's result slot, which decides how the
@@ -498,7 +519,7 @@ impl Function {
         let mut ts = 0;
         self.roles.iter().enumerate().map(move |(at, role)| {
             let fed = match role {
-                Role::ClosureData | Role::ClosureNotify | Role::Length { .. } | Role::Result { .. } => None,
+                Role::ClosureData | Role::ClosureNotify | Role::Length { .. } | Role::Result { .. } | Role::Outer | Role::Inner => None,
                 Role::Plain
                 | Role::NSString
                 | Role::NSArray(_)
@@ -1651,7 +1672,7 @@ impl Function {
         abi: Option<&str>,
         throws: Option<(&str, &str)>,
         defaults: &[(String, ParameterDefault)],
-        hresult: bool,
+        hresult: Option<Hresult>,
     ) -> Result<Self, String> {
         let abi_type = |ty| {
             if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
@@ -1727,7 +1748,13 @@ impl Function {
             parameters.push(ty);
             roles.push(Role::Plain);
         }
-        let returned = if hresult {
+        if hresult == Some(Hresult::Composable) {
+            parameters.push(Type::Pointer(Pointee::Void));
+            roles.push(Role::Outer);
+            parameters.push(Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void))));
+            roles.push(Role::Inner);
+        }
+        let returned = if hresult.is_some() {
             hresult_result(snapshot, &name, signature.return_type, abi, &mut parameters, &mut roles)?
         } else {
             returned(snapshot, &name, signature.return_type, abi)?
@@ -1758,7 +1785,7 @@ impl Function {
             defaults: given,
             result_as: returned.program,
             vtable: None,
-            hresult,
+            hresult: hresult.is_some(),
         })
     }
 }
@@ -1846,7 +1873,7 @@ fn retention_of(roles: &[Role]) -> Vec<Retention> {
                 Role::ClosureData if *scoped => Retention::NotRetained,
                 // C writes the result there during the call, and the slot is
                 // the caller's local, read once it returns.
-                Role::Result { .. } => {
+                Role::Result { .. } | Role::Inner => {
                     *scoped = false;
                     Retention::NotRetained
                 }

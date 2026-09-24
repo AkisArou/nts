@@ -11581,6 +11581,9 @@ enum Lent {
     /// gives back is the one `nts_com_delegate` made, whatever the callee
     /// does.
     Delegate { object: ValueId },
+    /// The slot a composable factory wrote its inner object to, released
+    /// after the call when it was written: nothing of the program holds it.
+    Inner { slot: ValueId },
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -41496,6 +41499,10 @@ impl<'a> FuncBuilder<'a> {
                 Lent::Delegate { object } => {
                     self.runtime_call("nts_com_release", vec![object], HirType::Void, origin.clone());
                 }
+                Lent::Inner { slot } => {
+                    let inner = self.runtime_call("nts_com_take", vec![slot], HirType::NativePointer(super::native::Pointee::Void), origin.clone());
+                    self.runtime_call("nts_com_release", vec![inner], HirType::Void, origin.clone());
+                }
                 // Checked, or read, by `finish_call` after everything else is
                 // given back; each is a local of the caller's own.
                 Lent::Error { .. } | Lent::Result { .. } => {}
@@ -41878,6 +41885,14 @@ impl<'a> FuncBuilder<'a> {
                     lent.push(Lent::Result { slot, written });
                     c_args.push(slot);
                 }
+                // A composable factory's outer object, none, and its inner
+                // one, given back after the call (`Role::Outer`, `Role::Inner`).
+                Role::Outer => c_args.push(self.push(OpKind::ConstNull, target.parameters[at].representation(), origin.clone())),
+                Role::Inner => {
+                    let slot = self.push(OpKind::NativeLocal { count: 1 }, target.parameters[at].representation(), origin.clone());
+                    lent.push(Lent::Inner { slot });
+                    c_args.push(slot);
+                }
                 Role::String(encoding) => {
                     let Some(string) = argument else { continue };
                     let pointer = self.runtime_call(
@@ -42120,6 +42135,14 @@ impl<'a> FuncBuilder<'a> {
         let selector =
             selector.or_else(|| declaration.and_then(|decl| self.node(decl).native.as_ref().and_then(|n| n.selector.clone())));
         let (throws, hidden) = split_hidden_throws(throws, selector.is_some(), signature);
+        let hresult = match declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.hresult.as_deref()) {
+            None => None,
+            Some(shape) => match shape.trim() {
+                "" => Some(super::native::Hresult::Plain),
+                "composable" => Some(super::native::Hresult::Composable),
+                _ => return Err(self.unsupported(call, "@ntsHresult with a shape other than `composable`")),
+            },
+        };
         let mut native = super::native::Function::from_signature(
             self.snapshot,
             name,
@@ -42127,7 +42150,7 @@ impl<'a> FuncBuilder<'a> {
             abi,
             throws.as_ref().map(|(slot, converter)| (slot.as_str(), converter.as_str())),
             &defaults,
-            declaration.and_then(|decl| self.node(decl).native.as_ref()).is_some_and(|n| n.hresult.is_some()),
+            hresult,
         )
         .map_err(|why| self.unsupported(call, &why))?;
         if let Some(converter) = hidden {
