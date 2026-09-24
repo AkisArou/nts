@@ -729,13 +729,15 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
          const fds = local<PollFd>();\n\
          return poll(fds, 1n as Count, timeout as Timeout);\n\
          }\n";
-    let binding = |field: &str| {
+    // `count` is the function's own claim, apart from the struct's: `c_ulong`
+    // is what <poll.h> says `nfds_t` is.
+    let binding = |field: &str, count: &str| {
         format!(
             "/** @ntsHeader poll.h */\n\
              declare module \"c:poll\" {{\n\
-             import type {{ Ptr, Struct, c_int, {field}, c_ulong }} from \"c:types\";\n\
+             import type {{ Ptr, Struct, c_int, c_long, {field}, c_ulong }} from \"c:types\";\n\
              export type PollFd = Struct<{{ fd: c_int; events: {field}; revents: {field} }}, \"pollfd\">;\n\
-             export type Count = c_ulong;\n\
+             export type Count = {count};\n\
              export type Timeout = c_int;\n\
              /** The array is read synchronously and no address into it is kept.\n\
               * @ntsNoEscape fds\n\
@@ -750,8 +752,8 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
     // witness with nothing in it means the generator stopped working. Reading
     // the two as one condition is how this test passed for its first three runs
     // while never executing a line of what it exists to check.
-    let witness_of = |name: &str, field: &str| -> Option<(Utf8PathBuf, String)> {
-        let (dir, prepared) = prepare_with_binding(name, &binding(field), PROGRAM)?;
+    let witness_of = |name: &str, field: &str, count: &str| -> Option<(Utf8PathBuf, String)> {
+        let (dir, prepared) = prepare_with_binding(name, &binding(field, count), PROGRAM)?;
         let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(
             emitted.diagnostics.is_empty(),
@@ -765,16 +767,27 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
         Some((dir, emitted.witness))
     };
 
-    let Some((signed_dir, signed)) = witness_of("witness-signed", "c_int16") else {
+    let Some((signed_dir, signed)) = witness_of("witness-signed", "c_int16", "c_ulong") else {
         eprintln!("skipped: no tsgo");
         return;
     };
-    let (unsigned_dir, unsigned) = witness_of("witness-unsigned", "c_uint16").unwrap();
+    let (unsigned_dir, unsigned) = witness_of("witness-unsigned", "c_uint16", "c_ulong").unwrap();
+    // The function's type wrong and nothing else -- `long` where the header
+    // says `unsigned long`, the same width -- so only the comparison of
+    // `poll`'s own type can refuse it.
+    let (narrow_dir, narrow) = witness_of("witness-signed-count", "c_int16", "c_long").unwrap();
 
+    // The header's declaration compared with the binding's type, not a second
+    // declaration of `poll`: an exact type, which is the check a
+    // merely-convertible call expression is not. A re-declaration asked the
+    // same question in a way Windows' `dllimport` headers refused for nothing.
     assert!(
-        signed.contains("extern int (poll)(struct pollfd *, unsigned long, int);"),
-        "the prototype is the check a merely-convertible call expression is not:\n{signed}"
+        signed.contains(
+            "__builtin_types_compatible_p(__typeof__(poll), int (struct pollfd *, unsigned long, int))"
+        ),
+        "the function's type is not compared with the header's:\n{signed}"
     );
+    assert!(!signed.contains("extern int (poll)"), "a named header's function was re-declared:\n{signed}");
 
     let layout_only = |witness: &str| {
         witness
@@ -818,4 +831,66 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
         "an unsigned `events` must be refused -- a witness that accepts both \
          arms is checking nothing about field types"
     );
+    assert!(
+        !accepted(&narrow_dir, &narrow),
+        "`poll` taking a signed `long` for `nfds_t` must be refused -- a witness \
+         that accepts it is checking nothing about function types"
+    );
+}
+
+/// A function the witness checks against an included header is called through
+/// that header's declaration, and every other keeps a prototype of its own.
+///
+/// **The first rule alone was a bug for a build.** `program.c` includes the
+/// bindings' headers only when it needs a struct a header defines. A binding
+/// of one function and no struct -- `windows-hello`'s `report` -- got no
+/// include and, once its prototype was dropped, called an undeclared function.
+/// So both arms are here: the same function and header, with and without a
+/// header-defined struct beside it.
+#[test]
+fn a_witnessed_function_is_called_through_its_header_only_where_the_header_is_included() {
+    // (name, binding, program, the function's own prototype line)
+    let arms = [
+        (
+            "through-header",
+            "/** @ntsHeader poll.h */\n\
+             declare module \"c:poll\" {\n\
+             import type { Ptr, Struct, c_int, c_int16, c_ulong } from \"c:types\";\n\
+             export type PollFd = Struct<{ fd: c_int; events: c_int16; revents: c_int16 }, \"pollfd\">;\n\
+             /** @ntsNoEscape fds */\n\
+             export function poll(fds: Ptr<PollFd>, count: c_ulong, timeout: c_int): c_int;\n\
+             }\n",
+            "import { poll, type PollFd } from \"c:poll\";\nimport { local } from \"c:memory\";\n\
+             import type { c_int, c_ulong } from \"c:types\";\n\
+             export function go(): number { const fds = local<PollFd>(); return poll(fds, 0n as c_ulong, 0 as c_int); }\n",
+            "int poll(",
+        ),
+        (
+            "own-prototype",
+            "/** @ntsHeader unistd.h */\n\
+             declare module \"c:unistd\" {\n\
+             import type { c_int } from \"c:types\";\n\
+             export function getpid(): c_int;\n\
+             }\n",
+            "import { getpid } from \"c:unistd\";\nexport function go(): number { return getpid(); }\n",
+            "int getpid(",
+        ),
+    ];
+    for (name, binding, program, prototype) in arms {
+        let Some((_, prepared)) = prepare_with_binding(name, binding, program) else {
+            eprintln!("skipped: no tsgo");
+            return;
+        };
+        assert!(prepared.diagnostics.is_empty(), "{name}: {:?}", prepared.diagnostics);
+        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(emitted.is_complete(), "{name}: {:?}", emitted.diagnostics);
+        let text = emitted.writer.text();
+        let includes = text.lines().any(|line| line.starts_with("#include <") && !line.contains("std"));
+        let declares = text.lines().any(|line| line.starts_with(prototype));
+        if name == "through-header" {
+            assert!(includes && !declares, "{name}: expected the header and no prototype of our own:\n{text}");
+        } else {
+            assert!(!includes && declares, "{name}: expected our own prototype, since no header is included:\n{text}");
+        }
+    }
 }

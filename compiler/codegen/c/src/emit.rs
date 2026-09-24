@@ -1022,6 +1022,20 @@ fn native_prototype(
     target: &nts_core::hir::native::Function,
     spelling: Spelling,
 ) -> String {
+    format!("{} {name}({});", spelling.of(&target.result), native_parameters(target, spelling))
+}
+
+/// The C function type a binding declares, with no name: `int (const char *)`.
+///
+/// What the witness compares against the header's own declaration, through
+/// `__typeof__`, rather than re-declaring the function. A function pointer
+/// result is spelled through its typedef, so the type never needs a declarator
+/// wrapped around it.
+pub(super) fn native_function_type(target: &nts_core::hir::native::Function, spelling: Spelling) -> String {
+    format!("{} ({})", spelling.of(&target.result), native_parameters(target, spelling))
+}
+
+fn native_parameters(target: &nts_core::hir::native::Function, spelling: Spelling) -> String {
     let mut parameters: Vec<String> =
         target.parameters.iter().map(|ty| spelling.of(ty)).collect();
     // `...` and nothing else: the tail's element type is this binding's claim
@@ -1034,12 +1048,11 @@ fn native_prototype(
     if target.variadic.is_some() {
         parameters.push("...".to_owned());
     }
-    let parameters = if parameters.is_empty() {
+    if parameters.is_empty() {
         "void".to_owned()
     } else {
         parameters.join(", ")
-    };
-    format!("{} {name}({parameters});", spelling.of(&target.result))
+    }
 }
 
 /// Whether this diagnostic means the emitted C is **not a program to build**.
@@ -1082,6 +1095,10 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
         rustc_hash::FxHashMap::default();
     let mut prototypes = Vec::new();
     let mut refusals = Vec::new();
+    // Whether `native_preamble` includes the bindings' headers in this file. A
+    // program naming no header-defined struct includes none, and then every
+    // function it calls is declared here or nowhere.
+    let headers_included = native_memory::needs_headers(program);
     for func in &program.funcs {
         for op in func
             .blocks
@@ -1135,7 +1152,25 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
                 Some(_) => {}
                 None => {
                     seen.insert(name, (target, prototype.clone()));
-                    prototypes.push(prototype);
+                    // **Called through the header's declaration** when the
+                    // witness compares that declaration with the binding: the
+                    // header is included above, and a second, attribute-less
+                    // declaration here would be the one the calls use. On
+                    // Windows that demoted every Win32 call from
+                    // `call *__imp_F` to a jump through an import thunk, and
+                    // warned `-Winconsistent-dllimport` eleven times.
+                    //
+                    // **Both conditions, and the first was missed once.** A
+                    // function the witness does not check keeps its prototype,
+                    // so a wrong header is still a compile error rather than a
+                    // call C converts silently. And a header this file does
+                    // not include declares nothing here: `windows-hello` binds
+                    // one function and no struct, so `program.c` included no
+                    // header, and without its prototype `report` was an
+                    // undeclared function.
+                    if !(headers_included && native_memory::witnessed_against_a_header(target)) {
+                        prototypes.push(prototype);
+                    }
                 }
             }
         }

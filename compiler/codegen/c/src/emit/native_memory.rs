@@ -1,6 +1,6 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
-use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, Spelling};
+use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, native_function_type, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, Spelling};
 use nts_core::hir::Callee;
 use nts_codegen_common::symbols::bridge_name;
 use nts_core::hir::native::{NativeAbi, Pointee, Type};
@@ -443,7 +443,9 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         }
         wrote = true;
     }
-    let mut declared: std::collections::BTreeMap<&str, (bool, String)> =
+    // Per symbol: whether a header was named, the prototype for one that has
+    // none, and the function type the header's declaration must have.
+    let mut declared: std::collections::BTreeMap<&str, (bool, String, String)> =
         std::collections::BTreeMap::new();
     let mut opaque: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
     for func in &program.funcs {
@@ -453,8 +455,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // its header is Objective-C, which a C witness cannot include.
             // Checking a selector's types against the class is the ObjC
             // witness's job (the Apple lane's A3), not this file's.
-            if target.send.is_some() { continue; }
-            if !target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign) { continue; }
+            if !witnessable(target) { continue; }
             for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
                 collect_opaque_tags(ty, &mut opaque);
             }
@@ -470,6 +471,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 (
                     target.declared_at.is_some(),
                     native_prototype(&format!("({})", target.name), target, Spelling::Expanded),
+                    native_function_type(target, Spelling::Expanded),
                 )
             });
         }
@@ -497,7 +499,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         writer.line(origin, format!("struct {tag};"));
         wrote = true;
     }
-    for (name, (names_a_header, prototype)) in &declared {
+    for (name, (names_a_header, prototype, function_type)) in &declared {
         // **The probe goes above the declaration, and that is the whole of
         // it.** Re-declaring a prototype checks it against the header's own --
         // `fsync(void)` against `fsync(int)` is `conflicting types for 'fsync'`
@@ -533,8 +535,24 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         if *names_a_header {
             writer.line(origin, format!(
                 "_Static_assert(sizeof(&{name}) > 0, \"a named header declares {name}\");"));
+            // **Compared, not re-declared.** A second declaration was the
+            // first form of this check -- `fsync(void)` against `fsync(int)`
+            // is `conflicting types` -- and it asks the question in a way that
+            // can itself be wrong: Windows headers declare every Win32 entry
+            // point `__declspec(dllimport)`, a re-declaration without it is
+            // `-Winconsistent-dllimport`, and at `-Werror` that refused every
+            // Win32 binding for a disagreement about nothing. `__typeof__`
+            // reads the declaration the header made, whatever its attributes,
+            // and `__builtin_types_compatible_p` is C's own compatibility rule,
+            // the one a conflicting re-declaration applies.
+            //
+            // A function-like macro of the same name does not expand here: it
+            // is not followed by `(`.
+            writer.line(origin, format!(
+                "_Static_assert(__builtin_types_compatible_p(__typeof__({name}), {function_type}), \"the header declares {name} as the binding does\");"));
+        } else {
+            writer.line(origin, format!("extern {prototype}"));
         }
-        writer.line(origin, format!("extern {prototype}"));
         wrote = true;
     }
     Ok(wrote)
@@ -591,6 +609,20 @@ fn collect_opaque_pointee<'a>(
         Pointee::Array { element, .. } => collect_opaque_pointee(element, into),
         Pointee::Scalar(_) | Pointee::Void | Pointee::Bits { .. } | Pointee::Record(_) => {}
     }
+}
+
+/// Whether the witness checks this function: a C function (not a message)
+/// whose every parameter and result names only what a header defines.
+fn witnessable(target: &nts_core::hir::native::Function) -> bool {
+    target.send.is_none()
+        && target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign)
+}
+
+/// Whether the witness compares this function's type with a named header's
+/// declaration, which is what lets `program.c` call it through that
+/// declaration instead of one of its own (`external_prototypes`).
+pub(super) fn witnessed_against_a_header(target: &nts_core::hir::native::Function) -> bool {
+    target.declared_at.is_some() && witnessable(target)
 }
 
 fn names_only_foreign(ty: &Type) -> bool {
