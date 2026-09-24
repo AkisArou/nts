@@ -157,6 +157,10 @@ pub(crate) enum Shape {
     /// A callback C calls once, after the call returns: a `OnceClosure`,
     /// which a Promise form stands in for.
     Once,
+    /// An array lent for the call (`CStrings`, `Counted<CBytes>`), which the
+    /// program holds as `program` -- `readonly string[]`, `Uint8Array` -- and
+    /// which only a foreign function's own parameter can be declared as.
+    Lent { program: String },
 }
 
 /// Why something was not bound. Counted, so the most common one is the next
@@ -654,6 +658,7 @@ impl<'a> Mapper<'a> {
                 let mapped = self.out(param)?;
                 c_parameters.push(mapped.c.clone());
                 no_escape.push(identifier(&param.name));
+                omissible.extend(self.omissible(param).map(|value| (identifier(&param.name), value)));
                 parameters.push((identifier(&param.name), mapped));
                 continue;
             }
@@ -713,6 +718,12 @@ impl<'a> Mapper<'a> {
     /// is guessed at -- `window.set_child()` meaning "no child" would be a
     /// default nobody chose.
     fn omissible(&self, param: &Param) -> Option<&'static str> {
+        // An out parameter the caller may pass no slot for -- `etag_out` on
+        // every GIO `_finish`, the second size of `get_size` -- is left out,
+        // as GJS leaves it out.
+        if param.direction == Direction::Out && param.optional {
+            return Some("null");
+        }
         if param.direction != Direction::In {
             return None;
         }
@@ -771,7 +782,20 @@ impl<'a> Mapper<'a> {
             return Err(if matches!(param.ty, TypeRef::Array(_)) { Reason::Array } else { Reason::OutParameter });
         };
         if name == "utf8" || name == "filename" {
-            return Err(Reason::StringOut);
+            // Only an optional one, which the caller leaves out (`omissible`):
+            // C's `char **` exactly, for a caller that does pass a slot.
+            if !param.optional {
+                return Err(Reason::StringOut);
+            }
+            let constant = c_type.as_deref().is_some_and(|c| c.trim_start().starts_with("const"));
+            let char = Pointee::Scalar(Scalar::Char);
+            let (ts, char) = if constant {
+                ("Ptr<ConstPtr<c_char>> | null", Pointee::Const(Box::new(char)))
+            } else {
+                ("Ptr<Ptr<c_char>> | null", char)
+            };
+            self.binding.brands.extend(["Ptr", "ConstPtr", "c_char"]);
+            return Ok(Mapped { shape: Shape::Other, ts: ts.to_owned(), c: Type::Pointer(Pointee::Pointer(Box::new(char))) });
         }
         if name == "gpointer" || name == "gconstpointer" {
             return Err(Reason::Gpointer);
@@ -827,7 +851,7 @@ impl<'a> Mapper<'a> {
         }
         let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.split_whitespace().collect();
         let char = Pointee::Scalar(Scalar::Char);
-        let (ts, c) = match element {
+        let (ts, c, program) = match element {
             "utf8" | "filename" if array.zero_terminated || length.is_some() => {
                 let (qualifier, c) = match spelling.replace("gchar", "char").as_str() {
                     "char**" => ("char", Type::Pointer(Pointee::Pointer(Box::new(char)))),
@@ -839,7 +863,7 @@ impl<'a> Mapper<'a> {
                     _ => return Err(Reason::Array),
                 };
                 self.binding.brands.insert("CStrings");
-                (format!("CStrings<\"{qualifier}\">"), c)
+                (format!("CStrings<\"{qualifier}\">"), c, "readonly string[]")
             }
             // Bytes have no terminator to find their end by, so only with a
             // length. `guchar` is `uint8_t` on every target GLib runs on; the
@@ -854,7 +878,7 @@ impl<'a> Mapper<'a> {
                     _ => return Err(Reason::Array),
                 };
                 self.binding.brands.insert("CBytes");
-                (format!("CBytes<\"{qualifier}\">"), Type::Pointer(pointee))
+                (format!("CBytes<\"{qualifier}\">"), Type::Pointer(pointee), "Uint8Array")
             }
             _ => return Err(Reason::Array),
         };
@@ -864,10 +888,12 @@ impl<'a> Mapper<'a> {
             ts = format!("Counted<{ts}, {}, \"{side}\">", count.ts);
         }
         // `null` is NULL, with a count of 0 beside it where there is one.
+        let mut program = program.to_owned();
         if param.nullable {
             ts.push_str(" | null");
+            program.push_str(" | null");
         }
-        Ok(Mapped { shape: Shape::Other, ts, c })
+        Ok(Mapped { shape: Shape::Lent { program }, ts, c })
     }
 
     /// `error: Ptr<GError | null> | null` -- C's `GError **error`, which the

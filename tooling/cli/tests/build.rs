@@ -4148,10 +4148,10 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         // C name, which is what the signature spells.
         "   * @ntsDefault flags=0\n   */\n  export function demo_flags(flags?: CEnum<DemoFlags, c_int>): void;",
         "  export type DemoFlags = Flags;",
-        // Out parameters: a slot each, the optional one nullable, and both
-        // stack storage the callee may not keep.
-        "   * @ntsNoEscape width\n   * @ntsNoEscape height\n   */\n  \
-         export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<CNumber<\"int\">>, height: Ptr<CNumber<\"int\">> | null): void;",
+        // Out parameters: a slot each, both stack storage the callee may not
+        // keep, and the optional one left out unless a slot is given.
+        "   * @ntsNoEscape width\n   * @ntsNoEscape height\n   * @ntsDefault height=null\n   */\n  \
+         export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<CNumber<\"int\">>, height?: Ptr<CNumber<\"int\">> | null): void;",
         // Bytes borrowed in place, their length after them and hidden.
         "   * @ntsNoEscape data\n   */\n  \
          export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, c_size_t, \"after\">): CNumber<\"int\">;",

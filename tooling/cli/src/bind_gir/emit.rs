@@ -232,10 +232,22 @@ pub(crate) fn promise_forms(binding: &Binding) -> Vec<(&Function, &Function)> {
                 .functions
                 .iter()
                 .find(|f| f.method.as_ref().is_some_and(|(c, n)| c == class && n == finish_name))?;
-            let read = finish.parameters.iter().filter(|(name, _)| finish.throws.as_deref() != Some(name.as_str())).count();
-            (read == 2 && settles(&finish.result)).then_some((start, finish))
+            (read(finish) == 2 && settles(&finish.result)).then_some((start, finish))
         })
         .collect()
+}
+
+/// The parameters a promise's `_finish` call has to write: all but the error
+/// slot, which a leaving-out throws, and the trailing ones the binding
+/// defaults -- `etag_out` on every GIO `_finish`. Two is the instance and the
+/// result.
+fn read(finish: &Function) -> usize {
+    let defaulted = defaults(finish, &finish.parameters);
+    finish
+        .parameters
+        .iter()
+        .filter(|(name, _)| finish.throws.as_deref() != Some(name.as_str()) && !defaulted.iter().any(|(given, _)| given == name))
+        .count()
 }
 
 /// Every `_async` method the binding kept, and whether it has a Promise form
@@ -274,8 +286,7 @@ fn why_no_promise(binding: &Binding, start: &Function) -> &'static str {
     else {
         return "no Promise form: its `_finish` is not bound";
     };
-    let read = finish.parameters.iter().filter(|(name, _)| finish.throws.as_deref() != Some(name.as_str())).count();
-    if read != 2 {
+    if read(finish) != 2 {
         return "no Promise form: its `_finish` takes more than the result";
     }
     match &finish.result.c {
@@ -499,12 +510,18 @@ fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
     // The method leaves these out as the C one would; here they are ordinary
     // default parameters, since this is the program's own function.
     let defaulted = defaults(start, taken);
+    // A lent array only a foreign parameter can be declared as is taken as
+    // the program holds it, and lent at the call inside.
+    let program = |mapped: &Mapped| match &mapped.shape {
+        Shape::Lent { program } => program.clone(),
+        _ => mapped.ts.clone(),
+    };
     let declared = taken
         .iter()
         .map(|(name, mapped)| match defaulted.iter().find(|(given, _)| *given == name.as_str()) {
-            Some((_, "null")) => format!("{name}: {} = null", mapped.ts),
-            Some((_, value)) => format!("{name}: {ts} = {value} as {ts}", ts = mapped.ts),
-            None => format!("{name}: {}", mapped.ts),
+            Some((_, "null")) => format!("{name}: {} = null", program(mapped)),
+            Some((_, value)) => format!("{name}: {ts} = {value} as {ts}", ts = program(mapped)),
+            None => format!("{name}: {}", program(mapped)),
         })
         .collect::<Vec<_>>()
         .join(", ");

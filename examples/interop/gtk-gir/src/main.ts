@@ -34,7 +34,7 @@
 //                 through its `label` property, as GJS writes it -- the
 //                 `gtk_label_set_label` and `gtk_label_get_label` GIR names
 //   ticks=3       and the count it captured is what `main` reads afterwards
-//   made=true again=rejected removed=true
+//   made=true again=rejected removed=true contents=6
 //                 `make_directory_async` and `delete_async` awaited: the
 //                 Promise forms the binding generates, resolving with what
 //                 `_finish` returns and rejecting with the `GError` it reports,
@@ -164,7 +164,15 @@ async function directories(path: string): Promise<void> {
     again = (e as Error).message.length > 0 ? "rejected" : "rejected-empty";
   }
   const removed = await directory.delete_async();
-  folders = "made=" + String(made) + " again=" + again + " removed=" + String(removed);
+  // A file written and read back: `replace_contents_async` lends the bytes
+  // for the call, and `load_bytes_async`'s `_finish` leaves its optional
+  // `etag_out` out, as GJS does.
+  const file = g_file_new_for_path(path + ".txt");
+  // "héllo" in UTF-8.
+  await file.replace_contents_async(new Uint8Array([104, 195, 169, 108, 108, 111]), null, false);
+  const bytes = await file.load_bytes_async();
+  await file.delete_async();
+  folders = "made=" + String(made) + " again=" + again + " removed=" + String(removed) + " contents=" + String(bytes.get_size());
 }
 
 let folders = "";
