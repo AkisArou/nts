@@ -3703,7 +3703,7 @@ instrument moved.
     13  is a namespace member whose function was not compiled    stream 9, fs 2
     13  a call inside a `try`, whose `throw` would not reach this handler
         fs 12, stream 1
-    12  is exported as a value of type `an object`, which does not cross
+    11  is exported as a value of type `an object`, which does not cross
     11  it calls `engineForMode`, and a `EngineOptions` where a `ZlibOptions`
         is wanted                                                    zlib 11
     11  is exported as a value of type `a function`, which does not cross
@@ -3713,6 +3713,49 @@ instrument moved.
      9  is exported and no function of that name was compiled
 
 155 distinct causes; 9 wrappers still name no root.
+
+**That row was 12 until 2026-09-24, and the one that left is the first published
+name this axis has gained in three nights: 140 -> 141.**
+
+`querystring`'s `QueryString` was declined as a value export whose type does not
+cross, and the cause was a **spelling**. `namespace_of` required every member of
+an exported object literal to be a `PROPERTY_ASSIGNMENT`, so one shorthand key
+disqualified the literal, it fell through to the value-export path, and an object
+whose fields are functions cannot cross. `punycode` published the identical shape
+only because its values are member accesses on an import, which forced explicit
+keys on it.
+
+Three things worth carrying forward, because each cost a wrong turn:
+
+- **The comment on this pointed somewhere else and the artefact refuted it.**
+  `codegen/napi/src/lib.rs` blames its own empty-fields rule, dead-code
+  elimination of each field's `#call`, and names a `Layout` callability flag as
+  the repair -- a `compiler/core` change four backends read. `nts layouts` shows
+  `QueryString` carrying all seven fields. Nothing is emptied, the refusal is
+  correct for a different reason, and **the napi crate needed no change at all**.
+  If a comment claims a collection is empty, print the collection.
+- **A shorthand's symbol is the property's, not the binding's**, so widening the
+  syntax test alone is a no-op -- and an object literal's *key* gets a symbol of
+  its own, spelled identically, so a name lookup finds three records for one
+  function. Candidates are deduplicated by the declaration they resolve to; two
+  genuinely different functions of one name still refuse.
+- **The shim guard had to widen, for the fourth recorded time in one file.**
+  `exports.QueryString` is now defined while `qs.parse` is still absent, so
+  testing the container let `shape.mjs` wrap `undefined` and publish a
+  `querystring.parse` that answers every presence check and throws on every
+  call.
+
+**And the axis moved by one, not by ten.** The new name is the `QueryString`
+container; node's tests still see the same three names because the shim correctly
+takes the partial path. What it buys is that `parse` and `stringify` are now
+*reachable* -- their blocker said "neither of them is reachable while this one
+stands" -- not that they work. The inbound object parameter is the next thing and
+is a runtime lifetime question rather than a marshalling one.
+
+The obvious follow-on, `export default { … }`, is **measured at zero**: every
+default export in the corpus has a member that cannot resolve to a function
+declaration, so the all-or-nothing rule still declines it. Recorded in
+`blockers/export-object-shorthand`.
 
 ### Three things the old instrument could not see
 
