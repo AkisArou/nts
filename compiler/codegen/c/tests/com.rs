@@ -218,3 +218,43 @@ fn tags_on_one_line_are_refused_as_one_tag() {
         prepared.diagnostics
     );
 }
+
+/// A runtime class's static, declared in a namespace of the class's name as
+/// `bind-winmd` writes it, is a call to that function: `JsonValue.Parse(x)`
+/// is `Parse(x)` on the class's factory, and the namespace, which has no
+/// value, is not lowered as a receiver.
+#[test]
+fn a_static_in_a_namespace_is_called_on_its_factory() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { c_double } from "c:types";
+  import type { ComClass, HString } from "winrt:types";
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 9 GetNumber
+     * @ntsHresult
+     */
+    GetNumber(this: IJsonValue): c_double;
+  }
+  export type IJsonValue = ComClass<"Windows_Data_Json_IJsonValue"> & IJsonValueMethods;
+  export type JsonValue = IJsonValue;
+  export namespace JsonValue {
+    /**
+     * @ntsVtable 6 Parse
+     * @ntsHresult
+     * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+     */
+    function Parse(input: HString): JsonValue;
+  }
+}
+"#;
+    let source = "import { JsonValue } from \"winrt:Windows.Data.Json\";\nexport function run(): number {\n  return JsonValue.Parse(\"7.5\").GetNumber();\n}\n";
+    let Some((_, prepared)) = prepare("namespace", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert!(text.contains("nts_winrt_factory(") && text.contains("[6])("), "Parse is not called on its factory:\n{text}");
+}

@@ -12447,6 +12447,19 @@ impl<'a> FuncBuilder<'a> {
         at
     }
 
+    /// Whether `id` names a namespace -- `declare namespace JsonValue`, or an
+    /// import of one -- which is a scope and not a value.
+    fn names_a_namespace(&self, id: NodeId) -> bool {
+        let Some(symbol) = self.node(id).symbol else { return false };
+        let symbol = self.denoted_symbol(symbol);
+        self.snapshot.symbols.get(symbol.0 as usize).is_some_and(|record| {
+            record.flags.contains(SymbolFlags::MODULE)
+                && ![SymbolFlags::VARIABLE, SymbolFlags::FUNCTION, SymbolFlags::CLASS, SymbolFlags::ENUM]
+                    .into_iter()
+                    .any(|value| record.flags.contains(value))
+        })
+    }
+
     /// What kind of name the lowering ran out of places to look for.
     ///
     /// This used to be one message — `a name declared outside this function` —
@@ -40378,9 +40391,16 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_static_call(id, &class_name, callee, &arguments);
         }
 
+        // `JsonValue.Parse(x)` — a function a namespace declares. The thing
+        // before the dot is a namespace, which has no value to be a receiver,
+        // so this is a call to the function, as `Parse(x)` would be.
+        let in_namespace = target.callee.is_some_and(|callee| self.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION))
+            && self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+            && self.children(callee_node).first().is_some_and(|object| self.names_a_namespace(*object));
+
         // `c.advance()` — a method call. The receiver becomes the first
         // argument, which is what a method is once it is explicit.
-        if self.names_a_property(callee_node) {
+        if !in_namespace && self.names_a_property(callee_node) {
             return self.lower_method_call(id, callee_node, &arguments);
         }
 
