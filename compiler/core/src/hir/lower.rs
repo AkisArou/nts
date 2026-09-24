@@ -6757,6 +6757,89 @@ fn module_namespace_of(
 /// it is not one, and the backend reports it as an export it cannot name --
 /// half a namespace is worse than none, because the half that is there looks
 /// like the whole.
+/// The binding a shorthand property names, by name, within its own file.
+///
+/// A shorthand's node carries the **property's** symbol rather than the
+/// referenced binding's -- `getShorthandAssignmentValueSymbol` answers the other
+/// one and the snapshot does not carry it. `FuncBuilder::shorthand_value_symbol`
+/// resolves it against the bindings it has in hand; this has only a snapshot, so
+/// it matches on the name and narrows by file.
+///
+/// **Scoped to the file, and that is correctness rather than tidiness.**
+/// `snapshot.symbols` is one table for the whole linked program, so an unscoped
+/// match would let `punycode`'s `{ decode }` resolve to `querystring`'s `decode`
+/// and publish the wrong function under the right name.
+///
+/// **The property's own symbol is excluded by its declaration's kind.** It is
+/// spelled the same and declared by the shorthand node, so without that test it
+/// is a second candidate and every shorthand answers ambiguous.
+///
+/// Two surviving candidates answer `None` and the whole literal stops being a
+/// namespace. That is the rule `shorthand_value_symbol` states as *a shorthand
+/// naming a shadowed binding*: with two bindings of one name in scope, either
+/// answer is a coin toss, and a namespace published from a coin toss is worse
+/// than one not published.
+fn shorthand_target(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    file: nts_diagnostics::SourceId,
+    text: &str,
+) -> Option<nts_semantic_schema::SymbolId> {
+    let mut found: Option<(nts_semantic_schema::SymbolId, NodeId)> = None;
+    for (index, record) in snapshot.symbols.iter().enumerate() {
+        if record.name != text {
+            continue;
+        }
+        // Spelled here, so another module's function of the same name is not a
+        // candidate. For an import it is the specifier that is in this file.
+        if !record
+            .declarations
+            .iter()
+            .any(|at| probe.node(*at).origin.location.file == file)
+        {
+            continue;
+        }
+        // **And it has to name a function**, which is the same thing the tail
+        // below requires and is what excludes the two property kinds without a
+        // list of them. An object literal's key gets a symbol of its own,
+        // spelled identically and declared by the property node -- a
+        // `PROPERTY_ASSIGNMENT` for `{ decode: decode }` and a
+        // `SHORTHAND_PROPERTY_ASSIGNMENT` for `{ decode }` -- so a name test
+        // alone finds three records for one function and calls it ambiguous.
+        // Neither property kind declares a function, and this asks that.
+        let denoted = record
+            .aliased
+            .and_then(|to| snapshot.symbols.get(to.0 as usize))
+            .unwrap_or(record);
+        let Some(declaration) = denoted
+            .declarations
+            .iter()
+            .copied()
+            .find(|at| probe.kind_of(*at) == Some(syntax::FUNCTION_DECLARATION))
+        else {
+            continue;
+        };
+        // **Two records naming one function are one candidate**, compared by the
+        // declaration they resolve to rather than by the record. `export { one }`
+        // beside `const held = { one }` gives the export specifier a symbol of
+        // its own, spelled `one` and aliased to the same function -- so counting
+        // records called that shadowed and refused a fixture whose whole subject
+        // is the shorthand. Only two *different* functions of one name are the
+        // coin toss this refuses.
+        match found {
+            Some((_, already)) if already != declaration => return None,
+            Some(_) => {},
+            None => {
+                found = Some((
+                    nts_semantic_schema::SymbolId(u32::try_from(index).unwrap_or(u32::MAX)),
+                    declaration,
+                ));
+            },
+        }
+    }
+    found.map(|(symbol, _)| symbol)
+}
+
 fn namespace_of(
     snapshot: &SemanticSnapshot,
     naming: &Naming,
@@ -6778,22 +6861,63 @@ fn namespace_of(
     if members.is_empty() {
         return None;
     }
+    // The literal's own file, which scopes the shorthand lookup below.
+    let file = probe.node(*literal).origin.location.file;
     let mut properties = Vec::with_capacity(members.len());
     for member in members {
-        if probe.kind_of(member) != Some(syntax::PROPERTY_ASSIGNMENT) {
-            return None;
-        }
         let parts = probe.children(member);
-        let key = parts.first().and_then(|at| probe.node(*at).text.clone())?;
-        // The value, which is the last part rather than the second: a key may
-        // be computed and carry children of its own.
-        let value = parts.last().copied()?;
-        let symbol = probe.node(value).symbol.or_else(|| {
-            probe
-                .children(value)
-                .last()
-                .and_then(|member| probe.node(*member).symbol)
-        })?;
+        // **Shorthand counts, and leaving it out cost a module.**
+        //
+        // `{ decode, encode }` is `{ decode: decode, encode: encode }` and a
+        // reader would not call the difference a difference -- but only the
+        // second was a `PROPERTY_ASSIGNMENT`, so the first fell out of this
+        // function, out of the namespace surface, and into a plain **value**
+        // export. A value export has to cross, and an object whose fields are
+        // functions does not, so the whole export was declined as
+        // `is exported as a value of type `an object`, which does not cross`.
+        //
+        // One shorthand member was enough: `querystring`'s `QueryString` writes
+        // five shorthand keys and two explicit ones, and refused all seven.
+        // `punycode` publishes the same shape only because its values are member
+        // accesses on an import, which forced explicit keys on it -- so the
+        // module that worked did not work for anything it knew.
+        //
+        // **A shorthand's symbol is the property's, not the binding's**, and
+        // that is why widening the kind test alone is a no-op: the property's
+        // only declaration is the shorthand node itself, so the
+        // `FUNCTION_DECLARATION` search below finds nothing and this returns
+        // `None` exactly as before. `lower.rs`'s own `shorthand_value_symbol`
+        // says so -- `getShorthandAssignmentValueSymbol` answers the other
+        // symbol and the snapshot does not carry it -- and resolves by name for
+        // the same reason. This does too, with only a snapshot in hand.
+        let (key, symbol) = match probe.kind_of(member) {
+            Some(syntax::PROPERTY_ASSIGNMENT) => {
+                let key = parts.first().and_then(|at| probe.node(*at).text.clone())?;
+                // The value, which is the last part rather than the second: a
+                // key may be computed and carry children of its own.
+                let value = parts.last().copied()?;
+                let symbol = probe.node(value).symbol.or_else(|| {
+                    probe
+                        .children(value)
+                        .last()
+                        .and_then(|member| probe.node(*member).symbol)
+                })?;
+                (key, symbol)
+            },
+            // Guarded on the single child, because `{ a = 1 }` is three children
+            // and is a destructuring *pattern* rather than a literal --
+            // unreachable from here, and cheaper to exclude than to reason about
+            // again later.
+            Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) if parts.len() == 1 => {
+                let at = parts.first().copied()?;
+                let text = probe.node(at).text.clone()?;
+                let symbol = shorthand_target(snapshot, &probe, file, &text)?;
+                (text, symbol)
+            },
+            // A spread, an accessor or a method still disqualifies the literal.
+            // Half a namespace is worse than none.
+            _ => return None,
+        };
         let record = snapshot.symbols.get(symbol.0 as usize)?;
         let record = record
             .aliased

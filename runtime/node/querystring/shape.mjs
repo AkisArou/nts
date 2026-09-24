@@ -20,7 +20,23 @@ export function shape(exports) {
   // Third time for this shape: `stream` and `process` carry the same
   // correction, and `os/shape.mjs` records the throwing version of it. The
   // guard is right and its scope was wrong.
-  if (qs === undefined) {
+  //
+  // **Fourth time, 2026-09-24, and the scope was wrong again.** `QueryString`
+  // now crosses as a *namespace*, so `qs` is defined -- and `qs.parse` is still
+  // absent, because `parse` takes an options object and the wrapper declines an
+  // object parameter (`blockers/object-parameter-at-the-wrapper`). Testing only
+  // for the container let the code below read `qs.parse`, wrap `undefined`, and
+  // publish a `querystring.parse` that answers every presence check and throws
+  // on every call. That is the failure this file already names twice and the one
+  // `os/shape.mjs` records: present-and-throwing is worse than absent.
+  //
+  // So the test is for the member this function actually needs, not for the
+  // object it hangs on. The partial path below yields the same three names it
+  // did when `QueryString` was absent entirely -- `escape`, `unescape`,
+  // `unescapeBuffer` -- so widening the guard preserves today's behaviour
+  // exactly, and `parse` becoming reachable is a change to make when the object
+  // parameter crosses rather than one to fake here.
+  if (qs === undefined || typeof qs.parse !== "function") {
     const partial = {};
     for (const [name, value] of Object.entries(exports)) {
       if (name === "default" || name === "QueryString") continue;

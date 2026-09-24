@@ -1,4 +1,17 @@
-// expect: emit-c --napi -> no wrapper for holderOfFunctions: is exported as a value of type `an object`, which does not cross
+// expect: emit-c --napi -> publishes holderOfFunctions
+//
+// FIXED 2026-09-24, kept as a guard. `{ one, two }` is shorthand, and
+// `namespace_of` required explicit keys -- so this published nothing while
+// `punycode`'s identical shape published, because its imports forced explicit
+// keys on it. `blockers/export-object-shorthand` carries the full account.
+//
+// This fixture is also what caught the fix's second bug: `export { one, two }`
+// below gives the export specifiers symbols spelled `one` and `two` that alias
+// to the same functions, so counting symbols by name called them shadowed and
+// refused. Candidates are deduplicated by the declaration they resolve to now,
+// and two *different* functions of one name are still the coin toss that
+// refuses. Do not remove the `export { one, two }` line: it is the arm that
+// distinguishes those.
 //
 // **The message changed on 2026-09-11 and the fixture is why it could.** It read
 // `is exported and is not a function this backend can name`, which is true of

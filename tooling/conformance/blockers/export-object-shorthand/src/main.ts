@@ -1,5 +1,34 @@
-// expect: emit-c --napi -> no wrapper for ucs2: is exported as a value of type
-//         `an object`, which does not cross
+// expect: emit-c --napi -> publishes ucs2
+//
+// FIXED 2026-09-24, kept as a guard. **The diagnosis below was right and the
+// cause was not where any comment said it was.**
+//
+// `object_crosses` in the napi backend was never the defect. Its comment blames
+// its own empty-fields rule and dead-code elimination, and names a `Layout`
+// callability flag as the repair; the layout dump refutes all three. `ucs2`'s
+// layout carries both fields, and `querystring`'s `QueryString` carries all
+// seven -- nothing is emptied, and an object whose fields are functions is
+// correctly refused as a *value* export either way.
+//
+// What publishes such an object is `Program::public_namespaces`, and the gate is
+// `namespace_of` (`compiler/core/src/hir/lower.rs`), which required every member
+// to be spelled with an explicit key. So the fixture's own word for it -- **a
+// spelling** -- was exactly right.
+//
+// Two things the fix needed beyond widening the kind test, both found by
+// instrumenting rather than by reading:
+//
+//   * **A shorthand's symbol is the property's, not the binding's.** Its only
+//     declaration is the shorthand node itself, so widening the kind test alone
+//     is a no-op. Resolved by name within the literal's own file, the way
+//     `shorthand_value_symbol` resolves it against the bindings it has.
+//   * **An object literal's key gets a symbol too**, spelled identically. A name
+//     match finds three records for one function -- the function, the explicit
+//     key, the shorthand -- so candidates are filtered to those that name a
+//     function and deduplicated by the declaration they resolve to. Counting
+//     records instead called `export { one }` beside `const held = { one }` a
+//     shadowed binding and refused `blockers/value-export-holding-functions`,
+//     whose whole subject is the shorthand.
 //
 // **The message changed on 2026-09-11**, from `is exported and is not a function
 // this backend can name`. That sentence was true of the export *shape* and sent
