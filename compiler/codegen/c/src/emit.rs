@@ -914,7 +914,13 @@ fn witness_file(program: &Program, abi: NativeAbi, origin: &Origin, diagnostics:
             // about the consumer's target, and both are needed to say what
             // does. A binding naming no fixed-width type pays an unused
             // include; one naming one and missing it does not compile.
-            for mechanism in ["stddef.h", "stdint.h"] {
+            //
+            // `bool` likewise: a `boolean` is spelled `bool`, which C11 has
+            // only through `<stdbool.h>`. It worked for as long as each
+            // binding's own header happened to include it, and
+            // `objc_registerClassPair`'s neighbour `class_addMethod`, bound
+            // with no header of its own, was the first that did not.
+            for mechanism in ["stddef.h", "stdint.h", "stdbool.h"] {
                 if !included.contains(&mechanism) {
                     file.line(origin, format!("#include <{mechanism}>"));
                 }

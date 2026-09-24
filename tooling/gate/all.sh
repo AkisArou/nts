@@ -1833,7 +1833,9 @@ interop() {
   # 29: `native-byvalue` (records by value, one per ABI class, against C) and
   #     `macos-geometry` (the same through Objective-C, `objc_msgSend_stret`
   #     included). The second SKIPs without a macOS SDK.
-  interop_floor=29
+  # 30: `macos-window` (A2's window), an NSWindow whose button's action is a
+  #     TypeScript closure, run inside `[NSApp run]` in the Mac's GUI session.
+  interop_floor=30
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"

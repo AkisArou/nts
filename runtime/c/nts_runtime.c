@@ -1375,6 +1375,10 @@ void nts_callback_leave(void) {
   }
 }
 
+bool nts_in_callback(void) {
+  return nts_environment_current()->in_callback != 0;
+}
+
 void nts_checkpoint_after_callbacks(bool on) {
   nts_environment_current()->checkpoint_after_callbacks = on;
 }

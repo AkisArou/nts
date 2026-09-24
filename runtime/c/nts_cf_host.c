@@ -1,5 +1,6 @@
 #include "nts_cf_host.h"
 
+#include "nts_runtime.h"
 #include "nts_uv_host.h"
 
 #include <CoreFoundation/CoreFoundation.h>
@@ -20,16 +21,28 @@ static const CFTimeInterval nts_cf_never = 1.0e10;
 
 /* The timer fires when libuv's next timeout is due, or never when libuv has
  * nothing alive: `nts_uv_host_backend_timeout` says -1 then, where libuv's own
- * answer is 0, and a timer armed at 0 would spin. */
+ * answer is 0, and a timer armed at 0 would spin.
+ *
+ * Never, too, while a TypeScript callback is on the stack: the loop turning
+ * now is one a native call made from inside the callback (`performClick:`,
+ * menu tracking, a modal panel), and no task may start until the callback has
+ * returned. Armed at libuv's 0 there, the timer would fire, be refused, and
+ * fire again for as long as that nested loop ran. The outer loop's
+ * before-waiting observer arms it once the callback is gone. */
 static void nts_cf_rearm(void) {
-  int due = nts_uv_host_backend_timeout();
+  int due = nts_in_callback() ? -1 : nts_uv_host_backend_timeout();
   CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
   CFRunLoopTimerSetNextFireDate(
       nts_cf_timer, due < 0 ? now + nts_cf_never : now + (double)due / 1000.0);
 }
 
-/* One turn of libuv, inside a pool of its own. */
+/* One turn of libuv, inside a pool of its own -- unless a TypeScript callback
+ * is still running below this loop, for the reason `nts_cf_rearm` gives. */
 static void nts_cf_pump(void) {
+  if (nts_in_callback()) {
+    nts_cf_rearm();
+    return;
+  }
   void *pool = objc_autoreleasePoolPush();
   nts_uv_host_pump();
   objc_autoreleasePoolPop(pool);

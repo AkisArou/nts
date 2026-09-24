@@ -2056,6 +2056,13 @@ typedef struct NtsLanding {
    The throw ends the process instead, naming the boundary. */
 void nts_callback_enter(void);
 void nts_callback_leave(void);
+/* Whether a bridge is on the stack: a TypeScript callback, called by native
+   code, that has not returned. A foreign-loop host asks before it runs a
+   task, because a native call made from inside a callback can turn the loop
+   itself -- AppKit's `performClick:` does, as do menu tracking and modal
+   panels -- and a task run there would start with the callback's frames
+   still below it, where JavaScript runs one to completion first. */
+bool nts_in_callback(void);
 /* Make a callback that returns to a foreign loop a checkpoint.
  *
  * For a program whose loop is someone else's -- GTK's `g_application_run`,

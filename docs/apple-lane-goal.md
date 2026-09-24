@@ -190,8 +190,23 @@ correctness does not depend on arm64 running by luck.
      backend refuses by name until it classifies aggregates (SysV and AAPCS64,
      checked against `clang -emit-llvm`).
 
-   Left for A2: records by value on LLVM, then `macos-window` with a capturing
-   target/action handler that starts a timer and an await. Sugar for
+   - **A window (C backend).** `examples/interop/macos-window` puts an
+     `NSWindow` with an `NSButton` on the Mac's screen. The button's action is
+     a TypeScript closure, and each press starts an `await` and a
+     `setTimeout`. All of it runs inside `[NSApp run]`, in JavaScript's order,
+     and a control with libuv detached shows no timeout firing early. A
+     program started over ssh reaches the logged-in session's WindowServer with
+     no extra setup.
+
+     It found a host bug. `performClick:` turns a nested run loop while the
+     callback that called it is still running, and the CF host pumped libuv
+     there, so a task started with TypeScript frames below it. The host now
+     asks `nts_in_callback()` and runs nothing until the callback returns,
+     which is also the rule for a modal panel opened from a handler. It is the
+     trade-off the host already made for a modal loop inside a libuv task.
+
+   Left for A2: records by value on LLVM (x86_64 SysV first), which closes A2
+   on both backends. Sugar for
    `class X extends NSObject` belongs to A4, and so does per-instance
    TypeScript state, and so does `NSMakeRect`-style construction. Today a
    rectangle is a `local<CGRect>()` filled member by member, and a helper that
