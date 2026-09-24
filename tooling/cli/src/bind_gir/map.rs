@@ -131,6 +131,9 @@ pub(crate) enum Reason {
     NoTag(String),
     /// Dropped by the self-check: the header disagrees with the mapping.
     Header(String),
+    /// Dropped by the self-check: in GIR, and in none of the headers GIR
+    /// names (`g_access` is in `glib/gstdio.h`, which `glib.h` leaves out).
+    Undeclared,
 }
 
 impl fmt::Display for Reason {
@@ -156,6 +159,7 @@ impl fmt::Display for Reason {
             Self::Unknown(name) => write!(f, "`{name}`, a type this binder does not know"),
             Self::NoTag(c) => write!(f, "`{c}`, which the headers do not define as a tagged struct"),
             Self::Header(error) => write!(f, "the header disagrees: {error}"),
+            Self::Undeclared => write!(f, "declared by none of the headers GIR names"),
         }
     }
 }

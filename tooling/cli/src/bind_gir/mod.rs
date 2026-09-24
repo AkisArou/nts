@@ -120,7 +120,8 @@ pub(crate) fn ensure(roots: &std::collections::BTreeSet<String>, search: &[Utf8P
     // bound is not bound again: `Gtk-4.0` brings `GLib-2.0` with it, and a
     // program importing both would otherwise pay for GLib twice.
     let mut order: Vec<&String> = wanted.iter().collect();
-    order.sort_by_key(|root| std::cmp::Reverse(closure_size(root, search)));
+    // Cached: the key parses a root's whole GIR closure.
+    order.sort_by_cached_key(|root| std::cmp::Reverse(closure_size(root, search)));
     for root in order {
         let _ = writeln!(stamp, "root {root}");
         let already = files.iter().any(|file| file.file_name() == Some(&format!("{root}.gir")));
@@ -296,16 +297,34 @@ fn pkg_config(repository: &model::Repository, namespace: &model::Namespace, what
     }
     let mut flags = Vec::new();
     for package in packages {
-        let Ok(output) = std::process::Command::new("pkg-config").args([what, &package]).output() else {
-            continue;
-        };
-        if output.status.success() {
-            for flag in String::from_utf8_lossy(&output.stdout).split_whitespace() {
-                if !flags.iter().any(|f| f == flag) {
-                    flags.push(flag.to_owned());
-                }
+        for flag in pkg_config_of(what, &package) {
+            if !flags.contains(&flag) {
+                flags.push(flag);
             }
         }
+    }
+    flags
+}
+
+/// `pkg-config <what> <package>`, asked once per process: every namespace
+/// that includes `GLib` asks for its flags, and each answer is a process.
+fn pkg_config_of(what: &str, package: &str) -> Vec<String> {
+    type Answers = BTreeMap<(String, String), Vec<String>>;
+    static ASKED: std::sync::OnceLock<std::sync::Mutex<Answers>> = std::sync::OnceLock::new();
+    let asked = ASKED.get_or_init(Default::default);
+    let key = (what.to_owned(), package.to_owned());
+    if let Some(flags) = asked.lock().ok().and_then(|asked| asked.get(&key).cloned()) {
+        return flags;
+    }
+    let flags: Vec<String> = std::process::Command::new("pkg-config")
+        .args([what, package])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).split_whitespace().map(str::to_owned).collect())
+        .unwrap_or_default();
+    if let Ok(mut asked) = asked.lock() {
+        asked.insert(key, flags.clone());
     }
     flags
 }

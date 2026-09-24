@@ -3891,6 +3891,9 @@ fn demo_gir(high: &str) -> String {
       <return-value><type name="gint" c:type="gint"/></return-value>
       <parameters><parameter name="x"><type name="gint" c:type="int"/></parameter></parameters>
     </function>
+    <function name="missing" c:identifier="demo_missing">
+      <return-value><type name="gint" c:type="gint"/></return-value>
+    </function>
   </namespace>
 </repository>
 "#
@@ -3906,6 +3909,8 @@ fn demo_gir(high: &str) -> String {
 /// `_DemoThing` convention, so a binder that assumed it would declare a
 /// different struct; and the GIR claims `demo_wrong` returns a `gint` where
 /// the header says `long`, which only a check against the header can catch.
+/// A third, `demo_missing`, is in the GIR and in no header -- a declaration
+/// the binding would otherwise supply itself, and so always agree with.
 fn gir_library(root: &Path, flag_signed: bool) {
     let include = root.join("include");
     for dir in [&include, &root.join("gir"), &root.join("pc"), &root.join("native")] {
@@ -3986,6 +3991,11 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     assert!(
         refused.lines().any(|line| line.starts_with("demo_wrong\t") && line.contains("the header disagrees")),
         "demo_wrong was not reported as contradicted:\n{refused}"
+    );
+    assert!(!binding.contains("demo_missing"), "a function no header declares was kept:\n{binding}");
+    assert!(
+        refused.lines().any(|line| line == "demo_missing\tdeclared by none of the headers GIR names"),
+        "demo_missing was not reported as undeclared:\n{refused}"
     );
     assert!(
         refused.lines().any(|line| line == "demo_thing_name\ta string out parameter"),

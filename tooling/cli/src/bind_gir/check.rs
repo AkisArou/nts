@@ -4,10 +4,17 @@
 //! headers and can be wrong about them, and the mapping is a claim about GIR.
 //! The build's witness would catch a wrong prototype -- but only for the
 //! functions a program happens to call, and only by failing that program's
-//! build. So the binder asks first: each function it would emit is declared,
-//! in the compiler's own C spelling, after the headers that declare it, and
-//! clang compiles the lot. Whatever clang rejects is dropped with clang's own
-//! words as the reason, and the rest is asked again until nothing is rejected.
+//! build. So the binder asks first: for each function it would emit, that the
+//! headers declare it, and with the type the compiler's own C spelling gives --
+//! `_Static_assert(__builtin_types_compatible_p(__typeof__(&(f)), T (*)(…)))`,
+//! after the headers, and clang compiles the lot once. Whatever clang
+//! rejects is dropped with clang's own words as the reason.
+//!
+//! **An assertion, not a redeclaration.** Redeclaring `extern T (f)(…);`
+//! checks a prototype against the header's -- and, where no header declares
+//! `f`, is simply the first declaration, which clang accepts: `g_access` is in
+//! GIR and not in `glib.h`, and passed. Asking for `f`'s type needs `f` to
+//! exist.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -27,61 +34,68 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
     ));
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let probe = dir.join(format!("{}.c", binding.module.replace([':', '.', '-'], "_")));
-    // Each round drops what clang reported; a round that reports errors on no
-    // declaration line has found something else wrong, and says so.
-    loop {
-        let (text, lines) = probe_text(binding);
-        std::fs::write(&probe, &text).with_context(|| format!("writing {}", probe.display()))?;
-        let output = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
-            .args(["-std=c11", "-fsyntax-only", "-ferror-limit=0", "-w"])
-            .args(cflags)
-            .arg(&probe)
-            .output()
-            .context("running clang on the binding's self-check")?;
-        if output.status.success() {
-            break;
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let name = probe.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-        let declared: BTreeMap<&str, &str> =
-            lines.iter().filter_map(|(n, symbol)| Some((symbol.as_str(), text_line(&text, *n)?))).collect();
-        let mut rejected: BTreeMap<String, String> = BTreeMap::new();
-        for line in stderr.lines() {
-            // `<probe>:<line>:<col>: error: <message>`
-            let Some(rest) = line.split_once(name).map(|(_, rest)| rest) else { continue };
-            let mut fields = rest.trim_start_matches(':').splitn(3, ':');
-            let (Some(number), _, Some(message)) = (fields.next(), fields.next(), fields.next()) else {
-                continue;
-            };
-            let Some(message) = message.trim().strip_prefix("error:") else { continue };
-            if let Some(symbol) = number.parse::<usize>().ok().and_then(|n| lines.get(&n)) {
-                // Clang's words and the prototype they were about, so a
-                // report line says what was declared and not only that it
-                // was wrong.
-                let prototype = declared.get(symbol.as_str()).copied().unwrap_or_default();
-                rejected
-                    .entry(symbol.clone())
-                    .or_insert_with(|| format!("{} -- declared `{prototype}`", message.trim()));
-            }
-        }
-        if rejected.is_empty() {
-            bail!(
-                "the self-check of `{}` failed outside any declaration, so the headers \
-                 themselves did not compile with these flags:\n{stderr}",
-                binding.module
-            );
-        }
-        binding.functions.retain(|f| !rejected.contains_key(&f.name));
-        binding
-            .refused
-            .extend(rejected.into_iter().map(|(symbol, why)| (symbol, Reason::Header(why))));
-    }
+    // One pass. Each line is an assertion that declares nothing, so one
+    // failing cannot make another fail, and `-ferror-limit=0` reports every
+    // one: dropping what clang reported leaves only lines that passed. An
+    // error on no assertion line means the headers themselves did not
+    // compile, and says so.
+    let (text, lines) = probe_text(binding);
+    std::fs::write(&probe, &text).with_context(|| format!("writing {}", probe.display()))?;
+    let output = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
+        .args(["-std=c11", "-fsyntax-only", "-ferror-limit=0", "-w"])
+        .args(cflags)
+        .arg(&probe)
+        .output()
+        .context("running clang on the binding's self-check")?;
     let _ = std::fs::remove_dir_all(&dir);
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let name = probe.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    let mut rejected: BTreeMap<String, Reason> = BTreeMap::new();
+    for line in stderr.lines() {
+        // `<probe>:<line>:<col>: error: <message>`
+        let Some(rest) = line.split_once(name).map(|(_, rest)| rest) else { continue };
+        let mut fields = rest.trim_start_matches(':').splitn(3, ':');
+        let (Some(number), _, Some(message)) = (fields.next(), fields.next(), fields.next()) else {
+            continue;
+        };
+        let Some(message) = message.trim().strip_prefix("error:") else { continue };
+        if let Some((symbol, prototype)) = number.parse::<usize>().ok().and_then(|n| lines.get(&n)) {
+            // Clang's words and the prototype they were about, so a report
+            // line says what was declared and not only that it was wrong. An
+            // undeclared name is its own reason: nothing disagreed, the
+            // headers never mention it.
+            rejected.entry(symbol.clone()).or_insert_with(|| {
+                if message.contains("undeclared") {
+                    Reason::Undeclared
+                } else {
+                    Reason::Header(format!("{} -- declared `{prototype}`", message.trim()))
+                }
+            });
+        }
+    }
+    if rejected.is_empty() {
+        bail!(
+            "the self-check of `{}` failed outside any declaration, so the headers \
+             themselves did not compile with these flags:\n{stderr}",
+            binding.module
+        );
+    }
+    binding.functions.retain(|f| !rejected.contains_key(&f.name));
+    // A downcast calls its class's `get_type`, so it goes where that goes:
+    // `g_settings_backend_get_type` is declared only in a header `gio.h`
+    // leaves out, and `asGSettingsBackend` would import a name nothing binds.
+    let bound: BTreeSet<&str> = binding.functions.iter().map(|f| f.symbol.as_str()).collect();
+    binding.casts.retain(|cast| bound.contains(cast.get_type.as_str()));
+    binding.refused.extend(rejected);
     Ok(())
 }
 
-/// The probe, and which function each of its lines declares.
-fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, String>) {
+/// The probe, and which function each of its lines checks: its name, and the
+/// prototype the binding would declare, for the report.
+fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) {
     let mut out = String::new();
     for header in &binding.headers {
         let _ = writeln!(out, "#include <{header}>");
@@ -97,6 +111,8 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, String>) {
     for tag in &tags {
         let _ = writeln!(out, "struct {tag};");
     }
+    // Counted as written, rather than by recounting the text per function.
+    let mut line = binding.headers.len() + tags.len();
     let mut lines = BTreeMap::new();
     for function in &binding.functions {
         let parameters = if function.c_parameters.is_empty() {
@@ -104,16 +120,14 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, String>) {
         } else {
             function.c_parameters.iter().map(Type::c_type_expanded).collect::<Vec<_>>().join(", ")
         };
-        // The declarator in parentheses, as the build's witness writes it: a
-        // header may define the function as a function-like macro too --
-        // GLib's `g_free` -- which a bare `g_free(` would expand.
+        let result = function.result.c.c_type_expanded();
+        let symbol = &function.symbol;
         let _ = writeln!(
             out,
-            "extern {} ({})({parameters});",
-            function.result.c.c_type_expanded(),
-            function.symbol
+            "_Static_assert(__builtin_types_compatible_p(__typeof__(&({symbol})), {result} (*)({parameters})), \"{symbol}\");"
         );
-        lines.insert(out.lines().count(), function.name.clone());
+        line += 1;
+        lines.insert(line, (function.name.clone(), format!("{result} {symbol}({parameters})")));
     }
     (out, lines)
 }
@@ -138,9 +152,4 @@ fn collect_pointee(pointee: &Pointee, into: &mut BTreeSet<String>) {
         Pointee::Const(inner) | Pointee::Pointer(inner) => collect_pointee(inner, into),
         _ => {}
     }
-}
-
-/// The probe's `number`th line, counting from one as clang does.
-fn text_line(text: &str, number: usize) -> Option<&str> {
-    text.lines().nth(number.checked_sub(1)?)
 }
