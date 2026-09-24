@@ -1,4 +1,22 @@
-// expect: a link after an optional access
+// expect: nothing refused
+
+// **Lowered, 2026-09-25, and this is now a guard.** `a?.b.c`, `a?.b?.c()`,
+// `a?.p[i].q` and the rest are one short-circuit over the whole chain
+// (`lower_chain`): each `?.` tests its receiver, innermost first, and the rest
+// of the expression is lowered in the arm where it is present, that link
+// standing for the receiver the test read -- the design described below,
+// with the narrowed links a map rather than one slot. All 203 cases across
+// the seven functions here agree with node (MainClaude, against one tree and
+// two binaries), and LLVM declines none of them.
+//
+// What is left is the cost the section below names: an index link inside the
+// arm still takes the chain's type, so `a?.p[i]` reads its element through
+// `erase` and `nts_array_element`. It is not stripped, because under
+// `noUncheckedIndexedAccess` the index's own `undefined` and the chain's are one
+// type in one union, and removing both would turn `a?.p[i] ?? d` with an index
+// out of range from `d` into a trap. Correct and slower, not wrong.
+//
+// What follows is the record of why the guard exists, kept as it was.
 
 // A non-optional link after an optional one. `a?.b.c` short-circuits the
 // *whole* chain in JavaScript: when `a` is absent, `.c` is never evaluated.
