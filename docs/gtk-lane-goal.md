@@ -410,10 +410,27 @@ the program running until it calls back (`nts_closures_owed`), as pending
 I/O keeps node's; and a handler that turns GLib's loop itself -- a modal
 dialog, a menu -- runs no libuv task under it (gtk-loop's `nested` arm).
 
+**Properties, as GJS writes them.** `label.label = "tick 3"` and
+`label.label`: a binding declares the property beside the methods GIR names
+for it (`@ntsGet get_label @ntsSet set_label`), and a read or an assignment is
+the call to that method -- its strings, `@ntsFree`, `@ntsThrows` and counting
+unchanged. 1170 in Gtk's closure; 379 read-only, where the getter answers what
+the setter does not take (`button.label`: `string | null` against `string`).
+
+**Booleans are booleans.** A `gboolean` parameter or result is `CBool<c_int>`
+-- a TypeScript `boolean` that C sees as its `int` -- so `button.has_frame =
+true` and `if (w.get_visible())`; a C answer of 2 is `true`, as C says. 3678
+in Gtk's closure. A callback's stay `c_int` for now.
+
+gtk-gir runs under `--rc` too, with `G_DEBUG=fatal-criticals`, to the same
+log: the core's `try`/`await`/`catch` use-after-free was a promise reader
+lending a reference the caller released, fixed by MainClaude in 8fb8e494.
+
 **Next in M3:**
 
-- `new Gtk.Button({ label })` -- construction with properties
-  (`g_object_new_with_properties`), and property getters and setters.
+- `new Gtk.Button({ label })` -- the constructor, then the setter of each
+  property the literal writes; construct-only properties need
+  `g_object_new_with_properties`.
 - The toggle-ref problem: a signal handler capturing its own widget is a
   cycle through a `GClosure` that the cycle collector cannot see.
 

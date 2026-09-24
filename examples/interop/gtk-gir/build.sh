@@ -36,4 +36,17 @@ if [ "$log" != "$expected" ]; then
   echo "FAILED gtk-gir: expected $expected" >&2
   exit 1
 fi
+
+# The same program under reference counting, where every GObject is counted
+# (`g_object_ref_sink`/`g_object_unref` through their NULL guards), a promise
+# of one holds it in a box, and `G_DEBUG=fatal-criticals` turns a count on a
+# freed or NULL object into an abort. Same log.
+"$nts" build "$source/tsconfig.json" --out "$out/rc" --rc
+rc=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
+  timeout 30 xvfb-run -a "$out/rc/gir/linux-gnu-x86_64/gir" 2>/dev/null | tr '\n' ' ' || true)
+echo "rc:  $rc"
+if [ "$rc" != "$expected" ]; then
+  echo "FAILED gtk-gir: under --rc, expected $expected" >&2
+  exit 1
+fi
 echo "GTK on bindings generated from GIR: OK"
