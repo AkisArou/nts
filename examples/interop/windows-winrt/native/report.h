@@ -3,6 +3,8 @@
 #ifndef NTS_WINDOWS_WINRT_REPORT_H
 #define NTS_WINDOWS_WINRT_REPORT_H
 
+#include <stdbool.h>
+
 // Prints `line` and a newline to stdout.
 void report(const char *line);
 
@@ -12,5 +14,12 @@ unsigned activations(void);
 
 // How many COM references the program has released: `nts_com_releases`.
 unsigned releases(void);
+
+// Whether the program was run with `word` as its first argument: how the
+// build selects an arm without a second program.
+bool asked(const char *word);
+
+// How many delegate objects the program made are alive: `nts_com_delegates`.
+unsigned delegates(void);
 
 #endif

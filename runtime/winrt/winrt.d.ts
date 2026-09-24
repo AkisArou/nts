@@ -31,7 +31,7 @@
 // One tag to a line. The slot and the method name are both the metadata's, and the compiler
 // refuses a declaration whose name is not the method its slot is said to be.
 declare module "winrt:types" {
-  import type { Class, ClassChain } from "c:types";
+  import type { Class, ClassChain, c_int64 } from "c:types";
 
   export type ComClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
     readonly __com: true;
@@ -46,4 +46,22 @@ declare module "winrt:types" {
   // deleted after it, and a returned one copied into a `string` and deleted.
   // The brand is optional, so any `string` passes.
   export type HString = string & { readonly __c_hstring?: true };
+
+  // A TypeScript function where the Windows Runtime takes a delegate: a COM
+  // object made for the call, whose `Invoke` calls the function and whose
+  // interface is `IID`. The function may capture, and lives as long as the
+  // object: a source that keeps the delegate -- an event's `add_` -- keeps it.
+  // `Invoke` answers S_OK; a function that throws ends the process by name,
+  // as any callback does.
+  //
+  // Not agile: called, or released for the last time, on another thread,
+  // it ends the process by name.
+  export type Delegate<F extends (...args: never[]) => void, IID extends string> = F & {
+    readonly __c_closure?: "delegate";
+    readonly __c_iid?: IID;
+  };
+
+  // What an event's `add_` answers and its `remove_` takes: a struct of one
+  // `int64`, which both calling conventions pass exactly as the integer.
+  export type EventRegistrationToken = c_int64;
 }

@@ -861,6 +861,12 @@ pub enum OpKind {
     /// type encoding. The block carries both words, so the adapter is one per
     /// signature, not one per closure.
     NativeBlock { invoke: ValueId, context: ValueId, signature: std::sync::Arc<native::FnPointer> },
+    /// The address of the Windows Runtime `Invoke` adapter for `signature`:
+    /// `HRESULT (*)(void *self, A...)`, one per signature, which calls the
+    /// bridge a delegate object holds with the context it holds and answers
+    /// `S_OK`. What `nts_com_delegate` puts in the object's table; the object
+    /// is a runtime call's result, so this is a constant and nothing more.
+    DelegateInvoke { signature: std::sync::Arc<native::FnPointer> },
     /// The nth parameter of the function, materialized as a value.
     Param(u32),
     /// The nth parameter of the block that defines it.

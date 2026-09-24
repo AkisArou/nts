@@ -15,8 +15,9 @@
 # - **On Windows:** each build prints its expectation. The line is built so a
 #   part that did not work shows (see `src/main.ts`): the factory cache is
 #   asserted by its count (a cache that never hit prints `activations=3`,
-#   measured), and `released` is 0 without a counting provider and 4 under
-#   `--rc`, one per object the program was handed.
+#   measured), and `released` and `delegates` as `src/main.ts` accounts for
+#   them. Run as `throw`, a delegate whose function throws ends the process
+#   with status 1, naming the boundary.
 #
 # With no Windows reachable the run arms say so by name, and the rest still
 # count.
@@ -83,6 +84,26 @@ for provider in nogc rc; do
         ;;
       77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
       *) echo "windows-winrt: $product ($provider) exited $status on Windows" >&2; exit 1 ;;
+    esac
+  done
+  # Run as `throw`, a delegate whose function throws: the process ends with
+  # status 1, naming the boundary and the message, and nothing after the
+  # event runs.
+  for product in winrt winrtLlvm; do
+    exe="$build/$product/windows-x86_64/$product.exe"
+    set +e
+    "$root/tooling/windows/run.sh" "$exe" throw >"$build/windows-$product-throw.txt" 2>"$build/windows-$product-throw.err"
+    status=$?
+    set -e
+    case $status in
+      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      1)
+        printf 'before\n' | diff -u - "$build/windows-$product-throw.txt"
+        grep -q "^nts: a callback threw across a C boundary that cannot carry it: .*the handler failed" "$build/windows-$product-throw.err" ||
+          { cat "$build/windows-$product-throw.err" >&2; echo "windows-winrt: $product ($provider) did not name the boundary" >&2; exit 1; }
+        echo "windows-x86_64 ($product, $provider): a throwing delegate ends the process by name, run on Windows"
+        ;;
+      *) cat "$build/windows-$product-throw.err" >&2; echo "windows-winrt: $product throw ($provider) exited $status on Windows, not 1" >&2; exit 1 ;;
     esac
   done
 done

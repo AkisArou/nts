@@ -11519,6 +11519,14 @@ enum Lent {
     Error { slot: ValueId, converter: String },
     /// A closure's context, for a `ScopedClosure`.
     Closure { context: ValueId },
+    /// A delegate object the call was passed: the *caller's* reference, given
+    /// back after the call. That ends the delegate only if the callee kept no
+    /// reference of its own. An event's `add_` keeps one, so the delegate
+    /// outlives the call and lives until the source lets go (`remove_`, or
+    /// the source's own end), and the closure with it. The one reference this
+    /// gives back is the one `nts_com_delegate` made, whatever the callee
+    /// does.
+    Delegate { object: ValueId },
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -41238,6 +41246,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
+                Lent::Delegate { object } => {
+                    self.runtime_call("nts_com_release", vec![object], HirType::Void, origin.clone());
+                }
                 // Checked, or read, by `finish_call` after everything else is
                 // given back; each is a local of the caller's own.
                 Lent::Error { .. } | Lent::Result { .. } => {}
@@ -41310,6 +41321,33 @@ impl<'a> FuncBuilder<'a> {
         );
         lent.push(Lent::Closure { context });
         Ok(Some(self.push(OpKind::NativeBlock { invoke, context, signature }, want, origin.clone())))
+    }
+
+    /// A closure as a Windows Runtime delegate: a COM object made for the call
+    /// (`nts_com_delegate`) whose `Invoke` is the adapter for `signature`, and
+    /// which holds the bridge into the closure's body and the closure, lent
+    /// until the object's count reaches zero. The caller's reference is given
+    /// back after the call.
+    fn delegate(
+        &mut self,
+        id: NodeId,
+        closure: ValueId,
+        (bridge, signature, iid): (std::sync::Arc<super::native::FnPointer>, std::sync::Arc<super::native::FnPointer>, &str),
+        want: HirType,
+        lent: &mut Vec<Lent>,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        if !is_interface_id(iid) {
+            return Err(self.unsupported(id, "a `Delegate` whose interface ID is not 8-4-4-4-12 hexadecimal digits"));
+        }
+        let pointer = HirType::NativePointer(super::native::Pointee::Void);
+        let invoke = self.bridge_closure(id, closure, &bridge, false, pointer.clone(), origin)?;
+        let adapter = self.push(OpKind::DelegateInvoke { signature }, pointer.clone(), origin.clone());
+        let context = self.runtime_call("nts_closure_lend", vec![closure], pointer.clone(), origin.clone());
+        let text = self.push(OpKind::ConstString(iid.to_owned()), HirType::Managed(ManagedType::String), origin.clone());
+        let object = self.runtime_call("nts_com_delegate", vec![adapter, invoke, context, text], want, origin.clone());
+        lent.push(Lent::Delegate { object });
+        Ok(object)
     }
 
     /// A `Uint8Array`'s bytes where C takes a pointer to them, NULL for
@@ -41613,6 +41651,9 @@ impl<'a> FuncBuilder<'a> {
                 }
                 Role::Block { bridge, signature } => c_args.extend(
                     self.lend_block(id, argument, (bridge, signature), target.parameters[at].representation(), &mut lent, &origin)?,
+                ),
+                Role::Delegate { bridge, signature, iid } => c_args.extend(
+                    argument.map(|closure| self.delegate(id, closure, (bridge, signature, &iid), target.parameters[at].representation(), &mut lent, &origin)).transpose()?,
                 ),
                 Role::ClosureData => {
                     let Some((closure, lifetime)) = lending else { continue };

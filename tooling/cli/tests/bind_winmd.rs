@@ -188,3 +188,41 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
     declared_in("export interface IJsonValueMethods", 10, "GetBoolean", "GetBoolean(this: IJsonValue): boolean;");
     assert!(!module.contains("TryParse("), "a refused method was written:\n{module}");
 }
+
+/// An event: `add_Closed` takes its handler as a `Delegate` whose function is
+/// the delegate's `Invoke` with the instantiation's arguments, and whose IID
+/// is the one computed for `TypedEventHandler<IMemoryBufferReference,
+/// Object>` -- the IID Windows asked the delegate object for, in
+/// `examples/interop/windows-winrt` and in the C oracle before it. An
+/// interface's required interfaces are `as_` queries on it too, since every
+/// object implementing it answers them: `reference.as_IClosable()`. A
+/// delegate a method answers is refused.
+#[test]
+fn winrt_events_take_delegates_by_their_computed_iid() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-events-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Foundation", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let module = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
+    let refused = std::fs::read_to_string(out.join("Windows.Foundation.refused.txt")).unwrap();
+    assert!(
+        module.contains("add_Closed(this: IMemoryBufferReference, handler: Delegate<(sender: IMemoryBufferReference, args: IInspectable) => void, \"F4637D4A-0760-5431-BFC0-24EB1D4F6C4F\">): EventRegistrationToken;"),
+        "{module}"
+    );
+    assert!(module.contains("remove_Closed(this: IMemoryBufferReference, cookie: EventRegistrationToken): void;"), "{module}");
+    assert!(
+        module.contains("@ntsQuery 30D5A829-7FA4-4026-83BB-D75BAE4EA99E\n     */\n    as_IClosable(this: IMemoryBufferReference): IClosable;"),
+        "{module}"
+    );
+    assert!(refused.contains("IAsyncOperation.get_Completed\t`AsyncOperationCompletedHandler`, a delegate as a result"), "{refused}");
+    let _ = std::fs::remove_dir_all(&out);
+}

@@ -43,6 +43,7 @@
 mod aggregate;
 mod native;
 mod objc;
+mod com;
 mod indirect;
 /// How many sixteen-byte arguments a Win64 runtime call can pass; see `indirect`.
 pub use indirect::SLOTS as WIN64_INDIRECT_SLOTS;
@@ -124,6 +125,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     }
     text.push_str(&native_memory::helpers(program));
     text.push_str(&objc::module(program));
+    text.push_str(&com::delegates(program));
     text.push_str(&counting_declarations(program));
     text.push_str(&open_chains(program));
     // What the runtime offers this backend, declared up front.
@@ -402,7 +404,7 @@ fn helper_operand(
 /// declaration, and external is what makes the link fail with the function's
 /// name in the message rather than the module fail to parse.
 fn refused_declaration(func: &Func) -> Option<String> {
-    let returns = ty_of(&func.return_type, func).ok()?;
+    let returns = return_ty_of(&func.return_type, func).ok()?;
     let mut params = Vec::new();
     for param in &func.params {
         if param.ty == HirType::Erased {
@@ -1228,7 +1230,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             } else {
                 "  call void @nts_callback_leave()".to_owned()
             };
-            let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
+            let call = format!("call {} {}({})", return_ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
             let parameters = parameters.join(", ");
             if want == HirType::Void {
                 let _ = writeln!(out, "define internal void @{name}({parameters}) nounwind {{");
@@ -1830,6 +1832,12 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
         .iter()
         .map(|name| (*name).to_owned())
         .collect();
+    // A foreign family's pair, which `counting_declarations` declared -- and
+    // which a program may also call by name: a COM object handed to a call is
+    // released with `nts_com_release`, the family's own release.
+    for counting in nts_codegen_common::counting::foreign(program) {
+        seen.extend([counting.retain.to_owned(), counting.release.to_owned()]);
+    }
     let mut lines = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
@@ -1888,6 +1896,16 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
         }
     }
     lines
+}
+
+/// The LLVM type a function returning `ty` is declared with: `void` for
+/// `never`, as the C backend's `return_c_type` spells it and for its reason --
+/// the function never returns, and nothing reads a value it does not produce.
+fn return_ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
+    if matches!(ty, HirType::Never) {
+        return Ok("void");
+    }
+    ty_of(ty, func)
 }
 
 /// The LLVM type a value of this HIR type lives in.
@@ -2016,7 +2034,7 @@ fn symbol(raw: &str) -> String {
 fn function(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
     indirect::unexportable(func, platform).map_or(Ok(()), |why| Err(refuse(func, why)))?;
     let mut out = String::new();
-    let returns = ty_of(&func.return_type, func)?;
+    let returns = return_ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
     // An erased parameter arrives as two scalars and is put back together at
     // the top of the entry block, which is what clang does for the same C.
@@ -2536,6 +2554,9 @@ fn allocation(
             )
         }
         OpKind::NativeBlock { invoke, context, signature } => objc::block(&out, *invoke, *context, signature),
+        OpKind::DelegateInvoke { signature } => {
+            format!("{out} = getelementptr i8, ptr @{}, i64 0", nts_codegen_common::com::delegate_invoke_symbol(signature))
+        }
         OpKind::ClosureStatic => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
                 return Err(refuse(func, "a closure value that is not an object"));
@@ -3452,6 +3473,7 @@ fn memory_operation(
         // the layout lookup already lives.
         | OpKind::NativeBridge { .. }
         | OpKind::NativeBlock { .. }
+        | OpKind::DelegateInvoke { .. }
         | OpKind::Await { .. }
         // `CellReady` belongs with the other two halves of the suspension
         // machine, and was the one kind missing from this list -- so it fell

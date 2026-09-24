@@ -247,7 +247,7 @@ impl Support<'_> {
 
 /// The helpers `nts_winrt.c` defines, any one of which a program calling it
 /// names in its C.
-const WINRT_HELPERS: [&str; 8] = [
+const WINRT_HELPERS: [&str; 9] = [
     "nts_string_to_hstring(",
     "nts_hstring_release(",
     "nts_string_from_hstring(",
@@ -256,6 +256,7 @@ const WINRT_HELPERS: [&str; 8] = [
     "nts_com_release(",
     "nts_winrt_factory(",
     "nts_hresult_message(",
+    "nts_com_delegate(",
 ];
 
 /// Every file a program needs beside `program.c`, given whether it converts case.
@@ -842,6 +843,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     native_memory::helpers(&mut writer, &origin, program);
     objc::declarations(&mut writer, &origin, program);
     objc::blocks(&mut writer, &origin, program);
+    com::delegates(&mut writer, &origin, program);
     // A foreign object system's retain and release, declared with the shape
     // every such pair has (the object in, and for retain, the object back),
     // for exactly the pairs this program calls.
@@ -5070,6 +5072,9 @@ fn emit_op(
             value: stored,
         } => {
             return open_field_chain(writer, func, value, *object, arms, Some(*stored), context);
+        }
+        OpKind::DelegateInvoke { signature } => {
+            format!("{name} = (void *){};", nts_codegen_common::com::delegate_invoke_symbol(signature))
         }
         OpKind::NativeBlock { invoke, context, signature } => {
             objc::block_expression(&name, &value_name(*invoke), &value_name(*context), signature)

@@ -1,6 +1,8 @@
 #include "report.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #ifdef _WIN32
 #include <fcntl.h>
@@ -29,4 +31,17 @@ unsigned activations(void) {
 
 unsigned releases(void) {
   return nts_com_releases();
+}
+
+bool asked(const char *word) {
+#ifdef _WIN32
+  return __argc > 1 && strcmp(__argv[1], word) == 0;
+#else
+  (void)word;
+  return 0;
+#endif
+}
+
+unsigned delegates(void) {
+  return nts_com_delegates();
 }

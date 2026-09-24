@@ -1,1 +1,1 @@
-number=42.5 text=42.5 list=[1,2.5,true] activations=4 bools=true,true,false languages=some,tagged vector=3:2.5 built={"x":3} threw=HRESULT 0x83750007 released=0
+number=42.5 text=42.5 list=[1,2.5,true] activations=4 bools=true,true,false languages=some,tagged vector=3:2.5 built={"x":3} threw=HRESULT 0x83750007 closed=1,sender=reference:0,alive=1,tokens=distinct released=2 delegates=0

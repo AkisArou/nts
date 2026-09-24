@@ -209,7 +209,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
-    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable")).collect();
+    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable" | "Delegate" | "EventRegistrationToken")).collect();
     if !winrt.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
     }
@@ -272,6 +272,13 @@ impl Writer<'_> {
                 Err(why) => self.refuse(&format!("{name}.{}", method_name(method)), &why),
             }
         }
+        // The interfaces this one requires, which every object implementing
+        // it answers: `reference.as_IClosable()`. A generic interface's
+        // depend on its parameters, whose IIDs are not known here.
+        if self.generics.is_empty() {
+            let required: Vec<Type> = def.interface_impls().map(|implemented| implemented.interface(&[])).collect();
+            methods.push_str(&self.queries(name, &this, &required));
+        }
         self.brands.insert("ComClass");
         let _ = writeln!(body, "  /** IID {iid} */");
         let _ = writeln!(body, "  export interface {name}Methods{parameters} {{");
@@ -283,6 +290,36 @@ impl Writer<'_> {
         let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\"> & {name}Methods{parameters};");
         self.generics.clear();
         true
+    }
+
+    /// `as_X()` for each of `interfaces` that `this` answers by
+    /// `QueryInterface`: `list.as_IVector()` is a `JsonArray` as its
+    /// `IVector<IJsonValue>`, whose table is the object's own. An
+    /// instantiation's IID is computed. `owner` names what is refused.
+    fn queries(&mut self, owner: &str, this: &str, interfaces: &[Type]) -> String {
+        let mut queries = String::new();
+        let mut asked: BTreeSet<String> = BTreeSet::new();
+        for interface in interfaces {
+            let Type::ClassName(named) = interface else { continue };
+            let base = generic_base(&named.name).to_owned();
+            let spelled = match self.spell(interface, false).and_then(|spelled| Ok((spelled, self.interface_iid(interface)?))) {
+                Ok(spelled) => spelled,
+                Err(why) => {
+                    self.refuse(&format!("{owner} as {base}"), &why);
+                    continue;
+                }
+            };
+            let (spelled, iid) = spelled;
+            let mut method = format!("as_{base}");
+            let mut again = 2;
+            while !asked.insert(method.clone()) {
+                method = format!("as_{base}{again}");
+                again += 1;
+            }
+            let _ = writeln!(queries, "    /**\n     * @ntsQuery {iid}\n     */");
+            let _ = writeln!(queries, "    {method}(this: {this}): {spelled};");
+        }
+        queries
     }
 
     /// `JsonValue`: its default interface, and its statics in a namespace of
@@ -337,38 +374,13 @@ impl Writer<'_> {
                 }
             }
         }
-        // The class's other interfaces, each reached by `QueryInterface`:
-        // `list.as_IVector()` is the array as its `IVector<IJsonValue>`, whose
-        // table is the object's own. An instantiation's IID is computed.
-        let mut queries = String::new();
-        let mut asked: BTreeSet<String> = BTreeSet::new();
-        for implemented in def.interface_impls().filter(|implemented| !implemented.has_attribute("DefaultAttribute")) {
-            let interface = implemented.interface(&[]);
-            let Type::ClassName(named) = &interface else { continue };
-            let base = generic_base(&named.name).to_owned();
-            let spelled_interface = match self.spell(&interface, false) {
-                Ok(spelled) => spelled,
-                Err(why) => {
-                    self.refuse(&format!("{name} as {base}"), &why);
-                    continue;
-                }
-            };
-            let iid = match self.interface_iid(&interface) {
-                Ok(iid) => iid,
-                Err(why) => {
-                    self.refuse(&format!("{name} as {base}"), &why);
-                    continue;
-                }
-            };
-            let mut method = format!("as_{base}");
-            let mut again = 2;
-            while !asked.insert(method.clone()) {
-                method = format!("as_{base}{again}");
-                again += 1;
-            }
-            let _ = writeln!(queries, "    /**\n     * @ntsQuery {iid}\n     */");
-            let _ = writeln!(queries, "    {method}(this: {name}): {spelled_interface};");
-        }
+        // The class's other interfaces, each reached by `QueryInterface`.
+        let others: Vec<Type> = def
+            .interface_impls()
+            .filter(|implemented| !implemented.has_attribute("DefaultAttribute"))
+            .map(|implemented| implemented.interface(&[]))
+            .collect();
+        let queries = self.queries(name, name, &others);
         if !queries.is_empty() {
             let _ = writeln!(body, "  export interface {name}Interfaces {{");
             body.push_str(&queries);
@@ -490,7 +502,7 @@ impl Writer<'_> {
                     return Err(format!("`{}`, not in the metadata read", name.name));
                 };
                 if def.category() == TypeCategory::Delegate {
-                    return Err(format!("`{}`, a delegate", generic_base(&name.name)));
+                    return self.delegate(ty, def, argument);
                 }
                 let base = self.named(&name.namespace, generic_base(&name.name));
                 // An instantiation, `IVectorView<HString>`: each argument as
@@ -509,6 +521,11 @@ impl Writer<'_> {
                 let Some(def) = self.index.get(&name.namespace, &name.name).next() else {
                     return Err(format!("`{}`, not in the metadata read", name.name));
                 };
+                // One `int64`, passed as the integer is (`winrt:types`).
+                if name.namespace == "Windows.Foundation" && name.name == "EventRegistrationToken" {
+                    self.brands.insert("EventRegistrationToken");
+                    return Ok("EventRegistrationToken".to_owned());
+                }
                 if def.category() != TypeCategory::Enum {
                     return Err(format!("`{}`, a struct", name.name));
                 }
@@ -534,6 +551,39 @@ impl Writer<'_> {
 }
 
 impl Writer<'_> {
+    /// A delegate where a method takes one: `Delegate<(sender: S, args: A) =>
+    /// void, "IID">`, the function its `Invoke` calls and the interface the
+    /// object is -- an instantiation's computed, as an interface's is.
+    ///
+    /// Only as an argument: a delegate a method answers is one someone else
+    /// made, and calling one is not built. Nor is an `Invoke` taking a string,
+    /// which would reach the function as an `HSTRING` the bridge does not
+    /// convert.
+    fn delegate(&mut self, ty: &Type, def: TypeDef, argument: bool) -> Result<String, String> {
+        let Type::ClassName(named) = ty else { return Err("not a delegate".to_owned()) };
+        let what = generic_base(&named.name);
+        if !argument {
+            return Err(format!("`{what}`, a delegate as a result"));
+        }
+        let invoke = def.methods().find(|method| method.name() == "Invoke").ok_or_else(|| format!("`{what}`, a delegate with no `Invoke`"))?;
+        let signature = invoke.signature(&named.generics);
+        if !matches!(signature.return_type, Type::Void) {
+            return Err(format!("`{what}`, a delegate that returns a value"));
+        }
+        let rows = invoke.params_by_sequence(signature.types.len()).map_err(|_| format!("`{what}`, whose `Invoke` the metadata numbers wrongly"))?;
+        let mut parameters = Vec::new();
+        for (at, parameter) in signature.types.iter().enumerate() {
+            if matches!(parameter, Type::String) {
+                return Err(format!("`{what}`, a delegate taking a string"));
+            }
+            let name = rows.params().get(at).copied().flatten().map_or_else(|| format!("param{at}"), |row| safe(row.name()));
+            parameters.push(format!("{name}: {}", self.spell(parameter, false)?));
+        }
+        let iid = self.interface_iid(ty)?;
+        self.brands.insert("Delegate");
+        Ok(format!("Delegate<({}) => void, \"{iid}\">", parameters.join(", ")))
+    }
+
     /// The IID of an interface or an instantiation of one: the metadata's
     /// `GuidAttribute`, or the Windows Runtime's hash of the instantiation's
     /// signature (`iid::parameterized`).

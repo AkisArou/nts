@@ -1472,7 +1472,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         }
         OpKind::FieldGet { object, .. } => vec![*object],
         OpKind::FieldSet { object, value, .. } => vec![*object, *value],
-        OpKind::NativeLocal { .. } | OpKind::NativeSizeOf(_) | OpKind::ObjcClass { .. } => vec![],
+        OpKind::NativeLocal { .. } | OpKind::NativeSizeOf(_) | OpKind::ObjcClass { .. } | OpKind::DelegateInvoke { .. } => vec![],
         OpKind::NativeBridge { closure, .. } => vec![*closure],
         OpKind::NativeBlock { invoke, context, .. } => vec![*invoke, *context],
         OpKind::NativeMalloc { bytes } => vec![*bytes],

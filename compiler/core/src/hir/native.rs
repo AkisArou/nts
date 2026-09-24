@@ -339,6 +339,13 @@ pub enum Role {
     /// The closure is lent for the call; a callee that keeps the block
     /// copies it, and the copy lends it again.
     Block { bridge: std::sync::Arc<FnPointer>, signature: std::sync::Arc<FnPointer> },
+    /// A TypeScript function as a Windows Runtime delegate (`Delegate<F, IID>`
+    /// in `winrt:types`): one C parameter, a COM object whose `Invoke` is the
+    /// adapter for `signature` (`HRESULT (*)(void *self, A...)`), holding the
+    /// bridge -- `signature` with the context after it -- and the closure,
+    /// lent for as long as the object lives. The caller's reference is given
+    /// back after the call; a callee that keeps the delegate added its own.
+    Delegate { bridge: std::sync::Arc<FnPointer>, signature: std::sync::Arc<FnPointer>, iid: std::sync::Arc<str> },
     /// The closure's context, the `void *` C hands back to the callback:
     /// `nts_closure_lend(closure)`. Hidden from TypeScript.
     ClosureData,
@@ -490,6 +497,7 @@ impl Function {
                 | Role::String(_)
                 | Role::Closure { .. }
                 | Role::Block { .. }
+                | Role::Delegate { .. }
                 | Role::Strings
                 | Role::Bytes
                 | Role::ErrorSlot { .. } => {
@@ -1865,9 +1873,23 @@ fn closure_slots(
     let mut callback = declared.parameters.clone();
     callback.push(context.clone());
     let bridge = std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()));
+    match kind {
+        // `Invoke` answers an HRESULT, which the adapter supplies; a delegate
+        // with a result of its own writes it through a parameter, which is
+        // not built.
+        ClosureKind::Delegate(iid) if *declared.result == Type::Void => {
+            return Ok(vec![(context, Role::Delegate { bridge, signature: declared, iid })]);
+        }
+        ClosureKind::Delegate(_) => {
+            return Err(format!(
+                "foreign function `{name}` delegate parameter `{parameter}` whose function returns a value; a delegate's result is not built"
+            ));
+        }
+        _ => {}
+    }
     let lifetime = match kind {
-        // A block returned above; its lend is the call's, as a scoped one's.
-        ClosureKind::Scoped | ClosureKind::Block => Lifetime::Call,
+        // A block and a delegate returned above.
+        ClosureKind::Scoped | ClosureKind::Block | ClosureKind::Delegate(_) => Lifetime::Call,
         ClosureKind::Once => Lifetime::Once,
         ClosureKind::Retained | ClosureKind::Erased(_) => Lifetime::Notified,
     };
@@ -1875,13 +1897,13 @@ fn closure_slots(
     // `GCallback`, which the bridge is converted to.
     let slot = match kind {
         ClosureKind::Erased(_) => Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void))),
-        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Retained | ClosureKind::Block => {
+        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Retained | ClosureKind::Block | ClosureKind::Delegate(_) => {
             Type::FnPointer(bridge.clone())
         }
     };
     let mut slots = vec![(slot, Role::Closure { lifetime, bridge }), (context.clone(), Role::ClosureData)];
     match kind {
-        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Block => {}
+        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Block | ClosureKind::Delegate(_) => {}
         ClosureKind::Retained => slots.push((
             Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context], Type::Void))),
             Role::ClosureNotify,
@@ -1963,7 +1985,7 @@ pub enum Lifetime {
 }
 
 /// Which closure a `c:` parameter asks for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ClosureKind {
     /// `ScopedClosure<F>`: called only during the call.
     Scoped,
@@ -1978,6 +2000,9 @@ enum ClosureKind {
     /// own context and is released by the block runtime, not by a destroy
     /// function beside it.
     Block,
+    /// `Delegate<F, IID>` (`winrt:types`): a COM object whose interface is
+    /// `IID`, which the callee may keep and COM's own count releases.
+    Delegate(std::sync::Arc<str>),
 }
 
 /// The function type inside a `Closure<F>` or `ScopedClosure<F>`, and whether
@@ -2004,6 +2029,7 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
     let mut function = None;
     let mut marker = None;
     let mut notify = None;
+    let mut iid = None;
     for part in parts {
         match kind_of(*part)? {
             TypeKind::Function(_) => function = Some(*part),
@@ -2014,6 +2040,12 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
                 };
                 marker = Some(kind.clone());
                 notify = properties.iter().find(|p| p.name == "___c_notify").and_then(|p| defined(p.ty));
+                iid = properties.iter().find(|p| p.name == "___c_iid").and_then(|p| defined(p.ty)).and_then(|id| {
+                    match kind_of(id)? {
+                        TypeKind::Literal(LiteralValue::String(iid)) => Some(std::sync::Arc::<str>::from(iid.as_str())),
+                        _ => None,
+                    }
+                });
             }
             _ => return None,
         }
@@ -2024,6 +2056,7 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
         "retained" => ClosureKind::Retained,
         "erased" => ClosureKind::Erased(notify?),
         "block" => ClosureKind::Block,
+        "delegate" => ClosureKind::Delegate(iid?),
         _ => return None,
     };
     Some((function?, kind))

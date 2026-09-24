@@ -252,12 +252,12 @@ fn blocks(program: &Program) -> String {
 }
 
 /// A native ABI type as an LLVM parameter type, with the extension C gives it.
-fn abi(ty: &Type) -> String {
+pub(super) fn abi(ty: &Type) -> String {
     let representation = ty.representation();
     format!("{}{}", extension(&representation), bare(&representation))
 }
 
-fn bare(ty: &HirType) -> &'static str {
+pub(super) fn bare(ty: &HirType) -> &'static str {
     match ty {
         HirType::Void => "void",
         HirType::Bool => "i1",

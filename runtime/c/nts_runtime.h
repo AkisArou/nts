@@ -1796,6 +1796,22 @@ void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid);
 void *nts_winrt_activate(const NtsString *class_name, const NtsString *iid);
 uint32_t nts_winrt_activations(void);
 char *nts_hresult_message(int32_t hr);
+/* A TypeScript function as a Windows Runtime delegate: a COM object whose
+ * table is `IUnknown` and then `invoke`, the compiler's adapter for the
+ * delegate's signature, which reads `bridge` and `context` here -- these
+ * three words are the layout it relies on -- and calls the one with the
+ * other last. The closure `context` was lent for is given back when the
+ * object's count reaches zero, which must happen on the thread that owns
+ * it. `nts_com_delegates` is how many are alive, for a test to see the
+ * last one go. */
+typedef struct NtsComDelegate {
+  const void *table;
+  void *bridge;
+  void *context;
+} NtsComDelegate;
+void *nts_com_delegate(void *invoke, void *bridge, void *context,
+                       const NtsString *iid);
+uint32_t nts_com_delegates(void);
 #endif
 /* A `string[]` as C's NULL-terminated array of strings, for a parameter
  * declared `CStrings`: each element converted as `nts_string_to_cstring`

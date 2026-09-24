@@ -2516,6 +2516,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::NativeBlock { invoke, context, signature } => {
             format!("%{index} = native.block %{} with %{} as {} : {ty}", invoke.0, context.0, signature.name)
         }
+        OpKind::DelegateInvoke { signature } => format!("%{index} = native.delegate.invoke {} : {ty}", signature.name),
         OpKind::NativeIndexAddress { pointer, index: offset } => format!("%{index} = native.index.addr %{}[%{}] : {ty}", pointer.0, offset.0),
         OpKind::NativeFieldAddress { pointer, field } => format!("%{index} = native.field.addr %{}.{field} : {ty}", pointer.0),
         OpKind::NativeBitLoad { pointer, field } => format!("%{index} = native.bit.load %{}.{field} : {ty}", pointer.0),

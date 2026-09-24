@@ -98,10 +98,16 @@ fn a_com_method_is_a_call_through_its_table() {
     // No symbol is declared for a method with none.
     assert!(!text.contains("Parse("), "a prototype or call names `Parse` as a symbol:\n{text}");
 
+    windows_syntax(&dir, &emitted);
+}
+
+/// The program as `nts build` compiles it for Windows, with mingw's headers,
+/// checked by clang: `-fsyntax-only` is ignored by `zig cc`, so clang itself.
+fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
     for file in emitted.support_files() {
         file.write(dir.as_std_path()).unwrap();
     }
-    std::fs::write(dir.join("program.c"), text).unwrap();
+    std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
     let zig = Command::new("zig").arg("env").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
     let Some(lib) = zig
         .as_deref()
@@ -113,7 +119,7 @@ fn a_com_method_is_a_call_through_its_table() {
     };
     let headers = format!("{lib}/libc/include");
     let checked = Command::new("clang")
-        .current_dir(&dir)
+        .current_dir(dir)
         .args([
             "--target=x86_64-w64-windows-gnu", "-nostdlibinc", "-isystem", &format!("{headers}/x86_64-windows-gnu"),
             "-isystem", &format!("{headers}/generic-mingw"), "-isystem", &format!("{headers}/x86_64-windows-any"),
@@ -324,6 +330,82 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
         assert!(
             prepared.diagnostics.iter().any(|d| d.message.contains(refusal)),
             "{name}: {:?}",
+            prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+}
+
+/// `Windows.Foundation`'s `IMemoryBufferReference`, as `bind-winmd` writes it:
+/// an event whose handler is a `Delegate`, with `{handler}` as its function
+/// type and `{iid}` as the delegate's interface.
+fn events(handler: &str, iid: &str) -> String {
+    format!(
+        r#"declare module "winrt:Windows.Foundation" {{
+  import type {{ CNumber }} from "c:types";
+  import type {{ ComClass, Delegate, EventRegistrationToken, IInspectable }} from "winrt:types";
+  export interface IMemoryBufferReferenceMethods {{
+    /**
+     * @ntsVtable 6 get_Capacity
+     * @ntsHresult
+     */
+    get_Capacity(this: IMemoryBufferReference): CNumber<"uint32">;
+    /**
+     * @ntsVtable 7 add_Closed
+     * @ntsHresult
+     */
+    add_Closed(this: IMemoryBufferReference, handler: Delegate<{handler}, "{iid}">): EventRegistrationToken;
+  }}
+  export type IMemoryBufferReference = ComClass<"Windows_Foundation_IMemoryBufferReference"> & IMemoryBufferReferenceMethods;
+  export type Unused = IInspectable;
+}}
+"#
+    )
+}
+
+/// A TypeScript function where a delegate is taken is a COM object made for
+/// the call: one `Invoke` adapter per signature, which reads the bridge and
+/// the context from the object and answers `S_OK`; the closure lent to it; and
+/// the caller's reference given back after the call.
+#[test]
+fn a_delegate_is_an_object_whose_invoke_calls_the_closure() {
+    let binding = events("(sender: IMemoryBufferReference, args: IInspectable) => void", "F4637D4A-0760-5431-BFC0-24EB1D4F6C4F");
+    let source = "import type { IMemoryBufferReference } from \"winrt:Windows.Foundation\";\nexport function watch(reference: IMemoryBufferReference): number {\n  let seen = 0;\n  reference.add_Closed((sender) => {\n    seen += sender.get_Capacity();\n  });\n  return seen;\n}\n";
+    let Some((dir, prepared)) = prepare("delegate", &binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_invoke_")).unwrap_or_else(|| panic!("no Invoke adapter:\n{text}"));
+    assert!(
+        adapter.contains("(void *self, struct Windows_Foundation_IMemoryBufferReference * a0, struct IInspectable * a1)")
+            && adapter.contains("d->bridge)(a0, a1, d->context); return 0;"),
+        "{adapter}"
+    );
+    for (what, wanted) in [("the object", "nts_com_delegate("), ("the lend", "nts_closure_lend("), ("the give-back", "nts_com_release(")] {
+        assert!(text.contains(wanted), "no {what}:\n{text}");
+    }
+    windows_syntax(&dir, &emitted);
+}
+
+/// A delegate whose function returns a value, or whose IID is not one, is
+/// refused where the call is lowered.
+#[test]
+fn a_delegate_that_cannot_be_built_is_refused_by_name() {
+    let source = "import type { IMemoryBufferReference } from \"winrt:Windows.Foundation\";\nexport function watch(reference: IMemoryBufferReference): void {\n  reference.add_Closed(() => 1);\n}\n";
+    for (name, handler, iid, refusal) in [
+        ("delegate-result", "() => CNumber<\"int32\">", "F4637D4A-0760-5431-BFC0-24EB1D4F6C4F", "returns a value"),
+        ("delegate-iid", "() => void", "F4637D4A", "not 8-4-4-4-12 hexadecimal digits"),
+    ] {
+        let Some((_, prepared)) = prepare(name, &events(handler, iid), source) else {
+            eprintln!("skipped: no tsgo");
+            return;
+        };
+        assert!(
+            prepared.diagnostics.iter().any(|d| d.message.contains(refusal)),
+            "{name}: expected {refusal:?}, got {:?}",
             prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }

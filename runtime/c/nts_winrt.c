@@ -117,6 +117,89 @@ typedef struct {
 
 static int nts_parse_iid(NtsUnits text, IID *out);
 
+/* A delegate object: the layout the adapter reads (`NtsComDelegate`), then
+ * this object's own table -- `Invoke` differs by signature, so the table is
+ * per object rather than per type -- its count, and the interface it is.
+ *
+ * Not agile, and says so: `QueryInterface` answers `IUnknown` and the
+ * delegate's own interface, never `IAgileObject`. The closure it calls is
+ * the owning thread's, and a source that would call it from another thread
+ * has to marshal to this one; one that calls it here directly is what the
+ * bridge checks, ending the process by name. */
+typedef struct {
+  NtsComDelegate head;
+  const void *slots[4];
+  volatile LONG count;
+  IID iid;
+} NtsDelegateObject;
+
+static uint32_t delegates;
+
+/* {00000000-0000-0000-C000-000000000046}, spelled here so that no `uuid`
+ * library is linked for one constant. */
+static const IID nts_iid_unknown = {
+    0x00000000, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
+
+static ULONG STDMETHODCALLTYPE nts_delegate_add_ref(void *self) {
+  return (ULONG)InterlockedIncrement(&((NtsDelegateObject *)self)->count);
+}
+
+static ULONG STDMETHODCALLTYPE nts_delegate_release(void *self) {
+  NtsDelegateObject *delegate = self;
+  LONG left = InterlockedDecrement(&delegate->count);
+  if (left == 0) {
+    if (!nts_is_owner_thread()) {
+      fprintf(stderr, "nts: a delegate was released off the thread that owns "
+                      "its closure\n");
+      abort();
+    }
+    nts_closure_unlend(delegate->head.context);
+    delegates--;
+    free(delegate);
+  }
+  return (ULONG)left;
+}
+
+static HRESULT STDMETHODCALLTYPE nts_delegate_query(void *self, const IID *iid,
+                                                    void **out) {
+  NtsDelegateObject *delegate = self;
+  if (IsEqualGUID(iid, &nts_iid_unknown) || IsEqualGUID(iid, &delegate->iid)) {
+    nts_delegate_add_ref(self);
+    *out = self;
+    return S_OK;
+  }
+  *out = 0;
+  return E_NOINTERFACE;
+}
+
+void *nts_com_delegate(void *invoke, void *bridge, void *context,
+                       const NtsString *iid) {
+  NtsDelegateObject *delegate = malloc(sizeof *delegate);
+  if (delegate == 0) {
+    fprintf(stderr, "nts: out of memory making a delegate\n");
+    abort();
+  }
+  const uint16_t *units = nts_string_to_utf16(iid);
+  int parsed = nts_parse_iid((NtsUnits){units, iid->length}, &delegate->iid);
+  nts_utf16_release(iid, units);
+  if (!parsed) {
+    fprintf(stderr, "nts: a delegate's interface ID does not parse\n");
+    abort();
+  }
+  delegate->slots[0] = (const void *)nts_delegate_query;
+  delegate->slots[1] = (const void *)nts_delegate_add_ref;
+  delegate->slots[2] = (const void *)nts_delegate_release;
+  delegate->slots[3] = invoke;
+  delegate->head.table = delegate->slots;
+  delegate->head.bridge = bridge;
+  delegate->head.context = context;
+  delegate->count = 1;
+  delegates++;
+  return delegate;
+}
+
+uint32_t nts_com_delegates(void) { return delegates; }
+
 /* `object` as the interface `iid` names, by `QueryInterface`: a reference of
  * its own, which the caller releases. An object without the interface ends
  * the process naming it -- the binding said its class implements it, and a
