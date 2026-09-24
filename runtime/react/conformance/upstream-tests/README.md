@@ -32,22 +32,32 @@ against that ledger. Only the diff says what changed; a total cannot say which
 test moved.
 
 - **In scope:** the test file uses only packages this lane implements.
-- **Out of scope `[out:react-dom]` etc.:** the file requires another renderer
-  or the server packages. It is recorded, but it counts toward neither side.
+- **Out of scope `[out:react-dom]` etc.:** the file requires another renderer,
+  the server packages, React's server-components build
+  (`react/react.react-server`) or the noop server renderers. It is recorded,
+  but it counts toward neither side. The classification is per file, so
+  `ReactOwnerStacks-test.js`, which mixes client and server cases, is out of
+  scope as a whole.
 - **`gated-*`:** upstream's `@gate` inverts a test whose feature is off in the
   stable channel. The test must fail, and it reports `passed` when it does, so
   any broken implementation passes it. The stub arm found 260 of these. They
   are recorded and never counted as passing.
 
-## Controls (2026-09-24, upstream 1d34f91d, reconciler suite)
+## Controls and this runtime (reconciler suite, upstream 1d34f91d)
 
-| Arm | In scope passed | failed | pending | gated | out of scope |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| upstream, development | 594 | 0 | 19 | 286 | 21 |
-| upstream, production | 567 | 0 | 19 | 313 | 21 |
-| stub, development | 1 | 593 | 19 | 286 | 21 failed |
-| stub, production | 1 | 566 | 19 | 313 | 21 failed |
+| Arm | Mode | In scope passed | failed | pending | gated |
+| --- | --- | ---: | ---: | ---: | ---: |
+| upstream | production | 557 | 0 | 19 | 309 |
+| upstream | development | 580 | 0 | 19 | 286 |
+| stub | production | 1 | 556 | 19 | 309 |
+| stub | development | 1 | 579 | 19 | 286 |
+| **this runtime** | production | **557** | **0** | 19 | 309 |
+| **this runtime** | development | **573** | **7** | 19 | 286 |
 
-In both modes the one test the stub passes is `ReactIsomorphicAct-test.js ::
-behavior in production`. In development its body is empty. In production it
-asserts that `React` has no `act`, which an empty module satisfies.
+The one test the stub passes is `ReactIsomorphicAct-test.js :: behavior in
+production`. In development its body is empty; in production it asserts that
+`React` has no `act`, which an empty module satisfies.
+
+The seven development failures are all in `ReactPerformanceTrack-test.js`,
+which checks the performance-timeline instrumentation; that module is still a
+stub.

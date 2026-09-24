@@ -94,10 +94,12 @@ if (!existsSync(json)) {
   throw new Error(`jest wrote no result (status ${run.status})`);
 }
 
-// A test file that requires another renderer or the server packages tests
-// that package, not this runtime. It stays in the ledger, marked out of scope,
+// A test file that requires another renderer, the server packages, React's
+// server-components build or the noop server renderers tests that, not this
+// runtime. It stays in the ledger, marked out of scope,
 // so it can neither inflate nor depress the in-scope count.
-const foreign = /require\(['"](react-dom|react-server|react-client|react-test-renderer|react-art)(\/[^'"]*)?['"]\)/;
+const foreign =
+  /require\(['"](react-dom|react-server|react-client|react-test-renderer|react-art|react\/react\.react-server|react-noop-renderer\/(?:server|flight-server|flight-client|flight-modules))(\/[^'"]*)?['"]\)/;
 const scopeOf = new Map<string, string>();
 function scope(file: string): string {
   if (!scopeOf.has(file)) {

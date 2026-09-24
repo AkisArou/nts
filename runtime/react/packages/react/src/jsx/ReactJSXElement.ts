@@ -53,13 +53,36 @@ function getOwner(): unknown {
   return null;
 }
 
-// The stack shared by elements created past the owner stack limit.
+// The stack shared by elements created past the owner stack limit. It is
+// shaped like a real one: a top frame, then React's bottom frame, so that
+// formatting it yields an empty owner stack rather than React's internals.
+function UnknownOwner(): Error {
+  return (() => Error("react-stack-top-frame"))();
+}
+const createFakeCallStack = {
+  react_stack_bottom_frame(callStackForError: () => Error): Error {
+    return callStackForError();
+  },
+};
+
 let unknownOwnerDebugStack: unknown = null;
 let unknownOwnerDebugTask: unknown = null;
 if (isDevelopment) {
-  unknownOwnerDebugStack = Error("react-stack-top-frame");
-  unknownOwnerDebugTask = createTask(getTaskName(null));
+  unknownOwnerDebugStack = createFakeCallStack.react_stack_bottom_frame.bind(createFakeCallStack, UnknownOwner)();
+  unknownOwnerDebugTask = createTask(getTaskName(UnknownOwner));
 }
+
+type ErrorWithStackTraceLimit = ErrorConstructor & { stackTraceLimit?: number };
+
+// Whether this element records where it was created. Past the limit,
+// elements share the unknown owner's stack.
+function shouldTrackActualOwner(): boolean {
+  return ReactSharedInternals.recentlyCreatedOwnerStacks++ < ownerStackLimit;
+}
+
+// Every development entry point below creates its `react-stack-top-frame`
+// error in its own frame, not in a helper: formatting an owner stack drops
+// exactly one frame, the JSX call's.
 
 let specialPropKeyWarningShown = false;
 let didWarnAboutOldJSXRuntime = false;
@@ -208,43 +231,59 @@ function ReactElementOf(
   return element;
 }
 
-// Where an element was created, for owner stacks in development.
-function captureDebugStack(): { stack: unknown; task: (type: unknown) => unknown } {
-  const trackActualOwner = ReactSharedInternals.recentlyCreatedOwnerStacks++ < ownerStackLimit;
-  if (!trackActualOwner) {
-    return { stack: unknownOwnerDebugStack, task: () => unknownOwnerDebugTask };
-  }
-  const errorConstructor = Error as ErrorConstructor & { stackTraceLimit?: number };
-  const previousStackTraceLimit = errorConstructor.stackTraceLimit;
-  errorConstructor.stackTraceLimit = ownerStackTraceLimit;
-  const stack = Error("react-stack-top-frame");
-  errorConstructor.stackTraceLimit = previousStackTraceLimit;
-  return { stack, task: (type) => createTask(getTaskName(type)) };
-}
-
 export function jsxProd(type: unknown, config: Props, maybeKey?: unknown): ReactElement {
   const key = resolveKey(maybeKey, config);
   return ReactElementOf(type, key, propsWithoutKey(config), getOwner(), undefined, undefined);
 }
 
-function jsxInDevelopment(
-  type: unknown,
-  config: Props,
-  maybeKey: unknown,
-  isStaticChildren: boolean,
-): ReactElement {
-  const debug = captureDebugStack();
-  return jsxDEVImpl(type, config, maybeKey, isStaticChildren, debug.stack, debug.task(type));
+function jsxProdSignatureRunningInDevWithDynamicChildren(type: unknown, config: Props, maybeKey?: unknown): ReactElement {
+  const trackActualOwner = shouldTrackActualOwner();
+  let debugStack: unknown = unknownOwnerDebugStack;
+  if (trackActualOwner) {
+    const errorConstructor = Error as ErrorWithStackTraceLimit;
+    const previousStackTraceLimit = errorConstructor.stackTraceLimit;
+    errorConstructor.stackTraceLimit = ownerStackTraceLimit;
+    debugStack = Error("react-stack-top-frame");
+    errorConstructor.stackTraceLimit = previousStackTraceLimit;
+  }
+  return jsxDEVImpl(
+    type,
+    config,
+    maybeKey,
+    false,
+    debugStack,
+    trackActualOwner ? createTask(getTaskName(type)) : unknownOwnerDebugTask,
+  );
+}
+
+function jsxProdSignatureRunningInDevWithStaticChildren(type: unknown, config: Props, maybeKey?: unknown): ReactElement {
+  const trackActualOwner = shouldTrackActualOwner();
+  let debugStack: unknown = unknownOwnerDebugStack;
+  if (trackActualOwner) {
+    const errorConstructor = Error as ErrorWithStackTraceLimit;
+    const previousStackTraceLimit = errorConstructor.stackTraceLimit;
+    errorConstructor.stackTraceLimit = ownerStackTraceLimit;
+    debugStack = Error("react-stack-top-frame");
+    errorConstructor.stackTraceLimit = previousStackTraceLimit;
+  }
+  return jsxDEVImpl(
+    type,
+    config,
+    maybeKey,
+    true,
+    debugStack,
+    trackActualOwner ? createTask(getTaskName(type)) : unknownOwnerDebugTask,
+  );
 }
 
 // `jsx` and `jsxs` as the automatic runtime exports them. In development the
 // production signature still validates, as upstream does.
 export const jsx: (type: unknown, config: Props, maybeKey?: unknown) => ReactElement = isDevelopment
-  ? (type, config, maybeKey) => jsxInDevelopment(type, config, maybeKey, false)
+  ? jsxProdSignatureRunningInDevWithDynamicChildren
   : jsxProd;
 
 export const jsxs: (type: unknown, config: Props, maybeKey?: unknown) => ReactElement = isDevelopment
-  ? (type, config, maybeKey) => jsxInDevelopment(type, config, maybeKey, true)
+  ? jsxProdSignatureRunningInDevWithStaticChildren
   : jsxProd;
 
 export function jsxDEV(
@@ -253,7 +292,23 @@ export function jsxDEV(
   maybeKey: unknown,
   isStaticChildren: boolean,
 ): ReactElement {
-  return jsxInDevelopment(type, config, maybeKey, isStaticChildren);
+  const trackActualOwner = shouldTrackActualOwner();
+  let debugStack: unknown = unknownOwnerDebugStack;
+  if (trackActualOwner) {
+    const errorConstructor = Error as ErrorWithStackTraceLimit;
+    const previousStackTraceLimit = errorConstructor.stackTraceLimit;
+    errorConstructor.stackTraceLimit = ownerStackTraceLimit;
+    debugStack = Error("react-stack-top-frame");
+    errorConstructor.stackTraceLimit = previousStackTraceLimit;
+  }
+  return jsxDEVImpl(
+    type,
+    config,
+    maybeKey,
+    isStaticChildren,
+    debugStack,
+    trackActualOwner ? createTask(getTaskName(type)) : unknownOwnerDebugTask,
+  );
 }
 
 function jsxDEVImpl(
@@ -380,8 +435,23 @@ export function createElement(type: unknown, config?: Props | null, ...children:
   if (!isDevelopment) {
     return ReactElementOf(type, key, props, getOwner(), undefined, undefined);
   }
-  const debug = captureDebugStack();
-  return ReactElementOf(type, key, props, getOwner(), debug.stack, debug.task(type));
+  const trackActualOwner = shouldTrackActualOwner();
+  let debugStack: unknown = unknownOwnerDebugStack;
+  if (trackActualOwner) {
+    const errorConstructor = Error as ErrorWithStackTraceLimit;
+    const previousStackTraceLimit = errorConstructor.stackTraceLimit;
+    errorConstructor.stackTraceLimit = ownerStackTraceLimit;
+    debugStack = Error("react-stack-top-frame");
+    errorConstructor.stackTraceLimit = previousStackTraceLimit;
+  }
+  return ReactElementOf(
+    type,
+    key,
+    props,
+    getOwner(),
+    debugStack,
+    trackActualOwner ? createTask(getTaskName(type)) : unknownOwnerDebugTask,
+  );
 }
 
 function defaultPropsOf(type: unknown): Props | null {
