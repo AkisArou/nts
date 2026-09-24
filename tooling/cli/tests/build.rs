@@ -1987,6 +1987,36 @@ fn a_macos_target_without_a_sysroot_names_the_script() {
     );
 }
 
+/// A macOS application with no `id` is refused before anything is written:
+/// its bundle identifier is not something to invent. The bundle itself runs
+/// on the Mac, in `examples/interop/macos-window`'s application arm.
+#[test]
+fn a_macos_application_without_an_id_is_refused_before_writing() {
+    if !available() || cfg!(target_os = "macos") {
+        skip("a non-Apple host with the tsgo frontend and clang");
+        return;
+    }
+    let project = fixture(
+        "build-macos-app-no-id",
+        r#"
+import { app, defineConfig } from "@nts/config";
+export default defineConfig({
+  products: { viewer: app.macos({ entry: "./src/main.ts", minimumVersion: "13.0" }) },
+});
+"#,
+    );
+    let empty = Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-apple-root-app");
+    std::fs::create_dir_all(&empty).expect("creating an empty root");
+    let run = build_for_apple(&project, &empty);
+    assert!(!run.ok, "a macOS application built with no identifier:\n{}", run.stdout);
+    assert!(
+        run.stderr.contains("CFBundleIdentifier") && run.stderr.contains("com.example.viewer"),
+        "the refusal names neither the key nor the fix:\n{}",
+        run.stderr
+    );
+    assert!(!project.join(".nts").exists(), "it wrote an output directory for a product it refused");
+}
+
 /// Naming the config means naming the project it describes.
 ///
 /// **Three spellings of one request, and one of them did something else.** A

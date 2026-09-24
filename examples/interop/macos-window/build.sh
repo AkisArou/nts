@@ -15,6 +15,9 @@
 #   second. The host must neither run a task there nor spin: before it parked
 #   the descriptor, that second cost a second of CPU.
 # - **LLVM:** the main arm's program from the LLVM backend, the same order.
+# - **Application:** the same program as `windowApp.app`, the bundle `nts
+#   build` makes for a `kind: "application"` product. It prints its bundle
+#   identifier where the bare executable prints `none`.
 # - **Control:** `WINDOW_CONTROL=detached` takes libuv's sources off the run
 #   loop. The presses and the stop are Cocoa's own and still happen, but no
 #   timeout may fire before the application has stopped.
@@ -54,7 +57,7 @@ mkdir -p "$out"
 # than a program that quietly compiles against something else.
 # NTS_REGENERATE=1 writes it instead.
 "$nts" bind-objc --sdk "$sdk" --module objc:AppKit --framework AppKit --framework Foundation \
-  --class NSApplication --class NSWindow --class NSButton --class NSString --class NSTimer --class NSEvent \
+  --class NSApplication --class NSWindow --class NSButton --class NSString --class NSTimer --class NSEvent --class NSBundle \
   --protocol NSWindowDelegate --out "$out/appkit.d.ts" --witness "$out/witness.c" >/dev/null
 if [ "${NTS_REGENERATE:-}" = 1 ]; then
   command cp -f "$out/appkit.d.ts" "$source/types/appkit.d.ts"
@@ -109,6 +112,7 @@ if [ -s "$out/main.err" ]; then
 fi
 cat >"$out/expected.txt" <<'EXPECTED'
 window 320 button 100x32 views 1
+bundle none
 pressed 1
 micro 1
 timeout 1
@@ -152,6 +156,19 @@ timeout 60 "$root/tooling/apple/run.sh" "$llvm/windowLlvm" >"$llvm/main.txt" 2>"
 [ -s "$llvm/main.err" ] && { cat "$llvm/main.err" >&2; exit 1; }
 diff -u "$out/expected.txt" "$llvm/main.txt"
 echo "LLVM: the same window, from the LLVM backend"
+
+# The application: the same program in `windowApp.app`, which `nts build` made for
+# the product declared `kind: "application"`. It is run as the bundle's own
+# executable, so the only difference from the main arm is the bundle around it
+# -- and that is the one line that differs, the identifier from `Info.plist`.
+bundle="$out/windowApp/macos-13-x86_64/windowApp.app"
+[ -f "$bundle/Contents/Info.plist" ] && [ -x "$bundle/Contents/MacOS/windowApp" ] ||
+  { echo "macos-window: no application bundle at $bundle" >&2; exit 1; }
+timeout 60 "$root/tooling/apple/run.sh" "$bundle" >"$out/app.txt" 2>"$out/app.err" ||
+  { cat "$out/app.txt" "$out/app.err" >&2; exit 1; }
+[ -s "$out/app.err" ] && { cat "$out/app.err" >&2; exit 1; }
+sed 's/^bundle none$/bundle dev.nts.examples.window/' "$out/expected.txt" | diff -u - "$out/app.txt"
+echo "application: windowApp.app runs as a bundle, and reads its identifier from Info.plist"
 
 run --env WINDOW_CONTROL=detached >"$out/control.txt" 2>&1 || { cat "$out/control.txt" >&2; exit 1; }
 before=$(sed -n '1,/^stopped$/p' "$out/control.txt")

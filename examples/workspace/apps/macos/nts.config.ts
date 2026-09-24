@@ -7,6 +7,7 @@ export default defineConfig({
   products: {
     app: app.macos({
       entry: "./src/main.ts",
+      id: "dev.example.workspace.macos",
       minimumVersion: "14.0",
     }),
   },

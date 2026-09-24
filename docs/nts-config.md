@@ -899,6 +899,7 @@ declares several; that is the whole interface.
 | `shared-library` | `.so`, `-fPIC`, version script, self-initialising |
 | `static-library` | `.a` through `ar`, same objects |
 | `executable`, `application` | linked against the libuv host, on the C backend |
+| `application` on macOS | the executable, and `<name>.app` around it: `Contents/MacOS/<name>` plus an `Info.plist` built from the product's `id` (as `CFBundleIdentifier`) and the target's `minimumVersion`. **Refused without an `id`**, before anything is written. No version keys, because the config declares no version |
 | `node-addon` | `.node`, checked for unresolved symbols, loads in node |
 | `jar` | `<name>.jar` plus `nts-runtime.jar` beside it |
 | `aar` | **refused**: the container is a zip of `classes.jar`, a manifest and resources |

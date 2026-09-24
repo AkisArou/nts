@@ -13,6 +13,7 @@
 // timeout may fire before the application has stopped.
 import {
   NSApplication,
+  Bundle,
   NSButton,
   NSEvent,
   NSObject,
@@ -126,6 +127,9 @@ function main(): void {
   // `subviews` is Swift's `[NSView]`: an array copied out of the NSArray.
   const views = window.contentView?.subviews.length ?? 0;
   report(`window ${shown.size.width} button ${width}x${height} views ${views}`);
+  // Which the program is: a bare executable has no bundle identifier, and an
+  // application has the one its `Info.plist` gives it.
+  report(`bundle ${Bundle.main.bundleIdentifier ?? "none"}`);
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
   // the closure a block the timer keeps, and calls from the run loop.

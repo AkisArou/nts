@@ -3007,6 +3007,7 @@ fn build(rest: &[String]) -> Result<()> {
             // reason to doubt. Refusing after the output directory exists is
             // also worse than refusing before it.
             refuse_unpackaged(name, &product.kind, target)?;
+            refuse_unidentified_bundle(name, product, target)?;
             // **Before the emitter, not before the packager.** The SDK is the
             // one input to an APK that a machine can simply not have, and
             // discovering that after a full compile and a packaged jar spends
@@ -3578,6 +3579,9 @@ fn build_c(
     let wrote = emit_c(tsconfig, Some(out), Emission { host, abi: native_abi(&target.os), ..emission })?;
     let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
     println!("  {artifact}");
+    if is_macos_application(product, target) {
+        println!("  {}", package_macos_app(name, product, &artifact, target)?);
+    }
     // Named here as well as on stderr, because a build whose last line is
     // `1 artifact(s)` has told the reader the opposite of what happened.
     if wrote.refused > 0 {
@@ -3927,6 +3931,80 @@ fn declared_native_roots(
     }
     found.sort();
     found
+}
+
+/// Whether a product is packaged as a macOS application bundle: an
+/// `application`, as `app.macos(...)` makes, rather than an `executable`.
+fn is_macos_application(product: &nts_build::config::Product, target: &nts_build::config::Target) -> bool {
+    product.kind == "application" && target.os == "macos"
+}
+
+/// A bundle's identifier is the product's `id`, and one is refused without it,
+/// before anything is written: `CFBundleIdentifier` is what the system files an
+/// application's preferences, permissions and notifications under, and an
+/// invented one collides with somebody else's.
+fn refuse_unidentified_bundle(name: &str, product: &nts_build::config::Product, target: &nts_build::config::Target) -> Result<()> {
+    if is_macos_application(product, target) && product.application_id.is_none() {
+        bail!(
+            "product `{name}` is a macOS application and declares no `id`. Its bundle's \
+             `CFBundleIdentifier` is what macOS keys its preferences, permissions and \
+             notifications on, and this cannot invent one. Add `id: \"com.example.{name}\"` \
+             to the product, or make it `kind: \"executable\"` for a bare program"
+        );
+    }
+    Ok(())
+}
+
+/// A macOS application is a bundle: `<name>.app/Contents/MacOS/<name>`, and an
+/// `Info.plist` saying which file that is and what the application is called.
+///
+/// Run bare, an `AppKit` program is a process and not an application: it has no
+/// bundle identifier, `NSBundle.mainBundle` finds nothing, and Launch Services
+/// (`open`, the Dock, Finder) does not know it. The executable is copied in and
+/// also left where it was linked, which is where the tests run it from.
+///
+/// Only what the configuration states goes in: no version keys, because the
+/// product declares no version, and a bundle claiming `1.0` says something
+/// nobody decided.
+fn package_macos_app(
+    name: &str,
+    product: &nts_build::config::Product,
+    executable: &Utf8Path,
+    target: &nts_build::config::Target,
+) -> Result<Utf8PathBuf> {
+    let id = product.application_id.as_deref().context("checked by `refuse_unidentified_bundle`")?;
+    let bundle = executable.parent().unwrap_or_else(|| Utf8Path::new(".")).join(format!("{name}.app"));
+    if bundle.exists() {
+        std::fs::remove_dir_all(&bundle).with_context(|| format!("removing the old {bundle}"))?;
+    }
+    let binaries = bundle.join("Contents/MacOS");
+    std::fs::create_dir_all(&binaries).with_context(|| format!("creating {binaries}"))?;
+    std::fs::copy(executable, binaries.join(name)).with_context(|| format!("copying {executable} into {bundle}"))?;
+    let escaped = |text: &str| text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let mut keys = vec![
+        ("CFBundleExecutable", format!("<string>{}</string>", escaped(name))),
+        ("CFBundleIdentifier", format!("<string>{}</string>", escaped(id))),
+        ("CFBundleInfoDictionaryVersion", "<string>6.0</string>".to_owned()),
+        ("CFBundleName", format!("<string>{}</string>", escaped(name))),
+        ("CFBundlePackageType", "<string>APPL</string>".to_owned()),
+        ("NSHighResolutionCapable", "<true/>".to_owned()),
+        ("NSPrincipalClass", "<string>NSApplication</string>".to_owned()),
+    ];
+    if let Some(minimum) = &target.minimum_version {
+        keys.push(("LSMinimumSystemVersion", format!("<string>{}</string>", escaped(minimum))));
+    }
+    let mut plist = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+         <plist version=\"1.0\">\n<dict>\n",
+    );
+    for (key, value) in keys {
+        let _ = writeln!(plist, "  <key>{key}</key>\n  {value}");
+    }
+    plist.push_str("</dict>\n</plist>\n");
+    let info = bundle.join("Contents/Info.plist");
+    std::fs::write(&info, plist).with_context(|| format!("writing {info}"))?;
+    Ok(bundle)
 }
 
 /// Stop at a product kind whose packaging is not built, rather than near it.

@@ -19,6 +19,14 @@ export default defineConfig({
       entry: "./src/main.ts",
       targets: [target.macos({ minimumVersion: "13.0", arch: "x86_64", backend: "llvm" })],
     }),
+    // The same window as an application: `window.app`, a bundle whose
+    // `Info.plist` gives it the identifier the program reads back.
+    windowApp: app({
+      kind: "application",
+      id: "dev.nts.examples.window",
+      entry: "./src/main.ts",
+      targets: [target.macos({ minimumVersion: "13.0", arch: "x86_64", backend: "c" })],
+    }),
   },
   native: [sources({ dir: "native" })],
 });

@@ -487,6 +487,14 @@ correctness does not depend on arm64 running by luck.
        object it is (`NSObject`), and TypeScript's structural check does the
        rest. If one program ever wants both, they meet at the `implements`
        clause and at nothing else.
+   - **Application bundles (2026-09-25).** A `kind: "application"` product
+     for macOS, which is what `app.macos(...)` makes, is packaged as
+     `<name>.app`, with `Info.plist` built from the product's `id` and
+     `minimumVersion`. It is refused without an `id`, as the APK is.
+     `macos-window` runs its `windowApp.app` on the VM (`run.sh` now takes a
+     bundle). The program reads `Bundle.main.bundleIdentifier` back: the
+     bundle prints `dev.nts.examples.window` where the bare executable prints
+     `none`.
    - **Every LLVM arm is `nts build`'s (2026-09-25).** Each macOS fixture's
      LLVM arm was `emit-llvm`, clang and a hand link against the C build's
      units. Now each fixture declares a second product for the LLVM backend

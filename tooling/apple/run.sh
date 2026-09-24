@@ -3,6 +3,10 @@
 # real Mac later), and returns its stdout, stderr and exit status unchanged.
 #
 #   tooling/apple/run.sh [--env NAME=VALUE]... <artifact> [args...]
+#
+# An artifact that is an application bundle (`name.app`) is copied whole and
+# run as its own executable, `name.app/Contents/MacOS/name`, which is how it
+# finds its `Info.plist`.
 #   tooling/apple/run.sh --reachable        # exit 0 if a Mac answers, else 77
 #
 # NTS_APPLE_SSH names the ssh destination (default `nts-mac`, an alias in
@@ -33,13 +37,17 @@ done
 artifact="$1"; shift
 # Asserted before anything else: scp of a missing path and a failed run read
 # as one failure otherwise.
-[[ -f "$artifact" ]] || { echo "no artifact at $artifact" >&2; exit 2; }
+[[ -f "$artifact" || ( -d "$artifact" && "$artifact" == *.app ) ]] ||
+  { echo "no artifact at $artifact" >&2; exit 2; }
 reachable || { echo "no Mac reachable at $dest" >&2; exit 77; }
 
 remote=$(ssh "${ssh_opts[@]}" "$dest" 'mktemp -d /tmp/nts-run.XXXXXX') || exit 77
 trap 'ssh "${ssh_opts[@]}" "$dest" "rm -rf $remote" >/dev/null 2>&1' EXIT
-scp -q "${ssh_opts[@]}" "$artifact" "$dest:$remote/" || { echo "copying $artifact failed" >&2; exit 2; }
+scp -q -r "${ssh_opts[@]}" "$artifact" "$dest:$remote/" || { echo "copying $artifact failed" >&2; exit 2; }
 name=$(basename "$artifact")
+if [[ -d "$artifact" ]]; then
+  name="$name/Contents/MacOS/$(basename "$artifact" .app)"
+fi
 # Only when there are arguments: `printf ' %q'` with none still prints once,
 # and the program receives one empty argument it was never given.
 quoted=""
