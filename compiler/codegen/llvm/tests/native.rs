@@ -2568,23 +2568,42 @@ interface ButtonOwnMethods {
 type Widget = Class<"_Widget"> & WidgetOwnMethods;
 type Button = Class<"_Button", Widget> & ButtonOwnMethods & WidgetOwnMethods;
 declare function button_as_widget(): Declared<Button, Widget>;
+declare function maybe_button(which: c_int): Declared<Button, Widget> | null;
 export function run(): number {
     const button = button_as_widget();
     button.set_label("declared");
     return button.get_width() * 100 + button.dup_label().length;
 }
+// Nullable, as 39 of GTK's constructors are: NULL is null, and a handle
+// is the `Button` as before.
+export function maybe(): number {
+    const none = maybe_button(0 as c_int);
+    const some = maybe_button(1 as c_int);
+    return (none === null ? 1 : 0) * 10 + (some === null ? 0 : some.dup_label().length);
+}
 "#;
-    let library = format!("{METHODS_LIBRARY}struct _Widget *button_as_widget(void) {{ return &the.parent; }}\n");
+    let library = format!(
+        "{METHODS_LIBRARY}struct _Widget *button_as_widget(void) {{ return &the.parent; }}\n\
+         struct _Widget *maybe_button(int which) {{ return which ? &the.parent : NULL; }}\n"
+    );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let caller = counted_caller(r#"printf("%.0f %.0f", run(), maybe());"#, "run(); maybe();");
         let Some((text, outputs)) = run_on_both_backends("declared", source, provider, &library, &caller) else { return; };
-        assert!(text.contains("struct _Widget * button_as_widget(void)") || text.contains("struct _Widget *button_as_widget(void)"), "the prototype is not C's: {text}");
-        // 42, and "declared" read back through the `Button`.
+        // What each prototype says is the only observable here: C's two
+        // translation units agree on the address whatever either declares.
+        for prototype in ["button_as_widget(void)", "maybe_button(int)"] {
+            assert!(
+                text.contains(&format!("struct _Widget * {prototype}")) || text.contains(&format!("struct _Widget *{prototype}")),
+                "`{prototype}` is not declared as C declares it: {text}"
+            );
+        }
+        // 42, and "declared" read back through the `Button`; then null, and
+        // the label again through a nullable one.
         for output in outputs {
-            assert_eq!(output, expect("4208", provider), "{provider:?}");
+            assert_eq!(output, expect("4208 18", provider), "{provider:?}");
         }
     }
-    let lie = source.replace("Declared<Button, Widget>", "Declared<Widget, Button>").replace(
+    let lie = source.replace("button_as_widget(): Declared<Button, Widget>", "button_as_widget(): Declared<Widget, Button>").replace(
         "    const button = button_as_widget();\n    button.set_label(\"declared\");\n    return button.get_width() * 100 + button.dup_label().length;",
         "    return button_as_widget().get_width();",
     );

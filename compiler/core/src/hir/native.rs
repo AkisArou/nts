@@ -1726,6 +1726,15 @@ fn tags_name_parameters(
 /// interface `T` implements, since a handle's chain records its parents only.
 fn declared_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<Option<(Type, Type)>, String> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    // `Declared<T, D> | null`: the handle, which may be NULL like any other.
+    let ty = match kind(ty) {
+        Some(TypeKind::Union(members)) => match members.as_slice() {
+            [a, b] if matches!(kind(*a), Some(TypeKind::Null)) => *b,
+            [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
+            _ => return Ok(None),
+        },
+        _ => ty,
+    };
     let Some(TypeKind::Intersection(parts)) = kind(ty) else { return Ok(None) };
     let declared = parts.iter().find_map(|part| match kind(*part) {
         Some(TypeKind::Object { properties }) => match properties.as_slice() {
