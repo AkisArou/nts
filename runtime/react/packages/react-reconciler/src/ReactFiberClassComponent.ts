@@ -1,4 +1,5 @@
 import type { Props } from "shared/ReactTypes.ts";
+import { shallowEqual } from "shared/shallowEqual.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
 import type { UpdateQueue } from "./ReactFiberClassUpdateQueue.ts";
@@ -92,31 +93,6 @@ export function setInstance(instance: object, value: Fiber): void {
   (instance as ClassInstance)._reactInternals = value;
 }
 
-// Upstream's shared/shallowEqual: equal when both have the same own keys with
-// Object.is-equal values.
-export function shallowEqual(objA: unknown, objB: unknown): boolean {
-  if (Object.is(objA, objB)) {
-    return true;
-  }
-  if (typeof objA !== "object" || objA === null || typeof objB !== "object" || objB === null) {
-    return false;
-  }
-  const recordA = objA as { [key: string]: unknown };
-  const recordB = objB as { [key: string]: unknown };
-  const keysA = Object.keys(recordA);
-  const keysB = Object.keys(recordB);
-  if (keysA.length !== keysB.length) {
-    return false;
-  }
-  // Test for A's keys different from B.
-  for (let i = 0; i < keysA.length; i++) {
-    const currentKey = keysA[i]!;
-    if (!Object.prototype.hasOwnProperty.call(recordB, currentKey) || !Object.is(recordA[currentKey], recordB[currentKey])) {
-      return false;
-    }
-  }
-  return true;
-}
 
 // The members a development check reads by name, whatever the class defines.
 function membersOf(value: object): { readonly [name: string]: unknown } {

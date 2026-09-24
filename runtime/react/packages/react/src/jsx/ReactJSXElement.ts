@@ -98,14 +98,14 @@ function isWarningGetter(config: object, name: string): boolean {
 }
 
 function hasValidRef(config: Props): boolean {
-  if (isDevelopment && Object.prototype.hasOwnProperty.call(config, "ref") && isWarningGetter(config, "ref")) {
+  if (isDevelopment && Object.hasOwn(config, "ref") && isWarningGetter(config, "ref")) {
     return false;
   }
   return config["ref"] !== undefined;
 }
 
 function hasValidKey(config: Props): boolean {
-  if (isDevelopment && Object.prototype.hasOwnProperty.call(config, "key") && isWarningGetter(config, "key")) {
+  if (isDevelopment && Object.hasOwn(config, "key") && isWarningGetter(config, "key")) {
     return false;
   }
   return config["key"] !== undefined;
@@ -341,7 +341,7 @@ function jsxDEVImpl(
 
   // A `key` in a spread props object is a mistake: React keys must be passed
   // directly.
-  if (Object.prototype.hasOwnProperty.call(config, "key")) {
+  if (Object.hasOwn(config, "key")) {
     const componentName = getComponentNameFromType(type);
     const keys = Object.keys(config).filter((k) => k !== "key");
     const beforeExample = keys.length > 0 ? "{key: someKey, " + keys.join(": ..., ") + ": ...}" : "{key: someKey}";
@@ -402,7 +402,7 @@ export function createElement(type: unknown, config?: Props | null, ...children:
     }
     for (const propName in config) {
       if (
-        Object.prototype.hasOwnProperty.call(config, propName) &&
+        Object.hasOwn(config, propName) &&
         propName !== "key" &&
         // The old JSX transform's source annotations are not props.
         propName !== "__self" &&
@@ -498,7 +498,7 @@ export function cloneElement(element: ReactElement | null | undefined, config?: 
     }
     for (const propName in config) {
       if (
-        Object.prototype.hasOwnProperty.call(config, propName) &&
+        Object.hasOwn(config, propName) &&
         propName !== "key" &&
         propName !== "__self" &&
         propName !== "__source" &&

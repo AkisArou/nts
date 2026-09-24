@@ -155,9 +155,11 @@ export function resetCurrentlyProcessingQueue(): void {
   }
 }
 
-export function initializeUpdateQueue<State>(fiber: Fiber): void {
-  const queue: UpdateQueue<State> = {
-    baseState: fiber.memoizedState as State,
+// The queue holds whatever state the fiber has (a class's state, the root's
+// element): erased here, typed by the code that reads the state.
+export function initializeUpdateQueue(fiber: Fiber): void {
+  const queue: UpdateQueue<unknown> = {
+    baseState: fiber.memoizedState,
     firstBaseUpdate: null,
     lastBaseUpdate: null,
     shared: {
@@ -170,12 +172,12 @@ export function initializeUpdateQueue<State>(fiber: Fiber): void {
   fiber.updateQueue = queue;
 }
 
-export function cloneUpdateQueue<State>(current: Fiber, workInProgress: Fiber): void {
+export function cloneUpdateQueue(current: Fiber, workInProgress: Fiber): void {
   // Clone the update queue from current. Unless it's already a clone.
-  const queue = workInProgress.updateQueue as UpdateQueue<State>;
-  const currentQueue = current.updateQueue as UpdateQueue<State>;
+  const queue = workInProgress.updateQueue as UpdateQueue<unknown>;
+  const currentQueue = current.updateQueue as UpdateQueue<unknown>;
   if (queue === currentQueue) {
-    const clone: UpdateQueue<State> = {
+    const clone: UpdateQueue<unknown> = {
       baseState: currentQueue.baseState,
       firstBaseUpdate: currentQueue.firstBaseUpdate,
       lastBaseUpdate: currentQueue.lastBaseUpdate,
@@ -440,11 +442,11 @@ export function suspendIfUpdateReadFromEntangledAsyncAction(): void {
   }
 }
 
-export function processUpdateQueue<State>(workInProgress: Fiber, props: unknown, instance: unknown, renderLanes: Lanes): void {
+export function processUpdateQueue(workInProgress: Fiber, props: unknown, instance: unknown, renderLanes: Lanes): void {
   didReadFromEntangledAsyncAction = false;
 
   // This is always non-null on a ClassComponent or HostRoot
-  const queue = workInProgress.updateQueue as UpdateQueue<State>;
+  const queue = workInProgress.updateQueue as UpdateQueue<unknown>;
 
   hasForceUpdate = false;
 
@@ -481,7 +483,7 @@ export function processUpdateQueue<State>(workInProgress: Fiber, props: unknown,
     const current = workInProgress.alternate;
     if (current !== null) {
       // This is always non-null on a ClassComponent or HostRoot
-      const currentQueue = current.updateQueue as UpdateQueue<State>;
+      const currentQueue = current.updateQueue as UpdateQueue<unknown>;
       const currentLastBaseUpdate = currentQueue.lastBaseUpdate;
       if (currentLastBaseUpdate !== lastBaseUpdate) {
         if (currentLastBaseUpdate === null) {
@@ -502,11 +504,11 @@ export function processUpdateQueue<State>(workInProgress: Fiber, props: unknown,
     // from the original lanes.
     let newLanes: Lanes = NoLanes;
 
-    let newBaseState = null as State | null;
-    let newFirstBaseUpdate = null as Update<State> | null;
-    let newLastBaseUpdate = null as Update<State> | null;
+    let newBaseState: unknown = null;
+    let newFirstBaseUpdate = null as Update<unknown> | null;
+    let newLastBaseUpdate = null as Update<unknown> | null;
 
-    let update: Update<State> = firstBaseUpdate;
+    let update: Update<unknown> = firstBaseUpdate;
     for (;;) {
       // An extra OffscreenLane bit is added to updates that were made to
       // a hidden tree, so that we can distinguish them from updates that were
@@ -525,7 +527,7 @@ export function processUpdateQueue<State>(workInProgress: Fiber, props: unknown,
         // Priority is insufficient. Skip this update. If this is the first
         // skipped update, the previous update/state is the new base
         // update/state.
-        const clone: Update<State> = {
+        const clone: Update<unknown> = {
           lane: updateLane,
 
           tag: update.tag,
@@ -553,7 +555,7 @@ export function processUpdateQueue<State>(workInProgress: Fiber, props: unknown,
         }
 
         if (newLastBaseUpdate !== null) {
-          const clone: Update<State> = {
+          const clone: Update<unknown> = {
             // This update is going to be committed so we never want uncommit
             // it. Using NoLane works because 0 is a subset of all bitmasks, so
             // this will never be skipped by the check above.
@@ -587,7 +589,7 @@ export function processUpdateQueue<State>(workInProgress: Fiber, props: unknown,
           }
         }
       }
-      const next: Update<State> | null = update.next;
+      const next: Update<unknown> | null = update.next;
       if (next !== null) {
         update = next;
         continue;
@@ -601,7 +603,7 @@ export function processUpdateQueue<State>(workInProgress: Fiber, props: unknown,
       const lastPendingUpdate = pendingQueue;
       // Intentionally unsound. Pending updates form a circular list, but we
       // unravel them when transferring them to the base queue.
-      const firstPendingUpdate = lastPendingUpdate.next as Update<State>;
+      const firstPendingUpdate = lastPendingUpdate.next as Update<unknown>;
       lastPendingUpdate.next = null;
       update = firstPendingUpdate;
       queue.lastBaseUpdate = lastPendingUpdate;
@@ -612,7 +614,7 @@ export function processUpdateQueue<State>(workInProgress: Fiber, props: unknown,
       newBaseState = newState;
     }
 
-    queue.baseState = newBaseState as State;
+    queue.baseState = newBaseState;
     queue.firstBaseUpdate = newFirstBaseUpdate;
     queue.lastBaseUpdate = newLastBaseUpdate;
 

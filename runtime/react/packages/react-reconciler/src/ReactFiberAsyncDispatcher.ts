@@ -5,7 +5,7 @@ import { readContext } from "./ReactFiberNewContext.ts";
 import { CacheContext } from "./ReactFiberCacheComponent.ts";
 import { current as currentOwner } from "./ReactCurrentFiber.ts";
 
-function getCacheForType<T>(resourceType: () => T): T {
+export function getCacheForType<T>(resourceType: () => T): T {
   const cache: Cache = readContext(CacheContext);
   let cacheForType = cache.data.get(resourceType) as T | undefined;
   if (cacheForType === undefined) {

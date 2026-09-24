@@ -215,7 +215,12 @@ import {
 import { resetShouldStartViewTransition, shouldStartViewTransition } from "./ReactFiberCommitViewTransitions.ts";
 import { enqueueUpdate } from "./ReactFiberClassUpdateQueue.ts";
 import { resetContextDependencies } from "./ReactFiberNewContext.ts";
-import { ContextOnlyDispatcher, resetHooksAfterThrow, resetHooksOnUnwind } from "./ReactFiberHooks.ts";
+import { resetHooksAfterThrow, resetHooksOnUnwind } from "./ReactFiberHooks.ts";
+import {
+  pushContextOnlyDispatcher,
+  restoreDispatcher,
+  type SavedDispatcher,
+} from "react-reconciler/ReactFiberHooksDispatcher.ts";
 import { DefaultAsyncDispatcher } from "./ReactFiberAsyncDispatcher.ts";
 import { type CapturedValue, createCapturedValueAtFiber } from "./ReactCapturedValue.ts";
 import {
@@ -2069,23 +2074,14 @@ export function shouldRemainOnPreviousScreen(): boolean {
   return false;
 }
 
-type Dispatcher = NonNullable<typeof ReactSharedInternals.H>;
 type AsyncDispatcher = typeof ReactSharedInternals.A;
 
-function pushDispatcher(_container: unknown): Dispatcher {
-  const prevDispatcher = ReactSharedInternals.H;
-  ReactSharedInternals.H = ContextOnlyDispatcher;
-  if (prevDispatcher === null) {
-    // The React isomorphic package does not include a default dispatcher.
-    // Instead the first renderer will lazily attach one, in order to give
-    // nicer error messages.
-    return ContextOnlyDispatcher;
-  }
-  return prevDispatcher;
+function pushDispatcher(_container: unknown): SavedDispatcher {
+  return pushContextOnlyDispatcher();
 }
 
-function popDispatcher(prevDispatcher: Dispatcher): void {
-  ReactSharedInternals.H = prevDispatcher;
+function popDispatcher(prevDispatcher: SavedDispatcher): void {
+  restoreDispatcher(prevDispatcher);
 }
 
 function pushAsyncDispatcher(): AsyncDispatcher {

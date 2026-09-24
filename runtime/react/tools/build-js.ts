@@ -105,7 +105,12 @@ function forkPlugin(entry: string): Plugin {
       pluginBuild.onResolve({filter: /\.ts$/}, args => {
         const resolved = resolveSource(args.path, args.resolveDir);
         const fork = active.find(f => resolved === join(packagesDir, f.module));
-        return fork === undefined ? undefined : {path: join(packagesDir, fork.use)};
+        if (fork !== undefined) return {path: join(packagesDir, fork.use)};
+        // A package path to a source file (`react/ReactHooks.ts`) is a module
+        // of this bundle, never a published entry: published entries do not
+        // end in `.ts`. Without this, `react/*` would be left external.
+        if (resolved !== null && !args.path.startsWith('.')) return {path: resolved};
+        return undefined;
       });
     },
   };

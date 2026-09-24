@@ -42,7 +42,7 @@ export {
   useState,
   useSyncExternalStore,
   useTransition,
-} from "./ReactHooks.ts";
+} from "react/ReactHooks.ts";
 export { cloneElement, createElement, isValidElement } from "./jsx/ReactJSXElement.ts";
 export { lazy } from "./ReactLazy.ts";
 export { memo } from "./ReactMemo.ts";

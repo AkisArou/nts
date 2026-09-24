@@ -16,11 +16,15 @@ import {
 } from "./ReactSymbols.ts";
 import type { LazyComponent } from "./ReactTypes.ts";
 
-// A named value: a function or one of React's exotic component objects.
+// A named value: a function or one of React's exotic component objects
+// (context, consumer, forwardRef, memo), with the fields any of them has.
 interface Named {
   readonly $$typeof?: unknown;
   readonly displayName?: unknown;
   readonly name?: unknown;
+  readonly _context?: Named;
+  readonly render?: unknown;
+  readonly type?: unknown;
 }
 
 function nameOf(value: unknown): string {
@@ -82,11 +86,7 @@ export function getComponentNameFromType(type: unknown): string | null {
       return "ViewTransition";
   }
   if (typeof type === "object") {
-    const exotic = type as Named & {
-      readonly _context?: Named;
-      readonly render?: unknown;
-      readonly type?: unknown;
-    };
+    const exotic = type as Named;
     switch (exotic.$$typeof) {
       case REACT_PORTAL_TYPE:
         return "Portal";

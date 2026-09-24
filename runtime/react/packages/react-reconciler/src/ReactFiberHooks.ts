@@ -2,7 +2,6 @@ import type {
   BasicStateAction,
   Dependencies as HookDependencies,
   Dispatch,
-  Dispatcher,
   EffectCreate,
   ReactContext,
   RefObject,
@@ -27,6 +26,22 @@ import {
   getCurrentUpdatePriority,
 } from "react-reconciler/ReactFiberConfig.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
+import {
+  ContextOnlyKind,
+  InvalidNestedUpdateInDEVKind,
+  MountKind,
+  MountInDEVKind,
+  MountWithHookTypesInDEVKind,
+  RerenderKind,
+  RerenderInDEVKind,
+  UpdateKind,
+  UpdateInDEVKind,
+  installDispatcher,
+  restoreDispatcher,
+  saveDispatcher,
+  useStateThroughDispatcher,
+  type SavedDispatcher,
+} from "react-reconciler/ReactFiberHooksDispatcher.ts";
 import {
   enableSchedulingProfiler,
   enableLegacyCache,
@@ -226,13 +241,8 @@ export interface FunctionComponentUpdateQueue {
   memoCache: MemoCache | null;
 }
 
-// The dispatcher as the reconciler builds it: upstream's also has the
-// deprecated `useFormState`, which ReactDOM re-exports.
-type FiberDispatcher = Dispatcher & {
-  useFormState: Dispatcher["useActionState"];
-};
 
-type ImperativeRef<T> = RefObject<T | null> | ((instance: T | null) => unknown) | null | undefined;
+export type ImperativeRef<T> = RefObject<T | null> | ((instance: T | null) => unknown) | null | undefined;
 
 // A component function, called with its props and a second argument (the
 // ref for forwardRef, the legacy context otherwise).
@@ -284,6 +294,12 @@ const RE_RENDER_LIMIT = 25;
 // In DEV, this is the name of the currently executing primitive hook
 let currentHookNameInDev: HookType | null = null;
 
+// The development dispatchers (ReactFiberHooksDispatcher.ts) record which hook
+// is running.
+export function setCurrentHookNameInDev(name: HookType | null): void {
+  currentHookNameInDev = name;
+}
+
 // In DEV, this list ensures that hooks are called in the same order between renders.
 // The list stores the order of hooks used during the initial render (mount).
 // Subsequent renders (updates) reference this list.
@@ -295,7 +311,7 @@ let hookTypesUpdateIndexDev: number = -1;
 // When true, such Hooks will always be "remounted". Only used during hot reload.
 let ignorePreviousDependencies: boolean = false;
 
-function mountHookTypesDev(): void {
+export function mountHookTypesDev(): void {
   if (isDevelopment) {
     const hookName = currentHookNameInDev as HookType;
 
@@ -307,7 +323,7 @@ function mountHookTypesDev(): void {
   }
 }
 
-function updateHookTypesDev(): void {
+export function updateHookTypesDev(): void {
   if (isDevelopment) {
     const hookName = currentHookNameInDev as HookType;
 
@@ -320,7 +336,7 @@ function updateHookTypesDev(): void {
   }
 }
 
-function checkDepsAreArrayDev(deps: unknown): void {
+export function checkDepsAreArrayDev(deps: unknown): void {
   if (isDevelopment) {
     if (deps !== undefined && deps !== null && !Array.isArray(deps)) {
       // Verify deps, but only on mount to avoid extra checks.
@@ -379,7 +395,7 @@ function warnOnHookMismatchInDev(currentHookName: HookType): void {
   }
 }
 
-function warnOnUseFormStateInDev(): void {
+export function warnOnUseFormStateInDev(): void {
   if (isDevelopment) {
     const componentName = getComponentNameFromFiber(currentlyRenderingFiber);
     if (!didWarnAboutUseFormState.has(componentName)) {
@@ -420,7 +436,7 @@ function warnIfAsyncClientComponent(Component: unknown): void {
   }
 }
 
-function throwInvalidHookError(): never {
+export function throwInvalidHookError(): never {
   throw new Error(
     "Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for" +
       " one of the following reasons:\n" +
@@ -525,20 +541,21 @@ export function renderWithHooks<Props, SecondArg>(
   // so memoizedState would be null during updates and mounts.
   if (isDevelopment) {
     if (current !== null && current.memoizedState !== null) {
-      ReactSharedInternals.H = HooksDispatcherOnUpdateInDEV;
+      installDispatcher(UpdateInDEVKind);
     } else if (hookTypesDev !== null) {
       // This dispatcher handles an edge case where a component is updating,
       // but no stateful hooks have been used.
       // We want to match the production code behavior (which will use HooksDispatcherOnMount),
       // but with the extra DEV validation to ensure hooks ordering hasn't changed.
       // This dispatcher does that.
-      ReactSharedInternals.H = HooksDispatcherOnMountWithHookTypesInDEV;
+      installDispatcher(MountWithHookTypesInDEVKind);
     } else {
-      ReactSharedInternals.H = HooksDispatcherOnMountInDEV;
+      installDispatcher(MountInDEVKind);
     }
   } else {
-    ReactSharedInternals.H =
-      current === null || current.memoizedState === null ? HooksDispatcherOnMount : HooksDispatcherOnUpdate;
+    installDispatcher(
+      current === null || current.memoizedState === null ? MountKind : UpdateKind,
+    );
   }
 
   // In Strict Mode, during development, user functions are double invoked to
@@ -615,7 +632,7 @@ function finishRenderingHooks(current: Fiber | null, workInProgress: Fiber): voi
 
   // We can assume the previous dispatcher is always this one, since we set it
   // at the beginning of the render phase and there's no re-entrance.
-  ReactSharedInternals.H = ContextOnlyDispatcher;
+  installDispatcher(ContextOnlyKind);
 
   // This check uses currentHook so that it works the same in DEV and prod bundles.
   // hookTypesDev could catch more cases (e.g. context) but only in DEV bundles.
@@ -784,7 +801,7 @@ function renderWithHooksAgain<Props, SecondArg>(
       hookTypesUpdateIndexDev = -1;
     }
 
-    ReactSharedInternals.H = isDevelopment ? HooksDispatcherOnRerenderInDEV : HooksDispatcherOnRerender;
+    installDispatcher(isDevelopment ? RerenderInDEVKind : RerenderKind);
 
     children = callComponent(Component, props, secondArg);
   } while (didScheduleRenderPhaseUpdateDuringThisPass);
@@ -802,8 +819,7 @@ export function renderTransitionAwareHostComponentWithHooks(
 export function TransitionAwareHostComponent(): TransitionStatus {
   // Only rendered for a host fiber that ensureFormComponentIsStateful already
   // gave its two state hooks, so these are always updates.
-  const dispatcher = ReactSharedInternals.H as Dispatcher;
-  const [maybeThenable] = dispatcher.useState<unknown>(undefined);
+  const [maybeThenable] = useStateThroughDispatcher<unknown>(undefined);
   let nextState: TransitionStatus;
   if (
     typeof maybeThenable === "object" &&
@@ -819,7 +835,7 @@ export function TransitionAwareHostComponent(): TransitionStatus {
 
   // The "reset state" is an object. If it changes, that means something
   // requested that we reset the form.
-  const [nextResetState] = dispatcher.useState<unknown>(undefined);
+  const [nextResetState] = useStateThroughDispatcher<unknown>(undefined);
   const prevResetState = currentHook !== null ? currentHook.memoizedState : null;
   if (prevResetState !== nextResetState) {
     // Schedule a form reset
@@ -861,7 +877,7 @@ export function resetHooksAfterThrow(): void {
 
   // We can assume the previous dispatcher is always this one, since we set it
   // at the beginning of the render phase and there's no re-entrance.
-  ReactSharedInternals.H = ContextOnlyDispatcher;
+  installDispatcher(ContextOnlyKind);
 }
 
 export function resetHooksOnUnwind(workInProgress: Fiber): void {
@@ -1051,19 +1067,22 @@ function useThenable<T>(thenable: Thenable<T>): T {
     const currentFiber = workInProgressFiber.alternate;
     if (isDevelopment) {
       if (currentFiber !== null && currentFiber.memoizedState !== null) {
-        ReactSharedInternals.H = HooksDispatcherOnUpdateInDEV;
+        installDispatcher(UpdateInDEVKind);
       } else {
-        ReactSharedInternals.H = HooksDispatcherOnMountInDEV;
+        installDispatcher(MountInDEVKind);
       }
     } else {
-      ReactSharedInternals.H =
-        currentFiber === null || currentFiber.memoizedState === null ? HooksDispatcherOnMount : HooksDispatcherOnUpdate;
+      installDispatcher(
+        currentFiber === null || currentFiber.memoizedState === null
+          ? MountKind
+          : UpdateKind,
+      );
     }
   }
   return result;
 }
 
-function use<T>(usable: Usable<T>): T {
+export function use<T>(usable: Usable<T>): T {
   if (usable !== null && typeof usable === "object") {
     if (typeof (usable as { then?: unknown }).then === "function") {
       // This is a thenable.
@@ -1082,7 +1101,7 @@ function use<T>(usable: Usable<T>): T {
   throw new Error("An unsupported type was passed to use(): " + String(usable));
 }
 
-function useMemoCache(size: number): unknown[] {
+export function useMemoCache(size: number): unknown[] {
   let memoCache: MemoCache | null = null;
   // Fast-path, load memo cache from wip fiber if already prepared
   let updateQueue = currentlyRenderingFiber.updateQueue as FunctionComponentUpdateQueue | null;
@@ -1168,7 +1187,7 @@ function basicStateReducer<S>(state: S, action: BasicStateAction<S>): S {
   return typeof action === "function" ? (action as (previous: S) => S)(state) : action;
 }
 
-function mountReducer<S, I, A>(
+export function mountReducer<S, I, A>(
   reducer: (state: S, action: A) => S,
   initialArg: I,
   init?: (initialArg: I) => S,
@@ -1202,7 +1221,7 @@ function mountReducer<S, I, A>(
   return [hook.memoizedState as S, dispatch];
 }
 
-function updateReducer<S, I, A>(
+export function updateReducer<S, I, A>(
   reducer: (state: S, action: A) => S,
   _initialArg: I,
   _init?: (initialArg: I) => S,
@@ -1437,7 +1456,7 @@ function updateReducerImpl<S, A>(hook: Hook, current: Hook, reducer: (state: S, 
   return [hook.memoizedState as S, dispatch];
 }
 
-function rerenderReducer<S, I, A>(
+export function rerenderReducer<S, I, A>(
   reducer: (state: S, action: A) => S,
   _initialArg: I,
   _init?: (initialArg: I) => S,
@@ -1494,7 +1513,7 @@ function rerenderReducer<S, I, A>(
   return [newState, dispatch];
 }
 
-function mountSyncExternalStore<T>(
+export function mountSyncExternalStore<T>(
   subscribe: (onStoreChange: () => void) => () => void,
   getSnapshot: () => T,
   getServerSnapshot?: () => T,
@@ -1579,7 +1598,7 @@ function mountSyncExternalStore<T>(
   return nextSnapshot;
 }
 
-function updateSyncExternalStore<T>(
+export function updateSyncExternalStore<T>(
   subscribe: (onStoreChange: () => void) => () => void,
   getSnapshot: () => T,
   getServerSnapshot?: () => T,
@@ -1772,7 +1791,7 @@ function mountStateImpl<S>(initialStateArg: (() => S) | S): Hook {
   return hook;
 }
 
-function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
+export function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
   const hook = mountStateImpl(initialState);
   const queue = hook.queue as UpdateQueue<S, BasicStateAction<S>>;
   const dispatch: Dispatch<BasicStateAction<S>> = (dispatchSetState<S, BasicStateAction<S>>).bind(
@@ -1784,15 +1803,15 @@ function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateActi
   return [hook.memoizedState as S, dispatch];
 }
 
-function updateState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
+export function updateState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
   return updateReducer<S, (() => S) | S, BasicStateAction<S>>(basicStateReducer, initialState);
 }
 
-function rerenderState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
+export function rerenderState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
   return rerenderReducer<S, (() => S) | S, BasicStateAction<S>>(basicStateReducer, initialState);
 }
 
-function mountOptimistic<S, A>(passthrough: S, _reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
+export function mountOptimistic<S, A>(passthrough: S, _reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
   const hook = mountWorkInProgressHook();
   hook.memoizedState = hook.baseState = passthrough;
   const queue: UpdateQueue<S, A> = {
@@ -1810,7 +1829,7 @@ function mountOptimistic<S, A>(passthrough: S, _reducer?: ((state: S, action: A)
   return [passthrough, dispatch];
 }
 
-function updateOptimistic<S, A>(passthrough: S, reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
+export function updateOptimistic<S, A>(passthrough: S, reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
   const hook = updateWorkInProgressHook();
   return updateOptimisticImpl(hook, currentHookForUpdate(), passthrough, reducer);
 }
@@ -1836,7 +1855,7 @@ function updateOptimisticImpl<S, A>(
   return updateReducerImpl(hook, currentHookForUpdate(), resolvedReducer);
 }
 
-function rerenderOptimistic<S, A>(passthrough: S, reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
+export function rerenderOptimistic<S, A>(passthrough: S, reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
   // Unlike useState, useOptimistic doesn't support render phase updates.
   // Also unlike useState, we need to replay all pending updates again in case
   // the passthrough value changed.
@@ -2174,7 +2193,7 @@ function actionStateReducer<S>(_oldState: S, newState: S): S {
   return newState;
 }
 
-function mountActionState<S, P>(
+export function mountActionState<S, P>(
   action: (state: Awaited<S>, payload: P) => S,
   initialStateProp: Awaited<S>,
   _permalink?: string,
@@ -2248,7 +2267,7 @@ function mountActionState<S, P>(
   return [initialState, dispatch, false];
 }
 
-function updateActionState<S, P>(
+export function updateActionState<S, P>(
   action: (state: Awaited<S>, payload: P) => S,
   initialState: Awaited<S>,
   permalink?: string,
@@ -2317,7 +2336,7 @@ function actionStateActionEffect<S, P>(
   actionQueue.action = action;
 }
 
-function rerenderActionState<S, P>(
+export function rerenderActionState<S, P>(
   action: (state: Awaited<S>, payload: P) => S,
   initialState: Awaited<S>,
   permalink?: string,
@@ -2387,14 +2406,14 @@ function createEffectInstance(): EffectInstance {
   return { destroy: undefined };
 }
 
-function mountRef<T>(initialValue: T): RefObject<T> {
+export function mountRef<T>(initialValue: T): RefObject<T> {
   const hook = mountWorkInProgressHook();
   const ref = { current: initialValue };
   hook.memoizedState = ref;
   return ref;
 }
 
-function updateRef<T>(_initialValue: T): RefObject<T> {
+export function updateRef<T>(_initialValue: T): RefObject<T> {
   const hook = updateWorkInProgressHook();
   return hook.memoizedState as RefObject<T>;
 }
@@ -2430,7 +2449,7 @@ function updateEffectImpl(fiberFlags: Flags, hookFlags: HookFlags, create: Effec
   hook.memoizedState = pushSimpleEffect(HookHasEffect | hookFlags, inst, create, nextDeps);
 }
 
-function mountEffect(create: EffectCreate, deps: HookDependencies): void {
+export function mountEffect(create: EffectCreate, deps: HookDependencies): void {
   if (isDevelopment && (currentlyRenderingFiber.mode & StrictEffectsMode) !== NoMode) {
     mountEffectImpl(MountPassiveDevEffect | PassiveEffect | PassiveStaticEffect, HookPassive, create, deps);
   } else {
@@ -2438,7 +2457,7 @@ function mountEffect(create: EffectCreate, deps: HookDependencies): void {
   }
 }
 
-function updateEffect(create: EffectCreate, deps: HookDependencies): void {
+export function updateEffect(create: EffectCreate, deps: HookDependencies): void {
   updateEffectImpl(PassiveEffect, HookPassive, create, deps);
 }
 
@@ -2470,29 +2489,29 @@ function createEventFunction(ref: { impl: EventImpl }): EventImpl {
   };
 }
 
-function mountEvent<F extends (...args: never[]) => unknown>(callback: F): F {
+export function mountEvent<F extends (...args: never[]) => unknown>(callback: F): F {
   const hook = mountWorkInProgressHook();
   const ref = { impl: callback as unknown as EventImpl };
   hook.memoizedState = ref;
   return createEventFunction(ref) as unknown as F;
 }
 
-function updateEvent<F extends (...args: never[]) => unknown>(callback: F): F {
+export function updateEvent<F extends (...args: never[]) => unknown>(callback: F): F {
   const hook = updateWorkInProgressHook();
   const ref = hook.memoizedState as { impl: EventImpl };
   useEffectEventImpl({ ref, nextImpl: callback as unknown as EventImpl });
   return createEventFunction(ref) as unknown as F;
 }
 
-function mountInsertionEffect(create: EffectCreate, deps: HookDependencies): void {
+export function mountInsertionEffect(create: EffectCreate, deps: HookDependencies): void {
   mountEffectImpl(UpdateEffect, HookInsertion, create, deps);
 }
 
-function updateInsertionEffect(create: EffectCreate, deps: HookDependencies): void {
+export function updateInsertionEffect(create: EffectCreate, deps: HookDependencies): void {
   return updateEffectImpl(UpdateEffect, HookInsertion, create, deps);
 }
 
-function mountLayoutEffect(create: EffectCreate, deps: HookDependencies): void {
+export function mountLayoutEffect(create: EffectCreate, deps: HookDependencies): void {
   let fiberFlags: Flags = UpdateEffect | LayoutStaticEffect;
   if (isDevelopment && (currentlyRenderingFiber.mode & StrictEffectsMode) !== NoMode) {
     fiberFlags |= MountLayoutDevEffect;
@@ -2500,7 +2519,7 @@ function mountLayoutEffect(create: EffectCreate, deps: HookDependencies): void {
   return mountEffectImpl(fiberFlags, HookLayout, create, deps);
 }
 
-function updateLayoutEffect(create: EffectCreate, deps: HookDependencies): void {
+export function updateLayoutEffect(create: EffectCreate, deps: HookDependencies): void {
   return updateEffectImpl(UpdateEffect, HookLayout, create, deps);
 }
 
@@ -2535,7 +2554,7 @@ function imperativeHandleEffect<T>(create: () => T, ref: ImperativeRef<T>): void
   }
 }
 
-function mountImperativeHandle<T>(ref: ImperativeRef<T>, create: () => T, deps: HookDependencies): void {
+export function mountImperativeHandle<T>(ref: ImperativeRef<T>, create: () => T, deps: HookDependencies): void {
   if (isDevelopment) {
     if (typeof create !== "function") {
       console.error(
@@ -2556,7 +2575,7 @@ function mountImperativeHandle<T>(ref: ImperativeRef<T>, create: () => T, deps: 
   mountEffectImpl(fiberFlags, HookLayout, () => imperativeHandleEffect(create, ref), effectDeps);
 }
 
-function updateImperativeHandle<T>(ref: ImperativeRef<T>, create: () => T, deps: HookDependencies): void {
+export function updateImperativeHandle<T>(ref: ImperativeRef<T>, create: () => T, deps: HookDependencies): void {
   if (isDevelopment) {
     if (typeof create !== "function") {
       console.error(
@@ -2573,22 +2592,24 @@ function updateImperativeHandle<T>(ref: ImperativeRef<T>, create: () => T, deps:
   updateEffectImpl(UpdateEffect, HookLayout, () => imperativeHandleEffect(create, ref), effectDeps);
 }
 
-function mountDebugValue<T>(_value: T, _formatterFn?: ((value: T) => unknown) | null): void {
+export function mountDebugValue<T>(_value: T, _formatterFn?: ((value: T) => unknown) | null): void {
   // This hook is normally a no-op.
   // The react-debug-hooks package injects its own implementation
   // so that e.g. DevTools can display custom hook values.
 }
 
-const updateDebugValue = mountDebugValue;
+export function updateDebugValue<T>(value: T, formatterFn?: ((value: T) => unknown) | null): void {
+  mountDebugValue(value, formatterFn);
+}
 
-function mountCallback<T>(callback: T, deps: HookDependencies): T {
+export function mountCallback<T>(callback: T, deps: HookDependencies): T {
   const hook = mountWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
   hook.memoizedState = [callback, nextDeps];
   return callback;
 }
 
-function updateCallback<T>(callback: T, deps: HookDependencies): T {
+export function updateCallback<T>(callback: T, deps: HookDependencies): T {
   const hook = updateWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
   const prevState = hook.memoizedState as [T, readonly unknown[] | null];
@@ -2602,7 +2623,7 @@ function updateCallback<T>(callback: T, deps: HookDependencies): T {
   return callback;
 }
 
-function mountMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
+export function mountMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
   const hook = mountWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
   const nextValue = nextCreate();
@@ -2618,7 +2639,7 @@ function mountMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
   return nextValue;
 }
 
-function updateMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
+export function updateMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
   const hook = updateWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
   const prevState = hook.memoizedState as [T, readonly unknown[] | null];
@@ -2642,19 +2663,19 @@ function updateMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
   return nextValue;
 }
 
-function mountDeferredValue<T>(value: T, initialValue?: T): T {
+export function mountDeferredValue<T>(value: T, initialValue?: T): T {
   const hook = mountWorkInProgressHook();
   return mountDeferredValueImpl(hook, value, initialValue);
 }
 
-function updateDeferredValue<T>(value: T, initialValue?: T): T {
+export function updateDeferredValue<T>(value: T, initialValue?: T): T {
   const hook = updateWorkInProgressHook();
   const resolvedCurrentHook = currentHookForUpdate();
   const prevValue = resolvedCurrentHook.memoizedState as T;
   return updateDeferredValueImpl(hook, prevValue, value, initialValue);
 }
 
-function rerenderDeferredValue<T>(value: T, initialValue?: T): T {
+export function rerenderDeferredValue<T>(value: T, initialValue?: T): T {
   const hook = updateWorkInProgressHook();
   if (currentHook === null) {
     // This is a rerender during a mount.
@@ -2968,9 +2989,9 @@ export function requestFormReset(formFiber: Fiber): void {
   dispatchSetStateInternal(formFiber, resetStateQueue, newResetState, requestUpdateLane(formFiber));
 }
 
-type StartTransitionFunction = (callback: () => unknown, options?: StartTransitionOptions) => void;
+export type StartTransitionFunction = (callback: () => unknown, options?: StartTransitionOptions) => void;
 
-function mountTransition(): [boolean, StartTransitionFunction] {
+export function mountTransition(): [boolean, StartTransitionFunction] {
   const stateHook = mountStateImpl<Thenable<boolean> | boolean>(false);
   // The `start` method never changes.
   const start: StartTransitionFunction = (startTransition<boolean>).bind(
@@ -2985,7 +3006,7 @@ function mountTransition(): [boolean, StartTransitionFunction] {
   return [false, start];
 }
 
-function updateTransition(): [boolean, StartTransitionFunction] {
+export function updateTransition(): [boolean, StartTransitionFunction] {
   const [booleanOrThenable] = updateState<Thenable<boolean> | boolean>(false);
   const hook = updateWorkInProgressHook();
   const start = hook.memoizedState as StartTransitionFunction;
@@ -2997,7 +3018,7 @@ function updateTransition(): [boolean, StartTransitionFunction] {
   return [isPending, start];
 }
 
-function rerenderTransition(): [boolean, StartTransitionFunction] {
+export function rerenderTransition(): [boolean, StartTransitionFunction] {
   const [booleanOrThenable] = rerenderState<Thenable<boolean> | boolean>(false);
   const hook = updateWorkInProgressHook();
   const start = hook.memoizedState as StartTransitionFunction;
@@ -3009,11 +3030,11 @@ function rerenderTransition(): [boolean, StartTransitionFunction] {
   return [isPending, start];
 }
 
-function useHostTransitionStatus(): TransitionStatus {
+export function useHostTransitionStatus(): TransitionStatus {
   return readContext(HostTransitionContext);
 }
 
-function mountId(): string {
+export function mountId(): string {
   const hook = mountWorkInProgressHook();
 
   const root = getWorkInProgressRoot() as FiberRoot;
@@ -3050,15 +3071,15 @@ function mountId(): string {
   return id;
 }
 
-function updateId(): string {
+export function updateId(): string {
   const hook = updateWorkInProgressHook();
   const id = hook.memoizedState as string;
   return id;
 }
 
-type RefreshFunction = <T>(createSeed?: () => T, seedValue?: T) => void;
+export type RefreshFunction = <T>(createSeed?: () => T, seedValue?: T) => void;
 
-function mountRefresh(): RefreshFunction {
+export function mountRefresh(): RefreshFunction {
   const hook = mountWorkInProgressHook();
   const fiber = currentlyRenderingFiber;
   const refresh: RefreshFunction = (seedKey, seedValue) => refreshCache(fiber, seedKey, seedValue);
@@ -3066,7 +3087,7 @@ function mountRefresh(): RefreshFunction {
   return refresh;
 }
 
-function updateRefresh(): RefreshFunction {
+export function updateRefresh(): RefreshFunction {
   const hook = updateWorkInProgressHook();
   return hook.memoizedState as RefreshFunction;
 }
@@ -3179,10 +3200,10 @@ function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, 
       // same as the current state, we may be able to bail out entirely.
       const lastRenderedReducer = queue.lastRenderedReducer;
       if (lastRenderedReducer !== null) {
-        let prevDispatcher: Dispatcher | null = null;
+        let prevDispatcher: SavedDispatcher | null = null;
         if (isDevelopment) {
-          prevDispatcher = ReactSharedInternals.H;
-          ReactSharedInternals.H = InvalidNestedHooksDispatcherOnUpdateInDEV;
+          prevDispatcher = saveDispatcher();
+          installDispatcher(InvalidNestedUpdateInDEVKind);
         }
         try {
           const currentState = queue.lastRenderedState as S;
@@ -3206,7 +3227,7 @@ function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, 
           // Suppress the error. It will throw again in the render phase.
         } finally {
           if (isDevelopment) {
-            ReactSharedInternals.H = prevDispatcher;
+            restoreDispatcher(prevDispatcher as SavedDispatcher);
           }
         }
       }
@@ -3354,365 +3375,4 @@ function markUpdateInDevTools<A>(fiber: Fiber, lane: Lane, _action: A): void {
   if (enableSchedulingProfiler) {
     markStateUpdateScheduled(fiber, lane);
   }
-}
-
-export const ContextOnlyDispatcher: FiberDispatcher = {
-  readContext,
-
-  use,
-  useCallback: throwInvalidHookError,
-  useContext: throwInvalidHookError,
-  useEffect: throwInvalidHookError,
-  useImperativeHandle: throwInvalidHookError,
-  useLayoutEffect: throwInvalidHookError,
-  useInsertionEffect: throwInvalidHookError,
-  useMemo: throwInvalidHookError,
-  useReducer: throwInvalidHookError,
-  useRef: throwInvalidHookError,
-  useState: throwInvalidHookError,
-  useDebugValue: throwInvalidHookError,
-  useDeferredValue: throwInvalidHookError,
-  useTransition: throwInvalidHookError,
-  useSyncExternalStore: throwInvalidHookError,
-  useId: throwInvalidHookError,
-  useHostTransitionStatus: throwInvalidHookError,
-  useFormState: throwInvalidHookError,
-  useActionState: throwInvalidHookError,
-  useOptimistic: throwInvalidHookError,
-  useMemoCache: throwInvalidHookError,
-  useCacheRefresh: throwInvalidHookError,
-  useEffectEvent: throwInvalidHookError,
-};
-
-const HooksDispatcherOnMount: FiberDispatcher = {
-  readContext,
-
-  use,
-  useCallback: mountCallback,
-  useContext: readContext,
-  useEffect: mountEffect,
-  useImperativeHandle: mountImperativeHandle,
-  useLayoutEffect: mountLayoutEffect,
-  useInsertionEffect: mountInsertionEffect,
-  useMemo: mountMemo,
-  useReducer: mountReducer,
-  useRef: mountRef,
-  useState: mountState,
-  useDebugValue: mountDebugValue,
-  useDeferredValue: mountDeferredValue,
-  useTransition: mountTransition,
-  useSyncExternalStore: mountSyncExternalStore,
-  useId: mountId,
-  useHostTransitionStatus: useHostTransitionStatus,
-  useFormState: mountActionState,
-  useActionState: mountActionState,
-  useOptimistic: mountOptimistic,
-  useMemoCache,
-  useCacheRefresh: mountRefresh,
-  useEffectEvent: mountEvent,
-};
-
-const HooksDispatcherOnUpdate: FiberDispatcher = {
-  readContext,
-
-  use,
-  useCallback: updateCallback,
-  useContext: readContext,
-  useEffect: updateEffect,
-  useImperativeHandle: updateImperativeHandle,
-  useInsertionEffect: updateInsertionEffect,
-  useLayoutEffect: updateLayoutEffect,
-  useMemo: updateMemo,
-  useReducer: updateReducer,
-  useRef: updateRef,
-  useState: updateState,
-  useDebugValue: updateDebugValue,
-  useDeferredValue: updateDeferredValue,
-  useTransition: updateTransition,
-  useSyncExternalStore: updateSyncExternalStore,
-  useId: updateId,
-  useHostTransitionStatus: useHostTransitionStatus,
-  useFormState: updateActionState,
-  useActionState: updateActionState,
-  useOptimistic: updateOptimistic,
-  useMemoCache,
-  useCacheRefresh: updateRefresh,
-  useEffectEvent: updateEvent,
-};
-
-const HooksDispatcherOnRerender: FiberDispatcher = {
-  readContext,
-
-  use,
-  useCallback: updateCallback,
-  useContext: readContext,
-  useEffect: updateEffect,
-  useImperativeHandle: updateImperativeHandle,
-  useInsertionEffect: updateInsertionEffect,
-  useLayoutEffect: updateLayoutEffect,
-  useMemo: updateMemo,
-  useReducer: rerenderReducer,
-  useRef: updateRef,
-  useState: rerenderState,
-  useDebugValue: updateDebugValue,
-  useDeferredValue: rerenderDeferredValue,
-  useTransition: rerenderTransition,
-  useSyncExternalStore: updateSyncExternalStore,
-  useId: updateId,
-  useHostTransitionStatus: useHostTransitionStatus,
-  useFormState: rerenderActionState,
-  useActionState: rerenderActionState,
-  useOptimistic: rerenderOptimistic,
-  useMemoCache,
-  useCacheRefresh: updateRefresh,
-  useEffectEvent: updateEvent,
-};
-
-// Development dispatchers. Upstream spells out seven near-identical tables;
-// they differ only along the axes below, so they are built from one
-// function. Each hook runs, in upstream's order: record its name, warn if it
-// is called inside another hook, record or check the hook order, then
-// (mount only) check that deps are an array, and (valid dispatchers only)
-// warn about the renamed useFormState.
-interface DevDispatcherOptions {
-  // The production implementations this dispatcher wraps.
-  readonly impls: FiberDispatcher;
-  // mountHookTypesDev when mounting, updateHookTypesDev otherwise.
-  readonly trackHookType: () => void;
-  // Only the plain mount dispatcher checks that deps are arrays.
-  readonly checkDeps: boolean;
-  // The "invalid nested" dispatchers warn on every hook call (a hook inside
-  // useMemo, useReducer or useState's initializer).
-  readonly invalid: boolean;
-  // The dispatcher installed while running useMemo/useReducer/useState's
-  // user functions.
-  readonly nested: () => Dispatcher | null;
-}
-
-let HooksDispatcherOnMountInDEV: FiberDispatcher | null = null;
-let HooksDispatcherOnMountWithHookTypesInDEV: FiberDispatcher | null = null;
-let HooksDispatcherOnUpdateInDEV: FiberDispatcher | null = null;
-let HooksDispatcherOnRerenderInDEV: FiberDispatcher | null = null;
-let InvalidNestedHooksDispatcherOnMountInDEV: FiberDispatcher | null = null;
-let InvalidNestedHooksDispatcherOnUpdateInDEV: FiberDispatcher | null = null;
-let InvalidNestedHooksDispatcherOnRerenderInDEV: FiberDispatcher | null = null;
-
-function warnInvalidContextAccess(): void {
-  console.error(
-    "Context can only be read while React is rendering. " +
-      "In classes, you can read it in the render method or getDerivedStateFromProps. " +
-      "In function components, you can read it directly in the function body, but not " +
-      "inside Hooks like useReducer() or useMemo().",
-  );
-}
-
-function warnInvalidHookAccess(): void {
-  console.error(
-    "Do not call Hooks inside useEffect(...), useMemo(...), or other built-in Hooks. " +
-      "You can only call Hooks at the top level of your React function. " +
-      "For more information, see " +
-      "https://react.dev/link/rules-of-hooks",
-  );
-}
-
-function createDevDispatcher(options: DevDispatcherOptions): FiberDispatcher {
-  const { impls, trackHookType, checkDeps, invalid, nested } = options;
-  // Every hook but useCacheRefresh warns in an invalid dispatcher.
-  const enter = (name: HookType): void => {
-    currentHookNameInDev = name;
-    if (invalid) {
-      warnInvalidHookAccess();
-    }
-    trackHookType();
-  };
-  const enterWithDeps = (name: HookType, deps: unknown): void => {
-    enter(name);
-    if (checkDeps) {
-      checkDepsAreArrayDev(deps);
-    }
-  };
-  const withNestedDispatcher = <T>(run: () => T): T => {
-    const prevDispatcher = ReactSharedInternals.H;
-    ReactSharedInternals.H = nested();
-    try {
-      return run();
-    } finally {
-      ReactSharedInternals.H = prevDispatcher;
-    }
-  };
-  return {
-    readContext<T>(context: ReactContext<T>): T {
-      if (invalid) {
-        warnInvalidContextAccess();
-      }
-      return readContext(context);
-    },
-    use<T>(usable: Usable<T>): T {
-      if (invalid) {
-        warnInvalidHookAccess();
-      }
-      return use(usable);
-    },
-    useCallback<T>(callback: T, deps: HookDependencies): T {
-      enterWithDeps("useCallback", deps);
-      return impls.useCallback(callback, deps);
-    },
-    useContext<T>(context: ReactContext<T>): T {
-      enter("useContext");
-      return readContext(context);
-    },
-    useEffect(create: EffectCreate, deps: HookDependencies): void {
-      enterWithDeps("useEffect", deps);
-      return impls.useEffect(create, deps);
-    },
-    useImperativeHandle<T>(ref: ImperativeRef<T>, create: () => T, deps: HookDependencies): void {
-      enterWithDeps("useImperativeHandle", deps);
-      return impls.useImperativeHandle(ref, create, deps);
-    },
-    useInsertionEffect(create: EffectCreate, deps: HookDependencies): void {
-      enterWithDeps("useInsertionEffect", deps);
-      return impls.useInsertionEffect(create, deps);
-    },
-    useLayoutEffect(create: EffectCreate, deps: HookDependencies): void {
-      enterWithDeps("useLayoutEffect", deps);
-      return impls.useLayoutEffect(create, deps);
-    },
-    useMemo<T>(create: () => T, deps: HookDependencies): T {
-      enterWithDeps("useMemo", deps);
-      return withNestedDispatcher(() => impls.useMemo(create, deps));
-    },
-    useReducer<S, I, A>(
-      reducer: (state: S, action: A) => S,
-      initialArg: I,
-      init?: (initialArg: I) => S,
-    ): [S, Dispatch<A>] {
-      enter("useReducer");
-      return withNestedDispatcher(() => impls.useReducer(reducer, initialArg, init));
-    },
-    useRef<T>(initialValue: T): RefObject<T> {
-      enter("useRef");
-      return impls.useRef(initialValue);
-    },
-    useState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
-      enter("useState");
-      return withNestedDispatcher(() => impls.useState(initialState));
-    },
-    useDebugValue<T>(value: T, formatterFn?: ((value: T) => unknown) | null): void {
-      enter("useDebugValue");
-      return impls.useDebugValue(value, formatterFn);
-    },
-    useDeferredValue<T>(value: T, initialValue?: T): T {
-      enter("useDeferredValue");
-      return impls.useDeferredValue(value, initialValue);
-    },
-    useTransition(): [boolean, StartTransitionFunction] {
-      enter("useTransition");
-      return impls.useTransition();
-    },
-    useSyncExternalStore<T>(
-      subscribe: (onStoreChange: () => void) => () => void,
-      getSnapshot: () => T,
-      getServerSnapshot?: () => T,
-    ): T {
-      enter("useSyncExternalStore");
-      return impls.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-    },
-    useId(): string {
-      enter("useId");
-      return impls.useId();
-    },
-    useFormState<S, P>(
-      action: (state: Awaited<S>, payload: P) => S,
-      initialState: Awaited<S>,
-      permalink?: string,
-    ): [Awaited<S>, (payload: P) => void, boolean] {
-      enter("useFormState");
-      if (!invalid) {
-        warnOnUseFormStateInDev();
-      }
-      return impls.useFormState(action, initialState, permalink);
-    },
-    useActionState<S, P>(
-      action: (state: Awaited<S>, payload: P) => S,
-      initialState: Awaited<S>,
-      permalink?: string,
-    ): [Awaited<S>, (payload: P) => void, boolean] {
-      enter("useActionState");
-      return impls.useActionState(action, initialState, permalink);
-    },
-    useOptimistic<S, A>(passthrough: S, reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
-      enter("useOptimistic");
-      return impls.useOptimistic(passthrough, reducer);
-    },
-    useHostTransitionStatus,
-    useMemoCache(size: number): unknown[] {
-      if (invalid) {
-        warnInvalidHookAccess();
-      }
-      return useMemoCache(size);
-    },
-    useCacheRefresh(): RefreshFunction {
-      // Upstream records this hook without the invalid-access warning.
-      currentHookNameInDev = "useCacheRefresh";
-      trackHookType();
-      return impls.useCacheRefresh();
-    },
-    useEffectEvent<F extends (...args: never[]) => unknown>(callback: F): F {
-      enter("useEffectEvent");
-      return impls.useEffectEvent(callback);
-    },
-  };
-}
-
-if (isDevelopment) {
-  HooksDispatcherOnMountInDEV = createDevDispatcher({
-    impls: HooksDispatcherOnMount,
-    trackHookType: mountHookTypesDev,
-    checkDeps: true,
-    invalid: false,
-    nested: () => InvalidNestedHooksDispatcherOnMountInDEV,
-  });
-  HooksDispatcherOnMountWithHookTypesInDEV = createDevDispatcher({
-    impls: HooksDispatcherOnMount,
-    trackHookType: updateHookTypesDev,
-    checkDeps: false,
-    invalid: false,
-    nested: () => InvalidNestedHooksDispatcherOnMountInDEV,
-  });
-  HooksDispatcherOnUpdateInDEV = createDevDispatcher({
-    impls: HooksDispatcherOnUpdate,
-    trackHookType: updateHookTypesDev,
-    checkDeps: false,
-    invalid: false,
-    nested: () => InvalidNestedHooksDispatcherOnUpdateInDEV,
-  });
-  HooksDispatcherOnRerenderInDEV = createDevDispatcher({
-    impls: HooksDispatcherOnRerender,
-    trackHookType: updateHookTypesDev,
-    checkDeps: false,
-    invalid: false,
-    nested: () => InvalidNestedHooksDispatcherOnRerenderInDEV,
-  });
-  InvalidNestedHooksDispatcherOnMountInDEV = createDevDispatcher({
-    impls: HooksDispatcherOnMount,
-    trackHookType: mountHookTypesDev,
-    checkDeps: false,
-    invalid: true,
-    nested: () => InvalidNestedHooksDispatcherOnMountInDEV,
-  });
-  InvalidNestedHooksDispatcherOnUpdateInDEV = createDevDispatcher({
-    impls: HooksDispatcherOnUpdate,
-    trackHookType: updateHookTypesDev,
-    checkDeps: false,
-    invalid: true,
-    nested: () => InvalidNestedHooksDispatcherOnUpdateInDEV,
-  });
-  InvalidNestedHooksDispatcherOnRerenderInDEV = createDevDispatcher({
-    impls: HooksDispatcherOnRerender,
-    trackHookType: updateHookTypesDev,
-    checkDeps: false,
-    invalid: true,
-    // Upstream nests into the update dispatcher here, not the rerender one.
-    nested: () => InvalidNestedHooksDispatcherOnUpdateInDEV,
-  });
 }

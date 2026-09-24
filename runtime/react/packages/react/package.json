@@ -10,6 +10,7 @@
     },
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
-    "./compiler-runtime": "./src/compiler-runtime.ts"
+    "./compiler-runtime": "./src/compiler-runtime.ts",
+    "./*": "./src/*"
   }
 }
