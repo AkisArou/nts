@@ -2630,7 +2630,10 @@ export function run(): number { return parse_number("1"); }
 /// The receiver arrives as the function's first argument -- a `Button`,
 /// where the method is declared -- and the body calls one of the handle's C
 /// methods on it, so a receiver passed wrongly reads the wrong width. A
-/// string argument passes through as it would to any function.
+/// string argument passes through as it would to any function. And an
+/// argument left out takes the *function's* default -- the method in the
+/// binding has none, being a declaration -- 7 where written 3, and a `null`
+/// beside it, which is how a Promise form leaves out flags and cancellable.
 #[test]
 fn an_ntscall_method_is_the_programs_function_with_the_receiver_first_on_both_backends() {
     let source = r#"
@@ -2642,6 +2645,8 @@ interface WidgetOwnMethods {
 interface ButtonOwnMethods {
     /** @ntsCall labelled_width */
     labelled(this: Button, label: string): number;
+    /** @ntsCall scaled_width */
+    scaled(this: Button, by?: c_int, other?: Button | null): number;
 }
 type Widget = Class<"_Widget"> & WidgetOwnMethods;
 type Button = Class<"_Button", Widget> & ButtonOwnMethods & WidgetOwnMethods;
@@ -2649,15 +2654,20 @@ declare function button_new(): Button;
 function labelled_width(button: Button, label: string): number {
     return (button.get_width() as number) * 100 + label.length;
 }
+function scaled_width(button: Button, by: c_int = 7 as c_int, other: Button | null = null): number {
+    return (button.get_width() as number) * (by as number) + (other === null ? 0 : 1);
+}
 export function run(): number {
-    return button_new().labelled("héllo");
+    const button = button_new();
+    return button.labelled("héllo") * 100000 + button.scaled() * 1000 + button.scaled(3 as c_int, button);
 }
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let Some((_, outputs)) = run_on_both_backends("ntscall", source, provider, METHODS_LIBRARY, &caller) else { return; };
         for output in outputs {
-            assert_eq!(output, expect("4205", provider), "{provider:?}");
+            // 4205; 42 * 7 with `other` null; 42 * 3 + 1.
+            assert_eq!(output, expect("420794127", provider), "{provider:?}");
         }
     }
 }

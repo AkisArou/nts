@@ -39460,14 +39460,43 @@ impl<'a> FuncBuilder<'a> {
             .cloned()
             .or_else(|| self.declared_name(function))
             .ok_or_else(|| self.unsupported(id, "an @ntsCall function with no name"))?;
-        let first = self
+        // Against the function's own parameters, not the call's signature:
+        // that is the binding's method, which has neither a body nor the
+        // defaults the function gives what the program left out --
+        // `file.query_info_async("standard::type")` against a wrapper taking
+        // `flags: c_uint = 0 as c_uint` and two more after it.
+        let parameters: Vec<NodeId> = self
             .children(function)
             .into_iter()
-            .find(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
-            .and_then(|parameter| self.type_of(parameter))
-            .ok_or_else(|| self.unsupported(id, "an @ntsCall function that takes no receiver"))?;
+            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+            .collect();
+        let want = |this: &Self, parameter: NodeId| {
+            this.type_of(parameter).ok_or_else(|| this.unsupported(id, "an @ntsCall function parameter of unrepresentable type"))
+        };
+        let first = parameters.first().ok_or_else(|| self.unsupported(id, "an @ntsCall function that takes no receiver"))?;
+        let first = want(self, *first)?;
         let mut args = vec![self.coerce(receiver, &first, id)?];
-        args.extend(self.lower_arguments(id, arguments)?);
+        for (at, argument) in arguments.iter().enumerate() {
+            let parameter = parameters
+                .get(at + 1)
+                .copied()
+                .filter(|_| self.kind_of(*argument) != Some(syntax::SPREAD_ELEMENT))
+                .ok_or_else(|| self.unsupported(*argument, "an argument an @ntsCall function has no parameter for"))?;
+            let ty = want(self, parameter)?;
+            let value = self.lower_expecting(*argument, &ty)?;
+            args.push(self.coerce(value, &ty, *argument)?);
+        }
+        // Each left out, its default, evaluated here: the defaults a binding
+        // writes are constants, and one that read an earlier parameter would
+        // find no binding for it and be refused, not guessed at.
+        for parameter in parameters.iter().skip(1 + arguments.len()) {
+            let default = self.default_of(*parameter).ok_or_else(|| {
+                self.unsupported(id, "an argument left out where the @ntsCall function has no default for it")
+            })?;
+            let ty = want(self, *parameter)?;
+            let value = self.lower_expecting(default, &ty)?;
+            args.push(self.coerce(value, &ty, default)?);
+        }
         self.push_call(id, Callee::Direct(name), args, Some(function))
     }
 
