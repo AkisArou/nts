@@ -91,7 +91,12 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
             kind @ ("class" | "interface") => namespace.classes.push(Class {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
                 c_type: c_attribute(node, "type").map(str::to_owned),
-                parent: attribute(node, "parent").map(str::to_owned),
+                // An interface has no parent, and its first prerequisite is what
+                // every instance of it also is -- `GObject` for `GFile` -- so it
+                // is the parent a handle upcasts to.
+                parent: attribute(node, "parent")
+                    .or_else(|| node.children().find(|n| is(*n, "prerequisite")).and_then(|n| attribute(n, "name")))
+                    .map(str::to_owned),
                 interface: kind == "interface",
                 symbol_prefix: c_attribute(node, "symbol-prefix").map(str::to_owned),
                 signals: node

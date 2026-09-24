@@ -62,6 +62,12 @@ declare module "c:types" {
     N extends (context: Ptr<unknown>, ...rest: never[]) => void,
   > = F & { readonly __c_closure?: "erased"; readonly __c_notify?: N };
   export type ScopedClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "scoped" };
+  // A closure C calls exactly once, some time after the call that registered
+  // it returns, and passes no destroy function for: GIO's
+  // `GAsyncReadyCallback`, GIR's `scope="async"`. The context follows it as
+  // for `ScopedClosure`, and the closure is released after that one call.
+  // A callback C calls twice, or never, is not this.
+  export type OnceClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "once" };
   // A `string[]` as C's NULL-terminated array of strings -- `argv`, GLib's
   // `gchar **` -- converted for the call and released after it, the way a
   // `string` parameter is. `Q` is the header's spelling, which the witness

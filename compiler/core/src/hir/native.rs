@@ -103,7 +103,7 @@ pub enum Role {
     /// It is the parameter's own C type except for an `ErasedClosure`, whose
     /// parameter is `GLib`'s type-erased `GCallback`, `void (*)(void)`, and
     /// the bridge is converted to it at the call.
-    Closure { scoped: bool, bridge: std::sync::Arc<FnPointer> },
+    Closure { lifetime: Lifetime, bridge: std::sync::Arc<FnPointer> },
     /// The closure's context, the `void *` C hands back to the callback:
     /// `nts_closure_lend(closure)`. Hidden from TypeScript.
     ClosureData,
@@ -1110,7 +1110,7 @@ fn retention_of(roles: &[Role]) -> Vec<Retention> {
         .iter()
         .scan(false, |scoped, role| {
             Some(match role {
-                Role::Closure { scoped: true, .. } => {
+                Role::Closure { lifetime: Lifetime::Call, .. } => {
                     *scoped = true;
                     Retention::NotRetained
                 }
@@ -1143,16 +1143,20 @@ fn closure_slots(
     let mut callback = declared.parameters.clone();
     callback.push(context.clone());
     let bridge = std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()));
-    let scoped = matches!(kind, ClosureKind::Scoped);
+    let lifetime = match kind {
+        ClosureKind::Scoped => Lifetime::Call,
+        ClosureKind::Once => Lifetime::Once,
+        ClosureKind::Retained | ClosureKind::Erased(_) => Lifetime::Notified,
+    };
     // What C's parameter is: the bridge's own type, or for an erased closure
     // `GCallback`, which the bridge is converted to.
     let slot = match kind {
         ClosureKind::Erased(_) => Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void))),
-        ClosureKind::Scoped | ClosureKind::Retained => Type::FnPointer(bridge.clone()),
+        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Retained => Type::FnPointer(bridge.clone()),
     };
-    let mut slots = vec![(slot, Role::Closure { scoped, bridge }), (context.clone(), Role::ClosureData)];
+    let mut slots = vec![(slot, Role::Closure { lifetime, bridge }), (context.clone(), Role::ClosureData)];
     match kind {
-        ClosureKind::Scoped => {}
+        ClosureKind::Scoped | ClosureKind::Once => {}
         ClosureKind::Retained => slots.push((
             Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context], Type::Void))),
             Role::ClosureNotify,
@@ -1176,11 +1180,27 @@ fn closure_slots(
     Ok(slots)
 }
 
+/// When a closure lent to C is given back, and by whom.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lifetime {
+    /// After the call that lent it (`ScopedClosure`): C calls it only during
+    /// that call.
+    Call,
+    /// When C calls the destroy function passed beside it (`Closure`,
+    /// `ErasedClosure`).
+    Notified,
+    /// By the bridge, after C's one call of it (`OnceClosure`): GIO's
+    /// `GAsyncReadyCallback`, which comes with no destroy function.
+    Once,
+}
+
 /// Which closure a `c:` parameter asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ClosureKind {
     /// `ScopedClosure<F>`: called only during the call.
     Scoped,
+    /// `OnceClosure<F>`: called once, later, then never again.
+    Once,
     /// `Closure<F>`: kept, and released by a `void (*)(void *)`.
     Retained,
     /// `ErasedClosure<F, N>`: kept, handed over as `GCallback`, and released
@@ -1228,6 +1248,7 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
     }
     let kind = match marker?.as_str() {
         "scoped" => ClosureKind::Scoped,
+        "once" => ClosureKind::Once,
         "retained" => ClosureKind::Retained,
         "erased" => ClosureKind::Erased(notify?),
         _ => return None,

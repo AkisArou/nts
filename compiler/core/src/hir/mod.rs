@@ -796,7 +796,12 @@ pub enum OpKind {
     /// signature's last parameter is its context: the bridge takes its receiver
     /// from there instead of from the static closure, and whoever passed the
     /// closure to C lent it (`nts_closure_lend`) for as long as C may call.
-    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool },
+    ///
+    /// **And `once`**, only with a context: C calls the bridge exactly once
+    /// and passes nothing that would release the closure -- GIO's
+    /// `GAsyncReadyCallback`, GIR's `scope="async"` -- so the bridge gives
+    /// the closure back itself (`nts_closure_unlend`) after that one call.
+    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool, once: bool },
     /// The nth parameter of the function, materialized as a value.
     Param(u32),
     /// The nth parameter of the block that defines it.

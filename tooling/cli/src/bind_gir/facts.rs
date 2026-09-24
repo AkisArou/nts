@@ -38,6 +38,10 @@ pub(crate) struct Facts {
     /// `unsigned` was not answered, and the caller falls back to GIR's values.
     pub(crate) signed: BTreeSet<String>,
     pub(crate) unsigned: BTreeSet<String>,
+    /// `interface C type -> the C type every instance of it also is`, from
+    /// the type system (`super::prerequisites`), for the interfaces GIR gives
+    /// no prerequisite.
+    pub(crate) prerequisites: BTreeMap<String, String>,
 }
 
 /// Ask the headers about `structs` and `enums`, which are C type names.

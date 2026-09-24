@@ -25,6 +25,7 @@ mod map;
 mod model;
 mod parse;
 mod facts;
+mod prerequisites;
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -79,7 +80,7 @@ pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<Strin
 ///
 /// **The stamp is what the bindings depend on, and nothing coarser.** It lists
 /// the executable and every GIR file the last run read, with each one's
-/// modification time and size. A system update that changes `GLib-2.0.gir`
+/// modification time and size, and the executable must be the one running. A system update that changes `GLib-2.0.gir`
 /// without touching `Gtk-4.0.gir` still regenerates, and a build that changes
 /// nothing costs one `stat` per file. `roots` are added to those the stamp
 /// already names, so a program that stops importing a namespace does not make
@@ -91,7 +92,17 @@ pub(crate) fn ensure(roots: &std::collections::BTreeSet<String>, search: &[Utf8P
         previous.lines().filter_map(|line| line.strip_prefix("root ")).map(str::to_owned).collect();
     let before = wanted.len();
     wanted.extend(roots.iter().cloned());
+    let exe = std::env::current_exe().ok().and_then(|p| Utf8PathBuf::from_path_buf(p).ok());
+    // The `nts` running now must be the one that wrote them. Checking only
+    // that each file the stamp names is unchanged let a *different* `nts` --
+    // a newer binder -- reuse bindings an older one wrote, since the older
+    // binary had not changed either.
+    let this_nts = exe
+        .as_deref()
+        .and_then(|exe| Some(format!("file {exe} {}", fingerprint(exe)?)))
+        .is_some_and(|line| previous.lines().any(|seen| seen == line));
     let fresh = wanted.len() == before
+        && this_nts
         && !previous.is_empty()
         && previous.lines().all(|line| match line.split_once(' ') {
             Some(("root", _)) => true,
@@ -104,7 +115,6 @@ pub(crate) fn ensure(roots: &std::collections::BTreeSet<String>, search: &[Utf8P
         return Ok(());
     }
     let mut stamp = String::new();
-    let exe = std::env::current_exe().ok().and_then(|p| Utf8PathBuf::from_path_buf(p).ok());
     let mut files: Vec<Utf8PathBuf> = Vec::new();
     // Largest closures first, and a root another root's closure already
     // bound is not bound again: `Gtk-4.0` brings `GLib-2.0` with it, and a
@@ -180,7 +190,19 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
                         )
                         .collect();
                     let enums: Vec<&str> = namespace.enums.iter().filter_map(|e| e.c_type.as_deref()).collect();
-                    facts::resolve(&namespace.headers, &structs, &enums, &cflags(repository, namespace))
+                    let flags = pkg_config(repository, namespace, "--cflags");
+                    let mut facts = facts::resolve(&namespace.headers, &structs, &enums, &flags)?;
+                    // The interfaces GIR gives no prerequisite, which the
+                    // type system is asked about instead.
+                    let interfaces: Vec<(&str, &str)> = namespace
+                        .classes
+                        .iter()
+                        .filter(|c| c.interface && c.parent.is_none())
+                        .filter_map(|c| Some((c.c_type.as_deref()?, c.get_type.as_deref()?)))
+                        .collect();
+                    let libs = pkg_config(repository, namespace, "--libs");
+                    facts.prerequisites = prerequisites::resolve(&namespace.headers, &interfaces, &flags, &libs);
+                    Ok::<_, anyhow::Error>(facts)
                 })
             })
             .collect();
@@ -190,6 +212,7 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
             all.tags.extend(one.tags);
             all.signed.extend(one.signed);
             all.unsigned.extend(one.unsigned);
+            all.prerequisites.extend(one.prerequisites);
         }
         Ok::<_, anyhow::Error>(all)
     })?;
@@ -201,7 +224,7 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
                 let (repository, facts) = (&repository, &facts);
                 scope.spawn(move || {
                     let mut binding = map::bind(repository, namespace, facts);
-                    check::against_headers(&mut binding, &cflags(repository, namespace))?;
+                    check::against_headers(&mut binding, &pkg_config(repository, namespace, "--cflags"))?;
                     Ok::<_, anyhow::Error>(binding)
                 })
             })
@@ -245,14 +268,15 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
     Ok(repository.files)
 }
 
-/// The `--cflags` the headers of `namespace` need: its packages and every
-/// included namespace's, since a header includes the headers it depends on.
+/// What pkg-config says for `namespace` -- `--cflags` for its headers,
+/// `--libs` for a program using them: its packages and every included
+/// namespace's, since a header includes the headers it depends on.
 ///
 /// A package pkg-config does not know is skipped rather than fatal. GIR names
 /// the package its scanner ran against, which is not always one this machine
 /// has a `.pc` for under that name; if the headers then fail to compile, the
 /// self-check says so with clang's own message.
-fn cflags(repository: &model::Repository, namespace: &model::Namespace) -> Vec<String> {
+fn pkg_config(repository: &model::Repository, namespace: &model::Namespace, what: &str) -> Vec<String> {
     let mut packages: Vec<String> = Vec::new();
     let mut pending = vec![namespace];
     let mut seen = std::collections::BTreeSet::new();
@@ -265,7 +289,7 @@ fn cflags(repository: &model::Repository, namespace: &model::Namespace) -> Vec<S
     }
     let mut flags = Vec::new();
     for package in packages {
-        let Ok(output) = std::process::Command::new("pkg-config").args(["--cflags", &package]).output() else {
+        let Ok(output) = std::process::Command::new("pkg-config").args([what, &package]).output() else {
             continue;
         };
         if output.status.success() {

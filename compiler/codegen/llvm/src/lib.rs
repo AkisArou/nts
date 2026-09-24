@@ -983,14 +983,14 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
     let mut declared = false;
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| func.value(*value)) {
-            let OpKind::NativeBridge { closure, signature, context } = &op.kind else { continue };
+            let OpKind::NativeBridge { closure, signature, context, once } = &op.kind else { continue };
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
                 .methods
                 .first()
                 .and_then(|method| method.as_deref())
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
-            let name = bridge_name(target, signature);
+            let name = bridge_name(target, signature, *once);
             if !seen.insert(name.clone()) {
                 continue;
             }
@@ -1053,7 +1053,13 @@ fn bridges(program: &Program) -> Result<String, Diagnostic> {
             // Same two calls the C bridge makes, because the policy lives in
             // the runtime and not in either backend's text.
             let enter = "  call void @nts_callback_enter()";
-            let leave = "  call void @nts_callback_leave()";
+            // A once-bridge gives the closure back after its one call, before
+            // leaving, as the C bridge does.
+            let leave = if *once {
+                format!("  call void @nts_closure_unlend(ptr %a{last})\n  call void @nts_callback_leave()")
+            } else {
+                "  call void @nts_callback_leave()".to_owned()
+            };
             let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
             let parameters = parameters.join(", ");
             if want == HirType::Void {
@@ -1101,8 +1107,9 @@ fn closure_layout<'p>(
 /// The same name the C backend derives, because the two must not disagree: a
 /// program compiled by one and linked against a consumer built for the other
 /// would otherwise differ in a symbol nobody looked at.
-fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer) -> String {
-    format!("NtsBridge_{}_{}", nts_codegen_common::symbols::c_identifier(target), signature.name)
+fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer, once: bool) -> String {
+    let kind = if once { "Once" } else { "" };
+    format!("NtsBridge{kind}_{}_{}", nts_codegen_common::symbols::c_identifier(target), signature.name)
 }
 
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
@@ -1553,6 +1560,16 @@ fn externals(program: &Program) -> Vec<String> {
             seen.push(target);
             lines.push(line);
         }
+    }
+    // A once-bridge calls `nts_closure_unlend` from its own body, which no
+    // operation above names -- the bridges are emitted from the operations
+    // that create them, not from calls.
+    let once = program.funcs.iter().flat_map(|func| &func.values).any(|op| matches!(op.kind, OpKind::NativeBridge { once: true, .. }));
+    let unlend = "nts_closure_unlend".to_owned();
+    if once && !seen.contains(&unlend)
+        && let Some(line) = declaration(&unlend)
+    {
+        lines.push(line);
     }
     lines
 }
@@ -2163,7 +2180,7 @@ fn allocation(
         // A bridge's address is its symbol. `getelementptr i8, ptr @f, i64 0` for
         // the same reason the static closure below uses one: a value needs a
         // name, and there is no no-op cast between two `ptr`s.
-        OpKind::NativeBridge { closure, signature, .. } => {
+        OpKind::NativeBridge { closure, signature, once, .. } => {
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
                 .methods
@@ -2172,7 +2189,7 @@ fn allocation(
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
             format!(
                 "{out} = getelementptr i8, ptr @{}, i64 0",
-                bridge_name(target, signature)
+                bridge_name(target, signature, *once)
             )
         }
         OpKind::ClosureStatic => {

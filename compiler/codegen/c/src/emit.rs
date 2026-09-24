@@ -2226,6 +2226,7 @@ fn bridge_text(
     op: &nts_core::hir::Op,
     closure: ValueId,
     signature: &nts_core::hir::native::FnPointer,
+    once: bool,
     name: &str,
     context: &Context<'_>,
 ) -> Result<String, Diagnostic> {
@@ -2237,7 +2238,7 @@ fn bridge_text(
             op.origin.location,
         )
     })?;
-    Ok(format!("{name} = {};", native_memory::bridge_name(target, signature)))
+    Ok(format!("{name} = {};", native_memory::bridge_name(target, signature, once)))
 }
 
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
@@ -4313,7 +4314,7 @@ fn memory_op(
         // Read only by a bridge, which names a symbol instead.
         OpKind::ClosureStatic if !context.read.contains(&value) => return Ok(()),
         OpKind::ClosureStatic => static_closure_text(op, &name, context)?,
-        OpKind::NativeBridge { closure, signature, .. } => bridge_text(func, op, *closure, signature, &name, context)?,
+        OpKind::NativeBridge { closure, signature, once, .. } => bridge_text(func, op, *closure, signature, *once, &name, context)?,
         OpKind::ObjectNew { frame } => {
             allocate_object(writer, op, &name, *frame, context)?
         }

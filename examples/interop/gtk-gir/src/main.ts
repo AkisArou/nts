@@ -24,6 +24,10 @@
 //   label=tick 3  a timeout closure ticked three times, rewriting the label,
 //                 which is read back through `gtk_label_get_text`
 //   ticks=3       and the count it captured is what `main` reads afterwards
+//   kind=2        `g_file_query_info_async` on "/", awaited as a Promise: the
+//                 `GAsyncReadyCallback` is a closure C calls once, which the
+//                 bridge releases after it, and `_finish` reports through the
+//                 `GError **` slot; 2 is `G_FILE_TYPE_DIRECTORY`
 import {
   gtk_application_new,
   gtk_application_window_new,
@@ -37,7 +41,15 @@ import {
   gtk_window_present,
   gtk_window_set_child,
 } from "c:Gtk-4.0";
-import { gio_application_connect_activate, g_application_quit, g_application_run } from "c:Gio-2.0";
+import {
+  gio_application_connect_activate,
+  g_application_quit,
+  g_application_run,
+  g_file_info_get_file_type,
+  g_file_new_for_path,
+  g_file_query_info_async,
+  g_file_query_info_finish,
+} from "c:Gio-2.0";
 import {
   g_compute_checksum_for_data,
   g_date_time_get_ymd,
@@ -104,8 +116,38 @@ function outParameters(): void {
   gir_log("sha256=" + (digest === null ? "none" : digest.slice(0, 8)));
 }
 
+// GIO's asynchronous shape as a Promise: start, and settle from the one
+// callback C makes, reading the result -- or the error -- through `_finish`.
+// What M3's generated methods will be, written out once by hand.
+function fileKind(path: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const file = g_file_new_for_path(path);
+    g_file_query_info_async(file, "standard::type", 0 as c_uint, PRIORITY_DEFAULT, null, (_source, result) => {
+      const error = local<GError | null>();
+      const info = g_file_query_info_finish(file, result, error);
+      const failure = error[0];
+      g_object_unref(file);
+      if (failure !== null) {
+        g_error_free(failure);
+        reject(new Error("query failed"));
+        return;
+      }
+      const kind = g_file_info_get_file_type(info) as number;
+      g_object_unref(info);
+      resolve(kind);
+    });
+  });
+}
+
+let kind = -1;
+
+async function learnKind(): Promise<void> {
+  kind = await fileKind("/");
+}
+
 function main(): void {
   outParameters();
+  void learnKind();
   const application = gtk_application_new("dev.nts.GtkGir", ApplicationFlags.NON_UNIQUE as c_uint);
   let ticks = 0;
   let clicks = 0;
@@ -137,7 +179,9 @@ function main(): void {
     g_timeout_add_full(PRIORITY_DEFAULT, 10 as c_uint, () => {
       ticks++;
       gtk_label_set_text(label, "tick " + String(ticks));
-      if (ticks < 3) return 1 as c_int;
+      // And the query answered, so the log does not depend on which of the
+      // two a loaded machine finishes first.
+      if (ticks < 3 || kind === -1) return 1 as c_int;
       gir_log("label=" + gtk_label_get_text(label));
       g_application_quit(application);
       return 0 as c_int;
@@ -150,6 +194,7 @@ function main(): void {
   gir_log("status=" + String(status));
   g_object_unref(application);
   gir_log("ticks=" + String(ticks));
+  gir_log("kind=" + String(kind));
 }
 
 main();

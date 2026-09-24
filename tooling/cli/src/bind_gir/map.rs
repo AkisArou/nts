@@ -392,6 +392,15 @@ impl<'a> Mapper<'a> {
             let c_type = parent.c_type.clone()?;
             return Some(self.reference(namespace, &c_type));
         }
+        // An interface GIR gives no prerequisite: what the type system says
+        // every instance of it also is -- `GObject` for `GFile`.
+        if class.interface
+            && let Some(prerequisite) = class.c_type.as_deref().and_then(|c| self.facts.prerequisites.get(c)).cloned()
+        {
+            let namespace = self.c_types.get(prerequisite.as_str()).copied()?;
+            let is_class = namespace.classes.iter().any(|c| c.c_type.as_deref() == Some(prerequisite.as_str()));
+            return is_class.then(|| self.reference(namespace, &prerequisite));
+        }
         let Some(TypeRef::Named { c_type: Some(c_type), .. }) = &class.first_field else { return None };
         if c_type.contains('*') {
             return None;
@@ -978,7 +987,9 @@ impl<'a> Mapper<'a> {
         let (scope, wrapper) = match param.scope {
             Some(Scope::Call) => (Scope::Call, "ScopedClosure"),
             Some(Scope::Notified) => (Scope::Notified, "Closure"),
-            Some(Scope::Async) => return Err(Reason::CallbackScope("async")),
+            // Called once, after the call returns, with nothing to release it
+            // by: GIO's `GAsyncReadyCallback`. The bridge releases it.
+            Some(Scope::Async) => (Scope::Async, "OnceClosure"),
             Some(Scope::Forever) => return Err(Reason::CallbackScope("forever")),
             None => return Err(Reason::CallbackShape("scope is not annotated")),
         };
@@ -995,8 +1006,21 @@ impl<'a> Mapper<'a> {
         }
         // The callback's own signature: its context must be its last
         // parameter, which is where the bridge takes its receiver from.
+        //
+        // Where the callback type does not mark it -- GIO's `AsyncReadyCallback`
+        // leaves its `data` unannotated -- a last parameter of type `gpointer`
+        // is it: the calling function's own `closure` annotation says there is
+        // user data, and GLib passes it last. A mark anywhere else still
+        // refuses.
         let signature = &callback.signature;
-        let context = signature.parameters.iter().position(|p| p.closure.is_some());
+        let last_is_data = signature.parameters.last().is_some_and(|p| {
+            matches!(&p.ty, TypeRef::Named { name, .. } if name == "gpointer")
+        });
+        let context = signature
+            .parameters
+            .iter()
+            .position(|p| p.closure.is_some())
+            .or_else(|| last_is_data.then(|| signature.parameters.len() - 1));
         if context != Some(signature.parameters.len().saturating_sub(1)) || signature.parameters.is_empty() {
             return Err(Reason::CallbackShape("context is not its last parameter"));
         }

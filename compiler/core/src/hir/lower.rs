@@ -39101,6 +39101,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         closure: ValueId,
         bridge: &std::sync::Arc<super::native::FnPointer>,
+        once: bool,
         want: HirType,
         origin: &Origin,
     ) -> Result<ValueId, Diagnostic> {
@@ -39114,7 +39115,7 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let bridged = self.push(
-            OpKind::NativeBridge { closure, signature: bridge.clone(), context: true },
+            OpKind::NativeBridge { closure, signature: bridge.clone(), context: true, once },
             HirType::NativePointer(super::native::Pointee::FnPointer(bridge.clone())),
             origin.clone(),
         );
@@ -39217,7 +39218,7 @@ impl<'a> FuncBuilder<'a> {
         let mut lent = Vec::new();
         let mut c_args = Vec::with_capacity(target.parameters.len());
         // The closure the context slots that follow a closure slot belong to.
-        let mut lending: Option<(ValueId, bool)> = None;
+        let mut lending: Option<(ValueId, super::native::Lifetime)> = None;
         for (at, role, fed) in target.slots() {
             use super::native::Role;
             let argument = fed.and_then(|ts| args.get(ts).copied());
@@ -39266,21 +39267,22 @@ impl<'a> FuncBuilder<'a> {
                     lent.push(Lent::String { string, pointer });
                     c_args.push(pointer);
                 }
-                Role::Closure { scoped, bridge } => {
+                Role::Closure { lifetime, bridge } => {
                     let Some(closure) = argument else { continue };
                     let want = target.parameters[at].representation();
-                    c_args.push(self.bridge_closure(id, closure, &bridge, want, &origin)?);
-                    lending = Some((closure, scoped));
+                    let once = lifetime == super::native::Lifetime::Once;
+                    c_args.push(self.bridge_closure(id, closure, &bridge, once, want, &origin)?);
+                    lending = Some((closure, lifetime));
                 }
                 Role::ClosureData => {
-                    let Some((closure, scoped)) = lending else { continue };
+                    let Some((closure, lifetime)) = lending else { continue };
                     let context = self.runtime_call(
                         "nts_closure_lend",
                         vec![closure],
                         target.parameters[at].representation(),
                         origin.clone(),
                     );
-                    if scoped {
+                    if lifetime == super::native::Lifetime::Call {
                         lent.push(Lent::Closure { context });
                     }
                     c_args.push(context);
@@ -39348,7 +39350,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(at);
         Ok(self.push(
-            OpKind::NativeBridge { closure: value, signature: signature.clone(), context: false },
+            OpKind::NativeBridge { closure: value, signature: signature.clone(), context: false, once: false },
             HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
             origin,
         ))
@@ -39387,7 +39389,7 @@ impl<'a> FuncBuilder<'a> {
             // bridges existed -- a `void *` says nothing a wrong value would
             // contradict.
             *argument = self.push(
-                OpKind::NativeBridge { closure: *argument, signature: signature.clone(), context: false },
+                OpKind::NativeBridge { closure: *argument, signature: signature.clone(), context: false, once: false },
                 HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
                 origin,
             );

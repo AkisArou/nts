@@ -122,7 +122,7 @@ declarations. Landed:
 | `892eba61` | Strings C returns, copied, and freed by `@ntsFree` (`g_free` for transfer-full). |
 
 Measured on this machine's GTK 4.22:
-**8607 functions bound**, 418 of them typed signal connects.
+**8782 functions bound**, 418 of them typed signal connects.
 
 **Typed signals.** A signal has no C prototype, so the binder emits one typed
 view of `g_signal_connect_data` per class and signal:
@@ -208,13 +208,35 @@ Six functions GIR spells `void *` where the header says `const void *`
 (`g_output_stream_write` among them) are refused by the self-check, with
 clang's words: GIR is wrong about them, and the check is what says so.
 
+**Async callbacks.** GIO's `GAsyncReadyCallback` is called once, after the
+`_async` call returns, with no destroy function: `OnceClosure<F>`, whose
+bridge gives the closure back after that one call. `gtk-gir` wraps
+`g_file_query_info_async` / `_finish` in a Promise and `await`s it -- what M3
+will generate -- and reads `G_FILE_TYPE_DIRECTORY` for `/`. Checked under
+reference counting: fifty runs leave no closure alive, and with the release
+removed they leave a hundred. (`.then` on a promise is refused by lowering
+today -- "no method table here"; `await` works.)
+
+Two binder fixes it needed:
+
+- **An interface's parent.** GIR omits `GObject` as a prerequisite --
+  `GFile`, `GListModel`, `GAsyncResult` list none, while
+  `g_type_interface_prerequisites` answers `GObject` for each -- so a
+  `GFile` did not upcast to `GObject` and `g_object_unref(file)` did not
+  typecheck. The binder now asks the type system: one small program per
+  namespace prints each interface's classed prerequisite. A namespace whose
+  probe cannot build or run answers nothing, and its interfaces keep no
+  parent.
+- **The binding cache.** Its stamp named the `nts` that wrote it and checked
+  only that that binary was unchanged, so a different `nts` -- a newer binder
+  -- reused an older one's bindings. It is the running one that must match.
+
 **Still refused, ranked by count:**
 
 - 643: GIR marks the function not introspectable.
 - 290: arrays -- arrays of handles and records, and buffers C fills and
   returns, are what is left.
 - 300: out parameters the caller allocates (a struct the callee fills in).
-- 189: async-scope callbacks, which should become Promises.
 - 153: `gpointer` results and `gconstpointer` parameters.
 - 50: string out parameters.
 

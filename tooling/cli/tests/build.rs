@@ -4027,8 +4027,8 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
         ),
     )
     .expect("tsconfig");
-    let build = || {
-        let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+    let build_with = |nts: &Path| {
+        let output = Command::new(nts)
             .arg("build")
             .arg(project.join("tsconfig.json"))
             .env("PKG_CONFIG_PATH", project.join("pc"))
@@ -4039,6 +4039,7 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
         assert!(output.status.success(), "{stdout}{}", String::from_utf8_lossy(&output.stderr));
         stdout
     };
+    let build = || build_with(Path::new(env!("CARGO_BIN_EXE_nts")));
     let first = build();
     assert!(first.contains("bound Demo-1.0"), "the first build did not bind from GIR:\n{first}");
     let run = Command::new(project.join(".nts/build/tool/linux-gnu-x86_64/tool")).output().expect("running the program");
@@ -4056,4 +4057,11 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
             .contains("export function demo_flags(flags: c_int): void;"),
         "the rebound binding is not the new GIR's"
     );
+    // Another `nts` -- here a copy elsewhere, for a newer binder -- binds
+    // again, although neither the GIR nor the `nts` that wrote the bindings
+    // has changed. It is the one running now that has to match.
+    let other = project.join("other-nts");
+    std::fs::copy(env!("CARGO_BIN_EXE_nts"), &other).expect("a second nts");
+    let fourth = build_with(&other);
+    assert!(fourth.contains("bound Demo-1.0"), "a different nts reused another's bindings:\n{fourth}");
 }

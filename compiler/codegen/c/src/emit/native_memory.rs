@@ -633,8 +633,9 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
 /// Both halves are in it because neither alone identifies the bridge: the same
 /// function can be handed to two callbacks with different C signatures, and two
 /// functions can share one signature.
-pub(super) fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer) -> String {
-    format!("NtsBridge_{}_{}", c_identifier(target), signature.name)
+pub(super) fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer, once: bool) -> String {
+    let kind = if once { "Once" } else { "" };
+    format!("NtsBridge{kind}_{}_{}", c_identifier(target), signature.name)
 }
 
 /// The typedefs and definitions the program's `NativeBridge` operations need.
@@ -655,11 +656,12 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     // The receiver: the static closure's name, or `None` when it arrives as
     // the context parameter.
-    let mut wanted: std::collections::BTreeMap<String, (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>)> =
+    #[allow(clippy::type_complexity)]
+    let mut wanted: std::collections::BTreeMap<String, (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>, bool)> =
         std::collections::BTreeMap::new();
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
-            let OpKind::NativeBridge { closure, signature, context } = &op.kind else { continue };
+            let OpKind::NativeBridge { closure, signature, context, once } = &op.kind else { continue };
             let layout = layout_of(program, &func.values[closure.0 as usize].ty, origin)?;
             let target = layout
                 .methods
@@ -688,15 +690,15 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 return Err(refuse("a callback bridge whose foreign signature and compiled function disagree about arity"));
             }
             wanted.insert(
-                bridge_name(target, signature),
-                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout))),
+                bridge_name(target, signature, *once),
+                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout)), *once),
             );
         }
     }
     if wanted.is_empty() {
         return Ok(false);
     }
-    for (name, (signature, compiled, receiver)) in &wanted {
+    for (name, (signature, compiled, receiver, once)) in &wanted {
         let mut parameters = Vec::new();
         // The receiver is the static closure itself -- one immortal object per
         // closure with no captured state -- or, for a bridge with a context,
@@ -737,12 +739,15 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // through -- inventing a return value would be worse than stopping,
         // since a comparator answering 0 because it failed sorts wrongly and
         // says nothing.
+        // A once-bridge gives the closure back after its one call: C passes
+        // nothing that would, and will not call it again.
+        let unlend = if *once { format!(" nts_closure_unlend(a{last});") } else { String::new() };
         let body = if matches!(&*signature.result, nts_core::hir::native::Type::Void) {
-            format!("nts_callback_enter(); {call}; nts_callback_leave();")
+            format!("nts_callback_enter(); {call};{unlend} nts_callback_leave();")
         } else {
             let _ = return_c_type(program, &compiled.return_type, &compiled.origin)?;
             format!(
-                "nts_callback_enter(); {result} r = ({result}){call}; nts_callback_leave(); return r;"
+                "nts_callback_enter(); {result} r = ({result}){call};{unlend} nts_callback_leave(); return r;"
             )
         };
         writer.line(origin, format!("static {result} {name}({parameters}) {{ {body} }}"));

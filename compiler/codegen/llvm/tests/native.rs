@@ -2206,3 +2206,61 @@ export function run(): string {
         }
     }
 }
+
+/// An asynchronous C API in miniature: a start function that keeps the
+/// callback and its data, and a loop turn that fires every pending one once.
+const ASYNC_LIBRARY: &str = r"
+typedef void (*ready_fn)(int result, void *data);
+static struct { ready_fn fn; void *data; int value; } pending[8];
+static int count;
+void start_async(int value, ready_fn fn, void *data) {
+    pending[count].fn = fn; pending[count].data = data; pending[count].value = value; count++;
+}
+void fire_all(void) {
+    int n = count;
+    count = 0;
+    for (int i = 0; i < n; i++) pending[i].fn(pending[i].value * 2, pending[i].data);
+}
+";
+
+/// A closure C calls once, later, with no destroy function to release it by:
+/// GIO's `GAsyncReadyCallback`, which is how an `_async` function reports and
+/// what a Promise over it resolves from.
+///
+/// The closure outlives the call that registered it -- `start` has returned
+/// before `fire_all` calls anything -- and captures that call's own `k`, so a
+/// closure released at the end of `start` would be read after it was freed.
+/// Released after its one call instead: under reference counting, fifty more
+/// runs leave `nts_live_count` where it was, which a closure nobody gave back
+/// would not.
+#[test]
+fn a_once_closure_is_released_after_its_one_call_on_both_backends() {
+    let source = r"
+import type { OnceClosure, c_int } from 'c:types';
+declare function start_async(value: c_int, ready: OnceClosure<(result: c_int) => void>): void;
+declare function fire_all(): void;
+let total = 0;
+function start(k: number): void {
+    start_async(k as c_int, (result) => { total += result * k; });
+}
+export function run(): number {
+    total = 0;
+    start(1);
+    start(10);
+    fire_all();
+    fire_all();
+    return total;
+}
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("once", source, provider, ASYNC_LIBRARY, &caller) else { return; };
+        assert!(text.contains("NtsBridgeOnce_"), "the bridge does not give the closure back");
+        assert!(text.contains("nts_closure_unlend(a1)"), "the once-bridge does not release its context");
+        // 1 * 2 * 1 + 10 * 2 * 10, each exactly once: a second `fire_all`
+        // finds nothing pending.
+        for output in outputs {
+            assert_eq!(output, expect("202", provider), "{provider:?}");
+        }
+    }
+}
