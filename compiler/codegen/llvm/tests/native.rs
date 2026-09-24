@@ -3806,7 +3806,8 @@ void collect(void) { nts_checkpoint(); }
 /// The arms are the ways borrowing could be wrong: a view of a fresh +1
 /// result, used twice; one held across a branch, where the handle's own last
 /// use would otherwise be the conversion; one returned, which must be
-/// retained where it leaves; and one stored into a field. The fake counts a
+/// retained where it leaves; one stored into a field; and a handle a closure
+/// captured, viewed in a loop, which borrows from the environment. The fake counts a
 /// count on a freed or NULL object as an error, and after fifty runs of each
 /// nothing is alive.
 #[test]
@@ -3836,6 +3837,15 @@ function up(t: Thing): GObject { return t; }
 export function returned(): number { const o = up(thing_new_owned(8 as c_int)); return object_value(o) as number; }
 class Holder { held: GObject; constructor(t: Thing) { this.held = t; } }
 export function stored(): number { const h = new Holder(thing_new_owned(5 as c_int)); return object_value(h.held) as number; }
+export function captured(): number {
+    const t = thing_new_owned(3 as c_int);
+    const sum = (n: number): number => {
+        let s = 0;
+        for (let i = 0; i < n; i++) s += object_value(t) as number;
+        return s;
+    };
+    return sum(3);
+}
 export function errors(): number { return errors_seen() as number; }
 export function live(): number { return live_objects() as number; }
 "#;
@@ -3843,8 +3853,8 @@ export function live(): number { return live_objects() as number; }
         "{GOBJECT_LIBRARY}\nint object_value(struct _GObject *o) {{ Thing *t = (Thing *)o; return t->parent.freed ? -1 : t->value; }}\n"
     );
     let caller = counted_caller(
-        r#"printf("%.0f %.0f %.0f %.0f %.0f", looped(), fresh(), branched(true), returned(), stored());
-  for (int i = 0; i < 50; i++) { looped(); fresh(); branched(true); branched(false); returned(); stored(); }
+        r#"printf("%.0f %.0f %.0f %.0f %.0f %.0f", looped(), fresh(), branched(true), returned(), stored(), captured());
+  for (int i = 0; i < 50; i++) { looped(); fresh(); branched(true); branched(false); returned(); stored(); captured(); }
   printf(" errors=%.0f live=%.0f", errors(), live());"#,
         "",
     );
@@ -3856,6 +3866,6 @@ export function live(): number { return live_objects() as number; }
     let body = c.split("inherited(").nth(2).and_then(|rest| rest.split("\n}\n").next()).expect("inherited is emitted");
     assert!(!body.contains("ref_sink") && !body.contains("unref"), "the loop still counts its receiver:\n{body}");
     for output in outputs {
-        assert_eq!(output, "6 8 6 8 5 errors=0 live=0 leak=0");
+        assert_eq!(output, "6 8 6 8 5 9 errors=0 live=0 leak=0");
     }
 }

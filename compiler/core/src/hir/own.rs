@@ -416,7 +416,7 @@ fn classify(
                 } else {
                     Ownership::Borrowed
                 }
-            } else if views_borrow(func, *value) {
+            } else if views_borrow(func, *value, decided.crossing) {
                 Ownership::Borrowed
             } else if produces_owned(kind) {
                 Ownership::Produced
@@ -2554,18 +2554,23 @@ fn hands_back_a_parameter(
 /// It is the same object, and liveness keeps the handle alive wherever the
 /// view is used (`viewed` there), so what the view needs is that the handle's
 /// reference is one nothing else can end early: a parameter, which the caller
-/// holds for the call, or a foreign call's result that this function reads,
-/// which it owns and gives back only where liveness says it dies. A chain of
-/// views goes back to its handle. Anything else -- a load, whose own borrow
-/// was argued over its direct uses only, a block parameter -- takes its own,
-/// as before.
+/// holds for the call; a foreign call's result that this function reads,
+/// which it owns and gives back only where liveness says it dies; or a
+/// borrow that crosses its whole life ([`crossing_borrows`]) -- a load whose
+/// slot survives everything reachable after it, not only its own uses, and a
+/// block parameter whose anchors liveness stretches over the view as it does
+/// over the borrow. A chain of views goes back to its handle. Anything else --
+/// a load borrowed block by block (`borrows_safely`, argued over its direct
+/// uses only) -- takes its own, as before.
 ///
 /// `box.get_visible()` in a loop paid `g_object_ref_sink` and
 /// `g_object_unref` for the upcast receiver on every call: 45-55 ns against
-/// 5-6 ns for the call alone, measured against GTK. A view that escapes -- is
+/// 5-6 ns for the call alone, measured against GTK. The crossing case is the
+/// common one: a handle a closure captured is a load from its environment,
+/// and `tooling/gtk-bench`'s `method` row went from 20.3 ns to 4.1 (C: 7.3). A view that escapes -- is
 /// stored, returned, passed on an edge -- is retained there, as any borrowed
 /// value is.
-fn views_borrow(func: &Func, value: ValueId) -> bool {
+fn views_borrow(func: &Func, value: ValueId, crossing: &rustc_hash::FxHashSet<ValueId>) -> bool {
     let counted = |v: ValueId| func.values[v.0 as usize].ty.counting().is_some();
     if !eliding() || !counted(value) {
         return false;
@@ -2582,10 +2587,11 @@ fn views_borrow(func: &Func, value: ValueId) -> bool {
     if at == value {
         return false;
     }
-    matches!(
-        func.values[at.0 as usize].kind,
-        OpKind::Param(_) | OpKind::Call { callee: super::Callee::Native(_), .. }
-    )
+    crossing.contains(&at)
+        || matches!(
+            func.values[at.0 as usize].kind,
+            OpKind::Param(_) | OpKind::Call { callee: super::Callee::Native(_), .. }
+        )
 }
 
 pub(super) fn repackages(kind: &OpKind) -> bool {
