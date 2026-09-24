@@ -455,23 +455,6 @@ fn an_objective_c_class_is_a_typescript_class() {
     assert!(text.contains("sel_registerName(\"isKindOfClass:\")"), "{text}");
 }
 
-/// A class the program writes over an Objective-C class is refused, naming
-/// why, rather than laid out as an object of ours with an Objective-C base.
-#[test]
-fn a_program_class_extending_an_objective_c_class_is_refused_by_name() {
-    let source = "import { NSObject } from \"objc:Foundation\";\n\
-                  export class Controller extends NSObject {\n  tick(): number { return 1; }\n}\n";
-    let Some((_, prepared)) = prepare("objc-subclass", CLASSES_AS_CLASSES, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
-    assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("a class extending an Objective-C class")),
-        "{:?}",
-        prepared.diagnostics
-    );
-}
-
 /// Swift's labels, `move(_:x:y:)` in TypeScript as `view.move(v, { x, y })`:
 /// one object literal the compiler never builds. Its properties are evaluated
 /// in the order the program writes them, which is JavaScript's rule, and
@@ -612,4 +595,73 @@ fn a_string_crosses_a_message_as_an_nsstring() {
     assert!(text.contains(&format!("nts_objc_sel_stringByAppendingString_c(), {object})")), "{text}");
     // And the result is copied back out of the `NSString`.
     assert!(text.contains("nts_string_of_nsstring("), "{text}");
+}
+
+/// Swift's `class Counter: NSObject`: a class the program writes over an
+/// Objective-C class is one, registered before `main` under its own name.
+/// Each method gets an entry point the runtime calls -- `self`, `_cmd`, then
+/// its arguments -- with clang's type encoding, a `number` crosses as Swift's
+/// `Double`, and a call the program writes goes straight to the compiled
+/// method.
+#[test]
+fn a_class_extending_an_objective_c_class_is_registered_with_the_runtime() {
+    let binding = r#"declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+  }
+}
+"#;
+    let source = "import { NSObject } from \"objc:Foundation\";\n\
+                  class Counter extends NSObject {\n  bump(by: number): number { return this.twice(by) + 1; }\n  twice(n: number): number { return n * 2; }\n}\n\
+                  export function run(): number {\n  return new Counter().bump(3);\n}\n";
+    let Some((_, prepared)) = prepare("objc-subclass-registered", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for expected in [
+        // The runtime's entry point: `self` and `_cmd`, then a `double`.
+        "static double nts_imp_Counter_0(struct Counter * a0, void * a1, double a2)",
+        // The selector Swift's `@objc` rule makes, with clang's encoding.
+        "{ \"bump:\", (void (*)(void))nts_imp_Counter_0, \"d24@0:8d16\" }",
+        // Registered before `main`, under its own name, over its superclass.
+        "__attribute__((constructor)) static void nts_objc_register_classes(void)",
+        "nts_objc_register_class(\"Counter\", \"NSObject\", nts_objc_methods_Counter, 2u);",
+        // `new Counter()` is the runtime's class, found by that name.
+        "objc_getRequiredClass(\"Counter\")",
+    ] {
+        assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+    }
+    // `this.twice(by)` is the compiled method, called directly.
+    let bump = text.split("static double Counter__bump(struct Counter * v0, double v1) {").nth(1).unwrap_or_default();
+    assert!(bump.split("\n}").next().unwrap_or_default().contains("Counter__twice(v0,"), "{text}");
+}
+
+/// What such a class cannot yet hold is refused by name: a field, which the
+/// object the runtime makes has no room for, and a constructor, where the
+/// superclass's initializers are inherited.
+#[test]
+fn a_field_or_constructor_on_an_objective_c_subclass_is_refused_by_name() {
+    let binding = r#"declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+  }
+}
+"#;
+    let source = "import { NSObject } from \"objc:Foundation\";\n\
+                  export class Held extends NSObject {\n  count = 0;\n  constructor() { super(); }\n  tick(): void {}\n}\n";
+    let Some((_, prepared)) = prepare("objc-subclass-refused", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    let messages: Vec<&str> = prepared.diagnostics.iter().map(|d| d.message.as_str()).collect();
+    assert!(messages.iter().any(|m| m.contains("a field of a class extending an Objective-C class")), "{messages:?}");
+    assert!(messages.iter().any(|m| m.contains("a constructor of a class extending an Objective-C class")), "{messages:?}");
 }

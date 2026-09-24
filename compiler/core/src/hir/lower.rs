@@ -5676,6 +5676,38 @@ fn lower_object_literal_members(
     }
 }
 
+/// Swift's `@objc` selector for a method of `count` parameters: its name,
+/// with a colon for each (`pressed(sender)` is `pressed:`).
+fn objc_selector(name: &str, count: usize) -> String {
+    format!("{name}{}", ":".repeat(count))
+}
+
+/// A class the program writes over an Objective-C class, recorded as the
+/// runtime will register it (`Program::objc_classes`), and its fields refused:
+/// a subclass's state is not yet stored in the object the runtime makes.
+fn register_objc_class(
+    snapshot: &SemanticSnapshot,
+    class: NodeId,
+    methods: Vec<super::ObjcMethod>,
+    lowered: &mut Lowered,
+) {
+    let probe = FuncBuilder::probe(snapshot);
+    for member in probe.children(class) {
+        if probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION) && !is_static_member(snapshot, member) {
+            let diagnostic = probe.unsupported(member, "a field of a class extending an Objective-C class, whose objects the runtime makes without room for one");
+            note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+            lowered.diagnostics.push(diagnostic);
+        }
+    }
+    let (Some(name), Some(superclass)) = (
+        super::native::objc_name(snapshot, class),
+        super::native::superclass(snapshot, class).and_then(|base| super::native::objc_name(snapshot, base)),
+    ) else {
+        return;
+    };
+    lowered.program.objc_classes.push(super::ObjcClass { name, superclass, methods });
+}
+
 fn lower_class(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -5686,6 +5718,7 @@ fn lower_class(
     wanted: &mut std::collections::BTreeSet<usize>,
 ) {
     let members = members_of(snapshot, foreign, class);
+    let mut objc_methods = Vec::new();
     for (copy, (instance, substitution)) in copies_of(generic, class).into_iter().enumerate() {
         for &member in &members {
             // One function for a `static` member, however many copies the class
@@ -5718,17 +5751,23 @@ fn lower_class(
                 continue;
             }
             // A class the program writes over an Objective-C class is an
-            // Objective-C class of its own, built at run time with its methods
-            // as the runtime's -- not an object of ours with an Objective-C
-            // base inside it, which would put two representations on one
-            // chain. Until that is built, refused by name.
+            // Objective-C class of its own, registered when the program loads
+            // with its methods as the runtime's -- not an object of ours with
+            // an Objective-C base inside it, which would put two
+            // representations on one chain.
             if super::native::extends_objc(snapshot, class) {
-                let diagnostic = builder.unsupported(
-                    member,
-                    "a class extending an Objective-C class, which is built as an Objective-C class of its own",
-                );
-                note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
-                lowered.diagnostics.push(diagnostic);
+                match builder.lower_objc_method(class, member, instance) {
+                    Ok((func, method)) => {
+                        lowered.program.funcs.push(func);
+                        objc_methods.push(method);
+                    }
+                    Err(diagnostic) => {
+                        note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                        lowered.diagnostics.push(diagnostic);
+                    }
+                }
+                wanted.extend(builder.used_closures.iter().copied());
+                collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
             }
             match builder.lower_method_of(class, member, instance) {
@@ -5758,6 +5797,9 @@ fn lower_class(
             wanted.extend(builder.used_closures.iter().copied());
             collect_layouts(&mut lowered.program, builder.layouts);
         }
+    }
+    if super::native::extends_objc(snapshot, class) {
+        register_objc_class(snapshot, class, objc_methods, lowered);
     }
 }
 
@@ -10281,9 +10323,9 @@ enum Decided {
 /// A native pointer comes first, and that includes an Objective-C class a
 /// binding declares (`@ntsClass`): its instances are the framework's objects,
 /// counted by ARC, whatever TypeScript calls the class. A class the *program*
-/// writes over one is not given a second representation on the same chain --
-/// it is refused (`native::extends_objc`) until it is built as an Objective-C
-/// class of its own, as Swift builds one.
+/// writes over one is one too, not a second representation on the same chain:
+/// an Objective-C class of its own, registered as Swift registers one
+/// (`Program::objc_classes`).
 fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Decided> {
     if let Some(brand) = super::native::scalar(snapshot, ty) {
         // What the program holds is what TypeScript says it is: a `number`
@@ -13228,6 +13270,53 @@ impl<'a> FuncBuilder<'a> {
         let return_type = self.return_type_of(member)?;
         self.materialize(member, &return_type)?;
         Ok(return_type)
+    }
+
+    /// A method of a class the program writes over an Objective-C class: the
+    /// compiled function, and how the runtime reaches it -- the selector
+    /// `@ntsSelector` names or Swift's `@objc` rule makes of its name
+    /// (`pressed(sender)` is `pressed:`), and the C signature it is called
+    /// with.
+    fn lower_objc_method(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+    ) -> Result<(Func, super::ObjcMethod), Diagnostic> {
+        match self.kind_of(member) {
+            Some(syntax::CONSTRUCTOR) => {
+                return Err(self.unsupported(
+                    member,
+                    "a constructor of a class extending an Objective-C class, which inherits its superclass's initializers",
+                ));
+            }
+            Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => {
+                return Err(self.unsupported(member, "an accessor of a class extending an Objective-C class"));
+            }
+            _ => {}
+        }
+        if is_static_member(self.snapshot, member) {
+            return Err(self.unsupported(member, "a static member of a class extending an Objective-C class"));
+        }
+        let signature = super::generics::declared_signature(self.snapshot, member)
+            .cloned()
+            .ok_or_else(|| self.unsupported(member, "an Objective-C method with no signature"))?;
+        let receiver = instance
+            .or_else(|| instance_type_of(self.snapshot, class))
+            .and_then(|ty| super::native::pointer(self.snapshot, ty))
+            .ok_or_else(|| self.unsupported(member, "an Objective-C method of a class that is not an Objective-C class"))?;
+        let imp = super::native::imp_signature(self.snapshot, receiver, &signature)
+            .map_err(|why| self.unsupported(member, &format!("an Objective-C method's {why}")))?;
+        let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
+        let selector = self
+            .node(member)
+            .native
+            .as_ref()
+            .and_then(|native| native.selector.clone())
+            .unwrap_or_else(|| objc_selector(&name, signature.parameters.len()));
+        let func = self.lower_method_of(class, member, instance)?;
+        let method = super::ObjcMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
+        Ok((func, method))
     }
 
     fn lower_method_of(
@@ -38544,6 +38633,9 @@ impl<'a> FuncBuilder<'a> {
             if let Some(function) = self.called_method(id)? {
                 return self.lower_called_method(id, receiver, function, arguments);
             }
+            if let Some(method) = self.program_objc_method(id) {
+                return self.lower_program_objc_call(id, receiver, method, arguments);
+            }
         }
 
         // `big.toString()` is the same `ToString` one type over, and
@@ -40402,6 +40494,46 @@ impl<'a> FuncBuilder<'a> {
     /// `handle.method(args)` as `function(handle, args)`, for an `@ntsCall`
     /// method: the receiver is the function's first argument, converted to
     /// its type, and the rest are the method's.
+    /// The method a call reaches, where it is a method of an Objective-C
+    /// class the program writes (`Program::objc_classes`).
+    fn program_objc_method(&self, id: NodeId) -> Option<NodeId> {
+        let declaration = self.snapshot.call_targets.get(&id)?.callee?;
+        if self.kind_of(declaration) != Some(syntax::METHOD_DECLARATION) || is_static_member(self.snapshot, declaration) {
+            return None;
+        }
+        let class = self.enclosing_class(declaration)?;
+        super::native::extends_objc(self.snapshot, class).then_some(declaration)
+    }
+
+    /// A call from TypeScript to a method of an Objective-C class the program
+    /// writes: the compiled method itself, called directly, as a call to one
+    /// of the program's own class methods is. The runtime reaches the same
+    /// function through the entry point the backend builds for it; a call
+    /// the program writes needs no message.
+    fn lower_program_objc_call(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        method: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let class = self.enclosing_class(method).ok_or_else(|| self.unsupported(id, "a method outside a class"))?;
+        let member = self.member_name(method).ok_or_else(|| self.unsupported(id, "a member whose name the program computes"))?;
+        let name = format!("{}#{member}", self.class_name_for(class, None, false)?);
+        let parameters: Vec<NodeId> =
+            self.children(method).into_iter().filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER)).collect();
+        if arguments.len() != parameters.len() {
+            return Err(self.unsupported(id, "a call to an Objective-C method of the program's with a default or rest parameter"));
+        }
+        let mut args = vec![receiver];
+        for (argument, parameter) in arguments.iter().zip(&parameters) {
+            let ty = self.type_of(*parameter).ok_or_else(|| self.unrepresentable(*parameter, "a method parameter"))?;
+            let value = self.lower_expecting(*argument, &ty)?;
+            args.push(self.coerce(value, &ty, *argument)?);
+        }
+        self.push_call(id, Callee::Direct(name), args, Some(method), None)
+    }
+
     fn lower_called_method(
         &mut self,
         id: NodeId,

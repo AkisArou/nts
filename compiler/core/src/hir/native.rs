@@ -1849,6 +1849,38 @@ pub(crate) fn block_role(declared: std::sync::Arc<FnPointer>) -> Role {
     Role::Block { bridge, signature: declared }
 }
 
+/// The C signature the Objective-C runtime calls a method of a class the
+/// program writes with: the receiver, `_cmd`, then each parameter's C type, and
+/// the result's. A parameter or result with no C type is refused by name,
+/// since the runtime passes nothing a TypeScript value could be made of.
+///
+/// # Errors
+///
+/// The parameter or the result that has no C type.
+pub(crate) fn imp_signature(
+    snapshot: &SemanticSnapshot,
+    receiver: Pointee,
+    signature: &nts_semantic_schema::SignatureRecord,
+) -> Result<FnPointer, String> {
+    let mut parameters = vec![Type::Pointer(receiver), Type::Pointer(Pointee::Void)];
+    // A plain `number` is Swift's `Double`, as a method of the program's is
+    // written in Swift.
+    let ty_of = |ty: TypeId| {
+        abi_type(snapshot, ty).or_else(|| {
+            matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Number))
+                .then_some(Type::Scalar(Scalar::Double))
+        })
+    };
+    for parameter in &signature.parameters {
+        let ty = ty_of(parameter.ty)
+            .filter(|ty| *ty != Type::Void)
+            .ok_or_else(|| format!("parameter `{}`, whose type has no C type the runtime could pass", parameter.name))?;
+        parameters.push(ty);
+    }
+    let result = ty_of(signature.return_type).ok_or("a result whose type has no C type the runtime could take")?;
+    Ok(FnPointer::spell(parameters, result))
+}
+
 /// When a closure lent to C is given back, and by whom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lifetime {
@@ -3044,7 +3076,7 @@ fn branded_members(
 
 pub(crate) mod schema;
 pub use schema::{is_layout, pointer, storage};
-pub(crate) use schema::{extends_objc, is_objc_class, objc_meta};
+pub(crate) use schema::{extends_objc, is_objc_class, objc_meta, objc_name, superclass};
 
 /// Whether a declared parameter is TypeScript's `object`, or `object | null`.
 ///

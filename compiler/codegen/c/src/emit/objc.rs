@@ -19,7 +19,7 @@
 //! and not required to be: every send runs on the program's owner thread, as
 //! every other call does.
 
-use super::{CodeWriter, Origin, Program};
+use super::{c_identifier, c_type_of, CodeWriter, Diagnostic, Origin, Program};
 use nts_codegen_common::objc::{
     block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol, lookups,
     selector_symbol,
@@ -90,6 +90,79 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
 /// which only its owning thread may, and they run without the block being
 /// invoked (a timer invalidated before it fires still disposes its block).
 /// So the guard is here, not only in the bridge an invoke goes through.
+/// The Objective-C classes the program writes over a binding's: for each
+/// method, the entry point the runtime calls -- `self` and `_cmd`, then the
+/// arguments, converted to what the compiled method takes as a callback
+/// bridge converts them -- and a table per class, registered before `main` by
+/// one constructor, base class first.
+pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
+    let classes = nts_codegen_common::objc::classes_in_order(program);
+    if classes.is_empty() {
+        return Ok(());
+    }
+    let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
+    writer.line(origin, "/* Objective-C classes the program declares: see `emit/objc.rs`. */");
+    for class in &classes {
+        let mut rows = Vec::new();
+        for (at, method) in class.methods.iter().enumerate() {
+            let compiled = program
+                .funcs
+                .iter()
+                .find(|func| func.name == method.function)
+                .ok_or_else(|| refuse("an Objective-C method whose compiled function this program does not define"))?;
+            if compiled.params.len() + 1 != method.signature.parameters.len() {
+                return Err(refuse("an Objective-C method whose entry point and compiled function disagree about arity"));
+            }
+            let mut parameters = Vec::new();
+            let mut arguments = Vec::new();
+            for (slot, ty) in method.signature.parameters.iter().enumerate() {
+                parameters.push(format!("{} a{slot}", ty.c_type()));
+                // `_cmd` is the runtime's; the compiled method never reads it.
+                if slot == 1 {
+                    continue;
+                }
+                let want = compiled.params[if slot == 0 { 0 } else { slot - 1 }].clone();
+                arguments.push(format!("({})a{slot}", c_type_of(program, &want.ty, &want.origin)?));
+            }
+            let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+            let symbol = nts_codegen_common::objc::imp_symbol(&class.name, at);
+            let result = method.signature.result.c_type();
+            let body = if matches!(*method.signature.result, Type::Void) {
+                format!("nts_callback_enter(); {call}; nts_callback_leave();")
+            } else {
+                format!("nts_callback_enter(); {result} r = ({result}){call}; nts_callback_leave(); return r;")
+            };
+            writer.line(origin, format!("static {result} {symbol}({}) {{ {body} }}", parameters.join(", ")));
+            rows.push(format!(
+                "{{ \"{}\", (void (*)(void)){symbol}, \"{}\" }}",
+                method.selector,
+                nts_codegen_common::objc::method_encoding(&method.signature)
+            ));
+        }
+        let table = nts_codegen_common::objc::methods_symbol(&class.name);
+        if rows.is_empty() {
+            writer.line(origin, format!("static const NtsObjcMethod *const {table} = 0;"));
+        } else {
+            writer.line(origin, format!("static const NtsObjcMethod {table}[] = {{ {} }};", rows.join(", ")));
+        }
+    }
+    writer.line(origin, "__attribute__((constructor)) static void nts_objc_register_classes(void) {");
+    for class in &classes {
+        writer.line(
+            origin,
+            format!(
+                "    nts_objc_register_class(\"{}\", \"{}\", {}, {}u);",
+                class.name,
+                class.superclass,
+                nts_codegen_common::objc::methods_symbol(&class.name),
+                class.methods.len()
+            ),
+        );
+    }
+    writer.line(origin, "}");
+    Ok(())
+}
+
 pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
     let signatures = block_signatures(program);
     if signatures.is_empty() {

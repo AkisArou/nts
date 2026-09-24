@@ -909,6 +909,11 @@ fn emit_bridges(
         Ok(false) => {}
         Err(diagnostic) => diagnostics.push(diagnostic),
     }
+    // A method the runtime calls is an entry point of the same kind: after
+    // every prototype, before every body.
+    if let Err(diagnostic) = objc::classes(writer, origin, program) {
+        diagnostics.push(diagnostic);
+    }
 }
 
 /// The claims this program makes about foreign declarations, as a file.

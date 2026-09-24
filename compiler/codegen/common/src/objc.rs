@@ -108,6 +108,59 @@ pub fn block_encoding(signature: &FnPointer) -> String {
     format!("{}{offset}@?0{arguments}", encoding(&signature.result).0)
 }
 
+/// A method's Objective-C type encoding, as clang writes it for the same
+/// signature: the result, the frame size, then each argument at its offset --
+/// the receiver `@0`, `_cmd` `:8`, and the rest. `-(void)pressed:(id)sender`
+/// is `v24@0:8@16`. What `class_addMethod` records, and what `NSInvocation`
+/// and forwarding read back.
+#[must_use]
+pub fn method_encoding(signature: &FnPointer) -> String {
+    let mut offset = 0usize;
+    let mut arguments = String::new();
+    for (at, parameter) in signature.parameters.iter().enumerate() {
+        let (code, size) = if at == 1 { (":", 8) } else { encoding(parameter) };
+        let _ = write!(arguments, "{code}{offset}");
+        offset += size;
+    }
+    format!("{}{offset}{arguments}", encoding(&signature.result).0)
+}
+
+/// The entry point the runtime calls for method `at` of class `class`.
+#[must_use]
+pub fn imp_symbol(class: &str, at: usize) -> String {
+    format!("nts_imp_{}_{at}", mangle(class))
+}
+
+/// The table of class `class`'s methods, as `nts_objc_register_class` reads it.
+#[must_use]
+pub fn methods_symbol(class: &str) -> String {
+    format!("nts_objc_methods_{}", mangle(class))
+}
+
+/// The program's Objective-C classes, each after the class it extends where
+/// that is one of them too, as the runtime must register them.
+#[must_use]
+pub fn classes_in_order(program: &Program) -> Vec<&nts_core::hir::ObjcClass> {
+    let mut ordered: Vec<&nts_core::hir::ObjcClass> = Vec::new();
+    let mut pending: Vec<&nts_core::hir::ObjcClass> = program.objc_classes.iter().collect();
+    while !pending.is_empty() {
+        let before = pending.len();
+        pending.retain(|class| {
+            let waits = program.objc_classes.iter().any(|other| other.name == class.superclass)
+                && !ordered.iter().any(|done| done.name == class.superclass);
+            if !waits {
+                ordered.push(class);
+            }
+            waits
+        });
+        // A cycle cannot be written in TypeScript; stop rather than spin.
+        if pending.len() == before {
+            ordered.append(&mut pending);
+        }
+    }
+    ordered
+}
+
 /// One type's encoding and its size in an argument frame.
 fn encoding(ty: &Type) -> (&'static str, usize) {
     match ty {

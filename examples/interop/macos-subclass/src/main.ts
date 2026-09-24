@@ -5,8 +5,9 @@
 // The class is built through the Objective-C runtime's C API, and the method's
 // implementation is a block (`imp_implementationWithBlock`), which takes `self`
 // first. So the method is a closure, and it captures: `clicks` is the
-// program's variable. `class X extends NSObject` sugar will lower to these
-// same calls (the Apple lane's A4).
+// program's variable. This is the runtime's own API, kept as its test;
+// `class X extends NSObject` is what a program writes (macos-window's
+// `Controller`), which the compiler registers without it.
 //
 // Foundation then calls the method twice: synchronously through
 // `performSelector:withObject:`, and from the run loop as an NSTimer's

@@ -11,12 +11,11 @@
 // The control (`WINDOW_CONTROL=detached`) takes libuv's sources off the run
 // loop. The presses and the stop still happen, since Cocoa drives them, but no
 // timeout may fire before the application has stopped.
-import { NSApplication, NSButton, NSEvent, NSWindow, Timer, type CGPoint, type CGRect } from "objc:AppKit";
-import { NtsWindowController } from "objc:Controller";
-import { actionImplementation, nested_while_readable, report, window_control } from "c:support";
-import { class_addMethod, objc_allocateClassPair, objc_getClass, objc_registerClassPair, sel_registerName } from "objc:runtime";
+import { NSApplication, NSButton, NSEvent, NSObject, NSWindow, Timer, type CGPoint, type CGRect } from "objc:AppKit";
+import { nested_while_readable, report, window_control } from "c:support";
+import { sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
-import type { Ptr, c_size_t } from "c:types";
+import type { Ptr } from "c:types";
 
 let presses = 0;
 let ticks = 0;
@@ -33,6 +32,22 @@ function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: nu
   r.origin.y = y;
   r.size.width = width;
   r.size.height = height;
+}
+
+// The button's target: an Objective-C class of the program's own, as Swift's
+// `class Controller: NSObject { @objc func pressed(_ sender: Any) }` is, whose
+// `pressed:` AppKit sends when the button is pressed.
+class Controller extends NSObject {
+  pressed(sender: NSObject): void {
+    presses++;
+    const press = presses;
+    report(`pressed ${press}`);
+    void afterAJob(`micro ${press}`);
+    setTimeout(() => report(`timeout ${press}`), 0);
+    if (press === 1) {
+      nested_while_readable();
+    }
+  }
 }
 
 function main(): void {
@@ -56,24 +71,6 @@ function main(): void {
   // `contentView` is `nullable` in NSWindow.h: Swift's optional chaining.
   window.contentView?.addSubview(button);
 
-  // The controller is defined at run time, which `class ... extends NSObject`
-  // will do once subclassing lands.
-  const root = objc_getClass("NSObject");
-  const cls = root === null ? null : objc_allocateClassPair(root, "NtsWindowController", 0n as c_size_t);
-  if (cls === null) {
-    report("no class");
-    return;
-  }
-  const pressed = actionImplementation((self, sender) => {
-    presses++;
-    const press = presses;
-    report(`pressed ${press}`);
-    void afterAJob(`micro ${press}`);
-    setTimeout(() => report(`timeout ${press}`), 0);
-    if (press === 1) {
-      nested_while_readable();
-    }
-  });
   const tick = (timer: Timer): void => {
     ticks++;
     if (ticks <= 2) {
@@ -99,10 +96,7 @@ function main(): void {
       app.postEvent(wake, { atStart: true });
     }
   };
-  class_addMethod(cls, sel_registerName("pressed:"), pressed, "v@:@");
-  objc_registerClassPair(cls);
-
-  const controller = new NtsWindowController();
+  const controller = new Controller();
   button.target = controller;
   button.action = sel_registerName("pressed:");
   window.makeKeyAndOrderFront(null);

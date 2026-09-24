@@ -6,6 +6,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -249,4 +250,25 @@ void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array) {
     [at] =
         nts_string_of_nsstring(CFArrayGetValueAtIndex((CFArrayRef)array, at));
   }
+}
+
+void nts_objc_register_class(const char *name, const char *superclass,
+                             const NtsObjcMethod *methods, uint32_t count) {
+  Class base = objc_getClass(superclass);
+  if (!base) {
+    fprintf(stderr, "nts: no Objective-C class %s for %s to extend\n",
+            superclass, name);
+    abort();
+  }
+  Class made = objc_allocateClassPair(base, name, 0);
+  if (!made) {
+    fprintf(stderr, "nts: an Objective-C class named %s already exists\n",
+            name);
+    abort();
+  }
+  for (uint32_t at = 0; at < count; at++) {
+    class_addMethod(made, sel_registerName(methods[at].selector),
+                    (IMP)methods[at].implementation, methods[at].types);
+  }
+  objc_registerClassPair(made);
 }

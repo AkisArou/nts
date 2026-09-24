@@ -119,20 +119,20 @@ pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::s
 /// marker, and needs none: the tag says what the class is, and it is on the
 /// declaration the checker resolved the type to.
 ///
-/// A class the *program* declares that extends one of these has no tag, and
-/// is not one of these; `extends_objc` is how lowering refuses it until such a
-/// subclass is built as an Objective-C class of its own.
+/// A class the *program* declares over one of these is one too: an
+/// Objective-C class of its own, registered under its own name when the
+/// program loads (`Program::objc_classes`), as Swift registers one.
 fn objc_class(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     let record = snapshot.types.get(ty.0 as usize)?;
     if !matches!(record.kind, TypeKind::Object { .. }) {
         return None;
     }
     let declaration = class_declaration(snapshot, record.symbol?)?;
-    let tag = objc_tag(snapshot, declaration)?.to_owned();
+    let tag = objc_name(snapshot, declaration)?;
     let mut ancestors = Vec::new();
     let mut at = base_class(snapshot, declaration);
     while let Some(base) = at {
-        ancestors.push(objc_tag(snapshot, base)?.to_owned());
+        ancestors.push(objc_name(snapshot, base)?);
         at = base_class(snapshot, base);
     }
     ancestors.reverse();
@@ -158,6 +158,27 @@ pub(crate) fn extends_objc(snapshot: &SemanticSnapshot, declaration: NodeId) -> 
 /// Whether a class declaration binds an Objective-C class (`@ntsClass`).
 pub(crate) fn is_objc_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
     objc_tag(snapshot, declaration).is_some()
+}
+
+/// The name the Objective-C runtime knows a class declaration by: a binding's
+/// `@ntsClass`, or a class the program writes over one, its own name.
+pub(crate) fn objc_name(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<String> {
+    if let Some(tag) = objc_tag(snapshot, declaration) {
+        return Some(tag.to_owned());
+    }
+    if !extends_objc(snapshot, declaration) {
+        return None;
+    }
+    syntax_children(snapshot, declaration).into_iter().find_map(|child| {
+        let node = snapshot.nodes.get(child.0 as usize)?;
+        matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER)).then(|| node.text.clone()).flatten()
+    })
+}
+
+/// The class a class declaration extends, where it is one this program's
+/// classes can name.
+pub(crate) fn superclass(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<NodeId> {
+    base_class(snapshot, declaration)
 }
 
 /// The `@ntsClass` a class declaration carries.

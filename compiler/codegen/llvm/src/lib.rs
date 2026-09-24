@@ -233,10 +233,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
             }
         }
     }
-    match bridges(program, platform) {
-        Ok(text_for_bridges) => text.push_str(&text_for_bridges),
-        Err(diagnostic) => diagnostics.push(diagnostic),
-    }
+    text.push_str(&entry_points(program, platform, &mut diagnostics));
     text.push_str(&bodies);
     let _ = writeln!(text, "\n{TBAA_TREE}");
     Emitted { text, diagnostics }
@@ -1210,6 +1207,125 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             }
         }
     }
+    Ok(out)
+}
+
+/// The functions foreign code calls into: the callback bridges, and the
+/// methods of the Objective-C classes the program declares, which share the
+/// two runtime calls around a callback and declare them once.
+fn entry_points(program: &Program, platform: Platform, diagnostics: &mut Vec<Diagnostic>) -> String {
+    let mut text = String::new();
+    let bridged = match bridges(program, platform) {
+        Ok(text_for_bridges) => {
+            let declared = text_for_bridges.contains("declare void @nts_callback_enter()");
+            text.push_str(&text_for_bridges);
+            declared
+        }
+        Err(diagnostic) => {
+            diagnostics.push(diagnostic);
+            false
+        }
+    };
+    match objc_classes(program, platform, bridged) {
+        Ok(classes) => text.push_str(&classes),
+        Err(diagnostic) => diagnostics.push(diagnostic),
+    }
+    text
+}
+
+/// The Objective-C classes the program writes over a binding's, as the C
+/// backend's `emit/objc.rs` writes them: an entry point per method -- `self`
+/// and `_cmd`, then the arguments converted to what the compiled method takes
+/// -- a table per class, and one constructor in `llvm.global_ctors`
+/// registering them all, base class first, before `main`.
+fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
+    let classes = nts_codegen_common::objc::classes_in_order(program);
+    let mut out = String::new();
+    if classes.is_empty() {
+        return Ok(out);
+    }
+    if !callbacks_declared {
+        out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
+    }
+    out.push_str("declare void @nts_objc_register_class(ptr, ptr, ptr, i32)\n");
+    let text = |out: &mut String, name: &str, value: &str| {
+        let _ = writeln!(out, "@{name} = private unnamed_addr constant [{} x i8] c\"{value}\\00\"", value.len() + 1);
+    };
+    let mut registrations = Vec::new();
+    for class in &classes {
+        let table = nts_codegen_common::objc::methods_symbol(&class.name);
+        let mut rows = Vec::new();
+        for (at, method) in class.methods.iter().enumerate() {
+            let Some(compiled) = program.funcs.iter().find(|func| func.name == method.function) else {
+                let missing = "an Objective-C method whose compiled function this program does not define";
+                // A method is one of the program's functions, so there is one
+                // to name the refusal by.
+                return match program.funcs.first() {
+                    Some(func) => Err(refuse(func, missing)),
+                    None => Ok(String::new()),
+                };
+            };
+            if compiled.params.len() + 1 != method.signature.parameters.len() {
+                return Err(refuse(compiled, "an Objective-C method whose entry point and compiled function disagree about arity"));
+            }
+            let imp = nts_codegen_common::objc::imp_symbol(&class.name, at);
+            let mut parameters = Vec::new();
+            let mut arguments = Vec::new();
+            let mut body = String::new();
+            for (slot, foreign) in method.signature.parameters.iter().enumerate() {
+                let from = foreign.abi(platform.abi);
+                let from_ty = ty_of(&from, compiled)?;
+                parameters.push(format!("{from_ty} %a{slot}"));
+                // `_cmd` is the runtime's; the compiled method never reads it.
+                if slot == 1 {
+                    continue;
+                }
+                let to = compiled.params[if slot == 0 { 0 } else { slot - 1 }].ty.clone();
+                let to_ty = ty_of(&to, compiled)?;
+                if from == to {
+                    arguments.push(format!("{to_ty} %a{slot}"));
+                } else if to == HirType::Bool {
+                    let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));
+                    arguments.push(format!("{to_ty} %p{slot}"));
+                } else {
+                    let instruction = conversion(&from, &to, compiled)?;
+                    let _ = writeln!(body, "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}");
+                    arguments.push(format!("{to_ty} %p{slot}"));
+                }
+            }
+            let want = method.signature.result.abi(platform.abi);
+            let have = compiled.return_type.clone();
+            let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
+            if want == HirType::Void {
+                let _ = writeln!(out, "define internal void @{imp}({}) nounwind {{", parameters.join(", "));
+                out.push_str(&body);
+                let _ = writeln!(out, "  call void @nts_callback_enter()\n  {call}\n  call void @nts_callback_leave()\n  ret void\n}}");
+            } else {
+                let want_ty = ty_of(&want, compiled)?;
+                let _ = writeln!(out, "define internal {want_ty} @{imp}({}) nounwind {{", parameters.join(", "));
+                out.push_str(&body);
+                let _ = writeln!(out, "  call void @nts_callback_enter()\n  %r = {call}\n  call void @nts_callback_leave()");
+                if have == want {
+                    let _ = writeln!(out, "  ret {want_ty} %r\n}}");
+                } else {
+                    let instruction = conversion(&have, &want, compiled)?;
+                    let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}", ty_of(&have, compiled)?);
+                }
+            }
+            text(&mut out, &format!("{imp}.sel"), &method.selector);
+            text(&mut out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
+            rows.push(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"));
+        }
+        let _ = writeln!(out, "@{table} = internal constant [{} x {{ ptr, ptr, ptr }}] [{}]", rows.len(), rows.join(", "));
+        text(&mut out, &format!("{table}.name"), &class.name);
+        text(&mut out, &format!("{table}.super"), &class.superclass);
+        registrations.push(format!(
+            "  call void @nts_objc_register_class(ptr @{table}.name, ptr @{table}.super, ptr @{table}, i32 {})",
+            class.methods.len()
+        ));
+    }
+    let _ = writeln!(out, "define internal void @nts_objc_register_classes() {{\n{}\n  ret void\n}}", registrations.join("\n"));
+    out.push_str("@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @nts_objc_register_classes, ptr null }]\n");
     Ok(out)
 }
 

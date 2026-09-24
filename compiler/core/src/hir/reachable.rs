@@ -366,6 +366,11 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
             .map(|func| func.name.as_str())
             .collect(),
     };
+    // A method of an Objective-C class the program registers is reached
+    // through the runtime, by selector, which no call in the IR names.
+    for class in &program.objc_classes {
+        names.extend(class.methods.iter().map(|method| method.function.as_str()));
+    }
     if !matches!(roots, Roots::Entry(_)) {
         for generator in &program.generators {
             if names.contains(&generator.constructor.as_str())

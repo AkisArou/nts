@@ -290,8 +290,8 @@ correctness does not depend on arm64 running by luck.
        send for a factory constructor (`@ntsSelector +numberWithInt:`).
      - Methods, properties and `static` members are messages.
      - `instanceof` is `isKindOfClass:`.
-     - A class the program writes over one is refused by name until S6 builds
-       it as an Objective-C class of its own.
+     - A class the program writes over one is an Objective-C class of its own
+       (S6, below).
      - `examples/interop/macos-classes` matches an ARC oracle on both
        backends, and its NoGc control differs only in `new`'s object living
        on.
@@ -421,6 +421,28 @@ correctness does not depend on arm64 running by luck.
        Eighteen are declared and not implemented: informal-protocol
        categories and one setter. Swift exposes them too.
      - A control with a bogus selector is caught.
+   - **S6, subclasses, first half landed.** `class Controller extends NSObject
+     { pressed(sender: NSObject): void { ... } }` is Swift's `class
+     Controller: NSObject`: an Objective-C class of the program's own,
+     registered under its own name before `main`, whose instances are the
+     runtime's objects.
+     - Each method's selector follows Swift's `@objc` rule (`pressed(sender)`
+       is `pressed:`), or `@ntsSelector` gives it.
+     - The runtime calls the method through an entry point the backend
+       builds over the compiled method (`self`, `_cmd`, then the arguments,
+       with clang's type encoding).
+     - A call the program writes goes straight to the compiled method, and
+       `new Controller()` is the inherited `alloc`/`init`.
+     - The lowering records it as data (`Program::objc_classes`), and each
+       backend emits the entry points, a table and one constructor, calling
+       the CF host's `nts_objc_register_class`. The JVM refuses it by name.
+     - `macos-window`'s button target is now this class. AppKit sends it
+       `pressed:` on both backends, the nested-loop arm included, which
+       replaces the runtime-API controller it had.
+     - Refused by name until the second half: a field (the runtime's object
+       has no room for one yet), a constructor, a static member, an accessor,
+       `super` calls, and protocols (`implements NSWindowDelegate`), which
+       will build on GTK's `__c_implements`.
    - **Against Swift, measured (2026-09-25).**
      `examples/interop/macos-bench/bench.sh` runs the same loops in
      TypeScript and in Swift (`reference/bench.swift`, `swiftc -O`) on the

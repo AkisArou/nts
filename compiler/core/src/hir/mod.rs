@@ -2099,6 +2099,26 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
     ty.0 >= CONSTRUCTOR_TOKENS
 }
 
+/// An Objective-C class the program declares (see [`Program::objc_classes`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObjcClass {
+    /// The runtime's name for it: the TypeScript class name.
+    pub name: String,
+    /// The runtime's name for the class it extends.
+    pub superclass: String,
+    pub methods: Vec<ObjcMethod>,
+}
+
+/// One method of an [`ObjcClass`]: the selector the runtime dispatches on,
+/// the compiled function that is its body, and the C signature the runtime
+/// calls it with -- `self`, `_cmd`, then the arguments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObjcMethod {
+    pub selector: String,
+    pub function: String,
+    pub signature: std::sync::Arc<native::FnPointer>,
+}
+
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {
@@ -2156,6 +2176,12 @@ pub struct Program {
     pub foreign: rustc_hash::FxHashMap<String, runtime::ForeignCall>,
     /// Layouts for every object type the program uses.
     pub layouts: Vec<Layout>,
+    /// The Objective-C classes the program writes over a binding's -- `class
+    /// Controller extends NSObject` -- which it registers when it loads, as
+    /// Swift registers its own. Each method's implementation is an entry point
+    /// the backend builds over the compiled function, taking `self` and
+    /// `_cmd` as the runtime passes them.
+    pub objc_classes: Vec<ObjcClass>,
     /// The distinct classes the program declares, and the types of each.
     ///
     /// **A layout is a shape and a class is an identity, and one field cannot

@@ -1708,6 +1708,19 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * - `nts_array_fill_from_nsarray` / `_strings_`: `into`, made `CFArrayGetCount`
  *   long by the caller, filled with the `NSArray`'s objects, each retained by
  *   `into`, or with a string of each. */
+/* A class the program writes over an Objective-C class (`class Controller
+ * extends NSObject`), registered when the program loads, as Swift registers
+ * one: each method's selector, its entry point -- which the compiler builds
+ * over the compiled method, taking `self` and `_cmd` as the runtime passes
+ * them -- and its type encoding. Defined by the CF host, like the bridging
+ * below; the compiler emits one call per class, base first. */
+typedef struct NtsObjcMethod {
+  const char *selector;
+  void (*implementation)(void);
+  const char *types;
+} NtsObjcMethod;
+void nts_objc_register_class(const char *name, const char *superclass,
+                             const NtsObjcMethod *methods, uint32_t count);
 void *nts_nsstring_of(const NtsString *string);
 NtsString *nts_string_of_nsstring(const void *string);
 void *nts_nsarray_of_objects(const NtsArray *array);
