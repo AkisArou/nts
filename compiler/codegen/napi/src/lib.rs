@@ -2921,6 +2921,7 @@ fn emit_module_init_prototype(
 fn emit_namespaces(
     program: &hir::Program,
     emitted: &[&str],
+    refused: &[String],
     skipped: &mut Vec<Skipped>,
     out: &mut String,
 ) {
@@ -2959,7 +2960,7 @@ fn emit_namespaces(
                 // Read after `module__init()`, for the reason the top-level
                 // value exports are: a deferred global holds its zero until
                 // module evaluation assigns it.
-                if let Some(text) = namespace_value(program, name_of, property) {
+                if let Some(text) = namespace_value(program, name_of, property, refused) {
                     out.push_str(&text.replace("__NTS_NS__", &object));
                     carried += 1;
                     continue;
@@ -3039,6 +3040,7 @@ fn declare_namespace_values(
     program: &hir::Program,
     values: &[(&hir::Global, &str, Cross)],
     functions: &[String],
+    refused: &[String],
 ) -> String {
     let mut out = String::new();
     let mut written: FxHashSet<&str> =
@@ -3046,7 +3048,7 @@ fn declare_namespace_values(
     for (_, properties) in &program.public_namespaces {
         for (property, emitted) in properties {
             if !written.insert(emitted.as_str())
-                || namespace_value(program, emitted, property).is_none()
+                || namespace_value(program, emitted, property, refused).is_none()
             {
                 continue;
             }
@@ -3074,15 +3076,24 @@ fn declare_namespace_values(
 ///
 /// `None` when the name is not an exported global this backend can carry, which
 /// is what makes the caller's decline honest rather than a guess.
-fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Option<String> {
+fn namespace_value(
+    program: &hir::Program,
+    emitted: &str,
+    property: &str,
+    refused: &[String],
+) -> Option<String> {
     let at = program
         .globals
         .iter()
         .position(|global| global.name == *emitted && global.exported)?;
     let global = &program.globals[at];
-    // The same rule the top-level value exports take: a global nothing writes
-    // has no value to publish, and publishing it binds the name to `undefined`.
-    if global.deferred && !program.global_is_initialized(u32::try_from(at).unwrap_or(u32::MAX)) {
+    // The same rule the top-level value exports take, in both halves: a global
+    // nothing writes has no value to publish, and a deferred one whose
+    // `module#init` the backend refused is written by nothing either.
+    if global.deferred
+        && (refused.iter().any(|name| name == hir::lower::MODULE_INIT)
+            || !program.global_is_initialized(u32::try_from(at).unwrap_or(u32::MAX)))
+    {
         return None;
     }
     // `class_names(program)` and not an empty set, which is what this passed
@@ -3164,7 +3175,28 @@ fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Opt
 /// zero until module evaluation runs, and for a reference that zero is a null
 /// pointer rather than a default -- the same ordering that had `punycode`'s
 /// `const delimiter = "-"` null when `decode` read it.
-fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
+fn value_exports<'a>(
+    program: &'a hir::Program,
+    refused: &[String],
+) -> Vec<(&'a hir::Global, &'a str, Cross)> {
+    // **A deferred global's value is written by `module#init`** -- that is what
+    // `deferred` means, per its own doc -- so when the *backend* declines
+    // `module#init`, nothing assigns any of them and every one would publish as
+    // `undefined`.
+    //
+    // This is the half the guard below could not see. `program.uncompiled` is
+    // what **lowering** refused, and it is what the other exports consult; a
+    // backend cascade is a different list, arriving as `NTS2009`, and
+    // `global_is_initialized` cannot see it either because it asks about HIR,
+    // where the store is present and fine. Two derivations of "does anything
+    // assign this", one per stage, and they disagreed for exactly one name.
+    //
+    // `process` published `env` as `undefined` this way, against a
+    // `shape.mjs` asserting "105 keys, all matching node", so every test
+    // reading `process.env.PATH` got a `TypeError` on `undefined` rather than a
+    // missing export it could report. `module#init` there is refused for
+    // `EventEmitter#on`, which has nothing to do with the environment.
+    let initializer_refused = refused.iter().any(|name| name == hir::lower::MODULE_INIT);
     let classes = class_names(program);
     let mut published = Vec::new();
     for (emitted, name) in &program.public_api {
@@ -3202,7 +3234,8 @@ fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
         // draws the line -- `let x: number;` at zero is what the source asked
         // for, `const delimiter = "-"` at zero is a null pointer.
         if global.deferred
-            && !program.global_is_initialized(u32::try_from(at).unwrap_or(u32::MAX))
+            && (initializer_refused
+                || !program.global_is_initialized(u32::try_from(at).unwrap_or(u32::MAX)))
         {
             continue;
         }
@@ -3307,7 +3340,7 @@ fn report_unrepresentable_exports(
     refused: &[String],
     skipped: &mut Vec<Skipped>,
 ) {
-    let values = value_exports(program);
+    let values = value_exports(program, refused);
     let already: FxHashSet<String> = skipped.iter().map(|s| s.function.clone()).collect();
     for (emitted, name) in &program.public_api {
         // A specific reason already given is the better one, and this pass
@@ -3445,6 +3478,24 @@ fn report_unrepresentable_exports(
                 program.uncompiled.iter().find(|(at, _)| at == name)
             {
                 format!("is exported and was not compiled: {why}")
+            // **A value whose initializer the backend refused.** `deferred`
+            // means "written by `module#init`", so when this backend declines
+            // that function nothing assigns the global and there is no value to
+            // publish. Named here rather than left to the sentence below,
+            // because the sentence below is about a *function* and this is not
+            // one -- `process`'s `env` read "is not a function this backend can
+            // name", which states the effect and sends the reader to an export
+            // table instead of to `module#init`'s own cascade.
+            } else if program
+                .globals
+                .iter()
+                .any(|global| global.name == *name && global.exported && global.deferred)
+                && refused.iter().any(|at| at == hir::lower::MODULE_INIT)
+            {
+                format!(
+                    "is a value written by `{}`, which this backend refused above",
+                    hir::lower::MODULE_INIT
+                )
             } else {
                 "is exported and is not a function this backend can name".to_owned()
             },
@@ -3698,12 +3749,12 @@ pub fn emit(program: &hir::Program) -> Addon {
 /// -- `path.win32.sep` is published on the namespace object rather than on
 /// `exports`. Without the extern the addon, a different translation unit from
 /// `program.c`, reports `use of undeclared identifier 'sep17'`.
-fn value_export_text(program: &hir::Program) -> (String, String) {
-    let values = value_exports(program);
+fn value_export_text(program: &hir::Program, refused: &[String]) -> (String, String) {
+    let values = value_exports(program, refused);
     let functions: Vec<String> =
         program.funcs.iter().map(|func| func.name.clone()).collect();
     let mut declarations = declare_value_exports(&values, &program.layouts, &functions);
-    declarations.push_str(&declare_namespace_values(program, &values, &functions));
+    declarations.push_str(&declare_namespace_values(program, &values, &functions, refused));
     let publishing = publish_value_exports(&values, &program.layouts, &functions);
     (declarations, publishing)
 }
@@ -3896,7 +3947,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
         // `export const constants: OsConstants` is a global, and without this
         // its helper was never emitted and the publication named a function
         // nothing declared.
-        .chain(value_exports(program).into_iter().map(|(global, _, _)| &global.ty))
+        .chain(value_exports(program, refused).into_iter().map(|(global, _, _)| &global.ty))
         .filter_map(|ty| match cross(ty, &program.layouts, &classes) {
             Some(Cross::Object(at)) => Some(at),
             // An `object[]` needs the struct *and* the helper the element loop
@@ -3984,7 +4035,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     let (class_inits, published_classes) =
         emit_classes(program, &classes, &ownership, release_managed, &mut skipped, &mut out);
 
-    let (value_declarations, value_publishing) = value_export_text(program);
+    let (value_declarations, value_publishing) = value_export_text(program, refused);
     out.push_str(&value_declarations);
 
     out.push_str("NAPI_MODULE_INIT() {\n");
@@ -4026,7 +4077,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     }
     out.push_str(&publish_functions(program, &wrapped));
     out.push_str(&class_inits);
-    emit_namespaces(program, &emitted, &mut skipped, &mut out);
+    emit_namespaces(program, &emitted, refused, &mut skipped, &mut out);
     out.push_str(&value_publishing);
     out.push_str("    return exports;\n}\n");
 

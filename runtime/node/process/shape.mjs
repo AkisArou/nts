@@ -14,11 +14,30 @@ export function shape(exports) {
   // A compiled module may not publish the instance yet, and when it does not,
   // the rest of what it publishes is still real.
   //
-  // This used to `return {}`. The compiled `process` publishes **`env` and
-  // nothing else** -- 105 keys, all matching node -- and neither `default` nor
-  // `process` is published, so the shape handed back an empty object and the
-  // environment was unreachable from every test. `hidden-exports.mjs` reported
-  // it as `NOT PUBLIC env: object`, which is what that instrument is for.
+  // This used to `return {}`, on the ground that the compiled `process`
+  // publishes `env` and that the environment was therefore reachable even with
+  // no instance. **That was measured and it was wrong, 2026-09-24.**
+  //
+  // `env` was published as a *name* and its value was `undefined`. The sentence
+  // that stood here -- "105 keys, all matching node" -- is a claim about the
+  // value, and nothing had ever read the value: `Object.keys(require(...))`
+  // answers `["env"]` either way, and `hidden-exports.mjs` asks about presence.
+  // So every test reading `process.env.PATH` got a `TypeError` on `undefined`
+  // rather than a missing export it could report, which is the
+  // present-and-throwing failure `querystring/shape.mjs` records four
+  // occurrences of.
+  //
+  // The cause was in the backend, not here: `env` is written by `module#init`,
+  // and `module#init` is refused with
+  // `NTS2009 ... because it calls EventEmitter#on`. The napi wrapper published
+  // the name anyway, because its guard against exactly this consulted what
+  // *lowering* refused and a backend cascade is a different list. Fixed there,
+  // so `process` now publishes **nothing** and says why -- which is the honest
+  // answer and the one a reader can act on.
+  //
+  // The early exit below therefore does hand back an empty object today. That
+  // is not this file's bug to fix: it is `module#init`'s cascade, and the
+  // sentence to keep is that a shape must not assert a value it never read.
   //
   // `stream/shape.mjs` carries the same correction, and `os/shape.mjs` records
   // the throwing version of it: "a shape that throws on a missing export
