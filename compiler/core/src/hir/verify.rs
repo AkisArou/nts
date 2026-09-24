@@ -158,6 +158,25 @@ pub enum Invalid {
         op: &'static str,
         found: HirType,
     },
+    /// A binary operation whose two operands are different types.
+    ///
+    /// **Nothing checked this**, and the check above deliberately skips `Eq` and
+    /// `Ne` because a tag comparison is legitimately erased on one side. Skipping
+    /// the *kind* check took the *agreement* check with it, so
+    /// `icmp eq i64 %field, i128 %bigint` passed verification: a `c_long` field
+    /// loads as `Int { bits: 64 }` and a `bigint` is `BigInt`, which is `i128`.
+    ///
+    /// C hid it behind an implicit conversion and emitted a working program.
+    /// LLVM's own verifier rejected the module — *"'%v1' defined with type 'i128'
+    /// but expected 'i64'"* — so the two backends did not agree and neither said
+    /// so at this layer. Found by the Windows lane while writing an unrelated
+    /// test.
+    MixedOperands {
+        func: String,
+        op: &'static str,
+        left: HirType,
+        right: HirType,
+    },
     /// A jump passed a different number of arguments than the target takes.
     ///
     /// The arguments *are* the edge's contribution to the target's parameters, so
@@ -1001,8 +1020,49 @@ fn check_operands(func: &Func, problems: &mut Vec<Invalid>) {
             BinOp::Min => "Math.min",
             BinOp::Max => "Math.max",
             // `Eq` and `Ne` read a tag on purpose; `Concat` takes strings.
-            BinOp::Eq | BinOp::Ne | BinOp::Concat => continue,
+            BinOp::Eq | BinOp::Ne | BinOp::Concat => "==",
         };
+        // **Both operands must agree on a machine width.** A different question
+        // from the kind check below, and asked by nothing.
+        //
+        // Scalars only, and that restriction is the whole of what makes the rule
+        // right. The hazard is an instruction that needs equal widths --
+        // `icmp eq i64 %a, i128 %b` is not one -- and only a scalar has a width
+        // to disagree about. **Two managed references of different `TypeId`s are
+        // a pointer comparison and entirely legitimate**: `a === b` between
+        // related object types is ordinary code, and `runtime/node` does it in
+        // `PriorityQueue#percolateDown`, `MemoryHttpCacheStore#touch` and
+        // `querystring`'s `stringify` among others. A first version of this rule
+        // asked for type *identity* and reported all of them.
+        //
+        // A shift's amount is exempt for the same reason it always was: it is a
+        // count rather than an operand of the same kind.
+        let (left, right) = (
+            func.values[lhs.0 as usize].ty.clone(),
+            func.values[rhs.0 as usize].ty.clone(),
+        );
+        // `HirType::is_scalar` is `Bool | Int | Float` and **excludes `BigInt`**,
+        // which is the one case this rule exists for -- so it is named here
+        // rather than borrowed. `HirType`'s own `may_hold_a_reference` neighbour
+        // writes `is_scalar() || ... || matches!(self, Self::BigInt)` for the same
+        // reason.
+        let has_a_width =
+            |ty: &HirType| ty.is_scalar() || matches!(ty, HirType::BigInt);
+        let widths_differ = left != right
+            && has_a_width(&left)
+            && has_a_width(&right)
+            && !matches!(bin, BinOp::Shl | BinOp::Shr | BinOp::UShr);
+        if widths_differ {
+            problems.push(Invalid::MixedOperands {
+                func: func.name.clone(),
+                op: machine,
+                left,
+                right,
+            });
+        }
+        if matches!(bin, BinOp::Eq | BinOp::Ne | BinOp::Concat) {
+            continue;
+        }
         for operand in [lhs, rhs] {
             let found = &func.values[operand.0 as usize].ty;
             if *found == HirType::Erased {

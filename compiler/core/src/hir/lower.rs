@@ -45253,6 +45253,11 @@ impl<'a> FuncBuilder<'a> {
         lhs: ValueId,
         rhs: ValueId,
     ) -> Result<(ValueId, ValueId), Diagnostic> {
+        // Widths first, and before the early return, because **every** binary
+        // operation needs its two sides to be one type -- not only the relational
+        // ones this function was written for. `Eq` took the early return and was
+        // the case that broke.
+        let (lhs, rhs) = self.agree_on_one_integer_width(id, lhs, rhs);
         if !matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge)
             || !self.compares_objects(lhs, rhs)
         {
@@ -45541,6 +45546,54 @@ impl<'a> FuncBuilder<'a> {
 
         let origin = self.origin(id);
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
+    }
+
+    /// Widen a native integer to the bigint beside it, so both sides are one type.
+    ///
+    /// **A `c_long` field is `Int { bits: 64 }` and a `bigint` is `BigInt`,**
+    /// which is `i128` — two representations of what TypeScript calls one type,
+    /// because `c_long` is a branded `bigint` whose *storage* is eight bytes.
+    /// `info.st_size === want` therefore produced a comparison between an `i64`
+    /// and an `i128`, and nothing reconciled them.
+    ///
+    /// C hid it: the implicit conversion is the correct widening, so the emitted
+    /// program worked. LLVM's own verifier rejected the module —
+    /// *"'%v1' defined with type 'i128' but expected 'i64'"* — so the two
+    /// backends disagreed, one of them silently, and `verify` was skipping the
+    /// question for `Eq` and `Ne` (see [`Invalid::MixedOperands`]). Found by the
+    /// Windows lane while writing an unrelated `c_long` test.
+    ///
+    /// Widening rather than truncating, and to the **bigint**: truncating would
+    /// answer a different question — `2n ** 70n === someLong` must be `false`,
+    /// not a comparison of low words — and it is the direction `conversion`
+    /// already documents, taking its signedness from the source so `UINT64_MAX`
+    /// widens to 18446744073709551615 rather than to -1.
+    ///
+    /// Only this one mix. Anything else left disagreeing is now a verifier
+    /// error rather than a silent divergence, which is what the new rule is for:
+    /// this fixes the case that exists and refuses to guess at cases that do not.
+    fn agree_on_one_integer_width(
+        &mut self,
+        id: NodeId,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> (ValueId, ValueId) {
+        let (left, right) = (
+            self.values[lhs.0 as usize].ty.clone(),
+            self.values[rhs.0 as usize].ty.clone(),
+        );
+        let origin = self.origin(id);
+        match (&left, &right) {
+            (HirType::Int { .. }, HirType::BigInt) => {
+                let widened = self.push(OpKind::Convert(lhs), HirType::BigInt, origin);
+                (widened, rhs)
+            },
+            (HirType::BigInt, HirType::Int { .. }) => {
+                let widened = self.push(OpKind::Convert(rhs), HirType::BigInt, origin);
+                (lhs, widened)
+            },
+            _ => (lhs, rhs),
+        }
     }
 
     /// A comparison against an absent literal whose answer is in the *type*.

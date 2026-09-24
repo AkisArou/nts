@@ -2941,11 +2941,12 @@ export function probe(seed: number): number {
     if (echo_long(low) === low) mask |= 1;
     if (echo_ulong(high) === high) mask |= 2;
     if (echo_long(wide) === ((BigInt(seed) * 5n) as c_long)) mask |= 4;
-    // The loaded value goes through `echo_long` before it is compared: a
-    // `c_long` field load compared directly is an `i64` against the `i128`
-    // HIR widens the other side to, which LLVM rejects on main on every ABI --
-    // a separate defect, reported rather than fixed here.
-    if (echo_long(slot[0].value) === echo_long(low) && slot[0].before === 1 && slot[0].after === 7) mask |= 8;
+    // Compared directly, which is the shape that could not be written until the
+    // `i64`-against-`i128` defect was fixed: a `c_long` field loads as an `i64`
+    // and a `c_long`-branded bigint is the `i128` it lives in, and nothing
+    // widened either side. LLVM rejected the module and C hid it behind an
+    // implicit conversion. `relational_operands` now widens to the bigint.
+    if (slot[0].value === low && slot[0].before === 1 && slot[0].after === 7) mask |= 8;
     return mask;
 }
 "#;

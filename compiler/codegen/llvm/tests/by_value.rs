@@ -389,7 +389,10 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
             "take",
             "void",
             "take(() => {});",
-            "without a native ABI type",
+            // Reworded when `native.rs`'s two messages were made noun phrases:
+            // they ended in advice and were being interpolated into "… is not
+            // supported by this lowering yet". `no_abi_type` builds both now.
+            "a type with no native ABI",
         ),
         (
             "escaping-result",

@@ -303,13 +303,13 @@ fn unbranded_parameter_and_return_are_separate_refusals() {
             "parameter",
             "declare function bad(n: number): c_int;",
             "bad(n)",
-            "parameter `n` without a native ABI type",
+            "parameter `n` (which wants a c_int or c_double brand, a boolean, or a string), a type with no native ABI",
         ),
         (
             "return",
             "declare function bad(n: c_int): number;",
             "bad(n as c_int)",
-            "return without a native ABI type",
+            "return (which wants a c_int or c_double brand, a boolean, or a string, or void), a type with no native ABI",
         ),
     ] {
         for unrelated in ["", "declare function witness(n: c_int): c_int;"] {

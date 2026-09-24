@@ -286,6 +286,33 @@ pub enum Role {
     ErrorSlot { converter: String },
 }
 
+/// "This has no native ABI type", **as a noun phrase**.
+///
+/// `hir::lower`'s `unsupported` interpolates a message into "… is not supported
+/// by this lowering yet", and its own doc states that rule and gives this exact
+/// failure as the example. These two messages ended in *advice*, so the Windows
+/// lane read
+///
+/// ```text
+/// use a c_int/c_double brand, boolean, or string is not supported by this
+/// lowering yet
+/// ```
+///
+/// which is a missing word rather than a diagnostic. The advice moves inside the
+/// sentence so it still ends on the thing that is unsupported, and both messages
+/// are built here so they cannot drift apart again.
+fn no_abi_type(function: &str, parameter: Option<&str>) -> String {
+    let wants = "a c_int or c_double brand, a boolean, or a string";
+    match parameter {
+        Some(name) => format!(
+            "foreign function `{function}`'s parameter `{name}` (which wants {wants}), a type with no native ABI"
+        ),
+        None => format!(
+            "foreign function `{function}`'s return (which wants {wants}, or void), a type with no native ABI"
+        ),
+    }
+}
+
 impl Function {
     /// Every C parameter in order: its role, and the TypeScript argument that
     /// feeds it -- `None` for the context slots no declaration spells.
@@ -1383,7 +1410,7 @@ impl Function {
             }
             let ty = abi_type(parameter.ty)
                 .filter(|ty| *ty != Type::Void)
-                .ok_or_else(|| format!("foreign function `{name}` parameter `{}` without a native ABI type; use a c_int/c_double brand, boolean, or string", parameter.name))?;
+                .ok_or_else(|| no_abi_type(&name, Some(&parameter.name)))?;
             parameters.push(ty);
             roles.push(Role::Plain);
         }
@@ -1394,7 +1421,7 @@ impl Function {
             (Some(text), _) => text,
             (None, Some((c, _))) => c.clone(),
             (None, None) => abi_type(signature.return_type)
-                .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, string, or void"))?,
+                .ok_or_else(|| no_abi_type(&name, None))?,
         })?;
         Ok(Self {
             name,
