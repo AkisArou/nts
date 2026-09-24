@@ -1613,6 +1613,10 @@ fn receivers_summary(census: &nts_core::receivers::Census) {
         excluded.member_not_declared
     );
     println!(
+        "excluded  module member       {:>7}  a name resolved at compile time, not a field",
+        excluded.module_member
+    );
+    println!(
         "unmeasured  untyped receiver   {:>7}  no recorded type; see `Excluded::untyped_receiver`",
         excluded.untyped_receiver
     );

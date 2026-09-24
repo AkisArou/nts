@@ -49,7 +49,7 @@ blind to the 77 refused sites that are the entire reason the question is open.
 
 | | field accesses | through an interface | |
 |---|---|---|---|
-| `runtime/node`, 185 files | 17,826 | **4,174** | **23.4%** |
+| `runtime/node`, 185 files | 17,521 | **4,174** | **23.8%** |
 | `benches/cases`, 61 cases | 694 | **10** | **1.4%** |
 
 Reads, writes and compound assignments together, because `FieldSet` goes through
@@ -128,10 +128,25 @@ wrong, not by reading:
   `describe(): string` and `describe: () => string` declare members of the same
   type and only the second is a field. 2,300 excluded on this.
 
-The instrument also reports what it could not examine, rather than rounding it
-down: 305 `unclear` accesses whose receiver the decomposer left undecomposed, and
-17 interfaces whose declared type carries no member list — the lower arm's blind
-spot, and the thing that decides whether that arm is a bound at all.
+**And the honesty row found the instrument's own defect, which is what it is
+for.** `unclear` — receivers whose type the decomposer had not reached — read
+**305**, and not one of them was an undecomposed type. They were **module
+namespaces**: 170 `zlib/src/constants`, 54 `fs/src/async`, 44
+`fs/src/constants`. `names_a_property` states the rule the census had missed —
+*"A module's member is not one: there is no receiver, so a call through it is a
+plain call and an access is a plain name"* — so `constants.Z_OK` resolves a name
+at compile time and loads no slot. The denominator was inflated by 305 accesses
+that never touch memory, and the first figure published was 23.4% where it is
+23.8%.
+
+They are excluded now and **`unclear` is zero**, which matters more than the
+digit: the census has no open bucket left, so what it cannot account for is
+nothing rather than 1.7% of its own subject. The numerator never moved, because a
+module is not an interface.
+
+What remains reported-rather-than-rounded is the lower arm's blind spot: 17
+interfaces whose declared type carries no member list, which is the thing that
+decides whether that arm is a bound at all.
 
 ## Verification
 

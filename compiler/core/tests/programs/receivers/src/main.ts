@@ -5,6 +5,7 @@
 // or not at all is visible as a count rather than as a wrong total.
 
 import type { Declared, Keyed, Mixed, Named, Uninhabitable } from "./shapes.js";
+import * as shapes from "./shapes.js";
 
 /** Covers `Declared` by saying so. */
 export class Sayer implements Declared {
@@ -100,4 +101,15 @@ export function declared(v: Declared): number {
 /** A class receiver reads at a fixed offset today and would keep doing so. */
 export function aClass(v: Quiet): string {
   return v.ownToItself;
+}
+
+/**
+ * A module member is not a field: `shapes.LIMIT` resolves a name at compile time
+ * and loads no slot, which is what `names_a_property` says outright.
+ *
+ * It must not reach the denominator. In `runtime/node` 305 accesses did, and
+ * every one of them was a module namespace -- `zlib/src/constants` alone was 170.
+ */
+export function throughAModule(n: number): number {
+  return shapes.LIMIT + n;
 }

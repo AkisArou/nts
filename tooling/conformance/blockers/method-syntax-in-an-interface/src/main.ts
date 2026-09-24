@@ -138,8 +138,19 @@
 //
 //      | | field accesses | through an interface | |
 //      |---|---|---|---|
-//      | `runtime/node`, 185 files | 17,826 | **4,174** | **23.4%** |
+//      | `runtime/node`, 185 files | 17,521 | **4,174** | **23.8%** |
 //      | `benches/cases`, 61 cases | 694 | **10** | **1.4%** |
+//
+//      The denominator was 17,826 for an hour, until the census's own honesty
+//      row corrected it. Its `unclear` bucket -- receivers whose type the
+//      decomposer had not reached -- read **305**, and every one turned out to be
+//      a **module namespace** rather than an undecomposed type: 170
+//      `zlib/src/constants`, 54 `fs/src/async`, 44 `fs/src/constants`.
+//      `names_a_property` says outright that "a module's member is not one: there
+//      is no receiver", so `constants.Z_OK` resolves a name at compile time and
+//      loads no slot. They are excluded now and `unclear` is **zero**, which is
+//      the useful part: the instrument has no open bucket left. The numerator
+//      never moved, because a module is not an interface.
 //
 //      The corpus was 184 files when this was first measured and 185 an hour
 //      later, **with both totals unchanged** -- which is the useful thing to know

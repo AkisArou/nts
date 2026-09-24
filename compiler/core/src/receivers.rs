@@ -267,6 +267,19 @@ pub struct Excluded {
     pub index_signature: u32,
     /// The receiver is a primitive, an array, `any` — not a generated struct.
     pub not_a_struct: u32,
+    /// The receiver is an imported module, so the access names no field.
+    ///
+    /// **Not a field access at all**, which `hir::lower`'s `names_a_property`
+    /// states outright: "A module's member is not one: there is no receiver, so
+    /// a call through it is a plain call and an access is a plain name."
+    /// `constants.Z_OK` resolves a name at compile time and loads no slot.
+    ///
+    /// Found by this census's own `unclear` row, which is what that row is for.
+    /// It read 305 in `runtime/node` and was not undecomposed object types at
+    /// all: 170 were `zlib/src/constants`, 54 `fs/src/async`, 44
+    /// `fs/src/constants` -- module namespaces, inflating the denominator with
+    /// accesses that never touch memory.
+    pub module_member: u32,
     /// The receiver's type declares no member of that name.
     ///
     /// Either a program the compiler refuses, or a name this derived wrongly —
@@ -545,6 +558,12 @@ fn record(
     known: &Inhabitable,
     out: &mut Census,
 ) {
+    // Before the type is consulted at all: a module member is not a field, so
+    // asking what its "receiver" is typed as is the wrong question.
+    if denotes_a_module(snapshot, object) {
+        out.excluded.module_member += 1;
+        return;
+    }
     let Some(&ty) = snapshot.node_types.get(&object) else {
         out.excluded.untyped_receiver += 1;
         return;
@@ -909,6 +928,44 @@ fn named_symbols(snapshot: &SemanticSnapshot, id: NodeId, out: &mut FxHashSet<u3
     for child in walk::children(snapshot, id) {
         named_symbols(snapshot, child, out);
     }
+}
+
+/// Whether this expression names an imported module rather than a value.
+///
+/// Mirrors `hir::lower`'s predicate of the same name, **including its
+/// asymmetry**, which is load-bearing and not obvious: the `NAMESPACE_IMPORT`
+/// test is asked of the **local** binding and the `SOURCE_FILE` test of what it
+/// denotes. Its comment says why -- "the module symbol is not reliably
+/// described: with a default export in the imported file it arrives with no
+/// declarations at all, and a predicate that looked for a source file among
+/// them said no. The import is the thing that is actually written down."
+///
+/// Following the alias for both halves would therefore miss every
+/// `import * as ns` of a module with a default export, which is most of
+/// `runtime/node`'s internal imports.
+fn denotes_a_module(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
+    let Some(local) = snapshot.nodes.get(id.0 as usize).and_then(|node| node.symbol) else {
+        return false;
+    };
+    let declared_as_a_namespace = snapshot
+        .symbols
+        .get(local.0 as usize)
+        .is_some_and(|record| {
+            record
+                .declarations
+                .iter()
+                .any(|at| walk::kind_of(snapshot, *at) == Some(syntax::NAMESPACE_IMPORT))
+        });
+    declared_as_a_namespace
+        || snapshot
+            .symbols
+            .get(walk::denoted(snapshot, local).0 as usize)
+            .is_some_and(|record| {
+                record
+                    .declarations
+                    .iter()
+                    .any(|at| walk::kind_of(snapshot, *at) == Some(syntax::SOURCE_FILE))
+            })
 }
 
 /// The property a type declares under a symbol with this description.

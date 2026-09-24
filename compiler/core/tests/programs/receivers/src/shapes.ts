@@ -37,3 +37,6 @@ export interface Uninhabitable {
 export interface Declared {
   declaredField: number;
 }
+
+/** A value, so the other file can import this module as a namespace. */
+export const LIMIT = 41;

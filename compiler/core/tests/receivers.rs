@@ -245,6 +245,25 @@ fn the_totals_are_what_the_cases_add_up_to() {
     assert_eq!(census.distinct_interface_members(), 10);
 }
 
+/// A module member is not a field access, so it must not reach the denominator.
+///
+/// `names_a_property` states it: "A module's member is not one: there is no
+/// receiver, so a call through it is a plain call and an access is a plain
+/// name." Found by this census's own `unclear` row, which read 305 in
+/// `runtime/node` and turned out to be module namespaces rather than
+/// undecomposed types -- 170 of them `zlib/src/constants`.
+///
+/// The paired assertion is the one that matters: the access is **counted as an
+/// exclusion** and the total is unchanged, so this distinguishes "excluded" from
+/// "never looked at".
+#[test]
+fn a_module_member_is_not_a_field_access() {
+    let Some(census) = counted() else { return };
+    assert_eq!(census.excluded.module_member, 1);
+    assert!(of(&census, "LIMIT").is_empty());
+    assert_eq!(census.total_fields(), 12);
+}
+
 /// **The density control**, and the reason this census may key on receiver
 /// expressions at all.
 ///
