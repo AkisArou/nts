@@ -3970,3 +3970,60 @@ void g_object_unref(void *o) { (void)o; }
         "a class not implementing the interface was accepted: {messages:?}"
     );
 }
+
+/// Native local storage used only in the block that made it -- written by C
+/// and read back at once, as the compiler's own `GError **` slot always is --
+/// is allowed in a loop and in an `async` function, where an address that
+/// outlives its use is not: kept across an iteration, or across an `await`.
+#[test]
+fn a_local_used_where_it_is_made_is_allowed_in_a_loop_and_an_async_function() {
+    let source = r#"
+import type { CNumber, Ptr } from "c:types";
+import { local } from "c:memory";
+/** @ntsNoEscape out */
+declare function fill(out: Ptr<CNumber<"int">>, value: CNumber<"int">): void;
+export function looped(): number {
+    let sum = 0;
+    for (let i = 1; i <= 4; i++) {
+        const slot = local<CNumber<"int">>();
+        fill(slot, i * 10);
+        sum += slot[0];
+    }
+    return sum;
+}
+export async function suspended(): Promise<number> {
+    const slot = local<CNumber<"int">>();
+    fill(slot, 7);
+    const before = slot[0];
+    await Promise.resolve();
+    return before;
+}
+"#;
+    let library = "void fill(int *out, int value) { *out = value; }\n";
+    let caller = counted_caller(r#"printf("%.0f", looped());"#, "looped();");
+    let Some((_, outputs)) = run_on_both_backends("confined", source, hir::Provider::NoGc, library, &caller) else { return; };
+    for output in outputs {
+        assert_eq!(output, "100");
+    }
+    // The address across an `await` is still refused, and so is one carried
+    // to the next iteration.
+    for (name, shape) in [
+        ("confined-across-await", "const before = slot[0];\n    await Promise.resolve();\n    return before;"),
+        ("confined-across-await", "await Promise.resolve();\n    return slot[0];"),
+    ] {
+        let edited = source.replace("const before = slot[0];\n    await Promise.resolve();\n    return before;", shape);
+        let Some((_, prepared)) = prepare(name, &edited) else { return; };
+        let refused = prepared.diagnostics.iter().any(|d| d.message.contains("native local storage in a suspending function"));
+        assert_eq!(refused, shape.starts_with("await"), "{shape}: {:?}", prepared.diagnostics);
+    }
+    let carried = source.replace(
+        "    for (let i = 1; i <= 4; i++) {\n        const slot = local<CNumber<\"int\">>();",
+        "    let kept = local<CNumber<\"int\">>();\n    for (let i = 1; i <= 4; i++) {\n        const slot = local<CNumber<\"int\">>();\n        sum += kept[0];\n        kept = slot;",
+    );
+    let Some((_, prepared)) = prepare("confined-carried", &carried) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("inside a loop")),
+        "an address carried to the next iteration was accepted: {:?}",
+        prepared.diagnostics
+    );
+}

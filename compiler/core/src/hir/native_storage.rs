@@ -28,9 +28,9 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
                 };
                 let reason = if count == 0 || size.and_then(|size| bytes.checked_add(size)).is_none_or(|total| total > STACK_LIMIT) {
                     Some("native local storage exceeds the 65536-byte function budget")
-                } else if suspends(func) {
+                } else if suspends(func) && !confined(func, block, value) {
                     Some("native local storage in a suspending function")
-                } else if in_cycle(func, BlockId(u32::try_from(block).unwrap_or(u32::MAX))) {
+                } else if in_cycle(func, BlockId(u32::try_from(block).unwrap_or(u32::MAX))) && !confined(func, block, value) {
                     Some("native local storage inside a loop; allocate it outside the loop")
                 } else if !borrowed(func, value, &borrows) {
                     Some("native local address escapes: it may not be returned, stored, captured, freed, or passed to a retaining or unclassified callee")
@@ -41,6 +41,44 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
         }
     }
     problems
+}
+
+/// Whether a local's every use is in the block that made it, before anything
+/// in that block can suspend, and none is on the block's way out.
+///
+/// Its storage is one slot per site in both backends, zeroed where the op
+/// runs, so what the loop and suspension refusals guard against is an
+/// *address* outliving the use it was made for: kept past the iteration, or
+/// past an `await`, where a resumed body has a different stack. A local used
+/// only here cannot be either. The compiler's own `GError **` slot for an
+/// `@ntsThrows` call is always one -- written by C, read back at once -- and
+/// refusing it refused every throwing `GLib` call in a loop or an `async`
+/// function: `for (let line = s.read_line_utf8(); …)`.
+fn confined(func: &Func, block: usize, value: ValueId) -> bool {
+    let body = &func.blocks[block];
+    if super::operands_of_terminator(&body.terminator).contains(&value) {
+        return false;
+    }
+    let Some(at) = body.ops.iter().position(|op| *op == value) else { return false };
+    let uses_here: Vec<usize> = body
+        .ops
+        .iter()
+        .enumerate()
+        .filter(|(_, op)| super::verify::operands(&func.value(**op).kind).contains(&value))
+        .map(|(index, _)| index)
+        .collect();
+    let used_elsewhere = func.blocks.iter().enumerate().any(|(other, b)| {
+        other != block
+            && (b.ops.iter().any(|op| super::verify::operands(&func.value(*op).kind).contains(&value))
+                || super::operands_of_terminator(&b.terminator).contains(&value))
+    });
+    if used_elsewhere {
+        return false;
+    }
+    let last = uses_here.last().copied().unwrap_or(at);
+    !body.ops[at..=last]
+        .iter()
+        .any(|op| matches!(func.value(*op).kind, OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. }))
 }
 
 fn live(func: &Func) -> impl Iterator<Item = ValueId> + '_ {

@@ -366,9 +366,12 @@ fn local_addresses_cannot_outlive_or_free_their_storage() {
         ("return-helper", "function alias(p: Ptr<c_int>): Ptr<c_int> { return p; } export function bad(): number { return alias(local<c_int>())[0]; }", "escapes"),
         ("store-helper", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } function keep(p: Ptr<c_int>): void { held = p; } export function bad(): void { keep(local<c_int>()); }", "module-scope variable"),
         ("free", "export function bad(): void { const p = local<c_int>(2); const q = addrOf(p[0]); free(q); }", "escapes"),
-        ("async", "export async function bad(): Promise<number> { const p = local<c_int>(); return p[0]; }", "suspending"),
-        ("generator", "export function* bad(): Generator<number> { const p = local<c_int>(); yield p[0]; }", "suspending"),
-        ("loop", "export function bad(n: number): number { let r=0; for(let i=0;i<n;i++) r+=local<c_int>()[0]; return r; }", "inside a loop"),
+        // A local used before the function can suspend, or within one
+        // iteration, is allowed (`native_storage::confined`); these use the
+        // address after the suspension, or carry it to the next iteration.
+        ("async", "export async function bad(): Promise<number> { const p = local<c_int>(); await 0; return p[0]; }", "suspending"),
+        ("generator", "export function* bad(): Generator<number> { const p = local<c_int>(); yield 1; yield p[0]; }", "suspending"),
+        ("loop", "export function bad(n: number): number { let r=0; let q=local<c_int>(); for(let i=0;i<n;i++) { const p=local<c_int>(); r+=q[0]; q=p; } return r; }", "inside a loop"),
         ("budget", "export function bad(): number { const a=local<c_int>(10000); const b=local<c_int>(10000); return a[0]+b[0]; }", "budget"),
         ("dynamic", "export function bad(n: number): number { return local<c_int>(n)[0]; }", "compile-time constant"),
         ("zero", "export function bad(): number { return local<c_int>(0)[0]; }", "positive fixed count"),
