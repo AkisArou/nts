@@ -4,8 +4,10 @@
 #
 # What each arm asserts:
 #
-# - **The build:** `nts build` exits 0 and refuses nothing. The witness
-#   compares every hand-written binding with <windows.h>.
+# - **The build:** `nts build` exits 0 and refuses nothing. Its Win32
+#   bindings are generated from Windows metadata by the build itself
+#   (`types/winmd`, `nts bind-winmd`), and the witness compares each one the
+#   program calls with <windows.h>.
 # - **The PE:** a console PE32+ for x86-64 that imports only Windows' own DLLs.
 # - **On Windows:** the program prints `expected.txt`: a window created and
 #   destroyed once, closed `by=typescript`. The control is inside the program:
@@ -29,6 +31,11 @@ for tool in zig clang llvm-objdump; do
     exit 0
   fi
 done
+# The Win32 metadata the bindings are generated from: fetched once, 24 MB.
+if ! NTS_WINDOWS_ROOT="$windows" "$root/tooling/windows/fetch-win32metadata.sh" >/dev/null 2>&1; then
+  echo "SKIP windows-window: no Win32 metadata, and it could not be fetched"
+  exit 0
+fi
 [ -f "$windows/x86_64/lib/libuv.a" ] ||
   NTS_WINDOWS_ROOT="$windows" "$root/tooling/windows/build-libuv.sh" x86_64 >/dev/null
 
@@ -36,7 +43,9 @@ mkdir -p "$out"
 log="$out/build.log"
 NTS_WINDOWS_ROOT="$windows" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
-if grep -q -e "refused" -e "NTS[0-9]" "$log"; then
+# The compiler's own refusals. The binder's summary lines ("129 refused (see
+# ...refused.txt)") are about the metadata, not this program.
+if grep -q -E "refused and are absent|NTS[0-9]{4}" "$log"; then
   cat "$log" >&2
   echo "windows-window: nts build refused part of the program and exited 0" >&2
   exit 1

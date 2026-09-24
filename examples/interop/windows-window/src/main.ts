@@ -13,16 +13,16 @@
 import { report } from "c:report";
 import { local } from "c:memory";
 import { malloc } from "c:stdlib";
-import type { ConstPtr, c_int, c_int64, c_uint, c_uint16, c_uint64, c_ulong } from "c:types";
+import type { ConstPtr, c_int, c_uint, c_uint16, c_uint64 } from "c:types";
+import type { HWND, LPARAM, LRESULT, WPARAM } from "c:Windows.Win32.Foundation";
+import { GetModuleHandleW } from "c:Windows.Win32.System.LibraryLoader";
 import {
-  CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, GetModuleHandleW,
+  CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
   KillTimer, PostQuitMessage, RegisterClassExW, SetTimer, TranslateMessage,
-} from "c:win32";
-import type { HWND, MSG, WNDCLASSEXW } from "c:win32";
-
-const WM_CREATE = 0x0001;
-const WM_DESTROY = 0x0002;
-const WM_TIMER = 0x0113;
+  WINDOW_EX_STYLE, WINDOW_STYLE,
+} from "c:Windows.Win32.UI.WindowsAndMessaging";
+import type { MSG, WNDCLASSEXW } from "c:Windows.Win32.UI.WindowsAndMessaging";
+import { WM_CREATE, WM_DESTROY, WM_TIMER } from "../types/winmd/Windows.Win32.UI.WindowsAndMessaging.values.ts";
 
 let created = 0;
 let destroyed = 0;
@@ -47,7 +47,7 @@ async function closeLater(hwnd: HWND): Promise<void> {
   DestroyWindow(hwnd);
 }
 
-function procedure(hwnd: HWND, message: c_uint, wParam: c_uint64, lParam: c_int64): c_int64 {
+function procedure(hwnd: HWND, message: c_uint, wParam: WPARAM, lParam: LPARAM): LRESULT {
   if (message === WM_CREATE) created++;
   if (message === WM_TIMER) {
     ticks++;
@@ -56,12 +56,12 @@ function procedure(hwnd: HWND, message: c_uint, wParam: c_uint64, lParam: c_int6
       KillTimer(hwnd, wParam);
       DestroyWindow(hwnd);
     }
-    return 0n as c_int64;
+    return 0n as LRESULT;
   }
   if (message === WM_DESTROY) {
     destroyed++;
     PostQuitMessage(0 as c_int);
-    return 0n as c_int64;
+    return 0n as LRESULT;
   }
   return DefWindowProcW(hwnd, message, wParam, lParam);
 }
@@ -81,7 +81,7 @@ function main(): void {
     report("RegisterClassExW failed");
     return;
   }
-  const hwnd = CreateWindowExW(0n as c_ulong, "NtsWindow", "nts", 0n as c_ulong,
+  const hwnd = CreateWindowExW(WINDOW_EX_STYLE.WS_EX_LEFT, "NtsWindow", "nts", WINDOW_STYLE.WS_OVERLAPPED,
     0 as c_int, 0 as c_int, 320 as c_int, 240 as c_int, null, null, instance, null);
   if (hwnd === null) {
     report("CreateWindowExW failed");
