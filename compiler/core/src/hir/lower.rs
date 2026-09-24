@@ -9782,10 +9782,13 @@ fn representation_within(
     // covers both, so the test has to name the container. `Set<undefined>` is
     // left out for want of a program that writes one.
     result.filter(|ty| match ty {
-        HirType::Managed(ManagedType::Array(element)) => !matches!(
-            element.as_ref(),
-            HirType::NativePointer(_) | HirType::Void | HirType::Never
-        ),
+        // A counted foreign object is an element the array owns a count of
+        // (`NTS_ARRAY_FOREIGN`); a C handle nobody counts is not one it can own.
+        HirType::Managed(ManagedType::Array(element)) => match element.as_ref() {
+            HirType::NativePointer(_) => element.counting().is_some(),
+            HirType::Void | HirType::Never => false,
+            _ => true,
+        },
         // A promise has a slot of its own for a C handle
         // (`nts_promise_fulfill_pointer`), outside its value; a set has none.
         HirType::Managed(ManagedType::Set(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
@@ -16822,7 +16825,7 @@ impl<'a> FuncBuilder<'a> {
         // and drawn here rather than emitting a copy that would read the wrong
         // width.
         let helper = match element {
-            HirType::Managed(_) => "nts_array_concat_ref",
+            counted if holds_counted(counted) => counted_helper(counted, Counts::Concat),
             HirType::Float { bits: 64 } => "nts_array_concat",
             // `unknown[]`, which is what a variadic forwarder takes:
             // `emit(type, ...args: unknown[])`. Sixteen bytes an element and a
@@ -19184,7 +19187,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
         };
         let append = match *element_ty {
-            HirType::Managed(_) => "nts_array_push_ref",
+            ref counted if holds_counted(counted) => "nts_array_push_ref",
             HirType::Float { bits: 64 } => "nts_array_push",
             // A narrower element is a *typed* array being built, which
             // `Array.from` does not do -- `Uint8Array.from` does, and is its
@@ -27717,7 +27720,7 @@ impl<'a> FuncBuilder<'a> {
                     return Err(self.unsupported(id, "an array length on something else"));
                 };
                 let helper = match *element {
-                    HirType::Managed(_) => "nts_array_set_length_ref",
+                    ref counted if holds_counted(counted) => counted_helper(counted, Counts::SetLength),
                     HirType::Erased => "nts_array_set_length_value",
                     _ => "nts_array_set_length",
                 };
@@ -33860,7 +33863,7 @@ impl<'a> FuncBuilder<'a> {
             _ => return Err(self.unrepresentable(elements[0], "an array literal")),
         };
         let (push, extend) = match &element_ty {
-            HirType::Managed(_) => ("nts_array_push_ref", "nts_array_extend_ref"),
+            counted if holds_counted(counted) => ("nts_array_push_ref", counted_helper(counted, Counts::Extend)),
             HirType::Float { bits: 64 } => ("nts_array_push", "nts_array_extend"),
             _ => {
                 return Err(self.unsupported(elements[0], "a spread into a typed array"));
@@ -33972,7 +33975,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(inner, "a copy of something that is not an array"));
         };
         let helper = match *element {
-            HirType::Managed(_) => "nts_array_slice_ref",
+            ref counted if holds_counted(counted) => counted_helper(counted, Counts::Slice),
             HirType::Float { bits: 64 } => "nts_array_slice",
             // **An erased element is not a typed array**, and saying so cost a
             // reader nothing until arrays of them existed. `[...xs]` where
@@ -43095,7 +43098,8 @@ impl<'a> FuncBuilder<'a> {
         if !matches!(
             element,
             HirType::Float { bits: 64 } | HirType::Managed(_) | HirType::Bool
-        ) {
+        ) && !holds_counted(element)
+        {
             return Err(self.unsupported(id, &format!("`{name}` on a typed array")));
         }
 
@@ -43137,9 +43141,8 @@ impl<'a> FuncBuilder<'a> {
         //
         // `pop` and `at` answer the element type directly here rather than an
         // erased value: `T | undefined` for a reference *is* the null pointer.
-        if let HirType::Managed(managed) = element.clone() {
-            return self
-                .lower_reference_array_method(id, member, &name, receiver, &managed, arguments);
+        if holds_counted(element) {
+            return self.lower_reference_array_method(id, member, &name, receiver, element, arguments);
         }
         if !matches!(element, HirType::Float { .. } | HirType::Int { .. }) {
             return Err(self.unsupported(member, "an array method on a non-numeric array"));
@@ -43455,7 +43458,11 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         let (slice, reverse) = if references {
-            ("nts_array_slice_ref", "nts_array_reverse_ref")
+            let slice = match ty {
+                HirType::Managed(ManagedType::Array(element)) => counted_helper(element, Counts::Slice),
+                _ => "nts_array_slice_ref",
+            };
+            (slice, "nts_array_reverse_ref")
         } else {
             ("nts_array_slice", "nts_array_reverse")
         };
@@ -43484,12 +43491,12 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         name: &str,
         receiver: ValueId,
-        element: &ManagedType,
+        element: &HirType,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
-        let of_element = HirType::Managed(element.clone());
+        let of_element = element.clone();
         let array = HirType::Managed(ManagedType::Array(Box::new(of_element.clone())));
-        let text = matches!(element, ManagedType::String);
+        let text = matches!(element, HirType::Managed(ManagedType::String));
         if name == "push" {
             return self.lower_pushes(id, "nts_array_push_ref", receiver, arguments, &of_element);
         }
@@ -43534,7 +43541,7 @@ impl<'a> FuncBuilder<'a> {
         let (helper, arity, ty) = match name {
             "pop" => ("nts_array_pop_ref", 0, of_element),
             "shift" => ("nts_array_shift_ref", 0, of_element),
-            "at" => ("nts_array_at_ref", 1, of_element),
+            "at" => (counted_helper(element, Counts::At), 1, of_element),
             // The needle's own type picks the variant, not only the array's.
             //
             // `validateOneOf(value: unknown, name: string, oneOf: string[])`
@@ -43558,8 +43565,8 @@ impl<'a> FuncBuilder<'a> {
             }
             "includes" if text => ("nts_array_includes_str", 1, HirType::Bool),
             "includes" => ("nts_array_includes_ref", 1, HirType::Bool),
-            "concat" => ("nts_array_concat_ref", 1, array.clone()),
-            "slice" => ("nts_array_slice_ref", 2, array.clone()),
+            "concat" => (counted_helper(element, Counts::Concat), 1, array.clone()),
+            "slice" => (counted_helper(element, Counts::Slice), 2, array.clone()),
             "splice" => ("nts_array_splice_ref", 2, array),
             "reverse" => ("nts_array_reverse_ref", 0, array),
             _ => {
@@ -43977,7 +43984,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let helper = match element {
             HirType::Bool => "nts_array_fill_bool",
-            HirType::Managed(_) => "nts_array_fill_ref",
+            counted if holds_counted(counted) => counted_helper(counted, Counts::Fill),
             _ => return Err(self.unsupported(id, "a `fill` on an array of this element type")),
         };
         let [value] = arguments else {
@@ -44353,7 +44360,7 @@ impl<'a> FuncBuilder<'a> {
                     .ok_or_else(|| self.unrepresentable(id, "a `find` result"))?;
                 let helper = match &ty {
                     HirType::Erased => "nts_array_at_value",
-                    HirType::Managed(_) => "nts_array_at_ref",
+                    counted if holds_counted(counted) => counted_helper(counted, Counts::At),
                     _ => "nts_array_at",
                 };
                 Ok(self.runtime_call(helper, vec![receiver, at], ty, origin))
@@ -44567,7 +44574,7 @@ impl<'a> FuncBuilder<'a> {
             (Iteration::Filter, Some(array), _) => CallbackResult::Keep {
                 array,
                 element: value,
-                push: if matches!(element, HirType::Managed(_)) {
+                push: if holds_counted(element) {
                     "nts_array_push_ref"
                 } else {
                     "nts_array_push"
@@ -48158,6 +48165,48 @@ mod native_memory;
 
 /// An Objective-C property: its declaration, and the selectors that read and
 /// write it. `setter` is `None` for a `readonly` one.
+/// Whether an array's elements are counted -- a managed reference, or a
+/// counted foreign object (`NTS_ARRAY_FOREIGN`) -- so that the runtime helpers
+/// which move elements (`push`, `pop`, `shift`, `splice`, `reverse`) are the
+/// `_ref` ones, a move changing no count.
+fn holds_counted(element: &HirType) -> bool {
+    matches!(element, HirType::Managed(_)) || element.counting().is_some()
+}
+
+/// A runtime helper that duplicates or drops an array's counted elements.
+#[derive(Clone, Copy)]
+enum Counts {
+    At,
+    Slice,
+    Concat,
+    Extend,
+    Fill,
+    SetLength,
+}
+
+/// The helper that performs `op` on an array of counted elements: the `_ref`
+/// one for managed references, the `_foreign` one -- counting through the
+/// family's `NtsFamilyOps` -- for foreign objects. One answer for every site
+/// that duplicates or drops an element, so the two families cannot be told
+/// apart differently in two places.
+fn counted_helper(element: &HirType, op: Counts) -> &'static str {
+    let foreign = !matches!(element, HirType::Managed(_)) && element.counting().is_some();
+    match (op, foreign) {
+        (Counts::At, false) => "nts_array_at_ref",
+        (Counts::At, true) => "nts_array_at_foreign",
+        (Counts::Slice, false) => "nts_array_slice_ref",
+        (Counts::Slice, true) => "nts_array_slice_foreign",
+        (Counts::Concat, false) => "nts_array_concat_ref",
+        (Counts::Concat, true) => "nts_array_concat_foreign",
+        (Counts::Extend, false) => "nts_array_extend_ref",
+        (Counts::Extend, true) => "nts_array_extend_foreign",
+        (Counts::Fill, false) => "nts_array_fill_ref",
+        (Counts::Fill, true) => "nts_array_fill_foreign",
+        (Counts::SetLength, false) => "nts_array_set_length_ref",
+        (Counts::SetLength, true) => "nts_array_set_length_foreign",
+    }
+}
+
 struct ObjcProperty {
     declaration: NodeId,
     /// A class property, sent to the class.

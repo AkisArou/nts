@@ -4,6 +4,25 @@
 #include <stdio.h>
 
 static __weak id watched;
+static __weak id replaced;
+static __weak id held;
+
+/* Swift's `[NSNumber]`: the same operations on an NSMutableArray under ARC. */
+static void arrays(void) {
+  NSMutableArray<NSNumber *> *numbers = [@[ [NSNumber numberWithInt:1], [NSNumber numberWithInt:2] ] mutableCopy];
+  [numbers addObject:[NSNumber numberWithInt:3]];
+  NSArray<NSNumber *> *tail = [numbers subarrayWithRange:NSMakeRange(1, numbers.count - 1)];
+  numbers[0] = [NSNumber numberWithInt:10];
+  int total = 0;
+  for (NSNumber *n in numbers) total += n.intValue;
+  printf("arrays %lu %lu %d %d %lu\n", (unsigned long)numbers.count, (unsigned long)tail.count, total, tail[0].intValue,
+         (unsigned long)[numbers indexOfObjectIdenticalTo:tail[1]]);
+  NSMutableArray *objects = [NSMutableArray arrayWithObject:[[NSObject alloc] init]];
+  replaced = objects[0];
+  objects[0] = [[NSObject alloc] init];
+  printf("replaced %s\n", replaced ? "alive" : "gone");
+  held = objects[0];
+}
 
 static void made(void) {
   NSObject *object = [[NSObject alloc] init];
@@ -34,6 +53,10 @@ int main(void) {
     [operation cancel];
     printf("optional %s %s absent unnamed\n", operation.isCancelled ? "true" : "false", operation.name.UTF8String);
   }
+  @autoreleasepool {
+    arrays();
+  }
+  printf("array %s\n", held ? "alive" : "gone");
   @autoreleasepool {
     made();
   }

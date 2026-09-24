@@ -3081,8 +3081,8 @@ fn construction_hole(name: &str, descriptor: &str) -> String {
 }
 
 /// A layout's foreign slots: the fields holding a counted foreign object, each
-/// with its family (`NTS_FAMILY_*`) and its family's release, which `nts_free`
-/// calls when the object dies. Answers how many, and the table's name (`0` for
+/// with its family (`NTS_FAMILY_*`) and its family's `NtsFamilyOps`, whose
+/// release `nts_free` calls when the object dies. Answers how many, and the table's name (`0` for
 /// none).
 fn foreign_slot_table(
     writer: &mut CodeWriter,
@@ -3095,9 +3095,9 @@ fn foreign_slot_table(
         .iter()
         .enumerate()
         .filter_map(|(at, field)| {
-            let release = field.ty.counting()?.release;
+            let ops = nts_codegen_common::counting::ops_name(&field.ty.counting()?);
             let family = field.ty.counted_family().map_or(0, nts_core::hir::native::Family::runtime_id);
-            Some(format!("{{ offsetof({name}, {}), {family}u, {release} }}", c_member_at(layout, at)))
+            Some(format!("{{ offsetof({name}, {}), {family}u, &{ops} }}", c_member_at(layout, at)))
         })
         .collect();
     if slots.is_empty() {
@@ -3168,7 +3168,9 @@ fn descriptors_reached(bodies: &[(String, CodeWriter, &Func)]) -> Vec<&'static s
             };
             // Arrays of references share the runtime's own descriptor: every
             // reference is a pointer, so they are all the same shape.
-            if element.is_managed() {
+            // An array of foreign objects has its family's descriptor, which
+            // `counting_declarations` writes beside the family's operations.
+            if element.is_managed() || nts_codegen_common::counting::counted_element(element).is_some() {
                 continue;
             }
             if let Ok(spelling) = c_type(element, &op.origin)
@@ -3555,6 +3557,9 @@ fn element_descriptor(array: &HirType, origin: &Origin) -> Result<String, Diagno
     if element.is_managed() {
         return Ok("nts_desc_ref".to_owned());
     }
+    if let Some(counting) = nts_codegen_common::counting::counted_element(element) {
+        return Ok(nts_codegen_common::counting::array_descriptor_name(&counting));
+    }
     Ok(descriptor_name(c_type(element, origin)?))
 }
 
@@ -3811,6 +3816,10 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         // `&'static str` where a named pointee does not: those are built from
         // the layout's own tag and go through `pointer_type`.
         HirType::NativePointer(nts_core::hir::native::Pointee::Void) => "void *",
+        // A counted foreign object, stored in an array's slot
+        // (`NTS_ARRAY_FOREIGN`): one width for every family, and a read
+        // converts to the handle's own pointer type as C does implicitly.
+        counted @ HirType::NativePointer(_) if counted.counting().is_some() => "void *",
         HirType::NativePointer(_) => return Err(Diagnostic::error("NTS2006", "an opaque pointer needs its declared C pointee name", origin.location)),
         HirType::Void => "void",
         HirType::Bool => "bool",
@@ -5698,6 +5707,8 @@ mod objc;
 /// that does not take NULL quietly, the guard every count goes through
 /// (`Counting::called`).
 fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+    let held = nts_codegen_common::counting::held(program);
+    let arrays = nts_codegen_common::counting::array_families(program);
     for counting in nts_codegen_common::counting::foreign(program) {
         writer.line(origin, format!("extern void *{}(void *object);", counting.retain));
         writer.line(origin, format!("extern void {}(void *object);", counting.release));
@@ -5717,6 +5728,31 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
                     "static inline void {}(void *object) {{ if (object) {}(object); }}",
                     nts_core::hir::native::Counting::guarded(counting.release),
                     counting.release
+                ),
+            );
+        }
+        // How the runtime counts one of these where it holds it: a field
+        // being freed, an array's elements. Both functions take NULL.
+        if !held.contains(&counting) {
+            continue;
+        }
+        let ops = nts_codegen_common::counting::ops_name(&counting);
+        writer.line(
+            origin,
+            format!("static const NtsFamilyOps {ops} = {{ {}, {} }};", counting.called(true), counting.called(false)),
+        );
+        // An array of this family's objects: its one foreign slot names the
+        // family, which the collector reads for holders, and its operations.
+        if let Some((_, family)) = arrays.iter().find(|(known, _)| *known == counting) {
+            let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
+            let cyclic = u32::from(family.holds_closures());
+            let family_name = *family;
+            let family = family.runtime_id();
+            writer.line(origin, format!("static const NtsForeignSlot {descriptor}_slot[] = {{ {{ 0u, {family}u, &{ops} }} }};"));
+            writer.line(
+                origin,
+                format!(
+                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name:?}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot }};"
                 ),
             );
         }

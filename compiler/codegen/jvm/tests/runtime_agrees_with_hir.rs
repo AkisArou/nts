@@ -226,4 +226,9 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 88 for `nts_string_to_utf16` and `nts_utf16_release`, which hand a
 /// `Utf16String` to a C function as `const uint16_t *`: native calls again.
-const REFUSED_FLOOR: usize = 88;
+///
+/// 93 for the `_foreign` array helpers (`at`, `concat`, `extend`,
+/// `set_length`, `slice`), which count an array's elements through a foreign
+/// family's operations: an array of Objective-C objects or `GObject`s, which
+/// only a binding's handles produce.
+const REFUSED_FLOOR: usize = 93;

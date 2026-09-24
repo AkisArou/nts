@@ -12,8 +12,10 @@
 #   property, and `instanceof` as `isKindOfClass:`. The object `new` made is
 #   gone once nothing holds it, so its +1 was owned and given back once.
 #   stderr is empty.
-# - **Control:** under NoGc that object outlives its last use, so the one
-#   lifetime line, and only that, differs from the oracle.
+#   Arrays of objects own a count of each element: an overwritten one is gone
+#   at once, and the array's go with it.
+# - **Control:** under NoGc nothing is given back, so the three lifetime
+#   lines, and only those, differ from the oracle.
 # - **arm64:** built and linked, never run here (tooling/apple/vm.md).
 #
 # Needs a macOS SDK. Without one it prints SKIP; with no Mac reachable it
@@ -77,8 +79,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 12 ] ||
-  { echo "macos-classes: the oracle printed $(wc -l <"$out/expected.txt") lines, not 12" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 15 ] ||
+  { echo "macos-classes: the oracle printed $(wc -l <"$out/expected.txt") lines, not 15" >&2; exit 1; }
 
 run_quietly "$out/classes/macos-13-x86_64/classes" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"
@@ -111,9 +113,9 @@ nogc="$out/nogc"
 build "$nogc"
 run_quietly "$nogc/classes/macos-13-x86_64/classes" "$out/nogc-actual"
 differs=$(diff "$out/expected.txt" "$out/nogc-actual.txt" | grep '^>' | tr '\n' '|')
-if [ "$differs" != "> object alive|" ]; then
-  echo "macos-classes: under NoGc the difference from the oracle was [$differs], not the lifetime line" >&2
+if [ "$differs" != "> replaced alive|> array alive|> object alive|" ]; then
+  echo "macos-classes: under NoGc the difference from the oracle was [$differs], not the three lifetime lines" >&2
   exit 1
 fi
-echo "control: under NoGc the object new made outlives its last use, and nothing else differs"
+echo "control: under NoGc the objects outlive their last use, and nothing else differs"
 

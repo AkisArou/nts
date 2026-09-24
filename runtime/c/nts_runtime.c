@@ -634,13 +634,28 @@ static void nts_free_storage(NtsHeader *object) {
  * finds nothing to give up twice. */
 static void nts_release_foreign(NtsHeader *object) {
   const NtsDescriptor *descriptor = object->descriptor;
+  /* An array of them: every element, through the one slot's family. */
+  if (descriptor->kind == NTS_KIND_ARRAY &&
+      descriptor->element == NTS_ARRAY_FOREIGN) {
+    NtsArray *array = (NtsArray *)object;
+    void **items = NTS_ITEMS(array, void *);
+    const NtsFamilyOps *ops = descriptor->foreign_slots[0].ops;
+    for (uint32_t at = 0; at < array->header.length; at++) {
+      void *held = items[at];
+      if (held) {
+        items[at] = 0;
+        ops->release(held);
+      }
+    }
+    return;
+  }
   for (uint32_t index = 0; index < descriptor->foreign; index++) {
     const NtsForeignSlot *slot = &descriptor->foreign_slots[index];
     void **field = (void **)((unsigned char *)object + slot->offset);
     void *held = *field;
     if (held) {
       *field = 0;
-      slot->release(held);
+      slot->ops->release(held);
     }
   }
 }
@@ -725,6 +740,25 @@ typedef enum { NTS_EDGES_OWNED, NTS_EDGES_TRACED } NtsEdges;
  * whose family holds closures, to that object's node, where it has one. */
 static void nts_each_holder(NtsHeader *object, void (*visit)(NtsHeader *)) {
   const NtsDescriptor *descriptor = object->descriptor;
+  /* An array of them: each element, when its family holds closures. */
+  if (descriptor->kind == NTS_KIND_ARRAY &&
+      descriptor->element == NTS_ARRAY_FOREIGN) {
+    uint32_t family = descriptor->foreign_slots[0].family;
+    const NtsHolders *holders =
+        family < NTS_FAMILIES ? nts_holders[family] : NULL;
+    if (holders == NULL) {
+      return;
+    }
+    const NtsArray *array = (const NtsArray *)object;
+    void *const *items = NTS_ITEMS(array, void *);
+    for (uint32_t at = 0; at < array->header.length; at++) {
+      NtsHeader *node = items[at] ? holders->node(items[at]) : NULL;
+      if (node != NULL) {
+        visit(node);
+      }
+    }
+    return;
+  }
   for (uint32_t index = 0; index < descriptor->foreign; index++) {
     const NtsForeignSlot *slot = &descriptor->foreign_slots[index];
     const NtsHolders *holders =
@@ -1839,6 +1873,12 @@ NtsValue nts_array_element(NtsValue array, double index) {
     nts_retain(element);
     return nts_value_of_reference(element, nts_tag_of_reference(element));
   }
+  case NTS_ARRAY_FOREIGN:
+    /* No tag holds a foreign object, and the lowering never erases one. */
+    fprintf(stderr,
+            NTS_REFUSED "an erased read of `%s`, an array of foreign objects\n",
+            descriptor->name ? descriptor->name : "?");
+    abort();
   case NTS_ARRAY_BOOL:
     return nts_value_of_boolean(NTS_ITEMS(object, bool)[at]);
   case NTS_ARRAY_FLOAT:
@@ -2117,14 +2157,35 @@ void *nts_array_pop_ref(NtsArray *a) {
   return NTS_ITEMS(a, void *)[a->header.length];
 }
 
-void *nts_array_at_ref(const NtsArray *a, double at) {
+/* How an array of counted elements counts them: a managed reference through
+ * the runtime, a foreign object through its family (`NTS_ARRAY_FOREIGN`). The
+ * helpers below that duplicate or drop elements are written once over this
+ * pair and instantiated for each: `static inline` with a constant argument, so
+ * the `_ref` ones compile to what they were before the pair existed. */
+static inline void *nts_count_managed(void *element) {
+  nts_retain((NtsHeader *)element);
+  return element;
+}
+static inline void nts_uncount_managed(void *element) {
+  nts_release((NtsHeader *)element);
+}
+static inline const NtsFamilyOps *nts_array_family(const NtsArray *a) {
+  return a->header.descriptor->foreign_slots[0].ops;
+}
+
+static inline void *nts_array_at_counted(const NtsArray *a, double at,
+                                         void *(*retain)(void *)) {
   double offset = nts_array_offset(a, at);
   if (offset < 0) {
     return NULL;
   }
-  void *element = NTS_ITEMS(a, void *)[(uint32_t)offset];
-  nts_retain((NtsHeader *)element);
-  return element;
+  return retain(NTS_ITEMS(a, void *)[(uint32_t)offset]);
+}
+void *nts_array_at_ref(const NtsArray *a, double at) {
+  return nts_array_at_counted(a, at, nts_count_managed);
+}
+void *nts_array_at_foreign(const NtsArray *a, double at) {
+  return nts_array_at_counted(a, at, nts_array_family(a)->retain);
 }
 
 /* `indexOf` and `includes` by identity, which is what `===` is for an object.
@@ -3092,16 +3153,26 @@ NtsArray *nts_array_fill_bool(NtsArray *a, bool value) {
   return nts_array_same(a);
 }
 
-NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
+static inline NtsArray *nts_array_fill_counted(NtsArray *a, void *value,
+                                               void *(*retain)(void *),
+                                               void (*release)(void *)) {
   void **items = NTS_ITEMS(a, void *);
   for (uint32_t at = 0; at < a->header.length; at++) {
     /* Retain before release, so filling an array with something it already
      * holds cannot free the value between the two. */
-    nts_retain((NtsHeader *)value);
-    nts_release((NtsHeader *)items[at]);
+    retain(value);
+    release(items[at]);
     items[at] = value;
   }
   return nts_array_same(a);
+}
+NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
+  return nts_array_fill_counted(a, value, nts_count_managed,
+                                nts_uncount_managed);
+}
+NtsArray *nts_array_fill_foreign(NtsArray *a, void *value) {
+  const NtsFamilyOps *ops = nts_array_family(a);
+  return nts_array_fill_counted(a, value, ops->retain, ops->release);
 }
 
 /* The coercions, as linkable symbols.
@@ -3500,7 +3571,9 @@ NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep) {
   return out;
 }
 
-NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to) {
+static inline NtsArray *nts_array_slice_counted(const NtsArray *a, double from,
+                                                double to,
+                                                void *(*retain)(void *)) {
   uint32_t start = nts_str_clamp(from, a->header.length, 1);
   uint32_t end = nts_str_clamp(to, a->header.length, 1);
   uint32_t count = end > start ? end - start : 0u;
@@ -3509,10 +3582,15 @@ NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to) {
   void *const *items = NTS_ITEMS(a, void *);
   void **into = NTS_ITEMS(out, void *);
   for (uint32_t at = 0; at < count; at++) {
-    into[at] = items[start + at];
-    nts_retain((NtsHeader *)into[at]);
+    into[at] = retain(items[start + at]);
   }
   return out;
+}
+NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to) {
+  return nts_array_slice_counted(a, from, to, nts_count_managed);
+}
+NtsArray *nts_array_slice_foreign(const NtsArray *a, double from, double to) {
+  return nts_array_slice_counted(a, from, to, nts_array_family(a)->retain);
 }
 
 /* Shorten an array to its first `count` elements.
@@ -3714,12 +3792,19 @@ void nts_array_set_length(NtsArray *a, double n) {
 }
 
 /* The reference case, which is the one the comment above is about. */
-void nts_array_set_length_ref(NtsArray *a, double n) {
+static inline void nts_array_set_length_counted(NtsArray *a, double n,
+                                                void (*release)(void *)) {
   uint32_t length = a->header.length;
   nts_array_set_length_at(a, n, sizeof(void *));
   for (uint32_t at = a->header.length; at < length; at++) {
-    nts_release((NtsHeader *)NTS_ITEMS(a, void *)[at]);
+    release(NTS_ITEMS(a, void *)[at]);
   }
+}
+void nts_array_set_length_ref(NtsArray *a, double n) {
+  nts_array_set_length_counted(a, n, nts_uncount_managed);
+}
+void nts_array_set_length_foreign(NtsArray *a, double n) {
+  nts_array_set_length_counted(a, n, nts_array_family(a)->release);
 }
 
 /* And the tagged case, where only some of the dropped slots hold a reference
@@ -3767,12 +3852,18 @@ void nts_array_extend(NtsArray *dst, const NtsArray *src) {
   }
 }
 
-void nts_array_extend_ref(NtsArray *dst, const NtsArray *src) {
+static inline void nts_array_extend_counted(NtsArray *dst, const NtsArray *src,
+                                            void *(*retain)(void *)) {
   void *const *items = NTS_ITEMS(src, void *);
   for (uint32_t at = 0; at < src->header.length; at++) {
-    nts_retain((NtsHeader *)items[at]);
-    nts_array_push_ref(dst, items[at]);
+    nts_array_push_ref(dst, retain(items[at]));
   }
+}
+void nts_array_extend_ref(NtsArray *dst, const NtsArray *src) {
+  nts_array_extend_counted(dst, src, nts_count_managed);
+}
+void nts_array_extend_foreign(NtsArray *dst, const NtsArray *src) {
+  nts_array_extend_counted(dst, src, nts_array_family(src)->retain);
 }
 
 NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b) {
@@ -3788,7 +3879,9 @@ NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b) {
 
 /* The same, and each element is a reference the new array now holds too -- so
  * unlike `splice`, which *moves* them, this one retains. */
-NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b) {
+static inline NtsArray *nts_array_concat_counted(const NtsArray *a,
+                                                 const NtsArray *b,
+                                                 void *(*retain)(void *)) {
   uint32_t total = a->header.length + b->header.length;
   NtsArray *out =
       nts_array_new_uninitialized(a->header.descriptor, (double)total);
@@ -3796,14 +3889,18 @@ NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b) {
   void *const *first = NTS_ITEMS(a, void *);
   void *const *second = NTS_ITEMS(b, void *);
   for (uint32_t at = 0; at < a->header.length; at++) {
-    into[at] = first[at];
-    nts_retain((NtsHeader *)into[at]);
+    into[at] = retain(first[at]);
   }
   for (uint32_t at = 0; at < b->header.length; at++) {
-    into[a->header.length + at] = second[at];
-    nts_retain((NtsHeader *)into[a->header.length + at]);
+    into[a->header.length + at] = retain(second[at]);
   }
   return out;
+}
+NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b) {
+  return nts_array_concat_counted(a, b, nts_count_managed);
+}
+NtsArray *nts_array_concat_foreign(const NtsArray *a, const NtsArray *b) {
+  return nts_array_concat_counted(a, b, nts_array_family(a)->retain);
 }
 
 /* The same again, for an array whose elements carry their own tag.

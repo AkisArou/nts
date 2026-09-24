@@ -710,6 +710,30 @@ fn descriptors(program: &Program) -> String {
 /// One descriptor per scalar element type an array is made of. An array of
 /// references uses the runtime's `nts_desc_ref`, declared above.
 fn array_descriptors(out: &mut String, program: &Program) {
+    // An array of a family's objects: its one foreign slot names the family,
+    // which the collector reads for holders, and the family's operations,
+    // which `counting_declarations` wrote. `size` is a pointer's, as the C
+    // backend's `sizeof(void *)`.
+    for (counting, family) in nts_codegen_common::counting::array_families(program) {
+        let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
+        let ops = nts_codegen_common::counting::ops_name(&counting);
+        let name = format!("{family:?}[]");
+        let _ = writeln!(*out, "@{descriptor}.name = internal constant [{} x i8] c\"{name}\\00\"", name.len() + 1);
+        let _ = writeln!(
+            *out,
+            "@{descriptor}.slot = internal constant [1 x {{ i32, i32, ptr }}] [{{ i32, i32, ptr }} {{ i32 0, i32 {}, ptr @{ops} }}]",
+            family.runtime_id()
+        );
+        let size = nts_core::hir::layout::shape_of(&HirType::NativePointer(nts_core::hir::native::Pointee::Void))
+            .map_or(8, |shape| shape.size);
+        let _ = writeln!(
+            *out,
+            "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
+             ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot }}",
+            u32::from(family.holds_closures()),
+            nts_codegen_common::counting::ARRAY_FOREIGN
+        );
+    }
     let mut seen: Vec<String> = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
@@ -719,7 +743,9 @@ fn array_descriptors(out: &mut String, program: &Program) {
             let HirType::Managed(nts_core::hir::ManagedType::Array(element)) = &op.ty else {
                 continue;
             };
-            if element.is_managed() {
+            // An array of foreign objects has its family's descriptor, which
+            // `counting_declarations` writes beside the family's operations.
+            if element.is_managed() || nts_codegen_common::counting::counted_element(element).is_some() {
                 continue;
             }
             let Some(shape) = nts_core::hir::layout::shape_of(element) else {
@@ -753,7 +779,8 @@ fn array_descriptors(out: &mut String, program: &Program) {
 }
 
 /// A layout's foreign slots: the fields holding a counted foreign object, each
-/// with its family's release, which `nts_free` calls when the object dies.
+/// with its family and its family's `NtsFamilyOps`, whose release `nts_free`
+/// calls when the object dies.
 /// Answers how many, and the table's operand (`ptr null` for none).
 fn foreign_slots(out: &mut String, layout: &nts_core::hir::Layout, offsets: &[u32], tag: &str) -> (usize, String) {
     let slots: Vec<String> = layout
@@ -761,9 +788,9 @@ fn foreign_slots(out: &mut String, layout: &nts_core::hir::Layout, offsets: &[u3
         .iter()
         .enumerate()
         .filter_map(|(at, field)| {
-            let release = field.ty.counting()?.release;
+            let ops = nts_codegen_common::counting::ops_name(&field.ty.counting()?);
             let family = field.ty.counted_family().map_or(0, nts_core::hir::native::Family::runtime_id);
-            Some(format!("{{ i32, i32, ptr }} {{ i32 {}, i32 {family}, ptr @{release} }}", offsets.get(at)?))
+            Some(format!("{{ i32, i32, ptr }} {{ i32 {}, i32 {family}, ptr @{ops} }}", offsets.get(at)?))
         })
         .collect();
     if slots.is_empty() {
@@ -2311,6 +2338,8 @@ fn allocation(
             };
             let descriptor = if element.is_managed() {
                 "@nts_desc_ref".to_owned()
+            } else if let Some(counting) = nts_codegen_common::counting::counted_element(element) {
+                format!("@{}", nts_codegen_common::counting::array_descriptor_name(&counting))
             } else {
                 format!("@nts_desc_arr_{}", element_tag(element))
             };
@@ -4283,6 +4312,7 @@ fn open_chain_body(
 
 fn counting_declarations(program: &Program) -> String {
     let mut text = String::new();
+    let held = nts_codegen_common::counting::held(program);
     for counting in nts_codegen_common::counting::foreign(program) {
         let _ = writeln!(text, "declare ptr @{}(ptr)", counting.retain);
         let _ = writeln!(text, "declare void @{}(ptr)", counting.release);
@@ -4301,6 +4331,19 @@ fn counting_declarations(program: &Program) -> String {
                 counting.release
             );
         }
+        // How the runtime counts one of these where it holds it: a field
+        // being freed, an array's elements. Both functions take NULL.
+        if !held.contains(&counting) {
+            continue;
+        }
+        let ops = nts_codegen_common::counting::ops_name(&counting);
+        let _ = writeln!(
+            text,
+            "@{ops} = internal constant {{ ptr, ptr }} {{ ptr @{}, ptr @{} }}",
+            counting.called(true),
+            counting.called(false)
+        );
+
     }
     text
 }

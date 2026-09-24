@@ -564,6 +564,7 @@ const RETURNS_ITS_ARRAY: &[&str] = &[
     "nts_array_fill",
     "nts_array_fill_bool",
     "nts_array_fill_ref",
+    "nts_array_fill_foreign",
     "nts_array_reverse",
 ];
 

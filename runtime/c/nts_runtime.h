@@ -132,10 +132,21 @@
  * and carries `NTS_KIND_ARRAY`, which already answers `true`. */
 #define NTS_KIND_TUPLE 6u
 
+/* How a foreign object system counts its objects: its retain and its release,
+ * each safe on NULL. One per family the program uses, emitted by the compiler
+ * beside the declarations of the pair (`objc_retain`/`objc_release`, the
+ * guarded `g_object_ref_sink`/`g_object_unref`), and pointed at by every slot
+ * that holds one of its objects -- a field, or an array's elements. Nothing is
+ * registered: a program with no generated `main` (a library, a test's own
+ * caller) carries its families in its descriptors like everything else. */
+typedef struct NtsFamilyOps {
+  void *(*retain)(void *object);
+  void (*release)(void *object);
+} NtsFamilyOps;
+
 /* A field holding an object of a foreign object system the program counts --
- * an Objective-C object -- and the function that gives it up. The function is
- * per slot because it is per family: `objc_release` today, `g_object_unref`
- * for a GObject.
+ * an Objective-C object -- and how that system counts it (`ops`), which
+ * `nts_free` releases through when the object dies.
  *
  * `family` says which system, where the runtime asks more of the object than
  * giving it up: `NTS_FAMILY_GOBJECT`, whose objects hold the closures lent to
@@ -149,7 +160,7 @@
 typedef struct NtsForeignSlot {
   uint32_t offset;
   uint32_t family;
-  void (*release)(void *object);
+  const NtsFamilyOps *ops;
 } NtsForeignSlot;
 
 typedef struct NtsDescriptor {
@@ -268,6 +279,15 @@ typedef struct NtsDescriptor {
 #define NTS_ARRAY_INT 4u
 #define NTS_ARRAY_UINT 5u
 #define NTS_ARRAY_BOOL 6u
+/* A counted foreign object per slot -- an Objective-C object, a GObject --
+ * which the array owns one count of. The family is the descriptor's one foreign
+ * slot
+ * (`foreign_slots[0]`, offset unused): its `ops` retain what a copy duplicates
+ * and release what the array drops, and its `family` says whether the trace
+ * follows the element to a holder's node. An element may be NULL (a grown
+ * slot, a nullable handle), which every op takes. There is no tagged form: an
+ * erased read of one is refused. */
+#define NTS_ARRAY_FOREIGN 7u
 
 /* RFC 8.2. One header for every variable-length managed object: an array and a
  * string differ by descriptor, not by shape, so `length` is the same field at
@@ -2020,6 +2040,17 @@ NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b);
 void nts_array_extend(NtsArray *dst, const NtsArray *src);
 void nts_array_extend_ref(NtsArray *dst, const NtsArray *src);
 NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b);
+/* The `_ref` helpers that count, for an array of counted foreign objects
+ * (`NTS_ARRAY_FOREIGN`): the same operations, counting through the family's
+ * `NtsFamilyOps`. The helpers that only move elements -- push, pop, shift,
+ * unshift, splice, reverse, sort -- are the `_ref` ones unchanged, since a move
+ * changes no count. */
+void nts_array_set_length_foreign(NtsArray *a, double n);
+void nts_array_extend_foreign(NtsArray *dst, const NtsArray *src);
+NtsArray *nts_array_concat_foreign(const NtsArray *a, const NtsArray *b);
+void *nts_array_at_foreign(const NtsArray *a, double at);
+NtsArray *nts_array_slice_foreign(const NtsArray *a, double from, double to);
+NtsArray *nts_array_fill_foreign(NtsArray *a, void *value);
 /* The same for an array of tagged values, which neither of the other two can
  * copy: sixteen bytes each, and a reference only when the tag says so. */
 NtsArray *nts_array_concat_value(const NtsArray *a, const NtsArray *b);

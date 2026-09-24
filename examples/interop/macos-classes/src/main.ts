@@ -15,6 +15,35 @@ function made(): void {
   watch = weak_watch(object);
 }
 
+let replaced = 0 as c_int;
+let held = 0 as c_int;
+
+// An object only the caller will hold, watched on the way out.
+function watched(): NSObject {
+  const object = new NSObject();
+  replaced = weak_watch(object);
+  return object;
+}
+
+// Swift's `[NSNumber]` and `[NSObject]`: an array owns a count of each element,
+// a copy counts its own, an overwritten element is given up at once, and the
+// array's elements go with the array.
+function arrays(): void {
+  const numbers: NSNumber[] = [new NSNumber(1), new NSNumber(2)];
+  numbers.push(new NSNumber(3));
+  const tail = numbers.slice(1);
+  numbers[0] = new NSNumber(10);
+  let total = 0;
+  for (const n of numbers) {
+    total += n.intValue;
+  }
+  report(`arrays ${numbers.length} ${tail.length} ${total} ${tail[0].intValue} ${numbers.indexOf(tail[1])}`);
+  const objects: NSObject[] = [watched()];
+  objects[0] = new NSObject();
+  report(`replaced ${weak_alive(replaced) ? "alive" : "gone"}`);
+  held = weak_watch(objects[0]);
+}
+
 function optional(operation: NSOperation | null): string {
   operation?.cancel();
   return `${operation?.isCancelled ?? "absent"} ${operation?.name ?? "unnamed"}`;
@@ -48,6 +77,9 @@ function main(): void {
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.
   report(`optional ${optional(operation)} ${optional(null)}`);
+
+  arrays();
+  report(`array ${weak_alive(held) ? "alive" : "gone"}`);
 
   made();
   report(`object ${weak_alive(watch) ? "alive" : "gone"}`);

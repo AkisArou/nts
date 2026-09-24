@@ -1395,7 +1395,10 @@ pub fn array_write_may_grow(func: &Func, array: ValueId) -> bool {
         // which is not what an index write means.
         return false;
     };
-    !element.may_hold_a_reference()
+    // A counted element -- a reference, or a foreign object the array owns a
+    // count of -- is stored after reading the old value out to release it,
+    // which is a read the slot at `length` does not have.
+    !element.may_hold_a_reference() && element.counting().is_none()
 }
 
 /// What a call reaches.
@@ -4852,6 +4855,7 @@ mod tests {
             // contract rather than the name.
             "nts_array_at",
             "nts_array_at_ref",
+            "nts_array_at_foreign",
             "nts_array_at_value",
             "nts_array_element",
             "nts_array_index_of",
@@ -4868,9 +4872,11 @@ mod tests {
             // resized.
             "nts_array_concat",
             "nts_array_concat_ref",
+            "nts_array_concat_foreign",
             "nts_array_concat_value",
             "nts_array_slice",
             "nts_array_slice_ref",
+            "nts_array_slice_foreign",
             "nts_array_slice_value",
             "nts_array_new",
             "nts_array_new_uninitialized",
@@ -4879,6 +4885,7 @@ mod tests {
             "nts_array_fill",
             "nts_array_fill_bool",
             "nts_array_fill_ref",
+            "nts_array_fill_foreign",
             "nts_array_fill_value",
             "nts_array_reverse",
             "nts_array_sort",
@@ -4890,6 +4897,7 @@ mod tests {
             // deliberately rather than omitted, so the claim is visible.
             "nts_array_extend",
             "nts_array_extend_ref",
+            "nts_array_extend_foreign",
         ];
         let mut unclassified = Vec::new();
         for name in crate::hir::runtime::declared_names() {
