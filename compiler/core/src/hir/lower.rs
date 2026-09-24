@@ -24246,6 +24246,22 @@ impl<'a> FuncBuilder<'a> {
     ///     kind says nothing and descriptor IDENTITY is the answer.
     ///
     /// `Ok(None)` for everything else, which is the ordinary class path.
+    /// Whether a name this program can write has no representation here.
+    ///
+    /// The guard under every "nothing a compiled program holds is one" fold, and
+    /// the reason those folds are honest rather than assertions: the day the type
+    /// represents, the caller falls through to the refusal it has today instead
+    /// of answering `false` about a real value.
+    ///
+    /// One function because it is one fact. [`Self::instanceof_native`] and
+    /// [`Self::instanceof_builtin`] both ask it, and two spellings of a guard
+    /// this load-bearing is how they drift.
+    fn has_no_representation(&mut self, name: &str) -> bool {
+        self.type_named(name)
+            .and_then(|ty| self.represent(ty))
+            .is_none()
+    }
+
     fn instanceof_native(
         &mut self,
         id: NodeId,
@@ -24276,15 +24292,30 @@ impl<'a> FuncBuilder<'a> {
         // folded by a general rule. "Any unrepresentable type answers false"
         // would be true today and is a much larger claim than the evidence --
         // it would quietly fold a class this compiler has simply not learned
-        // yet, where a refusal is the honest answer. These three are named
-        // because each was checked: `new WeakMap()`, `new WeakSet()` and
-        // `new WeakRef()` all refuse as unrepresentable, and `util`'s
-        // `inspect.ts:870` asks `value instanceof WeakRef` of a real value.
-        if matches!(name.as_str(), "WeakMap" | "WeakSet" | "WeakRef")
-            && self
-                .type_named(&name)
-                .and_then(|ty| self.represent(ty))
-                .is_none()
+        // yet, where a refusal is the honest answer. These are named because
+        // each was checked: `new WeakMap()`, `new WeakSet()`, `new WeakRef()`
+        // and `new FinalizationRegistry()` all refuse as unrepresentable, and
+        // `util`'s `inspect.ts` asks `value instanceof WeakRef` at :870 and
+        // `value instanceof FinalizationRegistry` at :873, of real values.
+        //
+        // **`FinalizationRegistry` was missing from this list for as long as it
+        // existed**, three lines from a `WeakRef` test that folded, so
+        // `inspect`'s two adjacent branches answered differently: one a constant
+        // `false`, the other `an instanceof against something this compiler has
+        // no class for`. Nothing went red when it was added, because a refusal
+        // does not fail when it expires.
+        //
+        // **Two functions decide this.** [`Self::instanceof_builtin`] makes the
+        // same argument for `RegExp` and routes it through `Builtin::Never`
+        // instead of answering here, because it shares a path with `Array`,
+        // `Object` and `Function`. The *guard* is one fact, so it is written
+        // once in [`Self::has_no_representation`] and consulted from both --
+        // the lists differ because the dispatch does, and that is the only
+        // thing about them that should.
+        if matches!(
+            name.as_str(),
+            "WeakMap" | "WeakSet" | "WeakRef" | "FinalizationRegistry"
+        ) && self.has_no_representation(&name)
         {
             let origin = self.origin(id);
             let _ = self.lower_expression(lhs)?;
@@ -24496,14 +24527,7 @@ impl<'a> FuncBuilder<'a> {
             // answerable and the answer is `false`. Guarded on the fact rather
             // than asserting it, so the day a regular expression represents
             // this falls through to the refusal it has today.
-            Some("RegExp")
-                if self
-                    .type_named("RegExp")
-                    .and_then(|ty| self.represent(ty))
-                    .is_none() =>
-            {
-                Builtin::Never
-            }
+            Some("RegExp") if self.has_no_representation("RegExp") => Builtin::Never,
             _ => return Ok(None),
         };
         // Declared by the program rather than by `lib.d.ts` means it is an

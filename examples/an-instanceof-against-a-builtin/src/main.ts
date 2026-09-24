@@ -119,10 +119,26 @@ export function throughTheHierarchy(n: number): number {
 // `RegExp` is the other kind of answer: **nothing a compiled program holds can
 // be one**, because a regular expression has no representation here, so the
 // test is not unanswerable — it is answerable and the answer is `false`. That
-// is the argument `instanceof_native` already makes for `WeakMap`, `WeakSet`
-// and `WeakRef`, and it is **guarded on the fact rather than asserting it**:
-// the day a regular expression represents, this falls through to the refusal
-// it has today rather than quietly answering `false` about a real value.
+// is the argument `instanceof_native` already makes for `WeakMap`, `WeakSet`,
+// `WeakRef` and `FinalizationRegistry`, and it is **guarded on the fact rather
+// than asserting it**: the day a regular expression represents, this falls
+// through to the refusal it has today rather than quietly answering `false`
+// about a real value.
+//
+// # `FinalizationRegistry` was the one missing from that list
+//
+// It is in it as of 2026-09-24, and the gap is worth recording because nothing
+// could have caught it. `runtime/node/util/src/inspect.ts` asks
+// `value instanceof WeakRef` at :870 and
+// `value instanceof FinalizationRegistry` at :873 — three lines apart, of real
+// values, for the same purpose — and the two answered differently: a constant
+// `false` for the first and *an `instanceof` against something this compiler
+// has no class for* for the second. Both types refuse their `new` as
+// unrepresentable, so the evidence for one was the evidence for both.
+//
+// **A refusal does not fail when it expires**, which is why this sat. Adding
+// the name turns a refusal into `false` and nothing goes red either way, so
+// the only thing that keeps the list honest is an arm here per name.
 
 function named(n: number): number {
   return n;
@@ -157,4 +173,33 @@ export function nothingIsARegExp(n: number): number {
   const b = numbers instanceof RegExp ? 1 : 0;
   const c = arrow instanceof RegExp ? 1 : 0;
   return a * 100 + b * 10 + c + (n < 1 ? 0 : 0);
+}
+
+/** Nothing is a weak collection, a `WeakRef`, or a `FinalizationRegistry`. */
+export function nothingIsWeaklyHeld(n: number): number {
+  const p = new Point();
+  const a = p instanceof WeakMap ? 1 : 0;
+  const b = p instanceof WeakSet ? 1 : 0;
+  const c = p instanceof WeakRef ? 1 : 0;
+  const d = p instanceof FinalizationRegistry ? 1 : 0;
+  return a * 1000 + b * 100 + c * 10 + d + (n < 1 ? 0 : 0);
+}
+
+/**
+ * And the receiver is still evaluated, which a fold to a constant can lose.
+ *
+ * `counted()` increments, so an answer of `false` that never called it reads
+ * `0` here where node reads `1`. The fold lowers the left side and discards the
+ * value rather than skipping it, and this is the arm that says so.
+ */
+let calls = 0;
+function counted(): Point {
+  calls = calls + 1;
+  return new Point();
+}
+export function theReceiverStillRuns(n: number): number {
+  calls = 0;
+  const a = counted() instanceof FinalizationRegistry ? 1 : 0;
+  const b = counted() instanceof WeakRef ? 1 : 0;
+  return calls * 10 + a + b + (n < 1 ? 0 : 0);
 }
