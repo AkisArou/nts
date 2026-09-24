@@ -117,20 +117,52 @@ what to link with `@ntsFramework Foundation`.
 
 What A1a does not do is ownership: `release` is itself a send, called by hand.
 
+## A1b, landed: the compiler owns Objective-C objects
+
+`4f3581ec`, plus `1d741c19`, which made `nts build --rc` compile the runtime
+with the provider it lowered for.
+
+- **What is counted.** A handle is `ObjcClass<Tag, Parent>` (from
+  `runtime/objc/objc.d.ts`), which is `Class`'s chain plus an `__objc` brand,
+  so `Handle.family` is `Objc`. Under `--rc` it is retained where a second
+  reference is taken and released where the last dies, with
+  `objc_retain`/`objc_release`. Under NoGc it lives forever, like everything
+  else there.
+- **Ownership.** ARC's method families (`alloc`, `new`, `copy`,
+  `mutableCopy`, `init`) hand over +1, and `init` consumes its receiver.
+  Everything else lends +0 and is retained when kept.
+- **One seam for other object systems.** `Family::counting()` names a
+  family's functions, and `returns_owned`/`consumes` are generic facts on the
+  native function. The GTK lane's `GObject` is one more arm.
+- **Refused:** `retain`, `release`, `autorelease`, `dealloc` and
+  `retainCount` on a counted object, and a +1 result nothing counts.
+- **The pool.** `main.c` keeps an autorelease pool around the run of any
+  program that sends messages. Every Mac run asserts an empty stderr.
+- **Measured** by `macos-foundation`: zeroing weak references say `gone`
+  under `--rc` and `alive` under NoGc, on both backends, against an
+  ARC-placed C oracle. `objc_arc.rs` checks the same rules on any host,
+  against a stub runtime.
+
+**Known gap (A1b.2):** a handle held in a heap object's field is counted on
+store, but not released when that object is destroyed. It is a leak, not a
+dangling pointer, and the fix is a descriptor slot kind.
+
+**Speed items the benchmark will price, not guessed at:**
+- a send is a cached load, a never-taken branch and a direct
+  `objc_msgSend`, where clang uses `__objc_selrefs` fixed up at load;
+- a +0 result is `objc_retain`ed, where clang's
+  `objc_retainAutoreleasedReturnValue` handshake skips the pool.
+
 **Never measured here: arm64 at run time.** The VM is x86_64. arm64 is built,
 linked and inspected, and the lane never emits a variadic `objc_msgSend`, so
 correctness does not depend on arm64 running by luck.
 
 ## Next
 
-1. **A1b, ARC-managed handles.** An `objc` family on the GTK lane's `Handle`.
-   Storing a handle retains it and dropping it releases it. The method family
-   decides +1 or +0 (`alloc`/`new`/`copy`/`mutableCopy`/`init`), and an
-   autorelease pool drains around each host task.
-   - Falsifier: a zeroing weak reference (`objc_loadWeakRetained`) is nil
-     after the TypeScript value dies, and not before. Not `retainCount`, which
-     Apple documents as meaningless.
-   - Also `NSString` ↔ `string` directly, not through `UTF8String`.
+1. **A1b.2, handles in fields.** A descriptor slot kind for foreign
+   references, so destroying an object releases the handles it holds. The
+   falsifier is the weak-reference arm, with the handle held in a class
+   field and in a closure capture.
 2. **A2, a window:** blocks, `extends NSObject`, the CFRunLoop host, and
    `macos-window` with a capturing target/action handler that starts a timer
    and an await.
