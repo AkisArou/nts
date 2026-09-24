@@ -15,8 +15,8 @@ import {
   GtkListView,
   GtkSignalListItemFactory,
   GtkSingleSelection,
+  GtkStringObject,
   gtk_string_object_get_type,
-  gtk_string_object_new,
 } from "c:Gtk-4.0";
 import { asGtkLabel, asGtkListItem, asGtkStringObject } from "../types/gir/Gtk-4.0.values.ts";
 import { ApplicationFlags, GListStore } from "c:Gio-2.0";
@@ -25,7 +25,8 @@ import { notes_log } from "c:notes";
 
 function open(application: GtkApplication): void {
   const store = new GListStore({ item_type: gtk_string_object_get_type() });
-  for (let row = 0; row < 1000; row++) store.append(gtk_string_object_new("row " + String(row)));
+  // `GtkStringObject.new`, GJS's constructor on the class.
+  for (let row = 0; row < 1000; row++) store.append(GtkStringObject.new("row " + String(row)));
   const factory = new GtkSignalListItemFactory({});
   let bound = 0;
   factory.connect("setup", (_factory, object) => {

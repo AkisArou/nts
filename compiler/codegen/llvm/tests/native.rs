@@ -4129,3 +4129,35 @@ int thing_record(struct _Thing *t) { return t->record; }
         }
     }
 }
+
+/// A C function a binding declares as a static member of a value -- GJS's
+/// `GtkStringObject.new("x")`, `GtkButton.new_with_label("Add")` -- called on
+/// the value's name: the C function with the written arguments, and the name,
+/// a declaration only, never evaluated. `new` is quoted in the type, since a
+/// bare `new(…)` there is a construct signature.
+#[test]
+fn a_static_member_of_a_declared_value_is_its_c_function_on_both_backends() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+type Thing = Class<"_Thing">;
+declare function thing_record(thing: Thing): c_int;
+declare const Thing: {
+    /** @ntsSymbol thing_sized */
+    "new"(width: c_int): Thing;
+    /** @ntsSymbol thing_sized */
+    with_width(width: c_int): Thing;
+};
+export function run(): number {
+    return (thing_record(Thing.new(5 as c_int)) as number) * 10 + (thing_record(Thing.with_width(3 as c_int)) as number);
+}
+"#;
+    let library = r"
+typedef struct _Thing { int record; } Thing;
+static Thing things[2]; static int made;
+struct _Thing *thing_sized(int width) { Thing *t = &things[made++ % 2]; t->record = width; return t; }
+int thing_record(struct _Thing *t) { return t->record; }
+";
+    let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+    let Some((_, outputs)) = run_on_both_backends("static-probe", source, hir::Provider::NoGc, library, &caller) else { return; };
+    for output in outputs { assert_eq!(output, "53"); }
+}

@@ -146,6 +146,10 @@ pub(crate) struct Function {
     /// Written only as a method: a signal's `connect`, which as a function
     /// would be one more name per signal for the same call.
     pub(crate) method_only: bool,
+    /// `(class, name)` where GIR declares this a constructor or a function of
+    /// a class rather than a method: a static member of the class's value,
+    /// `GtkStringObject.new("x")`, as GJS has it.
+    pub(crate) statics: Option<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -270,6 +274,15 @@ const COUNTING: [&str; 6] =
 /// Whether `name` can be a TypeScript type name as it is.
 fn is_type_name(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// A constructor or function GIR declares on a class, as a member of the
+/// class's value: `(class, name)`.
+fn static_of(callable: &Callable, owner: Option<&Class>) -> Option<(String, String)> {
+    matches!(callable.kind, CallableKind::Constructor | CallableKind::Function)
+        .then(|| owner.and_then(|class| class.c_type.clone()))
+        .flatten()
+        .map(|class| (class, callable.name.clone()))
 }
 
 /// The properties a constructor takes, where the class has construct-only
@@ -544,6 +557,7 @@ impl<'a> Mapper<'a> {
                     finish: None,
                     omissible: BTreeMap::new(),
                     method_only: false,
+                    statics: None,
                 });
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
@@ -797,13 +811,9 @@ impl<'a> Mapper<'a> {
             parameters.push(("error".to_owned(), error));
         }
         let throws = signature.throws.then(|| "error".to_owned());
-        let returns = (callable.kind == CallableKind::Constructor)
-            .then(|| match &signature.result.ty {
-                TypeRef::Named { name, .. } => Some(self.qualify(name)),
-                _ => None,
-            })
-            .flatten();
+        let returns = self.constructed(callable);
         let method = method_of(callable, &parameters);
+        let statics = if method.is_none() { static_of(callable, owner) } else { None };
         Ok(Function {
             name: symbol.clone(),
             symbol,
@@ -819,6 +829,7 @@ impl<'a> Mapper<'a> {
             finish: callable.finish.clone(),
             omissible,
             method_only: false,
+            statics,
         })
     }
 
@@ -1301,6 +1312,7 @@ impl<'a> Mapper<'a> {
             finish: None,
             omissible: BTreeMap::from([("connect_flags".to_owned(), "0")]),
             method_only: true,
+            statics: None,
         })
     }
 
@@ -1433,6 +1445,15 @@ impl<'a> Mapper<'a> {
         namespace.classes.iter().find(|class| class.c_type.as_deref() == Some(c_type)).is_some_and(|class| self.counted(namespace, class))
     }
 
+    /// What a constructor returns, as GIR names it (`Gtk.Button`), where C's
+    /// type may be an ancestor's.
+    fn constructed(&self, callable: &Callable) -> Option<String> {
+        match &callable.signature.result.ty {
+            TypeRef::Named { name, .. } if callable.kind == CallableKind::Constructor => Some(self.qualify(name)),
+            _ => None,
+        }
+    }
+
     /// A typed view of `g_object_new_with_properties` for one class:
     ///
     /// ```text
@@ -1498,6 +1519,7 @@ impl<'a> Mapper<'a> {
                 ("values".to_owned(), "null"),
             ]),
             method_only: false,
+            statics: None,
         })
     }
 

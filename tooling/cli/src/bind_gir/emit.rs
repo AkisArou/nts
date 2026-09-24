@@ -243,18 +243,44 @@ fn construction(
     }
     out.push_str("  }\n");
     let kept = |function: &str| binding.functions.iter().find(|f| f.name == function && f.throws.is_none());
-    let Some(constructor) = binding.constructors.get(name) else { return };
-    let tag = match (kept(&constructor.function), &constructor.get_type) {
-        (Some(_), None) if !constructor.from.is_empty() => format!("{}({})", constructor.function, constructor.from.join(", ")),
-        (Some(new), None) if new.parameters.is_empty() => constructor.function.clone(),
-        (Some(_), Some(get_type)) if kept(get_type).is_some() => format!("{} {get_type}", constructor.function),
-        _ => return,
-    };
-    let _ = writeln!(
-        out,
-        "  export const {name}: {{\n    /**\n     * @ntsConstruct {tag}\n     */\n    new (props{optional}: {name}Props): {name};\n  }};",
-        optional = if constructor.from.is_empty() { "?" } else { "" },
-    );
+    let construct = binding.constructors.get(name).and_then(|constructor| {
+        let tag = match (kept(&constructor.function), &constructor.get_type) {
+            (Some(_), None) if !constructor.from.is_empty() => format!("{}({})", constructor.function, constructor.from.join(", ")),
+            (Some(new), None) if new.parameters.is_empty() => constructor.function.clone(),
+            (Some(_), Some(get_type)) if kept(get_type).is_some() => format!("{} {get_type}", constructor.function),
+            _ => return None,
+        };
+        let optional = if constructor.from.is_empty() { "?" } else { "" };
+        Some(format!("    /**\n     * @ntsConstruct {tag}\n     */\n    new (props{optional}: {name}Props): {name};\n"))
+    });
+    // The class's constructors and functions, as GJS has them on the class:
+    // `GtkStringObject.new("x")`, `GtkButton.new_with_label("Add")`.
+    let statics: Vec<&Function> = binding
+        .functions
+        .iter()
+        .filter(|f| f.statics.as_ref().is_some_and(|(class, _)| class == name))
+        .collect();
+    if construct.is_none() && statics.is_empty() {
+        return;
+    }
+    let _ = writeln!(out, "  export const {name}: {{");
+    out.push_str(construct.as_deref().unwrap_or_default());
+    for function in statics {
+        static_member(out, function);
+    }
+    out.push_str("  };\n");
+}
+
+/// A constructor or function of a class as a member of the class's value.
+/// `new` is quoted, since a bare `new(…)` in a type is a construct signature.
+fn static_member(out: &mut String, function: &Function) {
+    let Some((_, name)) = &function.statics else { return };
+    let defaulted = defaults(function, &function.parameters);
+    notes(out, function, true, &defaulted, "    ");
+    let parameters: Vec<String> =
+        function.parameters.iter().map(|(given, mapped)| parameter(function, &defaulted, given, &mapped.ts)).collect();
+    let name = if name == "new" { "\"new\"".to_owned() } else { name.clone() };
+    let _ = writeln!(out, "    {name}({}): {};", parameters.join(", "), function.result.ts);
 }
 
 /// A function as a method of its class: `this` is its instance.

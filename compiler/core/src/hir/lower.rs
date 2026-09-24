@@ -21845,6 +21845,14 @@ impl<'a> FuncBuilder<'a> {
         callee: NodeId,
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
+        // `GtkStringObject.new("x")`: a C function as a static member of a
+        // class value, which has no value to be a receiver.
+        if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+            && let [target, member] = self.children(callee).as_slice()
+            && let Some(declaration) = self.static_native(id, *target)
+        {
+            return Some(self.lower_static_native(id, declaration, *member, arguments));
+        }
         if let Some(decl) = self.snapshot.call_targets.get(&id).and_then(|target| target.callee)
             && self.node(decl).native.as_ref().and_then(|n| n.abi.as_deref()) == Some("intrinsic")
             && !self.has_a_body(decl)
@@ -41839,6 +41847,33 @@ impl<'a> FuncBuilder<'a> {
     /// resolved to one: a method signature naming its C function with
     /// `@ntsSymbol` and its instance with `this: T` -- what `bind-gir` writes
     /// on `GtkButtonMethods` for `button.set_label(text)`.
+    /// A C function a binding declares as a static method of a value --
+    /// `GtkStringObject.new("x")`, GJS's constructors -- when the call at `id`
+    /// resolved to one: an `@ntsSymbol` method signature with no `this`,
+    /// called on a plain name. The name is a declaration only, with nothing to
+    /// evaluate, and a name is all that is accepted, so nothing is skipped.
+    fn static_native(&self, id: NodeId, target: NodeId) -> Option<NodeId> {
+        let call = self.snapshot.call_targets.get(&id)?;
+        let declaration = call.callee?;
+        let signature = &self.snapshot.signatures[call.signature.0 as usize];
+        (self.kind_of(target) == Some(syntax::IDENTIFIER)
+            && self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE)
+            && signature.this_type.is_none()
+            && self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some()))
+        .then_some(declaration)
+    }
+
+    /// [`Self::static_native`]'s call: the C function, with the arguments the
+    /// program wrote and no receiver.
+    fn lower_static_native(&mut self, id: NodeId, declaration: NodeId, member: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let signature = self.snapshot.call_targets[&id].signature;
+        let record = self.snapshot.signatures[signature.0 as usize].clone();
+        let name = self.node(member).text.clone().unwrap_or_default();
+        let callee = self.native_callee(id, Some(declaration), name, &record)?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, arguments, None)?;
+        self.finish_call(id, callee, args, lent, Some(declaration))
+    }
+
     fn native_method(&self, id: NodeId) -> Option<(NodeId, nts_semantic_schema::SignatureId)> {
         let target = self.snapshot.call_targets.get(&id)?;
         let declaration = target.callee?;
