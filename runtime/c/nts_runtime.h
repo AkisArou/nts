@@ -2461,6 +2461,11 @@ static inline uint32_t nts_check_or_grow(NtsArray *array, uint32_t index) {
   return nts_append_slot(array, (double)index);
 }
 
+/* The two above as symbols, for a backend that cannot call a `static inline`:
+ * the LLVM one. */
+uint32_t nts_slot_or_grow_fn(NtsArray *array, double index);
+uint32_t nts_check_or_grow_fn(NtsArray *array, uint32_t index);
+
 /* The same two checks over a view, whose length is computed rather than read
  * out of a header -- a view built without one follows its buffer through
  * `resize`, so there is no stored count to compare against. A detached view

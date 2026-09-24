@@ -29,7 +29,43 @@
 
 use std::fmt::Write as _;
 
-use nts_codegen_llvm::signatures::SIGNATURES;
+use nts_codegen_llvm::signatures::{SIGNATURES, Signature};
+use nts_codegen_llvm::signatures_win64::SIGNATURES_WIN64;
+
+/// A generated table: where it lives, and what clang is asked with.
+struct Table {
+    file: &'static str,
+    open: &'static str,
+    rows: &'static [Signature],
+}
+
+const SYSV: Table = Table {
+    file: "compiler/codegen/llvm/src/signatures.rs",
+    open: "pub const SIGNATURES: &[Signature] = &[\n",
+    rows: SIGNATURES,
+};
+
+const WIN64: Table = Table {
+    file: "compiler/codegen/llvm/src/signatures_win64.rs",
+    open: "pub const SIGNATURES_WIN64: &[Signature] = &[\n",
+    rows: SIGNATURES_WIN64,
+};
+
+/// clang's flags for `x86_64` Windows: the target and zig's mingw headers,
+/// as `nts build` compiles the runtime there. `None` without zig.
+fn win64_flags() -> Option<Vec<String>> {
+    let env = std::process::Command::new("zig").arg("env").output().ok()?;
+    let text = String::from_utf8_lossy(&env.stdout);
+    let lib = text.lines().find_map(|line| line.trim().strip_prefix(".lib_dir = \"")?.strip_suffix("\","))?;
+    let headers = std::path::Path::new(lib).join("libc/include");
+    let mut flags = vec!["--target=x86_64-w64-windows-gnu".to_owned(), "-nostdlibinc".to_owned()];
+    for directory in ["x86_64-windows-gnu", "generic-mingw", "x86_64-windows-any", "any-windows-any"] {
+        flags.push("-isystem".to_owned());
+        flags.push(headers.join(directory).to_string_lossy().into_owned());
+    }
+    flags.extend(["-D__MSVCRT_VERSION__=0xE00".to_owned(), "-D_WIN32_WINNT=0x0a00".to_owned()]);
+    Some(flags)
+}
 
 struct Declared {
     name: String,
@@ -73,7 +109,13 @@ fn attributes_in(text: &str) -> Vec<String> {
 }
 
 fn tidy(text: &str) -> String {
-    text.replace("noundef", "")
+    // The one named type a Win64 declaration mentions, spelled as the literal
+    // type of the same size and alignment so a module need not define it.
+    text.replace("sret(%struct.NtsValue)", "sret({ i32, i64 })")
+        // A linkage hint clang writes on Windows, not part of the type: call
+        // sites splice `returns` in as the type they call at.
+        .replace("dso_local", "")
+        .replace("noundef", "")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -81,7 +123,7 @@ fn tidy(text: &str) -> String {
 
 /// Reference every runtime function so clang has to declare it, then read the
 /// declarations back.
-fn from_clang(root: &std::path::Path) -> Option<Vec<Declared>> {
+fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>> {
     // **Both** headers. `nts_unicode.h` declares `nts_str_to_lower_case` and
     // `nts_str_to_upper_case`, and reading only `nts_runtime.h` made this
     // generator delete them on every run -- they had been added to the table by
@@ -106,7 +148,18 @@ fn from_clang(root: &std::path::Path) -> Option<Vec<Declared>> {
         if trimmed.starts_with("static") || !line.contains("nts_") || !line.contains('(') {
             continue;
         }
-        let Some(open) = line.find('(') else { continue };
+        // The first `nts_` identifier directly followed by `(`: the function's
+        // name, which is not the first parenthesis on the line when the
+        // function returns a function pointer --
+        // `void (*nts_closure_notify(void))(void *);` read by its first `(`
+        // named a function `void`, and the helper was carried by hand.
+        let Some(open) = line.match_indices("nts_").find_map(|(at, _)| {
+            let rest = &line[at..];
+            let end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_'))?;
+            rest[end..].starts_with('(').then_some(at + end)
+        }) else {
+            continue;
+        };
         let before = &line[..open];
         // Where the name starts. `rfind` answering nothing means the whole of
         // `before` *is* the name -- a declaration whose return type wrapped to
@@ -147,6 +200,7 @@ fn from_clang(root: &std::path::Path) -> Option<Vec<Declared>> {
     std::fs::write(dir.join("all.c"), source).ok()?;
 
     let output = std::process::Command::new("clang")
+        .args(flags)
         .args(["-S", "-emit-llvm", "-O0", "-w", "-I"])
         .arg(&dir)
         .arg(dir.join("all.c"))
@@ -208,17 +262,17 @@ fn from_clang(root: &std::path::Path) -> Option<Vec<Declared>> {
 
 /// Rewrite the table between its markers, leaving the module's own explanation
 /// of why it is generated where it is.
-fn regenerate(root: &std::path::Path, fresh: &[Declared]) {
-    const OPEN: &str = "pub const SIGNATURES: &[Signature] = &[\n";
+fn regenerate(root: &std::path::Path, fresh: &[Declared], table: &Table) {
     const CLOSE: &str = "];\n";
 
-    let path = root.join("compiler/codegen/llvm/src/signatures.rs");
-    let text = std::fs::read_to_string(&path).expect("src/signatures.rs");
-    let start = text.find(OPEN).expect("the table's opening") + OPEN.len();
+    let path = root.join(table.file);
+    let text = std::fs::read_to_string(&path).expect("the table's file");
+    let start = text.find(table.open).expect("the table's opening") + table.open.len();
     let end = start + text[start..].find(CLOSE).expect("the table's close");
 
     // Names the table already carries that clang did not report -- the LLVM
-    // intrinsics the backend reaches for, which are not in the C header.
+    // intrinsics the backend reaches for, which are not in the C header and
+    // are the same on every target, so System V's list is every table's.
     let mut rows: Vec<String> = SIGNATURES
         .iter()
         .filter(|known| !known.name.starts_with("nts_") && !fresh.iter().any(|f| f.name == known.name))
@@ -239,7 +293,7 @@ fn regenerate(root: &std::path::Path, fresh: &[Declared]) {
         out.push_str(line);
     }
     out.push_str(&text[end..]);
-    std::fs::write(&path, out).expect("write src/signatures.rs");
+    std::fs::write(&path, out).expect("write the table");
     eprintln!("regenerated {} entries", rows.len());
 }
 
@@ -260,18 +314,33 @@ fn row(name: &str, returns: &str, params: &[&str], attributes: &[&str]) -> Strin
 
 #[test]
 fn the_table_still_matches_the_header() {
+    check(&SYSV, &[]);
+}
+
+/// The same for `x86_64` Windows. Skips without zig, whose mingw headers are
+/// the ones the runtime is compiled against there; the gate has it.
+#[test]
+fn the_win64_table_still_matches_the_header() {
+    let Some(flags) = win64_flags() else {
+        eprintln!("SKIP: no zig, so no mingw headers to ask clang with");
+        return;
+    };
+    check(&WIN64, &flags);
+}
+
+fn check(table: &Table, flags: &[String]) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let Some(fresh) = from_clang(&root) else {
+    let Some(fresh) = from_clang(&root, flags) else {
         eprintln!("SKIP: clang or the runtime header is unavailable");
         return;
     };
     if std::env::var_os("NTS_REGENERATE").is_some() {
-        regenerate(&root, &fresh);
+        regenerate(&root, &fresh, table);
         return;
     }
     for declared in &fresh {
         let name = &declared.name;
-        let Some(known) = SIGNATURES.iter().find(|known| known.name == *name) else {
+        let Some(known) = table.rows.iter().find(|known| known.name == *name) else {
             // A helper the backend *reaches for* must be here. Missing, its
             // call is emitted with no declaration and no argument conversion --
             // an invalid module, not a refusal. Anything else the table does
@@ -301,9 +370,23 @@ fn the_table_still_matches_the_header() {
              change with every other test still green."
         );
     }
+    // And the other way: a runtime row clang no longer reports is a helper the
+    // header stopped declaring. Carried here, it is emitted as a call to a
+    // symbol whose signature nothing checks any more -- which is how three
+    // hand-added rows outlived their declarations, and why regenerating would
+    // have deleted two the backend calls.
+    for known in table.rows.iter().filter(|known| known.name.starts_with("nts_")) {
+        assert!(
+            fresh.iter().any(|declared| declared.name == known.name),
+            "`{}` is in {} but the header no longer declares it; declare it or rerun with NTS_REGENERATE=1",
+            known.name,
+            table.file
+        );
+    }
     assert!(
-        SIGNATURES.len() > 100,
-        "the table looks empty: {} entries",
-        SIGNATURES.len()
+        table.rows.len() > 100,
+        "{} looks empty: {} entries",
+        table.file,
+        table.rows.len()
     );
 }

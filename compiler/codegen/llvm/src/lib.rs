@@ -44,6 +44,7 @@ mod aggregate;
 mod native;
 mod objc;
 pub mod signatures;
+pub mod signatures_win64;
 
 use std::fmt::Write as _;
 
