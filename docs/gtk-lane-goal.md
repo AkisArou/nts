@@ -441,6 +441,24 @@ Passing the type exposed a core defect: every integer argument to a native
 call went through a double on its way to C's parameter, 53 bits for a 64-bit
 `GType`, since a foreign callee had no signature `specialize` consulted.
 
+**Interfaces.** `entry.get_text()` and `entry.text`: a GObject interface is a
+handle type, `GObjectInterface<"_GtkEditable", GtkWidget>` -- its
+prerequisite's handle, spelled by its own tag in C, `GtkEditable *`, as the
+header declares a parameter of one -- and a class says what it implements,
+`GObjectClass<"_GtkEntry", GtkWidget, "_GtkEditable" | …>`, inheriting its
+parent's. TypeScript's structural typing makes a `GtkEntry` assignable to a
+`GtkEditable` and nothing that does not declare it; the binding merges each
+interface's methods and properties into its implementers', as GJS does. 518
+`implements` in Gtk.
+
+What the checker vouches for is the *type's* claim, not the pointer's: a
+handle that came through `as`, or a binding whose `<implements>` GIR got
+wrong, converts all the same. For GObject a wrong one fails loudly -- every
+interface function checks `G_IS_…` and `G_DEBUG=fatal-criticals` ends the
+run -- which is why the compiler does not re-derive the relation; an
+Objective-C protocol built on the same `__c_implements` would have no such
+check behind it, and needs one.
+
 **Next in M3:**
 
 - Construct-only properties (`GtkApplication`'s are settable; `GSubprocess`'s

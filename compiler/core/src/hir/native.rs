@@ -757,6 +757,11 @@ pub struct Handle {
     pub ancestors: Vec<String>,
     /// Whose object this is, which decides whether the program counts it.
     pub family: Family,
+    /// A `GObject` interface (`GObjectInterface<Tag, Prerequisite>`): `tag` is
+    /// the interface's, `ancestors` its prerequisite's chain with the
+    /// prerequisite last. Any handle extending that chain converts to it --
+    /// the checker has already required that it implements the interface.
+    pub interface: bool,
 }
 
 /// The object system a handle belongs to.
@@ -853,7 +858,7 @@ impl Family {
 /// its release is the family's.
 #[must_use]
 pub fn gobject_root() -> Pointee {
-    Pointee::Opaque(Handle { tag: "_GObject".to_owned(), ancestors: vec!["_GTypeInstance".to_owned()], family: Family::GObject })
+    Pointee::Opaque(Handle { tag: "_GObject".to_owned(), ancestors: vec!["_GTypeInstance".to_owned()], family: Family::GObject, interface: false })
 }
 
 impl Pointee {
@@ -888,6 +893,16 @@ impl Handle {
     /// (`own::anchors`).
     #[must_use]
     pub fn upcasts_to(&self, to: &Self) -> bool {
+        if to.interface {
+            // The prerequisite's chain, which this one extends: `GtkEntry`'s
+            // is `GtkWidget`'s and more. Whether it implements the interface
+            // is TypeScript's `__c_implements`, which is not in a handle.
+            let chain: Vec<&String> = self.ancestors.iter().chain(std::iter::once(&self.tag)).collect();
+            return self.family == to.family
+                && self != to
+                && chain.len() >= to.ancestors.len()
+                && chain.iter().zip(&to.ancestors).all(|(mine, theirs)| *mine == theirs);
+        }
         (self.family == to.family || to.family == Family::C)
             && self.ancestors.len() > to.ancestors.len()
             && self.ancestors.starts_with(&to.ancestors)
@@ -897,7 +912,7 @@ impl Handle {
 
 impl From<String> for Handle {
     fn from(tag: String) -> Self {
-        Self { tag, ancestors: Vec::new(), family: Family::C }
+        Self { tag, ancestors: Vec::new(), family: Family::C, interface: false }
     }
 }
 
@@ -912,7 +927,7 @@ impl Handle {
     /// message as.
     #[must_use]
     pub fn ns_string() -> Self {
-        Self { tag: "NSString".to_owned(), ancestors: vec!["NSObject".to_owned()], family: Family::Objc }
+        Self { tag: "NSString".to_owned(), ancestors: vec!["NSObject".to_owned()], family: Family::Objc, interface: false }
     }
 }
 
@@ -3005,6 +3020,7 @@ mod handles {
             tag: (*tag).to_owned(),
             ancestors: ancestors.iter().map(|&a| a.to_owned()).collect(),
             family: super::Family::C,
+            interface: false,
         })
     }
 

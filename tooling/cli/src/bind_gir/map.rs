@@ -26,6 +26,14 @@ use super::model::{
     Transfer, TypeRef,
 };
 
+/// A type named from another module, or this one: `(module, name)`, the module
+/// empty for this one.
+type Reference = (String, String);
+
+/// An interface a class implements: the name the binding writes and the C
+/// tag it is, `("GtkEditable", "_GtkEditable")`.
+type Implemented = (String, String);
+
 /// What a signal's view calls: `g_signal_connect_data`, keeping the closure.
 pub(crate) const CONNECT: &str = "nts_gobject_connect";
 
@@ -85,7 +93,16 @@ pub(crate) enum TypeDecl {
     /// `Class<"_GtkButton", GtkWidget>`; the parent as `(module, name)` when
     /// it lives in another namespace.
     /// `counted` for a `GObject`, which the compiler counts: `GObjectClass`.
-    Class { name: String, tag: String, parent: Option<(String, String)>, counted: bool },
+    /// `interface` for a `GObject` interface (`GObjectInterface`), and
+    /// `implements` the interfaces a class declares, as `(name, tag)`.
+    Class {
+        name: String,
+        tag: String,
+        parent: Option<(String, String)>,
+        counted: bool,
+        interface: bool,
+        implements: Vec<(String, String)>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -471,7 +488,9 @@ impl<'a> Mapper<'a> {
         for class in &self.namespace.classes {
             let Some(c_type) = &class.c_type else { continue };
             let Some(tag) = self.facts.tags.get(c_type).cloned() else { continue };
-            let parent = self.parent_of(class);
+            // An interface's base is the first class above it, and the
+            // interfaces between are ones it implements.
+            let (parent, implied) = if class.interface { self.interface_base(class) } else { (self.parent_of(class), Vec::new()) };
             // The parent's methods come with it, from its own module.
             if let Some((module, name)) = &parent
                 && !module.is_empty()
@@ -528,7 +547,18 @@ impl<'a> Mapper<'a> {
             if counted {
                 self.binding.brands.insert("GObjectClass");
             }
-            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag, parent, counted });
+            let implements = if counted {
+                let mut implements = self.implements(class);
+                implements.extend(implied);
+                implements
+            } else {
+                Vec::new()
+            };
+            let interface = class.interface && counted && parent.is_some();
+            if interface {
+                self.binding.brands.insert("GObjectInterface");
+            }
+            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag, parent, counted, interface, implements });
         }
         // Records are roots: nothing derives from one by GIR's account, and a
         // root `Class` is an opaque handle that can also anchor a chain, which
@@ -537,8 +567,63 @@ impl<'a> Mapper<'a> {
             let Some(c_type) = &record.c_type else { continue };
             let Some(tag) = self.facts.tags.get(c_type) else { continue };
             self.binding.brands.insert("Class");
-            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag: tag.clone(), parent: None, counted: false });
+            self.binding.types.push(TypeDecl::Class {
+                name: c_type.clone(),
+                tag: tag.clone(),
+                parent: None,
+                counted: false,
+                interface: false,
+                implements: Vec::new(),
+            });
         }
+    }
+
+    /// An interface's base: the first class up its prerequisites, and the
+    /// interfaces passed on the way, as `(name, tag)` -- `GDtlsConnection`'s
+    /// prerequisite is the interface `GDatagramBased`, whose is `GObject`.
+    fn interface_base(&mut self, class: &'a Class) -> (Option<Reference>, Vec<Implemented>) {
+        let mut implied = Vec::new();
+        let (mut namespace, mut at) = (self.namespace, class);
+        for _ in 0..64 {
+            let Some((next_namespace, next)) = self.parent_class(namespace, at) else { break };
+            let Some(c_type) = next.c_type.clone() else { break };
+            if !next.interface {
+                return (Some(self.reference(next_namespace, &c_type)), implied);
+            }
+            if let Some(tag) = self.facts.tags.get(&c_type).cloned() {
+                let (module, local) = self.reference(next_namespace, &c_type);
+                if !module.is_empty() {
+                    self.binding.imports.entry(module).or_default().insert(format!("{local}Methods"));
+                }
+                implied.push((local, tag));
+            }
+            (namespace, at) = (next_namespace, next);
+        }
+        (None, implied)
+    }
+
+    /// The interfaces `class` declares, as the binding names them and as C
+    /// tags them: `("GtkEditable", "_GtkEditable")`. Each one's methods are
+    /// merged into the class's, from its own module. One the headers do not
+    /// tag, or that is not a counted interface, is left out -- the class is
+    /// then simply not seen to implement it.
+    fn implements(&mut self, class: &'a Class) -> Vec<Implemented> {
+        let mut found = Vec::new();
+        for name in &class.implements {
+            let qualified = if name.contains('.') { name.clone() } else { format!("{}.{name}", self.namespace.name) };
+            let Some(Resolved::Class(namespace, interface)) = self.resolve(&qualified) else { continue };
+            let Some(c_type) = interface.c_type.as_deref() else { continue };
+            let Some(tag) = self.facts.tags.get(c_type).cloned() else { continue };
+            if !interface.interface || !self.counted(namespace, interface) {
+                continue;
+            }
+            let (module, local) = self.reference(namespace, c_type);
+            if !module.is_empty() {
+                self.binding.imports.entry(module).or_default().insert(format!("{local}Methods"));
+            }
+            found.push((local, tag));
+        }
+        found
     }
 
     /// The class's parent: GIR's `parent`, or for a root its first field when

@@ -46,6 +46,9 @@ pub(crate) struct Class {
     /// `abstract="1"`: no instance is of exactly this class, so nothing
     /// constructs one by its `GType`.
     pub(crate) is_abstract: bool,
+    /// `<implements name="Editable"/>`: the interfaces this class declares,
+    /// named as GIR names them (qualified in another namespace).
+    pub(crate) implements: Vec<String>,
     /// `c:symbol-prefix`: `button` in `gtk_button_new`, joined to the
     /// namespace's own prefix to name what a binding adds for the class.
     pub(crate) symbol_prefix: Option<String>,

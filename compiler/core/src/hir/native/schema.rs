@@ -17,6 +17,14 @@ fn marker(snapshot: &SemanticSnapshot, ty: TypeId, name: &str) -> Option<TypeId>
     (p.readonly && !p.optional && p.kind == MemberKind::Field).then_some(p.ty)
 }
 
+/// An optional property's literal, through the `undefined` optionality adds.
+fn optional_text(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
+    match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Union(parts) => parts.iter().find_map(|part| text(snapshot, *part)),
+        _ => text(snapshot, ty),
+    }
+}
+
 fn text(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Literal(LiteralValue::String(name)) => Some(name),
@@ -47,7 +55,17 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     };
     let mut tags: Vec<String> =
         elements.iter().map_while(|element| text(snapshot, *element).map(str::to_owned)).collect();
-    let tag = tags.pop()?;
+    // `GObjectInterface<Tag, Prerequisite>`: the chain is the prerequisite's,
+    // whole, and the handle is the interface's own tag, which is how C
+    // declares a parameter of one (`GtkEditable *`).
+    let interface = property(snapshot, ty, "___c_interface")
+        .filter(|p| p.readonly && p.optional && p.kind == MemberKind::Field)
+        .and_then(|p| optional_text(snapshot, p.ty))
+        .map(str::to_owned);
+    let tag = match &interface {
+        Some(tag) => tag.clone(),
+        None => tags.pop()?,
+    };
     // `ObjcClass<Tag, Parent>` is `Class<Tag, Parent>` with this brand beside
     // it: the same chain, an object the program counts. `GObjectClass` the same.
     let family = if marker(snapshot, ty, "___objc").is_some() {
@@ -57,7 +75,7 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     } else {
         super::Family::C
     };
-    Some(Pointee::Opaque(super::Handle { tag, ancestors: tags, family }))
+    Some(Pointee::Opaque(super::Handle { tag, ancestors: tags, family, interface: interface.is_some() }))
 }
 
 /// `ByValue<T>`: the record `T` itself, where C takes or returns one by value.
@@ -103,7 +121,7 @@ fn objc_class(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         at = base_class(snapshot, base);
     }
     ancestors.reverse();
-    Some(Pointee::Opaque(super::Handle { tag, ancestors, family: super::Family::Objc }))
+    Some(Pointee::Opaque(super::Handle { tag, ancestors, family: super::Family::Objc, interface: false }))
 }
 
 /// Whether a class declaration has an Objective-C class among its ancestors

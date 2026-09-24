@@ -20,6 +20,9 @@
 //   made press false  `new GtkButton({ label: "press", has_frame: false })`:
 //                 `gtk_button_new`, then each setter the literal writes -- a
 //                 frame is on by default, so `false` is the setter's doing
+//   entry typed! 0  `GtkEditable`'s `set_text`, `get_text` and `text` on a
+//                 `GtkEntry`, and `GtkOrientable`'s orientation on a `GtkBox`:
+//                 an interface's methods on the classes implementing it
 //   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned, held as
 //                 a plain `GtkWidget`
 //   cast-null     `asGtkLabel` answers null for that same widget
@@ -52,6 +55,7 @@ import {
   gtk_window_set_child,
   Orientation,
   GtkButton,
+  GtkEntry,
   GtkEntryBuffer,
   GtkLabel,
   type GtkWidget,
@@ -205,6 +209,14 @@ function main(): void {
     const buffer = new GtkEntryBuffer({ max_length: 2 });
     buffer.set_text("abc", -1);
     gir_log("buffer " + buffer.text + " " + String(label.selectable));
+    // An interface's methods and properties on a class implementing it, as
+    // GJS has them: `GtkEditable`'s on a `GtkEntry`, `GtkOrientable`'s on a
+    // `GtkBox` -- each the C function taking the interface.
+    const entry = new GtkEntry({});
+    entry.set_text("typed");
+    entry.text = entry.get_text() + "!";
+    box.set_orientation(Orientation.HORIZONTAL);
+    gir_log("entry " + entry.text + " " + String(box.get_orientation()));
     // A checked downcast, for a handle known only as a widget.
     const widget: GtkWidget = box;
     gir_log(asGtkBox(widget) === null ? "cast-failed" : "cast-ok");

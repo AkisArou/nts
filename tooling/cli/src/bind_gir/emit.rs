@@ -50,7 +50,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     }
     for decl in &binding.types {
         match decl {
-            TypeDecl::Class { name, tag, parent, counted } => {
+            TypeDecl::Class { name, tag, parent, counted, interface, implements } => {
                 let class = if *counted { "GObjectClass" } else { "Class" };
                 // `button.set_label(text)`: each method is the C function it
                 // names, with the receiver as its `this`. Intersected rather
@@ -68,9 +68,27 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     accessor(&mut out, &own, &property.name, property.getter.as_deref(), property.setter.as_deref());
                 }
                 out.push_str("  }\n");
+                // An interface's methods are its implementers' too:
+                // `entry.get_text()` is `gtk_editable_get_text`.
+                let merged = implements.iter().fold(String::new(), |mut merged, (interface, _)| {
+                    let _ = write!(merged, " & {interface}Methods");
+                    merged
+                });
+                let tags = implements.iter().map(|(_, tag)| format!("\"{tag}\"")).collect::<Vec<_>>().join(" | ");
                 if let Some((_, parent)) = parent {
-                    let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods & {parent}Methods;");
-                    let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\", {parent}> & {name}Methods;");
+                    let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods & {parent}Methods{merged};");
+                    if *interface && implements.is_empty() {
+                        let _ = writeln!(out, "  export type {name} = GObjectInterface<\"{tag}\", {parent}> & {name}Methods;");
+                    } else if *interface {
+                        let _ = writeln!(out, "  export type {name} = GObjectInterface<\"{tag}\", {parent}, {tags}> & {name}Methods;");
+                    } else if implements.is_empty() {
+                        let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\", {parent}> & {name}Methods;");
+                    } else {
+                        let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\", {parent}, {tags}> & {name}Methods;");
+                    }
+                } else if !implements.is_empty() {
+                    let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods{merged};");
+                    let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\", null, {tags}> & {name}Methods;");
                 } else {
                     let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods;");
                     let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\"> & {name}Methods;");

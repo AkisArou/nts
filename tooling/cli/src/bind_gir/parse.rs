@@ -99,6 +99,12 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                     .map(str::to_owned),
                 interface: kind == "interface",
                 is_abstract: attribute(node, "abstract") == Some("1"),
+                implements: node
+                    .children()
+                    .filter(|n| is(*n, "implements"))
+                    .filter_map(|n| attribute(n, "name"))
+                    .map(str::to_owned)
+                    .collect(),
                 symbol_prefix: c_attribute(node, "symbol-prefix").map(str::to_owned),
                 signals: node
                     .children()

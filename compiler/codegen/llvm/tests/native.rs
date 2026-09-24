@@ -3920,3 +3920,53 @@ size_t doubled(size_t n) { return 2 * n + 1; }
     let Some((_, prepared)) = prepare("cnumber-promise", &settled) else { return; };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
 }
+
+/// A `GObject` interface as a handle type: `GObjectInterface<Tag, Prerequisite>`
+/// is its prerequisite's handle, spelled by its own tag in C -- a parameter of
+/// one is `struct _Editable *`, as the header declares it -- and a class whose
+/// `GObjectClass<…, Implements>` names the tag converts to it. `Label` does
+/// not implement it, and passing one is the checker's error.
+#[test]
+fn an_interface_takes_the_classes_implementing_it_on_both_backends() {
+    let source = r#"
+import type { GObjectClass, GObjectInterface, c_int } from "c:types";
+type GObject = GObjectClass<"_GObject">;
+type Widget = GObjectClass<"_Widget", GObject>;
+type Editable = GObjectInterface<"_Editable", Widget>;
+type Entry = GObjectClass<"_Entry", Widget, "_Editable">;
+type Label = GObjectClass<"_Label", Widget>;
+declare function entry_new(): Entry;
+declare function editable_value(editable: Editable): c_int;
+declare function widget_value(widget: Widget): c_int;
+export function run(): number {
+    const entry = entry_new();
+    const editable: Editable = entry;
+    return (editable_value(entry) as number) * 100 + (widget_value(editable) as number) * 10 + (editable_value(editable) as number);
+}
+"#;
+    let library = r"
+#include <stdlib.h>
+struct _Widget { int value; };
+struct _Editable;
+struct _Entry { struct _Widget widget; };
+struct _Entry *entry_new(void) { static struct _Entry e = { { 7 } }; return &e; }
+int editable_value(struct _Editable *e) { return ((struct _Widget *)e)->value - 5; }
+int widget_value(struct _Widget *w) { return w->value; }
+void *g_object_ref_sink(void *o) { return o; }
+void g_object_unref(void *o) { (void)o; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("interface", source, provider, library, &caller) else { return; };
+        assert!(text.contains("editable_value(struct _Editable *)"), "an interface parameter is not its own tag in C");
+        for output in outputs {
+            assert_eq!(output, expect("272", provider), "{provider:?}");
+        }
+    }
+    let wrong = source.replace("const editable: Editable = entry;", "const editable: Editable = entry;\n    const label = null as unknown as Label;\n    editable_value(label);");
+    let Some(messages) = checker_messages("interface-wrong", &wrong) else { return; };
+    assert!(
+        messages.iter().any(|m| m.contains("'Label' is not assignable to parameter of type 'Editable'")),
+        "a class not implementing the interface was accepted: {messages:?}"
+    );
+}

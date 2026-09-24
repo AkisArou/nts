@@ -153,9 +153,32 @@ declare module "c:types" {
   // reference a new widget is born with -- and drops it where the last one
   // dies, `g_object_unref`; so a program never calls either. Under the
   // no-GC provider nothing is ever freed, a GObject included.
-  export type GObjectClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
+  //
+  // `Implements` is the tags of the interfaces the class declares, and a
+  // class also implements what its parent does: `GtkEntry` is a `GtkEditable`,
+  // which is how `entry.get_text()` reaches `gtk_editable_get_text`.
+  export type GObjectClass<
+    Tag extends string,
+    Parent extends ClassChain | null = null,
+    Implements extends string = never,
+  > = Class<Tag, Parent> & {
     readonly __gobject: true;
+    readonly __c_implements: ImplementsOf<Parent> & { readonly [K in Implements]: true };
   };
+  // A GObject interface: a handle of its prerequisite class (`GtkWidget` for
+  // `GtkEditable`) that C spells by its own tag, `GtkEditable *`. Anything
+  // implementing `Tag` converts to one -- its `__c_implements` says so -- and
+  // nothing else does. The marker is optional so that an implementing class,
+  // which has none, is assignable; its value tells two interfaces apart. An
+  // interface whose prerequisite is another interface names the first class
+  // above it and `Implements` the interfaces between: `GDtlsConnection` is a
+  // `GObject` implementing `GDatagramBased`, so there is one marker per type.
+  export type GObjectInterface<Tag extends string, Prerequisite extends ClassChain, Implements extends string = never> =
+    Prerequisite & {
+      readonly __c_interface?: Tag;
+      readonly __c_implements: { readonly [K in Tag | Implements]: true };
+    };
+  type ImplementsOf<P> = P extends { readonly __c_implements: infer I } ? I : {};
   // A result the caller owns -- GIR's `transfer-ownership="full"`: the
   // reference comes with it, and is not taken again.
   export type Owned<T extends ClassChain> = T & { readonly __c_owned?: true };
