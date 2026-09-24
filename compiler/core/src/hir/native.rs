@@ -2528,6 +2528,7 @@ fn enum_members_scalar(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Optio
 
 pub(crate) mod schema;
 pub use schema::{is_layout, pointer, storage};
+pub(crate) use schema::objc_meta;
 
 /// Whether a declared parameter is TypeScript's `object`, or `object | null`.
 ///

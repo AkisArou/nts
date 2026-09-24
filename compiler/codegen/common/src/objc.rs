@@ -34,6 +34,9 @@ pub fn lookups(program: &Program) -> Lookups<'_> {
                 found.classes.extend(send.class.as_deref());
                 found.returns_records |= target.destination().is_some();
             }
+            if let OpKind::ObjcClass { name, .. } = &op.kind {
+                found.classes.push(name.as_str());
+            }
         }
     }
     for list in [&mut found.selectors, &mut found.classes] {

@@ -26,7 +26,7 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir:
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(
-            r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts"]}}"#
+            r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts","{root}/runtime/objc/objc.d.ts"]}}"#
         ),
     )
     .unwrap();
@@ -298,4 +298,72 @@ export function run(): number {
         return;
     };
     assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
+const CLASSES: &str = r#"/**
+ * @ntsFramework AppKit
+ */
+declare module "objc:AppKit" {
+  import type { ObjcClass, ObjcMeta } from "objc:types";
+  export type NSWindow = ObjcClass<"NSWindow">;
+  export interface NSWindowStatics {
+    /** @ntsSelector alloc */
+    alloc(this: NSWindowMeta): NSWindow;
+  }
+  export type NSWindowMeta = ObjcMeta<"NSWindow"> & NSWindowStatics;
+  export const NSWindow: NSWindowMeta;
+  export const Misnamed: ObjcMeta<"not a class">;
+}
+declare module "c:elsewhere" {
+  import type { ObjcMeta } from "objc:types";
+  export const Stray: ObjcMeta<"NSWindow">;
+}
+"#;
+
+/// `NSWindow` as a value is its class object: the cached, required lookup a
+/// class send makes, so `NSWindow.alloc()` is a message to it. The module's
+/// frameworks come with it.
+#[test]
+fn a_class_is_a_value_and_a_class_method_a_message_to_it() {
+    let source = "import { NSWindow } from \"objc:AppKit\";\nexport function run(): void {\n  NSWindow.alloc();\n}\n";
+    let Some((_, prepared)) = prepare("class-value", CLASSES, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let program = &prepared.program;
+    assert!(program.objc, "a program that names a class links libobjc");
+    assert_eq!(program.native_frameworks, ["AppKit"]);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
+    let text = emitted.writer.text();
+    assert!(text.contains("objc_getRequiredClass(\"NSWindow\")"), "{text}");
+    let lookup = text.lines().find(|line| line.contains("= nts_objc_class_NSWindow();")).unwrap_or_default();
+    let value = lookup.trim().split(' ').next().unwrap_or_default().to_owned();
+    assert!(
+        !value.is_empty() && text.contains(&format!("objc_msgSend)({value}, nts_objc_sel_alloc())")),
+        "alloc is not sent to the class value:\n{text}"
+    );
+}
+
+/// Only a constant an `objc:` module declares is a class, and only one whose
+/// brand names a class.
+#[test]
+fn a_class_value_is_declared_by_an_objc_module_with_a_class_name() {
+    for (name, import, module, expected) in [
+        ("stray", "Stray", "c:elsewhere", "a module-scope variable of a native pointer"),
+        ("misnamed", "Misnamed", "objc:AppKit", "`not a class` is not one"),
+    ] {
+        let source = format!(
+            "import {{ {import} }} from \"{module}\";\nimport type {{ ObjcMeta }} from \"objc:types\";\nexport function run(): ObjcMeta<string> {{\n  return {import};\n}}\n"
+        );
+        let Some((_, prepared)) = prepare(&format!("class-{name}"), CLASSES, &source) else {
+            eprintln!("skipped: no tsgo");
+            return;
+        };
+        assert!(
+            prepared.diagnostics.iter().any(|d| d.message.contains(expected)),
+            "{name}: no refusal saying `{expected}`: {:?}",
+            prepared.diagnostics
+        );
+    }
 }

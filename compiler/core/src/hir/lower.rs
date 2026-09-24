@@ -8122,6 +8122,10 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
                 program.objc |= target.send.is_some();
                 program.native_frameworks.extend(target.frameworks.iter().cloned());
             }
+            if let OpKind::ObjcClass { frameworks, .. } = &op.kind {
+                program.objc = true;
+                program.native_frameworks.extend(frameworks.iter().cloned());
+            }
             // A record enters a program through a type, not only through a
             // call: a program may hold a `Ptr<Rusage>` and call nothing from
             // the module that describes it. Every value is walked, parameters
@@ -40220,6 +40224,57 @@ impl<'a> FuncBuilder<'a> {
         Ok(Vec::new())
     }
 
+    /// `NSWindow` as a value: a constant an `objc:` module declares with the
+    /// type `ObjcMeta<"NSWindow">`, which is that class object.
+    ///
+    /// Only a declaration inside `declare module "objc:..."`, where a constant
+    /// can have no initializer and so can mean nothing else. The class name is
+    /// the brand's, not the constant's, so a binding may name the constant as
+    /// it likes. Asked before module scope is, which refuses a native pointer
+    /// at module scope for having no storage -- right for a variable, and this
+    /// is not one.
+    fn objc_class_object(&mut self, id: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(ty) = self.snapshot.node_types.get(&id).copied() else { return Ok(None) };
+        let Some(name) = super::native::objc_meta(self.snapshot, ty) else { return Ok(None) };
+        let Some(declaration) = self.snapshot.symbols.get(symbol.0 as usize).and_then(|record| {
+            record.declarations.iter().copied().find(|declaration| {
+                self.kind_of(*declaration) == Some(nts_semantic_schema::syntax::VARIABLE_DECLARATION)
+            })
+        }) else {
+            return Ok(None);
+        };
+        if !self.in_objc_module(declaration) {
+            return Ok(None);
+        }
+        if !super::native::is_c_identifier(&name) {
+            return Err(self.unsupported(id, &format!("`ObjcMeta<\"{name}\">` names a class by its name, and `{name}` is not one")));
+        }
+        let frameworks = self.declared_frameworks(id, declaration)?;
+        let ty = HirType::NativePointer(super::native::Pointee::Opaque("objc_class".into()));
+        Ok(Some(self.push(OpKind::ObjcClass { name, frameworks }, ty, self.origin(id))))
+    }
+
+    /// Whether `declaration` sits inside `declare module "objc:..."`.
+    fn in_objc_module(&self, declaration: NodeId) -> bool {
+        let mut at = self.node(declaration).parent;
+        while let Some(id) = at {
+            // The checker names an ambient module by its specifier, quotes
+            // and all: `"objc:AppKit"`. The node carries no symbol, so the
+            // module's is found by its declaration; this is asked only of a
+            // constant already typed `ObjcMeta`, so the scan is rare.
+            if self.kind_of(id) == Some(nts_semantic_schema::syntax::MODULE_DECLARATION) {
+                return self
+                    .snapshot
+                    .symbols
+                    .iter()
+                    .find(|record| record.declarations.contains(&id))
+                    .is_some_and(|record| record.name.trim_matches('"').starts_with("objc:"));
+            }
+            at = self.node(id).parent;
+        }
+        false
+    }
+
     /// The Objective-C message a declaration tagged `@ntsSelector` sends.
     ///
     /// Refused here, where the declaration is in hand, for everything the call
@@ -44502,6 +44557,9 @@ impl<'a> FuncBuilder<'a> {
         // An imported name, resolved to what it imports. Below the local
         // lookup because an import binds nothing a function body can shadow.
         let symbol = self.denoted_symbol(symbol);
+        if let Some(class) = self.objc_class_object(id, symbol)? {
+            return Ok(class);
+        }
 
         // Declared at module scope. A constant is its value; a variable is a
         // load.

@@ -214,7 +214,18 @@ correctness does not depend on arm64 running by luck.
    run, and the LLVM backend has no AAPCS64 classification, since it targets
    x86_64 only. `dispatch_async` needs `-fblocks` in the witness.
 
-2. **A3:** `nts bind-objc` from SDK headers, with an Objective-C witness.
+2. **The surface `bind-objc` will write, first.** The NativeScript shape needs
+   the lowering to express it, and a generator targeting today's surface would
+   be rewritten by A4. Landed so far:
+   - **A class is a value.** `export const NSWindow: ObjcMeta<"NSWindow"> &
+     NSWindowStatics` in an `objc:` module is the class object, read through
+     the cached, required lookup, so `NSWindow.alloc()` is a message to it and
+     class methods need no `@ntsClass` function. `macos-window` is written this
+     way.
+
+   Next: properties (`window.title = s` as `setTitle:`).
+
+3. **A3:** `nts bind-objc` from SDK headers, with an Objective-C witness.
    It replaces the hand-written `.d.ts` in every `macos-*` fixture. Sugar for
    `class X extends NSObject` belongs to A4, and so does per-instance
    TypeScript state, and so does `NSMakeRect`-style construction. Today a
@@ -228,7 +239,7 @@ correctness does not depend on arm64 running by luck.
    run-time value, so this cannot be refused statically. It is ObjC's own
    hazard, and A3's generated bindings, which know each method's real result,
    leave `performSelector:` as the one untyped escape hatch.
-3. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
+4. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.
 
 ## Rules this lane keeps

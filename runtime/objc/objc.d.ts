@@ -12,6 +12,7 @@
 // `autorelease`, `dealloc` or `retainCount`, and a call to one is refused.
 declare module "objc:types" {
   import type { Class, ClassChain } from "c:types";
+  import type { ClassObject } from "objc:runtime";
 
   export type ObjcClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
     readonly __objc: true;
@@ -28,6 +29,18 @@ declare module "objc:types" {
   // another thread ends the process by name, since the closure's count is
   // not atomic.
   export type Block<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "block" };
+
+  // The class object of `Tag`: what `NSWindow` means as a value, so that
+  // `NSWindow.alloc()` is a message to it. A binding declares one as
+  //
+  //     export const NSWindow: ObjcMeta<"NSWindow"> & NSWindowStatics;
+  //
+  // inside its `declare module "objc:..."`, where the statics interface holds
+  // the class methods, each taking `this` as the meta. Reading the constant
+  // is the class lookup the program already caches for its sends: once, and
+  // required, so a class that is not loaded ends the process by name rather
+  // than answering every message with nil. A class object is never counted.
+  export type ObjcMeta<Tag extends string> = ClassObject & { readonly __objc_meta: Tag };
 }
 
 // Hand-written. The Objective-C runtime's C API: what defining a class at run

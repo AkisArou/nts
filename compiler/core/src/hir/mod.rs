@@ -764,6 +764,12 @@ pub enum OpKind {
     NativeStore { pointer: ValueId, index: ValueId, value: ValueId },
     /// Fixed function-local zeroed storage. Count is positive and layout checked.
     NativeLocal { count: u32 },
+    /// An Objective-C class object, by name: what a constant typed
+    /// `ObjcMeta<Tag>` in an `objc:` module is. Each backend reads it through
+    /// the same cached, required lookup a class send uses. `frameworks` are
+    /// the declaring module's, so a program that only names a class still
+    /// links what defines it.
+    ObjcClass { name: String, frameworks: Vec<String> },
     /// `sizeof<T>()`: the byte size of native storage, as a `number`.
     ///
     /// **An op and not a constant, because the size is the target's.** A

@@ -74,6 +74,12 @@ pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::s
     }
 }
 
+/// `ObjcMeta<Tag>`: the name of the Objective-C class whose class object a
+/// value of this type is.
+pub(crate) fn objc_meta(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
+    marker(snapshot, ty, "___objc_meta").and_then(|tag| text(snapshot, tag)).map(str::to_owned)
+}
+
 /// A `Struct<...>` describes native storage; constructing its phantom marker as a
 /// managed JS object is not constructing that storage.
 #[must_use]

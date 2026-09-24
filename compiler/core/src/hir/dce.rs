@@ -118,6 +118,9 @@ fn has_effects(kind: &OpKind) -> bool {
         OpKind::NativeLocal { .. } => false,
         // A size is a constant the backend spells.
         OpKind::NativeSizeOf(_) => false,
+        // A cached lookup: the first one registers nothing a later one needs,
+        // and a class that is not loaded is found by the send that uses it.
+        OpKind::ObjcClass { .. } => false,
         // Erasing, reading a tag and unerasing are all pure: they read one
         // value and produce another. Dead ones go, like any other computation.
         OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => false,

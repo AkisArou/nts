@@ -10,7 +10,7 @@
  */
 declare module "objc:AppKit" {
   import type { ByValue, Struct, c_double, c_int16, c_long, c_ulong } from "c:types";
-  import type { ObjcClass } from "objc:types";
+  import type { ObjcClass, ObjcMeta } from "objc:types";
   import type { Selector } from "objc:runtime";
 
   export type CGPoint = Struct<{ x: c_double; y: c_double }, "CGPoint">;
@@ -90,57 +90,80 @@ declare module "objc:AppKit" {
   export type NSTimer = ObjcClass<"NSTimer", NSObject> & NSTimerOwnMethods;
   export type NtsWindowController = ObjcClass<"NtsWindowController", NSObject>;
 
-  /**
-   * @ntsSelector sharedApplication
-   * @ntsClass NSApplication
-   */
-  export function sharedApplication(): NSApplication;
-  /**
-   * @ntsSelector alloc
-   * @ntsClass NSWindow
-   */
-  export function allocWindow(): NSWindow;
-  /**
-   * @ntsSelector alloc
-   * @ntsClass NSButton
-   */
-  export function allocButton(): NSButton;
-  /**
-   * @ntsSelector new
-   * @ntsClass NtsWindowController
-   */
-  export function newController(): NtsWindowController;
-  /**
-   * @ntsSelector stringWithUTF8String:
-   * @ntsClass NSString
-   */
-  export function stringWithUTF8String(text: string): NSString;
-  /**
-   * @ntsSelector scheduledTimerWithTimeInterval:target:selector:userInfo:repeats:
-   * @ntsClass NSTimer
-   */
-  export function scheduledTimer(
-    interval: c_double,
-    target: NSObject,
-    name: Selector,
-    userInfo: NSObject | null,
-    repeats: boolean,
-  ): NSTimer;
-  /**
-   * `NSEventTypeApplicationDefined`, posted after `stop:` so the loop wakes
-   * and sees it.
-   * @ntsSelector otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:
-   * @ntsClass NSEvent
-   */
-  export function otherEvent(
-    type: c_ulong,
-    location: ByValue<CGPoint>,
-    flags: c_ulong,
-    time: c_double,
-    windowNumber: c_long,
-    context: NSObject | null,
-    subtype: c_int16,
-    data1: c_long,
-    data2: c_long,
-  ): NSEvent;
+  // The class objects, each a value whose statics interface holds the class
+  // methods: `NSWindow.alloc()` is a message to the class `NSWindow`.
+  export interface NSObjectStatics {
+    /**
+     * Quoted, because `new(...)` in an interface is a construct signature.
+     * @ntsSelector new
+     */
+    "new"(this: NtsWindowControllerMeta): NtsWindowController;
+  }
+  export const NSObject: ObjcMeta<"NSObject">;
+  export type NtsWindowControllerMeta = ObjcMeta<"NtsWindowController"> & NSObjectStatics;
+  export const NtsWindowController: NtsWindowControllerMeta;
+
+  export interface NSApplicationStatics {
+    /** @ntsSelector sharedApplication */
+    sharedApplication(this: NSApplicationMeta): NSApplication;
+  }
+  export type NSApplicationMeta = ObjcMeta<"NSApplication"> & NSApplicationStatics;
+  export const NSApplication: NSApplicationMeta;
+
+  export interface NSWindowStatics {
+    /** @ntsSelector alloc */
+    alloc(this: NSWindowMeta): NSWindow;
+  }
+  export type NSWindowMeta = ObjcMeta<"NSWindow"> & NSWindowStatics;
+  export const NSWindow: NSWindowMeta;
+
+  export interface NSButtonStatics {
+    /** @ntsSelector alloc */
+    alloc(this: NSButtonMeta): NSButton;
+  }
+  export type NSButtonMeta = ObjcMeta<"NSButton"> & NSButtonStatics;
+  export const NSButton: NSButtonMeta;
+
+  export interface NSStringStatics {
+    /** @ntsSelector stringWithUTF8String: */
+    stringWithUTF8String(this: NSStringMeta, text: string): NSString;
+  }
+  export type NSStringMeta = ObjcMeta<"NSString"> & NSStringStatics;
+  export const NSString: NSStringMeta;
+
+  export interface NSTimerStatics {
+    /** @ntsSelector scheduledTimerWithTimeInterval:target:selector:userInfo:repeats: */
+    scheduledTimerWithTimeIntervalTargetSelectorUserInfoRepeats(
+      this: NSTimerMeta,
+      interval: c_double,
+      target: NSObject,
+      name: Selector,
+      userInfo: NSObject | null,
+      repeats: boolean,
+    ): NSTimer;
+  }
+  export type NSTimerMeta = ObjcMeta<"NSTimer"> & NSTimerStatics;
+  export const NSTimer: NSTimerMeta;
+
+  export interface NSEventStatics {
+    /**
+     * `NSEventTypeApplicationDefined`, posted after `stop:` so the loop wakes
+     * and sees it.
+     * @ntsSelector otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:
+     */
+    otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(
+      this: NSEventMeta,
+      type: c_ulong,
+      location: ByValue<CGPoint>,
+      flags: c_ulong,
+      time: c_double,
+      windowNumber: c_long,
+      context: NSObject | null,
+      subtype: c_int16,
+      data1: c_long,
+      data2: c_long,
+    ): NSEvent;
+  }
+  export type NSEventMeta = ObjcMeta<"NSEvent"> & NSEventStatics;
+  export const NSEvent: NSEventMeta;
 }

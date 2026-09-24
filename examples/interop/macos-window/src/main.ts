@@ -12,18 +12,19 @@
 // loop. The presses and the stop still happen, since Cocoa drives them, but no
 // timeout may fire before the application has stopped.
 import {
-  allocButton,
-  allocWindow,
-  newController,
-  otherEvent,
-  scheduledTimer,
-  sharedApplication,
-  stringWithUTF8String,
+  NSApplication,
+  NSButton,
+  NSEvent,
+  NSObject,
+  NSString,
+  NSTimer,
+  NSWindow,
+  NtsWindowController,
   type CGPoint,
   type CGRect,
 } from "objc:AppKit";
 import { actionImplementation, nested_while_readable, report, timerImplementation, window_control } from "c:support";
-import { class_addMethod, objc_allocateClassPair, objc_getClass, objc_registerClassPair, sel_registerName } from "objc:runtime";
+import { class_addMethod, objc_allocateClassPair, objc_registerClassPair, sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
 import type { Ptr, c_double, c_int16, c_long, c_size_t, c_ulong } from "c:types";
 
@@ -46,22 +47,21 @@ function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: nu
 
 function main(): void {
   window_control();
-  const app = sharedApplication();
+  const app = NSApplication.sharedApplication();
   app.setActivationPolicy(0n as c_long);
 
   const frame = local<CGRect>();
   setRect(frame, 200, 200, 320, 200);
   // Titled and closable, buffered, not deferred.
-  const window = allocWindow().initWithContentRect(frame, 3n as c_ulong, 2n as c_ulong, false);
-  window.setTitle(stringWithUTF8String("nts"));
+  const window = NSWindow.alloc().initWithContentRect(frame, 3n as c_ulong, 2n as c_ulong, false);
+  window.setTitle(NSString.stringWithUTF8String("nts"));
   const buttonFrame = local<CGRect>();
   setRect(buttonFrame, 110, 80, 100, 32);
-  const button = allocButton().initWithFrame(buttonFrame);
-  button.setTitle(stringWithUTF8String("Press"));
+  const button = NSButton.alloc().initWithFrame(buttonFrame);
+  button.setTitle(NSString.stringWithUTF8String("Press"));
   window.contentView().addSubview(button);
 
-  const base = objc_getClass("NSObject");
-  const cls = base === null ? null : objc_allocateClassPair(base, "NtsWindowController", 0n as c_size_t);
+  const cls = objc_allocateClassPair(NSObject, "NtsWindowController", 0n as c_size_t);
   if (cls === null) {
     report("no class");
     return;
@@ -86,21 +86,21 @@ function main(): void {
     report("stopped");
     app.stop(null);
     // `stop:` is seen when the loop next finishes an event, so one is posted.
-    app.postEvent(otherEvent(15n as c_ulong, local<CGPoint>(), 0n as c_ulong, 0 as c_double, 0n as c_long, null,
+    app.postEvent(NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(15n as c_ulong, local<CGPoint>(), 0n as c_ulong, 0 as c_double, 0n as c_long, null,
       0 as c_int16, 0n as c_long, 0n as c_long), true);
   });
   class_addMethod(cls, sel_registerName("pressed:"), pressed, "v@:@");
   class_addMethod(cls, sel_registerName("tick:"), tick, "v@:@");
   objc_registerClassPair(cls);
 
-  const controller = newController();
+  const controller = NtsWindowController.new();
   button.setTarget(controller);
   button.setAction(sel_registerName("pressed:"));
   window.makeKeyAndOrderFront(null);
   const shown = window.frame();
   report(`window ${shown.size.width} button ${button.frame().size.width}x${button.frame().size.height}`);
 
-  scheduledTimer(0.05 as c_double, controller, sel_registerName("tick:"), null, true);
+  NSTimer.scheduledTimerWithTimeIntervalTargetSelectorUserInfoRepeats(0.05 as c_double, controller, sel_registerName("tick:"), null, true);
   app.run();
   report("done");
 }
