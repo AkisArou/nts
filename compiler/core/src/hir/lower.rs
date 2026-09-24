@@ -39258,6 +39258,10 @@ impl<'a> FuncBuilder<'a> {
             Callee::Native(target) => target.returns_string.clone().map(|string| (target.clone(), string)),
             _ => None,
         };
+        let result_as = match &callee {
+            Callee::Native(target) => target.result_as.as_ref().map(super::native::Type::representation),
+            _ => None,
+        };
         let call = self.push_call(id, callee, args, declaration)?;
         // A failure is checked *before* the result is read: a function that
         // reports one returns nothing meaningful -- GLib returns NULL where it
@@ -39275,9 +39279,11 @@ impl<'a> FuncBuilder<'a> {
         for (slot, converter) in errors {
             self.throw_if_reported(id, slot, &converter, &lent)?;
         }
-        let value = match returned {
-            Some((target, string)) => self.read_native_string(id, call, &target, &string)?,
-            None => call,
+        let value = match (returned, result_as) {
+            (Some((target, string)), _) => self.read_native_string(id, call, &target, &string)?,
+            // The handle GIR says it is, from the ancestor C declares.
+            (None, Some(ty)) => self.push(OpKind::Convert(call), ty, self.origin(id)),
+            (None, None) => call,
         };
         self.give_back(id, lent);
         Ok(value)
@@ -39360,6 +39366,7 @@ impl<'a> FuncBuilder<'a> {
             consumes: Vec::new(),
             frameworks: Vec::new(),
             defaults: Vec::new(),
+            result_as: None,
         });
         let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
         let message = self.push(
@@ -39390,6 +39397,7 @@ impl<'a> FuncBuilder<'a> {
             consumes: Vec::new(),
             frameworks: Vec::new(),
             defaults: Vec::new(),
+            result_as: None,
         });
         self.push(OpKind::Call { callee: Callee::Native(release), args: vec![message], frame: None }, HirType::Void, origin);
         self.throw_provided_error_text(id, "Error", text)?;
@@ -39600,6 +39608,7 @@ impl<'a> FuncBuilder<'a> {
                 consumes: Vec::new(),
                 frameworks: Vec::new(),
                 defaults: Vec::new(),
+                result_as: None,
             };
             self.push(
                 OpKind::Call { callee: Callee::Native(std::sync::Arc::new(release)), args: vec![pointer], frame: None },
@@ -40279,8 +40288,12 @@ impl<'a> FuncBuilder<'a> {
         // A native function returning a string returns C's `const char *`,
         // which is what the call's own value is; the caller copies it into the
         // string the program sees (`read_native_string`).
+        // And one whose result C declares as an ancestor (`Declared`), which
+        // is that ancestor until `finish_call` converts it.
         let native_string = match &callee {
-            Callee::Native(target) if target.returns_string.is_some() => Some(target.result.representation()),
+            Callee::Native(target) if target.returns_string.is_some() || target.result_as.is_some() => {
+                Some(target.result.representation())
+            }
             _ => None,
         };
         let ty = reserved

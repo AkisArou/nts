@@ -81,6 +81,9 @@ pub struct Function {
     /// `@ntsDefault`: the C parameter an optional TypeScript parameter lands
     /// in, and what the compiler passes there when the caller leaves it out.
     pub defaults: Vec<(usize, ParameterDefault)>,
+    /// `Declared<T, D>`: the handle the program receives, `T`, where `result`
+    /// is the ancestor `D` C declares. The call's value is converted to it.
+    pub result_as: Option<Type>,
 }
 
 /// What `@ntsDefault` gives an optional parameter: an integer for a C integer
@@ -1290,9 +1293,11 @@ impl Function {
         }
         let returns_string = if abi.is_none() { returned_string(snapshot, signature.return_type) } else { None };
         let returned_array = if abi.is_none() { returned_strings(snapshot, signature.return_type) } else { None };
-        let result = match returned_text(returned_array.is_some(), returns_string.is_some()) {
-            Some(text) => text,
-            None => abi_type(signature.return_type)
+        let declared = declared_result(snapshot, &name, signature.return_type)?;
+        let result = match (returned_text(returned_array.is_some(), returns_string.is_some()), &declared) {
+            (Some(text), _) => text,
+            (None, Some((c, _))) => c.clone(),
+            (None, None) => abi_type(signature.return_type)
                 .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, string, or void"))?,
         };
         Ok(Self {
@@ -1318,6 +1323,7 @@ impl Function {
             consumes: Vec::new(),
             frameworks: Vec::new(),
             defaults: given,
+            result_as: declared.map(|(_, program)| program),
         })
     }
 }
@@ -1705,6 +1711,48 @@ fn tags_name_parameters(
         }
     }
     Ok(())
+}
+
+/// A result typed `Declared<T, D>`: C's type, a pointer to `D`, and the
+/// program's, a pointer to `T`. `None` for any other result.
+///
+/// The claim is trusted: that `D` is an ancestor of `T` bounds its shape and
+/// not its truth, and a C function returning a sibling of `T` would be read
+/// as a `T`. What is refused is a `D` that is not an ancestor at all.
+///
+/// # Errors
+///
+/// `D` not a handle among `T`'s declared ancestors -- which includes an
+/// interface `T` implements, since a handle's chain records its parents only.
+fn declared_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<Option<(Type, Type)>, String> {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let Some(TypeKind::Intersection(parts)) = kind(ty) else { return Ok(None) };
+    let declared = parts.iter().find_map(|part| match kind(*part) {
+        Some(TypeKind::Object { properties }) => match properties.as_slice() {
+            [property] if property.name == "___c_declared" && property.optional && property.readonly => Some(property.ty),
+            _ => None,
+        },
+        _ => None,
+    });
+    let Some(declared) = declared else { return Ok(None) };
+    let declared = match kind(declared) {
+        Some(TypeKind::Union(members)) => members.iter().copied().find(|m| !matches!(kind(*m), Some(TypeKind::Undefined))),
+        _ => Some(declared),
+    };
+    let handle = |pointee: Option<Pointee>| match pointee {
+        Some(Pointee::Opaque(handle)) => Some(handle),
+        _ => None,
+    };
+    let (Some(c), Some(program)) = (handle(declared.and_then(|d| pointer(snapshot, d))), handle(pointer(snapshot, ty))) else {
+        return Err(format!("foreign function `{name}` with a `Declared` result whose types are not both handles"));
+    };
+    if !program.upcasts_to(&c) {
+        return Err(format!(
+            "foreign function `{name}` declares its result `{}` for a `{}`, which is not among its ancestors",
+            c.tag, program.tag
+        ));
+    }
+    Ok(Some((Type::Pointer(Pointee::Opaque(c)), Type::Pointer(Pointee::Opaque(program)))))
 }
 
 /// The C type of an optional parameter `@ntsDefault` gives a value: its type

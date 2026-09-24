@@ -2538,6 +2538,64 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
     }
 }
 
+/// A result C declares as an ancestor, typed as what it is: GIR's
+/// `gtk_box_new` returns a `GtkBox` the header declares `GtkWidget *`, and
+/// `Declared<Button, Widget>` lets the program have the `Button` while the
+/// prototype says `Widget`. The value is used through a method only a
+/// `Button` has, and its label read back, so a conversion that lost it
+/// would read the wrong struct; and a claim off the chain is refused.
+///
+/// The arm this cannot have: a claim well shaped and false -- a function
+/// declared to return a `Button` that returns some other `Widget`. Nothing
+/// can know that; the claim is trusted, and wrong GIR is not caught here.
+#[test]
+fn a_declared_result_is_the_handle_the_binding_says_on_both_backends() {
+    let source = r#"
+import type { Class, Declared, c_int } from "c:types";
+interface WidgetOwnMethods {
+    /** @ntsSymbol widget_get_width */
+    get_width(this: Widget): c_int;
+}
+interface ButtonOwnMethods {
+    /** @ntsSymbol button_set_label */
+    set_label(this: Button, label: string): void;
+    /**
+     * @ntsFree free
+     * @ntsSymbol button_dup_label
+     */
+    dup_label(this: Button): string;
+}
+type Widget = Class<"_Widget"> & WidgetOwnMethods;
+type Button = Class<"_Button", Widget> & ButtonOwnMethods & WidgetOwnMethods;
+declare function button_as_widget(): Declared<Button, Widget>;
+export function run(): number {
+    const button = button_as_widget();
+    button.set_label("declared");
+    return button.get_width() * 100 + button.dup_label().length;
+}
+"#;
+    let library = format!("{METHODS_LIBRARY}struct _Widget *button_as_widget(void) {{ return &the.parent; }}\n");
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("declared", source, provider, &library, &caller) else { return; };
+        assert!(text.contains("struct _Widget * button_as_widget(void)") || text.contains("struct _Widget *button_as_widget(void)"), "the prototype is not C's: {text}");
+        // 42, and "declared" read back through the `Button`.
+        for output in outputs {
+            assert_eq!(output, expect("4208", provider), "{provider:?}");
+        }
+    }
+    let lie = source.replace("Declared<Button, Widget>", "Declared<Widget, Button>").replace(
+        "    const button = button_as_widget();\n    button.set_label(\"declared\");\n    return button.get_width() * 100 + button.dup_label().length;",
+        "    return button_as_widget().get_width();",
+    );
+    let Some((_, prepared)) = prepare("declared-lie", &lie) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("declares its result `_Button` for a `_Widget`, which is not among its ancestors")),
+        "a result declared off the chain was accepted: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// A C API that reports failure through an out-parameter, `GLib`'s way, with a
 /// converter that takes the error and answers its message.
 const THROWS_LIBRARY: &str = r#"

@@ -105,6 +105,13 @@ declare module "c:types" {
   // `as c_uint`, and a member of another enum does not. A plain number is
   // still accepted, as C accepts one.
   export type CEnum<E extends number, B extends number> = E & { readonly __c_enum?: B };
+  // A handle C declares as one of its ancestors: `gtk_box_new` returns the
+  // `GtkBox` GIR says it does, which the header declares `GtkWidget *`. The
+  // program has a `T`; C's prototype says `D`, which must be an ancestor of
+  // `T`. A trust boundary, not a check: the claim is believed, as gtk-rs
+  // believes it (`unsafe_cast`), and a factory that returned a sibling of
+  // `T` would be read as a `T`. Only a `D` unrelated to `T` is refused.
+  export type Declared<T extends ClassChain, D extends ClassChain> = T & { readonly __c_declared?: D };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.
