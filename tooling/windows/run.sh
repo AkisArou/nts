@@ -38,8 +38,11 @@ reachable || { echo "no Windows reachable at $dest" >&2; exit 77; }
 remote="nts-run\\$(date +%s)-$$"
 ssh "${ssh_opts[@]}" "$dest" "mkdir $remote" >/dev/null || exit 77
 trap 'ssh "${ssh_opts[@]}" "$dest" "rmdir /s /q $remote" >/dev/null 2>&1' EXIT
-scp -q "${ssh_opts[@]}" "$artifact" "$dest:${remote//\\//}/" || { echo "copying $artifact failed" >&2; exit 2; }
+# Copied as `<name>.exe` whatever it is called here: cmd runs only a file with
+# an executable extension, and a consumer linked with `-o caller` has none.
 name=$(basename "$artifact")
+[[ "$name" == *.exe ]] || name="$name.exe"
+scp -q "${ssh_opts[@]}" "$artifact" "$dest:${remote//\\//}/$name" || { echo "copying $artifact failed" >&2; exit 2; }
 # cmd quoting: each argument in double quotes, with no argument at all when
 # there are none (a program given one empty argument it was never passed is a
 # different program -- the Apple lane's `run.sh` found that).
