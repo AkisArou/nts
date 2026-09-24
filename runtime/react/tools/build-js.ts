@@ -56,6 +56,18 @@ const forks: {entry: string; module: string; use: string}[] = [
     module: 'react/src/ReactSharedInternals.ts',
     use: 'react/src/ReactSharedInternalsClient.ts',
   },
+  // Each renderer entry bundles its own reconciler with its own host config
+  // in place of the reconciler's ReactFiberConfig.ts contract.
+  {
+    entry: 'react-noop-renderer/index',
+    module: 'react-reconciler/src/ReactFiberConfig.ts',
+    use: 'react-noop-renderer/src/ReactFiberConfigNoopMutation.ts',
+  },
+  {
+    entry: 'react-noop-renderer/persistent',
+    module: 'react-reconciler/src/ReactFiberConfig.ts',
+    use: 'react-noop-renderer/src/ReactFiberConfigNoopPersistent.ts',
+  },
 ];
 
 function forkPlugin(entry: string): Plugin {

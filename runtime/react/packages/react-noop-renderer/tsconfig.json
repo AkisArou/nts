@@ -1,0 +1,13 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "types": ["node"]
+  },
+  "references": [
+    { "path": "../shared" },
+    { "path": "../react" },
+    { "path": "../scheduler" },
+    { "path": "../react-reconciler" }
+  ]
+}

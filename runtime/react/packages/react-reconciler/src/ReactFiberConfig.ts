@@ -303,7 +303,7 @@ export declare function validateHydratableTextInstance(text: string, hostContext
 export declare const supportsResources: boolean;
 export declare function isHostHoistableType(type: Type, props: Props, hostContext: HostContext): boolean;
 export declare function getHoistableRoot(container: Container): HoistableRoot;
-export declare function getResource(type: Type, currentProps: Props, pendingProps: Props, currentResource: Resource | null): Resource | null;
+export declare function getResource(type: Type, currentProps: Props | null, pendingProps: Props, currentResource: Resource | null): Resource | null;
 export declare function acquireResource(hoistableRoot: HoistableRoot, resource: Resource, props: Props): Instance;
 export declare function releaseResource(resource: Resource): void;
 export declare function hydrateHoistable(

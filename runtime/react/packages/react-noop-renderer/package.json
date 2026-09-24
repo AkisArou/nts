@@ -1,0 +1,9 @@
+{
+  "name": "react-noop-renderer",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/ReactNoop.ts",
+    "./persistent": "./src/ReactNoopPersistent.ts"
+  }
+}
