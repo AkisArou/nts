@@ -49,8 +49,11 @@ import {
   gtk_label_set_text,
   gtk_window_present,
   gtk_window_set_child,
+  Orientation,
 } from "c:Gtk-4.0";
 import {
+  ApplicationFlags,
+  FileType,
   g_application_quit,
   g_application_run,
   g_file_new_for_path,
@@ -68,15 +71,15 @@ import {
   g_key_file_unref,
   g_strsplit,
   g_timeout_add_full,
+  ChecksumType,
+  KeyFileFlags,
   type GError,
 } from "c:GLib-2.0";
 import { g_object_unref } from "c:GObject-2.0";
 import type { c_double, c_int, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
-import { Orientation, asGtkBox, asGtkButton, asGtkLabel, asGtkWindow } from "../types/gir/Gtk-4.0.values.ts";
-import { ChecksumType } from "../types/gir/GLib-2.0.values.ts";
-import { ApplicationFlags } from "../types/gir/Gio-2.0.values.ts";
+import { asGtkBox, asGtkButton, asGtkLabel, asGtkWindow } from "../types/gir/Gtk-4.0.values.ts";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
 const PRIORITY_DEFAULT = 0 as c_int;
@@ -98,7 +101,7 @@ function outParameters(): void {
   const keys = g_key_file_new();
   const error = local<GError | null>();
   const text = "[a]\nk=5\n";
-  const loaded = g_key_file_load_from_data(keys, text, BigInt(text.length) as c_size_t, 0 as c_uint, error);
+  const loaded = g_key_file_load_from_data(keys, text, BigInt(text.length) as c_size_t, KeyFileFlags.NONE, error);
   const k = g_key_file_get_integer(keys, "a", "k", error);
   gir_log("keyfile " + String(loaded) + " " + String(k) + " " + (error[0] === null ? "no-error" : "error"));
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
@@ -122,7 +125,8 @@ function outParameters(): void {
   // `subarray` starts one byte in, so a pointer to the buffer rather than the
   // view would hash "_ab" instead.
   const abc = new Uint8Array([0x5f, 0x61, 0x62, 0x63, 0x5f]).subarray(1, 4);
-  const digest = g_compute_checksum_for_data(ChecksumType.SHA256 as c_uint, abc);
+  // An enum member as it is: the parameter is `CEnum<GChecksumType, c_uint>`.
+  const digest = g_compute_checksum_for_data(ChecksumType.SHA256, abc);
   gir_log("sha256=" + (digest === null ? "none" : digest.slice(0, 8)));
 }
 
@@ -134,9 +138,9 @@ async function fileKind(path: string): Promise<number> {
   // No flags, the default priority, nothing to cancel it: left out.
   const info = await file.query_info_async("standard::type");
   g_object_unref(file);
-  const found = info.get_file_type() as number;
+  const found = info.get_file_type();
   g_object_unref(info);
-  return found;
+  return found === FileType.DIRECTORY ? 2 : found;
 }
 
 // GIO's asynchronous methods, awaited: without its callback an `_async`
@@ -174,12 +178,12 @@ function main(): void {
   outParameters();
   void learnKind();
   void directories("/tmp/nts-gtk-gir-directory");
-  const application = gtk_application_new("dev.nts.GtkGir", ApplicationFlags.NON_UNIQUE as c_uint);
+  const application = gtk_application_new("dev.nts.GtkGir", ApplicationFlags.NON_UNIQUE);
   let ticks = 0;
   let clicks = 0;
   application.connect("activate", () => {
     const window = asGtkWindow(gtk_application_window_new(application));
-    const box = asGtkBox(gtk_box_new(Orientation.VERTICAL as c_uint, 4 as c_int));
+    const box = asGtkBox(gtk_box_new(Orientation.VERTICAL, 4 as c_int));
     const label = asGtkLabel(gtk_label_new("start"));
     const button = asGtkButton(gtk_button_new_with_label("press"));
     if (window === null || box === null || label === null || button === null) {

@@ -100,6 +100,9 @@ pub(crate) struct Function {
 #[derive(Debug)]
 pub(crate) struct EnumDecl {
     pub(crate) name: String,
+    /// The C type, `GtkOrientation`: the name a signature spells the enum
+    /// by, unique across namespaces where `Orientation` is not.
+    pub(crate) c_type: Option<String>,
     /// `(name, value, C identifier)`.
     pub(crate) members: Vec<(String, i64, String)>,
 }
@@ -187,6 +190,11 @@ impl Reason {
 
 /// The module name a namespace binds as: `c:Gtk-4.0`.
 #[must_use]
+/// Whether `name` can be a TypeScript type name as it is.
+fn is_type_name(name: &str) -> bool {
+    name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 pub(crate) fn module_of(namespace: &Namespace) -> String {
     format!("c:{}-{}", namespace.name, namespace.version)
 }
@@ -327,7 +335,8 @@ fn method_of(callable: &Callable, parameters: &[(String, Mapped)]) -> Option<(St
 enum Resolved<'a> {
     Class(&'a Namespace, &'a Class),
     Record,
-    Enum(Scalar),
+    /// An enum or bitfield, where it is declared, and the C integer it is.
+    Enum(&'a Namespace, &'a super::model::Enum, Scalar),
     Callback(&'a Callback),
 }
 
@@ -358,7 +367,7 @@ impl<'a> Mapper<'a> {
             } else {
                 e.members.iter().any(|m| m.value < 0)
             };
-            return Some(Resolved::Enum(if signed { Scalar::Int } else { Scalar::UInt }));
+            return Some(Resolved::Enum(namespace, e, if signed { Scalar::Int } else { Scalar::UInt }));
         }
         namespace
             .callbacks
@@ -496,6 +505,7 @@ impl<'a> Mapper<'a> {
         for e in &self.namespace.enums {
             self.binding.enums.push(EnumDecl {
                 name: e.name.clone(),
+                c_type: e.c_type.clone().filter(|c| is_type_name(c) && *c != e.name),
                 members: e
                     .members
                     .iter()
@@ -916,10 +926,23 @@ impl<'a> Mapper<'a> {
             return Ok(self.handle(local, &tag, constant, param.nullable));
         }
         match self.resolve(&qualified) {
-            Some(Resolved::Enum(scalar)) if depth == 0 => {
+            Some(Resolved::Enum(namespace, e, scalar)) if depth == 0 => {
                 let brand = if scalar == Scalar::Int { "c_int" } else { "c_uint" };
                 self.binding.brands.insert(brand);
-                Ok(Mapped { ts: brand.to_owned(), c: Type::Scalar(scalar) })
+                // `CEnum<GtkOrientation, c_uint>`, so the enum's members pass
+                // without a cast; by its C name, which `enums` declares beside
+                // the enum as an alias, since two namespaces can share a short one.
+                let ts = match e.c_type.as_deref().filter(|c| is_type_name(c) && *c != e.name) {
+                    Some(c_type) => {
+                        self.binding.brands.insert("CEnum");
+                        if namespace.name != self.namespace.name {
+                            self.binding.imports.entry(module_of(namespace)).or_default().insert(c_type.to_owned());
+                        }
+                        format!("CEnum<{c_type}, {brand}>")
+                    }
+                    None => brand.to_owned(),
+                };
+                Ok(Mapped { ts, c: Type::Scalar(scalar) })
             }
             Some(Resolved::Record) if depth == 0 => Err(Reason::RecordByValue),
             Some(Resolved::Callback(_)) => {

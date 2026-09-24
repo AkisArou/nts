@@ -38,6 +38,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         );
     }
     out.push('\n');
+    enums(&mut out, binding);
     // The methods of each class, from the functions the self-check kept.
     let promises: std::collections::BTreeMap<&str, &Function> =
         promise_forms(binding).into_iter().map(|(start, finish)| (start.symbol.as_str(), finish)).collect();
@@ -270,14 +271,35 @@ fn notes(out: &mut String, function: &Function, symbol: bool, defaulted: &[(&str
     }
 }
 
+/// The enums, as `const enum`s in the module itself, so a program imports
+/// `Orientation` from `c:Gtk-4.0` beside the functions taking one, and a
+/// member read is a literal where it is used -- no object, no global, no
+/// load. Named as GIR names them (`Align.FILL`), and each also by its C name
+/// (`GtkAlign`), which is the one signatures spell (`CEnum<GtkAlign,
+/// c_uint>`): two namespaces can share a short name, never a C one.
+fn enums(out: &mut String, binding: &Binding) {
+    for decl in &binding.enums {
+        let _ = writeln!(out, "  export const enum {} {{", decl.name);
+        for (name, value, c_identifier) in &decl.members {
+            // A member name may start with a digit (`2BUTTON_PRESS`), which
+            // TypeScript does not allow unquoted.
+            let key = if name.starts_with(|c: char| c.is_ascii_digit()) { format!("_{name}") } else { name.clone() };
+            let _ = writeln!(out, "    /** `{c_identifier}` */\n    {key} = {value},");
+        }
+        out.push_str("  }\n");
+        if let Some(c_type) = &decl.c_type {
+            let _ = writeln!(out, "  export type {c_type} = {};", decl.name);
+        }
+    }
+    if !binding.enums.is_empty() {
+        out.push('\n');
+    }
+}
+
 /// The companion module: what a declaration file cannot carry.
 ///
-/// A `.ts` rather than a `.d.ts`, because both halves are values:
+/// A `.ts` rather than a `.d.ts`, because what it holds are values:
 ///
-/// - **The enums, as `const enum`s**, so that a member read is a literal
-///   where it is used -- no object, no global, no load. Named as GIR names them
-///   (`Align.FILL`); the C names would collide with the enumerators
-///   `program.c` sees through the header.
 /// - **A checked downcast per class**, `asGtkBox(value)`: the one intended
 ///   caller of `unsafeDowncast`, which is safe here because the check is the
 ///   type system's own -- `g_type_check_instance_is_a` against the class's
@@ -324,20 +346,6 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
         names.dedup();
         let _ = writeln!(out, "import {{ {} }} from \"{module}\";", names.join(", "));
     }
-    for decl in &binding.enums {
-        let _ = writeln!(out, "\nexport const enum {} {{", decl.name);
-        for (name, value, c_identifier) in &decl.members {
-            // A member name may start with a digit (`2BUTTON_PRESS`), which
-            // TypeScript does not allow unquoted.
-            let key = if name.starts_with(|c: char| c.is_ascii_digit()) {
-                format!("_{name}")
-            } else {
-                name.clone()
-            };
-            let _ = writeln!(out, "  /** `{c_identifier}` */\n  {key} = {value},");
-        }
-        out.push_str("}\n");
-    }
     for cast in &binding.casts {
         let _ = writeln!(
             out,
@@ -362,7 +370,9 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
 /// was imported from, or `c:types` for a brand. `None` for anything else --
 /// `string`, `null`, a keyword.
 fn module_of_type(binding: &Binding, name: &str) -> Option<String> {
-    if binding.types.iter().any(|decl| matches!(decl, super::map::TypeDecl::Class { name: n, .. } if n == name)) {
+    if binding.types.iter().any(|decl| matches!(decl, super::map::TypeDecl::Class { name: n, .. } if n == name))
+        || binding.enums.iter().any(|decl| decl.c_type.as_deref() == Some(name))
+    {
         return Some(binding.module.clone());
     }
     if let Some((module, _)) = binding.imports.iter().find(|(_, names)| names.contains(name)) {
