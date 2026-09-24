@@ -32,5 +32,8 @@ remote=$(ssh "${ssh_opts[@]}" "$dest" 'mktemp -d /tmp/nts-run.XXXXXX') || exit 7
 trap 'ssh "${ssh_opts[@]}" "$dest" "rm -rf $remote" >/dev/null 2>&1' EXIT
 scp -q "${ssh_opts[@]}" "$artifact" "$dest:$remote/" || { echo "copying $artifact failed" >&2; exit 2; }
 name=$(basename "$artifact")
-quoted=$(printf ' %q' "$@")
+# Only when there are arguments: `printf ' %q'` with none still prints once,
+# and the program receives one empty argument it was never given.
+quoted=""
+[[ $# -eq 0 ]] || quoted=$(printf ' %q' "$@")
 ssh "${ssh_opts[@]}" "$dest" "cd $remote && chmod +x ./$name && ./$name$quoted"

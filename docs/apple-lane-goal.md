@@ -75,15 +75,31 @@ zig-derived sysroot and when built against the real SDK copied back by
 fails with `bad CPU type in executable` (exit 127), so the run arm reports a
 failure rather than printing whatever it was given.
 
+**Measured 2026-09-24: the C interop examples on macOS.**
+`tooling/apple/interop-on-mac.sh` mirrors each example outside the tree,
+retargets the mirror to macos-13 x86_64, and runs the example's own `build.sh`
+with the consumer compiled against the SDK and run on the VM. 16 examples
+have the shape it needs.
+
+| Result | Examples |
+|---|---|
+| **Pass on the Mac** (7) | c-from-ts, native-buffer, native-callback, native-closure, native-copy, native-fd, ts-from-c |
+| **Pass, checked by hand** (1) | library-module-state: `_nts_auto_init` survives the Mach-O link and the caller prints `total=12`. The script fails only because GNU `nm` cannot read Mach-O. |
+| **Refused by the witness, correctly** (6) | native-poll (`poll`), native-uname (`utsname`), native-stat (`stat`), native-rusage (`suseconds_t`), native-inet (glibc's `__in6_u`), native-epoll (no `sys/epoll.h`). Their bindings were generated from Linux headers, and a macOS build refuses them rather than miscompiling. |
+| **Linux-only consumer** (1) | native-open: `caller.c` asserts Linux's `O_CREAT == 64`. |
+| **Partly run** (1) | native-string: the main arm passes on the Mac. Its later arms call the caller inside `$(…)` and `valgrind`, which the harness does not redirect. |
+
+Found by running these: `run.sh` passed one empty argument to a program given
+none. `native-buffer`'s `argc` check caught it; `macos-hello` ignores its
+arguments and could not.
+
 **Never measured here: arm64 at run time.** The VM is x86_64. arm64 is built,
 linked and inspected, and the lane never emits a variadic `objc_msgSend`, so
 correctness does not depend on arm64 running by luck.
 
 ## Next
 
-1. **A0, remainder:** the existing C interop fixtures with a macOS target.
-   `native-poll` and `native-stat` apply; `native-epoll` does not.
-2. **A1, Foundation from TypeScript:**
+1. **A1, Foundation from TypeScript:**
    - an `objc:` specifier;
    - typed `objc_msgSend` lowering;
    - a family marker on the GTK lane's `Handle` (`c` or `objc`), which decides
@@ -93,11 +109,11 @@ correctness does not depend on arm64 running by luck.
 
    Fixture `macos-foundation`: `α😀` round-trips through NSString, and a
    retain-count arm fails when release is skipped.
-3. **A2, a window:** blocks, `extends NSObject`, the CFRunLoop host, and
+2. **A2, a window:** blocks, `extends NSObject`, the CFRunLoop host, and
    `macos-window` with a capturing target/action handler that starts a timer
    and an await.
-4. **A3:** `nts bind-objc` from SDK headers, with an ObjC witness.
-5. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
+3. **A3:** `nts bind-objc` from SDK headers, with an ObjC witness.
+4. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.
 
 ## Rules this lane keeps
