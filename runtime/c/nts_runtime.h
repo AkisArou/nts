@@ -1692,6 +1692,28 @@ NtsString *nts_str_raw(uint32_t length, int wide);
 NtsString *nts_str_alloc(const uint16_t *units, uint32_t length);
 
 NtsString *nts_string_from_utf8(const char *bytes, size_t length);
+
+/* Swift's bridging at an Objective-C message: a string or an array copied to
+ * the Foundation object a message takes, and back. Defined by the CF host
+ * (`nts_cf_host.c`), which only an Apple program links, so declared here for
+ * the one table every backend reads and called only by a program that sends a
+ * message.
+ *
+ * - `nts_nsstring_of`: an `NSString` of `string`'s contents, the caller's (+1),
+ *   made from its one-byte or two-byte storage as it is. NULL for NULL.
+ * - `nts_string_of_nsstring`: a string of an `NSString`'s contents, read from
+ *   its eight-bit storage where it has one, and NULL for nil.
+ * - `nts_nsarray_of_objects` / `_of_strings`: an `NSArray` of an array's
+ *   objects, or of an `NSString` made of each string, the caller's (+1).
+ * - `nts_array_fill_from_nsarray` / `_strings_`: `into`, made `CFArrayGetCount`
+ *   long by the caller, filled with the `NSArray`'s objects, each retained by
+ *   `into`, or with a string of each. */
+void *nts_nsstring_of(const NtsString *string);
+NtsString *nts_string_of_nsstring(const void *string);
+void *nts_nsarray_of_objects(const NtsArray *array);
+void *nts_nsarray_of_strings(const NtsArray *array);
+void nts_array_fill_from_nsarray(NtsArray *into, const void *array);
+void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array);
 /* The other direction: a string as a C string, for a foreign parameter the
  * binding declares as `string`, which means `const char *`.
  *

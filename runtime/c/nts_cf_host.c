@@ -139,9 +139,114 @@ void nts_cf_host_detach(void) {
 }
 
 char *nts_nserror_message(void *error) {
-  id description = ((id(*)(id, SEL))objc_msgSend)(
+  id description = ((id (*)(id, SEL))objc_msgSend)(
       (id)error, sel_registerName("localizedDescription"));
   const char *text = ((const char *(*)(id, SEL))objc_msgSend)(
       description, sel_registerName("UTF8String"));
   return strdup(text ? text : "");
+}
+
+void *nts_nsstring_of(const NtsString *string) {
+  if (!string) {
+    return NULL;
+  }
+  CFIndex length = (CFIndex)string->length;
+  /* One-byte storage is Latin-1 by construction, which CoreFoundation keeps
+   * as it is: no widening to UTF-16 on the way. */
+  if (!(string->flags & NTS_TWO_BYTE)) {
+    return (void *)CFStringCreateWithBytes(
+        NULL, NTS_ELEMENTS(string, const UInt8), length,
+        kCFStringEncodingISOLatin1, false);
+  }
+  return (void *)CFStringCreateWithCharacters(
+      NULL, NTS_ELEMENTS(string, const UniChar), length);
+}
+
+NtsString *nts_string_of_nsstring(const void *object) {
+  if (!object) {
+    return NULL;
+  }
+  CFStringRef string = (CFStringRef)object;
+  CFIndex length = CFStringGetLength(string);
+  const char *bytes = CFStringGetCStringPtr(string, kCFStringEncodingASCII);
+  if (bytes) {
+    NtsString *out = nts_str_raw((uint32_t)length, 0);
+    memcpy(NTS_ELEMENTS(out, unsigned char), bytes, (size_t)length);
+    return out;
+  }
+  /* A short string -- most of them, and every tagged-pointer one, which has
+   * no storage to point at -- copied out as ASCII in one call, which fails
+   * for anything that is not. */
+  if (length < 64) {
+    char ascii[64];
+    if (CFStringGetCString(string, ascii, sizeof ascii,
+                           kCFStringEncodingASCII)) {
+      NtsString *out = nts_str_raw((uint32_t)length, 0);
+      memcpy(NTS_ELEMENTS(out, unsigned char), ascii, (size_t)length);
+      return out;
+    }
+  }
+  const UniChar *units = CFStringGetCharactersPtr(string);
+  if (units) {
+    return nts_str_alloc(units, (uint32_t)length);
+  }
+  UniChar small[128];
+  UniChar *buffer =
+      length <= 128 ? small : malloc((size_t)length * sizeof(UniChar));
+  if (!buffer) {
+    abort();
+  }
+  CFStringGetCharacters(string, CFRangeMake(0, length), buffer);
+  NtsString *out = nts_str_alloc(buffer, (uint32_t)length);
+  if (buffer != small) {
+    free(buffer);
+  }
+  return out;
+}
+
+void *nts_nsarray_of_objects(const NtsArray *array) {
+  /* The array's own element block is the C array of objects CFArrayCreate
+   * takes, and its callbacks retain each for the NSArray. */
+  return (void *)CFArrayCreate(NULL, (const void **)NTS_ITEMS(array, void *),
+                               (CFIndex)array->header.length,
+                               &kCFTypeArrayCallBacks);
+}
+
+void *nts_nsarray_of_strings(const NtsArray *array) {
+  uint32_t count = array->header.length;
+  void *small[64];
+  void **strings = count <= 64 ? small : malloc((size_t)count * sizeof(void *));
+  if (!strings) {
+    abort();
+  }
+  for (uint32_t at = 0; at < count; at++) {
+    strings[at] = nts_nsstring_of(NTS_ITEMS(array, NtsString *)[at]);
+  }
+  CFArrayRef made = CFArrayCreate(NULL, (const void **)strings, (CFIndex)count,
+                                  &kCFTypeArrayCallBacks);
+  for (uint32_t at = 0; at < count; at++) {
+    CFRelease(strings[at]);
+  }
+  if (strings != small) {
+    free(strings);
+  }
+  return (void *)made;
+}
+
+void nts_array_fill_from_nsarray(NtsArray *into, const void *array) {
+  CFIndex count = (CFIndex)into->header.length;
+  const void **items = (const void **)NTS_ITEMS(into, void *);
+  CFArrayGetValues((CFArrayRef)array, CFRangeMake(0, count), items);
+  for (CFIndex at = 0; at < count; at++) {
+    CFRetain(items[at]);
+  }
+}
+
+void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array) {
+  CFIndex count = (CFIndex)into->header.length;
+  for (CFIndex at = 0; at < count; at++) {
+    NTS_ITEMS(into, NtsString *)
+    [at] =
+        nts_string_of_nsstring(CFArrayGetValueAtIndex((CFArrayRef)array, at));
+  }
 }

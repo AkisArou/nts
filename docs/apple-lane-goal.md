@@ -421,6 +421,31 @@ correctness does not depend on arm64 running by luck.
        Eighteen are declared and not implemented: informal-protocol
        categories and one setter. Swift exposes them too.
      - A control with a bogus selector is caught.
+   - **Against Swift, measured (2026-09-25).**
+     `examples/interop/macos-bench/bench.sh` runs the same loops in
+     TypeScript and in Swift (`reference/bench.swift`, `swiftc -O`) on the
+     lane's Mac. Rounds are interleaved and the median of 7 is taken, since
+     the VM's timings move by 2x.
+
+     | row | nts | Swift | ratio |
+     |---|---|---|---|
+     | send (`number.intValue`) | 3.2 ns | 3.1 ns | 1.03 |
+     | string-set (`op.name = "worker"`) | 539 ns | 524 ns | 1.03 |
+     | string-get (`op.name.length`) | 48.8 ns | 40.3 ns | 1.21 |
+     | array-out (`components(separatedBy:)`, 64 strings) | 10.5 us | 12.3 us | 0.86 |
+     | array-in (`path(withComponents:)`, 64 strings) | 2.68 us | 2.72 us | 0.98 |
+     | objects-in (`addObjects(from:)`, 4 objects) | 120 ns | 329 ns | 0.36 |
+
+     - The first measurement had string-get at 2.20 and array-in at 1.77.
+       The bridging was a UTF-8 round trip and a message per element built
+       in the lowering.
+     - It is now CoreFoundation in the CF host (`nts_nsstring_of`,
+       `nts_string_of_nsstring`, `nts_nsarray_of_*`,
+       `nts_array_fill_*from_nsarray`). A string is copied from its own
+       one-byte or two-byte storage, a short ASCII one in one call, and an
+       array is one `CFArrayCreate` over the elements' own block.
+     - What is left in string-get is an allocation Swift does not make: its
+       `String` holds up to 15 bytes inline, and ours is always on the heap.
    - **Optional chaining, as Swift's.** `window.contentView?.addSubview(button)`
      and `operation?.name ?? "unnamed"` send nothing to an absent receiver, and
      the chain is `undefined`. The checker adds that `undefined` to every

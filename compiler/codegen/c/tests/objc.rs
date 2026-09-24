@@ -575,9 +575,10 @@ fn swift_numbers_take_plain_numbers_and_cross_as_c_types() {
 }
 
 /// Swift's `String` at a message: a plain `string` argument is an `NSString`
-/// the compiler makes of it (`CFStringCreateWithCharacters`, released after),
-/// a plain `string` result is read back through `UTF8String` and copied, and
-/// a `CString` is still the C string a C function would get.
+/// the CF host makes of it (`nts_nsstring_of`, released after), a plain
+/// `string` result is copied back out of the `NSString` it is
+/// (`nts_string_of_nsstring`), and a `CString` is still the C string a C
+/// function would get.
 #[test]
 fn a_string_crosses_a_message_as_an_nsstring() {
     let binding = r#"declare module "objc:Foundation" {
@@ -603,13 +604,12 @@ fn a_string_crosses_a_message_as_an_nsstring() {
     let text = emitted.writer.text();
     // The constructor's `CString` is a UTF-8 C string.
     assert!(text.contains("nts_string_to_cstring("), "{text}");
-    // The message's `string` is an `NSString` made of the UTF-16...
-    let made = text.lines().find(|l| l.contains("= CFStringCreateWithCharacters(")).unwrap_or_default();
+    // The message's `string` is an `NSString` made of its storage...
+    let made = text.lines().find(|l| l.contains("= nts_nsstring_of(")).unwrap_or_default();
     let object = made.trim().split(' ').next().unwrap_or("?");
-    assert!(text.contains("nts_string_to_utf16("), "{text}");
     // ...passed to the message. (Its release after the send is ARC's +1 rule,
     // and shows under `--rc`, which `macos-classes` runs.)
     assert!(text.contains(&format!("nts_objc_sel_stringByAppendingString_c(), {object})")), "{text}");
-    // And the result is read back as UTF-8 and copied.
-    assert!(text.contains("nts_objc_sel_UTF8String()") && text.contains("nts_string_from_required_cstring("), "{text}");
+    // And the result is copied back out of the `NSString`.
+    assert!(text.contains("nts_string_of_nsstring("), "{text}");
 }

@@ -40494,30 +40494,6 @@ impl<'a> FuncBuilder<'a> {
         self.finish_call_typed(id, callee, args, lent, Some(declaration), typed)
     }
 
-    /// `for (let i = 0; i < length; i++) body(i)`, built rather than written:
-    /// the loop a bridge copies an array's elements with. The index is the
-    /// only name it carries.
-    fn index_loop(
-        &mut self,
-        id: NodeId,
-        length: ValueId,
-        origin: &Origin,
-        body: &mut dyn FnMut(&mut Self, ValueId) -> Result<(), Diagnostic>,
-    ) -> Result<(), Diagnostic> {
-        let index = self.synthetic_symbol();
-        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        self.bindings.insert(index, zero);
-        let record = self.begin_loop(id, &[index], true, origin)?;
-        let at = self.bindings[&index];
-        let cond = self.still_walking(at, length, false, origin);
-        self.test_loop(cond, &record);
-        self.switch_to(record.body);
-        body(self, at)?;
-        self.end_loop(&record, Step::Count { name: index, by: 1.0 })?;
-        self.bindings.remove(&index);
-        Ok(())
-    }
-
     /// A message the lowering sends itself, as a value of `result`'s type.
     fn send_bridge(&mut self, message: super::native::Function, args: Vec<ValueId>, origin: &Origin) -> ValueId {
         let ty = message.result.representation();
@@ -40525,79 +40501,42 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A TypeScript array as the `NSArray` an Objective-C message takes, as
-    /// Swift's `[T]` crosses: an `NSMutableArray` made for the call
-    /// (`alloc`, `initWithCapacity:`, so +1, and the program's count releases
-    /// it after the send) and each element added -- an object as it is, a
-    /// string as an `NSString` made of it and given up once added.
+    /// Swift's `[T]` crosses: made for the call by the CF host in one
+    /// `CFArrayCreate` over the array's own elements, or over an `NSString`
+    /// made of each string, and the caller's (+1), so the program's count
+    /// releases it after the send.
     fn ns_array_of(&mut self, id: NodeId, array: ValueId, element: &super::native::Bridged, origin: &Origin) -> Result<ValueId, Diagnostic> {
-        use super::native::{Bridged, Handle, Pointee, Scalar, Type};
-        let HirType::Managed(ManagedType::Array(of)) = self.values[array.0 as usize].ty.clone() else {
+        use super::native::{Bridged, Handle, Pointee, Type};
+        if !matches!(self.values[array.0 as usize].ty, HirType::Managed(ManagedType::Array(_))) {
             return Err(self.unsupported(id, "an `NSArray` argument that is not an array"));
+        }
+        let helper = match element {
+            Bridged::Object(_) => "nts_nsarray_of_objects",
+            Bridged::String => "nts_nsarray_of_strings",
         };
-        let mutable = Type::Pointer(Pointee::Opaque(Handle::objc("NSMutableArray")));
-        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
-        let allocated = self.send_bridge(bridge_send("alloc", Some("NSMutableArray"), Vec::new(), mutable.clone()), Vec::new(), origin);
-        let made = self.send_bridge(
-            bridge_send("initWithCapacity:", None, vec![mutable.clone(), Type::Scalar(Scalar::ULong)], mutable.clone()),
-            vec![allocated, length],
-            origin,
-        );
-        let object = match element {
-            Bridged::Object(pointee) => Type::Pointer(pointee.clone()),
-            Bridged::String => Type::Pointer(Pointee::Opaque(Handle::ns_string())),
-        };
-        let add = bridge_send("addObject:", None, vec![mutable, object], Type::Void);
-        self.index_loop(id, length, origin, &mut |this, at| {
-            let item = this.push(OpKind::ArrayGet { array, index: at, checked: false }, (*of).clone(), origin.clone());
-            let mut lent = Vec::new();
-            let object = match element {
-                Bridged::Object(_) => item,
-                Bridged::String => this.ns_string_of(item, &mut lent, origin),
-            };
-            this.send_bridge(add.clone(), vec![made, object], origin);
-            this.give_back(id, lent);
-            Ok(())
-        })?;
-        Ok(made)
+        let made = Type::Pointer(Pointee::Opaque(Handle::objc("NSArray")));
+        Ok(self.runtime_call(helper, vec![array], made.representation(), origin.clone()))
     }
 
     /// The `NSArray` a message returned, as the TypeScript array the program
-    /// reads (Swift's `[T]`): a new array of `count` elements, each
-    /// `objectAtIndex:` -- an object the array then holds a count of, or a
-    /// string copied out of its `NSString`.
+    /// reads (Swift's `[T]`): an array of `count` elements, filled by the CF
+    /// host in one pass -- the objects, each counted by the array, or a string
+    /// copied out of each `NSString`.
     fn read_ns_array(&mut self, id: NodeId, returned: ValueId, element: &super::native::Bridged, ty: HirType) -> Result<ValueId, Diagnostic> {
         use super::native::{Bridged, Handle, Pointee, Scalar, Type};
         let origin = self.origin(id);
-        let HirType::Managed(ManagedType::Array(of)) = ty.clone() else {
+        if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
             return Err(self.unsupported(id, "an `NSArray` result the program does not read as an array"));
-        };
+        }
         let array = Type::Pointer(Pointee::Opaque(Handle::objc("NSArray")));
-        let count = self.send_bridge(bridge_send("count", None, vec![array.clone()], Type::Scalar(Scalar::ULong)), vec![returned], &origin);
+        let count = self.send_bridge(bridge_send("count", None, vec![array], Type::Scalar(Scalar::ULong)), vec![returned], &origin);
         let length = self.coerce(count, &HirType::NUMBER, id)?;
         let out = self.push(OpKind::ArrayNew { length, zeroed: true }, ty, origin.clone());
-        let object = match element {
-            Bridged::Object(pointee) => Type::Pointer(pointee.clone()),
-            Bridged::String => Type::Pointer(Pointee::Opaque(Handle::ns_string())),
+        let fill = match element {
+            Bridged::Object(_) => "nts_array_fill_from_nsarray",
+            Bridged::String => "nts_array_fill_strings_from_nsarray",
         };
-        let at_index = bridge_send("objectAtIndex:", None, vec![array, Type::Scalar(Scalar::ULong)], object.clone());
-        let utf8 = bridge_send(
-            "UTF8String",
-            None,
-            vec![object],
-            Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char)))),
-        );
-        self.index_loop(id, length, &origin, &mut |this, at| {
-            let item = this.send_bridge(at_index.clone(), vec![returned, at], &origin);
-            let value = match element {
-                Bridged::Object(_) => item,
-                Bridged::String => {
-                    let text = this.send_bridge(utf8.clone(), vec![item], &origin);
-                    this.runtime_call("nts_string_from_required_cstring", vec![text], (*of).clone(), origin.clone())
-                }
-            };
-            this.push(OpKind::ArraySet { array: out, index: at, value, checked: false }, HirType::Void, origin.clone());
-            Ok(())
-        })?;
+        self.runtime_call(fill, vec![out, returned], HirType::Void, origin);
         Ok(out)
     }
 
@@ -40623,7 +40562,7 @@ impl<'a> FuncBuilder<'a> {
         use super::native::Role;
         let origin = self.origin(id);
         Ok(match inner {
-            Role::NSString => self.ns_string_of(value, lent, &origin),
+            Role::NSString => self.ns_string_of(value, &origin),
             Role::NSArray(element) => self.ns_array_of(id, value, element, &origin)?,
             Role::Block { bridge, signature } => self
                 .lend_block(id, Some(value), (bridge.clone(), signature.clone()), slot.representation(), lent, &origin)?
@@ -40645,33 +40584,13 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(id, &format!("a call missing its `{key}` label")))
     }
 
-    /// A `string` as the `NSString` an Objective-C message takes: its UTF-16
-    /// lent for the call (given back after it, as any lent string is), and an
-    /// object made of it by `CFStringCreateWithCharacters`, which hands it
-    /// over -- so the program's count releases it once the message is sent.
-    fn ns_string_of(&mut self, string: ValueId, lent: &mut Vec<Lent>, origin: &Origin) -> ValueId {
-        use super::native::{Encoding, Pointee, Scalar, Type};
-        let characters = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt16))));
-        let pointer = self.runtime_call(Encoding::Utf16.to_c(), vec![string], characters.representation(), origin.clone());
-        lent.push(Lent::String { string, pointer, encoding: Encoding::Utf16 });
-        // A `number`, which the specializer converts to the parameter's
-        // `CFIndex` as it converts every native argument.
-        let length = self.push(OpKind::Length(string), HirType::NUMBER, origin.clone());
-        let allocator = self.push(OpKind::ConstNull, HirType::NativePointer(Pointee::Void), origin.clone());
-        let object = Type::Pointer(Pointee::Opaque(super::native::Handle::ns_string()));
-        let mut create = synthesized(
-            "CFStringCreateWithCharacters",
-            vec![Type::Pointer(Pointee::Void), characters, Type::Scalar(Scalar::Long)],
-            object.clone(),
-            None,
-            vec!["CoreFoundation".to_owned()],
-        );
-        create.returns_owned = true;
-        self.push(
-            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(create)), args: vec![allocator, pointer, length], frame: None },
-            object.representation(),
-            origin.clone(),
-        )
+    /// A `string` as the `NSString` an Objective-C message takes, as Swift's
+    /// `String` crosses: made by the CF host from the string's own storage,
+    /// one-byte or two-byte as it is (`nts_nsstring_of`), and the caller's
+    /// (+1), so the program's count releases it once the message is sent.
+    fn ns_string_of(&mut self, string: ValueId, origin: &Origin) -> ValueId {
+        let object = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::ns_string()));
+        self.runtime_call("nts_nsstring_of", vec![string], object.representation(), origin.clone())
     }
 
     fn read_native_string(
@@ -40684,22 +40603,13 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         // A message that returns an `NSString` the program reads as a
-        // `string`: its UTF-8, which the object owns and keeps while it lives,
-        // copied at once below. A nil object answers a NULL pointer, which the
-        // nullable copy reads as `null`.
-        let pointer = if target.send.is_some() && matches!(target.result, super::native::Type::Pointer(super::native::Pointee::Opaque(_))) {
-            let utf8 = synthesized(
-                "UTF8String",
-                vec![target.result.clone()],
-                super::native::Type::Pointer(super::native::Pointee::Const(Box::new(super::native::Pointee::Scalar(super::native::Scalar::Char)))),
-                Some(super::native::Send { selector: "UTF8String".to_owned(), class: None }),
-                Vec::new(),
-            );
-            let ty = utf8.result.representation();
-            self.push(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(utf8)), args: vec![pointer], frame: None }, ty, origin.clone())
-        } else {
-            pointer
-        };
+        // `string`, as Swift's `String`: copied by the CF host from its own
+        // storage, the eight-bit bytes as they are where it has them. A nil
+        // object is `null`.
+        if target.send.is_some() && matches!(target.result, super::native::Type::Pointer(super::native::Pointee::Opaque(_))) {
+            let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
+            return Ok(self.runtime_call("nts_string_of_nsstring", vec![pointer], ty, origin));
+        }
         let value = if string.array {
             // Every element copied, so the array is the program's whatever C
             // does with its own afterwards. `required` is the declaration's
@@ -41113,7 +41023,7 @@ impl<'a> FuncBuilder<'a> {
                     let count = self.coerce(count, &target.parameters[at].representation(), id)?;
                     c_args.push(count);
                 }
-                Role::NSString => c_args.extend(argument.map(|string| self.ns_string_of(string, &mut lent, &origin))),
+                Role::NSString => c_args.extend(argument.map(|string| self.ns_string_of(string, &origin))),
                 Role::NSArray(element) => {
                     let Some(array) = argument else { continue };
                     c_args.push(self.ns_array_of(id, array, &element, &origin)?);
