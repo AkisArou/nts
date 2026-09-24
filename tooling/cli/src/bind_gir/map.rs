@@ -26,6 +26,9 @@ use super::model::{
     Transfer, TypeRef,
 };
 
+/// What a signal's view calls: `g_signal_connect_data`, keeping the closure.
+pub(crate) const CONNECT: &str = "nts_gobject_connect";
+
 /// One namespace's binding, ready to write.
 #[derive(Debug, Default)]
 pub(crate) struct Binding {
@@ -1045,13 +1048,20 @@ impl<'a> Mapper<'a> {
     ///
     /// Signals have no C prototype -- `GObject` registers them at run time -- so
     /// this is the one place a signal's signature can be typed. The C side is
-    /// `g_signal_connect_data` exactly, which the self-check compiles against
-    /// `GObject`'s header for every view: the instance is `void *`, the handler
-    /// a `GCallback`, its destroy function a `GClosureNotify`. The handler's
+    /// `g_signal_connect_data`'s exactly, called as `nts_gobject_connect`
+    /// (`nts_gobject.h`), which is `g_signal_connect_data` keeping the
+    /// connection's `GClosure` -- what lets the collector see that the
+    /// instance holds the handler's closure, and find a handler that captures
+    /// its own instance. The self-check compiles every view against that
+    /// header: the instance is `void *`, the handler a `GCallback`, its
+    /// destroy function a `GClosureNotify`. The handler's
     /// own signature is GIR's: the instance first, the signal's parameters,
     /// and the `user_data` last, where the bridge takes the closure from.
     fn signal(&mut self, class: &'a Class, signal: &super::model::Signal) -> Result<Function, Reason> {
         let c_type = class.c_type.clone().ok_or_else(|| Reason::Unknown(class.name.clone()))?;
+        if !self.binding.headers.iter().any(|header| header == nts_codegen_c::GOBJECT_HEADER_NAME) {
+            self.binding.headers.push(nts_codegen_c::GOBJECT_HEADER_NAME.to_owned());
+        }
         // `self: GtkButton` names the class's handle, which exists only for a
         // tagged struct.
         if !self.facts.tags.contains_key(&c_type) {
@@ -1104,7 +1114,7 @@ impl<'a> Mapper<'a> {
         );
         Ok(Function {
             name,
-            symbol: "g_signal_connect_data".to_owned(),
+            symbol: CONNECT.to_owned(),
             parameters: vec![
                 ("instance".to_owned(), Mapped { shape: Shape::Other, ts: format!("Erased<{local}>"), c: context.clone() }),
                 ("detailed_signal".to_owned(), Mapped { shape: Shape::Other, ts: format!("\"{}\"", signal.name), c: string.clone() }),

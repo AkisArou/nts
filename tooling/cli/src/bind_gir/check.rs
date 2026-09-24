@@ -41,8 +41,14 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
     // compile, and says so.
     let (text, lines) = probe_text(binding);
     std::fs::write(&probe, &text).with_context(|| format!("writing {}", probe.display()))?;
+    // The runtime's own header a signal's view is declared in, beside the
+    // probe, as the build writes it beside the witness.
+    let gobject = dir.join(nts_codegen_c::GOBJECT_HEADER_NAME);
+    std::fs::write(&gobject, nts_codegen_c::GOBJECT_HEADER).with_context(|| format!("writing {}", gobject.display()))?;
     let output = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
         .args(["-std=c11", "-fsyntax-only", "-ferror-limit=0", "-w"])
+        .arg("-I")
+        .arg(&dir)
         .args(cflags)
         .arg(&probe)
         .output()

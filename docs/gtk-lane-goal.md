@@ -446,8 +446,94 @@ call went through a double on its way to C's parameter, 53 bits for a 64-bit
 - Construct-only properties (`GtkApplication`'s are settable; `GSubprocess`'s
   `argv` is not): `GValue`s through `g_object_new_with_properties`' names
   and values.
-- The toggle-ref problem: a signal handler capturing its own widget is a
-  cycle through a `GClosure` that the cycle collector cannot see.
+- Cycles through a GObject (below).
+
+### Cycles through a GObject: design
+
+**The defect, measured.** Under `--rc`, `button.connect("clicked", () =>
+button.set_label(…))` leaks the button. A probe counting finalizations with
+`g_object_weak_ref` (real GTK, fatal-criticals): a plain unparented label is
+finalized (1); one whose handler captures *another* object is too (1); one
+whose handler captures itself is not (0); and neither is the same label
+parented into a window that is then destroyed (0) -- GTK4 disposes a child
+only at its last unref, and the handler's closure holds one.
+
+The cycle is closure --(a foreign slot: `g_object_ref`)--> X --(the
+`GClosure`'s lend of the closure)--> closure. Neither edge is one the
+collector sees: a foreign slot is not a reference field, and a lend is a
+count from outside.
+
+**Not GJS's shape.** GJS gives each GObject one wrapper holding one toggle
+reference, and the toggle says when that reference is the last. We hold one
+reference per live TypeScript value (3 at construction: each SSA view
+retains), so "the toggle is the last" is not the fact; and a wrapper is an
+allocation and an indirection on every toolkit call, and a second
+representation for foreign objects beside Objective-C's.
+
+**The shape: a holder is a node of the trial deletion.**
+
+1. *Registry.* Every connect view calls `nts_gobject_connect`
+   (`runtime/c/nts_gobject.c`), which is `g_signal_connect_data` -- the same
+   `g_cclosure_new` and `g_signal_connect_closure` -- keeping the `GClosure`.
+   Each connection is recorded against its instance, keyed by that closure:
+   the destroy notify receives only the lent closure, so one closure
+   connected to two instances could not otherwise say which edge ended, and
+   removing the wrong one leaves a phantom edge that can whiten a closure a
+   live instance still holds. The instance's record is the node: it carries a
+   header the collector walks, so the algorithm stays one algorithm. No tag,
+   no lowering change, no runtime helper -- the registry is the family's.
+2. *Edges.* During a collection only, an object's foreign slot pointing at a
+   registered X is an edge to X's record, and X's record has an edge to each
+   closure it holds. An X with no record holds nothing and is no node.
+3. *Count.* A record's count is X's own `ref_count`, read at the start of the
+   collection through a family hook (`nts_glib_host.c`, so the runtime stays
+   GLib-free). Trial deletion subtracts the edges from the candidate graph;
+   what remains is held from elsewhere. A transient GTK reference (emission,
+   layout) is a real reference, so it can only keep X black -- latency, never
+   a collection of something alive. Measured: inside the label's own
+   `notify` emission its `ref_count` is 6 against 3 outside, where the
+   program's loads explain at most one. Floating references never reach
+   here: the program's first retain is `g_object_ref_sink`, and the probe
+   reads floating = 0 at every point; `g_object_is_floating` stays as a
+   guard that states it.
+4. *Cyclic.* A layout holding a counted GObject is cyclic, since the object
+   can hold any closure lent to it. Measured: gtk-gir's candidates 10 -> 19;
+   a 20M-iteration loop storing rows that hold labels, 1000 more candidates
+   -- one per row, as buffering is once per object. What narrows it is
+   dynamic: an object that holds no lent closure has no node, and a slot
+   pointing at it is no edge.
+5. *Revisit.* `window.destroy()` drops GTK's reference to the label on the
+   GObject side, where no release of ours happens, so nothing becomes a root.
+   At a checkpoint, a record whose `ref_count` fell since the collector last
+   read it is a root: one read per record per checkpoint.
+6. *Collect, in an order that survives re-entrancy.* White records first
+   mark their closures severed, so an unlend reaching one is a no-op; then
+   their handlers are disconnected (`g_signal_handlers_disconnect_matched` on
+   the closure's context) -- the destroy notifies run and do nothing; then the
+   dead objects are freed as today, releasing their foreign slots, which is
+   X's last unref. No signal is left to run TypeScript during it, and all of
+   it runs under `collecting`.
+
+7. *Edges by mode.* `nts_each_reference` takes the edges it wants:
+   destruction asks for the ones an object owns, the collector's four walks
+   for the traced ones. A node is traced and never released by the runtime.
+
+A garbage object's own handlers do not run on the way out: they are garbage
+with it and severed first, as GJS refuses to call JavaScript during a sweep.
+
+**Measured** (`examples/interop/gtk-cycles`, real GTK, fatal-criticals):
+a self-capturing label is finalized, and so is the same label parented into
+a window that is then destroyed (both 0 before). A label whose emission holds
+the only references outside its cycle survives a collection that looks at
+it mid-emission -- the second handler still runs, and the candidate count
+shows the collection did look, so the arm tests something -- and is
+collected once the emission ends; with the emission's transient references
+subtracted from the count, the second handler is severed instead. A chain
+whose last holder is a garbage cycle goes with it, inside the sweep. On both
+backends against real libgobject
+(`a_cycle_through_a_gobject_is_collected_on_both_backends`), with no revisit
+an instance the library let go of is never collected, and with the family not
+registered no cycle is.
 
 ## After M3
 

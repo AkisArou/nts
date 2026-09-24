@@ -1837,7 +1837,10 @@ interop() {
   #     TypeScript closure, run inside `[NSApp run]` in the Mac's GUI session.
   # 31: `macos-classes` (the Swift-shaped surface's first step), Foundation's
   #     classes as TypeScript classes against an ARC oracle.
-  interop_floor=31
+  # 32: `gtk-cycles`, signal handlers capturing their own widgets under
+  #     reference counting, collected through the instance's node. It SKIPs
+  #     without gtk4, xvfb-run or Gtk-4.0.gir.
+  interop_floor=32
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
