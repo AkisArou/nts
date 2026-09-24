@@ -2992,7 +2992,42 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
                     reached.push(
                         callee
                             .and_then(|callee| probe.node(callee).symbol)
-                            .map(|called| called.0),
+                            .map(|called| called.0)
+                            // **A symbol is not the same as a function, and this
+                            // is where the difference escapes.** `component(props)`
+                            // with `component` a *parameter* has a symbol, so it
+                            // is recorded as a resolved callee -- and a
+                            // parameter's symbol is in no throwing set, because
+                            // that set holds functions whose body throws. So
+                            // `renderWithHooks`, which calls it, never joins; the
+                            // `try` around it compiles; and the throw escapes
+                            // **silently**. The React lane's reduction compiles
+                            // and then declines 6 of 29 cases, the negative
+                            // inputs where node answers -1.
+                            //
+                            // The arm below already has the rule -- "an
+                            // unresolved callee is unbounded, so its caller joins
+                            // the set at once" -- and a parameter is an
+                            // unresolved callee wearing a symbol.
+                            //
+                            // **Filtering it here was built and measured and is
+                            // not landed**, because it is right and blunt. Over
+                            // `runtime/node`, one tree and two binaries of it:
+                            // definitions 29915 -> 29344 and `emit-c --napi`
+                            // refusals 14632 -> 15158, against `all.sh`'s ceiling
+                            // of 14750. The floor of 17500 is not in danger; the
+                            // ceiling is breached, and that file's instruction
+                            // when it trips is that the first action is **not** to
+                            // raise it -- a measurement naming the compiler as the
+                            // cause is exactly when raising it hides something.
+                            //
+                            // The rule refuses every `try` whose call reaches a
+                            // parameter or field holding a closure, including
+                            // those whose closures provably cannot throw. What
+                            // decides it is the *call sites* of the enclosing
+                            // function, which say which closures actually arrive
+                            // -- the shape `hir::interprocedural` already asks.
+                            // Precision first, then the rule.
                     );
                 }
                 pending.extend(probe.children(at));
@@ -25463,10 +25498,10 @@ impl<'a> FuncBuilder<'a> {
         // grows more expensive as publishing improves, which is the opposite of
         // the usual shape.
         let mut handled = Vec::new();
-        if let Some(call) = self.call_within(body, &mut handled) {
+        if let Some((call, why)) = self.call_within(body, &mut handled) {
             return Err(self.unsupported(
                 call,
-                "a call inside a `try`, whose `throw` would not reach this handler",
+                &format!("a call inside a `try` whose `throw` would not reach this handler: {why}"),
             ));
         }
         // Every call this `try` *can* handle names the callee's raising copy
@@ -36796,7 +36831,11 @@ impl<'a> FuncBuilder<'a> {
     /// cannot either -- it aborts where it refuses, which is not a `throw` and
     /// reaches no handler by design. Refusing those would have cost the working
     /// half to fix the broken one.
-    fn call_within(&self, node: NodeId, handled: &mut Vec<NodeId>) -> Option<NodeId> {
+    fn call_within(
+        &self,
+        node: NodeId,
+        handled: &mut Vec<NodeId>,
+    ) -> Option<(NodeId, &'static str)> {
         if matches!(
             self.kind_of(node),
             Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
@@ -36811,7 +36850,7 @@ impl<'a> FuncBuilder<'a> {
                 handled.push(node);
                 return None;
             }
-            return Some(node);
+            return Some((node, self.why_no_raising_copy(node)));
         }
         // **An accessor is a call**, which is the first sentence of
         // `examples/accessors` and was not true of this guard: it matched
@@ -36829,7 +36868,7 @@ impl<'a> FuncBuilder<'a> {
         // would read whatever happens to sit at that offset". The guard made
         // the same mistake about control flow rather than about storage.
         if self.reads_an_accessor(node) {
-            return Some(node);
+            return Some((node, "an accessor, which is a call"));
         }
         // Not into a nested function: a closure written inside a `try` is not
         // *called* by it, and refusing on one would refuse every `try` holding
@@ -36847,6 +36886,51 @@ impl<'a> FuncBuilder<'a> {
         self.children(node)
             .into_iter()
             .find_map(|child| self.call_within(child, handled))
+    }
+
+    /// Why this call has no raising copy, in the words that name the repair.
+    ///
+    /// **The refusal used to say only that a throw would not reach the handler**,
+    /// which is a fact about the `try` and not about what is missing. The React
+    /// lane derived the distinction below by reading their own source for 14
+    /// blockers -- ten closures, one method, three both -- work the message
+    /// should have done, and which a census cannot do at all.
+    ///
+    /// The four answers are four different pieces of work, and that is the point
+    /// of separating them: a closure needs a raising variant reachable through a
+    /// dispatch slot, a method needs `raising_copies` to cover more than
+    /// `FUNCTION_DECLARATION`, and a plain function that lost the fixpoint needs
+    /// whatever *it* calls fixed first. The sentences are deliberately not
+    /// prefixes of one another, so a census matching on text has to pick one.
+    fn why_no_raising_copy(&self, call: NodeId) -> &'static str {
+        let Some(declaration) = self
+            .snapshot
+            .call_targets
+            .get(&call)
+            .and_then(|target| target.callee)
+        else {
+            // No declaration to copy: the callee arrived as a value. Every
+            // component and every effect in a React render is one of these.
+            return "through a function value, which has no raising copy to call";
+        };
+        match self.kind_of(declaration) {
+            Some(syntax::METHOD_DECLARATION) => {
+                "a method, and a raising copy is made of plain functions only"
+            },
+            Some(syntax::CONSTRUCTOR) => {
+                "a constructor, and a raising copy is made of plain functions only"
+            },
+            Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => {
+                "an accessor, and a raising copy is made of plain functions only"
+            },
+            Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {
+                "a function written as a value, which has no raising copy to call"
+            },
+            // A plain function that was eligible and lost the fixpoint: it calls
+            // something that can raise and cannot be copied. The repair is that
+            // callee's, not this call's, which is why the sentence points down.
+            _ => "a function that itself calls something whose `throw` cannot be carried",
+        }
     }
 
     /// Whether this call names a raising copy, as a suffix to append.
@@ -36975,6 +37059,24 @@ impl<'a> FuncBuilder<'a> {
         if super::builtin::is_error(&record.name) {
             return false;
         }
+        // **A symbol is not the same as a function**, and the escape hatch above
+        // missed the common case for exactly that reason. `component(props)`
+        // where `component` is a *parameter* has a symbol, so it never reached
+        // the "no symbol" arm -- and a parameter's symbol is in no `throwing`
+        // set, because that set holds functions whose body throws. So the call
+        // answered "cannot raise", the `try` around its caller compiled, and the
+        // throw escaped **silently**.
+        //
+        // Reported by the React lane, where it is the whole render path: every
+        // function component is called through a value. Their reduction compiles
+        // and then declines 6 of 29 cases -- the negative inputs, where node
+        // answers -1 and the compiled program has no answer at all.
+        //
+        // So the question is asked of the *declarations* and not of the symbol's
+        // membership: if nothing this symbol declares is a function, the callee
+        // arrived as a value and what it reaches "is exactly what cannot be known
+        // here" -- which is the sentence the arm above already gives for the
+        // no-symbol spelling, now given for both.
         // Not merely "compiled", but **can raise**. `bounded(n)` inside a `try`
         // is a compiled call and a pure one, and refusing it would take a
         // working example away to fix a defect it does not have --
