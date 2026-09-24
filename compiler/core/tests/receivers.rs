@@ -400,3 +400,68 @@ fn the_arm_histogram_covers_exactly_the_sound_population() {
     // same for every program.
     assert!(rows.len() > 1, "the fixture has receivers of two arm counts");
 }
+
+/// The arm list a chain needs, from the module both the census and the lowering
+/// read.
+///
+/// `Census::arm_histogram` counts arms and `inhabit::Inhabitants::arms` names
+/// them, and nothing but this holds them to one answer. Two derivations of one
+/// fact will disagree, and here the disagreement would be a chain that tests a
+/// different set from the one the cost was measured over.
+#[test]
+fn the_arm_list_and_the_arm_count_are_one_answer() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/receivers/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("the receivers fixture is checked in");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+    let census = receivers::classify(&snapshot);
+    let inhabitants = nts_core::inhabit::Inhabitants::of(&snapshot);
+
+    // The declared type of an interface, by the name the program spells.
+    let declared = |want: &str| {
+        snapshot
+            .symbols
+            .iter()
+            .filter(|record| record.name == want)
+            .find_map(|record| {
+                record.declarations.iter().find_map(|at| snapshot.node_types.get(at).copied())
+            })
+            .unwrap_or_else(|| panic!("the fixture declares `{want}`"))
+    };
+
+    // Each pair is the count the census recorded for a read through that
+    // interface, and the list `arms` names for the same type. Asserted together,
+    // because either alone would pass over a rule that answered the same for
+    // every input.
+    for (interface, member, expected) in [
+        // Two classes cover it, so three: its own layout and one per class.
+        ("TwoCoverers", "coveredTwice", 3),
+        // `Opting` says `implements` where no required name exists to compare.
+        ("OnlyOptional", "perhaps", 2),
+        // **The control**: covered by nothing and named by nothing, so one arm,
+        // no chain, and no cost.
+        ("Uninhabitable", "nobodyHasThis", 1),
+    ] {
+        let named = inhabitants.arms(&snapshot, declared(interface));
+        assert_eq!(
+            named.len(),
+            expected,
+            "`{interface}` should name {expected} arm(s), named {named:?}"
+        );
+        assert_eq!(
+            only(&census, member).arms as usize,
+            named.len(),
+            "the census counted a different number of arms for `{interface}` than \
+             `inhabit` names, which is the disagreement this test exists to prevent"
+        );
+    }
+
+    // And the first arm is the slot's own type, which is what makes a chain's
+    // first test the one a monomorphic site hits.
+    let two = declared("TwoCoverers");
+    assert_eq!(inhabitants.arms(&snapshot, two).first(), Some(&two));
+}

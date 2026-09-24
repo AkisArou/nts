@@ -116,9 +116,10 @@
 //! itself into the representation it was hoping for."
 
 use nts_semantic_schema::schema::{
-    LiteralValue, NodeId, SemanticSnapshot, SymbolId, TypeId, TypeKind,
+    LiteralValue, NodeId, SemanticSnapshot, TypeId, TypeKind,
 };
 use nts_semantic_schema::{syntax, walk};
+use crate::inhabit::Inhabitants;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// The checker's `TypeFlagsUniqueESSymbol`, mirrored from `names_one_member`.
@@ -551,7 +552,7 @@ impl Census {
 /// Count every field access in a program, by what its receiver is typed as.
 #[must_use]
 pub fn classify(snapshot: &SemanticSnapshot) -> Census {
-    let inhabitable = Inhabitable::of(snapshot);
+    let inhabitable = Inhabitants::of(snapshot);
     let mut out = Census::default();
     out.excluded.interfaces_unexamined = inhabitable.interfaces_unexamined;
     out.excluded.classes_unexamined = inhabitable.classes_unexamined;
@@ -586,7 +587,7 @@ fn order(sites: &mut [Site]) {
 }
 
 /// `v.name`.
-fn dotted(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mut Census) {
+fn dotted(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitants, out: &mut Census) {
     let Some([object, member]) = children2(snapshot, id) else {
         return;
     };
@@ -597,7 +598,7 @@ fn dotted(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mu
 }
 
 /// `v["name"]`, `v[kRefed]` — but never `v[i]`.
-fn keyed(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mut Census) {
+fn keyed(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitants, out: &mut Census) {
     let Some([object, index]) = children2(snapshot, id) else {
         return;
     };
@@ -632,7 +633,7 @@ fn keyed(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mut
 ///
 /// Zero property-access nodes and two field reads, which is the form a census
 /// keyed on `PROPERTY_ACCESS_EXPRESSION` loses entirely.
-fn destructured(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mut Census) {
+fn destructured(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitants, out: &mut Census) {
     let Some(pattern) = walk::parent(snapshot, id) else {
         return;
     };
@@ -672,7 +673,7 @@ fn destructured(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, ou
 }
 
 /// `{ ...v }`, which copies the whole layout.
-fn spread(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitable, out: &mut Census) {
+fn spread(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitants, out: &mut Census) {
     let Some(source) = walk::children(snapshot, id).first().copied() else {
         return;
     };
@@ -720,7 +721,7 @@ fn record(
     object: NodeId,
     named: Member<'_>,
     form: Form,
-    known: &Inhabitable,
+    known: &Inhabitants,
     out: &mut Census,
 ) {
     // Before the type is consulted at all: a module member is not a field, so
@@ -799,7 +800,7 @@ fn record(
 fn receiver_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
-    known: &Inhabitable,
+    known: &Inhabitants,
 ) -> (String, bool, bool, bool, u32) {
     let symbol = snapshot
         .types
@@ -816,9 +817,9 @@ fn receiver_of(
     let arms = symbol.map_or(1, |symbol| known.covering(symbol.0).saturating_add(1));
     (
         name,
-        symbol.is_some_and(|symbol| known.implemented.contains(&symbol.0)),
+        symbol.is_some_and(|symbol| known.implemented(symbol.0)),
         symbol.is_some_and(|symbol| known.satisfied(symbol.0)),
-        symbol.is_some_and(|symbol| known.unexamined.contains(&symbol.0)),
+        symbol.is_some_and(|symbol| known.unexamined(symbol.0)),
         arms,
     )
 }
@@ -966,213 +967,6 @@ fn through_a_constraint(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
         }
     }
     at
-}
-
-/// The two proxies for "a class could inhabit this interface".
-///
-/// The real set is the one record 0294 rules out: *"the classes that work by
-/// accident are exactly the ones producing no layout evidence."* So neither of
-/// these is the answer, and neither is implementable. Together they **bracket**
-/// the argument, which is what the design step needs — the way
-/// `erasure::Analysis::Local` is a bracket and not a proposal.
-struct Inhabitable {
-    /// See [`Excluded::interfaces_unexamined`].
-    interfaces_unexamined: u32,
-    /// See [`Excluded::classes_unexamined`].
-    classes_unexamined: u32,
-    /// Named in some class's heritage clause. Misses a structural satisfier, so
-    /// it over-states what a narrow rule would spare.
-    implemented: FxHashSet<u32>,
-    /// How many classes have a same-named member for each required member.
-    ///
-    /// A **count**, not a membership test, because the design step needs to know
-    /// how long a type-test chain would be and not merely whether one is needed.
-    /// Absent is zero; [`Inhabitable::satisfied`] is the old predicate, derived
-    /// from it so the two cannot disagree.
-    ///
-    /// Compares names and not types, because assignability is the checker's and
-    /// this does not have it — so it both over- and under-counts against the real
-    /// relation. As an **arm count** it is an upper bound on distinct layouts:
-    /// two classes can merge into one layout ([`crate::hir::Layout::same_shape`])
-    /// and none can split, so counting classes never reports fewer arms than a
-    /// chain would need.
-    covering: FxHashMap<u32, u32>,
-    /// Interfaces some class covers **by member name**: the published lower
-    /// bracket, kept apart from [`Inhabitable::covering`] now that the latter
-    /// also counts an `implements` a name comparison misses.
-    by_name: FxHashSet<u32>,
-    /// Interface symbols neither proxy could examine. Counted as *possibly*
-    /// inhabited, which is the direction that keeps a narrow rule sound.
-    unexamined: FxHashSet<u32>,
-}
-
-impl Inhabitable {
-    /// How many classes could inhabit this interface: the arm count a chain
-    /// through it would need, **not** counting the interface's own layout.
-    fn covering(&self, symbol: u32) -> u32 {
-        self.covering.get(&symbol).copied().unwrap_or(0)
-    }
-
-    /// The published lower-bracket predicate: **the name proxy alone**.
-    ///
-    /// Deliberately not `covering(symbol) > 0`, which now also counts a class
-    /// that merely *says* `implements`. That is the right arm count and the wrong
-    /// bracket: `through_satisfied`'s sentence is about structural satisfaction,
-    /// and widening it silently would move a published number by changing what it
-    /// claims rather than what it found.
-    fn satisfied(&self, symbol: u32) -> bool {
-        self.by_name.contains(&symbol)
-    }
-
-    fn of(snapshot: &SemanticSnapshot) -> Self {
-        let mut implemented = FxHashSet::default();
-        let mut unexamined: FxHashSet<u32> = FxHashSet::default();
-        let mut class_members: Vec<FxHashSet<&str>> = Vec::new();
-        let mut interfaces_unexamined = 0;
-        let mut classes_unexamined = 0;
-
-        // Aligned with `class_members` by position: one entry per class that was
-        // examined, holding the interfaces that class *names*. Two lists rather
-        // than one struct because `class_members` borrows the snapshot and
-        // splitting the borrow is what keeps this a single pass.
-        let mut class_heritage: Vec<FxHashSet<u32>> = Vec::new();
-
-        for index in 0..snapshot.nodes.len() {
-            let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-            let Some(kind) = walk::kind_of(snapshot, id) else {
-                continue;
-            };
-            if !matches!(
-                kind,
-                syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION
-            ) {
-                continue;
-            }
-            let mut mine: FxHashSet<u32> = FxHashSet::default();
-            // Heritage clauses, not `base_types`: `lower.rs` records that
-            // `base_types` "in fact carries neither for a class that only
-            // implements -- `class Counting implements Sink` has no entry at
-            // all. That was measured rather than assumed."
-            for clause in walk::children(snapshot, id) {
-                if walk::kind_of(snapshot, clause) != Some(syntax::HERITAGE_CLAUSE) {
-                    continue;
-                }
-                named_symbols(snapshot, clause, &mut mine);
-            }
-            implemented.extend(mine.iter().copied());
-            match instance_type_of(snapshot, id)
-                .and_then(|ty| snapshot.types.get(ty.0 as usize))
-                .map(|record| &record.kind)
-            {
-                Some(TypeKind::Object { properties }) => {
-                    class_members.push(properties.iter().map(|p| p.name.as_str()).collect());
-                    class_heritage.push(mine);
-                },
-                _ => classes_unexamined += 1,
-            }
-        }
-
-        let mut covering: FxHashMap<u32, u32> = FxHashMap::default();
-        let mut by_name: FxHashSet<u32> = FxHashSet::default();
-        for (index, record) in snapshot.symbols.iter().enumerate() {
-            if !record
-                .declarations
-                .iter()
-                .any(|at| walk::kind_of(snapshot, *at) == Some(syntax::INTERFACE_DECLARATION))
-            {
-                continue;
-            }
-            let Some(TypeKind::Object { properties }) = record
-                .declarations
-                .iter()
-                .find_map(|at| snapshot.node_types.get(at))
-                .and_then(|ty| snapshot.types.get(ty.0 as usize))
-                .map(|record| &record.kind)
-            else {
-                interfaces_unexamined += 1;
-                unexamined.insert(u32::try_from(index).unwrap_or(u32::MAX));
-                continue;
-            };
-            let symbol = u32::try_from(index).unwrap_or(u32::MAX);
-            let required: Vec<&str> = properties
-                .iter()
-                .filter(|property| !property.optional)
-                .map(|property| property.name.as_str())
-                .collect();
-            // **A class that says `implements I` inhabits it whether or not the
-            // name proxy agrees**, and leaving it out would be unsound in the one
-            // direction that matters: a chain missing a real arm aborts a correct
-            // program. The empty-`required` skip below is why this is not
-            // redundant -- an interface with only optional members is covered by
-            // nobody under the name rule and can still be implemented by name.
-            //
-            // Found by the `arms` column's own `1` row: three accesses read as
-            // one arm while their interface was in `implemented`, which is a
-            // chain of one arm through a type two layouts reach.
-            let covers = u32::try_from(
-                class_members
-                    .iter()
-                    .zip(&class_heritage)
-                    .filter(|(members, heritage)| {
-                        heritage.contains(&symbol)
-                            || (!required.is_empty()
-                                && required.iter().all(|name| members.contains(name)))
-                    })
-                    .count(),
-            )
-            .unwrap_or(u32::MAX);
-            if covers > 0 {
-                covering.insert(symbol, covers);
-            }
-            if !required.is_empty()
-                && class_members
-                    .iter()
-                    .any(|members| required.iter().all(|name| members.contains(name)))
-            {
-                by_name.insert(symbol);
-            }
-        }
-
-        Self {
-            interfaces_unexamined,
-            classes_unexamined,
-            implemented,
-            covering,
-            by_name,
-            unexamined,
-        }
-    }
-}
-
-/// The instance type a class node declares.
-///
-/// Four lines rather than a `pub` in `hir::lower`, which is the same trade
-/// `erasure` makes: reading the construct signature's result answers for a
-/// declaration and an expression without asking which kind of node this is.
-fn instance_type_of(snapshot: &SemanticSnapshot, class: NodeId) -> Option<TypeId> {
-    let ty = snapshot.node_types.get(&class).copied()?;
-    let TypeKind::Function(signature) = snapshot.types.get(ty.0 as usize)?.kind else {
-        return Some(ty);
-    };
-    Some(snapshot.signatures.get(signature.0 as usize)?.return_type)
-}
-
-/// Every symbol a heritage clause mentions, however it is spelled.
-///
-/// Walked rather than read at a fixed child: `implements Foo<Bar>` and
-/// `implements ns.Foo` put the name at different depths, and a fixed index finds
-/// one of them.
-fn named_symbols(snapshot: &SemanticSnapshot, id: NodeId, out: &mut FxHashSet<u32>) {
-    if let Some(symbol) = snapshot
-        .nodes
-        .get(id.0 as usize)
-        .and_then(|node| node.symbol)
-    {
-        out.insert(walk::denoted(snapshot, SymbolId(symbol.0)).0);
-    }
-    for child in walk::children(snapshot, id) {
-        named_symbols(snapshot, child, out);
-    }
 }
 
 /// Whether this expression names an imported module rather than a value.
