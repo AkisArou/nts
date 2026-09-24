@@ -2029,12 +2029,12 @@ export function latin(): number { const s = "caf\u00e9"; return same(s, s) ? 1 :
 export function wide(): number { const s = "\u03b1\u03b2"; return same(s, s) ? 1 : 0; }
 export function built(): number { let s = ""; for (let i = 0; i < 20; i++) s += String(i); return same(s, s) ? length(s) : -1; }
 "#;
-    let library = r#"
+    let library = r"
 #include <stdbool.h>
 #include <string.h>
 bool same(const char *a, const char *b) { return a == b && strcmp(a, b) == 0; }
 int length(const char *a) { return (int)strlen(a); }
-"#;
+";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f %.0f %.0f %.0f", ascii(), latin(), wide(), built());"#,
