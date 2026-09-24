@@ -498,7 +498,18 @@ class ClassicWritableWriter implements AsyncWriter {
 
   #waitForDrain(): Promise<void> {
     const pending = Promise.withResolvers<void>();
-    this.#waiters.push(new DrainWaiter((): void => pending.resolve(undefined), pending.reject));
+    // Both settlers wrapped, as `[drainableProtocol]` above already does.
+    // `pending.reject` passed directly is a capability member read as a *value*,
+    // which is refused -- a settler is a settle with the promise as receiver.
+    // And `resolve(undefined)` is refused separately, because `undefined` here
+    // stands in for a `void` rather than for a reference; `resolve()` is the
+    // same settle and says so.
+    this.#waiters.push(
+      new DrainWaiter(
+        (): void => pending.resolve(),
+        (reason?: unknown): void => pending.reject(reason),
+      ),
+    );
     this.#installListeners();
     return pending.promise;
   }
