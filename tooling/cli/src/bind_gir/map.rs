@@ -1065,13 +1065,19 @@ impl<'a> Mapper<'a> {
             if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename") {
                 return Err(Reason::StringInCallback);
             }
-            let mapped = self.typed(&self.with_c_type(param))?;
+            let param = self.with_c_type(param);
+            let mapped = self.typed(&param)?;
+            let mapped = self.truth(&param, mapped);
             ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
         }
         let result = match &signal.signature.result.ty {
             TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
             TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => return Err(Reason::StringInCallback),
-            _ => self.typed(&self.with_c_type(&signal.signature.result))?,
+            _ => {
+                let result = self.with_c_type(&signal.signature.result);
+                let mapped = self.typed(&result)?;
+                self.truth(&result, mapped)
+            }
         };
         let context = Type::Pointer(Pointee::Void);
         // The handler's C signature is the compiler's to derive from the
@@ -1176,8 +1182,9 @@ impl<'a> Mapper<'a> {
     }
 
     /// A `gboolean` as the boolean it means: `CBool<c_int>`, where C still
-    /// sees the `int` it is. Only for a function's own parameters and result;
-    /// a callback's stay `c_int`, which is what its bridge converts.
+    /// sees the `int` it is -- a function's parameters and result, and a
+    /// callback's or a signal handler's too, whose bridge reads C's `int` as
+    /// C does (2 is `true`) and answers 0 or 1: `() => true` keeps a timeout.
     fn truth(&mut self, param: &Param, mapped: Mapped) -> Mapped {
         let gboolean = matches!(&param.ty, TypeRef::Named { name, .. } if name == "gboolean");
         if !gboolean || mapped.c != Type::Scalar(Scalar::Int) {
@@ -1437,6 +1444,7 @@ impl<'a> Mapper<'a> {
                 return Err(Reason::StringInCallback);
             }
             let mapped = self.typed(p)?;
+            let mapped = self.truth(p, mapped);
             c_parameters.push(mapped.c.clone());
             ts_parameters.push(format!("{}: {}", identifier(&p.name), mapped.ts));
         }
@@ -1445,7 +1453,10 @@ impl<'a> Mapper<'a> {
         }
         let result = match &signature.result.ty {
             TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
-            _ => self.typed(&signature.result)?,
+            _ => {
+                let mapped = self.typed(&signature.result)?;
+                self.truth(&signature.result, mapped)
+            }
         };
         let context = Type::Pointer(Pointee::Void);
         let mut callback_c = c_parameters;

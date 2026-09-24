@@ -220,19 +220,21 @@ function main(): void {
     });
     gir_emit(button, "clicked");
     gir_log("order=" + order);
+    // A `GSourceFunc` answers a `gboolean`, as GJS writes it: `false`
+    // removes the source, `true` keeps it.
     g_idle_add_full(PRIORITY_DEFAULT, () => {
       gir_log("idle");
-      return 0 as c_int;
+      return false;
     });
     g_timeout_add_full(PRIORITY_DEFAULT, 10 as c_uint, () => {
       ticks++;
       label.label = "tick " + String(ticks);
       // And the query answered, so the log does not depend on which of the
       // two a loaded machine finishes first.
-      if (ticks < 3 || kind === -1 || folders === "") return 1 as c_int;
+      if (ticks < 3 || kind === -1 || folders === "") return true;
       gir_log("label=" + label.label);
       application.quit();
-      return 0 as c_int;
+      return false;
     });
   });
   // `argv` as a `string[]`, lent to C as `char **` with `argc` beside it.
