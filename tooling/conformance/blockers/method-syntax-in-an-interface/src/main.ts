@@ -110,10 +110,10 @@
 //      and `WritableImplementation`, which is most of the sites.
 //
 //   4. **Indirection** — pass the object with an offset table, or read fields
-//      through an accessor rather than a fixed offset. Unmeasured here. It is
-//      the only option in this list that does not have to choose between
-//      correctness and coverage, and it is also the only one that costs
-//      something on every field read rather than at a boundary.
+//      through an accessor rather than a fixed offset. **Measured on 2026-09-24;
+//      the numbers are below.** It is the only option in this list that does not
+//      have to choose between correctness and coverage, and it is also the only
+//      one that costs something on every field read rather than at a boundary.
 //
 //      **And it cannot be narrowed, which was checked on 2026-09-24.** The
 //      tempting cheap variant is to make only those slots indirect that a class
@@ -125,15 +125,63 @@
 //      classes satisfying each interface."* Same set, same answer.
 //
 //      So the implementable rule is the broad one -- every interface-typed slot
-//      -- and its cost is **every field read through an interface**, including
-//      the ones that compile and are correct today. That is the number to
-//      produce before the design step, and it is not in any existing dump:
-//      `nts hir --prepared` keys field ops by slot index (`field.set %2.0`), so
-//      interface-ness is erased by the time it is printed. It wants a temporary
-//      counter in the lowering, keyed on the receiver's checker type being an
-//      interface, run over `runtime/node` and over the benchmark cases -- the
-//      second because a cost on every field read is a benchmark question and
-//      this project's first value is that it beats node on every row.
+//      -- and its cost is **every field access through an interface**, including
+//      the ones that compile and are correct today.
+//
+//      # The number, 2026-09-24
+//
+//      `nts receivers <tsconfig>` produces it, and `--sites` the detail. The
+//      unit: **one field access -- one place a compiled program computes a
+//      field's offset and touches it.** Population: every such place in the
+//      program, *including in functions the compiler refuses*, which is why it
+//      reads the snapshot and not the HIR.
+//
+//      | | field accesses | through an interface | |
+//      |---|---|---|---|
+//      | `runtime/node`, 184 files | 17,826 | **4,174** | **23.4%** |
+//      | `benches/cases`, 61 cases | 694 | **10** | **1.4%** |
+//
+//      Reads, writes and compound assignments together, since `FieldSet` goes
+//      through the same offset; a spread is held separately because one
+//      `{ ...v }` is *N* reads, and in `runtime/node` that is 56 sites carrying
+//      635 more field reads, 619 of them through an interface.
+//
+//      **The corpus cost is real and the benchmark cost is not visible.** Of the
+//      61 cases, 57 have zero interface field accesses; the four that have any
+//      are `in-narrowing` (3), `json-stringify-doc` (3 of 66), `node-utf8` (2)
+//      and `optional-chain` (2). Every hot loop is zero -- `fib`, `loop`,
+//      `json-parse` with 127 field accesses, and all seven `awfy-*` rows.
+//
+//      Which is a finding about the benchmarks rather than a licence: **no
+//      current row would detect the cost of interface indirection**, so "the
+//      benchmarks did not regress" could not be evidence that it is free. A row
+//      that reads a field through an interface in a loop would have to be written
+//      first, and `node-utf8` -- the only case `benches/README.md` calls real
+//      code rather than a probe -- is 2 of 2, which is where to start.
+//
+//      **And the broad rule's waste is between 4x and 26x its useful work.** Of
+//      the 4,174, only 158 are through an interface some class names in an
+//      `implements` clause, and at most 883 through one whose required members
+//      any class in the program covers by name. So a narrow rule would spare
+//      79%-96% of the cost -- 344 distinct interfaces carry those accesses and
+//      the ones carrying the most are records and options bags that no class can
+//      ever inhabit: `UrlRecord` (158), `URLRecord` (154), `Key` (144),
+//      `StoredCookie` (132), `Context` (111), `TransportRequest` (96).
+//
+//      Neither of those two is implementable and neither is the real set --
+//      record 0294 still rules that out, and they bracket the argument rather
+//      than settling it. But the bracket says the set a narrow rule needs is
+//      *small*, which is a different question from the one 0294 answered: not
+//      "can the complete set be had" but "is a sound over-approximation of a
+//      few hundred interfaces reachable". That is the question the design step
+//      should take up next, and it did not exist before these numbers.
+//
+//      One correction to what this file said before: the number was described
+//      here as wanting "a temporary counter in the lowering". That would have
+//      been wrong twice over. Lowering erases the fact -- `OpKind::FieldGet`
+//      keys by slot index -- and, more importantly, lowering only ever sees code
+//      that compiles, so a counter inside it would have been blind to the 77
+//      refused sites that are the entire reason the question is open.
 //
 // **Base-first ordering, landed 04:47, is not one of these.** It fixes the
 // *other* layout problem — interface extending interface, where the shared

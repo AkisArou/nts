@@ -461,6 +461,7 @@ INSPECTING
   layouts      the object layouts the program produces
   modules      the modules the program is made of
   erasure      what the program does with its `any` and `unknown` values
+  receivers    every field access, by what its receiver is typed as
 
   help         this
   version      version, snapshot schema, and the pinned tsgo
@@ -656,6 +657,8 @@ fn main() -> Result<()> {
             let rest: Vec<String> = args.collect();
             dump_erasure(&project(&rest)?, rest.iter().any(|a| a == "--sites"))
         }
+        // `erasure`'s instrument, for the interface decision. See `dump_receivers`.
+        Some("receivers") => dump_receivers(&args.collect::<Vec<String>>()),
         // Acquire the TypeScript behind this project's dependencies, and say
         // what could not be acquired. `docs/npm-deps-plan.md` is why this is a
         // report as much as an action: there is no JavaScript fallback, so a
@@ -1449,6 +1452,239 @@ fn list_sites(
             site.name,
             if site.in_container { "[]" } else { "" },
             site.because,
+        );
+    }
+    println!();
+}
+
+/// Every field access, by what its receiver is typed as.
+///
+/// The input to the interface-representation decision: broad indirection costs
+/// one indirection per field access through an interface receiver, and this says
+/// how many that is, in which files, and how much of it a narrower rule could
+/// spare.
+///
+/// **It does not bail when the program fails to typecheck**, unlike `hir`. The
+/// sites that motivate the question are in functions the compiler refuses, so a
+/// census that stopped at the first error would be blind to its own subject.
+fn dump_receivers(args: &[String]) -> Result<()> {
+    let tsconfig = project(args)?;
+    let per_site = args.iter().any(|arg| arg == "--sites");
+    let tsgo_binary = frontend_binary();
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, &tsconfig, "nts-build")?;
+    let census = nts_core::receivers::classify(&snapshot);
+
+    // A partial type graph deflates every number below, silently. NTS0002 is the
+    // frontend saying its answer is "a wrong one wearing the clothes of an
+    // answer", so it goes above the table and not in a footnote.
+    for diagnostic in &snapshot.diagnostics {
+        if diagnostic.severity == nts_diagnostics::Severity::Warning {
+            println!("warning: {} {}", diagnostic.code, diagnostic.message);
+        }
+    }
+
+    println!(
+        "unit: one field access -- a place a compiled program computes a field's offset."
+    );
+    println!(
+        "population: every field access in this program, refused functions included."
+    );
+    println!();
+
+    if per_site {
+        list_receiver_sites(&snapshot, &census);
+    }
+
+    receivers_table(&snapshot, &census);
+
+    receivers_summary(&census);
+    Ok(())
+}
+
+/// Per-file rows and the totals line.
+///
+/// Keyed by *file*, because a package roll-up is a presentation choice:
+/// `snapshot.modules` is one record per file, and `runtime/node`'s "26 modules"
+/// are packages. Rows named after what the snapshot actually has.
+fn receivers_table(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    census: &nts_core::receivers::Census,
+) {
+    use nts_core::receivers::{Access, Shape};
+
+    let mut by_file: std::collections::BTreeMap<u32, [u32; 4]> =
+        std::collections::BTreeMap::new();
+    for site in &census.sites {
+        let row = by_file.entry(site.location.file.0).or_default();
+        row[match site.access {
+            Access::Read => 0,
+            Access::Write => 1,
+            Access::ReadModifyWrite => 2,
+        }] += site.fields;
+        if site.shape == Shape::Interface {
+            row[3] += site.fields;
+        }
+    }
+    println!(
+        "{:<52} {:>6} {:>6} {:>5} {:>7} {:>9}",
+        "file", "read", "write", "rmw", "total", "interface"
+    );
+    for (file, row) in &by_file {
+        let path = snapshot
+            .sources
+            .get(*file as usize)
+            .map_or("?", |source| source.display_path.as_str());
+        let shown = if path.len() > 52 {
+            &path[path.len() - 52..]
+        } else {
+            path
+        };
+        println!(
+            "{:<52} {:>6} {:>6} {:>5} {:>7} {:>9}",
+            shown,
+            row[0],
+            row[1],
+            row[2],
+            row[0] + row[1] + row[2],
+            row[3]
+        );
+    }
+    println!("{}", "-".repeat(93));
+
+    let total = census.total_fields();
+    let interface = census.through_interfaces();
+    println!(
+        "{:<52} {:>6} {:>6} {:>5} {:>7} {:>9}",
+        format!("total, {} files", by_file.len()),
+        census.sites.iter().filter(|s| s.access == Access::Read).map(|s| s.fields).sum::<u32>(),
+        census.sites.iter().filter(|s| s.access == Access::Write).map(|s| s.fields).sum::<u32>(),
+        census
+            .sites
+            .iter()
+            .filter(|s| s.access == Access::ReadModifyWrite)
+            .map(|s| s.fields)
+            .sum::<u32>(),
+        total,
+        interface
+    );
+    println!();
+
+    for shape in Shape::ALL {
+        let n = census.through(shape);
+        if n == 0 {
+            continue;
+        }
+        println!("  {:<13} {n:>7}  receiver", shape.as_str());
+    }
+    println!();
+
+    // Kept apart from the site total on purpose: one spread is N field reads, so
+    // adding it in would mix a site count with a field count.
+    if !census.spread_sites.is_empty() {
+        let fields: u32 = census.spread_sites.iter().map(|site| site.fields).sum();
+        let interface_spreads: u32 = census
+            .spread_sites
+            .iter()
+            .filter(|site| site.shape == Shape::Interface)
+            .map(|site| site.fields)
+            .sum();
+        println!(
+            "spread of a value:  {} sites, {fields} field reads ({interface_spreads} through an interface)",
+            census.spread_sites.len()
+        );
+        println!("  a multiplier over a site, not a site: counted here and not above.");
+        println!();
+    }
+
+}
+
+/// Shapes, the spread multiplier, the exclusions, and the bracket.
+fn receivers_summary(census: &nts_core::receivers::Census) {
+    let total = census.total_fields();
+    let interface = census.through_interfaces();
+
+    let excluded = census.excluded;
+    println!("excluded  method or accessor  {:>7}  no storage to make indirect", excluded.not_stored);
+    println!("excluded  index signature     {:>7}  a table: no fixed offset to lose", excluded.index_signature);
+    println!("excluded  not a struct        {:>7}  a primitive, an array, `any`", excluded.not_a_struct);
+    println!(
+        "excluded  undeclared member   {:>7}  the type declares no such member",
+        excluded.member_not_declared
+    );
+    println!(
+        "unmeasured  untyped receiver   {:>7}  no recorded type; see `Excluded::untyped_receiver`",
+        excluded.untyped_receiver
+    );
+    println!(
+        "unexamined  interface / class  {:>4} / {:<4} no member list: the lower arm's blind spot",
+        excluded.interfaces_unexamined, excluded.classes_unexamined
+    );
+    println!();
+
+    if interface == 0 {
+        println!("no field access in this program reaches an interface receiver.");
+        return;
+    }
+
+    // The bracket. Neither bound is implementable and the sentence says so,
+    // because the number will be quoted without the column headers.
+    let spared_most = interface - census.through_implemented();
+    let spared_least = interface - census.through_satisfied();
+    let share = f64::from(interface) * 100.0 / f64::from(total.max(1));
+    println!(
+        "broad indirection costs {interface} of {total} field accesses ({share:.1}%)."
+    );
+    println!(
+        "a narrow rule would spare between {spared_least} and {spared_most} of them \
+         ({:.0}%-{:.0}%).",
+        f64::from(spared_least) * 100.0 / f64::from(interface),
+        f64::from(spared_most) * 100.0 / f64::from(interface)
+    );
+    println!(
+        "neither bound is implementable: record 0294 rules that the complete set of classes"
+    );
+    println!(
+        "structurally satisfying each interface is one nobody has. the upper bound reads only"
+    );
+    println!(
+        "heritage clauses and misses a structural satisfier; the lower compares member names"
+    );
+    println!("and not types. they bracket the argument rather than answering it.");
+    println!();
+    println!(
+        "{} distinct interface members carry those {interface} accesses -- what a repair would",
+        census.distinct_interface_members()
+    );
+    println!("have to cover, as against what the cost is paid on.");
+    }
+
+/// One line per field access. The detail a reader needs to see the proxies' own
+/// mistakes rather than trust their totals.
+fn list_receiver_sites(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    census: &nts_core::receivers::Census,
+) {
+    for site in census.sites.iter().chain(&census.spread_sites) {
+        println!(
+            "{:<6} {:<13} {:<13} {:<11} {}  {}.{} through {}{}",
+            site.access.as_str(),
+            site.shape.as_str(),
+            site.form.as_str(),
+            match (site.implemented, site.satisfied) {
+                (true, _) => "implements",
+                (false, true) => "structural",
+                (false, false) => "neither",
+            },
+            where_it_is(snapshot, &site.location),
+            site.owner,
+            site.member,
+            site.receiver,
+            if site.fields == 1 {
+                String::new()
+            } else {
+                format!(" x{}", site.fields)
+            },
         );
     }
     println!();

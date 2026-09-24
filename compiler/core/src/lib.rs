@@ -31,6 +31,7 @@
 
 pub mod erasure;
 pub mod hir;
+pub mod receivers;
 /// Declaration reachability, which now lives in the schema crate: it is a pure
 /// query over a snapshot, and the *frontend* needs it to seed its deep passes.
 /// Re-exported here so nothing that already used it has to move.

@@ -42,6 +42,7 @@
 //! analysis, so an implementation that skipped it would beg the question.
 
 use nts_diagnostics::Location;
+use nts_semantic_schema::walk;
 use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SymbolId, TypeId, TypeKind, syntax};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -325,64 +326,31 @@ struct Walk<'a> {
 }
 
 impl Walk<'_> {
+    // The five below are `nts_semantic_schema::walk`'s, forwarded rather than
+    // written again. They were this file's own until 2026-09-24, and `denoted`
+    // in particular is one fact with three owners -- `hir::lower`'s
+    // `denoted_symbol` is the third, and the enum bug fixed the day before was
+    // exactly that function followed at two of four sites and not the other
+    // two. Forwarding keeps the call sites below reading the same way.
+
     fn kind_of(&self, id: NodeId) -> Option<u16> {
-        match self.snapshot.nodes.get(id.0 as usize)?.kind {
-            NodeKind::Syntax(kind) => Some(kind),
-            NodeKind::List => None,
-        }
+        walk::kind_of(self.snapshot, id)
     }
 
     fn text_of(&self, id: NodeId) -> Option<&str> {
-        self.snapshot.nodes.get(id.0 as usize)?.text.as_deref()
+        walk::text_of(self.snapshot, id)
     }
 
-    /// Children with list nodes flattened away, the way lowering sees them.
     fn children(&self, id: NodeId) -> Vec<NodeId> {
-        let mut out = Vec::new();
-        let Some(node) = self.snapshot.nodes.get(id.0 as usize) else {
-            return out;
-        };
-        for child in &node.children {
-            match self.snapshot.nodes.get(child.0 as usize).map(|n| &n.kind) {
-                Some(NodeKind::List) => out.extend(self.children(*child)),
-                _ => out.push(*child),
-            }
-        }
-        out
+        walk::children(self.snapshot, id)
     }
 
-    /// The nearest enclosing *syntax* node.
-    ///
-    /// A `NodeList` is an encoding artifact rather than a construct -- an
-    /// argument list, a statement list -- and stopping at one reported the use
-    /// as unrecognised. It was the single largest bucket in the first run of
-    /// this pass: 80 of `console`'s 140 unclear sites.
     fn parent(&self, id: NodeId) -> Option<NodeId> {
-        let mut at = self.snapshot.nodes.get(id.0 as usize)?.parent;
-        while let Some(node) = at {
-            if self.snapshot.nodes.get(node.0 as usize)?.kind != NodeKind::List {
-                return Some(node);
-            }
-            at = self.snapshot.nodes.get(node.0 as usize)?.parent;
-        }
-        None
+        walk::parent(self.snapshot, id)
     }
 
-    /// The symbol a name denotes, following an import alias.
     fn denoted(&self, symbol: SymbolId) -> SymbolId {
-        let mut at = symbol;
-        for _ in 0..8 {
-            match self
-                .snapshot
-                .symbols
-                .get(at.0 as usize)
-                .and_then(|r| r.aliased)
-            {
-                Some(next) => at = next,
-                None => return at,
-            }
-        }
-        at
+        walk::denoted(self.snapshot, symbol)
     }
 
     /// Erased-ness of a type, and whether the erasure is inside a container.

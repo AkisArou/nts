@@ -26,6 +26,9 @@ pub mod protocol;
 pub mod reachability;
 pub mod schema;
 pub mod syntax;
+/// Navigating a snapshot's nodes -- pure queries several passes want the same
+/// answers to, and two of them had their own copy before this.
+pub mod walk;
 
 pub use origin::{GeneratedReason, Origin, ScopeId};
 pub use protocol::{ITERATION, is_an_iteration_protocol, iteration_protocol_of};
