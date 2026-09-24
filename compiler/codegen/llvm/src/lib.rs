@@ -124,6 +124,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     text.push_str(&native_memory::helpers(program));
     text.push_str(&objc::module(program));
     text.push_str(&counting_declarations(program));
+    text.push_str(&open_chains(program));
     // What the runtime offers this backend, declared up front.
     //
     // `nts_to_int32` is `static inline` in the C header, which is right for C
@@ -1347,6 +1348,10 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
 /// `Callee::External`, the backend reaches for them. Declared from the same
 /// table as everything else so there is one place a signature comes from.
 pub const ALWAYS_DECLARED: &[&str] = &[
+    // The no-match arm of an open field chain. Declared always, because the
+    // chain is emitted wherever a slot has several layouts and a call with no
+    // declaration is an invalid module rather than a refusal.
+    "nts_no_arm",
     "nts_array_new",
     // The view trio. Emitted as raw IR from `index_lines` rather than as HIR
     // calls, so `externals` -- which reads `OpKind::Call` -- cannot see them
@@ -3306,6 +3311,11 @@ fn memory_operation(
                 tbaa(ty)
             )
         }
+        // A field whose index depends on which layout arrived: the chain, called
+        // rather than written here. `open_chains` says why it is a call.
+        OpKind::OpenFieldGet { .. } | OpKind::OpenFieldSet { .. } => {
+            open_chain_op(program, func, op, &out)?
+        }
         OpKind::FieldSet {
             object,
             field,
@@ -4069,6 +4079,208 @@ mod native_memory;
 /// The foreign counting pairs the program calls, declared -- and for a pair
 /// that does not take NULL quietly, the guard every count goes through
 /// (`Counting::called`).
+/// One `alwaysinline` function per distinct open-field chain in the program.
+///
+/// **A function rather than instructions in place, and the reason is `phi`.** A
+/// block parameter is emitted as a `phi` naming its predecessors' *labels*, and
+/// those labels are the HIR block ids. A chain written inline would split its
+/// HIR block into several LLVM blocks, so control would leave from a label no
+/// successor's `phi` names -- an invalid module, and not one the op could be
+/// blamed for. Calling out keeps the chain's branching inside a function of its
+/// own, and `alwaysinline` puts the same instructions back where they would
+/// have been. The null-guarded counting pairs above are emitted this way for
+/// the same reason.
+///
+/// The name **is** the key: arms, indices and result type, sanitised. Two
+/// identical chains in one program therefore share one definition without a
+/// table for anyone to keep in step, and two runs of one compiler on one input
+/// emit the same names.
+/// The call an open field access becomes.
+fn open_chain_op(
+    program: &Program,
+    func: &Func,
+    op: &nts_core::hir::Op,
+    out: &str,
+) -> Result<String, Diagnostic> {
+    match &op.kind {
+        OpKind::OpenFieldGet { object, arms } => {
+            let ty = ty_of(&op.ty, func)?;
+            open_chain_call(program, func, arms, ty, false)?;
+            Ok(format!(
+                "{out} = call {ty} @\"{}\"({ERASED_TYPE} {})",
+                open_chain_name(arms, ty, false),
+                name(*object)
+            ))
+        },
+        OpKind::OpenFieldSet {
+            object,
+            arms,
+            value,
+        } => {
+            let ty = ty_of(&func.values[value.0 as usize].ty, func)?;
+            open_chain_call(program, func, arms, ty, true)?;
+            Ok(format!(
+                "call void @\"{}\"({ERASED_TYPE} {}, {ty} {})",
+                open_chain_name(arms, ty, true),
+                name(*object),
+                name(*value)
+            ))
+        },
+        _ => Err(refuse(func, "an open field access this dispatch did not recognise")),
+    }
+}
+
+/// Refuse a call whose definition `open_chains` could not build.
+///
+/// The two ask the same questions -- every arm has a layout, every index is
+/// inside it -- and this is the half that can say so by name. Without it a
+/// missing definition would be a call to an undefined symbol: a link error a
+/// long way from the op, where a refusal names the operation and the function.
+fn open_chain_call(
+    program: &Program,
+    func: &Func,
+    arms: &[nts_core::hir::FieldArm],
+    ty: &str,
+    stored: bool,
+) -> Result<(), Diagnostic> {
+    if arms.is_empty() {
+        return Err(refuse(func, "an open field access over no arms"));
+    }
+    if open_chain_body(program, &open_chain_name(arms, ty, stored), arms, ty, stored).is_none() {
+        return Err(refuse(
+            func,
+            "an open field access over an arm with no layout, or an index outside one",
+        ));
+    }
+    Ok(())
+}
+
+fn open_chains(program: &Program) -> String {
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut text = String::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            let (arms, stored) = match &op.kind {
+                OpKind::OpenFieldGet { arms, .. } => (arms, None),
+                OpKind::OpenFieldSet { arms, value, .. } => {
+                    (arms, Some(&func.values[value.0 as usize].ty))
+                },
+                _ => continue,
+            };
+            let carried = stored.unwrap_or(&op.ty);
+            let Ok(ty) = ty_of(carried, func) else { continue };
+            let name = open_chain_name(arms, ty, stored.is_some());
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            if let Some(body) = open_chain_body(program, &name, arms, ty, stored.is_some()) {
+                text.push_str(&body);
+            }
+        }
+    }
+    text
+}
+
+/// The symbol a chain gets, which is its content spelled out.
+fn open_chain_name(arms: &[nts_core::hir::FieldArm], ty: &str, stored: bool) -> String {
+    let kind = if stored { "s" } else { "g" };
+    let sanitised: String = ty
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    let list = arms
+        .iter()
+        .map(|arm| format!("{}_{}", arm.ty.0, arm.field))
+        .collect::<Vec<_>>()
+        .join(".");
+    format!("nts.open.{kind}.{sanitised}.{list}")
+}
+
+/// The definition: one `nts_is_class` per arm, that arm's offset on a hit, and
+/// a named abort on the fall-through.
+///
+/// `None` when an arm has no layout or an index is outside one. The op's own
+/// emission asks the same questions and refuses by name, so a chain missing
+/// here is a call to an undefined symbol only if that refusal is skipped --
+/// which is why both ask rather than one trusting the other.
+fn open_chain_body(
+    program: &Program,
+    symbol: &str,
+    arms: &[nts_core::hir::FieldArm],
+    ty: &str,
+    stored: bool,
+) -> Option<String> {
+    let result = if stored { "void" } else { ty };
+    let params = if stored {
+        format!("{ERASED_TYPE} %v, {ty} %stored")
+    } else {
+        format!("{ERASED_TYPE} %v")
+    };
+    let mut text = format!("define internal {result} @\"{symbol}\"({params}) alwaysinline {{\nentry:\n");
+    let _ = writeln!(text, "  %t = extractvalue {ERASED_TYPE} %v, 0");
+    let _ = writeln!(text, "  %p = extractvalue {ERASED_TYPE} %v, 1");
+    let _ = writeln!(text, "  %ref = inttoptr i64 %p to ptr");
+    let _ = writeln!(text, "  br label %arm0");
+
+    let mut hits: Vec<String> = Vec::new();
+    let mut member = String::new();
+    for (at, arm) in arms.iter().enumerate() {
+        let layout = program
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(&arm.ty))?;
+        let placed = nts_core::hir::layout::place(&layout.fields)?;
+        let offset = *placed.offsets.get(arm.field as usize)?;
+        if at == 0 {
+            member.clone_from(&layout.fields.get(arm.field as usize)?.name);
+        }
+        let next = if at + 1 == arms.len() {
+            "miss".to_owned()
+        } else {
+            format!("arm{}", at + 1)
+        };
+        let _ = writeln!(text, "arm{at}:");
+        let _ = writeln!(
+            text,
+            "  %c{at} = call zeroext i1 @nts_is_class(i32 %t, i64 %p, ptr @nts_desc_{})",
+            descriptor_for(program, layout, Some(arm.ty))
+        );
+        let _ = writeln!(text, "  br i1 %c{at}, label %hit{at}, label %{next}");
+        let _ = writeln!(text, "hit{at}:");
+        let _ = writeln!(text, "  %at{at} = getelementptr i8, ptr %ref, i64 {offset}");
+        if stored {
+            let _ = writeln!(text, "  store {ty} %stored, ptr %at{at}{}", tbaa(ty));
+        } else {
+            let _ = writeln!(text, "  %r{at} = load {ty}, ptr %at{at}{}", tbaa(ty));
+            hits.push(format!("[ %r{at}, %hit{at} ]"));
+        }
+        let _ = writeln!(text, "  br label %done");
+    }
+
+    // Unreachable in a program whose arm set over-approximates its inhabitants,
+    // which is the op's precondition and not something this can check. Named
+    // rather than `unreachable` alone, because a wrong set announcing itself is
+    // the whole reason to test the arms instead of casting the pointer.
+    let _ = writeln!(text, "miss:");
+    let _ = writeln!(
+        text,
+        "  call void @nts_no_arm(ptr @\"{symbol}.member\")"
+    );
+    let _ = writeln!(text, "  unreachable");
+    let _ = writeln!(text, "done:");
+    if stored {
+        let _ = writeln!(text, "  ret void");
+    } else {
+        let _ = writeln!(text, "  %out = phi {ty} {}", hits.join(", "));
+        let _ = writeln!(text, "  ret {ty} %out");
+    }
+    let _ = writeln!(text, "}}");
+    let bytes = member.len() + 1;
+    Some(format!(
+        "@\"{symbol}.member\" = private unnamed_addr constant [{bytes} x i8] c\"{member}\\00\"\n{text}"
+    ))
+}
+
 fn counting_declarations(program: &Program) -> String {
     let mut text = String::new();
     for counting in nts_codegen_common::counting::foreign(program) {

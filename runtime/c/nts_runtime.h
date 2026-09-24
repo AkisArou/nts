@@ -2231,6 +2231,21 @@ NtsValue nts_raise_take(void);
 
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
 
+/* No arm of an open field access matched the value that arrived.
+ *
+ * The compiler emits a test per layout that can inhabit the slot, and the set
+ * it emits them from **over-approximates** the inhabitants -- so this path is
+ * unreachable in a program the checker accepted, and reaching it means the set
+ * was wrong. That is exactly why it is a named abort and not
+ * `__builtin_unreachable()`: the whole value of a test chain over a pointer
+ * cast is that a wrong inhabitant set announces itself here instead of loading
+ * at whatever offset the next arm would have used.
+ *
+ * `member` is the name being read, which is what a reader needs to find the
+ * slot; the descriptor's own name is not available to a caller that failed to
+ * recognise it. */
+_Noreturn void nts_no_arm(const char *member);
+
 /* `x instanceof C`, for one candidate class.
  *
  * The compiler asks this once per class that satisfies the test, because that

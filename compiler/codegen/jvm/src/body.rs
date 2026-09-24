@@ -120,7 +120,13 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
         //
         // which is the same sentence `examples/async-catch` produced, from a
         // different op, for the same reason.
-        OpKind::SharedFieldGet { .. } => true,
+        //
+        // The open pair is the same chain with per-arm indices, so it is the
+        // same answer -- and `OpenFieldSet` puts labels too, even though it
+        // produces nothing, because the labels are the chain and not the result.
+        OpKind::SharedFieldGet { .. }
+        | OpKind::OpenFieldGet { .. }
+        | OpKind::OpenFieldSet { .. } => true,
         _ => false,
     };
     let mut defined_at: Vec<Option<(usize, usize)>> = vec![None; func.values.len()];
@@ -157,7 +163,12 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
         // `next` -- so the receiver is live across the labels too and its slot
         // was `Top` at the second arm's `aload`.
         for &value in &block.ops {
-            if matches!(func.values[value.0 as usize].kind, OpKind::SharedFieldGet { .. }) {
+            if matches!(
+                func.values[value.0 as usize].kind,
+                OpKind::SharedFieldGet { .. }
+                    | OpKind::OpenFieldGet { .. }
+                    | OpKind::OpenFieldSet { .. }
+            ) {
                 crosses.insert(value);
                 crosses.extend(nts_core::hir::operands_of(&func.values[value.0 as usize].kind));
             }
@@ -592,7 +603,9 @@ impl<'a> Emitter<'a> {
                     // It needs no scratch slot -- the result goes to the value's
                     // own -- but it does put labels in a block, and this is the
                     // question that decides whether the prologue runs at all.
-                    OpKind::SharedFieldGet { .. } => true,
+                    OpKind::SharedFieldGet { .. }
+                    | OpKind::OpenFieldGet { .. }
+                    | OpKind::OpenFieldSet { .. } => true,
                     _ => false,
                 }
             })

@@ -1489,6 +1489,14 @@ void nts_checkpoint_after_callbacks(bool on) {
   nts_environment_current()->checkpoint_after_callbacks = on;
 }
 
+_Noreturn void nts_no_arm(const char *member) {
+  fprintf(stderr,
+          "nts: reading `%s` through a value no arm of its chain recognised; "
+          "the set of inhabiting layouts was not an over-approximation\n",
+          member);
+  abort();
+}
+
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
   /* An embedder with somewhere to put it gets it, and the process survives.
      Popped here rather than by the caller, because the caller is reached by a

@@ -1201,6 +1201,17 @@ fn view_to_array(want: &str, held: Option<&str>) -> Option<(&'static str, String
 }
 
 
+/// What every arm of a field-access chain shares: where it came from, what it
+/// reads through, and whether that arrives erased.
+///
+/// A bundle rather than three more parameters on `arm_test`, because the three
+/// are one fact about the op and are read together at every arm.
+struct Chain {
+    origin: nts_semantic_schema::Origin,
+    receiver: ValueId,
+    erased: bool,
+}
+
 impl Emitter<'_> {
     /// One block: its operations, then its terminator.
     pub(crate) fn block(
@@ -1383,6 +1394,12 @@ impl Emitter<'_> {
             // exists, not a guess now.
             OpKind::SharedFieldGet { value: receiver, arms, field } => {
                 self.shared_field_get(code, pool, value, *receiver, arms, *field)?
+            }
+            OpKind::OpenFieldGet { object, arms } => {
+                self.chain_field_get(code, pool, value, *object, arms)?
+            }
+            OpKind::OpenFieldSet { object, arms, value: stored } => {
+                self.chain_field_set(code, pool, value, *object, arms, *stored)?
             }
             OpKind::ObjectNew { .. } => self.object_new(code, pool, &op.ty, &origin)?,
             OpKind::FieldGet { .. } | OpKind::FieldSet { .. } => {
@@ -2289,52 +2306,93 @@ impl Emitter<'_> {
     /// through would be a `CHECKCAST` that can fail, which is the exception
     /// this op exists to delete. A value outside every arm is a program the
     /// checker should have rejected, and it gets a named refusal.
-    fn shared_field_get(
+    /// What every arm of one chain shares; see [`Chain`].
+    fn chain_of(&self, op: ValueId, receiver: ValueId) -> Chain {
+        Chain {
+            // Cloned rather than borrowed: every arm emits through `&mut self`,
+            // and a borrow of the function's own values would not survive that.
+            origin: self.func.values[op.0 as usize].origin.clone(),
+            receiver,
+            erased: self.arrives_erased(receiver),
+        }
+    }
+
+    /// One arm's test, leaving the receiver cast to that arm on the stack.
+    ///
+    /// Load, unwrap an erased value's reference, `instanceof` the arm's
+    /// **identity** class, branch to `next` on a miss, then load and cast again.
+    /// The identity class and the declaring class are two different names: a
+    /// class that shares a layout has an empty subclass, so `instanceof` names
+    /// that and the field lives on the base.
+    fn arm_test(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        chain: &Chain,
+        arm: nts_semantic_schema::TypeId,
+        owner: &str,
+        next: Label,
+    ) -> Result<(), Diagnostic> {
+        let (origin, receiver, erased) = (&chain.origin, chain.receiver, chain.erased);
+        let Some(layout) = self.program.layout(arm) else {
+            return Err(refuse(self.func, "a field read over an arm with no layout"));
+        };
+        let tested = crate::hierarchy::identity_of(self.program, arm)
+            .map_or_else(|| types::class_name(self.shape.package, layout), |class| {
+                types::identity_class_name(self.shape.package, layout, class)
+            });
+        self.load(code, pool, receiver)?;
+        if erased {
+            code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+        }
+        code.instance_of(origin, pool, &tested);
+        code.branch_zero(origin, Compare::Eq, next);
+        self.load(code, pool, receiver)?;
+        if erased {
+            code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+        }
+        code.check_cast(origin, pool, owner);
+        Ok(())
+    }
+
+    /// Whether a receiver arrives as an erased value that has to be unwrapped.
+    fn arrives_erased(&self, receiver: ValueId) -> bool {
+        *self.ty(receiver) == HirType::Erased && !self.unboxed.contains(&receiver)
+    }
+
+    /// The chain a field read through several possible layouts becomes.
+    ///
+    /// Each arm carries **its own** index, which is the whole of what separates
+    /// `OpenFieldGet` from `SharedFieldGet` -- the latter passes the same index
+    /// in every arm and is otherwise this function.
+    ///
+    /// A value matching no arm is a program the checker should have rejected, so
+    /// the last arm still takes its test and the fall-through throws rather than
+    /// reaching a cast nobody chose.
+    fn chain_field_get(
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
         value: ValueId,
         receiver: ValueId,
-        arms: &[nts_semantic_schema::TypeId],
-        field: u32,
+        arms: &[nts_core::hir::FieldArm],
     ) -> Result<Placed, Diagnostic> {
         // Taken from the value rather than passed: one argument over the limit,
         // and this is the one the caller had only just read off the same op.
         let origin = &self.func.values[value.0 as usize].origin.clone();
         if arms.is_empty() {
-            return Err(refuse(self.func, "a shared field read over no arms at all"));
+            return Err(refuse(self.func, "a field read over no arms at all"));
         }
         let Some(slot) = self.slot(value) else {
-            return Err(refuse(self.func, "a shared field read whose result has no slot"));
+            return Err(refuse(self.func, "a field read whose result has no slot"));
         };
         let kind = self.kind_of(value)?;
-        let erased =
-            *self.ty(receiver) == HirType::Erased && !self.unboxed.contains(&receiver);
+        let chain = self.chain_of(value, receiver);
         let done = code.label();
         for arm in arms {
             let next = code.label();
-            let (owner, name, descriptor, _) = self.field_ref_of(*arm, field)?;
-            // The identity class for the test and the declaring class for the
-            // read: a class that shares a layout has an empty subclass, so
-            // `instanceof` names that and the field lives on the base.
-            let Some(layout) = self.program.layout(*arm) else {
-                return Err(refuse(self.func, "a shared field read over an arm with no layout"));
-            };
-            let tested = crate::hierarchy::identity_of(self.program, *arm)
-                .map_or_else(|| types::class_name(self.shape.package, layout), |class| {
-                    types::identity_class_name(self.shape.package, layout, class)
-                });
-            self.load(code, pool, receiver)?;
-            if erased {
-                code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
-            }
-            code.instance_of(origin, pool, &tested);
-            code.branch_zero(origin, Compare::Eq, next);
-            self.load(code, pool, receiver)?;
-            if erased {
-                code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
-            }
-            code.check_cast(origin, pool, &owner);
+            let (owner, name, descriptor, _) = self.field_ref_of(arm.ty, arm.field)?;
+            self.arm_test(code, pool, &chain, arm.ty, &owner, next)?;
             code.get_field(origin, pool, &owner, &name, &descriptor);
             code.store(origin, kind, slot);
             code.goto(origin, done);
@@ -2344,6 +2402,61 @@ impl Emitter<'_> {
         code.athrow(origin);
         code.bind(done);
         Ok(Placed::Stored)
+    }
+
+    /// The same chain, storing instead of loading.
+    ///
+    /// The stored value is loaded **inside** each arm rather than once before the
+    /// chain: a `putfield` wants the reference underneath the value, and the
+    /// reference is what the test produces. Hoisting it would leave a value on
+    /// the stack across a branch, which is the shape the verifier rejects and the
+    /// emitter's own accounting catches first.
+    fn chain_field_set(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        op: ValueId,
+        receiver: ValueId,
+        arms: &[nts_core::hir::FieldArm],
+        stored: ValueId,
+    ) -> Result<Placed, Diagnostic> {
+        let origin = &self.func.values[op.0 as usize].origin.clone();
+        if arms.is_empty() {
+            return Err(refuse(self.func, "a field write over no arms at all"));
+        }
+        let chain = self.chain_of(op, receiver);
+        let done = code.label();
+        for arm in arms {
+            let next = code.label();
+            let (owner, name, descriptor, _) = self.field_ref_of(arm.ty, arm.field)?;
+            self.arm_test(code, pool, &chain, arm.ty, &owner, next)?;
+            self.load(code, pool, stored)?;
+            code.put_field(origin, pool, &owner, &name, &descriptor);
+            code.goto(origin, done);
+            code.bind(next);
+        }
+        code.invoke_static(origin, pool, RUNTIME, "unreachable", "()Ljava/lang/Error;");
+        code.athrow(origin);
+        code.bind(done);
+        Ok(Placed::Stored)
+    }
+
+    fn shared_field_get(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        receiver: ValueId,
+        arms: &[nts_semantic_schema::TypeId],
+        field: u32,
+    ) -> Result<Placed, Diagnostic> {
+        // One index in every arm, which is this op's precondition spelled as
+        // data: the chain is the same chain, told that the arms agree.
+        let arms: Vec<nts_core::hir::FieldArm> = arms
+            .iter()
+            .map(|ty| nts_core::hir::FieldArm { ty: *ty, field })
+            .collect();
+        self.chain_field_get(code, pool, value, receiver, &arms)
     }
 
     fn object_new(

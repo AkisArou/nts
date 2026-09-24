@@ -1971,19 +1971,102 @@ fn null_comparison(
 /// representation, so the offset and the load are the same through any of them.
 /// A backend that *cannot* do this reads `arms` and emits a test chain; see
 /// [`nts_core::hir::OpKind::SharedFieldGet`].
-/// The open-slot access this backend cannot emit yet.
+/// A field access through a slot several layouts reach, as a test chain.
 ///
-/// Refused **by name** rather than left to the exhaustiveness error, so that a
-/// program reaching it says which operation has no answer here -- and so that
-/// adding the op and emitting it stay two commits, which is what lets the op
-/// land with nothing emitting it and no lane turning red.
-fn no_open_chain(location: nts_diagnostics::Location) -> Diagnostic {
-    Diagnostic::error(
-        "NTS2006",
-        "a field read through a slot whose layouts disagree about where it is, which needs a \
-         per-arm test chain this backend does not emit yet",
-        location,
-    )
+/// One `nts_is_class` per arm, then that arm's member at that arm's index --
+/// which is the difference from [`shared_field_load`], where one index serves
+/// every arm and no test is needed at all.
+///
+/// **The test is exact, so the arm set has to be closed under subclassing.**
+/// `nts_is_class` compares descriptor pointers and a subclass has its own, so an
+/// arm that named only the base would not recognise a derived value. The set
+/// lowering builds is closed for free -- a subclass's member names are a
+/// superset of its base's -- but nothing here can check it, which is the other
+/// half of why the fall-through aborts by name.
+///
+/// Written through the writer rather than returned as text: this is several
+/// statements and the writer maps each line to an origin.
+fn open_field_chain(
+    writer: &mut CodeWriter,
+    func: &Func,
+    value: ValueId,
+    object: ValueId,
+    arms: &[nts_core::hir::FieldArm],
+    // The value being stored, or `None` for a read -- which is also what decides
+    // whether the emitted statement assigns into the place or out of it, so the
+    // two are one parameter rather than a flag beside a name.
+    stored: Option<ValueId>,
+    context: &Context<'_>,
+) -> Result<(), Diagnostic> {
+    let name = value_name(value);
+    let op = func.value(value);
+    let Some(first) = arms.first() else {
+        return Err(Diagnostic::error(
+            "NTS2006",
+            "a field access over no arms at all",
+            op.origin.location,
+        ));
+    };
+    let member = layout_of(
+        context.program,
+        &HirType::Managed(nts_core::hir::ManagedType::Object(first.ty)),
+        &op.origin,
+    )?
+    .fields
+    .get(first.field as usize)
+    .ok_or_else(|| {
+        Diagnostic::error("NTS2006", "an arm index outside its layout", op.origin.location)
+    })?
+    .name
+    .clone();
+
+    let subject = value_name(object);
+    for (at, arm) in arms.iter().enumerate() {
+        let ty = HirType::Managed(nts_core::hir::ManagedType::Object(arm.ty));
+        let layout = layout_of(context.program, &ty, &op.origin)?;
+        let Some(slot) = layout.fields.get(arm.field as usize) else {
+            return Err(Diagnostic::error(
+                "NTS2006",
+                "an arm index outside its layout",
+                op.origin.location,
+            ));
+        };
+        // The arms may disagree about *where* and never about *what*: checked in
+        // `hir::verify`, and checked again here because the alternative to saying
+        // so is a load at the wrong width.
+        let wanted = stored.map_or_else(
+            || op.ty.clone(),
+            |value| func.values[value.0 as usize].ty.clone(),
+        );
+        if slot.ty != wanted {
+            return Err(Diagnostic::error(
+                "NTS2006",
+                "an open field access at a type one of its arms does not declare",
+                op.origin.location,
+            ));
+        }
+        let cast = c_type_of(context.program, &ty, &op.origin)?;
+        let place = format!(
+            "(({cast})nts_value_reference({subject}))->{}",
+            c_member_at(layout, arm.field as usize)
+        );
+        let opener = if at == 0 { "if" } else { "} else if" };
+        writer.line(
+            &op.origin,
+            format!(
+                "{opener} (nts_is_class({subject}, &{})) {{",
+                descriptor_for(context.program, layout, Some(arm.ty))
+            ),
+        );
+        match stored {
+            Some(value) => writer.line(&op.origin, format!("  {place} = {};", value_name(value))),
+            None => writer.line(&op.origin, format!("  {name} = {place};")),
+        }
+    }
+    writer.line(&op.origin, "} else {");
+    writer.line(&op.origin, format!("  nts_no_arm(\"{member}\");"));
+    writer.line(&op.origin, "}");
+    Ok(())
 }
 
 fn shared_field_load(
@@ -4919,8 +5002,15 @@ fn emit_op(
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. } => return memory_op(writer, func, value, context),
-        OpKind::OpenFieldGet { .. } | OpKind::OpenFieldSet { .. } => {
-            return Err(no_open_chain(op.origin.location));
+        OpKind::OpenFieldGet { object, arms } => {
+            return open_field_chain(writer, func, value, *object, arms, None, context);
+        }
+        OpKind::OpenFieldSet {
+            object,
+            arms,
+            value: stored,
+        } => {
+            return open_field_chain(writer, func, value, *object, arms, Some(*stored), context);
         }
         OpKind::NativeBlock { invoke, context, signature } => {
             objc::block_expression(&name, &value_name(*invoke), &value_name(*context), signature)
