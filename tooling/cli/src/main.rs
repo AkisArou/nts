@@ -3183,7 +3183,7 @@ fn unresolved_foreign(
             continue;
         }
         let Some(module) = diagnostic.message.split('\'').nth(1) else { continue };
-        if !module.starts_with("c:") {
+        if !module.starts_with("c:") && !module.starts_with("winrt:") {
             continue;
         }
         let Some(source) = snapshot.sources.get(diagnostic.primary.file.0 as usize) else {
@@ -3292,6 +3292,10 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
     // `types/winmd`.
     let winmd = project.join("types").join("winmd");
     let mut winmd_wanted = std::collections::BTreeSet::new();
+    // And a `winrt:Windows.*` module, from the Windows Runtime's metadata,
+    // into `types/winrt`.
+    let winrt = project.join("types").join("winrt");
+    let mut winrt_wanted = std::collections::BTreeSet::new();
     for (module, file) in wanted {
         if let Some(namespace) = bind_gir::namespace_of(&module, &search) {
             roots_wanted.insert(namespace);
@@ -3301,6 +3305,10 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
             winmd_wanted.insert(namespace);
             continue;
         }
+        if let Some(namespace) = bind_winmd::winrt::namespace_of(&module) {
+            winrt_wanted.insert(namespace);
+            continue;
+        }
         bind_one(&module, &file, targets, project)?;
     }
     if !roots_wanted.is_empty() || gir.join(".nts-stamp").exists() {
@@ -3308,6 +3316,9 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
     }
     if !winmd_wanted.is_empty() || winmd.join(".nts-stamp").exists() {
         bind_winmd::ensure(&winmd_wanted, &winmd)?;
+    }
+    if !winrt_wanted.is_empty() || winrt.join(".nts-stamp").exists() {
+        bind_winmd::ensure_winrt(&winrt_wanted, &winrt)?;
     }
     Ok(roots)
 }

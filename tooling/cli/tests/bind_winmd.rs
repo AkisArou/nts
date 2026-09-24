@@ -110,3 +110,72 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     assert!(functions >= 250, "only {functions} functions bound from WindowsAndMessaging");
     let _ = std::fs::remove_dir_all(&out);
 }
+
+/// The directory of Windows Runtime contract `.winmd`s, as
+/// `tooling/windows/fetch-winrt-metadata.sh` leaves it.
+fn winrt_metadata() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("NTS_WINRT_METADATA") {
+        return Some(PathBuf::from(path));
+    }
+    let root = std::env::var_os("NTS_WINDOWS_ROOT").map_or_else(
+        || PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".cache/nts/windows"),
+        PathBuf::from,
+    );
+    std::fs::read_dir(root.join("metadata"))
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.join("Windows.Foundation.UniversalApiContract.winmd").is_file())
+}
+
+/// A Windows Runtime namespace, read off the contract metadata alone: each
+/// method's slot and name as the metadata gives them, a class's statics on its
+/// factory as the static interface's IID, and what is not bound yet refused
+/// by name.
+///
+/// **The pairs are the metadata's, checked against the C oracle that ran on
+/// Windows**: `Parse` is slot 6 of `IJsonValueStatics`, `Stringify` 7 and
+/// `GetNumber` 9 of `IJsonValue` -- the calls `examples/interop/windows-winrt`
+/// makes, and the ones a hand-written oracle made first. A binder that
+/// numbered from 0, or skipped a refused method's slot, fails here.
+#[test]
+fn winrt_bindings_are_the_metadata_slot_for_slot() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Data.Json", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let module = std::fs::read_to_string(out.join("Windows.Data.Json.d.ts")).unwrap();
+    let refused = std::fs::read_to_string(out.join("Windows.Data.Json.refused.txt")).unwrap();
+    // Within `scope`, the first declaration after `@ntsVtable <slot> <name>`.
+    let declared_in = |scope: &str, slot: u32, name: &str, rest: &str| {
+        let within = &module[module.find(scope).unwrap_or_else(|| panic!("no `{scope}`:\n{module}"))..];
+        let tag = format!("@ntsVtable {slot} {name}\n");
+        let at = within.find(&tag).unwrap_or_else(|| panic!("no `{tag}` in `{scope}`:\n{module}"));
+        let after = &within[at..];
+        let line = after.lines().find(|line| line.trim_start().starts_with(name) || line.contains(&format!("function {name}("))).unwrap();
+        assert!(line.contains(rest), "{name} at slot {slot}: {line}");
+    };
+    declared_in("export interface IJsonValueMethods", 7, "Stringify", "Stringify(this: IJsonValue): HString;");
+    declared_in("export interface IJsonValueMethods", 9, "GetNumber", "GetNumber(this: IJsonValue): c_double;");
+    declared_in("export namespace JsonValue", 6, "Parse", "function Parse(input: HString): JsonValue;");
+    assert!(
+        module.contains("@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C"),
+        "JsonValue's statics are not on its factory as IJsonValueStatics:\n{module}"
+    );
+    assert!(module.contains("export type JsonValue = IJsonValue;"), "a class is not its default interface:\n{module}");
+    assert!(module.contains("export namespace JsonValue {"), "{module}");
+    assert!(module.contains("ComClass<\"Windows_Data_Json_IJsonValue\">"), "{module}");
+    // Refused, each with the reason, and not written.
+    assert!(refused.contains("IJsonValueStatics.TryParse\tan `out` parameter"), "{refused}");
+    assert!(refused.contains("IJsonValue.GetBoolean\ta `boolean`"), "{refused}");
+    assert!(!module.contains("TryParse("), "a refused method was written:\n{module}");
+}

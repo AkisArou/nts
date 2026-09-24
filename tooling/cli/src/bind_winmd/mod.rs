@@ -22,6 +22,7 @@ mod emit;
 mod facts;
 mod map;
 mod read;
+pub(crate) mod winrt;
 
 use std::fmt::Write as _;
 
@@ -37,6 +38,7 @@ use camino::Utf8PathBuf;
 pub(crate) const WIN32_METADATA_VERSION: &str = "71.0.26-preview";
 
 /// What `nts bind-winmd` was asked for.
+#[derive(Clone)]
 pub(crate) struct Request {
     /// Metadata namespaces, as in `Windows.Win32.UI.WindowsAndMessaging`.
     pub(crate) namespaces: Vec<String>,
@@ -59,19 +61,53 @@ pub(crate) fn default_winmd() -> Utf8PathBuf {
 
 pub(crate) fn run(request: &Request) -> Result<()> {
     let command = format!("nts bind-winmd {}", request.namespaces.join(" "));
-    for line in bind(request, &command)? {
-        println!("{line}");
+    // Windows Runtime namespaces are read straight off their own metadata;
+    // Win32 ones are checked against the headers too.
+    let (winrt, win32): (Vec<String>, Vec<String>) =
+        request.namespaces.iter().cloned().partition(|namespace| winrt::is_winrt(namespace));
+    if !winrt.is_empty() {
+        for line in winrt::write(&winrt, &winrt::default_metadata(), &request.out, &command)? {
+            println!("{line}");
+        }
+    }
+    if !win32.is_empty() {
+        for line in bind(&Request { namespaces: win32, ..request.clone() }, &command)? {
+            println!("{line}");
+        }
     }
     Ok(())
 }
 
 /// A program's `c:Windows.Win32.*` imports, bound into `out` unless the stamp
 /// there says the same `nts` already bound them from the same metadata.
-///
-/// The `bind-gir` scheme: every namespace asked for, ever, is kept in the
-/// stamp, so a second program sharing `types/winmd` does not drop the first's.
 pub(crate) fn ensure(namespaces: &std::collections::BTreeSet<String>, out: &Utf8PathBuf) -> Result<()> {
     let winmd = default_winmd();
+    stamped(namespaces, out, std::slice::from_ref(&winmd), |wanted| {
+        let request = Request { namespaces: wanted.to_vec(), winmd: winmd.clone(), out: out.clone(), arch: "x86_64".into() };
+        bind(&request, &format!("nts build (bind-winmd {})", wanted.join(" ")))
+    })
+}
+
+/// A program's `winrt:Windows.*` imports, bound into `out` as `ensure` binds
+/// Win32's, from the Windows Runtime's metadata.
+pub(crate) fn ensure_winrt(namespaces: &std::collections::BTreeSet<String>, out: &Utf8PathBuf) -> Result<()> {
+    let metadata = winrt::default_metadata();
+    stamped(namespaces, out, &[winrt::metadata_marker(&metadata)], |wanted| {
+        winrt::write(wanted, &metadata, out, &format!("nts build (bind-winmd {})", wanted.join(" ")))
+    })
+}
+
+/// Bind `namespaces` into `out` unless its stamp says the same `nts` already
+/// bound them from the same `inputs`.
+///
+/// The `bind-gir` scheme: every namespace asked for, ever, is kept in the
+/// stamp, so a second program sharing the directory does not drop the first's.
+fn stamped(
+    namespaces: &std::collections::BTreeSet<String>,
+    out: &Utf8PathBuf,
+    inputs: &[Utf8PathBuf],
+    bind: impl FnOnce(&[String]) -> Result<Vec<String>>,
+) -> Result<()> {
     let stamp_path = out.join(".nts-stamp");
     let previous = std::fs::read_to_string(&stamp_path).unwrap_or_default();
     let mut wanted: std::collections::BTreeSet<String> =
@@ -79,10 +115,10 @@ pub(crate) fn ensure(namespaces: &std::collections::BTreeSet<String>, out: &Utf8
     let before = wanted.len();
     wanted.extend(namespaces.iter().cloned());
     let exe = std::env::current_exe().ok().and_then(|p| Utf8PathBuf::from_path_buf(p).ok());
-    let inputs: Vec<Utf8PathBuf> = exe.into_iter().chain([winmd.clone()]).collect();
-    let fingerprints: Vec<String> = inputs
-        .iter()
-        .filter_map(|file| Some(format!("file {file} {}", crate::bind_gir::fingerprint(file)?)))
+    let fingerprints: Vec<String> = exe
+        .into_iter()
+        .chain(inputs.iter().cloned())
+        .filter_map(|file| Some(format!("file {file} {}", crate::bind_gir::fingerprint(&file)?)))
         .collect();
     let fresh = wanted.len() == before
         && !previous.is_empty()
@@ -90,9 +126,8 @@ pub(crate) fn ensure(namespaces: &std::collections::BTreeSet<String>, out: &Utf8
     if fresh {
         return Ok(());
     }
-    let request = Request { namespaces: wanted.iter().cloned().collect(), winmd, out: out.clone(), arch: "x86_64".into() };
-    let command = format!("nts build (bind-winmd {})", request.namespaces.join(" "));
-    for line in bind(&request, &command)? {
+    let list: Vec<String> = wanted.iter().cloned().collect();
+    for line in bind(&list)? {
         println!("  {line}");
     }
     let mut stamp = String::new();
