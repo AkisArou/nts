@@ -56,9 +56,9 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
 fn closure_bodies(program: &Program) -> FxHashMap<TypeId, &str> {
     let mut bodies = FxHashMap::default();
     for layout in &program.layouts {
-        let Some(body) = layout.methods.iter().flatten().next() else { continue };
+        let Some(body) = layout.closure_call() else { continue };
         for ty in &layout.types {
-            bodies.insert(*ty, body.as_str());
+            bodies.insert(*ty, body);
         }
     }
     bodies

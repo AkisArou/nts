@@ -700,9 +700,7 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             let OpKind::NativeBridge { closure, signature, context, once } = &op.kind else { continue };
             let layout = layout_of(program, &func.values[closure.0 as usize].ty, origin)?;
             let target = layout
-                .methods
-                .first()
-                .and_then(|method| method.as_deref())
+                .closure_call()
                 .ok_or_else(|| refuse(&format!(
                     "a callback bridge whose closure publishes no function (layout `{}`, {} method slot(s))",
                     layout.name,

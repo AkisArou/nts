@@ -7,7 +7,7 @@
 declare module "c:support" {
   import type { Block } from "objc:types";
   import type { Implementation } from "objc:runtime";
-  import type { NSObject, NSTimer } from "objc:AppKit";
+  import type { NSObject, Timer } from "objc:AppKit";
   export function report(line: string): void;
   /** `WINDOW_CONTROL=detached` takes libuv's sources off the run loop. */
   export function window_control(): void;
@@ -20,5 +20,5 @@ declare module "c:support" {
   /**
    * @ntsSymbol imp_implementationWithBlock
    */
-  export function timerImplementation(block: Block<(self: NSObject, timer: NSTimer) => void>): Implementation;
+  export function timerImplementation(block: Block<(self: NSObject, timer: Timer) => void>): Implementation;
 }

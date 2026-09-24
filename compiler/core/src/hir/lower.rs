@@ -1142,6 +1142,14 @@ fn collect_hierarchy(
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // An Objective-C class a binding declares dispatches through the
+        // runtime, by selector: it has no table here, and a slot numbered for
+        // one of its overrides (`NSView`'s `rotate` over `NSResponder`'s)
+        // would widen every table in the program -- a closure's included,
+        // whose call then sat in slot 8 of 9.
+        if super::native::is_objc_class(snapshot, id) {
+            continue;
+        }
         let Some(declared) = instance_type_of(snapshot, id) else {
             continue;
         };
@@ -40830,9 +40838,10 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// The getter is the property's name, or the selector `@ntsSelector`
     /// gives it, since a `getter=isVisible` property is read with another.
-    /// The setter is `set` and the name capitalized, with a colon, which is
-    /// the one Cocoa's `@property` makes unless it says `setter=`; a
-    /// `readonly` property has none.
+    /// The setter is the one `@ntsSet` names, or `set` and the name
+    /// capitalized, with a colon, which is the one Cocoa's `@property` makes
+    /// unless it says `setter=`. Swift's `isHidden` is written with
+    /// `setHidden:`, so a binding names it. A `readonly` property has none.
     fn objc_property(&self, object: NodeId, member: NodeId) -> Option<ObjcProperty> {
         // A property signature of an `objc:` interface, or a property of an
         // Objective-C class a binding declares -- a class property when
@@ -40858,7 +40867,11 @@ impl<'a> FuncBuilder<'a> {
             })?;
         let is_static = self.objc_class_member(declaration).is_some_and(|member| member.is_static);
         let getter = self.node(declaration).native.as_ref().and_then(|n| n.selector.clone()).unwrap_or_else(|| name.clone());
+        let set = self.node(declaration).native.as_ref().and_then(|n| n.set.clone());
         let setter = (!self.node(declaration).modifiers.contains(nts_semantic_schema::DeclarationModifiers::READONLY)).then(|| {
+            if let Some(set) = set {
+                return set;
+            }
             let mut letters = name.chars();
             let first = letters.next().map(|c| c.to_ascii_uppercase()).into_iter();
             format!("set{}:", first.chain(letters).collect::<String>())

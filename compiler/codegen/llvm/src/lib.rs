@@ -1065,9 +1065,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             let OpKind::NativeBridge { closure, signature, context, once } = &op.kind else { continue };
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
-                .methods
-                .first()
-                .and_then(|method| method.as_deref())
+                .closure_call()
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
             let name = nts_codegen_common::symbols::bridge_name(target, signature, *once);
             if !seen.insert(name.clone()) {
@@ -2303,9 +2301,7 @@ fn allocation(
         OpKind::NativeBridge { closure, signature, once, .. } => {
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
-                .methods
-                .first()
-                .and_then(|method| method.as_deref())
+                .closure_call()
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
             format!(
                 "{out} = getelementptr i8, ptr @{}, i64 0",

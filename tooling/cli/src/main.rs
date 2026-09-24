@@ -348,7 +348,8 @@ fn bind_gir(rest: &[String]) -> Result<()> {
 ///
 /// The SDK is `--sdk`, else `NTS_APPLE_SDK`, else the one
 /// `tooling/apple/sync-sdk.sh` keeps: a real SDK, since zig's Darwin libc
-/// has no frameworks to read.
+/// has no frameworks to read. Swift's names come from the symbol graphs
+/// `tooling/apple/symbolgraph.sh` fetched for that SDK, or from `--symbols`.
 fn bind_objc(rest: &[String]) -> Result<()> {
     let repeated = |flag: &str| -> Vec<String> {
         rest.windows(2).filter(|pair| pair[0] == flag).map(|pair| pair[1].clone()).collect()
@@ -365,6 +366,7 @@ fn bind_objc(rest: &[String]) -> Result<()> {
         classes: repeated("--class"),
         sdk,
         target: single("--target").unwrap_or_else(|| "x86_64-apple-macos13".to_owned()),
+        symbols: single("--symbols").map(std::path::PathBuf::from),
     };
     if request.frameworks.is_empty() || request.classes.is_empty() {
         anyhow::bail!("`nts bind-objc` needs at least one `--framework` and one `--class`");

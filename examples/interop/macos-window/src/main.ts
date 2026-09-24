@@ -11,23 +11,12 @@
 // The control (`WINDOW_CONTROL=detached`) takes libuv's sources off the run
 // loop. The presses and the stop still happen, since Cocoa drives them, but no
 // timeout may fire before the application has stopped.
-import {
-  NSApplication,
-  NSButton,
-  NSEvent,
-  NSObject,
-  NSString,
-  NSTimer,
-  NSWindow,
-  type CGPoint,
-  type CGRect,
-  type NSString as NSStringHandle,
-} from "objc:AppKit";
+import { NSApplication, NSButton, NSEvent, NSWindow, Timer, type CGPoint, type CGRect } from "objc:AppKit";
 import { NtsWindowController } from "objc:Controller";
 import { actionImplementation, nested_while_readable, report, timerImplementation, window_control } from "c:support";
-import { class_addMethod, objc_allocateClassPair, objc_registerClassPair, sel_registerName } from "objc:runtime";
+import { class_addMethod, objc_allocateClassPair, objc_getClass, objc_registerClassPair, sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
-import type { Ptr, c_double, c_int16, c_long, c_size_t, c_ulong } from "c:types";
+import type { Ptr, c_size_t } from "c:types";
 
 let presses = 0;
 let ticks = 0;
@@ -39,44 +28,41 @@ async function afterAJob(line: string): Promise<void> {
   report(line);
 }
 
-// `stringWithUTF8String:` answers nil for bytes that are not UTF-8, which a
-// TypeScript string never is.
-function text(value: string): NSStringHandle {
-  const made = NSString.stringWithUTF8String(value);
-  if (made === null) {
-    throw new Error("not UTF-8");
-  }
-  return made;
-}
-
 function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: number): void {
-  r.origin.x = x as c_double;
-  r.origin.y = y as c_double;
-  r.size.width = width as c_double;
-  r.size.height = height as c_double;
+  r.origin.x = x;
+  r.origin.y = y;
+  r.size.width = width;
+  r.size.height = height;
 }
 
 function main(): void {
   window_control();
-  const app = NSApplication.sharedApplication;
-  app.setActivationPolicy(0n as c_long);
+  const app = NSApplication.shared;
+  app.setActivationPolicy(NSApplication.ActivationPolicy.regular);
 
   const frame = local<CGRect>();
   setRect(frame, 200, 200, 320, 200);
-  // Titled and closable, buffered, not deferred.
-  const window = NSWindow.alloc().initWithContentRectStyleMaskBackingDefer(frame, 3n as c_ulong, 2n as c_ulong, false);
-  window.title = text("nts");
+  const window = new NSWindow({
+    contentRect: frame,
+    styleMask: NSWindow.StyleMask.titled | NSWindow.StyleMask.closable,
+    backing: NSWindow.BackingStoreType.buffered,
+    defer: false,
+  });
+  window.title = "nts";
   const buttonFrame = local<CGRect>();
   setRect(buttonFrame, 110, 80, 100, 32);
-  const button = NSButton.alloc().initWithFrame(buttonFrame);
-  button.title = text("Press");
+  const button = new NSButton({ frame: buttonFrame });
+  button.title = "Press";
   // `contentView` is `nullable` in NSWindow.h.
   const content = window.contentView;
   if (content !== null) {
     content.addSubview(button);
   }
 
-  const cls = objc_allocateClassPair(NSObject, "NtsWindowController", 0n as c_size_t);
+  // The controller is defined at run time, which `class ... extends NSObject`
+  // will do once subclassing lands.
+  const root = objc_getClass("NSObject");
+  const cls = root === null ? null : objc_allocateClassPair(root, "NtsWindowController", 0n as c_size_t);
   if (cls === null) {
     report("no class");
     return;
@@ -101,17 +87,26 @@ function main(): void {
     report("stopped");
     app.stop(null);
     // `stop:` is seen when the loop next finishes an event, so one is posted.
-    const wake = NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(15n as c_ulong, local<CGPoint>(), 0n as c_ulong, 0 as c_double, 0n as c_long, null,
-      0 as c_int16, 0n as c_long, 0n as c_long);
+    const wake = NSEvent.otherEvent({
+      with: NSEvent.EventType.applicationDefined,
+      location: local<CGPoint>(),
+      modifierFlags: 0,
+      timestamp: 0,
+      windowNumber: 0,
+      context: null,
+      subtype: 0,
+      data1: 0,
+      data2: 0,
+    });
     if (wake !== null) {
-      app.postEventAtStart(wake, true);
+      app.postEvent(wake, { atStart: true });
     }
   });
   class_addMethod(cls, sel_registerName("pressed:"), pressed, "v@:@");
   class_addMethod(cls, sel_registerName("tick:"), tick, "v@:@");
   objc_registerClassPair(cls);
 
-  const controller = NtsWindowController.new();
+  const controller = new NtsWindowController();
   button.target = controller;
   button.action = sel_registerName("pressed:");
   window.makeKeyAndOrderFront(null);
@@ -121,7 +116,7 @@ function main(): void {
   const height = button.frame.size.height;
   report(`window ${shown.size.width} button ${width}x${height}`);
 
-  NSTimer.scheduledTimerWithTimeIntervalTargetSelectorUserInfoRepeats(0.05 as c_double, controller, sel_registerName("tick:"), null, true);
+  Timer.scheduledTimer({ timeInterval: 0.05, target: controller, selector: sel_registerName("tick:"), userInfo: null, repeats: true });
   app.run();
   report("done");
 }

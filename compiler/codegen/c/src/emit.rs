@@ -2492,7 +2492,7 @@ fn bridge_text(
     context: &Context<'_>,
 ) -> Result<String, Diagnostic> {
     let layout = layout_of(context.program, &func.value(closure).ty, &op.origin)?;
-    let target = layout.methods.first().and_then(|method| method.as_deref()).ok_or_else(|| {
+    let target = layout.closure_call().ok_or_else(|| {
         Diagnostic::error(
             "NTS2006",
             "a callback bridge whose closure publishes no function",

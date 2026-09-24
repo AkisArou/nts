@@ -902,3 +902,44 @@ fn a_witnessed_function_is_called_through_its_header_only_where_the_header_is_in
         }
     }
 }
+
+/// A closure's call sits in the closure slot, numbered after every slot an
+/// override claims: it is the first slot only in a program that overrides
+/// nothing. The bridge read the first, so one `override` anywhere refused
+/// every callback bridge in the program -- found when the Objective-C classes
+/// of a binding briefly claimed slots.
+#[test]
+fn a_callback_bridge_finds_its_closure_beside_an_override() {
+    let binding = r#"
+/** @ntsHeader "bridge.h" */
+declare module "c:bridge" {
+  import type { c_int } from "c:types";
+  export function apply(f: (n: c_int) => c_int, x: c_int): c_int;
+}
+"#;
+    let program = |shapes: &str| {
+        format!(
+            r#"import {{ apply }} from "c:bridge";
+import type {{ c_int }} from "c:types";
+{shapes}
+function addOne(n: c_int): c_int {{
+  return (n + 1) as c_int;
+}}
+export function run(x: number): number {{
+  return apply(addOne, x as c_int);
+}}
+"#
+        )
+    };
+    let overriding = "class Shape { area(): number { return 1; } }\nclass Square extends Shape { override area(): number { return 4; } }\nexport function area(big: boolean): number { const s: Shape = big ? new Square() : new Shape(); return s.area(); }";
+    for (name, shapes) in [("bridge-plain", ""), ("bridge-override", overriding)] {
+        let Some((_, prepared)) = prepare_with_binding(name, binding, &program(shapes)) else {
+            eprintln!("skipped: no tsgo");
+            return;
+        };
+        assert!(prepared.diagnostics.is_empty(), "{name}: {:?}", prepared.diagnostics);
+        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(emitted.diagnostics.is_empty(), "{name}: {:?}", emitted.diagnostics);
+        assert!(emitted.writer.text().contains("addOne"), "{name}: the bridge calls `addOne`");
+    }
+}

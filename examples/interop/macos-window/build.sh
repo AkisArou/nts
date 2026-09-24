@@ -40,6 +40,11 @@ if [ ! -d "$sdk/System/Library/Frameworks/AppKit.framework" ]; then
   echo "SKIP macos-window: no macOS SDK at $sdk (tooling/apple/sync-sdk.sh)"
   exit 0
 fi
+version=$(sed -n 's/.*"Version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$sdk/SDKSettings.json" | head -1)
+if [ ! -f "$apple/symbolgraph/$version/AppKit.symbols.json" ]; then
+  echo "SKIP macos-window: no Swift symbol graphs for SDK $version (tooling/apple/symbolgraph.sh AppKit Foundation ObjectiveC)"
+  exit 0
+fi
 [ -f "$apple/x86_64/lib/libuv.a" ] && [ -f "$apple/aarch64/lib/libuv.a" ] ||
   NTS_APPLE_ROOT="$apple" "$root/tooling/apple/build-libuv.sh" >/dev/null
 

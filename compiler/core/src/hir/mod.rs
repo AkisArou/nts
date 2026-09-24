@@ -1615,6 +1615,15 @@ pub struct Layout {
 }
 
 impl Layout {
+    /// The function a closure's layout calls: its one method, in the closure
+    /// slot. That slot is numbered after every slot an override claims, so it
+    /// is the first only in a program with no overriding -- reading the first
+    /// refused every callback bridge in a program with one `override`.
+    #[must_use]
+    pub fn closure_call(&self) -> Option<&str> {
+        self.methods.iter().flatten().next().map(String::as_str)
+    }
+
     /// Whether two layouts are the same shape.
     ///
     /// Field names and representations, in order. Not `readonly`: a value is

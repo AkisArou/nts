@@ -324,6 +324,34 @@ correctness does not depend on arm64 running by luck.
 
      Measured cost is still owed: a string crossing copies into an
      `NSString`, and the same copy Swift makes has not been compared yet.
+   - **S4, `bind-objc` v2, landed.** The generator writes the Swift surface,
+     and `macos-window` runs on it on both backends with no cast:
+     `new NSWindow({ contentRect, styleMask: NSWindow.StyleMask.titled |
+     NSWindow.StyleMask.closable, backing: .buffered, defer: false })`,
+     `window.title = "nts"`, `Timer.scheduledTimer({ timeInterval: 0.05, ... })`.
+     - Names are Swift's. `tooling/apple/symbolgraph.sh` fetches the importer's
+       graphs once per SDK, and each member is joined to clang by USR. A member
+       Swift does not import is absent. One deprecated by the deployment target,
+       or introduced after it, is skipped with that reason.
+     - An initializer is a constructor, a factory's included. A getter Swift
+       imports as a property is one. `isHidden` carries `@ntsSet setHidden:`.
+     - Enums nest where Swift nests them (`namespace NSWindow { const enum
+       StyleMask }`), with clang's values. An `NS_OPTIONS` also takes `0`,
+       Swift's `[]`.
+     - TypeScript gives a class one member per name and hides a base's
+       overloads. So a class declaring a name repeats its ancestors'
+       overloads of it (`isEqual(_:)` beside `isEqual(to:)`), and repeats
+       their initializers. Where Swift has a property and a method of one
+       name (`menu`, `menu(for:)`), the property wins and the method is
+       skipped with a reason.
+     - Skipped, with reasons: blocks (S5), collections (S3c), members Swift
+       throws or awaits (S5), and a label Swift repeats (`perform(_:with:with:)`).
+     - The binding's cost to the checker: the 2.6k-line `macos-window`
+       binding type-checks in 0.12 s, the same as `macos-classes`. The
+       full-framework cost is still to be measured.
+     - Found on the way: the binding's classes had entered the program's
+       class hierarchy, and one override anywhere refused every C callback
+       bridge. Both are fixed (`Layout::closure_call`).
    - **Objective-C handles narrow and assert.** `instanceof` narrows an
      Objective-C object to a subclass, and `as` asserts one, unchecked as every
      TypeScript assertion is. Any other opaque pointer is still refused.
