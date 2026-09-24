@@ -53,12 +53,19 @@ static void construct_run(long n) {
   }
 }
 
+/* The widget and the count are locals, as a C programmer writes the loop:
+ * a static global is re-read after every call, since the call could have
+ * written it, and that load and the counter's store were what put this
+ * floor above nts's own loop, which holds the receiver in a register. */
 static GtkWidget *button;
 static long visible;
 static void method_run(long n) {
+  GtkWidget *widget = button;
+  long seen = 0;
   for (long i = 0; i < n; i++)
-    if (gtk_widget_get_visible(button))
-      visible++;
+    if (gtk_widget_get_visible(widget))
+      seen++;
+  visible += seen;
 }
 
 static void mapped(GtkWidget *w, gpointer app) {

@@ -567,20 +567,28 @@ GTK 4.22; ns per operation, best of three in-process runs after one untimed.
 
 | case | C | nts | GJS | GJS / nts |
 |---|---:|---:|---:|---:|
-| signal round trip (`set_value` -> `value-changed`) | 218 | 185 | 701 | 3.8x |
-| property write + read (`label.label`) | 263 | 273 | 400 | 1.5x |
-| construct (`new GtkLabel({ label })`) | 4890 | 4814 | 5759 | 1.2x |
-| inherited method (`get_visible()`) | 7.3 | 4.1 | 128 | 31x |
-| startup to a mapped window (ms) | | 69.7 | 73.3 | 1.1x |
-| startup peak RSS (MB) | | 101 | 120 | 1.2x |
+| signal round trip (`set_value` -> `value-changed`) | 218-314 | 185-201 | 701-713 | 3.5-3.8x |
+| property write + read (`label.label`) | 261-263 | 265-273 | 388-825 | 1.5-3.1x |
+| construct (`new GtkLabel({ label })`) | 4811-4890 | 4814-4983 | 5742-5919 | 1.2x |
+| inherited method (`get_visible()`) | 4.0 | 4.1-4.2 | 128-133 | 31x |
+| startup to a mapped window (ms) | 73.1 | 69.7-77.8 | 73.3-78.7 | 1.0-1.1x |
+| startup peak RSS (MB) | | 88-101 | 105-120 | 1.2x |
+| notes app, 1000 notes, open to quit (ms) | | 102-123 | 116-186 | 1.1-1.5x |
+| notes app peak RSS (MB) | | 101 | 118-119 | 1.2x |
 
-The method row was 20.3 ns until an upcast borrowed its handle's reference
-(`own::views_borrow`): `g_object_ref_sink`/`g_object_unref` around every
-inherited call was 45-55 ns against GTK's 5-6. Every other nts row is at the
-C floor within noise; startup and RSS are GTK's.
+Ranges are separate runs on a machine other sessions share, which is also
+why a row's C can read above its nts: both are GTK's own work at the same
+floor. The method row was 20.3 ns until an upcast borrowed its handle's
+reference (`own::views_borrow`); `g_object_ref_sink`/`g_object_unref` around
+every inherited call was 45-55 ns against GTK's 5-6. It then read *below*
+the C floor, 4.1 against 7.3, because the C kept the widget and the count in
+static globals, which C re-reads after every call; written with locals, as
+nts holds them, C is 4.0. The notes application is
+`examples/interop/gtk-notes` against `gjs/notes.js`, line for line.
 
-**Next in M4:** a real application -- a list, an entry, a file loaded
-through Gio -- built on these bindings, benchmarked the same way.
+**Next in M4:** the application larger -- a `GtkListView` over a
+`GListStore`, a file chooser -- and a profile of where its time goes beside
+GJS's.
 
 ## Rules this lane keeps
 

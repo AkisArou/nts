@@ -54,6 +54,13 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
 /// `@ntsThrows` call is always one -- written by C, read back at once -- and
 /// refusing it refused every throwing `GLib` call in a loop or an `async`
 /// function: `for (let line = s.read_line_utf8(); …)`.
+///
+/// **This is about our own control flow, not the callee's.** That the C
+/// function does not keep the address past the call is a convention the
+/// local relies on -- `@ntsNoEscape`, which `borrowed` checks, or `GError`'s
+/// own, for the slot an `@ntsThrows` call is given -- and nothing here
+/// establishes it. A new use of `confined` for another kind of native call
+/// relies on that convention too, and should say which.
 fn confined(func: &Func, block: usize, value: ValueId) -> bool {
     let body = &func.blocks[block];
     if super::operands_of_terminator(&body.terminator).contains(&value) {
