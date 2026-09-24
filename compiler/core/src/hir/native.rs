@@ -78,6 +78,9 @@ pub struct Function {
     /// `declared_at` makes it include a header. A C function can live in one
     /// (CoreFoundation's `CFRunLoopRun`) as well as a message.
     pub frameworks: Vec<String>,
+    /// What the declaration's `@ntsLibrary` names: the C libraries the
+    /// program links because it calls this (`gdi32` for `BitBlt`).
+    pub libraries: Vec<String>,
     /// `@ntsDefault`: the C parameter an optional TypeScript parameter lands
     /// in, and what the compiler passes there when the caller leaves it out.
     pub defaults: Vec<(usize, ParameterDefault)>,
@@ -1550,6 +1553,7 @@ impl Function {
             returns_owned: returned.owned,
             consumes,
             frameworks: Vec::new(),
+            libraries: Vec::new(),
             defaults: given,
             result_as: returned.program,
         })

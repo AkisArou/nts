@@ -1988,6 +1988,18 @@ pub struct Program {
     /// calls, as headers are.
     pub objc: bool,
     pub native_frameworks: Vec<String>,
+    /// The C libraries the called functions' `@ntsLibrary` names, one `-l`
+    /// each at the link.
+    ///
+    /// **Alphabetical, for reproducibility, and that order is not a
+    /// dependency order.** It is safe for what this tag serves: a Windows
+    /// import library (`gdi32`, `comctl32`) resolves no archive chain, and a
+    /// shared library does not care. A GNU ld link of static archives where
+    /// one needs another resolves left to right and would care; a library
+    /// that needs that belongs in a pkg-config claim, which emits its own
+    /// order. A Linux "undefined reference" between two `@ntsLibrary` names
+    /// starts here.
+    pub native_libraries: Vec<String>,
     /// Bound foreign members, keyed by the **foreign key** -- `owner.member:descriptor`.
     ///
     /// **On `Program` for the same reason `classes` is.** A backend turning

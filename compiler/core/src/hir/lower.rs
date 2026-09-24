@@ -8121,6 +8121,7 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
                 reached.extend(target.declared_at);
                 program.objc |= target.send.is_some();
                 program.native_frameworks.extend(target.frameworks.iter().cloned());
+                program.native_libraries.extend(target.libraries.iter().cloned());
             }
             if let OpKind::ObjcClass { frameworks, .. } = &op.kind {
                 program.objc = true;
@@ -8162,6 +8163,8 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
     program.native_defines = defines;
     program.native_frameworks.sort();
     program.native_frameworks.dedup();
+    program.native_libraries.sort();
+    program.native_libraries.dedup();
 }
 
 /// Every module a native type reaches a record from, following the views and
@@ -39637,6 +39640,7 @@ impl<'a> FuncBuilder<'a> {
             returns_owned: false,
             consumes: Vec::new(),
             frameworks: Vec::new(),
+            libraries: Vec::new(),
             defaults: Vec::new(),
             result_as: None,
         });
@@ -39668,6 +39672,7 @@ impl<'a> FuncBuilder<'a> {
             returns_owned: false,
             consumes: Vec::new(),
             frameworks: Vec::new(),
+            libraries: Vec::new(),
             defaults: Vec::new(),
             result_as: None,
         });
@@ -39879,6 +39884,7 @@ impl<'a> FuncBuilder<'a> {
                 returns_owned: false,
                 consumes: Vec::new(),
                 frameworks: Vec::new(),
+                libraries: Vec::new(),
                 defaults: Vec::new(),
                 result_as: None,
             };
@@ -40418,7 +40424,8 @@ impl<'a> FuncBuilder<'a> {
         // in the snapshot.
         native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
         if let Some(decl) = declaration {
-            native.frameworks = self.declared_frameworks(call, decl)?;
+            native.frameworks = self.declared_names(call, decl, LinkTag::FRAMEWORK)?;
+            native.libraries = self.declared_names(call, decl, LinkTag::LIBRARY)?;
         }
         let selector =
             selector.or_else(|| declaration.and_then(|decl| self.node(decl).native.as_ref().and_then(|n| n.selector.clone())));
@@ -40510,15 +40517,16 @@ impl<'a> FuncBuilder<'a> {
         Ok(Callee::Native(std::sync::Arc::new(native)))
     }
 
-    /// The frameworks of the nearest enclosing declaration naming any, which is
-    /// the `declare module` a binding is written as.
-    fn declared_frameworks(&self, call: NodeId, declaration: NodeId) -> Result<Vec<String>, Diagnostic> {
+    /// The names a link tag (`@ntsFramework`, `@ntsLibrary`) gives on the
+    /// nearest enclosing declaration naming any: the function, or the
+    /// `declare module` a binding is written as. One walk for both tags.
+    fn declared_names(&self, call: NodeId, declaration: NodeId, tag: LinkTag) -> Result<Vec<String>, Diagnostic> {
         let mut at = Some(declaration);
         while let Some(id) = at {
             let node = self.node(id);
-            if let Some(names) = node.native.as_ref().and_then(|n| n.frameworks.as_ref()) {
-                if let Some(bad) = names.iter().find(|name| !super::native::is_c_identifier(name)) {
-                    return Err(self.unsupported(call, &format!("@ntsFramework names frameworks by their names, as in `@ntsFramework Foundation`, and `{bad}` is not one")));
+            if let Some(names) = node.native.as_ref().and_then(|n| (tag.names)(n)) {
+                if let Some(bad) = names.iter().find(|name| !(tag.valid)(name)) {
+                    return Err(self.unsupported(call, &format!("{}, and `{bad}` is not one", tag.rule)));
                 }
                 return Ok(names.clone());
             }
@@ -40552,7 +40560,7 @@ impl<'a> FuncBuilder<'a> {
         if !super::native::is_c_identifier(&name) {
             return Err(self.unsupported(id, &format!("`ObjcMeta<\"{name}\">` names a class by its name, and `{name}` is not one")));
         }
-        let frameworks = self.declared_frameworks(id, declaration)?;
+        let frameworks = self.declared_names(id, declaration, LinkTag::FRAMEWORK)?;
         let ty = HirType::NativePointer(super::native::Pointee::Opaque("objc_class".into()));
         Ok(Some(self.push(OpKind::ObjcClass { name, frameworks }, ty, self.origin(id))))
     }
@@ -47658,4 +47666,34 @@ fn accessor_signature(receiver: TypeId, value: Option<TypeId>, result: TypeId) -
         type_predicate: None,
         this_type: Some(receiver),
     }
+}
+
+/// A tag naming what a declaration links: where its names are, which names it
+/// accepts, and the sentence that says so when one is not.
+#[derive(Clone, Copy)]
+struct LinkTag {
+    names: fn(&nts_semantic_schema::NativeAttributes) -> Option<&Vec<String>>,
+    valid: fn(&str) -> bool,
+    rule: &'static str,
+}
+
+impl LinkTag {
+    /// An Apple framework, which is named like a C identifier.
+    const FRAMEWORK: Self = Self {
+        names: |n| n.frameworks.as_ref(),
+        valid: super::native::is_c_identifier,
+        rule: "@ntsFramework names frameworks by their names, as in `@ntsFramework Foundation`",
+    };
+    /// A C library, `-l<name>`: what a linker accepts in the name, which is
+    /// wider than an identifier (`glib-2.0`, `stdc++`).
+    const LIBRARY: Self = Self {
+        names: |n| n.libraries.as_ref(),
+        valid: |name| {
+            !name.is_empty()
+                && !name.starts_with('-')
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+' | '.'))
+        },
+        rule: "@ntsLibrary names libraries as `-l` takes them, as in `@ntsLibrary gdi32` or `@ntsLibrary glib-2.0` \
+               (letters, digits, `_`, `-`, `+`, `.`)",
+    };
 }

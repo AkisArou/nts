@@ -1495,6 +1495,7 @@ mod foreign_contracts {
             returns_owned: false,
             consumes: Vec::new(),
             frameworks: Vec::new(),
+            libraries: Vec::new(),
             defaults: Vec::new(),
             result_as: None,
         }))

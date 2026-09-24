@@ -5287,7 +5287,7 @@ fn link_c(
             for flag in &needs.libs {
                 command.arg(flag);
             }
-            command.args(objc_link_flags(wrote));
+            command.args(binding_link_flags(wrote));
             command.args(loop_host_link_flags(&sources, format));
             // **`--no-undefined` where it can be used**, which is the earliest
             // an unresolved symbol can be caught and the cheapest place to say
@@ -5420,14 +5420,15 @@ fn loop_host_link_flags(sources: &[String], format: ObjectFormat) -> Vec<String>
     flags
 }
 
-/// `-lobjc` for a program that sends messages, and each framework its
-/// bindings name, messages or C functions alike.
-fn objc_link_flags(wrote: &Wrote) -> Vec<String> {
+/// `-lobjc` for a program that sends messages, each framework its bindings
+/// name (messages or C functions alike), and each C library (`@ntsLibrary`).
+fn binding_link_flags(wrote: &Wrote) -> Vec<String> {
     let mut flags = if wrote.objc { vec!["-lobjc".to_owned()] } else { Vec::new() };
     for framework in &wrote.frameworks {
         flags.push("-framework".to_owned());
         flags.push(framework.clone());
     }
+    flags.extend(wrote.libraries.iter().map(|library| format!("-l{library}")));
     flags
 }
 
@@ -6701,6 +6702,8 @@ struct Wrote {
     /// frameworks its bindings name (one `-framework` each), at the link.
     objc: bool,
     frameworks: Vec<String>,
+    /// The C libraries its bindings name (`@ntsLibrary`), one `-l` each.
+    libraries: Vec<String>,
     /// Whether the program has module-level code to evaluate.
     ///
     /// **A program that is only declarations has nothing to evaluate**, so
@@ -6833,6 +6836,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     let mut wrote = write_c_output(&program, &emitted, out, emission, refused, initializes)?;
     wrote.objc = program.objc;
     wrote.frameworks.clone_from(&program.native_frameworks);
+    wrote.libraries.clone_from(&program.native_libraries);
     Ok(wrote)
 }
 

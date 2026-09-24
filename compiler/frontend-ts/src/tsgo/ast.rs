@@ -442,6 +442,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let class = leading_tag(source, "@ntsClass");
     let frameworks = leading_tag(source, "@ntsFramework")
         .map(|names| names.split_whitespace().map(str::to_owned).collect());
+    let libraries = leading_tag(source, "@ntsLibrary")
+        .map(|names| names.split_whitespace().map(str::to_owned).collect());
     if abi.is_none()
         && no_escape.is_none()
         && headers.is_none()
@@ -457,6 +459,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && selector.is_none()
         && class.is_none()
         && frameworks.is_none()
+        && libraries.is_none()
     {
         return None;
     }
@@ -476,6 +479,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         selector,
         class,
         frameworks,
+        libraries,
     }))
 }
 

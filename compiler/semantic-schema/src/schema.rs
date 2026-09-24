@@ -756,6 +756,12 @@ pub struct NativeAttributes {
     /// here, because an Objective-C header cannot be included from C.
     #[serde(default)]
     pub frameworks: Option<Vec<String>>,
+    /// `@ntsLibrary gdi32`: the C libraries a declaration needs at link time,
+    /// one `-l` each. On a function, or on the module for all of them -- the
+    /// nearest enclosing one that names any, as `@ntsFramework` is read. A
+    /// program links only the libraries of the functions it calls.
+    #[serde(default)]
+    pub libraries: Option<Vec<String>>,
 }
 
 /// Why a snapshot was rejected.

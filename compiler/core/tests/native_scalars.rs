@@ -1025,3 +1025,34 @@ fn an_async_callback_is_refused_and_an_async_caller_is_not() {
         }
     }
 }
+
+/// `@ntsLibrary` links what a program **calls**, not what its bindings
+/// mention: a binding of all of Win32 must not link all of Win32. And a
+/// library is named as `-l` takes it, which is wider than a C identifier.
+#[test]
+fn a_program_links_the_libraries_of_the_functions_it_calls() {
+    let Some(called) = snapshot("link-libraries", r"
+        /** @ntsLibrary gdi32 */
+        declare function drawn(): c_int;
+        /** @ntsLibrary comctl32 */
+        declare function never_called(): c_int;
+        /** @ntsLibrary glib-2.0 */
+        declare function dashed(): c_int;
+        export function run(): number { return drawn() + dashed(); }
+    ") else { return; };
+    let prepared = hir::prepare(&called).unwrap();
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert_eq!(prepared.program.native_libraries, ["gdi32", "glib-2.0"]);
+
+    let Some(flagged) = snapshot("link-libraries-bad", r"
+        /** @ntsLibrary -lfoo */
+        declare function flag(): c_int;
+        export function run(): number { return flag(); }
+    ") else { return; };
+    let prepared = hir::prepare(&flagged).unwrap();
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("@ntsLibrary names libraries as `-l` takes them")),
+        "a flag passed as a library name was accepted: {:?}",
+        prepared.diagnostics
+    );
+}
