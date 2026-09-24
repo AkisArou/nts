@@ -171,6 +171,7 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
     let command = format!("nts bind-gir {}", request.root);
     let mut totals: BTreeMap<String, usize> = BTreeMap::new();
     let (mut bound, mut refused) = (0, 0);
+    let (mut asyncs, mut promised) = (0, 0);
     // Every struct tag first, because a namespace's signatures name the types
     // of the namespaces it includes. Each namespace is one clang run that
     // parses its headers, independent of the others, so they run at once.
@@ -235,12 +236,9 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
     })?;
     for (namespace, binding) in namespaces.iter().zip(&bindings) {
         let stem = format!("{}-{}", namespace.name, namespace.version);
-        write(&request.out.join(format!("{stem}.d.ts")), &emit::declarations(binding, &command))?;
-        // Not `{stem}.ts`: TypeScript reads a `.d.ts` beside a `.ts` of the same
-        // stem as that file's own output and drops it, and every `c:` import
-        // of the module then fails to resolve.
-        write(&request.out.join(format!("{stem}.values.ts")), &emit::companion(binding, &command))?;
-        write(&request.out.join(format!("{stem}.refused.txt")), &report(binding))?;
+        let (async_count, promise_count) = write_namespace(&request.out, &stem, binding, &command)?;
+        asyncs += async_count;
+        promised += promise_count;
         if verbose {
             println!(
                 "  {:<16} {:>5} bound, {:>5} refused",
@@ -256,16 +254,25 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
         }
     }
     if !verbose {
-        println!("  bound {root}: {bound} function(s), {refused} refused (see *.refused.txt) into {}", request.out);
+        println!(
+            "  bound {root}: {bound} function(s), {refused} refused (see *.refused.txt), {promised} of {asyncs} async method(s) with a Promise form (see *.promises.txt) into {}",
+            request.out
+        );
         return Ok(repository.files);
     }
     println!("{bound} function(s) bound, {refused} refused, into {}", request.out);
+    println!("{promised} of {asyncs} async method(s) have a Promise form");
+    print_ranking(totals);
+    Ok(repository.files)
+}
+
+/// The refusals by kind, most first: what to build next.
+fn print_ranking(totals: BTreeMap<String, usize>) {
     let mut ranked: Vec<_> = totals.into_iter().collect();
     ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     for (kind, count) in ranked {
         println!("  {count:>5}  {kind}");
     }
-    Ok(repository.files)
 }
 
 /// What pkg-config says for `namespace` -- `--cflags` for its headers,
@@ -301,6 +308,32 @@ fn pkg_config(repository: &model::Repository, namespace: &model::Namespace, what
         }
     }
     flags
+}
+
+/// One namespace's files -- the declarations, the companion module, the
+/// refusals and the Promise census -- answering how many async methods it has
+/// and how many of them have a Promise form.
+fn write_namespace(out: &Utf8PathBuf, stem: &str, binding: &map::Binding, command: &str) -> Result<(usize, usize)> {
+    write(&out.join(format!("{stem}.d.ts")), &emit::declarations(binding, command))?;
+    // Not `{stem}.ts`: TypeScript reads a `.d.ts` beside a `.ts` of the same
+    // stem as that file's own output and drops it, and every `c:` import of
+    // the module then fails to resolve.
+    write(&out.join(format!("{stem}.values.ts")), &emit::companion(binding, command))?;
+    write(&out.join(format!("{stem}.refused.txt")), &report(binding))?;
+    let census = emit::promise_census(binding);
+    write(&out.join(format!("{stem}.promises.txt")), &promises_report(&census))?;
+    let promised = census.iter().filter(|(_, outcome)| *outcome == "promise").count();
+    Ok((census.len(), promised))
+}
+
+/// Every async method and its Promise form or why it has none, one per line.
+fn promises_report(census: &[(String, &'static str)]) -> String {
+    if census.is_empty() {
+        return String::new();
+    }
+    let mut lines: Vec<String> = census.iter().map(|(name, outcome)| format!("{name}\t{outcome}")).collect();
+    lines.sort();
+    lines.join("\n") + "\n"
 }
 
 /// Every refused function and why, one per line: the queue, as a file.

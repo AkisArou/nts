@@ -286,10 +286,40 @@ error and answers a `malloc`'d message, and GLib's is four lines in the GLib
 host (`nts_gerror_take_message`). Checked on C and LLVM under both providers
 with a fake error API and its own converter.
 
+**Async methods, awaited.** Without its callback, an `_async` method is its
+Promise form:
+
+```ts
+const made = await directory.make_directory_async(PRIORITY_DEFAULT, null);
+```
+
+The binding declares it as an overload of the C method, told apart by arity,
+and bodies it with a wrapper the companion module generates from the
+`_async`/`_finish` pair: start, and in the one callback call `_finish` -- which
+throws the `GError` it reports -- and resolve or reject. `@ntsCall` is what
+lets a handle method have a TypeScript body: it names the program's function,
+called with the receiver first.
+
+Counted, since an absent overload fails nothing (`*.promises.txt`, and the
+binder's summary line), of GTK 4.22's 134 async methods:
+
+| | |
+|---|---|
+| 59 | a Promise form: `_finish` returns nothing, a number, a boolean or a string |
+| 48 | none: `_finish` returns a handle (`query_info_async`'s `GFileInfo`) |
+| 15 | none: `_finish` is not bound |
+| 8 | none: `_finish` takes more than the result |
+| 4 | none: `_finish` returns a 64-bit integer |
+
+A promise cannot carry a handle or a 64-bit integer yet. The shape agreed
+with the language lane for a handle is a slot of its own on `NtsPromise`:
+not a value tag, since the tag space is full by construction -- a
+non-reference tag must sit outside `STRING..=OBJECT` and below `OBJECT`,
+which leaves only the three taken -- and a tag above `NULL` would answer
+`typeof x === "object"`, which `2fa3d575` now guards.
+
 **Next in M3:**
 
-- Async methods as Promises: `await file.query_info("standard::type")`,
-  from the `_async`/`_finish` pair.
 - Typed `connect`: `button.connect("clicked", handler)`.
 - Construction and lifetime: `new Gtk.Button({ label })`, and a GObject
   unreffed when the TypeScript value is released.

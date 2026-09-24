@@ -37541,11 +37541,15 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
-        // A method a binding declares on a C handle: the C function itself.
-        if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_))
-            && let Some(method) = self.native_method(id)
-        {
-            return self.lower_native_method_call(id, receiver, method, member, arguments);
+        // A method a binding declares on a C handle: the C function itself,
+        // or one of the program's own functions that `@ntsCall` names.
+        if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_)) {
+            if let Some(method) = self.native_method(id) {
+                return self.lower_native_method_call(id, receiver, method, member, arguments);
+            }
+            if let Some(function) = self.called_method(id)? {
+                return self.lower_called_method(id, receiver, function, arguments);
+            }
         }
 
         // `big.toString()` is the same `ToString` one type over, and
@@ -39293,6 +39297,59 @@ impl<'a> FuncBuilder<'a> {
             && self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some())
             && signature.this_type.is_some())
         .then_some((declaration, target.signature))
+    }
+
+    /// The function an `@ntsCall` method names, when the call at `id`
+    /// resolved to one: the program's only defined `function` of that name.
+    /// Two, or none, is refused -- a name that could mean either is not a
+    /// binding.
+    fn called_method(&self, id: NodeId) -> Result<Option<NodeId>, Diagnostic> {
+        let Some(declaration) = self.snapshot.call_targets.get(&id).and_then(|target| target.callee) else {
+            return Ok(None);
+        };
+        if self.kind_of(declaration) != Some(syntax::METHOD_SIGNATURE) {
+            return Ok(None);
+        }
+        let Some(name) = self.node(declaration).native.as_ref().and_then(|n| n.call.clone()) else {
+            return Ok(None);
+        };
+        let mut found = (0..self.snapshot.nodes.len()).map(|at| NodeId(u32::try_from(at).unwrap_or(u32::MAX))).filter(|node| {
+            self.kind_of(*node) == Some(syntax::FUNCTION_DECLARATION)
+                && self.has_a_body(*node)
+                && self.declared_name(*node).as_deref() == Some(name.as_str())
+        });
+        match (found.next(), found.next()) {
+            (Some(function), None) => Ok(Some(function)),
+            (None, _) => Err(self.unsupported(id, &format!("@ntsCall naming `{name}`, which this program does not define"))),
+            (Some(_), Some(_)) => Err(self.unsupported(id, &format!("@ntsCall naming `{name}`, which this program defines twice"))),
+        }
+    }
+
+    /// `handle.method(args)` as `function(handle, args)`, for an `@ntsCall`
+    /// method: the receiver is the function's first argument, converted to
+    /// its type, and the rest are the method's.
+    fn lower_called_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        function: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = self
+            .qualified
+            .get(&function)
+            .cloned()
+            .or_else(|| self.declared_name(function))
+            .ok_or_else(|| self.unsupported(id, "an @ntsCall function with no name"))?;
+        let first = self
+            .children(function)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+            .and_then(|parameter| self.type_of(parameter))
+            .ok_or_else(|| self.unsupported(id, "an @ntsCall function that takes no receiver"))?;
+        let mut args = vec![self.coerce(receiver, &first, id)?];
+        args.extend(self.lower_arguments(id, arguments)?);
+        self.push_call(id, Callee::Direct(name), args, Some(function))
     }
 
     /// `handle.method(args)` as the C call `symbol(handle, args)`: the

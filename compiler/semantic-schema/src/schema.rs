@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 19;
+pub const SCHEMA_VERSION: u32 = 20;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -717,6 +717,11 @@ pub struct NativeAttributes {
     /// its message.
     #[serde(default)]
     pub throws: Option<String>,
+    /// `@ntsCall g_file_query_info_async_promise`: a method a binding declares
+    /// on a handle whose body is a function of the program's -- the Promise
+    /// form of an `_async` method -- called with the receiver first.
+    #[serde(default)]
+    pub call: Option<String>,
 }
 
 /// Why a snapshot was rejected.

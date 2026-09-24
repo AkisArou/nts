@@ -2409,3 +2409,43 @@ export function run(): number {
         }
     }
 }
+
+/// A method a binding declares on a handle whose body is the program's own:
+/// `@ntsCall` names the function, and a call passes the receiver first. How
+/// `bind-gir` gives an `_async` method its Promise form, bodied by a wrapper
+/// in the companion module.
+///
+/// The receiver arrives as the function's first argument -- a `Button`,
+/// where the method is declared -- and the body calls one of the handle's C
+/// methods on it, so a receiver passed wrongly reads the wrong width. A
+/// string argument passes through as it would to any function.
+#[test]
+fn an_ntscall_method_is_the_programs_function_with_the_receiver_first_on_both_backends() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+interface WidgetOwnMethods {
+    /** @ntsSymbol widget_get_width */
+    get_width(this: Widget): c_int;
+}
+interface ButtonOwnMethods {
+    /** @ntsCall labelled_width */
+    labelled(this: Button, label: string): number;
+}
+type Widget = Class<"_Widget"> & WidgetOwnMethods;
+type Button = Class<"_Button", Widget> & ButtonOwnMethods & WidgetOwnMethods;
+declare function button_new(): Button;
+function labelled_width(button: Button, label: string): number {
+    return (button.get_width() as number) * 100 + label.length;
+}
+export function run(): number {
+    return button_new().labelled("héllo");
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((_, outputs)) = run_on_both_backends("ntscall", source, provider, METHODS_LIBRARY, &caller) else { return; };
+        for output in outputs {
+            assert_eq!(output, expect("4205", provider), "{provider:?}");
+        }
+    }
+}

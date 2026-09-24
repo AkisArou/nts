@@ -26,6 +26,10 @@
 //   label=tick 3  a timeout closure ticked three times, rewriting the label,
 //                 which is read back through `gtk_label_get_text`
 //   ticks=3       and the count it captured is what `main` reads afterwards
+//   made=1 again=rejected removed=1
+//                 `make_directory_async` and `delete_async` awaited: the
+//                 Promise forms the binding generates, resolving with what
+//                 `_finish` returns and rejecting with the `GError` it reports
 //   kind=2        `g_file_query_info_async` on "/", awaited as a Promise: the
 //                 `GAsyncReadyCallback` is a closure C calls once, which the
 //                 bridge releases after it, and `_finish` reports through the
@@ -47,10 +51,7 @@ import {
   gio_application_connect_activate,
   g_application_quit,
   g_application_run,
-  g_file_info_get_file_type,
   g_file_new_for_path,
-  g_file_query_info_async,
-  g_file_query_info_finish,
 } from "c:Gio-2.0";
 import {
   g_compute_checksum_for_data,
@@ -148,6 +149,31 @@ function fileKind(path: string): Promise<number> {
   });
 }
 
+// GIO's asynchronous methods, awaited: without its callback an `_async`
+// method is the Promise form the binding generates from it and its
+// `_finish`, which settles with what `_finish` returns -- or rejects with the
+// `GError` it reports.
+async function directories(path: string): Promise<void> {
+  const directory = g_file_new_for_path(path);
+  try {
+    await directory.delete_async(PRIORITY_DEFAULT, null);
+  } catch {
+    // Absent already, which is the usual case.
+  }
+  const made = await directory.make_directory_async(PRIORITY_DEFAULT, null);
+  let again = "resolved";
+  try {
+    await directory.make_directory_async(PRIORITY_DEFAULT, null);
+  } catch (e) {
+    again = (e as Error).message.length > 0 ? "rejected" : "rejected-empty";
+  }
+  const removed = await directory.delete_async(PRIORITY_DEFAULT, null);
+  g_object_unref(directory);
+  folders = "made=" + String(made) + " again=" + again + " removed=" + String(removed);
+}
+
+let folders = "";
+
 let kind = -1;
 
 async function learnKind(): Promise<void> {
@@ -157,6 +183,7 @@ async function learnKind(): Promise<void> {
 function main(): void {
   outParameters();
   void learnKind();
+  void directories("/tmp/nts-gtk-gir-directory");
   const application = gtk_application_new("dev.nts.GtkGir", ApplicationFlags.NON_UNIQUE as c_uint);
   let ticks = 0;
   let clicks = 0;
@@ -194,7 +221,7 @@ function main(): void {
       label.set_text("tick " + String(ticks));
       // And the query answered, so the log does not depend on which of the
       // two a loaded machine finishes first.
-      if (ticks < 3 || kind === -1) return 1 as c_int;
+      if (ticks < 3 || kind === -1 || folders === "") return 1 as c_int;
       gir_log("label=" + label.get_text());
       application.quit();
       return 0 as c_int;
@@ -208,6 +235,7 @@ function main(): void {
   g_object_unref(application);
   gir_log("ticks=" + String(ticks));
   gir_log("kind=" + String(kind));
+  gir_log(folders);
 }
 
 main();

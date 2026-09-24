@@ -426,6 +426,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let free = leading_tag(source, "@ntsFree");
     let symbol = leading_tag(source, "@ntsSymbol");
     let throws = leading_tag(source, "@ntsThrows");
+    let call = leading_tag(source, "@ntsCall");
     if abi.is_none()
         && no_escape.is_none()
         && headers.is_none()
@@ -433,10 +434,11 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && free.is_none()
         && symbol.is_none()
         && throws.is_none()
+        && call.is_none()
     {
         return None;
     }
-    Some(Box::new(nts_semantic_schema::NativeAttributes { abi, no_escape, headers, defines, free, symbol, throws }))
+    Some(Box::new(nts_semantic_schema::NativeAttributes { abi, no_escape, headers, defines, free, symbol, throws, call }))
 }
 
 fn native_abi(source: &str) -> Option<String> { leading_tag(source, "@ntsAbi") }

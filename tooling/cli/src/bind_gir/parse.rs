@@ -173,6 +173,10 @@ fn callable(node: Node<'_, '_>, kind: CallableKind) -> Callable {
         introspectable: attribute(node, "introspectable") != Some("0"),
         deprecated: attribute(node, "deprecated") == Some("1"),
         shadowed: attribute(node, "shadowed-by").is_some() || attribute(node, "moved-to").is_some(),
+        // GIR's own pairing, or GLib's naming convention where it is absent.
+        finish: node.attribute((GLIB, "finish-func")).map(str::to_owned).or_else(|| {
+            attribute(node, "name").and_then(|name| name.strip_suffix("_async")).map(|base| format!("{base}_finish"))
+        }),
     }
 }
 

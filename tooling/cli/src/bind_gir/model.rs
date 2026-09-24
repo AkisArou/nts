@@ -116,6 +116,9 @@ pub(crate) struct Callable {
     pub(crate) deprecated: bool,
     /// `shadowed-by`/`moved-to`: another entry is the one to bind.
     pub(crate) shadowed: bool,
+    /// `glib:finish-func`: for an `_async` callable, the name of the one that
+    /// reads its result.
+    pub(crate) finish: Option<String>,
 }
 
 #[derive(Debug)]

@@ -86,6 +86,8 @@ pub(crate) struct Function {
     /// `@ntsThrows`: the parameter GIR's `throws` adds, written optional so a
     /// caller that leaves it out has the failure thrown.
     pub(crate) throws: Option<String>,
+    /// For an `_async` method, the name of the method that finishes it.
+    pub(crate) finish: Option<String>,
 }
 
 #[derive(Debug)]
@@ -379,6 +381,7 @@ impl<'a> Mapper<'a> {
                     returns: None,
                     method: None,
                     throws: None,
+                    finish: None,
                 });
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
@@ -572,6 +575,7 @@ impl<'a> Mapper<'a> {
             returns,
             method,
             throws,
+            finish: callable.finish.clone(),
         })
     }
 
@@ -955,6 +959,7 @@ impl<'a> Mapper<'a> {
             returns: None,
             method: None,
             throws: None,
+                    finish: None,
         })
     }
 

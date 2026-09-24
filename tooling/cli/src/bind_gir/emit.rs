@@ -39,6 +39,8 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     }
     out.push('\n');
     // The methods of each class, from the functions the self-check kept.
+    let promises: std::collections::BTreeMap<&str, &Function> =
+        promise_forms(binding).into_iter().map(|(start, finish)| (start.symbol.as_str(), finish)).collect();
     let mut methods: std::collections::BTreeMap<&str, Vec<&Function>> = std::collections::BTreeMap::new();
     for function in &binding.functions {
         if let Some((class, _)) = &function.method {
@@ -55,6 +57,9 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                 let _ = writeln!(out, "  export interface {name}OwnMethods {{");
                 for function in methods.get(name.as_str()).into_iter().flatten() {
                     method(&mut out, function);
+                    if let Some(finish) = promises.get(function.symbol.as_str()) {
+                        promise_method(&mut out, function, finish);
+                    }
                 }
                 out.push_str("  }\n");
                 if let Some((_, parent)) = parent {
@@ -95,6 +100,111 @@ fn method(out: &mut String, function: &Function) {
     let rest: Vec<String> = parameters.map(|(name, mapped)| parameter(function, name, &mapped.ts)).collect();
     let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    {name}({this}): {};", function.result.ts);
+}
+
+/// The `_async` methods with a `_finish` that reads only their result: each
+/// pair a Promise can be made of. Only from functions the self-check kept,
+/// and only where the `_async` ends in its `OnceClosure` and the `_finish`
+/// takes the instance and the `GAsyncResult` -- and at most the error slot --
+/// so that the Promise settles with exactly what the `_finish` returns.
+pub(crate) fn promise_forms(binding: &Binding) -> Vec<(&Function, &Function)> {
+    binding
+        .functions
+        .iter()
+        .filter_map(|start| {
+            let (class, _) = start.method.as_ref()?;
+            let finish_name = start.finish.as_ref()?;
+            let (_, callback) = start.parameters.last()?;
+            if !callback.ts.starts_with("OnceClosure<") {
+                return None;
+            }
+            let finish = binding
+                .functions
+                .iter()
+                .find(|f| f.method.as_ref().is_some_and(|(c, n)| c == class && n == finish_name))?;
+            let read = finish.parameters.iter().filter(|(name, _)| finish.throws.as_deref() != Some(name.as_str())).count();
+            (read == 2 && settles(&finish.result)).then_some((start, finish))
+        })
+        .collect()
+}
+
+/// Every `_async` method the binding kept, and whether it has a Promise form
+/// -- and if not, why not. An absent overload fails nothing, so the ones
+/// without one are counted here rather than left to be found by a call that
+/// does not typecheck: the before-number for whatever makes them possible.
+pub(crate) fn promise_census(binding: &Binding) -> Vec<(String, &'static str)> {
+    let made: std::collections::BTreeSet<&str> = promise_forms(binding).into_iter().map(|(start, _)| start.symbol.as_str()).collect();
+    binding
+        .functions
+        .iter()
+        .filter(|start| {
+            start.method.is_some()
+                && start.finish.is_some()
+                && start.parameters.last().is_some_and(|(_, callback)| callback.ts.starts_with("OnceClosure<"))
+        })
+        .map(|start| {
+            let outcome = if made.contains(start.symbol.as_str()) {
+                "promise"
+            } else {
+                why_no_promise(binding, start)
+            };
+            (start.symbol.clone(), outcome)
+        })
+        .collect()
+}
+
+/// Why an `_async` method has no Promise form.
+fn why_no_promise(binding: &Binding, start: &Function) -> &'static str {
+    let (class, _) = start.method.as_ref().expect("a method");
+    let finish_name = start.finish.as_ref().expect("a finish");
+    let Some(finish) = binding
+        .functions
+        .iter()
+        .find(|f| f.method.as_ref().is_some_and(|(c, n)| c == class && n == finish_name))
+    else {
+        return "no Promise form: its `_finish` is not bound";
+    };
+    let read = finish.parameters.iter().filter(|(name, _)| finish.throws.as_deref() != Some(name.as_str())).count();
+    if read != 2 {
+        return "no Promise form: its `_finish` takes more than the result";
+    }
+    match &finish.result.c {
+        nts_core::hir::native::Type::Scalar(_) => "no Promise form: its `_finish` returns a 64-bit integer",
+        nts_core::hir::native::Type::Pointer(_) => "no Promise form: its `_finish` returns a handle",
+        _ => "no Promise form: its `_finish` returns what a promise cannot carry",
+    }
+}
+
+/// Whether a promise can carry what a `_finish` returns: nothing, a number,
+/// a boolean or a string. Not a handle -- a promise's value is a number or a
+/// *managed* reference, and a C pointer is neither -- and not a 64-bit
+/// integer, which a number cannot hold. Those `_async` methods keep only
+/// their callback form.
+fn settles(result: &super::map::Mapped) -> bool {
+    use nts_core::hir::native::Type;
+    match &result.c {
+        Type::Void | Type::Bool => true,
+        Type::Scalar(scalar) => !scalar.needs_exact_integer(),
+        Type::Pointer(_) => result.ts.starts_with("string"),
+        _ => false,
+    }
+}
+
+/// An `_async` method's Promise form: the same method without its callback,
+/// answering what the `_finish` returns -- `await file.query_info_async(…)`.
+/// An overload of the C one, told apart by arity, and bodied by the wrapper
+/// the companion module defines (`@ntsCall`).
+fn promise_method(out: &mut String, start: &Function, finish: &Function) {
+    let Some((_, name)) = &start.method else { return };
+    let mut parameters = start.parameters.iter();
+    let Some((_, instance)) = parameters.next() else { return };
+    let rest: Vec<String> = parameters
+        .take(start.parameters.len().saturating_sub(2))
+        .map(|(name, mapped)| parameter(start, name, &mapped.ts))
+        .collect();
+    let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
+    let _ = writeln!(out, "    /**\n     * @ntsCall {}_promise\n     */", start.symbol);
+    let _ = writeln!(out, "    {name}({this}): Promise<{}>;", finish.result.ts);
 }
 
 /// One parameter as TypeScript writes it: the `@ntsThrows` one optional, so a
@@ -153,26 +263,41 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "// Generated by `{command}`. Edit the command, not this file.");
     out.push_str("//\n// The values that go with the declarations in the module of the same name.\n");
+    // One import line per module, merged, since the checker lives in
+    // `GObject-2.0` and so do that module's own classes.
+    let mut imports: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
     if !binding.casts.is_empty() {
-        // One import line per module, merged, since the checker lives in
-        // `GObject-2.0` and so do that module's own classes.
-        let mut imports: std::collections::BTreeMap<&str, Vec<String>> = std::collections::BTreeMap::new();
-        let objects = "c:GObject-2.0";
-        imports.entry(objects).or_default().extend([
+        imports.entry("c:GObject-2.0".to_owned()).or_default().extend([
             "g_type_check_instance_is_a".to_owned(),
             "type GTypeInstance".to_owned(),
         ]);
-        let own = imports.entry(binding.module.as_str()).or_default();
+        let own = imports.entry(binding.module.clone()).or_default();
         for cast in &binding.casts {
             own.push(cast.get_type.clone());
             own.push(format!("type {}", cast.class));
         }
-        out.push_str("\nimport { unsafeDowncast } from \"c:memory\";\n");
-        for (module, mut names) in imports {
-            names.sort();
-            names.dedup();
-            let _ = writeln!(out, "import {{ {} }} from \"{module}\";", names.join(", "));
+    }
+    let promises = promise_forms(binding);
+    for (start, finish) in &promises {
+        let own = imports.entry(binding.module.clone()).or_default();
+        own.push(start.symbol.clone());
+        own.push(finish.symbol.clone());
+        let spellings = start.parameters.iter().map(|(_, mapped)| mapped.ts.as_str()).chain([finish.result.ts.as_str()]);
+        for name in spellings.flat_map(|ts| ts.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))) {
+            if let Some(module) = module_of_type(binding, name) {
+                imports.entry(module).or_default().push(format!("type {name}"));
+            }
         }
+    }
+    if !binding.casts.is_empty() {
+        out.push_str("\nimport { unsafeDowncast } from \"c:memory\";\n");
+    } else if !imports.is_empty() {
+        out.push('\n');
+    }
+    for (module, mut names) in imports {
+        names.sort();
+        names.dedup();
+        let _ = writeln!(out, "import {{ {} }} from \"{module}\";", names.join(", "));
     }
     for decl in &binding.enums {
         let _ = writeln!(out, "\nexport const enum {} {{", decl.name);
@@ -202,5 +327,49 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             get_type = cast.get_type,
         );
     }
+    for (start, finish) in &promises {
+        promise_wrapper(&mut out, start, finish);
+    }
     out
+}
+
+/// Where a type name a spelling uses is declared: this module, the module it
+/// was imported from, or `c:types` for a brand. `None` for anything else --
+/// `string`, `null`, a keyword.
+fn module_of_type(binding: &Binding, name: &str) -> Option<String> {
+    if binding.types.iter().any(|decl| matches!(decl, super::map::TypeDecl::Class { name: n, .. } if n == name)) {
+        return Some(binding.module.clone());
+    }
+    if let Some((module, _)) = binding.imports.iter().find(|(_, names)| names.contains(name)) {
+        return Some(module.clone());
+    }
+    binding.brands.contains(name).then(|| "c:types".to_owned())
+}
+
+/// `start` as a Promise, settled by `finish`: what `finish` returns, or the
+/// `GError` it reports, thrown there and rejected here. The method overload
+/// `promise_method` declares is bodied by this (`@ntsCall`).
+fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
+    let taken = &start.parameters[..start.parameters.len().saturating_sub(1)];
+    let Some((instance, _)) = taken.first() else { return };
+    let declared = taken.iter().map(|(name, mapped)| format!("{name}: {}", mapped.ts)).collect::<Vec<_>>().join(", ");
+    let passed = taken.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>().join(", ");
+    let _ = writeln!(
+        out,
+        "\n/** `{start}` as a Promise, settled by `{finish}`. */\n\
+         export function {start}_promise({declared}): Promise<{result}> {{\n\
+         \x20 return new Promise((nts_resolve, nts_reject) => {{\n\
+         \x20   {start}({passed}, (_source, nts_result) => {{\n\
+         \x20     try {{\n\
+         \x20       nts_resolve({finish}({instance}, nts_result));\n\
+         \x20     }} catch (nts_error) {{\n\
+         \x20       nts_reject(nts_error);\n\
+         \x20     }}\n\
+         \x20   }});\n\
+         \x20 }});\n\
+         }}",
+        start = start.symbol,
+        finish = finish.symbol,
+        result = finish.result.ts,
+    );
 }
