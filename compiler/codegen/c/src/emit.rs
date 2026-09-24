@@ -4664,6 +4664,13 @@ fn emit_op(
         // Enough digits to round-trip an f64 exactly. Fewer would change the
         // program's arithmetic.
         OpKind::ConstFloat(v) => format!("{name} = {};", float_literal(*v)),
+        // The size is this target's, so it is resolved here and not in HIR.
+        OpKind::NativeSizeOf(storage) => {
+            let shape = nts_core::hir::layout::native_shape(storage).ok_or_else(|| {
+                Diagnostic::error("NTS2006", "sizeof needs a complete native layout", op.origin.location)
+            })?;
+            format!("{name} = {};", float_literal(f64::from(shape.size)))
+        }
         OpKind::StringUnitAt {
             string,
             index,

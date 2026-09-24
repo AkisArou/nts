@@ -764,6 +764,15 @@ pub enum OpKind {
     NativeStore { pointer: ValueId, index: ValueId, value: ValueId },
     /// Fixed function-local zeroed storage. Count is positive and layout checked.
     NativeLocal { count: u32 },
+    /// `sizeof<T>()`: the byte size of native storage, as a `number`.
+    ///
+    /// **An op and not a constant, because the size is the target's.** A
+    /// `long` is 8 bytes under LP64 and 4 under Windows' LLP64, so a layout
+    /// holding one has two sizes, and HIR is shared by every target a program
+    /// is built for. Folded to a constant during lowering, one target's answer
+    /// was written into every target's program. Each backend resolves this from
+    /// its own target and emits a literal, exactly as it already places fields.
+    NativeSizeOf(native::Pointee),
     /// Byte count is a TS number, checked before conversion/allocation. Failure is null.
     NativeMalloc { bytes: ValueId },
     NativeFree { pointer: ValueId },

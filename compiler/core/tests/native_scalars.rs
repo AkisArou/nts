@@ -322,6 +322,36 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
     assert!(prepared.program.funcs.iter().any(|f| f.name == "heap"));
 }
 
+/// Two sizes in one function stay two sizes.
+///
+/// `NativeSizeOf` has no operands and no effect, which is the shape a pass
+/// deduplicating by `OpKind` is entitled to merge. Its identity is its storage,
+/// so a merge that ignored the payload would answer both with one struct's
+/// size -- a wrong number, not a crash.
+#[test]
+fn sizes_of_two_structs_in_one_function_are_not_merged() {
+    let Some(snapshot) = snapshot("two-sizes", r#"
+        import { sizeof } from "c:memory";
+        import type { Struct } from "c:types";
+        type One = Struct<{ a: c_int }, "one">;
+        type Three = Struct<{ a: c_int; b: c_int; c: c_int }, "three">;
+        export function run(): number { return sizeof<One>() * 100 + sizeof<Three>(); }
+    "#) else { return; };
+    let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let run = prepared.program.funcs.iter().find(|f| f.name == "run").unwrap();
+    let sizes: Vec<u32> = run
+        .blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .filter_map(|value| match &run.values[value.0 as usize].kind {
+            hir::OpKind::NativeSizeOf(storage) => hir::layout::native_shape(storage).map(|s| s.size),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(sizes, [4, 12], "the two sizes did not both survive preparation");
+}
+
 #[test]
 fn local_addresses_cannot_outlive_or_free_their_storage() {
     for (name, body, reason) in [

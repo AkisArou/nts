@@ -2346,6 +2346,8 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     match &op.kind {
         OpKind::NativeLoad { pointer, index: offset } => format!("%{index} = native.load %{}[%{}] : {ty}", pointer.0, offset.0),
         OpKind::NativeLocal { count } => format!("%{index} = native.local {count} : {ty}"),
+        // The storage and not a byte count: the count is the target's.
+        OpKind::NativeSizeOf(storage) => format!("%{index} = native.sizeof {} : {ty}", storage.c_type()),
         OpKind::NativeMalloc { bytes } => format!("%{index} = native.malloc %{} : {ty}", bytes.0),
         OpKind::NativeFree { pointer } => format!("native.free %{}", pointer.0),
         OpKind::NativeCopy { destination, source } => {

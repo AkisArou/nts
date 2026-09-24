@@ -2026,6 +2026,13 @@ fn operation(program: &Program, func: &Func, value: ValueId) -> Result<String, D
             // than speed.
             format!("{out} = fsub double {}, 0.0", float_literal(*number))
         }
+        // The size is this target's, so it is resolved here and not in HIR,
+        // and spelled as the constant it is.
+        OpKind::NativeSizeOf(storage) => {
+            let shape = nts_core::hir::layout::native_shape(storage)
+                .ok_or_else(|| refuse(func, "sizeof needs a complete native layout"))?;
+            format!("{out} = fsub double {}, 0.0", float_literal(f64::from(shape.size)))
+        }
         OpKind::ConstInt(number) => {
             let ty = ty_of(&op.ty, func)?;
             format!("{out} = add {ty} 0, {number}")

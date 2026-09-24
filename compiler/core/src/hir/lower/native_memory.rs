@@ -304,8 +304,10 @@ impl FuncBuilder<'_> {
                 .ok_or_else(|| self.unsupported(id, "sizeof needs one explicit native type argument"))?;
             let ty = *self.snapshot.node_types.get(&type_node).ok_or_else(|| self.unsupported(id, "sizeof type has no semantic type"))?;
             let storage = crate::hir::native::storage(self.snapshot, ty).ok_or_else(|| self.unsupported(id, "sizeof needs a complete native storage type"))?;
-            let shape = crate::hir::layout::native_shape(&storage).ok_or_else(|| self.unsupported(id, "sizeof needs a complete native layout"))?;
-            return Ok(self.push(OpKind::ConstFloat(f64::from(shape.size)), HirType::NUMBER, self.origin(id)));
+            if crate::hir::layout::native_shape(&storage).is_none() {
+                return Err(self.unsupported(id, "sizeof needs a complete native layout"));
+            }
+            return Ok(self.push(OpKind::NativeSizeOf(storage), HirType::NUMBER, self.origin(id)));
         }
         if operation == "copy" {
             let [destination, source] = args else {

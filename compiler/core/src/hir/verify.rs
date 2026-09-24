@@ -631,6 +631,8 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
             OpKind::NativeMalloc { bytes } => func.value(*bytes).ty == HirType::NUMBER
                 && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p).is_some()),
             OpKind::NativeFree { pointer } => op.ty == HirType::Void && matches!(func.value(*pointer).ty, HirType::NativePointer(_)),
+            // Each backend resolves the size, so each may rely on a layout.
+            OpKind::NativeSizeOf(storage) => op.ty == HirType::NUMBER && super::layout::native_shape(storage).is_some(),
             _ => true,
         };
         if !valid { problems.push(Invalid::OperandType { func: func.name.clone(), op: "native storage", found: op.ty.clone() }); }
@@ -1349,7 +1351,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         }
         OpKind::FieldGet { object, .. } => vec![*object],
         OpKind::FieldSet { object, value, .. } => vec![*object, *value],
-        OpKind::NativeLocal { .. } => vec![],
+        OpKind::NativeLocal { .. } | OpKind::NativeSizeOf(_) => vec![],
         OpKind::NativeBridge { closure, .. } => vec![*closure],
         OpKind::NativeBlock { invoke, context, .. } => vec![*invoke, *context],
         OpKind::NativeMalloc { bytes } => vec![*bytes],

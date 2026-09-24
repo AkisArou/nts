@@ -116,6 +116,8 @@ fn has_effects(kind: &OpKind) -> bool {
         // A fixed local has no allocator call or observable effect without a
         // use of its address. Dropping it also drops its zero initialization.
         OpKind::NativeLocal { .. } => false,
+        // A size is a constant the backend spells.
+        OpKind::NativeSizeOf(_) => false,
         // Erasing, reading a tag and unerasing are all pure: they read one
         // value and produce another. Dead ones go, like any other computation.
         OpKind::Erase { .. } | OpKind::TagOf { .. } | OpKind::Unerase { .. } => false,
