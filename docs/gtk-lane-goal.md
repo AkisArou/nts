@@ -266,10 +266,28 @@ along the chain.
 Cost, measured on gtk-gir's pre-M3 program with both binaries: 2.37 s ->
 2.66 s to build, the same 140 MB peak, `Gtk-4.0.d.ts` 513 KB -> 962 KB.
 
+**Errors thrown.** A function that reports failure through `GError **`
+declares that parameter optional and `@ntsThrows error
+nts_gerror_take_message`. Pass a slot and read the error yourself, as at the
+C level; leave it out and the compiler supplies a zeroed one, and after the
+call -- once everything lent is given back -- a reported error is thrown as an
+`Error` carrying its message:
+
+```ts
+try {
+  keys.get_integer("a", "absent");
+} catch (e) {
+  // Key file does not have key "absent" in group "a"
+}
+```
+
+The compiler knows nothing of GLib: the converter the tag names takes the
+error and answers a `malloc`'d message, and GLib's is four lines in the GLib
+host (`nts_gerror_take_message`). Checked on C and LLVM under both providers
+with a fake error API and its own converter.
+
 **Next in M3:**
 
-- Errors thrown: a method whose C function reports through `GError **` throws
-  an `Error` carrying the `GError`'s message instead of taking the slot.
 - Async methods as Promises: `await file.query_info("standard::type")`,
   from the `_async`/`_finish` pair.
 - Typed `connect`: `button.connect("clicked", handler)`.

@@ -8,6 +8,9 @@
 #include "nts_uv_host.h"
 
 #include <glib.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* The source, and the poll record for libuv's descriptor inside it. */
 typedef struct {
@@ -65,6 +68,20 @@ void nts_glib_host_attach(void) {
   g_source_set_name(source, "nts libuv");
   g_source_attach(source, NULL);
   nts_glib_source = self;
+}
+
+char *nts_gerror_take_message(struct _GError *error) {
+  GError *reported = error;
+  const char *text = reported->message != NULL ? reported->message : "unknown GLib error";
+  size_t length = strlen(text);
+  char *message = malloc(length + 1);
+  if (message == NULL) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  memcpy(message, text, length + 1);
+  g_error_free(reported);
+  return message;
 }
 
 void nts_glib_host_detach(void) {

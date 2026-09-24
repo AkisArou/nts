@@ -2332,3 +2332,80 @@ export function run(): number {
         }
     }
 }
+
+/// A C API that reports failure through an out-parameter, `GLib`'s way, with a
+/// converter that takes the error and answers its message.
+const THROWS_LIBRARY: &str = r#"
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+typedef struct _Err { int code; char *message; } Err;
+static char *copy(const char *text) { char *out = malloc(strlen(text) + 1); strcpy(out, text); return out; }
+int parse_number(const char *text, Err **error) {
+    int value = 0;
+    for (const char *p = text; *p; p++) {
+        if (!isdigit((unsigned char)*p)) {
+            if (error) {
+                *error = malloc(sizeof **error);
+                (*error)->code = 1;
+                (*error)->message = malloc(strlen(text) + 16);
+                strcpy((*error)->message, "not a number: ");
+                strcat((*error)->message, text);
+            }
+            return -1;
+        }
+        value = value * 10 + (*p - '0');
+    }
+    return value;
+}
+char *err_take_message(Err *error) {
+    char *message = copy(error->message);
+    free(error->message);
+    free(error);
+    return message;
+}
+"#;
+
+/// `@ntsThrows`: a failure C reports through `Err **error` is thrown as an
+/// `Error` carrying the message the declaration's converter makes of it --
+/// `GLib`'s `GError **`, with `nts_gerror_take_message`, in `bind-gir`'s
+/// output -- when the caller leaves the parameter out.
+///
+/// Three arms: a call that succeeds and throws nothing; one that fails, caught
+/// with the converter's message; and one whose caller passes its own slot,
+/// which is theirs to read and throws nothing. Under reference counting the
+/// thrown `Error`s are collected: fifty more runs leave nothing alive.
+#[test]
+fn a_reported_c_error_is_thrown_on_both_backends() {
+    let source = r#"
+import type { Class, Ptr, c_int } from "c:types";
+import { local } from "c:memory";
+type Err = Class<"_Err">;
+/**
+ * @ntsNoEscape error
+ * @ntsThrows error err_take_message
+ */
+declare function parse_number(text: string, error?: Ptr<Err | null> | null): c_int;
+export function run(): number {
+    let total = parse_number("12") as number;
+    try {
+        parse_number("x1");
+        total += 100000;
+    } catch (e) {
+        total += (e as Error).message.length * 100;
+    }
+    const slot = local<Err | null>();
+    parse_number("zz", slot);
+    return total + (slot[0] !== null ? 5 : 0);
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((_, outputs)) = run_on_both_backends("throws", source, provider, THROWS_LIBRARY, &caller) else { return; };
+        // 12, then "not a number: x1" (16) caught, then the caller's own slot
+        // written and nothing thrown.
+        for output in outputs {
+            assert_eq!(output, expect("1617", provider), "{provider:?}");
+        }
+    }
+}

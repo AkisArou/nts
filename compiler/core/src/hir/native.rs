@@ -124,6 +124,12 @@ pub enum Role {
     /// count is `0` -- `(NULL, 0)` being the one pair that describes no array,
     /// and `GLib`'s documented `g_application_run(app, 0, NULL)`.
     Length { array: usize, nullable: bool },
+    /// Where C reports a failure -- `GError **error` -- declared `@ntsThrows`.
+    /// A caller that passes a slot reads the error itself; one that leaves the
+    /// parameter out gets a zeroed slot of the compiler's, and a failure C
+    /// reports there is thrown as an `Error` carrying the message `converter`
+    /// makes of it.
+    ErrorSlot { converter: String },
 }
 
 impl Function {
@@ -139,7 +145,12 @@ impl Function {
         self.roles.iter().enumerate().map(move |(at, role)| {
             let fed = match role {
                 Role::ClosureData | Role::ClosureNotify | Role::Length { .. } => None,
-                Role::Plain | Role::String | Role::Closure { .. } | Role::Strings | Role::Bytes => {
+                Role::Plain
+                | Role::String
+                | Role::Closure { .. }
+                | Role::Strings
+                | Role::Bytes
+                | Role::ErrorSlot { .. } => {
                     ts += 1;
                     Some(ts - 1)
                 }
@@ -985,34 +996,17 @@ impl Function {
                 .all(|(a, b)| a.same_abi(b))
     }
 
+    /// `throws` is `@ntsThrows`: the parameter that is the error slot, and the
+    /// function that turns an error into its message.
     pub fn from_signature(
         snapshot: &SemanticSnapshot,
         name: String,
         signature: &nts_semantic_schema::SignatureRecord,
         abi: Option<&str>,
+        throws: Option<(&str, &str)>,
     ) -> Result<Self, String> {
         let abi_type = |ty| {
-            if abi == Some("managed") {
-                match super::lower::representation(snapshot, ty)? {
-                    HirType::Void => Some(Type::Void),
-                    HirType::Bool => Some(Type::Bool),
-                    HirType::Float { bits: 64 } => Some(Type::Scalar(Scalar::Double)),
-                    HirType::Managed(ManagedType::Object(_))
-                        if matches!(
-                            snapshot.types.get(ty.0 as usize)?.kind,
-                            TypeKind::Tuple(_)
-                        ) =>
-                    {
-                        None
-                    }
-                    HirType::Managed(ty) => Some(Type::Managed(ty)),
-                    HirType::Erased => Some(Type::Erased),
-                    HirType::BigInt => Some(Type::BigInt),
-                    _ => None,
-                }
-            } else {
-                abi_type(snapshot, ty)
-            }
+            if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
         };
         if let Some(abi) = abi
             && abi != "managed"
@@ -1033,6 +1027,16 @@ impl Function {
         let mut roles = Vec::with_capacity(signature.parameters.len());
         let mut variadic = None;
         for (at, parameter) in signature.parameters.iter().enumerate() {
+            // The error slot, the one parameter a caller may leave out: C
+            // reports through it, and the compiler supplies one when omitted.
+            if let Some((slot, converter)) = throws
+                && parameter.name == slot
+            {
+                let (ty, role) = error_slot(snapshot, &name, parameter, converter)?;
+                parameters.push(ty);
+                roles.push(role);
+                continue;
+            }
             if parameter.optional {
                 return Err(format!("foreign function `{name}` with an optional parameter"));
             }
@@ -1065,17 +1069,10 @@ impl Function {
         }
         let returns_string = if abi.is_none() { returned_string(snapshot, signature.return_type) } else { None };
         let returned_array = if abi.is_none() { returned_strings(snapshot, signature.return_type) } else { None };
-        let result = if returned_array.is_some() {
-            // Borrowed until `@ntsFree` says otherwise, which makes it
-            // `char **`: the rule a returned `string` follows, and GLib's own
-            // spelling of both.
-            let char = Pointee::Scalar(Scalar::Char);
-            Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char)))))))
-        } else if returns_string.is_some() {
-            Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))))
-        } else {
-            abi_type(signature.return_type)
-                .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, string, or void"))?
+        let result = match returned_text(returned_array.is_some(), returns_string.is_some()) {
+            Some(text) => text,
+            None => abi_type(signature.return_type)
+                .ok_or_else(|| format!("foreign function `{name}` return without a native ABI type; use a c_int/c_double brand, boolean, string, or void"))?,
         };
         Ok(Self {
             name,
@@ -1403,6 +1400,70 @@ fn array_slots(
     } else {
         vec![(length, Role::Length { array: at + 1, nullable: array.nullable }), (array.c.clone(), array.role.clone())]
     })
+}
+
+/// A type under `@ntsAbi managed`, which passes the managed value itself.
+fn managed_abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+    match super::lower::representation(snapshot, ty)? {
+        HirType::Void => Some(Type::Void),
+        HirType::Bool => Some(Type::Bool),
+        HirType::Float { bits: 64 } => Some(Type::Scalar(Scalar::Double)),
+        HirType::Managed(ManagedType::Object(_))
+            if matches!(snapshot.types.get(ty.0 as usize)?.kind, TypeKind::Tuple(_)) =>
+        {
+            None
+        }
+        HirType::Managed(ty) => Some(Type::Managed(ty)),
+        HirType::Erased => Some(Type::Erased),
+        HirType::BigInt => Some(Type::BigInt),
+        _ => None,
+    }
+}
+
+/// The C result a returned `string[]` or `string` is read from: borrowed
+/// until `@ntsFree` says otherwise, which makes it `char **` / `char *` --
+/// the rule both follow, and `GLib`'s own spelling of both.
+fn returned_text(array: bool, string: bool) -> Option<Type> {
+    let char = Pointee::Scalar(Scalar::Char);
+    if array {
+        Some(Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))))
+    } else if string {
+        Some(Type::Pointer(Pointee::Const(Box::new(char))))
+    } else {
+        None
+    }
+}
+
+/// The `@ntsThrows` parameter: C's `E **error`, and the converter that makes
+/// a reported error its message.
+///
+/// Optional, so its type is `T | undefined` -- and `T` is `Ptr<E | null> |
+/// null`. The pointer-to-pointer member is the slot; the absent ones all mean
+/// "no slot", which is what leaving it out says.
+fn error_slot(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    parameter: &nts_semantic_schema::ParameterRecord,
+    converter: &str,
+) -> Result<(Type, Role), String> {
+    let members = match snapshot.types.get(parameter.ty.0 as usize).map(|record| &record.kind) {
+        Some(TypeKind::Union(parts)) => parts.clone(),
+        _ => vec![parameter.ty],
+    };
+    let Some(ty) = members
+        .into_iter()
+        .filter_map(|member| abi_type(snapshot, member))
+        .find(|ty| matches!(ty, Type::Pointer(Pointee::Pointer(_))))
+    else {
+        return Err(format!(
+            "foreign function `{name}` @ntsThrows parameter `{}` that is not a pointer to a pointer",
+            parameter.name
+        ));
+    };
+    if !is_c_identifier(converter) {
+        return Err(format!("foreign function `{name}` @ntsThrows converter `{converter}` that is not a C function name"));
+    }
+    Ok((ty, Role::ErrorSlot { converter: converter.to_owned() }))
 }
 
 /// The parameters only the C convention has, each a type TypeScript spells

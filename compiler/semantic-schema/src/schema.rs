@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 18;
+pub const SCHEMA_VERSION: u32 = 19;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -711,6 +711,12 @@ pub struct NativeAttributes {
     /// when its TypeScript name is another. Several typed views of one C
     /// function -- one per signal of a `GObject` -- each need a name of their own.
     pub symbol: Option<String>,
+    /// `@ntsThrows error nts_gerror_take_message`: the parameter C reports a
+    /// failure through (`GError **error`), which a caller may leave out to have
+    /// the failure thrown, and the function that turns a reported error into
+    /// its message.
+    #[serde(default)]
+    pub throws: Option<String>,
 }
 
 /// Why a snapshot was rejected.

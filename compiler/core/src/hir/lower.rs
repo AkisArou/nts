@@ -11184,7 +11184,7 @@ static NO_FOREIGN: std::sync::OnceLock<
 
 /// Something lent to a native call for its duration, given back once the call
 /// returns.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Lent {
     /// A C string, beside the string it was made from.
     String { string: ValueId, pointer: ValueId },
@@ -11193,6 +11193,9 @@ enum Lent {
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
     /// view must outlive the call.
     View { view: ValueId },
+    /// The compiler's own error slot, for an `@ntsThrows` parameter the caller
+    /// left out: read after the call, and a failure reported there thrown.
+    Error { slot: ValueId, converter: String },
     /// A closure's context, for a `ScopedClosure`.
     Closure { context: ValueId },
 }
@@ -14373,6 +14376,18 @@ impl<'a> FuncBuilder<'a> {
         if in_c && let Some(argument) = super::native::native_array_argument(self.snapshot, ty) {
             return Some(argument);
         }
+        // An optional C pointer -- `error?: Ptr<GError | null> | null`, an
+        // `@ntsThrows` slot -- is the pointer: absent is NULL, as `null` is.
+        if in_c
+            && let Some(TypeKind::Union(members)) = self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
+            && members.iter().any(|member| matches!(self.snapshot.types.get(member.0 as usize).map(|r| &r.kind), Some(TypeKind::Undefined)))
+            && let Some(pointer) = members.iter().find_map(|member| match self.represent(*member) {
+                Some(pointer @ HirType::NativePointer(_)) => Some(pointer),
+                _ => None,
+            })
+        {
+            return Some(pointer);
+        }
         self.represent(ty)
     }
 
@@ -16574,6 +16589,10 @@ impl<'a> FuncBuilder<'a> {
         match self.parameter_representation(call, at) {
             Some(HirType::Erased) => Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin)),
             Some(ty) if ty.is_managed() => Ok(self.push(OpKind::ConstUndefined, ty, origin)),
+            // C's absence. Reached only by an `@ntsThrows` slot -- every other
+            // optional native parameter is refused -- whose lowering asks
+            // whether the argument was written, not what this is.
+            Some(ty @ HirType::NativePointer(_)) => Ok(self.push(OpKind::ConstNull, ty, origin)),
             _ => Err(self.unsupported(
                 call,
                 "an omitted argument for a parameter with nowhere to put `undefined`",
@@ -39021,8 +39040,121 @@ impl<'a> FuncBuilder<'a> {
             Some((target, string)) => self.read_native_string(id, call, &target, &string)?,
             None => call,
         };
+        let errors: Vec<(ValueId, String)> = lent
+            .iter()
+            .filter_map(|lent| match lent {
+                Lent::Error { slot, converter } => Some((*slot, converter.clone())),
+                _ => None,
+            })
+            .collect();
         self.give_back(id, lent);
+        // Last, so that a throw leaves nothing lent behind it.
+        for (slot, converter) in errors {
+            self.throw_if_reported(id, slot, &converter)?;
+        }
         Ok(value)
+    }
+
+    /// `nts_closure_unlend`, as the destroy function's type the binding
+    /// states. `GLib`'s `GClosureNotify` takes the `GClosure` second, and the
+    /// release ignores it -- which is `GLib`'s own `(GClosureNotify) g_free`.
+    fn closure_notify(&mut self, want: HirType, origin: &Origin) -> ValueId {
+        let released = super::native::Type::FnPointer(std::sync::Arc::new(super::native::FnPointer::spell(
+            vec![super::native::Type::Pointer(super::native::Pointee::Void)],
+            super::native::Type::Void,
+        )))
+        .representation();
+        let notify = self.runtime_call("nts_closure_notify", Vec::new(), released.clone(), origin.clone());
+        if released == want { notify } else { self.push(OpKind::Convert(notify), want, origin.clone()) }
+    }
+
+    /// The value an `@ntsThrows` parameter receives: the caller's own slot
+    /// where one was written, and otherwise a zeroed local of ours, recorded
+    /// so that `finish_call` checks it.
+    fn error_slot(
+        &mut self,
+        written: Option<ValueId>,
+        ty: HirType,
+        converter: String,
+        lent: &mut Vec<Lent>,
+        origin: &Origin,
+    ) -> ValueId {
+        if let Some(written) = written {
+            return written;
+        }
+        let slot = self.push(OpKind::NativeLocal { count: 1 }, ty, origin.clone());
+        lent.push(Lent::Error { slot, converter });
+        slot
+    }
+
+    /// After a call that reports failure through `slot` (`@ntsThrows`): if C
+    /// wrote an error there, throw an `Error` whose message is what
+    /// `converter` makes of it. The converter takes the error -- it frees it --
+    /// and answers a `malloc`'d message, which is copied and freed here:
+    /// `nts_gerror_take_message` for `GLib`'s `GError`.
+    fn throw_if_reported(&mut self, id: NodeId, slot: ValueId, converter: &str) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let HirType::NativePointer(super::native::Pointee::Pointer(error)) = self.values[slot.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "an @ntsThrows slot that is not a pointer to a pointer"));
+        };
+        let error_ty = HirType::NativePointer((*error).clone());
+        let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let reported = self.push(OpKind::NativeLoad { pointer: slot, index: first }, error_ty.clone(), origin.clone());
+        let none = self.push(OpKind::ConstNull, error_ty, origin.clone());
+        let failed = self.push(OpKind::Binary { op: BinOp::Ne, lhs: reported, rhs: none }, HirType::Bool, origin.clone());
+        let raise = self.new_block();
+        let after = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: failed,
+            then_target: raise,
+            then_args: Vec::new(),
+            else_target: after,
+            else_args: Vec::new(),
+        });
+        self.switch_to(raise);
+        let convert = std::sync::Arc::new(super::native::Function {
+            name: converter.to_owned(),
+            convention: super::native::Convention::C,
+            parameters: vec![super::native::Type::Pointer((*error).clone())],
+            result: super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char)),
+            retention: vec![super::native::Retention::Unknown],
+            variadic: None,
+            // Not the library's own header: the converter is the program's
+            // (GLib's lives in the GLib host), so there is nothing to check
+            // its prototype against.
+            declared_at: None,
+            roles: vec![super::native::Role::Plain],
+            returns_string: None,
+        });
+        let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
+        let message = self.push(
+            OpKind::Call { callee: Callee::Native(convert), args: vec![reported], frame: None },
+            char_pointer.representation(),
+            origin.clone(),
+        );
+        // Copied into the `Error`'s message, then C's freed. Not through
+        // `read_native_string`, which types its copy as the *call's* result.
+        let text = self.runtime_call(
+            "nts_string_from_required_cstring",
+            vec![message],
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        let release = std::sync::Arc::new(super::native::Function {
+            name: "free".to_owned(),
+            convention: super::native::Convention::C,
+            parameters: vec![super::native::Type::Pointer(super::native::Pointee::Void)],
+            result: super::native::Type::Void,
+            retention: vec![super::native::Retention::Unknown],
+            variadic: None,
+            declared_at: None,
+            roles: vec![super::native::Role::Plain],
+            returns_string: None,
+        });
+        self.push(OpKind::Call { callee: Callee::Native(release), args: vec![message], frame: None }, HirType::Void, origin);
+        self.throw_provided_error_text(id, "Error", text)?;
+        self.switch_to(after);
+        Ok(())
     }
 
     /// The method a binding declares on a C handle, when the call at `id`
@@ -39148,6 +39280,8 @@ impl<'a> FuncBuilder<'a> {
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
+                // Checked by `finish_call`, after everything else is given back.
+                Lent::Error { .. } => {}
             }
         }
     }
@@ -39294,6 +39428,13 @@ impl<'a> FuncBuilder<'a> {
             let argument = fed.and_then(|ts| args.get(ts).copied());
             match role {
                 Role::Plain => c_args.extend(argument),
+                // A slot the caller passed is theirs to read; one they left out
+                // is a zeroed local of ours, checked after the call.
+                Role::ErrorSlot { converter } => {
+                    let written = fed.is_some_and(|ts| ts < arguments.len());
+                    let ty = target.parameters[at].representation();
+                    c_args.push(self.error_slot(argument.filter(|_| written), ty, converter, &mut lent, &origin));
+                }
                 Role::Strings => {
                     let Some(array) = argument else { continue };
                     let pointer = self.runtime_call(
@@ -39358,19 +39499,8 @@ impl<'a> FuncBuilder<'a> {
                     c_args.push(context);
                 }
                 Role::ClosureNotify => {
-                    // `nts_closure_unlend`, as the destroy function's type the
-                    // binding states. GLib's `GClosureNotify` takes the
-                    // `GClosure` second, and the release ignores it -- which is
-                    // GLib's own `(GClosureNotify) g_free`.
-                    let released = super::native::Type::FnPointer(std::sync::Arc::new(super::native::FnPointer::spell(
-                        vec![super::native::Type::Pointer(super::native::Pointee::Void)],
-                        super::native::Type::Void,
-                    )))
-                    .representation();
-                    let notify = self.runtime_call("nts_closure_notify", Vec::new(), released.clone(), origin.clone());
                     let want = target.parameters[at].representation();
-                    let notify = if released == want { notify } else { self.push(OpKind::Convert(notify), want, origin.clone()) };
-                    c_args.push(notify);
+                    c_args.push(self.closure_notify(want, &origin));
                 }
             }
         }
@@ -39494,8 +39624,23 @@ impl<'a> FuncBuilder<'a> {
         if abi == Some("intrinsic") {
             return Ok(Callee::External(name));
         }
-        let mut native = super::native::Function::from_signature(self.snapshot, name, signature, abi)
-            .map_err(|why| self.unsupported(call, &why))?;
+        // `@ntsThrows error convert`: the slot parameter and the converter.
+        let throws = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.throws.clone());
+        let throws = match throws.as_deref().map(str::split_whitespace).map(Iterator::collect::<Vec<_>>) {
+            None => None,
+            Some(words) => match words.as_slice() {
+                [slot, converter] => Some(((*slot).to_owned(), (*converter).to_owned())),
+                _ => return Err(self.unsupported(call, "@ntsThrows names the error parameter and its converter, as in `@ntsThrows error nts_gerror_take_message`")),
+            },
+        };
+        let mut native = super::native::Function::from_signature(
+            self.snapshot,
+            name,
+            signature,
+            abi,
+            throws.as_ref().map(|(slot, converter)| (slot.as_str(), converter.as_str())),
+        )
+        .map_err(|why| self.unsupported(call, &why))?;
         // The module whose `@ntsHeader` covers this declaration, recorded where
         // the declaration node is still in hand. `collect_native_headers` reads
         // it, so a program carries the headers it reaches rather than every one

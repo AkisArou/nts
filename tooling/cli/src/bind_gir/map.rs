@@ -83,6 +83,9 @@ pub(crate) struct Function {
     /// also written as `method(this: Class, ...)` on that class's methods, so
     /// `button.set_label(text)` calls it.
     pub(crate) method: Option<(String, String)>,
+    /// `@ntsThrows`: the parameter GIR's `throws` adds, written optional so a
+    /// caller that leaves it out has the failure thrown.
+    pub(crate) throws: Option<String>,
 }
 
 #[derive(Debug)]
@@ -375,6 +378,7 @@ impl<'a> Mapper<'a> {
                     no_escape: Vec::new(),
                     returns: None,
                     method: None,
+                    throws: None,
                 });
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
@@ -539,6 +543,7 @@ impl<'a> Mapper<'a> {
             no_escape.push("error".to_owned());
             parameters.push(("error".to_owned(), error));
         }
+        let throws = signature.throws.then(|| "error".to_owned());
         let returns = (callable.kind == CallableKind::Constructor)
             .then(|| match &signature.result.ty {
                 TypeRef::Named { name, .. } => Some(self.qualify(name)),
@@ -566,6 +571,7 @@ impl<'a> Mapper<'a> {
             no_escape,
             returns,
             method,
+            throws,
         })
     }
 
@@ -948,6 +954,7 @@ impl<'a> Mapper<'a> {
             no_escape: Vec::new(),
             returns: None,
             method: None,
+            throws: None,
         })
     }
 

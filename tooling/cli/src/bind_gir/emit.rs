@@ -73,7 +73,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         let parameters = function
             .parameters
             .iter()
-            .map(|(name, mapped)| format!("{name}: {}", mapped.ts))
+            .map(|(name, mapped)| parameter(function, name, &mapped.ts))
             .collect::<Vec<_>>()
             .join(", ");
         let _ = writeln!(
@@ -92,9 +92,16 @@ fn method(out: &mut String, function: &Function) {
     let mut parameters = function.parameters.iter();
     let Some((_, instance)) = parameters.next() else { return };
     notes(out, function, true, "    ");
-    let rest: Vec<String> = parameters.map(|(name, mapped)| format!("{name}: {}", mapped.ts)).collect();
+    let rest: Vec<String> = parameters.map(|(name, mapped)| parameter(function, name, &mapped.ts)).collect();
     let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    {name}({this}): {};", function.result.ts);
+}
+
+/// One parameter as TypeScript writes it: the `@ntsThrows` one optional, so a
+/// caller that leaves it out has the failure thrown.
+fn parameter(function: &Function, name: &str, ts: &str) -> String {
+    let optional = if function.throws.as_deref() == Some(name) { "?" } else { "" };
+    format!("{name}{optional}: {ts}")
 }
 
 /// The tags a declaration carries: one per line, since a tag's value runs to
@@ -115,6 +122,9 @@ fn notes(out: &mut String, function: &Function, symbol: bool, indent: &str) {
     }
     if symbol {
         notes.push(format!("@ntsSymbol {}", function.symbol));
+    }
+    if let Some(slot) = &function.throws {
+        notes.push(format!("@ntsThrows {slot} nts_gerror_take_message"));
     }
     if !notes.is_empty() {
         let _ = writeln!(out, "{indent}/**");

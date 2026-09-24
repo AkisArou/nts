@@ -11,6 +11,8 @@
 //                 a key file loaded and read, and the `GError **` slot beside
 //                 each call was left null
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
+//   thrown        and the same call as a method, with no slot passed, threw an
+//                 `Error` carrying the `GError`'s message instead
 //   split=a|b|c   `g_strsplit` returned a `char **`, copied into a `string[]`
 //                 and released by the binding's `g_strfreev`
 //   sha256=ba7816bf  the bytes "abc", from offset 1 of a larger `Uint8Array`,
@@ -104,6 +106,13 @@ function outParameters(): void {
     gir_log("error-set " + String(missing));
     g_error_free(failure);
     error[0] = null;
+  }
+  // `@ntsThrows`: leave the slot out, and a failure is thrown.
+  try {
+    keys.get_integer("a", "absent");
+    gir_log("not-thrown");
+  } catch (e) {
+    gir_log((e as Error).message.length > 0 ? "thrown" : "thrown-empty");
   }
   g_key_file_unref(keys);
 

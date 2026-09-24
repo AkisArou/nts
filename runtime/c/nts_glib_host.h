@@ -23,4 +23,11 @@ void nts_glib_host_attach(void);
 /* Detach, before `nts_uv_host_shutdown`. */
 void nts_glib_host_detach(void);
 
+/* A `GError` as the message a thrown `Error` carries: a `malloc`'d copy of
+ * `error->message`, and the error freed. The converter `bind-gir` names in
+ * `@ntsThrows error nts_gerror_take_message`: a function that reports failure
+ * through `GError **error`, called without one, throws what this returns. */
+struct _GError;
+char *nts_gerror_take_message(struct _GError *error);
+
 #endif /* NTS_GLIB_HOST_H */
