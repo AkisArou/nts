@@ -414,16 +414,6 @@ export class BroadcastController {
   }
 }
 
-class DrainWaiter {
-  readonly resolve: (canWrite: boolean) => void;
-  readonly reject: (reason?: unknown) => void;
-
-  constructor(resolve: (canWrite: boolean) => void, reject: (reason?: unknown) => void) {
-    this.resolve = resolve;
-    this.reject = reject;
-  }
-}
-
 class PendingBroadcastWrite {
   chunks: ByteBatch | null;
   readonly promise: Promise<void>;
@@ -472,7 +462,20 @@ class PendingBroadcastWrite {
 export class BroadcastWriter {
   readonly #broadcast: BroadcastController;
   readonly #pendingWrites = new RingBuffer<PendingBroadcastWrite>();
-  #pendingDrains: DrainWaiter[] = [];
+  /**
+   * The drain **capabilities**, held whole.
+   *
+   * This was a `DrainWaiter[]`, a class whose only job was to hold
+   * `pending.resolve` and `pending.reject` extracted out of a
+   * `Promise.withResolvers()`. Extracting a capability member as a value is
+   * refused -- a settler is a settle with the promise as receiver, not a
+   * function object -- so the class held two things that could not be built.
+   *
+   * A `PromiseWithResolvers<boolean>` has `resolve` and `reject` with the same
+   * signatures, so the consumers below are unchanged and the class was not
+   * replaced, it was **removed**. See `examples/promise-with-resolvers`.
+   */
+  #pendingDrains: PromiseWithResolvers<boolean>[] = [];
   #totalBytes = 0;
   #closed: Promise<number> | null = null;
   #aborted = false;
@@ -490,7 +493,7 @@ export class BroadcastWriter {
     if (canWrite === null) return null;
     if (canWrite) return Promise.resolve(true);
     const pending = Promise.withResolvers<boolean>();
-    this.#pendingDrains.push(new DrainWaiter(pending.resolve, pending.reject));
+    this.#pendingDrains.push(pending);
     return pending.promise;
   }
 
