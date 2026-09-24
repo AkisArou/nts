@@ -4679,9 +4679,7 @@ fn link_c(
     // flag below is a GNU spelling that `ld64.lld` and Apple's `ld` reject as
     // an unknown argument, so the branches say which linker they are talking to.
     let macho = matches!(target.os.as_str(), "macos" | "ios");
-    if addon && macho {
-        refuse_an_apple_addon(name, target)?;
-    }
+    refuse_what_this_linker_cannot(name, target, addon && macho, wrote.objc && !macho)?;
     // An addon needs one header and no library. Asked before anything is
     // compiled, so a missing toolchain is a message rather than forty
     // `node_api.h: No such file` lines.
@@ -4826,6 +4824,7 @@ fn link_c(
             for flag in &needs.libs {
                 command.arg(flag);
             }
+            command.args(objc_link_flags(wrote));
             // The libuv host is a translation unit like any other, so its
             // presence in what was written is the question -- not the product
             // kind, and not a flag somebody remembers.
@@ -4873,6 +4872,46 @@ fn refuse_an_apple_addon(name: &str, target: &nts_build::config::Target) -> Resu
          unresolved-symbol check reads ELF only",
         target.id
     )
+}
+
+/// The two products this linker is refused before anything compiles: a Node
+/// addon for Apple (`refuse_an_apple_addon`), and Objective-C off Apple.
+///
+/// An Objective-C message has a runtime to be sent through, and only Apple's
+/// is linked here. The GNU runtime, `libobjc2`, would answer the same calls, but
+/// nothing in this build finds or tests it, so it is refused by name, not
+/// attempted.
+fn refuse_what_this_linker_cannot(
+    name: &str,
+    target: &nts_build::config::Target,
+    apple_addon: bool,
+    objc_off_apple: bool,
+) -> Result<()> {
+    if apple_addon {
+        refuse_an_apple_addon(name, target)?;
+    }
+    if objc_off_apple {
+        bail!(
+            "product `{name}` sends Objective-C messages (`@ntsSelector`) and targets {}, \
+             which has no Objective-C runtime this build links. Build it for macOS",
+            target.id
+        )
+    }
+    Ok(())
+}
+
+/// `-lobjc` for `objc_msgSend`, and each framework the bindings name. Nothing
+/// for a program that sends no message.
+fn objc_link_flags(wrote: &Wrote) -> Vec<String> {
+    if !wrote.objc {
+        return Vec::new();
+    }
+    let mut flags = vec!["-lobjc".to_owned()];
+    for framework in &wrote.frameworks {
+        flags.push("-framework".to_owned());
+        flags.push(framework.clone());
+    }
+    flags
 }
 
 /// **An archive's index is per format.** GNU `ar` writes a `/` symbol table
@@ -6099,6 +6138,10 @@ struct Wrote {
     sources: Vec<String>,
     /// C symbols the artifact publishes.
     published: Vec<String>,
+    /// Whether the program sends an Objective-C message, and the frameworks
+    /// its bindings name: `-lobjc` and one `-framework` each, at the link.
+    objc: bool,
+    frameworks: Vec<String>,
     /// Whether the program has module-level code to evaluate.
     ///
     /// **A program that is only declarations has nothing to evaluate**, so
@@ -6220,7 +6263,10 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         return Ok(Wrote { initializes, refused, ..Wrote::default() });
     };
 
-    write_c_output(&program, &emitted, out, emission, refused, initializes)
+    let mut wrote = write_c_output(&program, &emitted, out, emission, refused, initializes)?;
+    wrote.objc = program.objc;
+    wrote.frameworks.clone_from(&program.native_frameworks);
+    Ok(wrote)
 }
 
 /// Write the program, its runtime, and whatever the product's shape adds.
@@ -6310,6 +6356,7 @@ fn write_c_output(
             published_without_a_symbol,
             refused,
             initializes,
+            ..Wrote::default()
         });
     }
 
@@ -6339,6 +6386,7 @@ fn write_c_output(
             published_without_a_symbol,
             refused,
             initializes,
+            ..Wrote::default()
         });
     }
 
@@ -6371,6 +6419,7 @@ fn write_c_output(
         published_without_a_symbol,
         refused,
         initializes,
+        ..Wrote::default()
     })
 }
 

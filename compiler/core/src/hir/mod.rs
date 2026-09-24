@@ -1900,6 +1900,12 @@ pub struct Program {
     /// See [`Program::native_headers`]. Emitted before every include, which is
     /// the only order in which a feature-test macro does anything.
     pub native_defines: Vec<String>,
+    /// Whether the program sends an Objective-C message, so it links the
+    /// Objective-C runtime (`-lobjc`). Sorted frameworks in
+    /// `native_frameworks`, collected from the sends the program makes, as
+    /// headers are from the functions it calls.
+    pub objc: bool,
+    pub native_frameworks: Vec<String>,
     /// Bound foreign members, keyed by the **foreign key** -- `owner.member:descriptor`.
     ///
     /// **On `Program` for the same reason `classes` is.** A backend turning

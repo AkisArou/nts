@@ -656,6 +656,7 @@ pub fn emit(program: &Program) -> Emitted {
     }
     writer.append(object_types);
     native_memory::helpers(&mut writer, &origin, program);
+    objc::lookups(&mut writer, &origin, program);
 
     // Forward declarations, so a call does not depend on definition order — and
     // only for functions that actually have a definition. Before the
@@ -951,6 +952,9 @@ fn external_prototypes(program: &Program) -> Prototypes {
                 continue;
             };
             let target = match callee {
+                // A message has no symbol of its own to declare: its call is a
+                // cast of `objc_msgSend`, which `objc::lookups` declares.
+                Callee::Native(target) if target.send.is_some() => continue,
                 Callee::Native(target) => target,
                 Callee::External(name) if !runtime_declares(name) => {
                     refusals.push(Diagnostic::error(
@@ -1384,6 +1388,11 @@ fn native_call_expression(
     result: &HirType,
     origin: &Origin,
 ) -> Result<String, Diagnostic> {
+    // A send is refused a managed ABI where it is read, so the cast below is
+    // the whole of it.
+    if let Some(send) = &target.send {
+        return Ok(objc::send_expression(target, send, arguments));
+    }
     let call = format!("{}({})", target.name, arguments.join(", "));
     if matches!(target.result, nts_core::hir::native::Type::Managed(_)) {
         let wanted = c_type_of(program, result, origin)?;
@@ -5223,3 +5232,4 @@ mod tests {
 }
 
 mod native_memory;
+mod objc;

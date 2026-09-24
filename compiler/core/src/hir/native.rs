@@ -55,6 +55,63 @@ pub struct Function {
     /// Set when the declaration returns a TypeScript `string`: the `result`
     /// is then C's `const char *`, which the call site copies into a string.
     pub returns_string: Option<ReturnedString>,
+    /// Set when the declaration is an Objective-C message (`@ntsSelector`)
+    /// rather than a C symbol. `name` is then the TypeScript name, which no
+    /// backend links against. The call is `objc_msgSend` cast to exactly this
+    /// function's type, with the receiver and the selector first.
+    pub send: Option<Send>,
+}
+
+/// An Objective-C message: `[receiver selector:arguments]`.
+///
+/// **Always a cast, never a variadic call.** `objc_msgSend` is declared
+/// variadic, and calling it that way is wrong on arm64, where variadic
+/// arguments are passed on the stack and the method reads them from
+/// registers. Each call site casts it to the exact function type this
+/// declaration spells, which is what clang itself does for `[r sel]`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Send {
+    /// `initWithUTF8String:`. One colon per argument, checked when the
+    /// declaration is read.
+    pub selector: String,
+    /// `Some("NSString")` for a class method: the receiver is the class
+    /// object, looked up by name, and is not a parameter. `None` for an
+    /// instance method: `parameters[0]` is the receiver (`this`).
+    pub class: Option<String>,
+    /// What the declaring module's `@ntsFramework` names, which the program
+    /// links. Carried on the send because a send is what makes a program
+    /// reach a framework, the way `declared_at` makes it reach a header.
+    pub frameworks: Vec<String>,
+}
+
+impl Send {
+    /// The arguments a selector takes: one per colon. `length` takes none,
+    /// `initWithUTF8String:` one, and `setObject:forKey:` two.
+    #[must_use]
+    pub fn arity(selector: &str) -> usize {
+        selector.bytes().filter(|&byte| byte == b':').count()
+    }
+
+    /// A selector's spelling: identifier characters, where every colon
+    /// follows a keyword, and a selector with any colon ends in one. So
+    /// `length` and `setObject:forKey:` are selectors, and `upper:case:String`
+    /// (a keyword with no argument after two with one) is not. Neither empty,
+    /// nor starting with a colon, nor holding a space, which is also what keeps
+    /// it safe inside a C string literal.
+    #[must_use]
+    pub fn is_selector(selector: &str) -> bool {
+        let mut keyword = false;
+        for byte in selector.bytes() {
+            match byte {
+                b':' if keyword => keyword = false,
+                b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => keyword = true,
+                _ => return false,
+            }
+        }
+        !selector.is_empty()
+            && !selector.as_bytes()[0].is_ascii_digit()
+            && (!selector.contains(':') || selector.ends_with(':'))
+    }
 }
 
 /// A string a foreign function returns, as the declaration describes it.
@@ -1092,6 +1149,7 @@ impl Function {
             returns_string: returned_array
                 .map(|nullable| ReturnedString { nullable, free: None, array: true })
                 .or(returns_string),
+            send: None,
         })
     }
 }

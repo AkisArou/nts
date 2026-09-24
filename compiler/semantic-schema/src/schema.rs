@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 20;
+pub const SCHEMA_VERSION: u32 = 21;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -722,6 +722,20 @@ pub struct NativeAttributes {
     /// form of an `_async` method -- called with the receiver first.
     #[serde(default)]
     pub call: Option<String>,
+    /// `@ntsSelector initWithUTF8String:`: the declaration is an Objective-C
+    /// message, not a C symbol. On a method, the receiver is `this`. On a
+    /// function it is the class `@ntsClass` names.
+    #[serde(default)]
+    pub selector: Option<String>,
+    /// `@ntsClass NSString`: the class a function's message is sent to, which
+    /// makes the function a class method.
+    #[serde(default)]
+    pub class: Option<String>,
+    /// `@ntsFramework Foundation AppKit`: the frameworks a binding **module**
+    /// needs at link time. A module tag, like `@ntsHeader`. There is no header
+    /// here, because an Objective-C header cannot be included from C.
+    #[serde(default)]
+    pub frameworks: Option<Vec<String>>,
 }
 
 /// Why a snapshot was rejected.

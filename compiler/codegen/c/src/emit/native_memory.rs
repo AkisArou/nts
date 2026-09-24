@@ -448,6 +448,11 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
             let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
+            // An Objective-C message has no C declaration to compare against:
+            // its header is Objective-C, which a C witness cannot include.
+            // Checking a selector's types against the class is the ObjC
+            // witness's job (the Apple lane's A3), not this file's.
+            if target.send.is_some() { continue; }
             if !target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign) { continue; }
             for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
                 collect_opaque_tags(ty, &mut opaque);

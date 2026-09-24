@@ -25,6 +25,11 @@ pub(super) fn declarations(program: &Program) -> Result<Vec<String>, Vec<Diagnos
             else {
                 continue;
             };
+            // A message has no symbol: `objc::module` declares `objc_msgSend`,
+            // and each call spells its own function type.
+            if target.send.is_some() {
+                continue;
+            }
             let symbol = target.name.as_str();
             let problem = if !nts_codegen_common::symbols::is_native_c_identifier(symbol) {
                 Some(format!(

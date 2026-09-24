@@ -8119,6 +8119,10 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
         for op in &func.values {
             if let OpKind::Call { callee: super::Callee::Native(target), .. } = &op.kind {
                 reached.extend(target.declared_at);
+                if let Some(send) = &target.send {
+                    program.objc = true;
+                    program.native_frameworks.extend(send.frameworks.iter().cloned());
+                }
             }
             // A record enters a program through a type, not only through a
             // call: a program may hold a `Ptr<Rusage>` and call nothing from
@@ -8154,6 +8158,8 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
     }
     program.native_headers = headers;
     program.native_defines = defines;
+    program.native_frameworks.sort();
+    program.native_frameworks.dedup();
 }
 
 /// Every module a native type reaches a record from, following the views and
@@ -39253,6 +39259,7 @@ impl<'a> FuncBuilder<'a> {
             declared_at: None,
             roles: vec![super::native::Role::Plain],
             returns_string: None,
+            send: None,
         });
         let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
         let message = self.push(
@@ -39278,6 +39285,7 @@ impl<'a> FuncBuilder<'a> {
             declared_at: None,
             roles: vec![super::native::Role::Plain],
             returns_string: None,
+            send: None,
         });
         self.push(OpKind::Call { callee: Callee::Native(release), args: vec![message], frame: None }, HirType::Void, origin);
         self.throw_provided_error_text(id, "Error", text)?;
@@ -39293,8 +39301,15 @@ impl<'a> FuncBuilder<'a> {
         let target = self.snapshot.call_targets.get(&id)?;
         let declaration = target.callee?;
         let signature = &self.snapshot.signatures[target.signature.0 as usize];
+        // `@ntsSelector` as well as `@ntsSymbol`: an Objective-C instance
+        // method is the same shape, a method whose instance is its first
+        // argument. Only the call differs.
         (self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE)
-            && self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some())
+            && self
+                .node(declaration)
+                .native
+                .as_ref()
+                .is_some_and(|n| n.symbol.is_some() || n.selector.is_some())
             && signature.this_type.is_some())
         .then_some((declaration, target.signature))
     }
@@ -39423,6 +39438,7 @@ impl<'a> FuncBuilder<'a> {
                 declared_at: target.declared_at,
                 roles: vec![super::native::Role::Plain],
                 returns_string: None,
+                send: None,
             };
             self.push(
                 OpKind::Call { callee: Callee::Native(std::sync::Arc::new(release)), args: vec![pointer], frame: None },
@@ -39827,6 +39843,11 @@ impl<'a> FuncBuilder<'a> {
         // it, so a program carries the headers it reaches rather than every one
         // in the snapshot.
         native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
+        if let Some(decl) = declaration
+            && let Some(selector) = self.node(decl).native.as_ref().and_then(|n| n.selector.clone())
+        {
+            native.send = Some(self.objc_send(call, decl, &native, selector)?);
+        }
         if let Some(free) = declaration
             .and_then(|decl| self.node(decl).native.as_ref())
             .and_then(|n| n.free.as_deref())
@@ -39883,6 +39904,83 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(call, "a `CStrings` or `CBytes` parameter without `@ntsNoEscape`, which is what says C does not keep the array it is lent"));
         }
         Ok(Callee::Native(std::sync::Arc::new(native)))
+    }
+
+    /// The Objective-C message a declaration tagged `@ntsSelector` sends.
+    ///
+    /// Refused here, where the declaration is in hand, for everything the call
+    /// could not honour:
+    /// - A method sends to `this`, and a function to the class `@ntsClass`
+    ///   names. A function with no class has no receiver.
+    /// - One argument per colon, because the selector is the method's
+    ///   signature. `initWithUTF8String` with an argument would send a message
+    ///   the class answers with a different method, or with none.
+    /// - No variadic tail and no managed ABI, since the send is a cast to one
+    ///   exact C function type. No closures either, because a callback crosses
+    ///   into Objective-C as a block, which is A2.
+    fn objc_send(
+        &self,
+        call: NodeId,
+        declaration: NodeId,
+        native: &super::native::Function,
+        selector: String,
+    ) -> Result<super::native::Send, Diagnostic> {
+        let attributes = self.node(declaration).native.as_deref();
+        if attributes.is_some_and(|n| n.symbol.is_some()) {
+            return Err(self.unsupported(call, "a declaration that is both an Objective-C message (`@ntsSelector`) and a C function (`@ntsSymbol`)"));
+        }
+        if !super::native::Send::is_selector(&selector) {
+            return Err(self.unsupported(call, "@ntsSelector names one selector, as in `@ntsSelector initWithUTF8String:`"));
+        }
+        let method = self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE);
+        let class = attributes.and_then(|n| n.class.clone());
+        match (method, &class) {
+            (true, Some(_)) => {
+                return Err(self.unsupported(call, "@ntsClass on a method, whose receiver is already `this`"));
+            }
+            (false, None) => {
+                return Err(self.unsupported(call, "an Objective-C message with no receiver: `this` on a method, or `@ntsClass` on a function"));
+            }
+            (false, Some(name)) if !super::native::is_c_identifier(name) => {
+                return Err(self.unsupported(call, "@ntsClass names one Objective-C class, as in `@ntsClass NSString`"));
+            }
+            _ => {}
+        }
+        if native.variadic.is_some() || native.convention != super::native::Convention::C {
+            return Err(self.unsupported(call, "an Objective-C message with a variadic tail or a managed ABI, which a cast to one C function type cannot carry"));
+        }
+        if native.roles.iter().any(|role| !matches!(role, super::native::Role::Plain | super::native::Role::String)) {
+            return Err(self.unsupported(call, "an Objective-C message taking a callback, an array or an error slot; a callback crosses as a block, which is not built yet"));
+        }
+        // The *message's* arguments: the declared parameters less the
+        // receiver. Not the C arity, which also counts `self` and `_cmd` --
+        // `uppercaseString` has no colon and a two-parameter C signature.
+        let arguments = native.parameters.len() - usize::from(method);
+        if super::native::Send::arity(&selector) != arguments {
+            return Err(self.unsupported(
+                call,
+                &format!(
+                    "an Objective-C message whose selector `{selector}` takes {} argument(s) where the declaration passes {arguments}: one colon per argument",
+                    super::native::Send::arity(&selector)
+                ),
+            ));
+        }
+        // The frameworks of the nearest enclosing declaration naming any, which
+        // is the `declare module` a binding is written as.
+        let mut frameworks = Vec::new();
+        let mut at = Some(declaration);
+        while let Some(id) = at {
+            let node = self.node(id);
+            if let Some(names) = node.native.as_ref().and_then(|n| n.frameworks.as_ref()) {
+                frameworks.clone_from(names);
+                break;
+            }
+            at = node.parent;
+        }
+        if let Some(bad) = frameworks.iter().find(|name| !super::native::is_c_identifier(name)) {
+            return Err(self.unsupported(call, &format!("@ntsFramework names frameworks by their names, as in `@ntsFramework Foundation`, and `{bad}` is not one")));
+        }
+        Ok(super::native::Send { selector, class, frameworks })
     }
 
     /// A lowered call, at the type its result actually has.

@@ -1491,6 +1491,7 @@ mod foreign_contracts {
             declared_at: None,
             roles: vec![crate::hir::native::Role::Plain; 2],
             returns_string: None,
+            send: None,
         }))
     }
 

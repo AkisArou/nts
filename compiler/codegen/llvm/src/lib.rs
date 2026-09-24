@@ -41,6 +41,7 @@
 //! *something* for every input is a backend nobody can trust the output of.
 
 mod native;
+mod objc;
 pub mod signatures;
 
 use std::fmt::Write as _;
@@ -80,6 +81,7 @@ pub fn emit(program: &Program) -> Emitted {
         let _ = writeln!(text, "{line}");
     }
     text.push_str(&native_memory::helpers(program));
+    text.push_str(&objc::module(program));
     // What the runtime offers this backend, declared up front.
     //
     // `nts_to_int32` is `static inline` in the C header, which is right for C
@@ -2805,6 +2807,9 @@ fn call(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
     {
         if frame.is_some() {
             return Err(refuse(func, "a frame-placed native call"));
+        }
+        if let Some(send) = &target.send {
+            return objc::send(func, target, send, args, &op.ty, out);
         }
         return native::call(func, target, args, &op.ty, out);
     }
