@@ -1843,7 +1843,9 @@ interop() {
   # 33: `gtk-notes`, a notes application on the GIR bindings -- an entry, a
   #     list, its file loaded and saved through Gio -- run twice. It SKIPs
   #     as gtk-cycles does.
-  interop_floor=33
+  # 34: `gtk-list`, a list view over a GListStore, its rows bound by a
+  #     factory. It SKIPs as gtk-cycles does.
+  interop_floor=34
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
