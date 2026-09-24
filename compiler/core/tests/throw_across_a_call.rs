@@ -98,6 +98,13 @@ fn a_chain_of_callees_compiles_through_copies_of_each() {
 /// By message *and* by count: asserting the whole diagnostic list is one string
 /// is what catches a refusal arriving from somewhere else entirely, and what
 /// catches a second one appearing when a copy stops being made.
+///
+/// **And by which of the four reasons**, which is the half the sentence gained.
+/// "A throw would not reach this handler" is a fact about the `try`; a census
+/// needs to know whether the callee is a method, a value, or a function that
+/// calls one, because those are three different pieces of work. Pinning the
+/// classification here is what keeps the four sentences from collapsing back
+/// into one.
 #[test]
 fn a_callee_with_no_copy_is_still_refused() {
     let Some(lowered) = lowered() else {
@@ -110,7 +117,10 @@ fn a_callee_with_no_copy_is_still_refused() {
         .collect();
     assert_eq!(
         reasons,
-        vec!["a call inside a `try`, whose `throw` would not reach this handler is not supported by this lowering yet"],
+        vec![
+            "a call inside a `try` whose `throw` would not reach this handler: a method, and a \
+             raising copy is made of plain functions only is not supported by this lowering yet"
+        ],
         "one refusal, naming the call"
     );
     assert!(
