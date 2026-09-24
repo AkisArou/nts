@@ -45,6 +45,7 @@
     "android-shape/nts.config.ts",
     "java-from-ts/nts.config.ts",
     "ts-from-java/nts.config.ts",
-    "windows-hello/nts.config.ts"
+    "windows-hello/nts.config.ts",
+    "windows-window/nts.config.ts"
   ]
 }
