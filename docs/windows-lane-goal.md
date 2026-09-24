@@ -178,6 +178,41 @@ both backends and both providers:
     its metadata provider while it activates. No `resources.pri` is involved.
     So the milestone is `class App extends Application`, with the metadata
     provider supplied for the program.
+
+### `class App extends Application`: the design, for a decision
+
+Measured, not guessed: the oracle above is the whole mechanism, in C.
+
+- **The object.** The runtime makes an outer object per instance:
+  - one table per interface the class overrides (`IApplicationOverrides`);
+  - `IXamlMetadataProvider`, supplied for every `Application` subclass by
+    delegating to WinUI's `XamlControlsXamlMetaDataProvider`, which is what a
+    XAML project generates;
+  - its count;
+  - the inner object, and the composed instance the base's factory answers
+    (`CreateInstance(outer, &inner, &instance)`).
+  Every other interface is the inner's, by `QueryInterface`.
+- **`this` is the composed instance:** the base's default interface
+  (`IApplication`) on the aggregated object, as `this` in an Objective-C
+  subclass is the `id`. So `this.Exit()` is an ordinary vtable call, and a
+  `QueryInterface` on it reaches the outer object. A method the class
+  overrides is reached through a per-signature adapter, the delegate's shape:
+  the table's slot finds the outer object from the interface pointer and calls
+  the compiled method with the instance.
+- **Fields are refused at first**, as the Objective-C lane refuses them: the
+  runtime makes the object without room for a TypeScript object's state.
+  Captured state (a closure, a module variable) works.
+- **What TypeScript sees is the decision.** `extends` needs a constructor
+  value, and bind-winmd declares a runtime class as a type and a namespace.
+  - (a) bind-winmd declares each composable class as a `declare class` with
+    its overridable methods: `class App extends Application { OnLaunched(args)
+    { ... } }`, which is what C# and C++/WinRT write.
+  - (b) A builder: `Application.subclass({ OnLaunched(args) { ... } })`,
+    which needs no class machinery in the compiler, but is not what anyone
+    writes for WinUI.
+  (a) is the recommendation. It reuses the `extends`-a-foreign-class path the
+  Apple lane built for `NSObject`, and the record on `Program` can be one for
+  both families.
   - The idiomatic layer (W4).
 
 ## Next
