@@ -147,7 +147,7 @@ fn closure_size(root: &str, search: &[Utf8PathBuf]) -> usize {
 }
 
 /// Modification time and size: what changes when a file is replaced.
-fn fingerprint(path: &camino::Utf8Path) -> Option<String> {
+pub(crate) fn fingerprint(path: &camino::Utf8Path) -> Option<String> {
     let metadata = std::fs::metadata(path).ok()?;
     let modified = metadata.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?;
     Some(format!("{}.{:09}:{}", modified.as_secs(), modified.subsec_nanos(), metadata.len()))

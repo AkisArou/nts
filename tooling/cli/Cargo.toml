@@ -35,6 +35,7 @@ serde_json.workspace = true
 # AppKit, through a seed that keeps only the classes asked for.
 serde.workspace = true
 # `nts bind-gir` reads GObject-introspection XML.
+windows-metadata.workspace = true
 roxmltree.workspace = true
 camino.workspace = true
 

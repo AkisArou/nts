@@ -8,6 +8,7 @@
 mod bind;
 mod bind_objc;
 mod bind_gir;
+mod bind_winmd;
 
 use std::fmt::Write as _;
 
@@ -379,6 +380,30 @@ fn bind_objc(rest: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// `nts bind-winmd Windows.Win32.UI.WindowsAndMessaging --out types [--winmd <file>] [--arch x86_64]`
+///
+/// Binds the named Win32 metadata namespaces, and declares every type they
+/// reach in its own namespace's module: one `.d.ts`, one `.values.ts` and one
+/// `.refused.txt` each.
+fn bind_winmd(rest: &[String]) -> Result<()> {
+    let flag = |name: &str| rest.windows(2).find(|pair| pair[0] == name).map(|pair| pair[1].clone());
+    let namespaces: Vec<String> = rest
+        .iter()
+        .enumerate()
+        .filter(|(at, arg)| !arg.starts_with("--") && (*at == 0 || !rest[at - 1].starts_with("--")))
+        .map(|(_, arg)| arg.clone())
+        .collect();
+    if namespaces.is_empty() {
+        bail!("`nts bind-winmd` needs a namespace, as in `nts bind-winmd Windows.Win32.UI.WindowsAndMessaging`");
+    }
+    bind_winmd::run(&bind_winmd::Request {
+        namespaces,
+        winmd: flag("--winmd").map_or_else(bind_winmd::default_winmd, Utf8PathBuf::from),
+        out: flag("--out").map_or_else(|| Utf8PathBuf::from("."), Utf8PathBuf::from),
+        arch: flag("--arch").unwrap_or_else(|| "x86_64".to_owned()),
+    })
+}
+
 /// `nts bind-c --header sys/epoll.h --record epoll_event --fn epoll_ctl ...`
 ///
 /// Repeatable flags rather than a request file: the command *is* the record of
@@ -487,6 +512,7 @@ BINDINGS
   bind-c       generate a TypeScript declaration from a C header
   bind-objc    generate an objc: declaration from macOS framework headers
   bind-gir     generate TypeScript declarations from GObject introspection
+  bind-winmd   generate TypeScript declarations from Windows (Win32) metadata
   bind         generate declarations and a binding table from class files
   deps         acquire the TypeScript behind this project's dependencies
 
@@ -597,6 +623,7 @@ fn main() -> Result<()> {
         Some("bind-c") => bind_c(&args.collect::<Vec<String>>()),
         Some("bind-objc") => bind_objc(&args.collect::<Vec<String>>()),
         Some("bind-gir") => bind_gir(&args.collect::<Vec<String>>()),
+        Some("bind-winmd") => bind_winmd(&args.collect::<Vec<String>>()),
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
             // Through `project`, like every other command that builds a
@@ -3183,15 +3210,26 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
     let search = bind_gir::search_path();
     let gir = project.join("types").join("gir");
     let mut roots_wanted = std::collections::BTreeSet::new();
+    // Likewise a `c:Windows.Win32.*` module, from Windows metadata, into
+    // `types/winmd`.
+    let winmd = project.join("types").join("winmd");
+    let mut winmd_wanted = std::collections::BTreeSet::new();
     for (module, file) in wanted {
         if let Some(namespace) = bind_gir::namespace_of(&module, &search) {
             roots_wanted.insert(namespace);
+            continue;
+        }
+        if let Some(namespace) = bind_winmd::namespace_of(&module) {
+            winmd_wanted.insert(namespace);
             continue;
         }
         bind_one(&module, &file, targets, project)?;
     }
     if !roots_wanted.is_empty() || gir.join(".nts-stamp").exists() {
         bind_gir::ensure(&roots_wanted, &search, &gir)?;
+    }
+    if !winmd_wanted.is_empty() || winmd.join(".nts-stamp").exists() {
+        bind_winmd::ensure(&winmd_wanted, &winmd)?;
     }
     Ok(roots)
 }
@@ -4951,7 +4989,22 @@ fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<T
             host_os()
         )
     };
-    let mut leading = vec![format!("--target={arch}-w64-windows-gnu"), "-nostdlibinc".to_owned()];
+    let mut leading = windows_compile_flags(arch, &zig);
+    let mut link = Vec::new();
+    let uv = windows_root().join(arch);
+    if uv.join("include/uv.h").is_file() {
+        leading.push(format!("-I{}", uv.join("include")));
+        link.push(format!("-L{}", uv.join("lib")));
+    }
+    let linker = vec!["zig".to_owned(), "cc".to_owned(), "-target".to_owned(), format!("{arch}-windows-gnu")];
+    Ok(Toolchain { program: "clang".to_owned(), leading, link, linker: Some(linker) })
+}
+
+/// What a C compile for Windows on `arch` passes clang: the target, zig's four
+/// mingw include directories and the macros zig compiles with. One derivation
+/// for the build and for `nts bind-winmd`, which reads the same headers.
+fn windows_compile_flags(arch: &str, zig: &Utf8Path) -> Vec<String> {
+    let mut flags = vec![format!("--target={arch}-w64-windows-gnu"), "-nostdlibinc".to_owned()];
     let headers = zig.join("libc/include");
     for directory in [
         format!("{arch}-windows-gnu"),
@@ -4961,19 +5014,12 @@ fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<T
     ] {
         let directory = headers.join(directory);
         if directory.is_dir() {
-            leading.push("-isystem".to_owned());
-            leading.push(directory.to_string());
+            flags.push("-isystem".to_owned());
+            flags.push(directory.to_string());
         }
     }
-    leading.extend(["-D__MSVCRT_VERSION__=0xE00".to_owned(), "-D_WIN32_WINNT=0x0a00".to_owned()]);
-    let mut link = Vec::new();
-    let uv = windows_root().join(arch);
-    if uv.join("include/uv.h").is_file() {
-        leading.push(format!("-I{}", uv.join("include")));
-        link.push(format!("-L{}", uv.join("lib")));
-    }
-    let linker = vec!["zig".to_owned(), "cc".to_owned(), "-target".to_owned(), format!("{arch}-windows-gnu")];
-    Ok(Toolchain { program: "clang".to_owned(), leading, link, linker: Some(linker) })
+    flags.extend(["-D__MSVCRT_VERSION__=0xE00".to_owned(), "-D_WIN32_WINNT=0x0a00".to_owned()]);
+    flags
 }
 
 /// zig's library directory, which holds the libc headers it bundles, or `None`
