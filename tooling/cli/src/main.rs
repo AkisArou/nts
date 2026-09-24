@@ -4921,11 +4921,8 @@ fn link_c(
     let shared = product.kind == "shared-library" || addon;
     let library = product.kind == "shared-library" || product.kind == "static-library";
     let pic = library || addon;
-    // **Mach-O links with ld64's vocabulary, not GNU ld's.** Every `-Wl,--`
-    // flag below is a GNU spelling that `ld64.lld` and Apple's `ld` reject as
-    // an unknown argument, so the branches say which linker they are talking to.
-    let macho = matches!(target.os.as_str(), "macos" | "ios");
-    refuse_what_this_linker_cannot(name, target, addon && macho, wrote.uses_apple() && !macho)?;
+    let format = ObjectFormat::of(target);
+    refuse_what_this_linker_cannot(name, target, format, addon, wrote.uses_apple())?;
     // An addon needs one header and no library. Asked before anything is
     // compiled, so a missing toolchain is a message rather than forty
     // `node_api.h: No such file` lines.
@@ -5022,7 +5019,7 @@ fn link_c(
     let artifact = out.join(artifact_name(name, product, target));
     if product.kind == "static-library" {
         {
-            let mut command = archiver(macho);
+            let mut command = archiver(format);
             command.arg("rcs").arg(artifact.as_str());
             for object in &objects {
                 command.arg(object.as_str());
@@ -5033,7 +5030,7 @@ fn link_c(
         {
             let mut command = tools.link_command();
             if shared {
-                command.arg(if macho { "-dynamiclib" } else { "-shared" });
+                command.arg(if format == ObjectFormat::MachO { "-dynamiclib" } else { "-shared" });
                 // **A Windows DLL is half an artifact without its import
                 // library.** The linker emits one either way; unnamed, it takes
                 // the first object's name -- this produced `program.c.lib`
@@ -5041,27 +5038,26 @@ fn link_c(
                 // under a name they could not guess. Named here so the two
                 // agree, and reported below because an output nobody is told
                 // about reads later as one that was never generated.
-                if target.os == "windows" {
+                if format == ObjectFormat::Coff {
                     command.arg(format!(
                         "-Wl,--out-implib={}",
                         out.join(format!("{name}.lib"))
                     ));
                 }
                 if !addon {
-                    hide_all_but_the_exports(&mut command, out, wrote, macho)?;
+                    hide_all_but_the_exports(&mut command, out, wrote, format)?;
                 }
-                name_the_library(&mut command, name, product, target, macho);
+                name_the_library(&mut command, name, product, target, format);
             }
             for object in &objects {
                 command.arg(object.as_str());
             }
-            if macho {
+            match format {
                 // libm is part of libSystem there, and the zig-derived sysroot
                 // carries no separate `libm.tbd` for `-lm` to find.
-                command.arg("-Wl,-dead_strip");
-            } else {
-                command.args(["-Wl,--gc-sections", "-lm"]);
-            }
+                ObjectFormat::MachO => command.arg("-Wl,-dead_strip"),
+                ObjectFormat::Elf | ObjectFormat::Coff => command.args(["-Wl,--gc-sections", "-lm"]),
+            };
             // **After our own objects and before `-o`.** A static archive is
             // consumed left to right by the linker, so a `-l` that precedes the
             // objects needing it resolves nothing -- which is the failure mode
@@ -5071,23 +5067,15 @@ fn link_c(
                 command.arg(flag);
             }
             command.args(objc_link_flags(wrote));
-            // The libuv host is a translation unit like any other, so its
-            // presence in what was written is the question -- not the product
-            // kind, and not a flag somebody remembers.
-            if sources.iter().any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME) {
-                command.arg("-luv");
-            }
-            // The run-loop adapter's framework, by the same rule.
-            if sources.iter().any(|s| s == nts_codegen_c::CF_HOST_SOURCE_NAME) {
-                command.args(["-framework", "CoreFoundation"]);
-            }
+            command.args(loop_host_link_flags(&sources));
             // **`--no-undefined` where it can be used**, which is the earliest
             // an unresolved symbol can be caught and the cheapest place to say
             // so. Not for an addon: a `.node` resolves `napi_*` out of the host
             // process at load, so those are legitimately unresolved at link time
             // and there is no library to satisfy them from.
-            // ld64 already refuses an undefined symbol in a dylib by default.
-            if shared && !addon && !macho {
+            // ld64 and COFF links already refuse an undefined symbol in a
+            // dylib or DLL by default.
+            if shared && !addon && format == ObjectFormat::Elf {
                 command.arg("-Wl,--no-undefined");
             }
             command.arg("-o").arg(artifact.as_str());
@@ -5111,21 +5099,46 @@ fn link_c(
 ///
 /// A build that writes a file nothing can load has half-emitted, which is the
 /// one thing this command must not do.
-/// Refused before anything compiles. A `.node` for a Mac resolves `napi_*`
-/// from the process (`-undefined dynamic_lookup`), and the unresolved-symbol
-/// check after the link reads ELF (`nm -D`). Neither is written; an addon that
+/// The linker vocabulary a target's artifacts are written in.
+///
+/// **One answer to one question**, rather than a flag per format: every `-Wl,--`
+/// spelling in `link_c` is GNU ld's, which `ld64` rejects as an unknown
+/// argument and a COFF link can accept and ignore. Two booleans over three
+/// formats would leave a fourth state that means nothing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ObjectFormat {
+    Elf,
+    MachO,
+    Coff,
+}
+
+impl ObjectFormat {
+    fn of(target: &nts_build::config::Target) -> Self {
+        match target.os.as_str() {
+            "macos" | "ios" => Self::MachO,
+            "windows" => Self::Coff,
+            _ => Self::Elf,
+        }
+    }
+}
+
+/// Refused before anything compiles. A `.node` off ELF resolves `napi_*` from
+/// its host a way this link does not write -- `-undefined dynamic_lookup` on a
+/// Mac, an import library for `node.exe` on Windows -- and the
+/// unresolved-symbol check after the link reads ELF (`nm -D`). An addon that
 /// linked without both would be unchecked.
-fn refuse_an_apple_addon(name: &str, target: &nts_build::config::Target) -> Result<()> {
+fn refuse_an_addon_off_elf(name: &str, target: &nts_build::config::Target) -> Result<()> {
     bail!(
-        "product `{name}` is a Node addon for {}, and addons are not built for \
-         Apple yet: the link needs `-undefined dynamic_lookup` and the \
-         unresolved-symbol check reads ELF only",
+        "product `{name}` is a Node addon for {}, and addons are built for Linux \
+         only so far: the link has to resolve `napi_*` from the host process (on \
+         a Mac with `-undefined dynamic_lookup`, on Windows against node's import \
+         library), and the unresolved-symbol check reads ELF only",
         target.id
     )
 }
 
 /// The two products this linker is refused before anything compiles: a Node
-/// addon for Apple (`refuse_an_apple_addon`), and Objective-C off Apple.
+/// addon off ELF (`refuse_an_addon_off_elf`), and Objective-C off Apple.
 ///
 /// An Objective-C message has a runtime to be sent through, and only Apple's
 /// is linked here. The GNU runtime, `libobjc2`, would answer the same calls, but
@@ -5134,13 +5147,14 @@ fn refuse_an_apple_addon(name: &str, target: &nts_build::config::Target) -> Resu
 fn refuse_what_this_linker_cannot(
     name: &str,
     target: &nts_build::config::Target,
-    apple_addon: bool,
-    objc_off_apple: bool,
+    format: ObjectFormat,
+    addon: bool,
+    apple: bool,
 ) -> Result<()> {
-    if apple_addon {
-        refuse_an_apple_addon(name, target)?;
+    if addon && format != ObjectFormat::Elf {
+        refuse_an_addon_off_elf(name, target)?;
     }
-    if objc_off_apple {
+    if apple && format != ObjectFormat::MachO {
         bail!(
             "product `{name}` sends Objective-C messages (`@ntsSelector`) or links an Apple \
              framework (`@ntsFramework`), and targets {}, which has neither. Build it for macOS",
@@ -5148,6 +5162,22 @@ fn refuse_what_this_linker_cannot(
         )
     }
     Ok(())
+}
+
+/// What the program's loop hosts link against.
+///
+/// The libuv host is a translation unit like any other, so its presence in what
+/// was written is the question -- not the product kind, and not a flag somebody
+/// remembers. The same rule gives the run-loop adapter its framework.
+fn loop_host_link_flags(sources: &[String]) -> Vec<String> {
+    let mut flags = Vec::new();
+    if sources.iter().any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME) {
+        flags.push("-luv".to_owned());
+    }
+    if sources.iter().any(|s| s == nts_codegen_c::CF_HOST_SOURCE_NAME) {
+        flags.extend(["-framework".to_owned(), "CoreFoundation".to_owned()]);
+    }
+    flags
 }
 
 /// `-lobjc` for a program that sends messages, and each framework its
@@ -5164,14 +5194,17 @@ fn objc_link_flags(wrote: &Wrote) -> Vec<String> {
 /// **An archive's index is per format.** GNU `ar` writes a `/` symbol table
 /// Apple's linkers do not read as one; `llvm-ar --format=darwin` writes
 /// `__.SYMDEF`, which they do. On a Mac, `ar` is Apple's and already right.
-fn archiver(macho: bool) -> std::process::Command {
-    if macho && host_os() != "macos" {
-        let mut command = std::process::Command::new("llvm-ar");
-        command.arg("--format=darwin");
-        command
-    } else {
-        std::process::Command::new("ar")
-    }
+/// A `.lib` is written in COFF's archive format, which is what MSVC's
+/// `link.exe` expects as well as lld.
+fn archiver(format: ObjectFormat) -> std::process::Command {
+    let spelling = match format {
+        ObjectFormat::MachO if host_os() != "macos" => "--format=darwin",
+        ObjectFormat::Coff => "--format=coff",
+        _ => return std::process::Command::new("ar"),
+    };
+    let mut command = std::process::Command::new("llvm-ar");
+    command.arg(spelling);
+    command
 }
 
 /// The name a shared library records for whoever loads it.
@@ -5179,20 +5212,27 @@ fn archiver(macho: bool) -> std::process::Command {
 /// A dylib always records one: the path a consumer will load it from. Left
 /// alone that is the build directory, which exists on no machine the library
 /// ships to; `@rpath` defers it to the consumer, which is what `soname` means
-/// on ELF -- where it is written only when the product names one.
+/// on ELF -- where it is written only when the product names one. A DLL is
+/// loaded by its file name, which `artifact_name` already takes from `soname`.
 fn name_the_library(
     command: &mut std::process::Command,
     name: &str,
     product: &nts_build::config::Product,
     target: &nts_build::config::Target,
-    macho: bool,
+    format: ObjectFormat,
 ) {
-    if macho {
-        let file =
-            product.soname.clone().unwrap_or_else(|| artifact_name(name, product, target));
-        command.arg(format!("-Wl,-install_name,@rpath/{file}"));
-    } else if let Some(soname) = &product.soname {
-        command.arg(format!("-Wl,-soname,{soname}"));
+    match format {
+        ObjectFormat::MachO => {
+            let file =
+                product.soname.clone().unwrap_or_else(|| artifact_name(name, product, target));
+            command.arg(format!("-Wl,-install_name,@rpath/{file}"));
+        }
+        ObjectFormat::Elf => {
+            if let Some(soname) = &product.soname {
+                command.arg(format!("-Wl,-soname,{soname}"));
+            }
+        }
+        ObjectFormat::Coff => {}
     }
 }
 
@@ -5525,9 +5565,26 @@ fn hide_all_but_the_exports(
     command: &mut std::process::Command,
     out: &Utf8Path,
     wrote: &Wrote,
-    macho: bool,
+    format: ObjectFormat,
 ) -> Result<()> {
-    if macho {
+    if format == ObjectFormat::Coff {
+        // **A COFF link accepts a version script and ignores it.** Measured:
+        // `zig cc -shared -Wl,--version-script=` exited 0 with a DLL exporting
+        // every function -- the hidden one too -- plus the CRT's `_CRT_INIT`
+        // and `atexit`. A module-definition file is COFF's spelling of the
+        // same set: the export table is exactly its names, and a name no
+        // symbol answers to fails the link (`undefined symbol: nosuch`), the
+        // check `--no-undefined-version` adds below for GNU ld.
+        let definitions = out.join("exports.def");
+        let mut text = String::from("EXPORTS\n");
+        for symbol in &wrote.published {
+            text.push_str("  ");
+            text.push_str(symbol);
+            text.push('\n');
+        }
+        std::fs::write(&definitions, text).with_context(|| format!("writing {definitions}"))?;
+        command.arg(definitions.as_str());
+    } else if format == ObjectFormat::MachO {
         // ld64 has no version scripts. An exported-symbols list is the same
         // set, in Mach-O's spelling of a C name (a leading underscore), and a
         // name in it that no symbol answers to is already an error there --

@@ -1738,6 +1738,52 @@ fn a_windows_target_produces_a_windows_dll() {
     );
 }
 
+/// A Windows DLL publishes exactly the entry's surface, as a `.so` does
+/// (`a_shared_library_publishes_its_entry_and_nothing_else`).
+///
+/// **The export table is the assertion, not the link.** A COFF link accepts
+/// `--version-script`, ignores it, and exits 0. Built that way, `sdk.dll`
+/// exported `helper`, `notPublished`, every runtime internal, and the mingw
+/// CRT's `_CRT_INIT`, `atexit` and `__mingw_module_is_dll`. Only reading the
+/// artifact shows that, because a check on the link cannot tell an honoured
+/// export list from an ignored one.
+#[test]
+fn a_windows_dll_publishes_its_entry_and_nothing_else() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    let tools = ["zig", "llvm-objdump"]
+        .iter()
+        .all(|tool| Command::new(tool).arg("--version").output().is_ok());
+    if !frontend || !tools || cfg!(target_os = "windows") {
+        skip("the tsgo frontend, zig and llvm-objdump, on a non-Windows host");
+        return;
+    }
+    let project = fixture("build-win-exports", WINDOWS_LIB);
+    let run = build(&project, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+
+    let dll = project.join(".nts/build/sdk/windows-x86_64/sdk.dll");
+    let listed = Command::new("llvm-objdump").arg("-p").arg(&dll).output().expect("llvm-objdump");
+    let text = String::from_utf8_lossy(&listed.stdout);
+    // The rows under the `Ordinal  RVA  Name` header are `<ordinal> <rva>
+    // <name>`. Matched as the whole header: `Ordinal base: 1` comes first.
+    let exports: Vec<&str> = text
+        .lines()
+        .skip_while(|line| line.split_whitespace().collect::<Vec<_>>() != ["Ordinal", "RVA", "Name"])
+        .skip(1)
+        .map_while(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            (fields.len() == 3).then(|| fields[2])
+        })
+        .collect();
+    assert!(exports.contains(&"published"), "the entry's export is missing: {exports:?}");
+    assert!(
+        !exports.iter().any(|name| ["helper", "notPublished", "_CRT_INIT", "atexit"].contains(name)),
+        "a name the entry does not export crossed the ABI: {exports:?}",
+    );
+    assert!(exports.len() < 5, "the runtime's internals are public: {exports:?}");
+}
+
 /// iOS is refused by name, and not with the macOS reason.
 ///
 /// **This test used to be about macOS**, refused because "Apple needs its SDK".
