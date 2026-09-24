@@ -16,7 +16,10 @@
 set -uo pipefail
 
 dest="${NTS_WINDOWS_SSH:-nts-win}"
-ssh_opts=(-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new)
+# `LogLevel=ERROR`: Windows' OpenSSH offers no post-quantum key exchange, and
+# the client's warning about it on every connection would land in the
+# artifact's stderr, which callers compare.
+ssh_opts=(-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR)
 
 reachable() { ssh "${ssh_opts[@]}" "$dest" exit 0 >/dev/null 2>&1; }
 

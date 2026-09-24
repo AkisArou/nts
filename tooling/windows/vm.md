@@ -4,6 +4,11 @@ This box is Linux. nts compiles and links Windows artifacts here, and a Windows
 machine only *runs* them. Until there is real hardware, that machine is a
 quickemu Windows 11 VM.
 
+**The one in use since 2026-09-24** is Windows 11 (build 26200), installed
+unattended by quickget: `~/windows-11.conf`, user `Quickemu`, ssh forwarded on
+host port 22221. `windows-hello` ran there first and matched node byte for
+byte.
+
 **What the VM cannot answer.** It is x86_64. arm64 PE is built and linked here,
 and its headers and imports are checked, but it is not *run* until an arm64
 Windows machine is reachable.
@@ -28,6 +33,7 @@ Windows machine is reachable.
    Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
    Start-Service sshd
    Set-Service -Name sshd -StartupType Automatic
+   New-NetFirewallRule -Name sshd-nts -DisplayName 'OpenSSH (nts)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
    ```
 
    Then turn on automatic sign-in for your user (`netplwiz`). A GUI program
@@ -46,9 +52,9 @@ Windows machine is reachable.
 
    ```
    Host nts-win
-     HostName localhost
+     HostName 127.0.0.1
      Port 22221
-     User <your Windows user>
+     User Quickemu
    ```
 
    `tooling/windows/run.sh --reachable` exits 0 once it answers.
