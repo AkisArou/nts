@@ -2,8 +2,8 @@
 // window and no package identity, called through COM vtables.
 //
 // Each value reported depends on one part working:
-// - `number` and `text`: `Parse` is a static, called on the class's cached
-//   activation factory with an HSTRING argument; `GetNumber` writes a double
+// - `number` and `text`: `JsonValue.Parse` is a static, called on the
+//   class's cached activation factory with an HSTRING argument; `GetNumber` writes a double
 //   through its result slot, `Stringify` an HSTRING copied into a `string`.
 // - `activations=1` after three parses: the factory cache hit. A cache that
 //   never hit would answer the same values and count 3.
@@ -13,16 +13,17 @@
 //   inside the `try` fails, so it hands over nothing and has nothing to give
 //   back; a release there would be of an object that does not exist.
 import { activations, releases, report } from "c:report";
-import { Parse } from "winrt:Windows.Data.Json";
+// Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
+import { JsonValue } from "winrt:Windows.Data.Json";
 
 function run(): string {
-  const value = Parse("42.5");
+  const value = JsonValue.Parse("42.5");
   const number = value.GetNumber();
   const text = value.Stringify();
-  const list = Parse("[1, 2.5, true]");
+  const list = JsonValue.Parse("[1, 2.5, true]");
   let threw = "nothing";
   try {
-    Parse("{not json");
+    JsonValue.Parse("{not json");
   } catch (error) {
     threw = (error as Error).message.slice(0, 18);
   }

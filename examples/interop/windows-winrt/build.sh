@@ -5,7 +5,8 @@
 # What each arm asserts:
 #
 # - **The build:** `nts build` exits 0 and refuses nothing, with and without
-#   `--rc`.
+#   `--rc`. Its bindings are generated from the Windows Runtime's metadata by
+#   the build itself (`types/winrt`, `nts bind-winmd`).
 # - **The PE:** a console PE32+ for x86-64 that imports only Windows' own
 #   DLLs -- the Windows Runtime is `api-ms-win-core-winrt-*`, present on every
 #   Windows 10 and 11, with nothing to redistribute.
@@ -32,6 +33,11 @@ for tool in zig clang llvm-objdump; do
     exit 0
   fi
 done
+# The Windows Runtime's metadata the bindings are generated from, fetched once.
+if ! NTS_WINDOWS_ROOT="$windows" "$root/tooling/windows/fetch-winrt-metadata.sh" >/dev/null 2>&1; then
+  echo "SKIP windows-winrt: no Windows Runtime metadata, and it could not be fetched"
+  exit 0
+fi
 [ -f "$windows/x86_64/lib/libuv.a" ] ||
   NTS_WINDOWS_ROOT="$windows" "$root/tooling/windows/build-libuv.sh" x86_64 >/dev/null
 
