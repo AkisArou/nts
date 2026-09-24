@@ -2464,6 +2464,41 @@ const RUNTIME_HANDS_BACK: &[&str] = &[
     "nts_set_add",
 ];
 
+/// Runtime helpers whose result is a reference read **out of a slot of** one of
+/// their arguments.
+///
+/// Not the argument itself, which is what [`RUNTIME_HANDS_BACK`] names. A
+/// promise's fulfilled value and its rejection reason are *fields*, and the
+/// ownership consequence is identical for the reason `is_load`'s neighbours
+/// give: the reference belongs to the slot, the slot's container is an operand
+/// of this call, and the caller is holding it. So it is merged into the same set
+/// and gets the same `safely()` question.
+///
+/// **The callee is right and the caller was wrong**, which is why this list
+/// exists rather than three retains in the runtime. `runtime/c/tests/erased.c`
+/// asserts the contract deliberately -- *"reading does not retain again"* and
+/// *"releasing the promise releases the string"* -- with a comment stating that a
+/// reference "is retained on the way in and released with the promise, through
+/// the slot the descriptor already knows about". `nts_promise_fulfill` and
+/// `nts_promise_reject` each retain, so the promise owns exactly one count.
+///
+/// Without this the result was `Produced`, and the comment at that arm already
+/// says what that is: *"`Produced` would be wrong and is a use-after-free: the
+/// callee stops retaining unconditionally, so there is no reference here to have
+/// been produced."* True of these three as written, and it was.
+///
+/// Found under `--rc` with `ASan` by the GTK lane, from
+/// `g_file_make_directory_finish` failing an assertion on a heap corrupted long
+/// before. It reduces to **`await` on a promise fulfilled with an object** --
+/// twelve lines, no rejection, no `catch` -- which is the most ordinary async
+/// shape there is. Invisible without RC, the cycle collector reaching the
+/// promise at a checkpoint, and the freed bytes reused.
+const RUNTIME_LENDS_A_SLOT: &[&str] = &[
+    "nts_promise_value",
+    "nts_promise_reference",
+    "nts_promise_reason",
+];
+
 fn hands_back_a_parameter(
     program: &Program,
     layouts: &[Layout],
@@ -2488,6 +2523,7 @@ fn hands_back_a_parameter(
         })
         .map(|func| func.name.clone())
         .chain(RUNTIME_HANDS_BACK.iter().map(|name| (*name).to_string()))
+        .chain(RUNTIME_LENDS_A_SLOT.iter().map(|name| (*name).to_string()))
         .collect()
 }
 

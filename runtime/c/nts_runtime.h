@@ -3013,7 +3013,26 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
  * A rejection's reason is always a reference (`nts_promise_reject` takes one),
  * so there is no number case. A rejection with no reason cannot arise here --
  * `state` says rejected only after the pointer is stored -- and a null answers
- * `undefined`, which is what a `catch` of one would see. */
+ * `undefined`, which is what a `catch` of one would see.
+ *
+ * **Returns a borrow, and so do `nts_promise_value` and `nts_promise_reference`.**
+ * The promise owns the count; the caller must **not** release what it reads.
+ *
+ * This had to be written down because it was not, and the two sides disagreed.
+ * `nts_promise_fulfill` and `nts_promise_reject` each retain, so a promise owns
+ * exactly one count on its payload -- and lowering released what it read here,
+ * destroying that count. The slot then dangled and the cycle collector walked it.
+ * Found under `--rc` with ASan by the GTK lane, from
+ * `g_file_make_directory_finish` failing an assertion on a heap corrupted long
+ * before; reduced to `await` on a promise fulfilled with an object, with no
+ * rejection involved at all.
+ *
+ * **The contract here was already right and asserted** --
+ * `runtime/c/tests/erased.c` checks "reading does not retain again" and
+ * "releasing the promise releases the string" -- so the repair belongs at the
+ * caller, and these three are named in `own::RUNTIME_LENDS_A_SLOT`. Retaining
+ * here instead would have been the same bug pointing the other way, which is
+ * what `nts_array_same` says about its own history. */
 NTS_READS_ONLY NtsValue nts_promise_reason(const NtsPromise *promise);
 /* Which of `NTS_PROMISE_PENDING`, `_FULFILLED` and `_REJECTED` a promise is in.
  *
