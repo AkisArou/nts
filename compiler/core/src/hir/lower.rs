@@ -25711,28 +25711,34 @@ impl<'a> FuncBuilder<'a> {
 
     fn lower_native_construct(&mut self, id: NodeId, function: &str) -> Result<ValueId, Diagnostic> {
         // The constructor: a foreign function of that name, called with
-        // nothing -- its tags apply as at any call of it.
-        let found = (0..self.snapshot.nodes.len()).map(|at| NodeId(u32::try_from(at).unwrap_or(u32::MAX))).find(|node| {
-            self.kind_of(*node) == Some(syntax::FUNCTION_DECLARATION)
-                && !self.has_a_body(*node)
-                && self.declared_name(*node).as_deref() == Some(function)
-        });
+        // nothing -- `Declared`, `Owned` and its tags apply as at any call.
+        // Found by its symbol: every binding's declarations are in the
+        // program, and a C name is one function wherever it is declared.
+        let found = self
+            .snapshot
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.name == function)
+            .flat_map(|symbol| symbol.declarations.iter().copied())
+            .find(|node| self.kind_of(*node) == Some(syntax::FUNCTION_DECLARATION) && !self.has_a_body(*node));
         let declaration = found.ok_or_else(|| {
             self.unsupported(id, &format!("@ntsConstruct naming `{function}`, which no foreign function declares"))
         })?;
-        // The construct signature is the constructor's, with the properties in
-        // front: its result is what the constructor answers, `Declared` and
-        // `Owned` as written, and the checker has resolved it here. The
-        // constructor's own declaration is in a binding nothing may call, which
-        // the frontend does not type node by node.
-        let construct = self.snapshot.call_targets.get(&id).map(|target| target.signature).ok_or_else(|| {
-            self.unsupported(id, &format!("@ntsConstruct naming `{function}` at a `new` the checker did not resolve"))
-        })?;
-        let record = nts_semantic_schema::SignatureRecord {
-            parameters: Vec::new(),
-            is_construct: false,
-            ..self.snapshot.signatures[construct.0 as usize].clone()
-        };
+        // Its own signature, as any call of it would resolve: a symbol's type
+        // is its declaration's (`node_types`), which the frontend records there
+        // rather than on the symbol.
+        let signature = std::iter::once(declaration)
+            .chain(self.children(declaration))
+            .find_map(|node| self.snapshot.node_types.get(&node).copied())
+            .and_then(|ty| match self.snapshot.types.get(ty.0 as usize).map(|t| &t.kind) {
+                Some(TypeKind::Function(signature)) => Some(*signature),
+                _ => None,
+            })
+            .ok_or_else(|| self.unsupported(id, &format!("@ntsConstruct naming `{function}`, whose signature is unknown")))?;
+        let record = self.snapshot.signatures[signature.0 as usize].clone();
+        if !record.parameters.is_empty() {
+            return Err(self.unsupported(id, &format!("@ntsConstruct naming `{function}`, which takes arguments")));
+        }
         let callee = self.native_callee(id, Some(declaration), function.to_owned(), &record)?;
         let Callee::Native(target) = &callee else {
             return Err(self.unsupported(id, "@ntsConstruct naming a function that is not foreign"));

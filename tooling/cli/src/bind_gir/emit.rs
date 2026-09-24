@@ -189,12 +189,10 @@ fn construction(out: &mut String, binding: &Binding, own: &[&Function], name: &s
     }) else {
         return;
     };
-    // Its result is the constructor's, as written: the lowering calls the
-    // constructor through this signature, less the properties.
     let _ = writeln!(
         out,
-        "  export const {name}: {{\n    /**\n     * @ntsConstruct {}\n     */\n    new (props?: {name}Props): {};\n  }};",
-        constructor.symbol, constructor.result.ts,
+        "  export const {name}: {{\n    /**\n     * @ntsConstruct {}\n     */\n    new (props?: {name}Props): {name};\n  }};",
+        constructor.symbol,
     );
 }
 
