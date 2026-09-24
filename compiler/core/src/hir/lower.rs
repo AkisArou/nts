@@ -36875,7 +36875,7 @@ impl<'a> FuncBuilder<'a> {
         &self,
         node: NodeId,
         handled: &mut Vec<NodeId>,
-    ) -> Option<(NodeId, &'static str)> {
+    ) -> Option<(NodeId, String)> {
         if matches!(
             self.kind_of(node),
             Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
@@ -36908,7 +36908,7 @@ impl<'a> FuncBuilder<'a> {
         // would read whatever happens to sit at that offset". The guard made
         // the same mistake about control flow rather than about storage.
         if self.reads_an_accessor(node) {
-            return Some((node, "an accessor, which is a call"));
+            return Some((node, "an accessor, which is a call".to_owned()));
         }
         // Not into a nested function: a closure written inside a `try` is not
         // *called* by it, and refusing on one would refuse every `try` holding
@@ -36942,7 +36942,7 @@ impl<'a> FuncBuilder<'a> {
     /// `FUNCTION_DECLARATION`, and a plain function that lost the fixpoint needs
     /// whatever *it* calls fixed first. The sentences are deliberately not
     /// prefixes of one another, so a census matching on text has to pick one.
-    fn why_no_raising_copy(&self, call: NodeId) -> &'static str {
+    fn why_no_raising_copy(&self, call: NodeId) -> String {
         let Some(declaration) = self
             .snapshot
             .call_targets
@@ -36951,25 +36951,105 @@ impl<'a> FuncBuilder<'a> {
         else {
             // No declaration to copy: the callee arrived as a value. Every
             // component and every effect in a React render is one of these.
-            return "through a function value, which has no raising copy to call";
+            return "through a function value, which has no raising copy to call".to_owned();
         };
         match self.kind_of(declaration) {
             Some(syntax::METHOD_DECLARATION) => {
-                "a method, and a raising copy is made of plain functions only"
+                "a method, and a raising copy is made of plain functions only".to_owned()
             },
             Some(syntax::CONSTRUCTOR) => {
-                "a constructor, and a raising copy is made of plain functions only"
+                "a constructor, and a raising copy is made of plain functions only".to_owned()
             },
             Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => {
-                "an accessor, and a raising copy is made of plain functions only"
+                "an accessor, and a raising copy is made of plain functions only".to_owned()
             },
             Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {
-                "a function written as a value, which has no raising copy to call"
+                "a function written as a value, which has no raising copy to call".to_owned()
             },
             // A plain function that was eligible and lost the fixpoint: it calls
             // something that can raise and cannot be copied. The repair is that
-            // callee's, not this call's, which is why the sentence points down.
-            _ => "a function that itself calls something whose `throw` cannot be carried",
+            // callee's, not this call's, which is why the sentence points down
+            // -- and names what it points at.
+            //
+            // **The leaf is the whole value of this arm.** Without it the React
+            // lane had 12 of 14 blockers saying "something further down", which
+            // is the sentence they had already derived by reading source. With
+            // it, a census classifies itself.
+            _ => match self.the_leaf_that_cannot_be_carried(declaration, 0) {
+                Some((name, why)) => format!(
+                    "a function that itself calls something whose `throw` cannot be carried: \
+                     `{name}`, {why}"
+                ),
+                None => "a function that itself calls something whose `throw` cannot be carried"
+                    .to_owned(),
+            },
+        }
+    }
+
+    /// The call at the bottom of a transitive refusal, and why **it** cannot be
+    /// carried.
+    ///
+    /// Walks down the declarations rather than up: each step asks the same
+    /// question `call_within` asks of a `try`, so the leaf this names is the one
+    /// a reader would find by following the chain by hand. The first
+    /// non-transitive answer wins, which is the one that names a piece of work.
+    ///
+    /// Bounded at eight steps. A cycle here is a program this compiler cannot
+    /// have built, and looping on one is worse than naming nothing -- the same
+    /// trade `walk::denoted`'s bound makes.
+    fn the_leaf_that_cannot_be_carried(
+        &self,
+        declaration: NodeId,
+        depth: u32,
+    ) -> Option<(String, String)> {
+        if depth >= 8 {
+            return None;
+        }
+        for call in calls_in_the_body_of(self, declaration) {
+            if self.has_a_raising_copy(call) || !self.calls_compiled_code(call) {
+                continue;
+            }
+            let why = self.why_no_raising_copy(call);
+            let next = self
+                .snapshot
+                .call_targets
+                .get(&call)
+                .and_then(|target| target.callee);
+            // Transitive again: keep going down rather than naming a frame the
+            // reader would have to walk through anyway.
+            if why.starts_with("a function that itself calls") {
+                if let Some(next) = next
+                    && let Some(found) = self.the_leaf_that_cannot_be_carried(next, depth + 1)
+                {
+                    return Some(found);
+                }
+                continue;
+            }
+            return Some((self.spelled_callee(call), why));
+        }
+        None
+    }
+
+    /// How a call's callee is written, for a diagnostic to name it by.
+    ///
+    /// `effect.create` rather than `create`, because the receiver is what tells
+    /// a reader which call this is -- and a member's own text is all the node
+    /// carries, so the two halves are read separately and joined.
+    fn spelled_callee(&self, call: NodeId) -> String {
+        let Some(callee) = self.children(call).first().copied() else {
+            return "the call".to_owned();
+        };
+        if let Some(text) = self.node(callee).text.clone() {
+            return text;
+        }
+        let parts = self.children(callee);
+        match parts.as_slice() {
+            [object, member] => {
+                let object = self.node(*object).text.clone().unwrap_or_else(|| "_".to_owned());
+                let member = self.node(*member).text.clone().unwrap_or_else(|| "_".to_owned());
+                format!("{object}.{member}")
+            },
+            _ => "the call".to_owned(),
         }
     }
 
