@@ -103,7 +103,18 @@ export class ConnectionPool {
   private accepting = true;
   private destroyed = false;
   private drainResult: Promise<void> | null = null;
-  private drainResolve: (() => void) | null = null;
+  /**
+   * The drain **capability**, not its settler.
+   *
+   * `this.drainResolve = result.resolve` extracts a member as a value, which is
+   * refused for the same reason `new Promise(r => { f = r })` is: a settler is a
+   * settle with the promise as receiver, not a function object. Holding the
+   * capability instead works because in this representation it *is* the promise
+   * -- see `examples/promise-with-resolvers` and
+   * `examples/a-capability-settled-through-an-optional-link`, which already keeps
+   * one in a field.
+   */
+  private drainCapability: PromiseWithResolvers<void> | null = null;
 
   constructor(connector: SocketConnector, scheduler: Scheduler, options: PoolOptions = {}) {
     this.connector = connector;
@@ -320,9 +331,9 @@ export class ConnectionPool {
       rejectWaiter(waiter, new TypeError("Connection pool is closed"));
       waiter = next;
     }
-    const resolve = this.drainResolve;
-    this.drainResolve = null;
-    resolve?.();
+    const pending = this.drainCapability;
+    this.drainCapability = null;
+    pending?.resolve();
   }
 
   drain(): Promise<void> {
@@ -331,7 +342,7 @@ export class ConnectionPool {
     this.accepting = false;
     const result = Promise.withResolvers<void>();
     this.drainResult = result.promise;
-    this.drainResolve = result.resolve;
+    this.drainCapability = result;
     for (const record of this.records) if (!record.busy) this.drop(record);
     this.pump();
     this.checkDrained();
@@ -342,16 +353,16 @@ export class ConnectionPool {
     if (
       this.accepting ||
       this.destroyed ||
-      this.drainResolve === null ||
+      this.drainCapability === null ||
       this.pendingCount !== 0 ||
       this.connecting.size !== 0 ||
       this.records.size !== 0
     ) {
       return;
     }
-    const resolve = this.drainResolve;
-    this.drainResolve = null;
-    resolve();
+    const pending = this.drainCapability;
+    this.drainCapability = null;
+    pending.resolve();
   }
 
   get stats(): { connections: number; pending: number; idle: number } {
