@@ -69,6 +69,45 @@ export function shape(exports) {
     }
     return new exports.Assert(options);
   };
+  // **The callable below is `exports.ok`, and a compiled `assert` may publish no
+  // `ok`.** Measured 2026-09-24: it publishes *nothing* -- 0 names -- so
+  // `assert(...)` threw `exports.ok is not a function` on every call, and so did
+  // `assert.strict(...)`. Every method hung off it was `undefined` besides.
+  //
+  // That is the **present-and-throwing** failure `querystring/shape.mjs` records
+  // four occurrences of, and the guard eleven lines above this one already names
+  // the rule for `AssertionError`: "reaching through an absent export turns 'one
+  // export is missing' into 'the module did not load'". The rule was right and
+  // its scope was the one export it was written for.
+  //
+  // A manufactured callable is worse than an absent one for the same reason a
+  // name bound to `undefined` is: `typeof require("assert") === "function"` is
+  // true either way, so a check asking whether the module loaded agrees, and the
+  // first call is where it goes wrong -- with a message about this file rather
+  // than about the refusal that took `ok`.
+  //
+  // So hand back the published names, as `process/shape.mjs` does for the same
+  // reason and in the same shape. When `ok` publishes, everything below runs
+  // unchanged.
+  //
+  // **What this does not do is make the failure clearer, and that is worth
+  // stating.** `surface-identity-static.js` fails either way -- it did before
+  // this and it does after -- and the message it fails with *changed*, from
+  // `assert.strictEqual is not a function` to `Cannot read properties of
+  // undefined (reading 'ok')`. Neither names the cause, which is that nothing
+  // published. What the guard buys is narrower and is the part that matters:
+  // `typeof require("assert") === "function"` no longer answers true for a
+  // module that cannot do anything, so a check asking whether the surface exists
+  // stops agreeing with a phantom. The messages get better when `assert`
+  // publishes `ok`, not here.
+  if (typeof exports.ok !== "function") {
+    const partial = {};
+    for (const [name, value] of Object.entries(exports)) {
+      if (name === "default") continue;
+      partial[name] = value;
+    }
+    return partial;
+  }
   // Named `ok`, not `assert`: node's callable reports `name` `"ok"`, because on
   // node the callable *is* `ok`. `assert.name` is `"ok"` there and was `"assert"`
   // here. The binding stays `assert`; only the function's name changes.
