@@ -23141,6 +23141,52 @@ the axis -- rest parameters, inbound references, `.call` rebinding,
 `URL#constructor` -- is a list of lowering gaps, and a quarter of the gap is not
 one.
 
+#### Re-measured 2026-09-24: 84 of 503, and the 92 was one sentence over five causes
+
+Same instrument, `export-reach.mjs`, so the two are comparable. **The share is 17%
+rather than 26%**, and the row that dominated the table above is now 17:
+
+```text
+    21  takes an object
+    17  is exported and is not a function this backend can name
+    11  is exported as a value of type `an object`, which does not cross
+    11  is exported as a value of type `a function`, which does not cross
+     7  returns an object
+     6  is exported as a value of type `symbol`, which does not cross
+     5  takes or returns a union that erases
+     4  is a field of type Date and does not cross
+     2  takes an object[] / an object, which crosses outward only
+    ---
+    84 of 503 declined exports, 26 modules
+```
+
+**The 92 did not shrink; it was split.** `record_unstorable_exports` and the
+diagnostic work behind it turned one sentence into the `an object` / `a function`
+/ `symbol` rows above, which is why the total falls while the denominator rises.
+Read the old table as a single unranked bucket rather than as a measurement of
+"not a function".
+
+**And 8 of the remaining 17 are not gaps.** The instrument now says what each
+value is, and node does not publish these at all:
+
+```text
+    8  NOT PUBLISHED BY NODE -- not a gap
+       async_hooks.AsyncHook  async_hooks.RunScope  buffer.default
+       events.default  string_decoder.default  timers.PriorityQueue
+       util.default  zlib.ZlibError
+    7  a class
+       assert.CallTracker  events.EventEmitter  fs.Dirent
+       http.OutgoingMessage  http.Server  net.SocketAddress  readline.Interface
+    1  a number    cluster.schedulingPolicy
+    1  a mixed object (0 fn of 17)    http.globalAgent
+```
+
+So the honest figure for that row is **9**, seven of which are one shape: a class
+exported as a value, which `object_crosses` refuses because "a class instance is
+more than its fields". That is a decision to make about classes at the boundary,
+not seventeen unrelated obstacles -- and it is the kind of correction the 92
+could never have surfaced, because a grouped message is not a cause.
+
 ### The fix that is landed
 
 Step 3, because it is correct independently of the rest: an empty array literal
