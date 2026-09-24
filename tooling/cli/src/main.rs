@@ -4678,6 +4678,11 @@ struct Toolchain {
     /// here that is not a link -- the witness above all, at `-Werror` -- turns
     /// an unused `-fuse-ld=` or `-L` into an error.
     link: Vec<String>,
+    /// The command line that links, where it is not `program`: the driver that
+    /// carries the target's C runtime. Windows compiles with clang, which reads
+    /// headers faithfully, and links with `zig cc`, which alone carries mingw's
+    /// CRT and import libraries (`windows_toolchain`).
+    linker: Option<Vec<String>>,
 }
 
 impl Toolchain {
@@ -4689,7 +4694,14 @@ impl Toolchain {
 
     /// `command`, for a link.
     fn link_command(&self) -> std::process::Command {
-        let mut command = self.command();
+        let mut command = match self.linker.as_deref() {
+            Some([program, leading @ ..]) => {
+                let mut command = std::process::Command::new(program);
+                command.args(leading);
+                command
+            }
+            _ => self.command(),
+        };
         command.args(&self.link);
         command
     }
@@ -4711,10 +4723,14 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
             program: words.next().unwrap_or("clang").to_owned(),
             leading: words.map(str::to_owned).collect(),
             link: Vec::new(),
+            linker: None,
         });
     }
     if target.os == "macos" {
         return apple_toolchain(name, target);
+    }
+    if target.os == "windows" {
+        return windows_toolchain(name, target);
     }
     if target.os == "ios" {
         // **Not the macOS reason.** Compiling for iOS is the same command line
@@ -4750,6 +4766,7 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         program: "zig".to_owned(),
         leading: vec!["cc".to_owned(), "-target".to_owned(), triple],
         link: Vec::new(),
+        linker: None,
     })
 }
 
@@ -4810,7 +4827,88 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
         leading.push(format!("-I{}", uv.join("include")));
         link.push(format!("-L{}", uv.join("lib")));
     }
-    Ok(Toolchain { program: "clang".to_owned(), leading, link })
+    Ok(Toolchain { program: "clang".to_owned(), leading, link, linker: None })
+}
+
+/// Where the Windows lane keeps what a Windows build needs and this box does not
+/// ship: a libuv per arch. `tooling/windows/build-libuv.sh` fills it.
+fn windows_root() -> Utf8PathBuf {
+    if let Ok(root) = std::env::var("NTS_WINDOWS_ROOT") {
+        return Utf8PathBuf::from(root);
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_owned());
+    Utf8PathBuf::from(home).join(".cache/nts/windows")
+}
+
+/// Windows (the mingw-w64 ABI, UCRT) from a machine that is not Windows: clang
+/// compiles against zig's bundled mingw headers, and `zig cc` links.
+///
+/// **Two programs, because each does one half right.**
+/// - **The headers go to clang.** Every build compiles a witness with
+///   `-fsyntax-only`, and `zig cc` does not honour that flag: it reported
+///   `error: FileNotFound` at 1:1 for a file whose `_Static_assert` holds, and
+///   the same failure for one whose assertion is false. clang given zig's
+///   headers passes the first and rejects the second.
+/// - **The link goes to zig.** It alone carries mingw's CRT objects and
+///   import libraries. It builds them from source on first use, so there is no
+///   sysroot to point clang's own link at.
+///
+/// **The same configuration zig compiles with**, read from `zig cc -###`: its
+/// four mingw include directories, `__MSVCRT_VERSION__=0xE00` (UCRT, which is
+/// what zig links), and `_WIN32_WINNT=0x0a00`. With a different CRT macro the
+/// headers would select msvcrt.dll's stdio while the link supplies UCRT's.
+/// Bitfields need no flag: both default to MS layout for this triple
+/// (measured: `struct { char a:4; int b:4; }` is 8 bytes under each).
+///
+/// libuv, which every executable links, comes from `<root>/<arch>` when
+/// `tooling/windows/build-libuv.sh` has put one there. Otherwise the usual
+/// refusal about `uv.h` says what is missing.
+fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
+    let arch = target.arch.as_deref().unwrap_or(host_arch());
+    let Some(zig) = zig_lib_dir() else {
+        bail!(
+            "product `{name}` targets {} and this is a {} machine, so it is \
+             cross-compiled with zig's mingw-w64 -- and `zig env` did not answer. \
+             Install zig, or set CC to a cross compiler for {arch}-w64-windows-gnu",
+            target.id,
+            host_os()
+        )
+    };
+    let mut leading = vec![format!("--target={arch}-w64-windows-gnu"), "-nostdlibinc".to_owned()];
+    let headers = zig.join("libc/include");
+    for directory in [
+        format!("{arch}-windows-gnu"),
+        "generic-mingw".to_owned(),
+        format!("{arch}-windows-any"),
+        "any-windows-any".to_owned(),
+    ] {
+        let directory = headers.join(directory);
+        if directory.is_dir() {
+            leading.push("-isystem".to_owned());
+            leading.push(directory.to_string());
+        }
+    }
+    leading.extend(["-D__MSVCRT_VERSION__=0xE00".to_owned(), "-D_WIN32_WINNT=0x0a00".to_owned()]);
+    let mut link = Vec::new();
+    let uv = windows_root().join(arch);
+    if uv.join("include/uv.h").is_file() {
+        leading.push(format!("-I{}", uv.join("include")));
+        link.push(format!("-L{}", uv.join("lib")));
+    }
+    let linker = vec!["zig".to_owned(), "cc".to_owned(), "-target".to_owned(), format!("{arch}-windows-gnu")];
+    Ok(Toolchain { program: "clang".to_owned(), leading, link, linker: Some(linker) })
+}
+
+/// zig's library directory, which holds the libc headers it bundles, or `None`
+/// when there is no `zig` to ask.
+fn zig_lib_dir() -> Option<Utf8PathBuf> {
+    let output = std::process::Command::new("zig").arg("env").output().ok()?;
+    let text = String::from_utf8(output.stdout).ok()?;
+    // `.lib_dir = "/usr/lib/zig",` since 0.14 (ZON), `"lib_dir": "…"` before
+    // (JSON): the value is the next quoted string after the key either way.
+    let after = text.split_once("lib_dir")?.1;
+    let value = after.split('"').nth(if after.starts_with('"') { 2 } else { 1 })?;
+    Some(Utf8PathBuf::from(value))
 }
 
 fn run(mut command: std::process::Command, what: &str) -> Result<()> {
@@ -5067,7 +5165,7 @@ fn link_c(
                 command.arg(flag);
             }
             command.args(objc_link_flags(wrote));
-            command.args(loop_host_link_flags(&sources));
+            command.args(loop_host_link_flags(&sources, format));
             // **`--no-undefined` where it can be used**, which is the earliest
             // an unresolved symbol can be caught and the cheapest place to say
             // so. Not for an addon: a `.node` resolves `napi_*` out of the host
@@ -5122,6 +5220,11 @@ impl ObjectFormat {
     }
 }
 
+/// The system libraries a static libuv needs on Windows: its `CMakeLists.txt`
+/// list for `WIN32`, which `tooling/windows/build-libuv.sh` builds from.
+const WINDOWS_UV_LIBS: [&str; 9] =
+    ["psapi", "user32", "advapi32", "iphlpapi", "userenv", "ws2_32", "dbghelp", "ole32", "shell32"];
+
 /// Refused before anything compiles. A `.node` off ELF resolves `napi_*` from
 /// its host a way this link does not write -- `-undefined dynamic_lookup` on a
 /// Mac, an import library for `node.exe` on Windows -- and the
@@ -5169,10 +5272,15 @@ fn refuse_what_this_linker_cannot(
 /// The libuv host is a translation unit like any other, so its presence in what
 /// was written is the question -- not the product kind, and not a flag somebody
 /// remembers. The same rule gives the run-loop adapter its framework.
-fn loop_host_link_flags(sources: &[String]) -> Vec<String> {
+fn loop_host_link_flags(sources: &[String], format: ObjectFormat) -> Vec<String> {
     let mut flags = Vec::new();
     if sources.iter().any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME) {
         flags.push("-luv".to_owned());
+        // A static libuv brings its dependencies' names, not the libraries:
+        // on Windows, its `CMakeLists.txt` list for `WIN32`.
+        if format == ObjectFormat::Coff {
+            flags.extend(WINDOWS_UV_LIBS.iter().map(|lib| format!("-l{lib}")));
+        }
     }
     if sources.iter().any(|s| s == nts_codegen_c::CF_HOST_SOURCE_NAME) {
         flags.extend(["-framework".to_owned(), "CoreFoundation".to_owned()]);

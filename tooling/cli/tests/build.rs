@@ -2915,7 +2915,12 @@ fn a_cross_build_that_needs_libuv_names_it_rather_than_failing_in_the_compiler()
         return;
     }
     let project = fixture("build-windows-libuv", WINDOWS_EXECUTABLE);
-    let run = build(&project, &[]);
+    // **An empty root, because this machine may have a real one.** The lane
+    // cross-builds libuv into `~/.cache/nts/windows`, and with it there this
+    // test built an `.exe` and failed for having succeeded.
+    let empty = project.join("no-windows-root");
+    std::fs::create_dir_all(&empty).expect("empty root");
+    let run = build_for_windows(&project, &empty);
     assert!(!run.ok, "it built without libuv:\n{}", run.stdout);
     assert!(
         run.stderr.contains("`uv.h` is not reachable") && run.stderr.contains("libuv"),
@@ -2927,6 +2932,68 @@ fn a_cross_build_that_needs_libuv_names_it_rather_than_failing_in_the_compiler()
         "it still reports the compiler's error rather than its own:\n{}",
         run.stderr
     );
+}
+
+/// `nts build` for Windows, run with `NTS_WINDOWS_ROOT` pointing at `root`.
+fn build_for_windows(project: &Path, root: &Path) -> Run {
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        .env("NTS_WINDOWS_ROOT", root)
+        .env_remove("CC")
+        .output()
+        .expect("running nts build");
+    Run {
+        ok: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }
+}
+
+/// The other arm of the refusal above: the same program, with the libuv
+/// `tooling/windows/build-libuv.sh` puts under `NTS_WINDOWS_ROOT`, links into
+/// a console `.exe` that loads nothing but Windows' own DLLs.
+///
+/// **The imports are the assertion.** A cross link that picked up a host
+/// library, or a mingw runtime DLL (`libwinpthread-1.dll`) that is not on a
+/// stock Windows, still produces a PE32+ executable; it fails only on the
+/// machine it was built for.
+#[test]
+fn a_windows_executable_links_the_lane_libuv_and_only_system_dlls() {
+    let root = std::env::var_os("NTS_WINDOWS_ROOT").map_or_else(
+        || PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".cache/nts/windows"),
+        PathBuf::from,
+    );
+    let tools = ["zig", "llvm-objdump"]
+        .iter()
+        .all(|tool| Command::new(tool).arg("--version").output().is_ok());
+    if !available() || !tools || !root.join("x86_64/lib/libuv.a").is_file() {
+        skip("the tsgo frontend, zig, llvm-objdump, and tooling/windows/build-libuv.sh's libuv");
+        return;
+    }
+    let project = fixture("build-windows-exe", WINDOWS_EXECUTABLE);
+    let run = build_for_windows(&project, &root);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    let exe = project.join(".nts/build/tool/windows-x86_64/tool.exe");
+    let kind = Command::new("file").arg("-b").arg(&exe).output().expect("running file");
+    let kind = String::from_utf8_lossy(&kind.stdout);
+    assert!(kind.contains("PE32+") && kind.contains("console"), "not a console .exe: {kind}");
+    let listed = Command::new("llvm-objdump").arg("-p").arg(&exe).output().expect("llvm-objdump");
+    let text = String::from_utf8_lossy(&listed.stdout);
+    let foreign: Vec<&str> = text
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("DLL Name: "))
+        .filter(|dll| {
+            let dll = dll.to_ascii_lowercase();
+            !dll.starts_with("api-ms-win-")
+                && ![
+                    "kernel32.dll", "advapi32.dll", "user32.dll", "ws2_32.dll", "iphlpapi.dll",
+                    "userenv.dll", "dbghelp.dll", "ole32.dll", "shell32.dll", "psapi.dll",
+                ]
+                .contains(&dll.as_str())
+        })
+        .collect();
+    assert!(foreign.is_empty(), "the .exe loads DLLs a stock Windows does not have: {foreign:?}");
 }
 
 const RELATIVE_LIB: &str = r#"
