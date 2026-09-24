@@ -20,6 +20,7 @@ mod check;
 mod ctype;
 mod emit;
 mod facts;
+mod iid;
 mod map;
 mod read;
 pub(crate) mod winrt;

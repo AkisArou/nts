@@ -171,9 +171,18 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         module.contains("@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C"),
         "JsonValue's statics are not on its factory as IJsonValueStatics:\n{module}"
     );
-    assert!(module.contains("export type JsonValue = IJsonValue;"), "a class is not its default interface:\n{module}");
+    // A class is its default interface, and its others by `as_` queries.
+    assert!(module.contains("export type JsonValue = IJsonValue & JsonValueInterfaces;"), "{module}");
     assert!(module.contains("export namespace JsonValue {"), "{module}");
     assert!(module.contains("ComClass<\"Windows_Data_Json_IJsonValue\">"), "{module}");
+    // A class's other interface, by the IID the Windows Runtime computes for
+    // the instantiation: the value Windows answered `QueryInterface` for, in
+    // `examples/interop/windows-winrt`.
+    assert!(
+        module.contains("@ntsQuery D44662BC-DCE3-59A8-9272-4B210F33908B\n     */\n    as_IVector(this: JsonArray): IVector<IJsonValue>;"),
+        "JsonArray is not queried for IVector<IJsonValue> by its computed IID:\n{module}"
+    );
+    assert!(module.contains("export type JsonArray = IJsonArray & JsonArrayInterfaces;"), "{module}");
     // Refused, each with the reason, and not written.
     assert!(refused.contains("IJsonValueStatics.TryParse\tan `out` parameter"), "{refused}");
     declared_in("export interface IJsonValueMethods", 10, "GetBoolean", "GetBoolean(this: IJsonValue): boolean;");

@@ -40836,7 +40836,7 @@ impl<'a> FuncBuilder<'a> {
             .node(declaration)
             .native
             .as_ref()
-            .is_some_and(|n| n.symbol.is_some() || n.selector.is_some() || n.vtable.is_some());
+            .is_some_and(|n| n.symbol.is_some() || n.selector.is_some() || n.vtable.is_some() || n.query.is_some());
         // Or a method of an Objective-C class a binding declares, whose
         // receiver is the object it is called on, or the class when `static`.
         let objc_member = self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
@@ -41013,6 +41013,10 @@ impl<'a> FuncBuilder<'a> {
         let typed = if chained == with_this.return_type { None } else { self.represent(chained) };
         with_this.return_type = chained;
         let name = self.node(member).text.clone().unwrap_or_default();
+        // `list.as_IVector()`: the object as another of its interfaces.
+        if let Some(iid) = self.node(declaration).native.as_ref().and_then(|n| n.query.clone()) {
+            return self.lower_query(id, receiver, &iid, with_this.return_type, arguments);
+        }
         // A class method is sent to the class, which the send looks up
         // itself: the receiver the program wrote is the class, as a value.
         if self.objc_class_member(declaration).is_some_and(|member| member.is_static) {
@@ -41983,6 +41987,32 @@ impl<'a> FuncBuilder<'a> {
             (None, true) => {}
         }
         Ok(Some(super::native::Vtable { slot, method: (*method).to_owned(), factory }))
+    }
+
+    /// `@ntsQuery`: the receiver as the COM interface the IID names, which is
+    /// `QueryInterface` -- a table of the object's own, not a conversion of
+    /// the pointer the program has. What comes back is a reference of its own,
+    /// released when the program is done with it, as a runtime call's result
+    /// is; an object without the interface ends the process naming it, since
+    /// the binding said the class implements it.
+    fn lower_query(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        iid: &str,
+        result: nts_semantic_schema::TypeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        if !arguments.is_empty() {
+            return Err(self.unsupported(id, "@ntsQuery on a method that takes arguments beside `this`"));
+        }
+        if !is_interface_id(iid) {
+            return Err(self.unsupported(id, "@ntsQuery with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
+        }
+        let ty = self.represent(result).ok_or_else(|| self.unrepresentable(id, "the interface @ntsQuery answers"))?;
+        let origin = self.origin(id);
+        let text = self.push(OpKind::ConstString(iid.trim_matches(['{', '}']).to_owned()), HirType::Managed(ManagedType::String), origin.clone());
+        Ok(self.runtime_call("nts_com_query", vec![receiver, text], ty, origin))
     }
 
     /// The receiver of a runtime class's static: its activation factory as the

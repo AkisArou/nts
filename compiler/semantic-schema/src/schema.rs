@@ -29,7 +29,18 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 27;
+///
+/// **An additive field is a change too.** One marked `#[serde(default)]`
+/// does not fail on a snapshot written before it existed: it reads as
+/// absent, so a program's `@ntsVtable` would lose its slot without a word.
+/// The frontend's own cache is additionally keyed on the compiler binary
+/// (`built_by` in `frontend-ts/src/cache.rs`), which is why a missed bump has
+/// not been an emergency there; anything else that keeps a snapshot across
+/// binaries has only this number. W2's `vtable`, `hresult` and `factory`
+/// landed at 26 without one, and two lanes' bumps met on a rebase as the
+/// same line and merged into none: whoever lands second takes the next
+/// number, and checks that it did.
+pub const SCHEMA_VERSION: u32 = 28;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -782,6 +793,10 @@ pub struct NativeAttributes {
     /// interface.
     #[serde(default)]
     pub factory: Option<String>,
+    /// `@ntsQuery 913337E9-...`: a method taking only `this` that is the
+    /// object as another of its COM interfaces, by `QueryInterface`.
+    #[serde(default)]
+    pub query: Option<String>,
 }
 
 /// Why a snapshot was rejected.

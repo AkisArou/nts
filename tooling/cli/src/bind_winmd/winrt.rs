@@ -319,8 +319,49 @@ impl Writer<'_> {
                 }
             }
         }
+        // The class's other interfaces, each reached by `QueryInterface`:
+        // `list.as_IVector()` is the array as its `IVector<IJsonValue>`, whose
+        // table is the object's own. An instantiation's IID is computed.
+        let mut queries = String::new();
+        let mut asked: BTreeSet<String> = BTreeSet::new();
+        for implemented in def.interface_impls().filter(|implemented| !implemented.has_attribute("DefaultAttribute")) {
+            let interface = implemented.interface(&[]);
+            let Type::ClassName(named) = &interface else { continue };
+            let base = generic_base(&named.name).to_owned();
+            let spelled_interface = match self.spell(&interface, false) {
+                Ok(spelled) => spelled,
+                Err(why) => {
+                    self.refuse(&format!("{name} as {base}"), &why);
+                    continue;
+                }
+            };
+            let iid = match self.interface_iid(&interface) {
+                Ok(iid) => iid,
+                Err(why) => {
+                    self.refuse(&format!("{name} as {base}"), &why);
+                    continue;
+                }
+            };
+            let mut method = format!("as_{base}");
+            let mut again = 2;
+            while !asked.insert(method.clone()) {
+                method = format!("as_{base}{again}");
+                again += 1;
+            }
+            let _ = writeln!(queries, "    /**\n     * @ntsQuery {iid}\n     */");
+            let _ = writeln!(queries, "    {method}(this: {name}): {spelled_interface};");
+        }
+        if !queries.is_empty() {
+            let _ = writeln!(body, "  export interface {name}Interfaces {{");
+            body.push_str(&queries);
+            let _ = writeln!(body, "  }}");
+        }
         if !spelled.is_empty() {
-            let _ = writeln!(body, "  export type {name} = {spelled};");
+            if queries.is_empty() {
+                let _ = writeln!(body, "  export type {name} = {spelled};");
+            } else {
+                let _ = writeln!(body, "  export type {name} = {spelled} & {name}Interfaces;");
+            }
         }
         if !statics.is_empty() {
             let _ = writeln!(body, "  export namespace {name} {{");
@@ -471,6 +512,77 @@ impl Writer<'_> {
 }
 
 impl Writer<'_> {
+    /// The IID of an interface or an instantiation of one: the metadata's
+    /// `GuidAttribute`, or the Windows Runtime's hash of the instantiation's
+    /// signature (`iid::parameterized`).
+    fn interface_iid(&self, ty: &Type) -> Result<String, String> {
+        let Type::ClassName(named) = ty else { return Err("not an interface".to_owned()) };
+        if named.generics.is_empty() {
+            let def = self.find(&named.namespace, &named.name)?;
+            return iid(def).ok_or_else(|| format!("`{}`, an interface with no GuidAttribute", named.name));
+        }
+        Ok(super::iid::parameterized(&self.signature(ty)?))
+    }
+
+    /// A type's signature as a parameterized IID is computed from it:
+    /// `pinterface({faa585ea-6214-4217-afda-7f46de5869b3};string)`.
+    fn signature(&self, ty: &Type) -> Result<String, String> {
+        Ok(match ty {
+            Type::Bool => "b1".to_owned(),
+            Type::Char => "c2".to_owned(),
+            Type::I8 => "i1".to_owned(),
+            Type::U8 => "u1".to_owned(),
+            Type::I16 => "i2".to_owned(),
+            Type::U16 => "u2".to_owned(),
+            Type::I32 => "i4".to_owned(),
+            Type::U32 => "u4".to_owned(),
+            Type::I64 => "i8".to_owned(),
+            Type::U64 => "u8".to_owned(),
+            Type::F32 => "f4".to_owned(),
+            Type::F64 => "f8".to_owned(),
+            Type::String => "string".to_owned(),
+            Type::Object => "cinterface(IInspectable)".to_owned(),
+            Type::ValueName(named) if named.namespace == "System" && named.name == "Guid" => "g16".to_owned(),
+            Type::ValueName(named) => {
+                let def = self.find(&named.namespace, &named.name)?;
+                if def.category() == TypeCategory::Enum {
+                    let underlying = if matches!(def.underlying_type(), Some(Type::U32)) { "u4" } else { "i4" };
+                    format!("enum({}.{};{underlying})", named.namespace, named.name)
+                } else {
+                    let fields: Vec<String> =
+                        def.fields().map(|field| self.signature(&field.ty())).collect::<Result<_, _>>()?;
+                    format!("struct({}.{};{})", named.namespace, named.name, fields.join(";"))
+                }
+            }
+            Type::ClassName(named) => {
+                let def = self.find(&named.namespace, &named.name)?;
+                let own = || iid(def).map(|iid| format!("{{{}}}", iid.to_lowercase())).ok_or_else(|| format!("`{}` has no IID", named.name));
+                if named.generics.is_empty() {
+                    match def.category() {
+                        TypeCategory::Interface => own()?,
+                        TypeCategory::Delegate => format!("delegate({})", own()?),
+                        TypeCategory::Class => {
+                            let default = def
+                                .interface_impls()
+                                .find(|implemented| implemented.has_attribute("DefaultAttribute"))
+                                .ok_or_else(|| format!("`{}`, a class with no default interface", named.name))?;
+                            format!("rc({}.{};{})", named.namespace, named.name, self.signature(&default.interface(&[]))?)
+                        }
+                        _ => return Err(format!("`{}`, which has no signature", named.name)),
+                    }
+                } else {
+                    let arguments: Vec<String> = named.generics.iter().map(|argument| self.signature(argument)).collect::<Result<_, _>>()?;
+                    format!("pinterface({};{})", own()?, arguments.join(";"))
+                }
+            }
+            other => return Err(format!("{other:?}, which has no signature")),
+        })
+    }
+
+    fn find(&self, namespace: &str, name: &str) -> Result<TypeDef<'_>, String> {
+        self.index.get(namespace, generic_base(name)).next().ok_or_else(|| format!("`{name}`, not in the metadata read"))
+    }
+
     /// A type's name as this module spells it: its own, imported from the
     /// module of the namespace declaring it when that is another.
     fn named(&mut self, namespace: &str, name: &str) -> String {

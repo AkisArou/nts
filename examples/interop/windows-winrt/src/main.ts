@@ -14,15 +14,20 @@
 //   instantiation the static handed back, whatever `T` it was made for. What
 //   the machine's languages are is its own, so the line says only that there
 //   is one and that the first is a BCP-47 tag.
+// - `vector`: a class's other interface, by `QueryInterface` with the IID the
+//   Windows Runtime computes for `IVector<IJsonValue>` -- `as_IVector` on a
+//   `JsonArray`, whose own interface is `IJsonArray`. A wrong IID ends the
+//   process naming it rather than printing anything.
 // - `threw`: an HRESULT failure, thrown as an `Error` naming the code.
 // - `released`, reported after `run` returns: 0 without a counting provider,
-//   and 4 under `--rc`, one for each object handed over: `value`, `list`,
-//   `made`, and the `Parse("false")` read once and dropped. The parse
+//   and 8 under `--rc`, one for each object handed over: `value`, `list`,
+//   `made`, the `Parse("false")` read once and dropped, the languages, the
+//   array, its `IVector` and the item read from it. The parse
 //   inside the `try` fails, so it hands over nothing and has nothing to give
 //   back; a release there would be of an object that does not exist.
 import { activations, releases, report } from "c:report";
 // Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
-import { JsonValue } from "winrt:Windows.Data.Json";
+import { JsonArray, JsonValue } from "winrt:Windows.Data.Json";
 import { ApplicationLanguages } from "winrt:Windows.Globalization";
 
 function run(): string {
@@ -35,6 +40,8 @@ function run(): string {
   const languages = ApplicationLanguages.get_Languages();
   const first = languages.GetAt(0);
   const tags = (languages.get_Size() >= 1 ? "some" : "none") + "," + (first.includes("-") ? "tagged" : first);
+  const vector = JsonArray.Parse("[1, 2.5, true]").as_IVector();
+  const items = String(vector.get_Size()) + ":" + String(vector.GetAt(1).GetNumber());
   let threw = "nothing";
   try {
     JsonValue.Parse("{not json");
@@ -42,7 +49,7 @@ function run(): string {
     threw = (error as Error).message.slice(0, 18);
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
-    String(activations()) + " bools=" + bools + " languages=" + tags + " threw=" + threw;
+    String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " threw=" + threw;
 }
 
 const line = run();

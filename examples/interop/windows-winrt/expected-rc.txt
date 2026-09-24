@@ -1,1 +1,1 @@
-number=42.5 text=42.5 list=[1,2.5,true] activations=2 bools=true,true,false languages=some,tagged threw=HRESULT 0x83750007 released=5
+number=42.5 text=42.5 list=[1,2.5,true] activations=3 bools=true,true,false languages=some,tagged vector=3:2.5 threw=HRESULT 0x83750007 released=8

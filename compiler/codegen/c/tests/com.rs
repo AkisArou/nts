@@ -258,3 +258,73 @@ fn a_static_in_a_namespace_is_called_on_its_factory() {
     let text = emitted.writer.text();
     assert!(text.contains("nts_winrt_factory(") && text.contains("[6])("), "Parse is not called on its factory:\n{text}");
 }
+
+/// `@ntsQuery` is a runtime call that answers the object as another of its
+/// interfaces; one with arguments, or an IID that is not one, is refused.
+#[test]
+fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
+    let binding = |extra: &str| {
+        format!(
+            r#"declare module "winrt:Windows.Data.Json" {{
+  import type {{ ComClass, HString }} from "winrt:types";
+  import type {{ CNumber }} from "c:types";
+  export interface IJsonValueMethods {{
+    /**
+     * @ntsVtable 9 GetNumber
+     * @ntsHresult
+     */
+    GetNumber(this: IJsonValue): CNumber<"double">;
+  }}
+  export type IJsonValue = ComClass<"Windows_Data_Json_IJsonValue"> & IJsonValueMethods;
+  export interface JsonValueInterfaces {{
+    /**
+     * @ntsQuery A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E
+     */
+    as_IJsonValue(this: JsonValue): IJsonValue;
+{extra}
+  }}
+  export type JsonValue = IJsonValue & JsonValueInterfaces;
+  export namespace JsonValue {{
+    /**
+     * @ntsVtable 6 Parse
+     * @ntsHresult
+     * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+     */
+    function Parse(input: HString): JsonValue;
+  }}
+}}
+"#
+        )
+    };
+    let source = "import { JsonValue } from \"winrt:Windows.Data.Json\";\nexport function run(): number {\n  return JsonValue.Parse(\"1\").as_IJsonValue().GetNumber();\n}\n";
+    let Some((_, prepared)) = prepare("query", &binding(""), source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let text = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64).writer.text().to_owned();
+    assert!(text.contains("nts_com_query("), "no QueryInterface:\n{text}");
+
+    for (name, extra, call, refusal) in [
+        (
+            "query-args",
+            "    /**\n     * @ntsQuery A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E\n     */\n    as_Other(this: JsonValue, n: CNumber<\"double\">): IJsonValue;",
+            "JsonValue.Parse(\"1\").as_Other(1)",
+            "takes arguments beside `this`",
+        ),
+        (
+            "query-iid",
+            "    /**\n     * @ntsQuery A3219ECB\n     */\n    as_Other(this: JsonValue): IJsonValue;",
+            "JsonValue.Parse(\"1\").as_Other()",
+            "not 8-4-4-4-12 hexadecimal digits",
+        ),
+    ] {
+        let source = format!("import {{ JsonValue }} from \"winrt:Windows.Data.Json\";\nexport function run(): void {{\n  {call};\n}}\n");
+        let Some((_, prepared)) = prepare(name, &binding(extra), &source) else { return };
+        assert!(
+            prepared.diagnostics.iter().any(|d| d.message.contains(refusal)),
+            "{name}: {:?}",
+            prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+}

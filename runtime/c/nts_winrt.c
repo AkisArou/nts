@@ -102,6 +102,32 @@ static void nts_winrt_initialize(void) {
   }
 }
 
+static int nts_parse_iid(const NtsString *text, IID *out);
+
+/* `object` as the interface `iid` names, by `QueryInterface`: a reference of
+ * its own, which the caller releases. An object without the interface ends
+ * the process naming it -- the binding said its class implements it, and a
+ * wrong table is not something to call through. */
+void *nts_com_query(void *object, const NtsString *iid) {
+  IID wanted;
+  if (!nts_parse_iid(iid, &wanted)) {
+    fprintf(stderr,
+            "nts: @ntsQuery names an interface ID that does not parse\n");
+    abort();
+  }
+  void *answer = 0;
+  HRESULT hr = (*(const NtsUnknownTable **)object)
+                   ->query_interface(object, &wanted, &answer);
+  if (FAILED(hr) || answer == 0) {
+    const uint16_t *units = nts_string_to_utf16(iid);
+    fprintf(stderr,
+            "nts: the object does not implement the interface %ls (0x%08lx)\n",
+            (const wchar_t *)units, (unsigned long)hr);
+    abort();
+  }
+  return answer;
+}
+
 /* `{5F6B544A-2F53-48E1-91A3-F78B50A6345C}` or without the braces. */
 static int nts_parse_iid(const NtsString *text, IID *out) {
   char buffer[40];

@@ -1788,6 +1788,7 @@ void *nts_string_to_hstring(const NtsString *s);
 void nts_hstring_release(const NtsString *s, void *h);
 NtsString *nts_string_from_hstring(void *h);
 void *nts_com_take(void *slot);
+void *nts_com_query(void *object, const NtsString *iid);
 void *nts_com_addref(void *object);
 void nts_com_release(void *object);
 uint32_t nts_com_releases(void);
