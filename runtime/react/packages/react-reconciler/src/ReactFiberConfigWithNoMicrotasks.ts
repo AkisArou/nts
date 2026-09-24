@@ -1,6 +1,8 @@
 // Renderers that don't support microtasks
 // can re-export everything from this module.
 
+
+
 function shim(..._args: unknown[]): never {
   throw new Error(
     "The current renderer does not support microtasks. " +
@@ -10,4 +12,4 @@ function shim(..._args: unknown[]): never {
 }
 
 export const supportsMicrotasks: boolean = false;
-export const scheduleMicrotask = shim;
+export const scheduleMicrotask: (callback: () => void) => void = shim;

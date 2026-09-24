@@ -5,6 +5,7 @@
 //
 // Port of upstream's ReactFiberCommitEffects.js (stable channel).
 
+import { hostInstanceOf, hostNodeOf } from "./ReactFiberStateNode.ts";
 import type { Props } from "shared/ReactTypes.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import type { UpdateQueue } from "./ReactFiberClassUpdateQueue.ts";
@@ -471,7 +472,7 @@ export function commitRootCallbacks(finishedWork: Fiber): void {
       switch (finishedWork.child.tag) {
         case HostSingleton:
         case HostComponent:
-          instance = getPublicInstance(finishedWork.child.stateNode);
+          instance = getPublicInstance(hostNodeOf(finishedWork.child));
           break;
         case ClassComponent:
           instance = finishedWork.child.stateNode;
@@ -574,7 +575,7 @@ function commitAttachRef(finishedWork: Fiber): void {
       case HostHoistable:
       case HostSingleton:
       case HostComponent:
-        instanceToUse = getPublicInstance(finishedWork.stateNode);
+        instanceToUse = getPublicInstance(hostInstanceOf(finishedWork));
         break;
       case ViewTransitionComponent: {
         if (enableViewTransition) {

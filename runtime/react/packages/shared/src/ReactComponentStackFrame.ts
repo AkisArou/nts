@@ -7,7 +7,7 @@
 // that must clear the hooks dispatcher take the internals as their last
 // argument.
 
-import { isDevelopment } from "./Build.ts";
+import { isDevelopment } from "shared/Build.ts";
 import { disableLogs, reenableLogs } from "./ConsolePatchingDev.ts";
 import { DefaultPrepareStackTrace, ErrorWithStackHook } from "./DefaultPrepareStackTrace.ts";
 import { formatOwnerStack } from "./ReactOwnerStackFrames.ts";

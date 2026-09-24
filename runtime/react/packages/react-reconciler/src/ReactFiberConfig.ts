@@ -34,7 +34,7 @@ export type ViewTransitionInstance = null | { name: string };
 export type InstanceMeasurement = unknown;
 export type EventResponder = unknown;
 export type GestureTimeline = unknown;
-export type FragmentInstanceType = null;
+export type FragmentInstanceType = unknown;
 export type HoistableRoot = unknown;
 export type Resource = unknown;
 
@@ -84,7 +84,7 @@ export declare const supportsHydration: boolean;
 export declare function getInstanceFromNode(node: unknown): unknown;
 export declare function beforeActiveInstanceBlur(internalInstanceHandle: InternalInstanceHandle): void;
 export declare function afterActiveInstanceBlur(): void;
-export declare function preparePortalMount(portalInstance: Instance): void;
+export declare function preparePortalMount(portalInstance: Container): void;
 export declare function prepareScopeUpdate(scopeInstance: unknown, instance: unknown): void;
 export declare function getInstanceFromScope(scopeInstance: unknown): unknown;
 export declare function setCurrentUpdatePriority(newPriority: number): void;
@@ -218,14 +218,14 @@ export declare function cloneInstance(
   oldProps: Props,
   newProps: Props,
   keepChildren: boolean,
-  newChildSet: ChildSet | null,
+  newChildSet: ChildSet | null | undefined,
 ): Instance;
 export declare function createContainerChildSet(): ChildSet;
 export declare function appendChildToContainerChildSet(childSet: ChildSet, child: Instance | TextInstance): void;
 export declare function finalizeContainerChildren(container: Container, newChildren: ChildSet): void;
 export declare function replaceContainerChildren(container: Container, newChildren: ChildSet): void;
 export declare function cloneHiddenInstance(instance: Instance, type: Type, props: Props): Instance;
-export declare function cloneHiddenTextInstance(instance: Instance, text: string): TextInstance;
+export declare function cloneHiddenTextInstance(instance: TextInstance, text: string): TextInstance;
 
 // Hydration.
 export declare function isSuspenseInstancePending(instance: SuspenseInstance): boolean;

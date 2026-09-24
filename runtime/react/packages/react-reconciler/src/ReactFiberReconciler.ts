@@ -1,6 +1,7 @@
 // The reconciler's public API: what a renderer calls to create roots,
 // render into them and flush work.
 
+import { hostNodeOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableSchedulingProfiler } from "shared/ReactFeatureFlags.ts";
 import type { ErrorInfo, Fiber, FiberRoot } from "./ReactInternalTypes.ts";
@@ -125,7 +126,7 @@ function findHostInstance(component: object): PublicInstance | null {
   if (hostFiber === null) {
     return null;
   }
-  return getPublicInstance(hostFiber.stateNode);
+  return getPublicInstance(hostNodeOf(hostFiber));
 }
 
 function findHostInstanceWithWarning(component: object, methodName: string): PublicInstance | null {
@@ -171,7 +172,7 @@ function findHostInstanceWithWarning(component: object, methodName: string): Pub
       });
     }
   }
-  return getPublicInstance(hostFiber.stateNode);
+  return getPublicInstance(hostNodeOf(hostFiber));
 }
 
 export function createContainer(
@@ -375,7 +376,7 @@ export function getPublicRootInstance(container: OpaqueRoot): unknown {
   switch (containerFiber.child.tag) {
     case HostSingleton:
     case HostComponent:
-      return getPublicInstance(containerFiber.child.stateNode);
+      return getPublicInstance(hostNodeOf(containerFiber.child));
     default:
       return containerFiber.child.stateNode;
   }
@@ -463,7 +464,7 @@ export function findHostInstanceWithNoPortals(fiber: Fiber): PublicInstance | nu
   if (hostFiber === null) {
     return null;
   }
-  return getPublicInstance(hostFiber.stateNode);
+  return getPublicInstance(hostNodeOf(hostFiber));
 }
 
 let shouldErrorImpl: (fiber: Fiber) => boolean | null | undefined = () => null;

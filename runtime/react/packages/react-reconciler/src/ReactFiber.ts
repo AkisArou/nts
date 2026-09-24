@@ -110,7 +110,7 @@ if (isDevelopment) {
 //    always know when it is a fiber.
 // 3) It should be easy to port this to a C struct and keep a C implementation
 //    compatible.
-class FiberNode implements Fiber {
+export class FiberNode {
   // Instance
   tag: WorkTag;
   key: ReactKey;

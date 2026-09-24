@@ -2,6 +2,7 @@
 // tree (the commit phase), and handles everything that can interrupt either
 // one: suspending, errors, yielding to the host, and nested updates.
 
+import { hostInstanceOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { reportGlobalError } from "shared/reportGlobalError.ts";
 import { REACT_STRICT_MODE_TYPE } from "shared/ReactSymbols.ts";
@@ -2465,7 +2466,7 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes): RootExitStatus {
               const hostFiber = workInProgress;
               const type = hostFiber.type as string;
               const props = hostFiber.pendingProps as Props;
-              const isReady = resource ? preloadResource(resource) : preloadInstance(hostFiber.stateNode, type, props);
+              const isReady = resource ? preloadResource(resource) : preloadInstance(hostInstanceOf(hostFiber), type, props);
               if (isReady) {
                 // The data resolved. Resume the work loop as if nothing
                 // suspended. Unlike when a user component suspends, we don't
@@ -4105,7 +4106,7 @@ export function attachPingListener(root: FiberRoot, wakeable: Wakeable, lanes: L
   let pingCache = root.pingCache;
   let threadIDs: Set<unknown> | undefined;
   if (pingCache === null) {
-    pingCache = root.pingCache = new WeakMap();
+    pingCache = root.pingCache = new Map();
     threadIDs = new Set();
     pingCache.set(wakeable, threadIDs);
   } else {

@@ -2,6 +2,7 @@
 // its host instance, pop the contexts it pushed, and bubble lanes and flags
 // up to its parent.
 
+import { hostInstanceOf, hostNodeOf, textInstanceOf } from "./ReactFiberStateNode.ts";
 import {
   disableLegacyMode,
   enableLegacyHidden,
@@ -228,7 +229,7 @@ function appendAllChildren(parent: Instance, workInProgress: Fiber, needsVisibil
     let node = workInProgress.child;
     while (node !== null) {
       if (node.tag === HostComponent || node.tag === HostText) {
-        appendInitialChild(parent, node.stateNode);
+        appendInitialChild(parent, hostNodeOf(node));
       } else if (node.tag === HostPortal || (supportsSingletons ? node.tag === HostSingleton : false)) {
         // If we have a portal child, then we don't want to traverse
         // down its children. Instead, we'll get insertions from each child in
@@ -257,14 +258,14 @@ function appendAllChildren(parent: Instance, workInProgress: Fiber, needsVisibil
     let node = workInProgress.child;
     while (node !== null) {
       if (node.tag === HostComponent) {
-        let instance: Instance = node.stateNode;
+        let instance: Instance = hostInstanceOf(node);
         if (needsVisibilityToggle && isHidden) {
           // This child is inside a timed out tree. Hide it.
           instance = cloneHiddenInstance(instance, node.type as Type, node.memoizedProps as Props);
         }
         appendInitialChild(parent, instance);
       } else if (node.tag === HostText) {
-        let instance: TextInstance = node.stateNode;
+        let instance: TextInstance = textInstanceOf(node);
         if (needsVisibilityToggle && isHidden) {
           // This child is inside a timed out tree. Hide it.
           instance = cloneHiddenTextInstance(instance, node.memoizedProps as string);
@@ -320,14 +321,14 @@ function appendAllChildrenToContainer(
     let node = workInProgress.child;
     while (node !== null) {
       if (node.tag === HostComponent) {
-        let instance: Instance = node.stateNode;
+        let instance: Instance = hostInstanceOf(node);
         if (needsVisibilityToggle && isHidden) {
           // This child is inside a timed out tree. Hide it.
           instance = cloneHiddenInstance(instance, node.type as Type, node.memoizedProps as Props);
         }
         appendChildToContainerChildSet(containerChildSet, instance);
       } else if (node.tag === HostText) {
-        let instance: TextInstance = node.stateNode;
+        let instance: TextInstance = textInstanceOf(node);
         if (needsVisibilityToggle && isHidden) {
           // This child is inside a timed out tree. Hide it.
           instance = cloneHiddenTextInstance(instance, node.memoizedProps as string);
@@ -395,7 +396,7 @@ function updateHostComponent(current: Fiber, workInProgress: Fiber, type: Type, 
     }
     markUpdate(workInProgress);
   } else if (supportsPersistence) {
-    const currentInstance: Instance = current.stateNode;
+    const currentInstance: Instance = hostInstanceOf(current);
     const oldProps = current.memoizedProps as Props;
     // If there are no effects associated with this node, then none of our children had any updates.
     // This guarantees that we can reuse all of them.
@@ -493,7 +494,7 @@ function preloadInstanceAndSuspendIfNeeded(
     // preload the instance if necessary. Even if this is an urgent render there
     // could be benefits to preloading early.
     // @TODO we should probably do the preload in begin work
-    const isReady = preloadInstance(workInProgress.stateNode, type, newProps);
+    const isReady = preloadInstance(hostInstanceOf(workInProgress), type, newProps);
     if (!isReady) {
       if (shouldRemainOnPreviousScreen()) {
         workInProgress.flags |= ShouldSuspendCommit;
@@ -1046,7 +1047,7 @@ function completeHostComponent(current: Fiber | null, workInProgress: Fiber, new
       // TODO: Move this and createInstance step into the beginPhase
       // to consolidate.
       prepareToHydrateHostInstance(workInProgress, currentHostContext);
-      if (finalizeHydratedChildren(workInProgress.stateNode, type, newProps, currentHostContext)) {
+      if (finalizeHydratedChildren(hostInstanceOf(workInProgress), type, newProps, currentHostContext)) {
         workInProgress.flags |= Hydrate;
       }
     } else {

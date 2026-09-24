@@ -813,7 +813,7 @@ export function TransitionAwareHostComponent(): TransitionStatus {
     const thenable = maybeThenable as Thenable<TransitionStatus>;
     nextState = useThenable(thenable);
   } else {
-    const status: TransitionStatus = maybeThenable;
+    const status = maybeThenable as TransitionStatus;
     nextState = status;
   }
 

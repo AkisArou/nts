@@ -30,14 +30,16 @@ export interface RootState {
 
 type ErrorCallback = (error: unknown, errorInfo: ErrorInfo) => void;
 
-class FiberRootNode implements FiberRoot {
+export class FiberRootNode {
   tag: RootTag;
   containerInfo: Container;
   pendingChildren: unknown = null;
   // Set by createFiberRoot right after construction: the root and its host
   // root fiber point at each other.
   current!: Fiber;
-  pingCache: WeakMap<Wakeable, Set<unknown>> | Map<Wakeable, Set<unknown>> | null = null;
+  // A Map rather than upstream's WeakMap-when-available: a union of the two
+  // has no fixed layout, and entries are deleted when the wakeable pings.
+  pingCache: Map<Wakeable, Set<unknown>> | null = null;
   timeoutHandle: TimeoutHandle | NoTimeout = noTimeout;
   cancelPendingCommit: (() => void) | null = null;
   context: object | null = null;

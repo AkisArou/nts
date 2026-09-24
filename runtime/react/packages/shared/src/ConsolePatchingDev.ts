@@ -6,7 +6,7 @@
 // JS object model: this replaces console methods with property descriptors,
 // as upstream does. Development only.
 
-import { isDevelopment } from "./Build.ts";
+import { isDevelopment } from "shared/Build.ts";
 
 type ConsoleMethod = (...args: unknown[]) => void;
 

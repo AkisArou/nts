@@ -2,6 +2,7 @@
 // below it. enableScopeAPI is off in the stable channel; the module is kept
 // with upstream's behaviour for when it is on.
 
+import { hostInstanceOf } from "./ReactFiberStateNode.ts";
 import type { ReactContext } from "shared/ReactTypes.ts";
 import { enableScopeAPI } from "shared/ReactFeatureFlags.ts";
 import { getInstanceFromNode, getInstanceFromScope, getPublicInstance } from "react-reconciler/ReactFiberConfig.ts";
@@ -27,7 +28,7 @@ const emptyObject: { [name: string]: unknown } = {};
 function collectScopedNodes(node: Fiber, fn: ReactScopeQuery, scopedNodes: unknown[]): void {
   if (enableScopeAPI) {
     if (node.tag === HostComponent) {
-      const instance = getPublicInstance(node.stateNode);
+      const instance = getPublicInstance(hostInstanceOf(node));
       const props = (node.memoizedProps as { [name: string]: unknown } | null) || emptyObject;
       if (instance !== null && fn(node.type as string, props, instance) === true) {
         scopedNodes.push(instance);
@@ -46,7 +47,7 @@ function collectScopedNodes(node: Fiber, fn: ReactScopeQuery, scopedNodes: unkno
 function collectFirstScopedNode(node: Fiber, fn: ReactScopeQuery): unknown {
   if (enableScopeAPI) {
     if (node.tag === HostComponent) {
-      const instance = getPublicInstance(node.stateNode);
+      const instance = getPublicInstance(hostInstanceOf(node));
       if (instance !== null && fn(node.type as string, node.memoizedProps as { [name: string]: unknown }, instance) === true) {
         return instance;
       }

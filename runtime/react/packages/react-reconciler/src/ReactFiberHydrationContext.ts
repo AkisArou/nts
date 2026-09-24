@@ -2,6 +2,7 @@
 // new ones. Every entry point checks `supportsHydration`, so a renderer that
 // cannot hydrate never reaches a host hydration call.
 
+import { hydratableInstanceOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
 import type { CapturedValue } from "./ReactCapturedValue.ts";
 import { createCapturedValueAtFiber } from "./ReactCapturedValue.ts";
@@ -661,7 +662,7 @@ function popHydrationState(fiber: Fiber): boolean {
   } else if (supportsSingletons && tag === HostSingleton) {
     nextHydratableInstance = getNextHydratableSiblingAfterSingleton(fiber.type as Type, nextHydratableInstance);
   } else {
-    nextHydratableInstance = hydrationParentFiber ? getNextHydratableSibling(fiber.stateNode) : null;
+    nextHydratableInstance = hydrationParentFiber ? getNextHydratableSibling(hydratableInstanceOf(fiber)) : null;
   }
   return true;
 }
@@ -725,7 +726,7 @@ function popHydrationStateOnInterruptedWork(fiber: Fiber): void {
   // or advance the cursor - we're restoring, not completing.
   popToNextHostParent(fiber);
   if (fiber.tag === HostComponent && fiber.stateNode != null) {
-    nextHydratableInstance = fiber.stateNode;
+    nextHydratableInstance = hydratableInstanceOf(fiber);
   }
 }
 

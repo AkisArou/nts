@@ -1,6 +1,8 @@
 // Renderers that don't support React Scopes
 // can re-export everything from this module.
 
+
+
 function shim(..._args: unknown[]): never {
   throw new Error(
     "The current renderer does not support React Scopes. " +
@@ -9,5 +11,5 @@ function shim(..._args: unknown[]): never {
   );
 }
 
-export const prepareScopeUpdate = shim;
-export const getInstanceFromScope = shim;
+export const prepareScopeUpdate: (scopeInstance: unknown, instance: unknown) => void = shim;
+export const getInstanceFromScope: (scopeInstance: unknown) => unknown = shim;

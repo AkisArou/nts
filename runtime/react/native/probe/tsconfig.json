@@ -1,0 +1,46 @@
+{
+  "//": "A native program made of this lane's runtime: react, the reconciler and the production scheduler. The three fork points are bound to native twins through `paths`, and every workspace package is mapped to its real source directory: nts does not lower files it reaches through node_modules. `nts check` compiles it and compares its exported functions with node.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "shared/Build.ts": [
+        "./src/Build.ts"
+      ],
+      "scheduler/src/Host.ts": [
+        "./src/SchedulerHost.ts"
+      ],
+      "react-reconciler/ReactFiberConfig.ts": [
+        "./src/ReactFiberConfigTestHost.ts"
+      ],
+      "shared/*": [
+        "../../packages/shared/src/*"
+      ],
+      "react": [
+        "../../packages/react/src/index.ts"
+      ],
+      "react/*": [
+        "../../packages/react/src/*"
+      ],
+      "scheduler": [
+        "../../packages/scheduler/src/index.ts"
+      ],
+      "scheduler/src/*": [
+        "../../packages/scheduler/src/*"
+      ],
+      "react-reconciler/*": [
+        "../../packages/react-reconciler/src/*"
+      ]
+    },
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "skipLibCheck": true
+  },
+  "include": [
+    "src"
+  ]
+}

@@ -2676,7 +2676,8 @@ function reappearLayoutEffects(
         // subtree (the mutation traversal is gated by subtreeFlags and would
         // skip an unchanged hoistable). This is the same tradeoff as for
         // HostSingleton.
-        const instance = finishedWork.stateNode as { ownerDocument: Container } | null;
+        // DOM only (supportsResources): a hoistable instance knows its document.
+        const instance = finishedWork.stateNode as (Instance & { readonly ownerDocument: Container }) | null;
         if (finishedWork.memoizedState === null && instance !== null && !offscreenSubtreeIsHidden) {
           // currentHoistableRoot is only maintained during the mutation
           // phase. Derive the hoistable root from the instance's owner

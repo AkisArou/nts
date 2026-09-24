@@ -4,7 +4,7 @@
 // `if (enableX)` shape so that each file stays diffable against upstream at
 // the next pin; the constants fold away at build time.
 
-import { isProfiling } from "./Build.ts";
+import { isProfiling } from "shared/Build.ts";
 
 const __EXPERIMENTAL__ = false;
 const __PROFILE__ = isProfiling;

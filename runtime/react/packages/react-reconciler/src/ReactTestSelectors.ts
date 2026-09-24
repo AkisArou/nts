@@ -1,6 +1,7 @@
 // The test selector API (`findAllNodes`, `focusWithin`, ...): finding host
 // instances by component, role, text or test name.
 
+import { hostInstanceOf } from "./ReactFiberStateNode.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import type { Instance } from "react-reconciler/ReactFiberConfig.ts";
@@ -97,7 +98,7 @@ function matchSelector(fiber: Fiber, selector: Selector): boolean {
       return hasMatchingPaths(fiber, (selector as HasPseudoClassSelector).value);
     case ROLE_TYPE:
       if (isHostInstanceTag(tag)) {
-        if (matchAccessibilityRole(fiber.stateNode, (selector as StringSelector).value)) {
+        if (matchAccessibilityRole(hostInstanceOf(fiber), (selector as StringSelector).value)) {
           return true;
         }
       }
@@ -237,7 +238,7 @@ export function findAllNodes(hostRoot: Instance, selectors: Selector[]): Instanc
       if (isHiddenSubtree(node)) {
         continue;
       }
-      instanceRoots.push(node.stateNode);
+      instanceRoots.push(hostInstanceOf(node));
     } else {
       let child = node.child;
       while (child !== null) {
@@ -402,7 +403,7 @@ export function focusWithin(hostRoot: Instance, selectors: Selector[]): boolean 
       continue;
     }
     if (isHostInstanceTag(tag)) {
-      if (setFocusIfFocusable(fiber.stateNode)) {
+      if (setFocusIfFocusable(hostInstanceOf(fiber))) {
         return true;
       }
     }
