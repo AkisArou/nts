@@ -957,6 +957,7 @@ fn suspension(
     func: &Func,
     value: ValueId,
     out: &str,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
@@ -1011,8 +1012,12 @@ fn suspension(
     }
     // Subscribing the rest of this function to a promise. `NtsTask` is
     // three pointers -- what to run, how to drop it unrun, and the frame
-    // both act on -- and the platform passes it in memory, which is what
-    // `byval` in the runtime's signature says.
+    // both act on -- and every platform passes it in memory, each its own
+    // way: System V copies it into the argument area (`byval`), Win64 and
+    // AAPCS64 hand over a pointer to a copy the caller made. The spelling
+    // is the platform's table's, not written here: `byval` on AArch64 is a
+    // stack copy where the callee reads a pointer from a register, and ran
+    // into a segfault in the first arm64 program to `await`.
     OpKind::Suspend {
         promise,
         frame,
@@ -1025,8 +1030,11 @@ fn suspension(
         format!("{out}.state = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 2"),
         format!("store ptr {}, ptr {out}.state{}", name(*frame), tbaa("ptr")),
         format!(
-            "call void @nts_promise_subscribe(ptr {}, ptr byval(%struct.NtsTask) align 8 {out}.task)",
-            name(*promise)
+            "call void @nts_promise_subscribe(ptr {}, {} {out}.task)",
+            name(*promise),
+            signatures::signature_on("nts_promise_subscribe", platform)
+                .and_then(|known| known.params.get(1))
+                .ok_or_else(|| refuse(func, "`nts_promise_subscribe` is missing from this platform's table"))?
         ),
     ]
     .join("\n  "),
@@ -2474,6 +2482,7 @@ fn allocation(
     func: &Func,
     value: ValueId,
     out: &str,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
@@ -2542,7 +2551,7 @@ fn allocation(
             )
         }
         OpKind::CellReady { .. } | OpKind::Await { .. } | OpKind::Suspend { .. } => {
-            return suspension(program, func, value, &out);
+            return suspension(program, func, value, &out, platform);
         }
         OpKind::ObjectNew { frame } => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
@@ -3452,7 +3461,7 @@ fn memory_operation(
         // never written.
         | OpKind::CellReady { .. }
         | OpKind::Suspend { .. } => {
-            return allocation(program, func, value, &out);
+            return allocation(program, func, value, &out, platform);
         }
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             return element_access(func, value, &out);
