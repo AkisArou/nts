@@ -3637,3 +3637,129 @@ export function negative(): number { return echo_long(-5 as c_long32); }
     assert_eq!(c_refused.len(), 2, "C on SysV refused {c_refused:?}");
     assert_eq!(c_refused, llvm_refused, "the two backends refused different functions");
 }
+
+/// A cycle through a `GObject`: a signal handler capturing its own instance,
+/// connected through `nts_gobject_connect` as `bind-gir`'s views are. Real
+/// libgobject (a `GObject`'s own `notify` needs no display), on both backends
+/// under reference counting, with the collector run by hand.
+///
+/// `itself` holds its instance from its own handler -- the cycle, which the
+/// collector sees only through the instance's node -- and `other` a second
+/// instance, which is no cycle. Both are finalized. `kept` is the same cycle
+/// with the library holding one more reference: the node's count stays above
+/// what the candidates hold, so it survives the collection, and goes at the
+/// checkpoint after the library lets go. A collector that did not see through
+/// the instance leaves
+/// `itself` and `kept` alive; one that ignored the instance's own count
+/// collects `kept` while the library holds it; and one that looked only at
+/// releases of its own never collects `kept`, which the library let go of on
+/// `GObject`'s side. The repeat asserts the closures are freed too (`leak=0`).
+#[test]
+fn a_cycle_through_a_gobject_is_collected_on_both_backends() {
+    let pkg = |what: &str| -> Option<Vec<String>> {
+        let output = Command::new("pkg-config").args([what, "gobject-2.0"]).output().ok()?;
+        output.status.success().then(|| String::from_utf8_lossy(&output.stdout).split_whitespace().map(str::to_owned).collect())
+    };
+    let (Some(cflags), Some(libs)) = (pkg("--cflags"), pkg("--libs")) else { return; };
+    let cflags: Vec<&str> = cflags.iter().map(String::as_str).collect();
+    let libs: Vec<&str> = libs.iter().map(String::as_str).collect();
+    let source = r#"
+import type { Class, Erased, ErasedClosure, GObjectClass, Owned, Ptr, c_int, c_uint, c_ulong } from "c:types";
+type GClosure = Class<"_GClosure">;
+type GParamSpec = Class<"_GParamSpec">;
+interface GObjectMethods {
+    /**
+     * @ntsSymbol nts_gobject_connect
+     * @ntsDefault connect_flags=0
+     */
+    connect(this: Erased<GObject>, detailed_signal: "notify", handler: ErasedClosure<(self: GObject, pspec: GParamSpec) => void, (data: Ptr<unknown>, closure: GClosure) => void>, connect_flags?: c_uint): c_ulong;
+}
+type GObject = GObjectClass<"_GObject"> & GObjectMethods;
+declare function made(): Owned<GObject>;
+declare function keep(object: GObject): void;
+declare function let_go(): void;
+declare function finalized(): c_int;
+declare function collect(): void;
+let touched = 0;
+function itself(): void {
+    const object = made();
+    object.connect("notify", () => { keep(object); touched++; });
+}
+function other(): void {
+    const keeper = made();
+    const object = made();
+    object.connect("notify", () => { keep(keeper); touched++; });
+}
+function kept(): void {
+    const object = made();
+    object.connect("notify", () => { let_go(); keep(object); touched++; });
+    keep(object);
+}
+export function run(): number {
+    const before = finalized() as number;
+    itself();
+    collect();
+    const one = (finalized() as number) - before;
+    other();
+    collect();
+    const two = (finalized() as number) - before;
+    kept();
+    collect();
+    const three = (finalized() as number) - before;
+    let_go();
+    collect();
+    const four = (finalized() as number) - before;
+    return one * 1000 + two * 100 + three * 10 + four;
+}
+"#;
+    let library = r"
+#include <glib-object.h>
+#include <stddef.h>
+void nts_checkpoint(void);
+static int gone;
+static GObject *held;
+static void finalize_counted(gpointer data, GObject *object) { (void)data; (void)object; gone++; }
+GObject *made(void) {
+    GObject *object = g_object_new(G_TYPE_OBJECT, NULL);
+    g_object_weak_ref(object, finalize_counted, NULL);
+    return object;
+}
+void keep(GObject *object) { if (held == NULL) held = g_object_ref(object); }
+void let_go(void) { if (held != NULL) { GObject *object = held; held = NULL; g_object_unref(object); } }
+int finalized(void) { return gone; }
+void collect(void) { nts_checkpoint(); }
+";
+    let provider = hir::Provider::ReferenceCounting;
+    let Some((dir, prepared)) = prepare_with_provider("gobject-cycle-rc", source, provider) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let support = c.support_files();
+    assert!(support.iter().any(|file| file.name == nts_codegen_c::GOBJECT_SOURCE_NAME && file.compiled), "a program that connects does not bring nts_gobject.c");
+    for file in &support { file.write(dir.as_std_path()).unwrap(); }
+    std::fs::write(dir.join("native.c"), library).unwrap();
+    let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+    std::fs::write(dir.join("caller.c"), caller).unwrap();
+    let rc = ["-DNTS_PROVIDER_RC"];
+    for file in ["native.c", "nts_gobject.c"] {
+        clang(&dir, &[&["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file][..], &rc, &cflags].concat());
+    }
+    clang(&dir, &[&["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", "caller.c"][..], &rc].concat());
+    clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], &rc].concat());
+    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], &rc].concat());
+        clang(&dir, &[&[object, "native.o", "caller.o", "nts_runtime.o", "nts_gobject.o", "-lm", "-o", executable][..], &libs].concat());
+        let run = Command::new(dir.join(executable)).env("G_DEBUG", "fatal-criticals").output().unwrap();
+        assert!(run.status.success(), "{executable}: {}", String::from_utf8_lossy(&run.stderr));
+        // Running totals: `itself` 1; `other` 2 more (its instance, freed
+        // outright, released the handler that was the last to hold the
+        // keeper); `kept` none while the library holds it, and 1 at the
+        // checkpoint after it lets go -- a release on GObject's side, which
+        // only the revisit sees.
+        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "1334 leak=0", "{executable}");
+    }
+}

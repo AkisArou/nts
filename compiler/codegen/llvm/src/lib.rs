@@ -745,7 +745,8 @@ fn foreign_slots(out: &mut String, layout: &nts_core::hir::Layout, offsets: &[u3
         .enumerate()
         .filter_map(|(at, field)| {
             let release = field.ty.counting()?.release;
-            Some(format!("{{ i32, ptr }} {{ i32 {}, ptr @{release} }}", offsets.get(at)?))
+            let family = field.ty.counted_family().map_or(0, nts_core::hir::native::Family::runtime_id);
+            Some(format!("{{ i32, i32, ptr }} {{ i32 {}, i32 {family}, ptr @{release} }}", offsets.get(at)?))
         })
         .collect();
     if slots.is_empty() {
@@ -753,7 +754,7 @@ fn foreign_slots(out: &mut String, layout: &nts_core::hir::Layout, offsets: &[u3
     }
     let _ = writeln!(
         out,
-        "@nts_foreign_{tag} = internal constant [{} x {{ i32, ptr }}] [{}]",
+        "@nts_foreign_{tag} = internal constant [{} x {{ i32, i32, ptr }}] [{}]",
         slots.len(),
         slots.join(", ")
     );

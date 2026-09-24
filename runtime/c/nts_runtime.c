@@ -682,12 +682,75 @@ void nts_retain(NtsHeader *object) {
   object->flags = (object->flags & ~NTS_COLOR_MASK) | NTS_BLACK;
 }
 
+/* The families whose objects hold closures the program lent them, by
+ * `NTS_FAMILY_*` (see `NtsHolders`). Set once, before the program runs. */
+static const NtsHolders *nts_holders[NTS_FAMILIES];
+
+void nts_register_holders(uint32_t family, const NtsHolders *holders) {
+  if (family < NTS_FAMILIES) {
+    nts_holders[family] = holders;
+  }
+}
+
+/* A node: the collector's stand-in for a foreign object while it holds a lent
+ * closure. Nothing allocates one of these as an object; the family does, with
+ * this descriptor in its header, and the collector recognises it by address.
+ * Cyclic, since holding is what puts it in a cycle. */
+const NtsDescriptor nts_holder_descriptor = {
+    NTS_KIND_OBJECT,   0,  0,   1, 0, 0, "holder", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL};
+
+static bool nts_is_holder(const NtsHeader *object) {
+  return object->descriptor == &nts_holder_descriptor;
+}
+
+/* Which references a walk wants. Two questions with two answers, asked
+ * explicitly at every call rather than read off the collector's state:
+ *
+ * - `NTS_EDGES_OWNED`: the references an object gives up when it dies --
+ *   its reference and erased slots. What destruction releases.
+ * - `NTS_EDGES_TRACED`: those, and the edges through a foreign object that
+ *   holds a lent closure -- a foreign slot to the object's node, and a node to
+ *   each closure it holds. What the collector's four walks follow. A node is
+ *   traced and never released by this runtime, and a foreign slot is released
+ *   by `nts_release_foreign`, not here; so destruction must not see these
+ *   edges, and the collector must. */
+typedef enum { NTS_EDGES_OWNED, NTS_EDGES_TRACED } NtsEdges;
+
+/* A traced object's edges through the foreign objects it holds: each slot
+ * whose family holds closures, to that object's node, where it has one. */
+static void nts_each_holder(NtsHeader *object, void (*visit)(NtsHeader *)) {
+  const NtsDescriptor *descriptor = object->descriptor;
+  for (uint32_t index = 0; index < descriptor->foreign; index++) {
+    const NtsForeignSlot *slot = &descriptor->foreign_slots[index];
+    const NtsHolders *holders =
+        slot->family < NTS_FAMILIES ? nts_holders[slot->family] : NULL;
+    void *held = *(void **)((unsigned char *)object + slot->offset);
+    if (holders == NULL || held == NULL) {
+      continue;
+    }
+    NtsHeader *node = holders->node(held);
+    if (node != NULL) {
+      visit(node);
+    }
+  }
+}
+
 /* Every reference an object holds, handed one at a time to `visit`.
  *
- * The three walks the collector does and the one destruction does differ only
- * in what they do with each child, so the walking is written once. */
-static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *)) {
+ * The four walks the collector does and the one destruction does differ only
+ * in what they do with each child, so the walking is written once; which
+ * references count as its children is `edges`. */
+static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
+                               NtsEdges edges) {
   const NtsDescriptor *descriptor = object->descriptor;
+  if (edges == NTS_EDGES_TRACED) {
+    if (nts_is_holder(object)) {
+      nts_holders[object->length]->each_held(object, visit);
+      return;
+    }
+    nts_each_holder(object, visit);
+  }
   if (descriptor->references == 0 && descriptor->erased == 0) {
     return;
   }
@@ -920,7 +983,7 @@ void nts_value_release(NtsValue value) {
  * everything below its root, which is the shape of leak that looks like it
  * works right up until it doesn't. */
 static void nts_release_contents(NtsHeader *object) {
-  nts_each_reference(object, nts_release);
+  nts_each_reference(object, nts_release, NTS_EDGES_OWNED);
 }
 
 /* Objects whose count has reached zero and whose contents have not been given
@@ -1105,7 +1168,7 @@ static void nts_mark_gray(NtsHeader *root) {
       continue;
     }
     nts_paint(object, NTS_GRAY);
-    nts_each_reference(object, nts_mark_gray_child);
+    nts_each_reference(object, nts_mark_gray_child, NTS_EDGES_TRACED);
   }
 }
 
@@ -1129,7 +1192,7 @@ static void nts_scan_black(NtsHeader *root) {
   nts_work_push(root);
   while (nts_env->work_len > floor) {
     NtsHeader *object = nts_env->work[--nts_env->work_len];
-    nts_each_reference(object, nts_scan_black_child);
+    nts_each_reference(object, nts_scan_black_child, NTS_EDGES_TRACED);
   }
 }
 
@@ -1150,7 +1213,7 @@ static void nts_scan(NtsHeader *root) {
       continue;
     }
     nts_paint(object, NTS_WHITE);
-    nts_each_reference(object, nts_scan_child);
+    nts_each_reference(object, nts_scan_child, NTS_EDGES_TRACED);
   }
 }
 
@@ -1178,7 +1241,7 @@ static void nts_gather_white(NtsHeader *root) {
       continue;
     }
     nts_paint(object, NTS_BLACK);
-    nts_each_reference(object, nts_collect_white_child);
+    nts_each_reference(object, nts_collect_white_child, NTS_EDGES_TRACED);
     nts_push(&nts_env->dead, &nts_env->dead_len, &nts_env->dead_cap, object);
   }
 }
@@ -1188,6 +1251,15 @@ void nts_collect_cycles(void) {
     return;
   }
   nts_env->collecting = true;
+
+  /* Every node's count to its foreign object's references, read now: a
+   * trace subtracts from it what the candidates hold, and whatever is left
+   * is held by the foreign system. */
+  for (uint32_t family = 0; family < NTS_FAMILIES; family++) {
+    if (nts_holders[family] != NULL) {
+      nts_holders[family]->count();
+    }
+  }
 
   /* Mark. A candidate that is no longer purple was retained since it was
    * buffered, so it is reachable and not a root; one whose count reached zero
@@ -1202,7 +1274,8 @@ void nts_collect_cycles(void) {
       continue;
     }
     root->flags &= ~NTS_BUFFERED;
-    if (nts_color(root) == NTS_BLACK && root->reserved == 0) {
+    if (nts_color(root) == NTS_BLACK && root->reserved == 0 &&
+        !nts_is_holder(root)) {
       /* Set aside, not destroyed. Destroying here runs real releases in the
        * middle of trial deletion, and a release that takes an already-gray
        * root to zero repaints it black -- after which `nts_scan` skips it for
@@ -1235,10 +1308,45 @@ void nts_collect_cycles(void) {
 
   /* Every one of these is garbage and every reference between them has
    * already been accounted for, so this frees the memory and nothing else --
-   * releasing contents here would decrement counts a second time. */
+   * releasing contents here would decrement counts a second time.
+   *
+   * In three passes, because freeing is not silent. Giving up a foreign slot
+   * can finalize a foreign object, and a finalizing GObject runs its
+   * handlers' notifies, each of which releases a lent closure -- one of these,
+   * possibly, not yet reached. So every one is marked dying first, which a
+   * release ignores (see `nts_release`); then each garbage node is severed, its
+   * object disconnecting the closures it held, whose notifies meet the same
+   * mark; and only then is anything freed. */
+  /* **Nothing foreign runs while `roots` is live.** A notify can release an
+   * object to a non-zero count, which buffers it -- `nts_push` onto `roots`,
+   * which may move the array under a walk still indexing it. The candidate
+   * walks are all above, and `roots_len` is zero from here; a reorder that
+   * moved severing up would corrupt quietly, so it is refused loudly. */
+  if (nts_env->roots_len != 0) {
+    fprintf(stderr, "nts: the collector reached foreign code with candidates "
+                    "still being walked\n");
+    abort();
+  }
   for (size_t index = 0; index < nts_env->dead_len; index++) {
-    nts_env->reclaimed++;
-    nts_free(nts_env->dead[index]);
+    if (!nts_is_holder(nts_env->dead[index])) {
+      nts_env->dead[index]->flags |= NTS_DYING;
+    }
+  }
+  for (size_t index = 0; index < nts_env->dead_len; index++) {
+    NtsHeader *dead = nts_env->dead[index];
+    if (nts_is_holder(dead)) {
+      /* Out of the list before the family runs: severing may free the node,
+       * and the pass below must not read it to learn that it was one. */
+      nts_env->dead[index] = NULL;
+      nts_holders[dead->length]->sever(dead);
+    }
+  }
+  for (size_t index = 0; index < nts_env->dead_len; index++) {
+    NtsHeader *dead = nts_env->dead[index];
+    if (dead != NULL) {
+      nts_env->reclaimed++;
+      nts_free(dead);
+    }
   }
   nts_env->dead_len = 0;
 
@@ -7732,8 +7840,30 @@ bool nts_has_pending_work(void) {
  * checkpoint -- no promises, no timers -- still relies on the buffer filling,
  * and one that makes cycles far faster than it checkpoints still wants the
  * bound the threshold gives it. */
+/* A node as a candidate root, the way a release makes an object one. */
+static void nts_holder_root(NtsHeader *node) {
+  nts_paint(node, NTS_PURPLE);
+  if (node->flags & NTS_BUFFERED) {
+    return;
+  }
+  node->flags |= NTS_BUFFERED;
+  nts_push(&nts_env->roots, &nts_env->roots_len, &nts_env->roots_cap, node);
+  nts_env->candidates++;
+}
+
 static void nts_collect_at_checkpoint(void) {
-  if (nts_env->collecting || nts_env->draining || nts_env->roots_len == 0) {
+  if (nts_env->collecting || nts_env->draining) {
+    return;
+  }
+  /* And a foreign object that let go of something on its own side -- a window
+   * destroyed, dropping its child -- which released nothing of ours, so its
+   * cycle is looked at only if someone asks. */
+  for (uint32_t family = 0; family < NTS_FAMILIES; family++) {
+    if (nts_holders[family] != NULL) {
+      nts_holders[family]->fallen(nts_holder_root);
+    }
+  }
+  if (nts_env->roots_len == 0) {
     return;
   }
   nts_collect_cycles();

@@ -810,6 +810,26 @@ impl Counting {
 }
 
 impl Family {
+    /// Whether this family's objects hold closures the program lends them: a
+    /// `GObject` holds each of its signal handlers'. A cycle through one is
+    /// then possible -- a handler capturing its own instance -- so a layout
+    /// holding one is cyclic, and the runtime is told the family of each such
+    /// slot (see `NtsHolders` in `nts_runtime.h`).
+    #[must_use]
+    pub const fn holds_closures(self) -> bool {
+        matches!(self, Self::GObject)
+    }
+
+    /// `NTS_FAMILY_*` in `nts_runtime.h`: what a foreign slot says it holds,
+    /// for a family the runtime asks more of than a release.
+    #[must_use]
+    pub const fn runtime_id(self) -> u32 {
+        match self {
+            Self::GObject => 1,
+            Self::C | Self::Objc => 0,
+        }
+    }
+
     /// How this family's objects are counted, or `None` when the program does
     /// not count them. The one place a family's functions are named: the
     /// ownership pass asks it whether to count, and each backend asks it

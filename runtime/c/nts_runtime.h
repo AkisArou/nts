@@ -135,9 +135,20 @@
 /* A field holding an object of a foreign object system the program counts --
  * an Objective-C object -- and the function that gives it up. The function is
  * per slot because it is per family: `objc_release` today, `g_object_unref`
- * for a GObject. */
+ * for a GObject.
+ *
+ * `family` says which system, where the runtime asks more of the object than
+ * giving it up: `NTS_FAMILY_GOBJECT`, whose objects hold the closures lent to
+ * their signals (see `NtsHolders`). `NTS_FAMILY_NONE` for every other. Before
+ * `release`, so a slot is sixteen bytes rather than twenty-four; every table
+ * is emitted by the compiler, and none is written by hand. */
+#define NTS_FAMILY_NONE 0u
+#define NTS_FAMILY_GOBJECT 1u
+#define NTS_FAMILIES 2u
+
 typedef struct NtsForeignSlot {
   uint32_t offset;
+  uint32_t family;
   void (*release)(void *object);
 } NtsForeignSlot;
 
@@ -226,10 +237,13 @@ typedef struct NtsDescriptor {
    * reached zero or the cycle collector found it garbage (`nts_free` is where
    * both end).
    *
-   * Never traced. A foreign object is not a managed one, the collector cannot
-   * see through it, and a cycle through a foreign system's objects is that
-   * system's to break. Last, after `element`, because descriptors in
-   * `runtime/node` set `element` positionally and zero-fill what follows. */
+   * Not traced as a reference: a foreign object is not a managed one, and the
+   * collector cannot see through it. Except to a holder: a family that
+   * registers `NtsHolders` makes the object a node of the collector's trace
+   * while it holds a closure the program lent it, which is how a cycle through
+   * a GObject's signal handler is found. Last, after `element`, because
+   * descriptors in `runtime/node` set `element` positionally and zero-fill
+   * what follows. */
   uint32_t foreign;
   const NtsForeignSlot *foreign_slots;
 } NtsDescriptor;
@@ -268,6 +282,49 @@ typedef struct NtsHeader {
   uint32_t flags;
   uint32_t length;
 } NtsHeader;
+
+/* A foreign family whose objects hold closures the program lent them -- a
+ * GObject holds each of its signal handlers' -- registered by the host that
+ * knows the family (`nts_glib_host.c` for GObject), so this runtime knows no
+ * foreign system.
+ *
+ * A cycle through one is invisible otherwise: `button.connect("clicked", () =>
+ * button.set_label(…))` is a closure holding the button (a foreign slot) and a
+ * button holding the closure (a lend, which is a count from outside). While a
+ * foreign object holds a closure, the family gives it a *node*: a header
+ * describing `nts_holder_descriptor`, whose count the family sets to the
+ * object's own live references before a trace, and whose references are the
+ * closures it holds. Trial deletion then treats it as it treats an object:
+ * what is left of its count once the candidates' references are subtracted is
+ * held from elsewhere -- a parent widget, GTK itself -- and a node left with
+ * none is garbage with everything only it held.
+ *
+ * - `node`: the node standing for `object` in a trace, or NULL where it holds
+ *   nothing -- then it is no node, and a slot pointing at it is no edge.
+ * - `each_held`: each closure a node holds, once per lend.
+ * - `count`: before a trace, every node's count to its object's references.
+ * - `fallen`: at a checkpoint, `root` for each node whose object's count fell
+ *   since `count` last read it. A reference given up on the foreign side --
+ *   a window destroyed, dropping its child -- releases nothing of ours, so
+ *   nothing else would ever look at the cycle it leaves behind.
+ * - `sever`: a node found garbage. The object lets go of the closures it holds
+ *   (a disconnect), and the release each lend's notify then makes reaches an
+ *   object the collector has already marked dying, which ignores it. The
+ *   family frees the node here or later; the collector reads it no more. */
+typedef struct NtsHolders {
+  NtsHeader *(*node)(void *object);
+  void (*each_held)(NtsHeader *node, void (*visit)(NtsHeader *));
+  void (*count)(void);
+  void (*fallen)(void (*root)(NtsHeader *));
+  void (*sever)(NtsHeader *node);
+} NtsHolders;
+
+/* What a node's header describes: a node is recognised by this address. Its
+ * `length` is the family. */
+extern const NtsDescriptor nts_holder_descriptor;
+
+/* Owner thread, once per family, before the program runs. */
+void nts_register_holders(uint32_t family, const NtsHolders *holders);
 
 typedef NtsHeader NtsString;
 

@@ -64,6 +64,13 @@ pub const GLIB_HOST_HEADER_NAME: &str = "nts_glib_host.h";
 pub const GLIB_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_glib_host.h");
 pub const GLIB_HOST_SOURCE_NAME: &str = "nts_glib_host.c";
 pub const GLIB_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_glib_host.c");
+/// What a program that connects a signal needs of `GObject`: the connection
+/// the collector can see through (`nts_gobject_connect`). Only for such a
+/// program, which is what brings libgobject into the link.
+pub const GOBJECT_HEADER_NAME: &str = "nts_gobject.h";
+pub const GOBJECT_HEADER: &str = include_str!("../../../../runtime/c/nts_gobject.h");
+pub const GOBJECT_SOURCE_NAME: &str = "nts_gobject.c";
+pub const GOBJECT_SOURCE: &str = include_str!("../../../../runtime/c/nts_gobject.c");
 pub const CF_HOST_HEADER_NAME: &str = "nts_cf_host.h";
 pub const CF_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_cf_host.h");
 pub const CF_HOST_SOURCE_NAME: &str = "nts_cf_host.c";
@@ -523,6 +530,16 @@ impl Emitted {
     #[must_use]
     pub fn support_files(&self) -> Vec<Support<'_>> {
         let mut files = support_files(self.needs_unicode());
+        // The header wherever a binding names it, which the witness then
+        // includes; the source only where a signal is connected, since that is
+        // what brings libgobject into the link.
+        let connects = self.writer.text().contains("nts_gobject_connect(");
+        if connects || self.witness.contains(GOBJECT_HEADER_NAME) {
+            files.push(Support { name: GOBJECT_HEADER_NAME, contents: GOBJECT_HEADER, compiled: false });
+        }
+        if connects {
+            files.push(Support { name: GOBJECT_SOURCE_NAME, contents: GOBJECT_SOURCE, compiled: true });
+        }
         files.push(Support {
             name: "program.h",
             contents: &self.header,
@@ -2966,8 +2983,9 @@ fn construction_hole(name: &str, descriptor: &str) -> String {
 }
 
 /// A layout's foreign slots: the fields holding a counted foreign object, each
-/// with its family's release, which `nts_free` calls when the object dies.
-/// Answers how many, and the table's name (`0` for none).
+/// with its family (`NTS_FAMILY_*`) and its family's release, which `nts_free`
+/// calls when the object dies. Answers how many, and the table's name (`0` for
+/// none).
 fn foreign_slot_table(
     writer: &mut CodeWriter,
     origin: &Origin,
@@ -2980,7 +2998,8 @@ fn foreign_slot_table(
         .enumerate()
         .filter_map(|(at, field)| {
             let release = field.ty.counting()?.release;
-            Some(format!("{{ offsetof({name}, {}), {release} }}", c_member_at(layout, at)))
+            let family = field.ty.counted_family().map_or(0, nts_core::hir::native::Family::runtime_id);
+            Some(format!("{{ offsetof({name}, {}), {family}u, {release} }}", c_member_at(layout, at)))
         })
         .collect();
     if slots.is_empty() {

@@ -389,6 +389,15 @@ impl HirType {
         }
     }
 
+    /// The family of a counted foreign handle, where this is one.
+    #[must_use]
+    pub fn counted_family(&self) -> Option<native::Family> {
+        match self {
+            Self::NativePointer(pointee) if pointee.counting().is_some() => pointee.family(),
+            _ => None,
+        }
+    }
+
     /// Whether the reference-counting pass tracks a value of this type: one
     /// the collector sees, or a counted foreign handle.
     #[must_use]
@@ -2436,6 +2445,17 @@ impl Program {
             }
             // Through an array, which is a reference like any other.
             HirType::Managed(ManagedType::Array(element)) => self.reaches(element, into),
+            // Through a foreign object that holds the closures lent to it: a
+            // `GObject` can hold any closure the program connects to its
+            // signals, and a closure can hold anything -- so, as for a type
+            // with no layout here, every layout. The runtime follows the edge
+            // only while the object holds one (`NtsHolders`), so what this
+            // costs is candidacy: measured on gtk-gir, 10 candidates became 19,
+            // and a loop storing 1000 label-holding rows 20M times buffered
+            // 1000 more -- once per object, as buffering is.
+            HirType::NativePointer(_) if ty.counted_family().is_some_and(native::Family::holds_closures) => {
+                into.extend(0..self.layouts.len());
+            }
             _ => {}
         }
     }
