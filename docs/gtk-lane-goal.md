@@ -426,11 +426,26 @@ gtk-gir runs under `--rc` too, with `G_DEBUG=fatal-criticals`, to the same
 log: the core's `try`/`await`/`catch` use-after-free was a promise reader
 lending a reference the caller released, fixed by MainClaude in 8fb8e494.
 
+**Construction, as GJS writes it.** `new GtkButton({ label: "press",
+has_frame: false })` is the class's `new` taking nothing, then the setter of
+each property the literal writes, in its order -- no object is built for the
+literal (`@ntsConstruct gtk_button_new` on the construct signature of a value
+named for the class, beside its `GtkButtonProps`). A class with no such `new`
+is made by its `GType`, every property at its default, as GJS makes every
+class: `new GtkLabel({ label })` is
+`g_object_new_with_properties(gtk_label_get_type(), 0, NULL, NULL)` through a
+view the binder declares per class (`@ntsConstruct GtkLabel_construct
+gtk_label_get_type`) -- floating for a `GInitiallyUnowned`, `Owned`
+otherwise. 241 constructible classes in Gtk's closure, 127 of them by type.
+Passing the type exposed a core defect: every integer argument to a native
+call went through a double on its way to C's parameter, 53 bits for a 64-bit
+`GType`, since a foreign callee had no signature `specialize` consulted.
+
 **Next in M3:**
 
-- `new Gtk.Button({ label })` -- the constructor, then the setter of each
-  property the literal writes; construct-only properties need
-  `g_object_new_with_properties`.
+- Construct-only properties (`GtkApplication`'s are settable; `GSubprocess`'s
+  `argv` is not): `GValue`s through `g_object_new_with_properties`' names
+  and values.
 - The toggle-ref problem: a signal handler capturing its own widget is a
   cycle through a `GClosure` that the cycle collector cannot see.
 
