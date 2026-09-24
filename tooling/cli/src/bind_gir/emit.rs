@@ -64,8 +64,8 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                         promise_method(&mut out, function, finish);
                     }
                 }
-                for (property, getter, setter) in binding.properties.get(name.as_str()).into_iter().flatten() {
-                    accessor(&mut out, &own, property, getter.as_deref(), setter.as_deref());
+                for property in binding.properties.get(name.as_str()).into_iter().flatten() {
+                    accessor(&mut out, &own, &property.name, property.getter.as_deref(), property.setter.as_deref());
                 }
                 out.push_str("  }\n");
                 if let Some((_, parent)) = parent {

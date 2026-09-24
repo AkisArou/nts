@@ -107,17 +107,7 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                         signature: signature(signal),
                     })
                     .collect(),
-                properties: node
-                    .children()
-                    .filter(|n| is(*n, "property"))
-                    .filter_map(|property| {
-                        Some(Property {
-                            name: attribute(property, "name")?.to_owned(),
-                            getter: attribute(property, "getter").map(str::to_owned),
-                            setter: attribute(property, "setter").map(str::to_owned),
-                        })
-                    })
-                    .collect(),
+                properties: properties(node),
                 get_type: node.attribute((GLIB, "get-type")).map(str::to_owned),
                 first_field: node.children().find(|n| is(*n, "field")).and_then(|field| {
                     let ty = child(field, "type")?;
@@ -159,6 +149,22 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
         }
     }
     Ok(namespace)
+}
+
+/// A class's `<property>` elements, each with the methods GIR says read and
+/// write it.
+fn properties(class: Node<'_, '_>) -> Vec<Property> {
+    class
+        .children()
+        .filter(|n| is(*n, "property"))
+        .filter_map(|property| {
+            Some(Property {
+                name: attribute(property, "name")?.to_owned(),
+                getter: attribute(property, "getter").map(str::to_owned),
+                setter: attribute(property, "setter").map(str::to_owned),
+            })
+        })
+        .collect()
 }
 
 fn callables(owner: Node<'_, '_>) -> Vec<Callable> {
