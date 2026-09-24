@@ -132,6 +132,14 @@ fn has_effects(kind: &OpKind) -> bool {
         // and the trap on the no-match path is unreachable by the op's own
         // precondition -- so a dead one is a dead load and goes like any other.
         OpKind::SharedFieldGet { .. } => false,
+        // The same, and for the same reasons: a read through an open slot is a
+        // test chain and a load. The abort on the no-match path is unreachable
+        // by the op's own precondition, so it is not an effect that keeps a dead
+        // read alive -- if it were reachable the program was already wrong.
+        //
+        // `OpenFieldSet` is a store and is **not** here, so it falls through to
+        // the arm that keeps it, beside `FieldSet`.
+        OpKind::OpenFieldGet { .. } => false,
         // Named runtime functions that compute and do nothing else. A call is
         // assumed to have effects because it may, and these provably do not:
         // `nts_tag_name` allocates a string and returns it, so a dead one is a
@@ -151,6 +159,7 @@ fn has_effects(kind: &OpKind) -> bool {
         | OpKind::NativeBitStore { .. }
         | OpKind::ArraySet { .. }
         | OpKind::FieldSet { .. }
+        | OpKind::OpenFieldSet { .. }
         | OpKind::GlobalSet { .. }
         | OpKind::Retain(_)
         | OpKind::Release(_)

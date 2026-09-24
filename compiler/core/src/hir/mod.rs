@@ -1157,6 +1157,73 @@ pub enum OpKind {
         /// The index, equal in every arm by the precondition above.
         field: u32,
     },
+    /// `object.member`, where several distinct layouts can reach this slot and
+    /// they do **not** agree about where the member is.
+    ///
+    /// The counterpart of [`OpKind::SharedFieldGet`], and the reason both exist:
+    /// that one states *the arms agree about this index*, which is what licenses
+    /// C and LLVM to skip every test and read. This one states *the arms differ*,
+    /// which licenses nothing and obliges each backend to say which arm it is
+    /// looking at.
+    ///
+    /// # Why the operand is erased, and why nothing here names an interface
+    ///
+    /// The slot this reads through is an interface -- or a type alias to an
+    /// object type, which is the same hazard under a different spelling -- that
+    /// more than one layout can inhabit. **Such a slot erases**, and it has to:
+    /// on the JVM an interface that declares a property is not emitted as a JVM
+    /// interface at all (one has no instance fields), so it becomes a class, and
+    /// `assignable_types` refuses every store of another class into it. A slot
+    /// typed at the interface therefore cannot hold an inhabitant there.
+    ///
+    /// An erased slot can, and the chain tests the **inhabitants**. It never
+    /// casts to the interface -- `hierarchy::declared`'s doc says what that
+    /// costs: *"a value erased from `A` and unerased to `C` is a `checkcast
+    /// nts/gen/C` that throws"*, which is record 0289's history, seventeen
+    /// throws in one example, fixed by replacing the unerase with the chain.
+    ///
+    /// So no backend has to ask whether a `TypeId` is an interface. The op
+    /// carries the *consequence* -- these layouts, these indices -- exactly as
+    /// `SharedFieldGet` carries arms instead of "this is a union".
+    ///
+    /// # The contract
+    ///
+    /// - `arms` **over-approximates** the inhabitants: every value that can
+    ///   reach here matches some arm. That is what makes the no-match path
+    ///   unreachable, and it is not statically checkable -- the abort is what
+    ///   makes a violation loud instead of a load from the wrong offset.
+    /// - Each arm carries **its own** index. This is the whole difference from
+    ///   `SharedFieldGet`, whose one index is shared by construction.
+    /// - Every arm declares the member at the op's result type. Checked in
+    ///   [`super::verify`]: the arms may disagree about *where*, never about
+    ///   *what*, or a load reads a `double` out of a slot holding a pointer.
+    /// - Arms are distinct **layouts**, deduplicated as such: several `TypeId`s
+    ///   share one [`Layout`], so a chain built from type ids without that step
+    ///   emits the same test twice.
+    /// - The last arm still takes its test rather than being a fallthrough, so
+    ///   what happens on no match is a named abort and not a cast nobody chose.
+    ///
+    /// ```text
+    /// C, LLVM   a descriptor-pointer test per arm, then that arm's member
+    /// JVM       one `instanceof`, `checkcast` and `getfield` per arm
+    /// ```
+    OpenFieldGet {
+        object: ValueId,
+        /// Every layout that can arrive, in a stable order -- the order a
+        /// backend's test chain should follow, and the order that makes two runs
+        /// of one compiler on one input emit the same program.
+        arms: Vec<FieldArm>,
+    },
+    /// `object.member = value`, through the same open slot. Produces nothing.
+    ///
+    /// Everything [`OpKind::OpenFieldGet`] documents applies, with one addition:
+    /// the arms must agree about the member's type for the *stored* value's
+    /// sake as well, which is the same check from the other side.
+    OpenFieldSet {
+        object: ValueId,
+        arms: Vec<FieldArm>,
+        value: ValueId,
+    },
     /// `object.field = value`. Produces nothing.
     FieldSet {
         object: ValueId,
@@ -1612,6 +1679,18 @@ pub struct Layout {
     /// A `TypeId` rather than a layout index, because indices move as layouts
     /// merge and a `TypeId` does not. [`Program::base_layout`] resolves it.
     pub base: Option<TypeId>,
+}
+
+/// One layout a value at an open slot can have, and *that layout's* index for
+/// the member being read.
+///
+/// A pair rather than two parallel vectors, so an arm and its index cannot be
+/// separated by a later edit -- which is the failure this project has paid for
+/// under the name "two places that must agree".
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FieldArm {
+    pub ty: TypeId,
+    pub field: u32,
 }
 
 impl Layout {
@@ -3413,6 +3492,12 @@ fn base_first_positions(fields: &[Field], order: &[(String, Option<TypeId>)]) ->
     positions
 }
 
+/// Where a reorder moved the index (or indices) one op reads at.
+enum Moved {
+    One(u32),
+    Each(Vec<u32>),
+}
+
 /// Rewrite every field access through the layout its object's type names.
 ///
 /// `OpKind::FieldGet { field: u32 }` is an index, so a reorder without this
@@ -3423,38 +3508,107 @@ fn base_first_positions(fields: &[Field], order: &[(String, Option<TypeId>)]) ->
 /// valid on a subclass exactly because both were reordered against the same
 /// prefix.
 fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
-    let mut edits: Vec<(usize, usize, u32)> = Vec::new();
+    // **An op keyed on its operand's type, and an op keyed on its arms.** A
+    // `FieldGet` names the type it reads through; a shared or open read's operand
+    // is *erased* and names nothing, so its layouts come from the arms instead.
+    // Missing that is how a reorder can leave an erased read pointing at whatever
+    // now occupies the slot -- silently, because an index still in range still
+    // loads something.
+    let where_of = |ty: TypeId| {
+        program
+            .layouts
+            .iter()
+            .position(|candidate| candidate.types.contains(&ty))
+    };
+    let mut edits: Vec<(usize, usize, Moved)> = Vec::new();
     for (at, func) in program.funcs.iter().enumerate() {
         for (index, op) in func.values.iter().enumerate() {
-            let (object, field) = match &op.kind {
+            match &op.kind {
                 OpKind::FieldGet { object, field } | OpKind::FieldSet { object, field, .. } => {
-                    (*object, *field)
-                }
-                _ => continue,
-            };
-            let HirType::Managed(ManagedType::Object(ty)) = func.values[object.0 as usize].ty
-            else {
-                continue;
-            };
-            let Some(layout) = program
-                .layouts
-                .iter()
-                .position(|candidate| candidate.types.contains(&ty))
-            else {
-                continue;
-            };
-            let Some(to) = moved[layout].get(field as usize).copied() else {
-                continue;
-            };
-            if to != field {
-                edits.push((at, index, to));
+                    let HirType::Managed(ManagedType::Object(ty)) =
+                        func.values[object.0 as usize].ty
+                    else {
+                        continue;
+                    };
+                    let Some(to) = where_of(ty).and_then(|at| moved[at].get(*field as usize).copied())
+                    else {
+                        continue;
+                    };
+                    if to != *field {
+                        edits.push((at, index, Moved::One(to)));
+                    }
+                },
+                // Every arm agrees about this index by the op's precondition, so
+                // they must still agree *after* the reorder -- and a reorder is
+                // per layout, so it can move one arm and not another and quietly
+                // falsify that. When they disagree the op is left alone and the
+                // backend's own check is what says so, exactly as `fields::narrow`
+                // does for the same reason.
+                //
+                // **I could not produce a program that reaches this.** Every
+                // union fixture here reads a field the reorder leaves where it
+                // was. It stays because what it guards is a *precondition*, and
+                // because `OpenFieldGet` below -- whose arms disagree by
+                // construction -- reaches the same machinery and cannot rely on
+                // the coincidence.
+                OpKind::SharedFieldGet { arms, field, .. } => {
+                    let mut agreed = None;
+                    let mut all = true;
+                    for arm in arms {
+                        match where_of(*arm).and_then(|at| moved[at].get(*field as usize).copied()) {
+                            Some(to) if agreed.is_none_or(|seen| seen == to) => agreed = Some(to),
+                            _ => all = false,
+                        }
+                    }
+                    match agreed {
+                        Some(to) if all && to != *field => {
+                            edits.push((at, index, Moved::One(to)));
+                        },
+                        _ => {},
+                    }
+                },
+                // Per arm, because the arms are *allowed* to disagree here --
+                // that is the op. Every arm must still resolve, or the rewrite
+                // would leave some arms moved and some not, which is worse than
+                // leaving all of them.
+                OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } => {
+                    let mut each = Vec::with_capacity(arms.len());
+                    for arm in arms {
+                        let Some(to) =
+                            where_of(arm.ty).and_then(|at| moved[at].get(arm.field as usize).copied())
+                        else {
+                            each.clear();
+                            break;
+                        };
+                        each.push(to);
+                    }
+                    if !each.is_empty()
+                        && each.iter().zip(arms).any(|(to, arm)| *to != arm.field)
+                    {
+                        edits.push((at, index, Moved::Each(each)));
+                    }
+                },
+                _ => {},
             }
         }
     }
     for (func, index, to) in edits {
-        match &mut program.funcs[func].values[index].kind {
-            OpKind::FieldGet { field, .. } | OpKind::FieldSet { field, .. } => *field = to,
-            _ => {}
+        match (&mut program.funcs[func].values[index].kind, to) {
+            (
+                OpKind::FieldGet { field, .. }
+                | OpKind::FieldSet { field, .. }
+                | OpKind::SharedFieldGet { field, .. },
+                Moved::One(to),
+            ) => *field = to,
+            (
+                OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. },
+                Moved::Each(each),
+            ) => {
+                for (arm, to) in arms.iter_mut().zip(each) {
+                    arm.field = to;
+                }
+            },
+            _ => {},
         }
     }
 }
@@ -4849,6 +5003,102 @@ mod tests {
         // And a type with the same base is still merged on shape, which is what
         // keeps two spellings of one anonymous type from becoming two layouts.
         assert!(shape.same_shape(&derived_fields, &[], None));
+    }
+
+    /// A reorder moves each arm's index, and each arm's index is its own.
+    ///
+    /// [`remap_field_accesses`] rewrites what an op reads at after
+    /// [`put_bases_first`] moves a layout's fields. It knew two ops, both of
+    /// which name their layout through the **operand's type** -- and an open or
+    /// shared read's operand is erased and names nothing, so its layouts come
+    /// from its arms. An op left unrewritten still holds an index in range, so
+    /// it still loads something: the failure is a wrong field, silently.
+    ///
+    /// Here the two arms move in *opposite* directions -- index 0 to 1 in one
+    /// and 1 to 0 in the other -- which is a case no single rewritten number
+    /// could satisfy, and so is a test of the per-arm rewrite rather than of a
+    /// rewrite that happens to agree.
+    #[test]
+    fn a_reorder_moves_every_arm_of_an_open_read() {
+        let integer = HirType::Int { bits: 32, signed: true };
+        let program = |arms: Vec<FieldArm>| {
+            let values = vec![
+                Op {
+                    kind: OpKind::ObjectNew { frame: false },
+                    ty: HirType::Erased,
+                    origin: origin(),
+                },
+                Op {
+                    kind: OpKind::OpenFieldGet { object: ValueId(0), arms },
+                    ty: integer.clone(),
+                    origin: origin(),
+                },
+            ];
+            Program {
+                layouts: vec![
+                    layout(
+                        "Plain",
+                        1,
+                        vec![
+                            field("count", integer.clone()),
+                            field("other", integer.clone()),
+                        ],
+                    ),
+                    layout(
+                        "Tagged",
+                        2,
+                        vec![
+                            field("tag", integer.clone()),
+                            field("count", integer.clone()),
+                        ],
+                    ),
+                ],
+                funcs: vec![Func {
+                    name: "f".to_owned(),
+                    params: Vec::new(),
+                    return_type: HirType::Void,
+                    values,
+                    blocks: vec![Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(0), ValueId(1)],
+                        terminator: Terminator::Return(None),
+                    }],
+                    origin: origin(),
+                    exported: true,
+                    initializes_receiver: false,
+                    async_result: None,
+                    frame: None,
+                    abstract_declaration: false,
+                }],
+                ..Program::default()
+            }
+        };
+
+        // `Plain` swaps its two fields and `Tagged` swaps its two, so `count`
+        // goes 0 -> 1 in the first and 1 -> 0 in the second.
+        let moved = vec![vec![1, 0], vec![1, 0]];
+        let mut subject = program(vec![
+            FieldArm { ty: TypeId(1), field: 0 },
+            FieldArm { ty: TypeId(2), field: 1 },
+        ]);
+        remap_field_accesses(&mut subject, &moved);
+        let OpKind::OpenFieldGet { arms, .. } = &subject.funcs[0].values[1].kind else {
+            panic!("the op is still an open read");
+        };
+        assert_eq!(arms[0].field, 1, "the first arm's index moved with its layout");
+        assert_eq!(arms[1].field, 0, "and the second arm's moved the other way");
+
+        // **The control.** An identity permutation must leave the op alone, or
+        // the assertions above would pass over a rewrite that always fires.
+        let mut untouched = program(vec![
+            FieldArm { ty: TypeId(1), field: 0 },
+            FieldArm { ty: TypeId(2), field: 1 },
+        ]);
+        remap_field_accesses(&mut untouched, &[vec![0, 1], vec![0, 1]]);
+        let OpKind::OpenFieldGet { arms, .. } = &untouched.funcs[0].values[1].kind else {
+            panic!("the op is still an open read");
+        };
+        assert_eq!((arms[0].field, arms[1].field), (0, 1));
     }
 
     fn field(name: &str, ty: HirType) -> Field {

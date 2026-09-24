@@ -773,6 +773,30 @@ fn executed_values(func: &Func) -> FxHashSet<super::ValueId> {
         .collect()
 }
 
+/// Every arm of an open access, at its own index, against one type.
+///
+/// Extracted so the arms read as one rule rather than two copies: the read
+/// checks against the op's result and the store against the stored value, and
+/// that is the only difference between them.
+fn check_arms(
+    program: &Program,
+    arms: &[super::FieldArm],
+    what: &'static str,
+    against: &HirType,
+    report: &mut impl FnMut(&'static str, &HirType, &HirType),
+) {
+    for arm in arms {
+        if let Some(slot) = program
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(&arm.ty))
+            .and_then(|layout| layout.fields.get(arm.field as usize))
+        {
+            report(what, &slot.ty, against);
+        }
+    }
+}
+
 fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
     let mut report = |what, expected: &HirType, found: &HirType| {
         if !compatible(found, expected) {
@@ -859,6 +883,27 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
                 {
                     report("a field", &slot.ty, &func.values[value.0 as usize].ty);
                 }
+            }
+            // **The open ops' contract, and the half of it a machine can hold.**
+            //
+            // The arms may disagree about *where* the member is -- that is the
+            // whole op -- and must agree about *what* it is, or a load reads a
+            // `double` out of a slot holding a pointer and nothing refuses. So
+            // each arm is checked at its own index against the op's result type
+            // (or, for a store, the stored value's), which is `FieldGet`'s rule
+            // applied once per arm rather than once per op.
+            //
+            // The other half -- that the arms *over-approximate* the inhabitants
+            // -- is not checkable here: it is a claim about every value that can
+            // reach this program point, which is the thing no local rule knows.
+            // The no-match abort is what makes a violation of it loud, and the
+            // op's doc says so in those words.
+            OpKind::OpenFieldGet { arms, .. } => {
+                check_arms(program, arms, "an open field read", &op.ty, &mut report);
+            }
+            OpKind::OpenFieldSet { arms, value, .. } => {
+                let stored = func.values[value.0 as usize].ty.clone();
+                check_arms(program, arms, "an open field", &stored, &mut report);
             }
             _ => {}
         }
@@ -1377,10 +1422,21 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::TagOf { value }
         | OpKind::Unerase { value }
         | OpKind::InstanceOf { value, .. }
-        | OpKind::SharedFieldGet { value, .. } => {
+        | OpKind::SharedFieldGet { value, .. }
+        | OpKind::OpenFieldGet { object: value, .. } => {
             vec![*value]
         }
-        OpKind::NativeCopy { destination, source } => vec![*destination, *source],
+        // A receiver and a stored value, or a copy's two ends: two operands and
+        // nothing else, whatever the fields are called.
+        OpKind::OpenFieldSet {
+            object: first,
+            value: second,
+            ..
+        }
+        | OpKind::NativeCopy {
+            destination: first,
+            source: second,
+        } => vec![*first, *second],
         OpKind::Await { promise, rejects_to } => {
             let mut read = vec![*promise];
             // Every argument the rejection edge owes its handler is read here,
@@ -1689,6 +1745,110 @@ mod tests {
                 .iter()
                 .any(|p| matches!(p, Invalid::StoreType { what: "a field read", .. })),
             "the read must be reported against the layout: {problems:#?}"
+        );
+    }
+
+    /// An open read's arms may disagree about *where* and never about *what*.
+    ///
+    /// That is the op's whole contract on the machine-checkable side: per-arm
+    /// indices are the point, per-arm *representations* are the bug, and the
+    /// difference is a load that reads a `double` out of a slot holding a
+    /// pointer. `SharedFieldGet` gets this for free from its one index; this op
+    /// has to be told.
+    #[test]
+    fn an_open_read_is_checked_at_every_arm() {
+        use crate::hir::{Field, FieldArm, Layout};
+        use nts_semantic_schema::TypeId;
+
+        let field = |name: &str, ty: HirType| Field {
+            name: name.to_owned(),
+            ty,
+            readonly: false,
+            declared_by: None,
+        };
+        let integer = HirType::Int { bits: 32, signed: true };
+        let laid_out = |id: u32, name: &str, fields: Vec<Field>| Layout {
+            types: vec![TypeId(id)],
+            name: name.to_owned(),
+            interfaces: Vec::new(),
+            fields,
+            methods: Vec::new(),
+            base: None,
+        };
+
+        // `count` at index 0 in one arm and index 1 in the other -- the shape
+        // that has no single index and is the reason this op exists.
+        let agreeing = vec![
+            laid_out(1, "Plain", vec![field("count", integer.clone())]),
+            laid_out(
+                2,
+                "Tagged",
+                vec![field("tag", integer.clone()), field("count", integer.clone())],
+            ),
+        ];
+        let arms = vec![
+            FieldArm { ty: TypeId(1), field: 0 },
+            FieldArm { ty: TypeId(2), field: 1 },
+        ];
+
+        let built = |layouts: Vec<Layout>, read: HirType| {
+            let values = vec![
+                op(OpKind::ObjectNew { frame: false }),
+                Op {
+                    kind: OpKind::OpenFieldGet {
+                        object: ValueId(0),
+                        arms: arms.clone(),
+                    },
+                    ty: read,
+                    origin: origin(),
+                },
+            ];
+            let mut program = func(
+                values,
+                vec![block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1)],
+                    Terminator::Return(None),
+                )],
+            );
+            program.layouts = layouts;
+            program
+        };
+
+        // This rule's own findings, and not every finding: the helper declares
+        // an `f64` return and these blocks return nothing, which is a complaint
+        // about the fixture rather than about the op.
+        let mine = |program: &Program| match verify(program) {
+            Ok(()) => Vec::new(),
+            Err(problems) => problems
+                .into_iter()
+                .filter(|p| matches!(p, Invalid::StoreType { what: "an open field read", .. }))
+                .collect(),
+        };
+
+        // Disagreeing *indices* with an agreeing representation is the op
+        // working, and must not be reported.
+        let legal = mine(&built(agreeing.clone(), integer.clone()));
+        assert!(
+            legal.is_empty(),
+            "arms that agree about the member's type are legal: {legal:#?}"
+        );
+
+        // **The control**, and without it the case above would also pass a rule
+        // that reported nothing at all: the same program read as an `f64`.
+        assert!(
+            !mine(&built(agreeing.clone(), HirType::Float { bits: 64 })).is_empty(),
+            "an open read at a type no arm declares must be caught"
+        );
+
+        // And **every** arm, not just the first: arm zero agrees here and arm
+        // one does not, which is exactly what a rule checking `arms[0]` would
+        // let through.
+        let mut second_disagrees = agreeing;
+        second_disagrees[1].fields[1].ty = HirType::Float { bits: 64 };
+        assert!(
+            !mine(&built(second_disagrees, integer)).is_empty(),
+            "a disagreement behind arm zero must be reported, not just at arm zero"
         );
     }
 

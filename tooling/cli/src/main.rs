@@ -2473,6 +2473,18 @@ fn render_shared_field(
     format!("%{index} = field.get.shared %{}.{field} over {arms} : {ty}", value.0)
 }
 
+/// An open read's arms, each with **its own** index.
+///
+/// Spelled `obj4.0 | obj9.2` rather than one index after the receiver, because
+/// that difference is the whole op: a reader who sees one number has been told
+/// the arms agree, and here they do not.
+fn render_arms(arms: &[nts_core::hir::FieldArm]) -> String {
+    arms.iter()
+        .map(|arm| format!("obj{}.{}", arm.ty.0, arm.field))
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
 #[allow(clippy::too_many_lines)] // One exhaustive HIR rendering dispatch.
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
@@ -2555,6 +2567,21 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::FieldGet { object, field } => {
             format!("%{index} = field.get %{}.{field} : {ty}", object.0)
         }
+        OpKind::OpenFieldGet { object, arms } => format!(
+            "%{index} = field.get.open %{} over {} : {ty}",
+            object.0,
+            render_arms(arms)
+        ),
+        OpKind::OpenFieldSet {
+            object,
+            arms,
+            value,
+        } => format!(
+            "field.set.open %{} over {} = %{}",
+            object.0,
+            render_arms(arms),
+            value.0
+        ),
         OpKind::SharedFieldGet { value, arms, field } => {
             render_shared_field(index, *value, arms, *field, &ty)
         }

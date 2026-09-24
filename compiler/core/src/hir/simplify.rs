@@ -180,41 +180,65 @@ fn constant(func: &Func, value: ValueId) -> Option<i128> {
 /// Exhaustive by construction: a new variant with an operand will not compile
 /// until it is listed, which is the only way a substitution stays correct as the
 /// instruction set grows.
+/// An `await`'s rejection edge, whose arguments are operands like any other.
+///
+/// They are the values the handler's parameters receive, and a renumbering that
+/// missed them would hand a handler a value that no longer exists.
+fn substitute_rejection(rejection: Option<&mut super::Rejection>, of: impl Fn(ValueId) -> ValueId) {
+    if let Some(rejection) = rejection {
+        for arg in &mut rejection.args {
+            *arg = of(*arg);
+        }
+    }
+}
+
+// Kept whole, as the C backend's own dispatch is and for the same reason: this
+// is the one place that says which values every operation reads, and an arm
+// split out of it is an operand list a renumbering can miss. Being exhaustive
+// over `OpKind` is what makes a new operation fail to compile here rather than
+// silently keep a stale `ValueId`.
+#[allow(clippy::too_many_lines)]
 pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
     match kind {
         OpKind::NativeBridge { closure, .. } => *closure = of(*closure),
-        OpKind::NativeBlock { invoke, context, .. } => {
-            *invoke = of(*invoke);
-            *context = of(*context);
-        }
-        OpKind::NativeCopy { destination, source } => {
-            *destination = of(*destination);
-            *source = of(*source);
-        }
+
         OpKind::Erase { value }
         | OpKind::TagOf { value }
         | OpKind::Unerase { value }
         | OpKind::InstanceOf { value, .. }
-        | OpKind::SharedFieldGet { value, .. } => {
+        | OpKind::SharedFieldGet { value, .. }
+        | OpKind::OpenFieldGet { object: value, .. } => {
             *value = of(*value);
+        }
+        // Two operands and nothing else, whatever they are called.
+        OpKind::NativeCopy {
+            destination: first,
+            source: second,
+        }
+        | OpKind::OpenFieldSet {
+            object: first,
+            value: second,
+            ..
+        }
+        | OpKind::Suspend {
+            promise: first,
+            frame: second,
+            ..
+        }
+        | OpKind::NativeBlock {
+            invoke: first,
+            context: second,
+            ..
+        } => {
+            *first = of(*first);
+            *second = of(*second);
         }
         OpKind::Await { promise, rejects_to } => {
             *promise = of(*promise);
-            // The rejection's arguments are operands like any other: they are
-            // the values the handler's parameters receive, and a renumbering
-            // that missed them would hand a handler a value that no longer
-            // exists.
-            if let Some(rejection) = rejects_to {
-                for arg in &mut rejection.args {
-                    *arg = of(*arg);
-                }
-            }
+            substitute_rejection(rejects_to.as_mut(), of);
         }
         OpKind::CellReady { cell, .. } => *cell = of(*cell),
-        OpKind::Suspend { promise, frame, .. } => {
-            *promise = of(*promise);
-            *frame = of(*frame);
-        }
+
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
@@ -503,6 +527,7 @@ const fn leaves_fields_alone(kind: &OpKind) -> bool {
             | OpKind::Unerase { .. }
             | OpKind::FieldGet { .. }
             | OpKind::SharedFieldGet { .. }
+            | OpKind::OpenFieldGet { .. }
             | OpKind::ArrayGet { .. }
             | OpKind::StringUnitAt { .. }
             | OpKind::GlobalGet(_)

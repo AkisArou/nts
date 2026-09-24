@@ -1971,6 +1971,21 @@ fn null_comparison(
 /// representation, so the offset and the load are the same through any of them.
 /// A backend that *cannot* do this reads `arms` and emits a test chain; see
 /// [`nts_core::hir::OpKind::SharedFieldGet`].
+/// The open-slot access this backend cannot emit yet.
+///
+/// Refused **by name** rather than left to the exhaustiveness error, so that a
+/// program reaching it says which operation has no answer here -- and so that
+/// adding the op and emitting it stay two commits, which is what lets the op
+/// land with nothing emitting it and no lane turning red.
+fn no_open_chain(location: nts_diagnostics::Location) -> Diagnostic {
+    Diagnostic::error(
+        "NTS2006",
+        "a field read through a slot whose layouts disagree about where it is, which needs a \
+         per-arm test chain this backend does not emit yet",
+        location,
+    )
+}
+
 fn shared_field_load(
     op: &nts_core::hir::Op,
     value: ValueId,
@@ -4904,6 +4919,9 @@ fn emit_op(
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. } => return memory_op(writer, func, value, context),
+        OpKind::OpenFieldGet { .. } | OpKind::OpenFieldSet { .. } => {
+            return Err(no_open_chain(op.origin.location));
+        }
         OpKind::NativeBlock { invoke, context, signature } => {
             objc::block_expression(&name, &value_name(*invoke), &value_name(*context), signature)
         }

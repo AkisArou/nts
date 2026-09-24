@@ -330,6 +330,24 @@ pub fn narrow(program: &mut Program, narrowed: &FieldWidths) -> usize {
                     }
                     if all { agreed } else { None }
                 },
+                // The same, per arm. An open read's arms disagree about *where*
+                // and must agree about *what*, so narrowing them apart falsifies
+                // the op just as surely -- and here each arm carries its own
+                // index, so the lookup is `(arm.ty, arm.field)` and not one field
+                // number shared across the set.
+                OpKind::OpenFieldGet { arms, .. } => {
+                    let mut agreed: Option<HirType> = None;
+                    let mut all = true;
+                    for arm in arms {
+                        match by_type.get(&(arm.ty, arm.field)) {
+                            Some(ty) if agreed.as_ref().is_none_or(|seen| seen == ty) => {
+                                agreed = Some(ty.clone());
+                            },
+                            _ => all = false,
+                        }
+                    }
+                    if all { agreed } else { None }
+                },
                 _ => continue,
             };
             if let Some(ty) = narrowed {
