@@ -164,7 +164,15 @@ correctness does not depend on arm64 running by luck.
 
 ## Next
 
-1. **A2, a window:** blocks, `extends NSObject`, the CFRunLoop host, and
+1. **A2, a window.** Landed so far:
+   - **The run-loop host (`48faceb5`).** `nts_cf_host` turns libuv inside
+     the main `CFRunLoop`, with a per-task autorelease pool.
+     `examples/interop/macos-loop` runs `gtk-loop`'s four arms.
+   - **Blocks (`6e177bd0`).** `Block<F>` becomes a clang-shaped stack block
+     whose copy and dispose lend and give back the closure, guarded to the
+     owning thread. `examples/interop/macos-blocks` matches an ARC oracle.
+
+   Left for A2: `class X extends NSObject` (target/action, delegates), then
    `macos-window` with a capturing target/action handler that starts a timer
    and an await.
 2. **A3:** `nts bind-objc` from SDK headers, with an ObjC witness.
