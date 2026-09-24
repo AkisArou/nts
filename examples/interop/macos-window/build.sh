@@ -10,6 +10,11 @@
 #   callback is still running, and no task may start there. Before the CF host
 #   checked for that, `timeout 1` came before `micro 1`, and this arm
 #   rejects that order.
+# - **Nested:** `WINDOW_NESTED=1` makes the first press's handler, still inside
+#   its callback, make libuv's kqueue readable and turn a nested run loop for a
+#   second. The host must neither run a task there nor spin: before it parked
+#   the descriptor, that second cost a second of CPU.
+# - **LLVM:** the main arm's program from the LLVM backend, the same order.
 # - **Control:** `WINDOW_CONTROL=detached` takes libuv's sources off the run
 #   loop. The presses and the stop are Cocoa's own and still happen, but no
 #   timeout may fire before the application has stopped.
@@ -83,6 +88,51 @@ done
 EXPECTED
 diff -u "$out/expected.txt" "$out/main.txt"
 echo "main: a closure as a button's action, its job and its timeout run inside [NSApp run], in order"
+
+run --env WINDOW_NESTED=1 >"$out/nested.txt" 2>"$out/nested.err" || { cat "$out/nested.txt" "$out/nested.err" >&2; exit 1; }
+cpu=$(sed -n 's/^nested-cpu-ms \([0-9]*\)$/\1/p' "$out/nested.txt")
+if [ -z "$cpu" ] || [ "$cpu" -ge 300 ]; then
+  echo "macos-window: a nested loop under a callback took ${cpu:-no measurement} ms of CPU in one second -- the host spins" >&2
+  cat "$out/nested.txt" >&2
+  exit 1
+fi
+# Nothing ran inside the callback: its job is the next thing after it. After
+# the second, libuv's timer and Cocoa's are both overdue, and which of two
+# run-loop timers fires first is not defined, so the rest is compared as a set.
+inside=$(sed -n '/^pressed 1$/,/^micro 1$/p' "$out/nested.txt" | grep -v '^pressed 1$\|^micro 1$\|^nested-cpu-ms ' || true)
+if [ -n "$inside" ]; then
+  echo "macos-window: a task ran inside the callback's nested loop: $inside" >&2
+  exit 1
+fi
+grep -v '^nested-cpu-ms ' "$out/nested.txt" | LC_ALL=C sort >"$out/nested.sorted"
+LC_ALL=C sort "$out/expected.txt" | diff -u - "$out/nested.sorted"
+echo "nested: a second-long loop inside a callback, kqueue readable, ran no task and took ${cpu} ms of CPU"
+
+# LLVM, linked with the C build's runtime, main and host.
+llvm="$out/llvm"
+c_out="$out/window/macos-13-x86_64"
+mkdir -p "$llvm"
+"$nts" emit-llvm "$source/tsconfig.json" >"$llvm/program.ll" 2>"$llvm/emit.log" ||
+  { cat "$llvm/emit.log" >&2; exit 1; }
+if grep -q "NTS[0-9]" "$llvm/emit.log"; then
+  cat "$llvm/emit.log" >&2
+  echo "macos-window: emit-llvm refused part of the program" >&2
+  exit 1
+fi
+set -- -target x86_64-apple-macos13 -isysroot "$sdk"
+clang "$@" -x ir -w -O2 -c "$llvm/program.ll" -o "$llvm/program.o"
+for unit in main nts_runtime nts_uv_host nts_cf_host nts_unicode; do
+  [ -f "$c_out/$unit.c" ] || continue
+  clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
+done
+clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -I"$source/native" -c "$source/native/support.c" -o "$llvm/support.o"
+clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework AppKit -framework Foundation \
+  -framework CoreFoundation -o "$llvm/window"
+timeout 60 "$root/tooling/apple/run.sh" "$llvm/window" >"$llvm/main.txt" 2>"$llvm/main.err" ||
+  { cat "$llvm/main.txt" "$llvm/main.err" >&2; exit 1; }
+[ -s "$llvm/main.err" ] && { cat "$llvm/main.err" >&2; exit 1; }
+diff -u "$out/expected.txt" "$llvm/main.txt"
+echo "LLVM: the same window, from the LLVM backend"
 
 run --env WINDOW_CONTROL=detached >"$out/control.txt" 2>&1 || { cat "$out/control.txt" >&2; exit 1; }
 before=$(sed -n '1,/^stopped$/p' "$out/control.txt")

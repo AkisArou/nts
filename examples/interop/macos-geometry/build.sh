@@ -7,6 +7,9 @@
 # - **Oracle:** `reference/geometry.m`, compiled by clang, which decides how
 #   each record is passed and which `objc_msgSend` a send goes through.
 # - **Main:** the program prints exactly what the oracle prints, stderr empty.
+# - **LLVM:** the same from the LLVM backend, whose `rectValue` is an
+#   `sret` call to `objc_msgSend_stret` and whose `pointValue` returns
+#   `{ double, double }`.
 # - **Control:** the same program with every send forced through plain
 #   `objc_msgSend`. On x86_64 a 32-byte `rectValue` must then go wrong, or the
 #   main arm could not tell `objc_msgSend_stret` from `objc_msgSend`.
@@ -81,6 +84,31 @@ run_quietly "$out/oracle" "$out/expected"
 run_quietly "$out/geometry/macos-13-x86_64/geometry" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"
 echo "macos-x86_64: records sent, returned and passed to C as clang passes them, stderr empty"
+
+# LLVM, linked with the C build's runtime, main and host.
+llvm="$out/llvm"
+c_out="$out/geometry/macos-13-x86_64"
+mkdir -p "$llvm"
+"$nts" emit-llvm "$source/tsconfig.json" >"$llvm/program.ll" 2>"$llvm/emit.log" ||
+  { cat "$llvm/emit.log" >&2; exit 1; }
+if grep -q "NTS[0-9]" "$llvm/emit.log"; then
+  cat "$llvm/emit.log" >&2
+  echo "macos-geometry: emit-llvm refused part of the program" >&2
+  exit 1
+fi
+grep -q "call void (ptr, ptr, ptr) @objc_msgSend_stret(ptr sret" "$llvm/program.ll" ||
+  { echo "macos-geometry: the LLVM rectValue is not an sret call to objc_msgSend_stret" >&2; exit 1; }
+clang "$@" -x ir -w -O2 -c "$llvm/program.ll" -o "$llvm/program.o"
+for unit in main nts_runtime nts_uv_host nts_cf_host nts_unicode; do
+  [ -f "$c_out/$unit.c" ] || continue
+  clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
+done
+clang "$@" -std=c11 -O2 -w -I"$source/native" -c "$source/native/report.c" -o "$llvm/report.o"
+clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework Foundation -framework CoreFoundation \
+  -o "$llvm/geometry"
+run_quietly "$llvm/geometry" "$llvm/actual"
+diff -u "$out/expected.txt" "$llvm/actual.txt"
+echo "macos-x86_64 (LLVM): the same, from the LLVM backend"
 
 # The control: the build's own C, with the entry point decided wrongly.
 c_out="$out/geometry/macos-13-x86_64"

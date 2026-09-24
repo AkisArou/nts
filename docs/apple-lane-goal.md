@@ -205,8 +205,17 @@ correctness does not depend on arm64 running by luck.
      which is also the rule for a modal panel opened from a handler. It is the
      trade-off the host already made for a modal loop inside a libuv task.
 
-   Left for A2: records by value on LLVM (x86_64 SysV first), which closes A2
-   on both backends. Sugar for
+   - **Records by value on LLVM.** x86_64 System V classification, with the
+     declarations checked against `clang -emit-llvm`. `macos-geometry` and
+     `macos-window` each have an LLVM arm on the Mac, and `native-byvalue` one
+     on Linux.
+
+   **A2 is closed on both backends.** Still open from it: arm64 has never
+   run, and the LLVM backend has no AAPCS64 classification, since it targets
+   x86_64 only. `dispatch_async` needs `-fblocks` in the witness.
+
+2. **A3:** `nts bind-objc` from SDK headers, with an Objective-C witness.
+   It replaces the hand-written `.d.ts` in every `macos-*` fixture. Sugar for
    `class X extends NSObject` belongs to A4, and so does per-instance
    TypeScript state, and so does `NSMakeRect`-style construction. Today a
    rectangle is a `local<CGRect>()` filled member by member, and a helper that
@@ -219,7 +228,6 @@ correctness does not depend on arm64 running by luck.
    run-time value, so this cannot be refused statically. It is ObjC's own
    hazard, and A3's generated bindings, which know each method's real result,
    leave `performSelector:` as the one untyped escape hatch.
-2. **A3:** `nts bind-objc` from SDK headers, with an ObjC witness.
 3. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.
 

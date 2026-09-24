@@ -10,10 +10,11 @@ use nts_codegen_common::objc::{
     block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol, lookups,
     selector_symbol,
 };
-use nts_core::hir::native::{FnPointer, Function, Send, Type};
+use nts_core::hir::native::{FnPointer, Function, NativeAbi, Send, Type};
 use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId};
 use nts_diagnostics::Diagnostic;
 
+use super::aggregate::{self, Crossing, Passing};
 use super::{extension, name, refuse, ty_of};
 
 /// A C string as an LLVM constant. Selectors and class names are identifier
@@ -69,6 +70,11 @@ pub(super) fn module(program: &Program) -> String {
             let _ = writeln!(text, "{declaration}");
         }
     }
+    // A record result in memory comes back through `objc_msgSend_stret` on
+    // x86_64, the only arch this backend emits for; see `send`.
+    if found.returns_records && !bound(program, "objc_msgSend_stret") {
+        let _ = writeln!(text, "declare void @objc_msgSend_stret()");
+    }
     for selector in found.selectors {
         lookup(&mut text, &selector_symbol(selector), "sel_registerName", selector);
     }
@@ -79,6 +85,11 @@ pub(super) fn module(program: &Program) -> String {
 }
 
 /// `%out = call R (ptr, ptr, A...) @objc_msgSend(ptr %receiver, ptr %sel, A %a...)`.
+///
+/// A record crosses as `native::call` passes one, with the receiver and the
+/// selector counted as the two integer arguments ahead of it. A record result
+/// in memory goes through `objc_msgSend_stret`, the `sret` pointer first: on
+/// `x86_64` plain `objc_msgSend` would read that pointer as the receiver.
 pub(super) fn send(
     func: &Func,
     target: &Function,
@@ -86,14 +97,16 @@ pub(super) fn send(
     args: &[ValueId],
     result: &HirType,
     out: &str,
+    abi: NativeAbi,
 ) -> Result<String, Diagnostic> {
-    if target.passes_a_record() {
-        return Err(refuse(func, "a C record passed or returned by value, which this backend has no aggregate calling convention for yet; the C backend builds it"));
-    }
     let instance = send.class.is_none();
-    if args.len() != target.parameters.len() || *result != target.result.representation() {
+    // The selector always; the receiver too when it is a class, which is not
+    // among the declared parameters.
+    let plan = super::native::plan(func, target, 1 + usize::from(!instance), abi)?;
+    if args.len() != target.argument_types().count() || *result != target.call_result() {
         return Err(refuse(func, "an Objective-C message whose HIR disagrees with its declared ABI"));
     }
+    let (args, destination) = super::native::split_destination(target, args);
     let mut before = Vec::new();
     let receiver = match &send.class {
         Some(class) => {
@@ -105,17 +118,51 @@ pub(super) fn send(
     };
     let selector = format!("{out}.selector");
     before.push(format!("{selector} = call ptr @{}()", selector_symbol(&send.selector)));
-    let mut types = vec!["ptr".to_owned(), "ptr".to_owned()];
-    let mut values = vec![format!("ptr {receiver}"), format!("ptr {selector}")];
-    let rest = &args[usize::from(instance)..];
-    for (at, arg) in rest.iter().enumerate() {
+    let mut types = Vec::new();
+    let mut values = Vec::new();
+    if let (Some(passing), Some(destination)) = (&plan.result, destination)
+        && let Some(hidden) = aggregate::sret(passing, &name(destination))
+    {
+        types.push("ptr".to_owned());
+        values.push(hidden);
+    }
+    types.extend(["ptr".to_owned(), "ptr".to_owned()]);
+    values.extend([format!("ptr {receiver}"), format!("ptr {selector}")]);
+    let skip = usize::from(instance);
+    for (at, arg) in args.iter().enumerate().skip(skip) {
         let ty = &func.values[arg.0 as usize].ty;
         if *ty == HirType::Erased {
             return Err(refuse(func, "an Objective-C message with an erased argument"));
         }
-        types.push(ty_of(ty, func)?.to_owned());
         let temp = format!("{out}.arg{at}");
-        values.extend(super::arguments(func, &temp, &[*arg], &mut before)?);
+        if let Crossing::Record(passing) = &plan.arguments[at] {
+            let align = super::native::record_alignment(func, target.parameters.get(at), abi)?;
+            if let Passing::Memory { .. } = passing {
+                types.push("ptr".to_owned());
+            } else {
+                types.extend(aggregate::parameter_types(passing));
+            }
+            values.extend(aggregate::load_argument(passing, align, &name(*arg), &temp, &mut before));
+        } else {
+            types.push(ty_of(ty, func)?.to_owned());
+            values.extend(super::arguments(func, &temp, &[*arg], &mut before)?);
+        }
+    }
+    if let (Some(passing), Some(destination)) = (&plan.result, destination) {
+        let align = super::native::record_alignment(func, Some(&target.result), abi)?;
+        let returned = format!("{out}.returned");
+        let (entry, prefix) = match passing {
+            Passing::Memory { .. } => ("objc_msgSend_stret", String::new()),
+            Passing::Registers(_) => ("objc_msgSend", format!("{returned} = ")),
+        };
+        let spelled = aggregate::result_type(passing);
+        before.push(format!(
+            "{prefix}call {spelled} ({}) @{entry}({})",
+            types.join(", "),
+            values.join(", ")
+        ));
+        aggregate::store_result(passing, align, &returned, &name(destination), &mut before);
+        return Ok(before.join("\n"));
     }
     let prefix = if *result == HirType::Void { String::new() } else { format!("{out} = ") };
     before.push(format!(

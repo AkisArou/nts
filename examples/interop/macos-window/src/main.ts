@@ -22,7 +22,7 @@ import {
   type CGPoint,
   type CGRect,
 } from "objc:AppKit";
-import { actionImplementation, report, timerImplementation, window_control } from "c:support";
+import { actionImplementation, nested_while_readable, report, timerImplementation, window_control } from "c:support";
 import { class_addMethod, objc_allocateClassPair, objc_getClass, objc_registerClassPair, sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
 import type { Ptr, c_double, c_int16, c_long, c_size_t, c_ulong } from "c:types";
@@ -72,6 +72,9 @@ function main(): void {
     report(`pressed ${press}`);
     void afterAJob(`micro ${press}`);
     setTimeout(() => report(`timeout ${press}`), 0);
+    if (press === 1) {
+      nested_while_readable();
+    }
   });
   const tick = timerImplementation((self, timer) => {
     ticks++;

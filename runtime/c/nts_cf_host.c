@@ -16,6 +16,10 @@ static CFRunLoopSourceRef nts_cf_source;
 static CFRunLoopTimerRef nts_cf_timer;
 static CFRunLoopObserverRef nts_cf_observer;
 
+/* Whether the descriptor's callback was left off because a TypeScript
+ * callback was running when libuv's kqueue became readable. */
+static bool nts_cf_parked;
+
 /* Far enough away to mean "never", and still a date CF can add to. */
 static const CFTimeInterval nts_cf_never = 1.0e10;
 
@@ -49,12 +53,20 @@ static void nts_cf_pump(void) {
   nts_cf_rearm();
 }
 
+/* A CFFileDescriptor's callbacks are one-shot, so leaving them off is how
+ * the descriptor is parked: under a TypeScript callback nothing may pump, and
+ * re-enabled there a still-readable kqueue would fire again at once, for as
+ * long as the nested loop ran -- a second of it measured a second of CPU. The
+ * before-waiting observer re-enables it once the callback has returned. */
 static void nts_cf_readable(CFFileDescriptorRef descriptor, CFOptionFlags flags,
                             void *info) {
   (void)flags;
   (void)info;
+  if (nts_in_callback()) {
+    nts_cf_parked = true;
+    return;
+  }
   nts_cf_pump();
-  /* A CFFileDescriptor's callbacks are one-shot. */
   CFFileDescriptorEnableCallBacks(descriptor, kCFFileDescriptorReadCallBack);
 }
 
@@ -71,6 +83,11 @@ static void nts_cf_before_waiting(CFRunLoopObserverRef observer,
   (void)observer;
   (void)activity;
   (void)info;
+  if (nts_cf_parked && !nts_in_callback()) {
+    nts_cf_parked = false;
+    CFFileDescriptorEnableCallBacks(nts_cf_descriptor,
+                                    kCFFileDescriptorReadCallBack);
+  }
   nts_cf_rearm();
 }
 
@@ -110,6 +127,7 @@ void nts_cf_host_detach(void) {
   CFRelease(nts_cf_source);
   CFFileDescriptorInvalidate(nts_cf_descriptor);
   CFRelease(nts_cf_descriptor);
+  nts_cf_parked = false;
   nts_cf_observer = NULL;
   nts_cf_timer = NULL;
   nts_cf_source = NULL;

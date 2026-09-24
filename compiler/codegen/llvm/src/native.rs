@@ -6,7 +6,57 @@ use std::collections::BTreeMap;
 use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId, native::{Function, NativeAbi}};
 use nts_diagnostics::Diagnostic;
 
+use super::aggregate::{self, Crossing, Plan};
 use super::{extension, name, refuse, signatures, ty_of};
+
+/// How this call's arguments and result cross, or the refusal that names why
+/// a record in it cannot: under Win64, whose aggregate convention this backend
+/// does not implement, or a record `aggregate::classify` does not describe.
+pub(super) fn plan(func: &Func, target: &Function, leading: usize, abi: NativeAbi) -> Result<Plan, Diagnostic> {
+    aggregate::plan(leading, &target.parameters, &target.result, abi).ok_or_else(|| {
+        refuse(func, if abi == NativeAbi::Win64 {
+            "a C record passed or returned by value under Win64, whose aggregate calling convention this backend does not implement; the C backend builds it"
+        } else {
+            "a C record passed or returned by value that this backend cannot classify (a union, or a member it cannot place); the C backend builds it"
+        })
+    })
+}
+
+/// The declared spelling of one fixed parameter.
+fn parameter_spelling(func: &Func, ty: &nts_core::hir::native::Type, crossing: &Crossing, abi: NativeAbi) -> Result<Vec<String>, Diagnostic> {
+    Ok(match crossing {
+        Crossing::ErasedInMemory => vec!["ptr byval({ i32, i64 }) align 8".to_owned()],
+        Crossing::Record(passing) => aggregate::parameter_types(passing),
+        Crossing::Scalar => {
+            let ty = ty.abi(abi);
+            if ty == HirType::Erased {
+                vec!["i32, i64".to_owned()]
+            } else {
+                vec![format!("{} {}", ty_of(&ty, func)?, extension(&ty).trim_end()).trim_end().to_owned()]
+            }
+        }
+    })
+}
+
+/// The return type a call is declared and made with: a record's eightbytes or
+/// `void` for one in memory, and otherwise the slot C returns in.
+fn returned_type(func: &Func, target: &Function, plan: &Plan, abi: NativeAbi) -> Result<String, Diagnostic> {
+    if let Some(passing) = &plan.result {
+        return Ok(aggregate::result_type(passing));
+    }
+    let result = target.result.abi(abi);
+    Ok(format!("{}{}", extension(&result), ty_of(&result, func)?))
+}
+
+/// The arguments C sees, and a record result's storage: the last HIR
+/// argument, which is where the result is stored or the `sret` pointer and
+/// never an argument of its own.
+pub(super) fn split_destination<'a>(target: &Function, args: &'a [ValueId]) -> (&'a [ValueId], Option<ValueId>) {
+    match (target.destination(), args.split_last()) {
+        (Some(_), Some((last, rest))) => (rest, Some(*last)),
+        _ => (args, None),
+    }
+}
 
 pub(super) fn declarations(program: &Program, abi: NativeAbi) -> Result<Vec<String>, Vec<Diagnostic>> {
     let mut seen: BTreeMap<&str, (&Function, String)> = BTreeMap::new();
@@ -92,28 +142,20 @@ pub(super) fn declarations(program: &Program, abi: NativeAbi) -> Result<Vec<Stri
 }
 
 fn declaration(func: &Func, target: &Function, abi: NativeAbi) -> Result<String, Diagnostic> {
-    if target.passes_a_record() {
-        return Err(refuse(func, "a C record passed or returned by value, which this backend has no aggregate calling convention for yet; the C backend builds it"));
+    let plan = plan(func, target, 0, abi)?;
+    let mut parameters: Vec<String> = plan.result.as_ref().and_then(|passing| aggregate::sret(passing, "")).map(|hidden| hidden.trim_end().to_owned()).into_iter().collect();
+    for (ty, crossing) in target.parameters.iter().zip(&plan.arguments) {
+        parameters.extend(parameter_spelling(func, ty, crossing, abi)?);
     }
-    let result = target.result.abi(abi);
-    let parameters = target.parameters.iter().zip(memory_arguments(target))
-        .map(|(ty, memory)| {
-            let ty = ty.abi(abi);
-            if memory { return Ok("ptr byval({ i32, i64 }) align 8".to_owned()); }
-            if ty == HirType::Erased { return Ok("i32, i64".to_owned()); }
-            Ok(format!("{} {}", ty_of(&ty, func)?, extension(&ty).trim_end()).trim_end().to_owned())
-        }).collect::<Result<Vec<_>, Diagnostic>>()?;
     // `...` and nothing after it, as in C. LLVM needs the declaration to say
     // so, because a call to a variadic function has to spell the function type
     // at the call site and the two must agree.
-    let mut parameters = parameters;
     if target.variadic.is_some() {
         parameters.push("...".to_owned());
     }
     Ok(format!(
-        "declare {}{} @{}({})",
-        extension(&result),
-        ty_of(&result, func)?,
+        "declare {} @{}({})",
+        returned_type(func, target, &plan, abi)?,
         target.name,
         parameters.join(", ")
     ))
@@ -124,19 +166,20 @@ fn declaration(func: &Func, target: &Function, abi: NativeAbi) -> Result<String,
 /// A call to a non-variadic function may leave it out, and does; LLVM takes it
 /// from the callee. For a variadic one it is required, because the call is what
 /// says how many arguments are actually being passed.
-fn variadic_type(func: &Func, target: &Function, abi: NativeAbi) -> Result<String, Diagnostic> {
-    let mut parameters = target
-        .parameters
-        .iter()
-        .zip(memory_arguments(target))
-        .map(|(ty, memory)| {
-            if memory { return Ok("ptr".to_owned()); }
-            let ty = ty.abi(abi);
-            if ty == HirType::Erased { return Ok("i32, i64".to_owned()); }
-            ty_of(&ty, func).map(str::to_owned)
-        })
-        .collect::<Result<Vec<_>, Diagnostic>>()?;
+fn variadic_type(func: &Func, target: &Function, plan: &Plan, abi: NativeAbi) -> Result<String, Diagnostic> {
+    let mut parameters = Vec::new();
+    for (ty, crossing) in target.parameters.iter().zip(&plan.arguments) {
+        match crossing {
+            Crossing::ErasedInMemory | Crossing::Record(aggregate::Passing::Memory { .. }) => parameters.push("ptr".to_owned()),
+            Crossing::Record(passing) => parameters.extend(aggregate::parameter_types(passing)),
+            Crossing::Scalar => {
+                let ty = ty.abi(abi);
+                parameters.push(if ty == HirType::Erased { "i32, i64".to_owned() } else { ty_of(&ty, func)?.to_owned() });
+            }
+        }
+    }
     parameters.push("...".to_owned());
+    // A variadic function never returns a record: `from_signature` refuses it.
     Ok(format!(
         "{} ({})",
         ty_of(&target.result.abi(abi), func)?,
@@ -152,21 +195,20 @@ pub(super) fn call(
     out: &str,
     abi: NativeAbi,
 ) -> Result<String, Diagnostic> {
-    if target.passes_a_record() {
-        return Err(refuse(func, "a C record passed or returned by value, which this backend has no aggregate calling convention for yet; the C backend builds it"));
-    }
+    let plan = plan(func, target, 0, abi)?;
+    let carried = target.argument_types().count();
     let miscounted = match target.variadic {
-        Some(_) => args.len() < target.parameters.len(),
-        None => args.len() != target.parameters.len(),
+        Some(_) => args.len() < carried,
+        None => args.len() != carried,
     };
-    if miscounted || *result != target.result.representation() {
+    if miscounted || *result != target.call_result() {
         return Err(refuse(
             func,
             "a native call whose HIR disagrees with its declared ABI",
         ));
     }
     for (at, arg) in args.iter().enumerate() {
-        let Some(expected) = target.parameters.get(at).or(target.variadic.as_ref()) else {
+        let Some(expected) = target.argument(at) else {
             continue;
         };
         if !expected.accepts(&func.values[arg.0 as usize].ty) {
@@ -176,31 +218,54 @@ pub(super) fn call(
             ));
         }
     }
+    let (args, destination) = split_destination(target, args);
     let mut before = Vec::new();
     let mut parameters = Vec::new();
+    if let (Some(passing), Some(destination)) = (&plan.result, destination) {
+        parameters.extend(aggregate::sret(passing, &name(destination)));
+    }
     // The tail is never a memory argument: every type that would be passed
     // that way is refused as a variadic tail where the declaration is read.
-    let passing = memory_arguments(target)
-        .into_iter()
-        .chain(std::iter::repeat(false))
-        .take(args.len());
-    for (at, (arg, memory)) in args.iter().zip(passing).enumerate() {
+    let crossings = plan.arguments.iter().cloned().chain(std::iter::repeat(Crossing::Scalar)).take(args.len());
+    for (at, (arg, crossing)) in args.iter().zip(crossings).enumerate() {
         let temp = format!("{out}.arg{at}");
-        let declared = target.parameters.get(at).or(target.variadic.as_ref());
+        let declared = target.argument(at);
         let value = &func.values[arg.0 as usize].ty;
-        if memory {
-            before.push(format!("store {{ i32, i64 }} {}, ptr {temp}.storage, align 8", name(*arg)));
-            parameters.push(format!("ptr byval({{ i32, i64 }}) align 8 {temp}.storage"));
-        } else if let Some(slot) = declared.map(|ty| ty.abi(abi)).filter(|slot| super::widening(slot, value).is_some()) {
-            // A value wider than the slot C reads -- a `c_long` under Win64 --
-            // is truncated here, as C truncates. A constant that would lose
-            // bits was refused before emission (`abi::unrepresentable_constants`).
-            let (from, to) = (ty_of(value, func)?, ty_of(&slot, func)?);
-            before.push(format!("{temp}.narrow = trunc {from} {} to {to}", name(*arg)));
-            parameters.push(format!("{to} {}{temp}.narrow", extension(&slot)));
-        } else {
-            parameters.extend(super::arguments(func, &temp, &[*arg], &mut before)?);
+        match crossing {
+            Crossing::ErasedInMemory => {
+                before.push(format!("store {{ i32, i64 }} {}, ptr {temp}.storage, align 8", name(*arg)));
+                parameters.push(format!("ptr byval({{ i32, i64 }}) align 8 {temp}.storage"));
+            }
+            Crossing::Record(passing) => {
+                let align = record_alignment(func, declared, abi)?;
+                parameters.extend(aggregate::load_argument(&passing, align, &name(*arg), &temp, &mut before));
+            }
+            Crossing::Scalar => {
+                if let Some(slot) = declared.map(|ty| ty.abi(abi)).filter(|slot| super::widening(slot, value).is_some()) {
+                    // A value wider than the slot C reads -- a `c_long` under Win64 --
+                    // is truncated here, as C truncates. A constant that would lose
+                    // bits was refused before emission (`abi::unrepresentable_constants`).
+                    let (from, to) = (ty_of(value, func)?, ty_of(&slot, func)?);
+                    before.push(format!("{temp}.narrow = trunc {from} {} to {to}", name(*arg)));
+                    parameters.push(format!("{to} {}{temp}.narrow", extension(&slot)));
+                } else {
+                    parameters.extend(super::arguments(func, &temp, &[*arg], &mut before)?);
+                }
+            }
         }
+    }
+    if let (Some(passing), Some(destination)) = (&plan.result, destination) {
+        let align = record_alignment(func, Some(&target.result), abi)?;
+        let returned = format!("{out}.returned");
+        let prefix = if matches!(passing, aggregate::Passing::Memory { .. }) { String::new() } else { format!("{returned} = ") };
+        before.push(format!(
+            "{prefix}call {} @{}({})",
+            aggregate::result_type(passing),
+            target.name,
+            parameters.join(", ")
+        ));
+        aggregate::store_result(passing, align, &returned, &name(destination), &mut before);
+        return Ok(before.join("\n"));
     }
     let prefix = if *result == HirType::Void {
         String::new()
@@ -216,7 +281,7 @@ pub(super) fn call(
     let widened = super::widening(&returned, result);
     let prefix = if widened.is_some() { format!("{out}.narrow = ") } else { prefix };
     let spelled = match target.variadic {
-        Some(_) => variadic_type(func, target, abi)?,
+        Some(_) => variadic_type(func, target, &plan, abi)?,
         None => ty_of(&returned, func)?.to_owned(),
     };
     before.push(format!(
@@ -232,31 +297,27 @@ pub(super) fn call(
     Ok(before.join("\n"))
 }
 
-/// AMD64 System V assigns an aggregate wholly to registers or wholly to memory.
-/// In particular, one free integer register cannot carry half an `NtsValue`.
-fn memory_arguments(target: &Function) -> Vec<bool> {
-    let mut available = 6usize;
-    target.parameters.iter().map(|parameter| {
-        let ty = parameter.representation();
-        let words = match ty {
-            HirType::Erased | HirType::BigInt => 2,
-            HirType::Float { .. } | HirType::Void => 0,
-            _ => 1,
-        };
-        let memory = ty == HirType::Erased && available < words;
-        if available >= words { available -= words; }
-        memory
-    }).collect()
+/// The alignment of a record crossing by value, for the loads and stores that
+/// move its eightbytes.
+pub(super) fn record_alignment(func: &Func, ty: Option<&nts_core::hir::native::Type>, abi: NativeAbi) -> Result<u32, Diagnostic> {
+    match ty {
+        Some(nts_core::hir::native::Type::Record(record)) => aggregate::alignment(record, abi),
+        _ => None,
+    }
+    .ok_or_else(|| refuse(func, "a C record by value whose layout this backend cannot place"))
 }
 
 /// One temporary per call site, in the entry block, so a call in a loop does
 /// not accumulate stack allocations. The callee receives a by-value copy.
-pub(super) fn stack_arguments(func: &Func) -> Vec<String> {
+pub(super) fn stack_arguments(func: &Func, abi: NativeAbi) -> Vec<String> {
     let mut storage = Vec::new();
     for value in func.blocks.iter().flat_map(|block| &block.ops) {
         let OpKind::Call { callee: Callee::Native(target), .. } = &func.values[value.0 as usize].kind else { continue; };
-        for (at, memory) in memory_arguments(target).into_iter().enumerate() {
-            if memory {
+        // A call whose records cannot be planned is refused where it is
+        // emitted, so it needs no storage here.
+        let Some(plan) = aggregate::plan(0, &target.parameters, &target.result, abi) else { continue };
+        for (at, crossing) in plan.arguments.iter().enumerate() {
+            if *crossing == Crossing::ErasedInMemory {
                 storage.push(format!("{}.arg{at}.storage = alloca {{ i32, i64 }}, align 8", name(*value)));
             }
         }

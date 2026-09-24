@@ -759,8 +759,28 @@ C's parameter is the record in that storage, not its address.
 
 A record's HIR representation is a pointer to it, so a backend that does not
 know records would pass every check a pointer passes and hand C an address
-where C reads bytes. `Function::passes_a_record` is the question the LLVM
-backend asks so that it refuses by name until it classifies aggregates itself.
+where C reads bytes.
+
+**The LLVM backend classifies each record as x86_64 System V does**
+(`compiler/codegen/llvm/src/aggregate.rs`), because its native calls follow
+that ABI and no other:
+
+- **In memory:** a record over 16 bytes, or one holding a misaligned member.
+  As an argument it is passed `byval`; as a result it comes back through an
+  `sret` pointer, which takes one integer register.
+- **Otherwise, one scalar per eightbyte.** An eightbyte is SSE when everything
+  in it is floating point, spelled `double`, `<2 x float>` or `float`. Else it
+  is INTEGER, spelled as the member at its start when the rest is padding, or
+  as the bytes the record still has, up to eight.
+- **Out of registers:** a record whose eightbytes do not all fit in the
+  registers left goes to memory whole.
+
+`tests/by_value.rs` compares the declarations with `clang -emit-llvm` for
+thirteen shapes, including SSE and integer register exhaustion, and a sabotage
+that made every eightbyte INTEGER broke `native-byvalue`'s LLVM arm at exactly
+the `double` lines. Under Win64, and for a union, LLVM refuses by name: the
+first because its aggregate convention is not System V, the second because
+clang's union rules are not reproduced here.
 
 **An Objective-C send** returning a record goes through `objc_msgSend_stret` on
 x86_64 when the record is over 16 bytes, since every record that crosses is

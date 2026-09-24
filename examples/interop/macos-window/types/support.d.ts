@@ -11,6 +11,8 @@ declare module "c:support" {
   export function report(line: string): void;
   /** `WINDOW_CONTROL=detached` takes libuv's sources off the run loop. */
   export function window_control(): void;
+  /** Under `WINDOW_NESTED=1`, a nested run loop inside the callback. */
+  export function nested_while_readable(): void;
   /**
    * @ntsSymbol imp_implementationWithBlock
    */

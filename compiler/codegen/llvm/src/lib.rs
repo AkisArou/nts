@@ -40,6 +40,7 @@
 //! managed is refused by name rather than half-emitted. A backend that emits
 //! *something* for every input is a backend nobody can trust the output of.
 
+mod aggregate;
 mod native;
 mod objc;
 pub mod signatures;
@@ -1795,7 +1796,7 @@ fn function(program: &Program, func: &Func, abi: NativeAbi) -> Result<String, Di
         }
     }
     prologue.extend(frame_storage(program, func));
-    prologue.extend(native::stack_arguments(func));
+    prologue.extend(native::stack_arguments(func, abi));
     prologue.extend(native_memory::stack_storage(func, abi));
     let linkage = if func.exported { "" } else { "internal " };
     // `nounwind` on everything this compiler defines, for the reason above: the
@@ -2906,7 +2907,7 @@ fn call(func: &Func, value: ValueId, out: &str, abi: NativeAbi) -> Result<String
             return Err(refuse(func, "a frame-placed native call"));
         }
         if let Some(send) = &target.send {
-            return objc::send(func, target, send, args, &op.ty, out);
+            return objc::send(func, target, send, args, &op.ty, out, abi);
         }
         return native::call(func, target, args, &op.ty, out, abi);
     }
