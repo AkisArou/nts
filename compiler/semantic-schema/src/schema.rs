@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 21;
+pub const SCHEMA_VERSION: u32 = 22;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -722,6 +722,12 @@ pub struct NativeAttributes {
     /// form of an `_async` method -- called with the receiver first.
     #[serde(default)]
     pub call: Option<String>,
+    /// `@ntsDefault flags=7 cancellable=null`: what the compiler passes for an
+    /// optional parameter the caller leaves out. The raw text, like `abi`:
+    /// `hir::native::parse_defaults` is its one reader, so a malformed tag is
+    /// refused there with a reason naming it.
+    #[serde(default)]
+    pub defaults: Option<String>,
     /// `@ntsSelector initWithUTF8String:`: the declaration is an Objective-C
     /// message, not a C symbol. On a method, the receiver is `this`. On a
     /// function it is the class `@ntsClass` names.

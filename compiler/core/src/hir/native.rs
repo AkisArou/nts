@@ -78,6 +78,47 @@ pub struct Function {
     /// `declared_at` makes it include a header. A C function can live in one
     /// (CoreFoundation's `CFRunLoopRun`) as well as a message.
     pub frameworks: Vec<String>,
+    /// `@ntsDefault`: the C parameter an optional TypeScript parameter lands
+    /// in, and what the compiler passes there when the caller leaves it out.
+    pub defaults: Vec<(usize, ParameterDefault)>,
+}
+
+/// What `@ntsDefault` gives an optional parameter: an integer for a C integer
+/// or boolean, `null` for a pointer that admits it. Nothing else -- a string
+/// would be a managed value the binding writes for the caller, and a float
+/// has no parameter that wants one yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParameterDefault {
+    Int(i64),
+    Null,
+}
+
+/// `@ntsDefault flags=7 cancellable=null`, read: the one parser of the tag's
+/// text, which the snapshot keeps raw so that a malformed one is refused here
+/// with a reason naming it.
+///
+/// # Errors
+///
+/// A word that is not `name=value`, a value that is neither an integer nor
+/// `null`, or a name given twice.
+pub fn parse_defaults(text: &str) -> Result<Vec<(String, ParameterDefault)>, String> {
+    let mut defaults: Vec<(String, ParameterDefault)> = Vec::new();
+    for word in text.split_whitespace() {
+        let Some((name, value)) = word.split_once('=').filter(|(name, _)| is_c_identifier(name)) else {
+            return Err(format!("@ntsDefault `{word}` that is not `parameter=value`, as in `@ntsDefault flags=0 cancellable=null`"));
+        };
+        let value = match value {
+            "null" => ParameterDefault::Null,
+            number => number.parse().map(ParameterDefault::Int).map_err(|_| {
+                format!("@ntsDefault `{word}` whose value is neither an integer nor `null`")
+            })?,
+        };
+        if defaults.iter().any(|(given, _)| given == name) {
+            return Err(format!("@ntsDefault gives `{name}` twice"));
+        }
+        defaults.push((name.to_owned(), value));
+    }
+    Ok(defaults)
 }
 
 /// An Objective-C message: `[receiver selector:arguments]`.
@@ -1157,13 +1198,15 @@ impl Function {
     }
 
     /// `throws` is `@ntsThrows`: the parameter that is the error slot, and the
-    /// function that turns an error into its message.
+    /// function that turns an error into its message. `defaults` is
+    /// `@ntsDefault`, read by [`parse_defaults`].
     pub fn from_signature(
         snapshot: &SemanticSnapshot,
         name: String,
         signature: &nts_semantic_schema::SignatureRecord,
         abi: Option<&str>,
         throws: Option<(&str, &str)>,
+        defaults: &[(String, ParameterDefault)],
     ) -> Result<Self, String> {
         let abi_type = |ty| {
             if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
@@ -1186,15 +1229,8 @@ impl Function {
         let mut parameters = Vec::with_capacity(signature.parameters.len());
         let mut roles = Vec::with_capacity(signature.parameters.len());
         let mut variadic = None;
-        // An `@ntsThrows` naming no parameter would leave the call with no
-        // slot, and nothing it reported would ever be thrown. Asked first, so
-        // the refusal names the tag rather than the optional parameter it
-        // failed to claim.
-        if let Some((slot, _)) = throws
-            && !signature.parameters.iter().any(|parameter| parameter.name == slot)
-        {
-            return Err(format!("foreign function `{name}` @ntsThrows names no parameter `{slot}`"));
-        }
+        tags_name_parameters(&name, signature, throws, defaults)?;
+        let mut given = Vec::new();
         for (at, parameter) in signature.parameters.iter().enumerate() {
             // The error slot, the one parameter a caller may leave out: C
             // reports through it, and the compiler supplies one when omitted.
@@ -1207,7 +1243,16 @@ impl Function {
                 continue;
             }
             if parameter.optional {
-                return Err(format!("foreign function `{name}` with an optional parameter"));
+                let Some((_, value)) = defaults.iter().find(|(named, _)| *named == parameter.name) else {
+                    return Err(format!(
+                        "foreign function `{name}` with an optional parameter `{}` that no @ntsDefault gives a value",
+                        parameter.name
+                    ));
+                };
+                given.push((parameters.len(), *value));
+                parameters.push(defaulted(snapshot, &name, parameter, *value)?);
+                roles.push(Role::Plain);
+                continue;
             }
             if parameter.rest {
                 let element = rest_element(snapshot, &name, parameter, at, signature)?;
@@ -1265,6 +1310,7 @@ impl Function {
             returns_owned: false,
             consumes: Vec::new(),
             frameworks: Vec::new(),
+            defaults: given,
         })
     }
 }
@@ -1613,6 +1659,95 @@ fn returned_text(array: bool, string: bool) -> Option<Type> {
 /// Optional, so its type is `T | undefined` -- and `T` is `Ptr<E | null> |
 /// null`. The pointer-to-pointer member is the slot; the absent ones all mean
 /// "no slot", which is what leaving it out says.
+/// Every parameter the tags name exists, asked before any parameter is read
+/// so that a refusal names the tag rather than the parameter it failed to
+/// claim. An `@ntsThrows` naming none would leave the call with no slot, and
+/// nothing it reported would ever be thrown; a default is for a parameter the
+/// caller may leave out, and given to any other it would be text nothing
+/// reads.
+fn tags_name_parameters(
+    name: &str,
+    signature: &nts_semantic_schema::SignatureRecord,
+    throws: Option<(&str, &str)>,
+    defaults: &[(String, ParameterDefault)],
+) -> Result<(), String> {
+    let find = |named: &str| signature.parameters.iter().find(|parameter| parameter.name == named);
+    if let Some((slot, _)) = throws
+        && find(slot).is_none()
+    {
+        return Err(format!("foreign function `{name}` @ntsThrows names no parameter `{slot}`"));
+    }
+    for (named, _) in defaults {
+        match find(named) {
+            None => return Err(format!("foreign function `{name}` @ntsDefault names no parameter `{named}`")),
+            Some(parameter) if !parameter.optional => {
+                return Err(format!("foreign function `{name}` @ntsDefault for `{named}`, which is not optional"));
+            }
+            Some(_) => {}
+        }
+    }
+    Ok(())
+}
+
+/// The C type of an optional parameter `@ntsDefault` gives a value: its type
+/// without the `undefined` that being optional adds. An integer needs one C
+/// integer or boolean, in range; `null` needs a pointer whose type admits it.
+fn defaulted(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    parameter: &nts_semantic_schema::ParameterRecord,
+    value: ParameterDefault,
+) -> Result<Type, String> {
+    let kind = |ty: TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+    let members = match kind(parameter.ty) {
+        Some(TypeKind::Union(parts)) => parts.clone(),
+        _ => vec![parameter.ty],
+    };
+    let members: Vec<TypeId> = members.into_iter().filter(|m| !matches!(kind(*m), Some(TypeKind::Undefined))).collect();
+    let nullable = members.iter().any(|m| matches!(kind(*m), Some(TypeKind::Null)));
+    let payload: Vec<TypeId> = members.into_iter().filter(|m| !matches!(kind(*m), Some(TypeKind::Null))).collect();
+    let parameter = &parameter.name;
+    // `boolean` is `true | false` to the checker, so it arrives here as two
+    // literals once `undefined` is gone.
+    let boolean = |m: &TypeId| matches!(kind(*m), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
+    let ty = match payload.as_slice() {
+        [one] => abi_type(snapshot, *one),
+        [_, _] if payload.iter().all(boolean) => Some(Type::Bool),
+        _ => None,
+    };
+    match (value, ty) {
+        (ParameterDefault::Int(value), Some(Type::Bool)) if !nullable => {
+            if value == 0 || value == 1 {
+                Ok(Type::Bool)
+            } else {
+                Err(format!("foreign function `{name}` @ntsDefault gives boolean `{parameter}` {value}, which is not 0 or 1"))
+            }
+        }
+        (ParameterDefault::Int(value), Some(Type::Scalar(scalar))) if !nullable => match scalar.representation() {
+            HirType::Int { bits, signed } => {
+                let (low, high) = if signed {
+                    (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
+                } else {
+                    (0, (1i128 << bits) - 1)
+                };
+                if (low..=high).contains(&i128::from(value)) {
+                    Ok(Type::Scalar(scalar))
+                } else {
+                    Err(format!("foreign function `{name}` @ntsDefault gives `{parameter}` {value}, outside its C type"))
+                }
+            }
+            _ => Err(format!("foreign function `{name}` @ntsDefault for floating-point `{parameter}`, which takes only an integer or null")),
+        },
+        (ParameterDefault::Null, Some(ty @ Type::Pointer(_))) if nullable => Ok(ty),
+        (ParameterDefault::Int(_), _) => Err(format!(
+            "foreign function `{name}` @ntsDefault gives `{parameter}` an integer, which only a C integer or boolean parameter takes"
+        )),
+        (ParameterDefault::Null, _) => Err(format!(
+            "foreign function `{name}` @ntsDefault gives `{parameter}` null, which only a C pointer parameter admitting `null` takes"
+        )),
+    }
+}
+
 fn error_slot(
     snapshot: &SemanticSnapshot,
     name: &str,

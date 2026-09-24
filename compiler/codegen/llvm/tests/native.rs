@@ -2371,6 +2371,105 @@ export function run(): number {
     }
 }
 
+/// C behind the `@ntsDefault` test: each answer spells what arrived.
+const DEFAULTS_LIBRARY: &str = r"
+#include <stdbool.h>
+#include <stdlib.h>
+typedef struct _Thing { int count; } Thing;
+int flagged(int value, unsigned flags) { return value * 100 + (int)flags; }
+int toggled(bool on) { return on ? 11 : 22; }
+int maybe_thing(Thing *thing) { return thing == NULL ? -1 : 1; }
+Thing *thing_new(void) { static Thing thing = { 10 }; return &thing; }
+int thing_add(Thing *thing, int amount) { return thing->count + amount; }
+";
+
+/// `@ntsDefault`: an optional parameter the caller leaves out reaches C as the
+/// value the binding declares.
+///
+/// The defaults are distinctive -- 7, not 0 -- because a zero default cannot
+/// tell "applied" from "never written": both are the same bytes. So each
+/// omitted arm is beside a written one that differs from it, a written `0`
+/// against the default 7, and a zero default of its own. `null` can only be
+/// observed as `NULL`, so that arm stands on the integer arms' evidence that
+/// the mechanism runs. And the default is found for the right call: a method,
+/// whose receiver is a C argument nobody wrote, and a foreign call nested in
+/// another's argument, which must not leave its own function behind.
+#[test]
+fn an_omitted_argument_takes_the_bindings_default_on_both_backends() {
+    let source = r#"
+import type { Class, c_int, c_uint } from "c:types";
+interface ThingOwnMethods {
+    /**
+     * @ntsSymbol thing_add
+     * @ntsDefault amount=7
+     */
+    add(this: Thing, amount?: c_int): c_int;
+}
+type Thing = Class<"_Thing"> & ThingOwnMethods;
+/** @ntsDefault flags=7 */
+declare function flagged(value: c_int, flags?: c_uint): c_int;
+/**
+ * @ntsSymbol flagged
+ * @ntsDefault flags=0
+ */
+declare function zeroed(value: c_int, flags?: c_uint): c_int;
+/** @ntsDefault on=1 */
+declare function toggled(on?: boolean): c_int;
+/** @ntsDefault thing=null */
+declare function maybe_thing(thing?: Thing | null): c_int;
+declare function thing_new(): Thing;
+function show(values: number[]): string { return values.join(" "); }
+export function run(): string {
+    const thing = thing_new();
+    return show([
+        flagged(3 as c_int), flagged(3 as c_int, 2 as c_uint), flagged(3 as c_int, 0 as c_uint), zeroed(3 as c_int),
+        toggled(), toggled(false),
+        maybe_thing(), maybe_thing(thing),
+        thing.add(), thing.add(5 as c_int),
+        flagged(flagged(1 as c_int)),
+    ]);
+}
+export function total(): number { return flagged(1 as c_int) + thing_new().add(); }
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", total());"#, "total();");
+        let Some((text, outputs)) = run_on_both_backends("defaults", source, provider, DEFAULTS_LIBRARY, &caller) else { return; };
+        assert!(text.contains("flagged("), "the call is not in the C program");
+        // 107 and the method's 17.
+        for output in outputs {
+            assert_eq!(output, expect("124", provider), "{provider:?}");
+        }
+    }
+    // Every arm, as text: the defaults 7, 1, NULL and the method's 7 beside
+    // the written 2, 0, false, a handle and 5; and 10707, the outer call's 7
+    // after an inner call that took its own.
+    let caller = "#include \"program.h\"\n#include <stdio.h>\nint main(void) { NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i)); putchar('\\n'); return 0; }\n";
+    let Some((_, outputs)) = run_on_both_backends("defaults-arms", source, hir::Provider::NoGc, DEFAULTS_LIBRARY, caller) else { return; };
+    for output in outputs {
+        assert_eq!(output, "307 302 300 300 11 22 -1 1 17 15 10707");
+    }
+
+    // What a default cannot be given to, each refused with its reason.
+    for (label, declaration, reason) in [
+        ("misnamed", "/** @ntsDefault flag=7 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;", "@ntsDefault names no parameter `flag`"),
+        ("required", "/** @ntsDefault value=7 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;", "@ntsDefault for `value`, which is not optional"),
+        ("absent", "declare function f(value: c_int, flags?: c_uint): c_int;", "optional parameter `flags` that no @ntsDefault gives a value"),
+        ("string", "/** @ntsDefault flags=null */\ndeclare function f(value: c_int, flags?: string | null): c_int;", "gives `flags` null, which only a C pointer parameter"),
+        ("range", "/** @ntsDefault flags=-1 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;", "gives `flags` -1, outside its C type"),
+        ("malformed", "/** @ntsDefault flags */\ndeclare function f(value: c_int, flags?: c_uint): c_int;", "`flags` that is not `parameter=value`"),
+    ] {
+        let refused = format!(
+            "import type {{ c_int, c_uint }} from \"c:types\";\n{declaration}\nexport function run(): number {{ return f(1 as c_int); }}\n"
+        );
+        let Some((_, prepared)) = prepare(&format!("defaults-{label}"), &refused) else { return; };
+        assert!(
+            prepared.diagnostics.iter().any(|d| d.message.contains(reason)),
+            "{label}: {:?}",
+            prepared.diagnostics
+        );
+    }
+}
+
 /// A C API that reports failure through an out-parameter, `GLib`'s way, with a
 /// converter that takes the error and answers its message.
 const THROWS_LIBRARY: &str = r#"

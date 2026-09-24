@@ -11213,6 +11213,12 @@ struct FuncBuilder<'a> {
     /// representation cannot answer: how many positions a tuple has. See
     /// [`super::generics::Sources`].
     sources: super::generics::Sources,
+    /// The foreign function whose arguments are being lowered, and how many
+    /// leading C arguments the program did not write (a method's receiver):
+    /// what an omitted argument reads its `@ntsDefault` from. Set around the
+    /// arguments only, and restored after, so a foreign call inside one of
+    /// them does not leave its own behind.
+    omitting_for: Option<(std::sync::Arc<super::native::Function>, usize)>,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -11312,6 +11318,14 @@ static NO_FOREIGN: std::sync::OnceLock<
     super::runtime::ForeignTable,
 > = std::sync::OnceLock::new();
 
+/// What a foreign declaration's tags say about its parameters.
+struct ParameterTags {
+    /// `@ntsThrows error convert`: the slot parameter and the converter.
+    throws: Option<(String, String)>,
+    /// `@ntsDefault flags=0 cancellable=null`: what an omitted argument is.
+    defaults: Vec<(String, super::native::ParameterDefault)>,
+}
+
 /// Something lent to a native call for its duration, given back once the call
 /// returns.
 #[derive(Debug, Clone)]
@@ -11396,6 +11410,7 @@ impl<'a> FuncBuilder<'a> {
             used_closures: Vec::new(),
             substitution: Substitution::default(),
             sources: super::generics::Sources::default(),
+            omitting_for: None,
         }
     }
 
@@ -16716,6 +16731,9 @@ impl<'a> FuncBuilder<'a> {
     /// no call to it existed to be wrong.
     fn absent_argument(&mut self, call: NodeId, at: usize) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(call);
+        if let Some(value) = self.omitted_by_default(at, &origin) {
+            return Ok(value);
+        }
         match self.parameter_representation(call, at) {
             Some(HirType::Erased) => Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin)),
             Some(ty) if ty.is_managed() => Ok(self.push(OpKind::ConstUndefined, ty, origin)),
@@ -16728,6 +16746,42 @@ impl<'a> FuncBuilder<'a> {
                 "an omitted argument for a parameter with nowhere to put `undefined`",
             )),
         }
+    }
+
+    /// What a foreign declaration's tags say about its parameters.
+    fn parameter_tags(&self, call: NodeId, declaration: Option<NodeId>) -> Result<ParameterTags, Diagnostic> {
+        let tags = declaration.and_then(|decl| self.node(decl).native.as_ref());
+        let throws = match tags.and_then(|n| n.throws.as_deref()).map(|text| text.split_whitespace().collect::<Vec<_>>()) {
+            None => None,
+            Some(words) => match words.as_slice() {
+                [slot, converter] => Some(((*slot).to_owned(), (*converter).to_owned())),
+                _ => return Err(self.unsupported(call, "@ntsThrows names the error parameter and its converter, as in `@ntsThrows error nts_gerror_take_message`")),
+            },
+        };
+        let defaults = tags
+            .and_then(|n| n.defaults.as_deref())
+            .map(super::native::parse_defaults)
+            .transpose()
+            .map_err(|why| self.unsupported(call, &why))?
+            .unwrap_or_default();
+        Ok(ParameterTags { throws, defaults })
+    }
+
+    /// A foreign function's `@ntsDefault` for the `at`th argument the program
+    /// wrote, when it left that one out: the declared value, at the C slot's
+    /// own representation. `None` for every other call.
+    fn omitted_by_default(&mut self, at: usize, origin: &Origin) -> Option<ValueId> {
+        use super::native::ParameterDefault;
+        let (target, unwritten) = self.omitting_for.as_ref()?;
+        let slot = target.c_index(at + unwritten)?;
+        let (_, value) = target.defaults.iter().find(|(given, _)| *given == slot)?;
+        let ty = target.parameters[slot].representation();
+        let op = match (value, &ty) {
+            (ParameterDefault::Null, _) => OpKind::ConstNull,
+            (ParameterDefault::Int(value), HirType::Bool) => OpKind::ConstBool(*value != 0),
+            (ParameterDefault::Int(value), _) => OpKind::ConstInt(i128::from(*value)),
+        };
+        Some(self.push(op, ty, origin.clone()))
     }
 
     /// The declaration that has the body, for a callee that may be an overload
@@ -39305,6 +39359,7 @@ impl<'a> FuncBuilder<'a> {
             returns_owned: false,
             consumes: Vec::new(),
             frameworks: Vec::new(),
+            defaults: Vec::new(),
         });
         let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
         let message = self.push(
@@ -39334,6 +39389,7 @@ impl<'a> FuncBuilder<'a> {
             returns_owned: false,
             consumes: Vec::new(),
             frameworks: Vec::new(),
+            defaults: Vec::new(),
         });
         self.push(OpKind::Call { callee: Callee::Native(release), args: vec![message], frame: None }, HirType::Void, origin);
         self.throw_provided_error_text(id, "Error", text)?;
@@ -39490,6 +39546,7 @@ impl<'a> FuncBuilder<'a> {
                 returns_owned: false,
                 consumes: Vec::new(),
                 frameworks: Vec::new(),
+                defaults: Vec::new(),
             };
             self.push(
                 OpKind::Call { callee: Callee::Native(std::sync::Arc::new(release)), args: vec![pointer], frame: None },
@@ -39639,6 +39696,29 @@ impl<'a> FuncBuilder<'a> {
     /// parameter becomes *three* C arguments -- the bridge, the closure's
     /// context, and for a retained one the function that releases it -- of
     /// which the program wrote one.
+    /// The arguments the program wrote, and in the places it left one out,
+    /// what goes there -- for a foreign function, its `@ntsDefault`, which
+    /// `absent_argument` reads from `omitting_for` while these are lowered.
+    fn lower_written_arguments(
+        &mut self,
+        id: NodeId,
+        callee: &Callee,
+        arguments: &[NodeId],
+        method: bool,
+        tail: Option<&HirType>,
+    ) -> Result<Vec<ValueId>, Diagnostic> {
+        let outer = match callee {
+            Callee::Native(target) => self.omitting_for.replace((target.clone(), usize::from(method))),
+            _ => self.omitting_for.take(),
+        };
+        let args = match tail {
+            Some(element) => self.lower_native_arguments(id, arguments, element),
+            None => self.lower_arguments(id, arguments),
+        };
+        self.omitting_for = outer;
+        args
+    }
+
     fn lower_call_arguments(
         &mut self,
         id: NodeId,
@@ -39652,10 +39732,7 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => None,
         };
-        let mut args = match &tail {
-            Some(element) => self.lower_native_arguments(id, arguments, element)?,
-            None => self.lower_arguments(id, arguments)?,
-        };
+        let mut args = self.lower_written_arguments(id, callee, arguments, receiver.is_some(), tail.as_ref())?;
         let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
         let target = target.clone();
         let origin = self.origin(id);
@@ -39874,21 +39951,14 @@ impl<'a> FuncBuilder<'a> {
         if abi == Some("intrinsic") {
             return Ok(Callee::External(name));
         }
-        // `@ntsThrows error convert`: the slot parameter and the converter.
-        let throws = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.throws.clone());
-        let throws = match throws.as_deref().map(str::split_whitespace).map(Iterator::collect::<Vec<_>>) {
-            None => None,
-            Some(words) => match words.as_slice() {
-                [slot, converter] => Some(((*slot).to_owned(), (*converter).to_owned())),
-                _ => return Err(self.unsupported(call, "@ntsThrows names the error parameter and its converter, as in `@ntsThrows error nts_gerror_take_message`")),
-            },
-        };
+        let ParameterTags { throws, defaults } = self.parameter_tags(call, declaration)?;
         let mut native = super::native::Function::from_signature(
             self.snapshot,
             name,
             signature,
             abi,
             throws.as_ref().map(|(slot, converter)| (slot.as_str(), converter.as_str())),
+            &defaults,
         )
         .map_err(|why| self.unsupported(call, &why))?;
         // The module whose `@ntsHeader` covers this declaration, recorded where

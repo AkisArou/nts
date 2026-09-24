@@ -427,6 +427,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let symbol = leading_tag(source, "@ntsSymbol");
     let throws = leading_tag(source, "@ntsThrows");
     let call = leading_tag(source, "@ntsCall");
+    let defaults = leading_tag(source, "@ntsDefault");
     let selector = leading_tag(source, "@ntsSelector");
     let class = leading_tag(source, "@ntsClass");
     let frameworks = leading_tag(source, "@ntsFramework")
@@ -439,6 +440,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && symbol.is_none()
         && throws.is_none()
         && call.is_none()
+        && defaults.is_none()
         && selector.is_none()
         && class.is_none()
         && frameworks.is_none()
@@ -454,6 +456,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         symbol,
         throws,
         call,
+        defaults,
         selector,
         class,
         frameworks,
