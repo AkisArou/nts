@@ -14,7 +14,9 @@ Every arm exports `renderTwice(next)` and agrees with node
 | `b-generic-subclass` | `StateHook<S> extends Hook`, projected with `instanceof StateHook` | 6 |
 | `c-generic-subclass-guard` | as B, projected with a generic guard `hook is StateHook<S>` | 7 |
 
-Measured on 2026-09-24 at nts `9f870e92`, from a pinned worktree build.
+Measured on 2026-09-24 at nts `9f870e92`, from a pinned worktree build. Arm A also
+agrees with node under `nts check` (29 cases), both without a collector and
+with `--rc`.
 
 **B and C fail because of TypeScript, not NTS.** `instanceof` against a
 generic class narrows to `StateHook<any>`. NTS refuses `any`, so `state`
