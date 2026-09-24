@@ -21,7 +21,8 @@ use nts_semantic_schema::{
 
 use super::facts::Facts;
 use super::{
-    BinOp, Block, BlockId, Callee, Field, Func, GeneratorKind, HirType, Layout, ManagedType, Op,
+    BinOp, Block, BlockId, Callee, Field, FieldArm, Func, GeneratorKind, HirType, Layout,
+    ManagedType, Op,
     OpKind, Param, ParamShape, Program, Terminator, UnOp, ValueId,
 };
 
@@ -35103,6 +35104,58 @@ impl<'a> FuncBuilder<'a> {
         Some((members, at, read))
     }
 
+    /// A member every arm of a union declares and **no two of them agree about
+    /// where**: the arms with their own indices, and what it reads as.
+    ///
+    /// The sibling of [`Self::shared_field`], and the two cover the union between
+    /// them: that one wants one index for every arm, which is what licenses C and
+    /// LLVM to skip the tests and read; this one is the case it declines, in the
+    /// two shapes `why_not_shared` names -- "share no leading field" and "past
+    /// the fields its members agree about".
+    ///
+    /// # What still has to agree, and what no longer does
+    ///
+    /// The **representation** must: a rule matching names alone emits a load that
+    /// reads a `double` out of a slot holding a pointer, which is the hazard
+    /// `same_slot` exists for and it does not go away when the indices are
+    /// allowed to differ. The **index** need not, and that is the whole point --
+    /// each arm carries its own, and no arm's offset has to be derivable from
+    /// another's.
+    ///
+    /// So the prefix condition disappears with it. `shared_field`'s agreement is
+    /// "a prefix and not a set" because a field behind a disagreement has no
+    /// known offset *through the first arm's layout*; here the offset is looked
+    /// up in the arm's own layout, so a disagreement earlier in the struct costs
+    /// nothing.
+    ///
+    /// Every arm must declare the member. One that does not is not an arm a test
+    /// could read through, and the read stays refused by the sentence that names
+    /// which arm -- rather than becoming a chain with a hole in it.
+    fn open_field(&mut self, id: NodeId, member_name: &str) -> Option<(Vec<FieldArm>, HirType)> {
+        let object = self.children(id).first().copied()?;
+        let ty = *self.snapshot.node_types.get(&object)?;
+        let TypeKind::Union(members) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        let members = members.clone();
+        if members.len() < 2 {
+            return None;
+        }
+        let mut arms = Vec::with_capacity(members.len());
+        let mut read: Option<HirType> = None;
+        for member in &members {
+            let layout = self.layout_of(id, *member).ok()?;
+            let at = layout.index_of(member_name)?;
+            let slot = layout.fields.get(at as usize)?;
+            match &read {
+                Some(seen) if *seen != slot.ty => return None,
+                _ => read = Some(slot.ty.clone()),
+            }
+            arms.push(FieldArm { ty: *member, field: at });
+        }
+        Some((arms, read?))
+    }
+
     /// The layout an `IteratorResult<T>` gets, which nothing decomposes.
     ///
     /// **Provided rather than read**, the way `builtin::error_fields` is and for
@@ -35400,6 +35453,22 @@ impl<'a> FuncBuilder<'a> {
         {
             let origin = self.origin(id);
             return Ok(self.push(OpKind::SharedFieldGet { value, arms, field }, ty, origin));
+        }
+        // **And the case that one declines.** Every arm declares the member and
+        // they disagree about where it sits, so there is no single index -- which
+        // is a refusal only while the operation has to name one. `OpenFieldGet`
+        // carries an index per arm and each backend tests which arrived, so the
+        // two together cover a union whose members all store the member.
+        //
+        // After the shared attempt, never instead of it: agreeing arms cost a
+        // pointer read on C and LLVM and this costs a test chain, so the cheaper
+        // operation has to be tried first.
+        if member_name != "length"
+            && self.values[value.0 as usize].ty == HirType::Erased
+            && let Some((arms, ty)) = self.open_field(id, member_name)
+        {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::OpenFieldGet { object: value, arms }, ty, origin));
         }
         if member_name != "length" {
             return Err(self.not_a_length(id, value, member_name, sequence));

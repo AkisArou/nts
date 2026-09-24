@@ -246,7 +246,67 @@ pub(super) fn representations(
             narrowed.insert((at, field), HirType::Int { bits, signed: true });
         }
     }
+    keep_arms_together(program, &layouts, &mut narrowed);
     narrowed
+}
+
+/// A field several arms of one read share must narrow in every arm or in none.
+///
+/// **This is a soundness rule and not an optimisation.** `SharedFieldGet` and
+/// `OpenFieldGet` both require their arms to agree about the member's
+/// *representation*, and the decision above is per `(layout, field)`:
+/// `shares_storage` groups layouts that put a field at the same offset, which is
+/// exactly what an open read's arms do **not** do. So nothing above relates them,
+/// and narrowing one arm and not another falsifies the op's precondition.
+///
+/// It is not a theoretical hazard. `blockers/union-members-lay-fields-out-differently`
+/// has `A | B` whose `tail` agrees behind an `at` that does not, and the first
+/// version of the open read produced
+///
+/// ```text
+/// invalid HIR: StoreType { func: "pastADisagreement", what: "an open field read",
+///                          expected: Int { bits: 32 }, found: Float { bits: 64 } }
+/// ```
+///
+/// -- `hir::verify`'s own per-arm rule, catching the pass that moved the layouts
+/// out from under the op. Dropping the narrowing is the conservative repair and
+/// costs a wider field in exactly the programs where the arms could not have been
+/// narrowed as a unit anyway.
+fn keep_arms_together(program: &Program, layouts: &LayoutIndex, narrowed: &mut FieldWidths) {
+    let mut drop: Vec<(usize, u32)> = Vec::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            // Both ops, and both for the same reason: the arms are one unit
+            // whether or not they agree about the index.
+            let group: Vec<(super::TypeId, u32)> = match &op.kind {
+                OpKind::SharedFieldGet { arms, field, .. } => {
+                    arms.iter().map(|ty| (*ty, *field)).collect()
+                },
+                OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } => {
+                    arms.iter().map(|arm| (arm.ty, arm.field)).collect()
+                },
+                _ => continue,
+            };
+            let places: Vec<(usize, u32)> = group
+                .iter()
+                .filter_map(|(ty, field)| {
+                    layouts
+                        .of(&HirType::Managed(super::ManagedType::Object(*ty)))
+                        .map(|layout| (layout, *field))
+                })
+                .collect();
+            if places.len() != group.len() {
+                continue;
+            }
+            let first = narrowed.get(&places[0]);
+            if !places.iter().all(|place| narrowed.get(place) == first) {
+                drop.extend(places);
+            }
+        }
+    }
+    for place in drop {
+        narrowed.remove(&place);
+    }
 }
 
 /// The width a field's contents fit in, if any.

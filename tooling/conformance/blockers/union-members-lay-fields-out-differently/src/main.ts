@@ -160,13 +160,31 @@ class B {
   }
 }
 
-/** Under test: same name, different representation, at the same index. */
+/**
+ * Under test: same name, different representation, at the same index.
+ *
+ * The **only** remaining refusal of this shape. An index per arm answers where a
+ * field sits; nothing answers a `number` in one arm and a `string` in the other,
+ * because the read has one result type and a load has one width.
+ */
 export function sameNameDifferentType(n: number): number {
   const v: A | B = (n & 1) === 1 ? new A() : new B();
   return typeof v.at === "number" ? v.at : v.at.length;
 }
 
-/** Under test: a field that agrees, behind one that does not. */
+/**
+ * **Control, since the open read landed.** A field that agrees, behind one that
+ * does not, used to refuse here -- "past the fields its members agree about" --
+ * because there was no single index for it and the operation had to name one.
+ * It now lowers through `OpKind::OpenFieldGet`, which carries an index per arm
+ * and leaves it to each backend to test which arrived.
+ *
+ * It stays in this file rather than moving out, because the contrast is what the
+ * file is for: the same union, the same kind of read, and the only difference is
+ * whether the arms agree about the member's *representation*. That is the one
+ * agreement an index per arm does not buy, and `sameNameDifferentType` above is
+ * what still goes on refusing.
+ */
 export function pastADisagreement(n: number): number {
   const v: A | B = (n & 1) === 1 ? new A() : new B();
   return v.tail;
