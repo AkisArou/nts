@@ -134,6 +134,10 @@ declare module "c:types" {
   // A result the caller owns -- GIR's `transfer-ownership="full"`: the
   // reference comes with it, and is not taken again.
   export type Owned<T extends ClassChain> = T & { readonly __c_owned?: true };
+  // An argument the callee keeps -- GIR's `transfer-ownership="full"` on a
+  // parameter: the caller hands its reference over instead of dropping it
+  // after the call, taking one first if it has only a borrowed handle.
+  export type Consumed<T extends ClassChain> = T & { readonly __c_consumed?: true };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.

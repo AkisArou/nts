@@ -2464,10 +2464,16 @@ void *g_object_ref_sink(void *object) {
     if (o->floating) o->floating = false; else o->refs++;
     return object;
 }
+static int errors;
 void g_object_unref(void *object) {
     GObject *o = object;
+    if (o->freed || o->refs <= 0) { errors++; return; }
     if (--o->refs == 0) { o->freed = true; live--; }
 }
+static Thing *kept;
+void thing_keep(struct _Thing *t) { if (kept) g_object_unref(kept); kept = t; }
+void thing_drop_kept(void) { if (kept) { g_object_unref(kept); kept = NULL; } }
+int errors_seen(void) { return errors; }
 int instance_value(struct _GTypeInstance *instance) {
     Thing *t = (Thing *)instance;
     return t->parent.freed ? -1 : t->value;
@@ -2523,6 +2529,54 @@ export function live(): number { return live_objects(); }
     };
     for output in outputs {
         assert_eq!(output, "9 7 5 6 live=0 leak=0");
+    }
+}
+
+/// `Consumed<T>`: an argument C keeps (GIR's `transfer-ownership="full"`),
+/// so the caller hands a reference over instead of releasing its own after
+/// the call. A +1 temporary is handed as it is; a variable still used after
+/// the call, or a borrowed (+0, floating) result, needs a reference taken
+/// for it first. Each is dropped by C later, and the count balances: an
+/// extra release would be an unref of a freed object, which the fake counts
+/// as an error, and a missing one leaves the object alive.
+#[test]
+fn a_consumed_argument_is_handed_over_on_both_backends() {
+    let source = r#"
+import type { Class, Consumed, GObjectClass, Owned, c_int } from "c:types";
+type GTypeInstance = Class<"_GTypeInstance">;
+type GObject = GObjectClass<"_GObject", GTypeInstance>;
+type Thing = GObjectClass<"_Thing", GObject>;
+declare function thing_new_owned(value: c_int): Owned<Thing>;
+declare function thing_new_floating(value: c_int): Thing;
+declare function thing_keep(thing: Consumed<Thing>): void;
+declare function thing_drop_kept(): void;
+declare function instance_value(instance: GTypeInstance): c_int;
+declare function live_objects(): c_int;
+declare function errors_seen(): c_int;
+export function temporary(): void { thing_keep(thing_new_owned(4 as c_int)); thing_drop_kept(); }
+export function used_after(): number {
+    const t = thing_new_owned(5 as c_int);
+    thing_keep(t);
+    thing_drop_kept();
+    return instance_value(t);
+}
+export function floating(): void { thing_keep(thing_new_floating(6 as c_int)); thing_drop_kept(); }
+export function live(): number { return live_objects(); }
+export function errors(): number { return errors_seen(); }
+"#;
+    let caller = counted_caller(
+        r#"temporary(); printf("%.0f", used_after()); floating();
+  for (int i = 0; i < 50; i++) { temporary(); used_after(); floating(); }
+  printf(" live=%.0f errors=%.0f", live(), errors());"#,
+        "",
+    );
+    let Some((_, outputs)) =
+        run_on_both_backends("consumed", source, hir::Provider::ReferenceCounting, GOBJECT_LIBRARY, &caller)
+    else {
+        return;
+    };
+    for output in outputs {
+        assert_eq!(output, "5 live=0 errors=0 leak=0");
     }
 }
 

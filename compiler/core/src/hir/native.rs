@@ -1392,7 +1392,7 @@ impl Function {
         let mut roles = Vec::with_capacity(signature.parameters.len());
         let mut variadic = None;
         tags_name_parameters(&name, signature, throws, defaults)?;
-        let mut given = Vec::new();
+        let (mut given, mut consumes) = (Vec::new(), Vec::new());
         for (at, parameter) in signature.parameters.iter().enumerate() {
             // The error slot, the one parameter a caller may leave out: C
             // reports through it, and the compiler supplies one when omitted.
@@ -1440,18 +1440,12 @@ impl Function {
             let ty = abi_type(parameter.ty)
                 .filter(|ty| *ty != Type::Void)
                 .ok_or_else(|| no_abi_type(&name, Some(&parameter.name)))?;
+            if consumed(snapshot, &name, parameter, &ty)? { consumes.push(parameters.len()); }
             parameters.push(ty);
             roles.push(Role::Plain);
         }
-        let returns_string = if abi.is_none() { returned_string(snapshot, signature.return_type) } else { None };
-        let returned_array = if abi.is_none() { returned_strings(snapshot, signature.return_type) } else { None };
-        let (declared, returns_owned) = handed_back(snapshot, &name, signature.return_type)?;
-        let result = records_checked(&name, &parameters, variadic.is_some(), match (returned_text(returned_array.is_some(), returns_string.is_some()), &declared) {
-            (Some(text), _) => text,
-            (None, Some((c, _))) => c.clone(),
-            (None, None) => abi_type(signature.return_type)
-                .ok_or_else(|| no_abi_type(&name, None))?,
-        })?;
+        let returned = returned(snapshot, &name, signature.return_type, abi)?;
+        let result = records_checked(&name, &parameters, variadic.is_some(), returned.result)?;
         Ok(Self {
             name,
             convention: if abi == Some("managed") {
@@ -1467,15 +1461,13 @@ impl Function {
             // that has the declaration node.
             declared_at: None,
             roles,
-            returns_string: returned_array
-                .map(|nullable| ReturnedString { nullable, free: None, array: true })
-                .or(returns_string),
+            returns_string: returned.string,
             send: None,
-            returns_owned,
-            consumes: Vec::new(),
+            returns_owned: returned.owned,
+            consumes,
             frameworks: Vec::new(),
             defaults: given,
-            result_as: declared.map(|(_, program)| program),
+            result_as: returned.program,
         })
     }
 }
@@ -1930,11 +1922,75 @@ fn tags_name_parameters(
     Ok(())
 }
 
-/// What a returned handle's type says of it: the handle the program has where
-/// C declares an ancestor (`Declared`), and whether the reference comes with
-/// it (`Owned`).
-fn handed_back(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<(Option<(Type, Type)>, bool), String> {
-    Ok((declared_result(snapshot, name, ty)?, owned_result(snapshot, name, ty)?))
+/// What a foreign function hands back, read from its declared return type.
+struct Returned {
+    /// C's result type.
+    result: Type,
+    /// A string, or a `NULL`-terminated array of them, copied at the call.
+    string: Option<ReturnedString>,
+    /// `Owned<T>`: the reference comes with the handle.
+    owned: bool,
+    /// `Declared<T, D>`: the handle the program has where C declares `D`.
+    program: Option<Type>,
+}
+
+fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&str>) -> Result<Returned, String> {
+    let string = if abi.is_none() { returned_string(snapshot, ty) } else { None };
+    let array = if abi.is_none() { returned_strings(snapshot, ty) } else { None };
+    let declared = declared_result(snapshot, name, ty)?;
+    let result = match (returned_text(array.is_some(), string.is_some()), &declared) {
+        (Some(text), _) => text,
+        (None, Some((c, _))) => c.clone(),
+        (None, None) => if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
+            .ok_or_else(|| no_abi_type(name, None))?,
+    };
+    Ok(Returned {
+        result,
+        string: array.map(|nullable| ReturnedString { nullable, free: None, array: true }).or(string),
+        owned: owned_result(snapshot, name, ty)?,
+        program: declared.map(|(_, program)| program),
+    })
+}
+
+/// Whether `ty` -- or its non-null half -- carries the optional brand
+/// `property` (tsgo's escaped name), as `Owned<T>` and `Consumed<T>` do.
+fn branded(snapshot: &SemanticSnapshot, ty: TypeId, property: &str) -> bool {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let ty = match kind(ty) {
+        Some(TypeKind::Union(members)) => match members.as_slice() {
+            [a, b] if matches!(kind(*a), Some(TypeKind::Null)) => *b,
+            [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
+            _ => return false,
+        },
+        _ => ty,
+    };
+    let Some(TypeKind::Intersection(parts)) = kind(ty) else { return false };
+    parts.iter().any(|part| {
+        matches!(kind(*part), Some(TypeKind::Object { properties })
+            if matches!(properties.as_slice(), [p] if p.name == property && p.optional && p.readonly))
+    })
+}
+
+/// Whether a parameter is typed `Consumed<T>` -- GIR's
+/// `transfer-ownership="full"` on an argument: the callee keeps the
+/// reference it is given, so the caller hands one over rather than releasing
+/// its own after the call.
+///
+/// # Errors
+///
+/// `Consumed` on a handle the program does not count: there is no reference
+/// here to hand.
+fn consumed(snapshot: &SemanticSnapshot, name: &str, parameter: &nts_semantic_schema::ParameterRecord, ty: &Type) -> Result<bool, String> {
+    if !branded(snapshot, parameter.ty, "___c_consumed") {
+        return Ok(false);
+    }
+    if !matches!(ty, Type::Pointer(pointee) if pointee.counting().is_some()) {
+        return Err(format!(
+            "foreign function `{name}` takes over `{}`, a handle the program does not count; declare its class with `GObjectClass`, not `Class`",
+            parameter.name
+        ));
+    }
+    Ok(true)
 }
 
 /// Whether a result is typed `Owned<T>` -- GIR's `transfer-ownership="full"`:
@@ -1945,20 +2001,7 @@ fn handed_back(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<(O
 /// `Owned` on a handle the program does not count: a reference handed over
 /// that nothing would ever drop.
 fn owned_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<bool, String> {
-    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let ty = match kind(ty) {
-        Some(TypeKind::Union(members)) => match members.as_slice() {
-            [a, b] if matches!(kind(*a), Some(TypeKind::Null)) => *b,
-            [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
-            _ => return Ok(false),
-        },
-        _ => ty,
-    };
-    let Some(TypeKind::Intersection(parts)) = kind(ty) else { return Ok(false) };
-    let owned = parts.iter().any(|part| {
-        matches!(kind(*part), Some(TypeKind::Object { properties })
-            if matches!(properties.as_slice(), [p] if p.name == "___c_owned" && p.optional && p.readonly))
-    });
+    let owned = branded(snapshot, ty, "___c_owned");
     if owned && pointer(snapshot, ty).is_none_or(|pointee| pointee.counting().is_none()) {
         return Err(format!(
             "foreign function `{name}` hands back a reference the caller owns, as a handle the program does not count; declare its class with `GObjectClass`, not `Class`"
