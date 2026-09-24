@@ -24,6 +24,8 @@
 //   chained 2     A's cycle is the last to hold B: both go, B inside the
 //                 sweep. B's own handler does not run on the way out -- it is
 //                 garbage with B, and severed first
+//   listed 3      three labels in an array, each handler capturing the
+//                 array: the trace goes through the array's elements
 import { gtk_init, GtkLabel, GtkWindow } from "c:Gtk-4.0";
 import {
   cycles_candidates,
@@ -96,6 +98,18 @@ function chained(): void {
   });
 }
 
+function listed(): void {
+  const rows: GtkLabel[] = [];
+  for (let at = 0; at < 3; at++) {
+    const row = new GtkLabel({ label: "r" });
+    cycles_track(row);
+    row.connect("destroy", () => {
+      rows[0].set_label("z");
+    });
+    rows.push(row);
+  }
+}
+
 // A timer's worth of loop: long enough for GLib's idle sources to run too.
 function turn(): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -122,6 +136,7 @@ async function main(): Promise<void> {
   await arm("parented", parented, 1);
   await arm("emitting", emitting, 2);
   await arm("chained", chained, 1);
+  await arm("listed", listed, 1);
 }
 
 void main();

@@ -33,7 +33,7 @@ mkdir -p "$out"
 log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
   timeout 30 xvfb-run -a "$out/cycles/linux-gnu-x86_64/cycles" 2>/dev/null | tr '\n' ' ' || true)
 echo "log: $log"
-expected="plain 1 other 1 itself 1 parented 1 h1 e h2 e looked emitting 1 chained 2 "
+expected="plain 1 other 1 itself 1 parented 1 h1 e h2 e looked emitting 1 chained 2 listed 3 "
 if [ "$log" != "$expected" ]; then
   echo "FAILED gtk-cycles: expected $expected" >&2
   exit 1
