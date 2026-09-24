@@ -138,11 +138,11 @@ pub(crate) fn unboxable(func: &Func) -> FxHashSet<ValueId> {
             }
             // Arrives on an edge; its arguments carry the obligation.
             OpKind::BlockParam(_) => {}
-            // A nullable erase, refused above by not matching: it must keep its
-            // box, so the value it defines cannot be unboxed either.
-            OpKind::Erase { .. } => {
-                refused.insert(classes.find(value.0));
-            }
+            // Everything else, **a nullable erase included**: that one is
+            // refused by not matching the arm above, and it has to be -- a bare
+            // reference carries no tag, so an erase whose null means `null` or
+            // `undefined` has nothing left to say which. The default was already
+            // right for it, which is the point of the default.
             _ => {
                 refused.insert(classes.find(value.0));
             }

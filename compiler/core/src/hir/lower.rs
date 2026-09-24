@@ -14521,11 +14521,7 @@ impl<'a> FuncBuilder<'a> {
     /// say which absence arrived, so the representation is genuinely unable to
     /// carry the program. It keeps today's behaviour rather than picking an
     /// arm, and is a gap to close with a representation and not with a guess.
-    fn absence_at(&self, id: NodeId) -> Absent {
-        self.absence_at_excluding(id, false)
-    }
-
-    /// The same, where the **other arm of a merge supplies the `undefined`**.
+    /// Where the **other arm of a merge supplies the `undefined`**.
     ///
     /// A chain's node carries the whole expression's type, and for `a?.b?.c`
     /// that is `T | null | undefined`: the `undefined` is what the
