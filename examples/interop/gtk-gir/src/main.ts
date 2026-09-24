@@ -19,9 +19,12 @@
 //                 borrowed in place as `const guint8 *` with their length
 //   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned as a widget
 //   cast-null     `asGtkLabel` answers null for that same box
-//   clicked 1     a typed signal handler, connected through the generated
-//                 `gtk_button_connect_clicked`, ran when the signal was emitted,
-//                 and was handed the button it was connected to
+//   clicked 1     a typed signal handler, connected as GJS spells it --
+//                 `button.connect("clicked", handler)`, the flags left out --
+//                 ran when the signal was emitted, and was handed the button
+//                 it was connected to
+//   order=ab      `connect_after` passes `G_CONNECT_AFTER`: its handler,
+//                 connected first, still ran after the plain one
 //   idle          a closure given to `g_idle_add_full` ran
 //   label=tick 3  a timeout closure ticked three times, rewriting the label,
 //                 which is read back through `gtk_label_get_text`
@@ -29,7 +32,8 @@
 //   made=1 again=rejected removed=1
 //                 `make_directory_async` and `delete_async` awaited: the
 //                 Promise forms the binding generates, resolving with what
-//                 `_finish` returns and rejecting with the `GError` it reports
+//                 `_finish` returns and rejecting with the `GError` it reports,
+//                 their priority and cancellable left out
 //   kind=2        `g_file_query_info_async` on "/", awaited as a Promise: the
 //                 `GAsyncReadyCallback` is a closure C calls once, which the
 //                 bridge releases after it, and `_finish` reports through the
@@ -39,7 +43,6 @@ import {
   gtk_application_window_new,
   gtk_box_append,
   gtk_box_new,
-  gtk_button_connect_clicked,
   gtk_button_new_with_label,
   gtk_label_get_text,
   gtk_label_new,
@@ -48,7 +51,6 @@ import {
   gtk_window_set_child,
 } from "c:Gtk-4.0";
 import {
-  gio_application_connect_activate,
   g_application_quit,
   g_application_run,
   g_file_new_for_path,
@@ -78,8 +80,6 @@ import { ApplicationFlags } from "../types/gir/Gio-2.0.values.ts";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
 const PRIORITY_DEFAULT = 0 as c_int;
-// No `G_CONNECT_*` flags.
-const CONNECT_DEFAULT = 0 as c_uint;
 
 // Out parameters, `GError **` among them: slots on this function's stack that
 // C writes through during the call, read once it returns.
@@ -131,7 +131,8 @@ function outParameters(): void {
 // value the collector may read.
 async function fileKind(path: string): Promise<number> {
   const file = g_file_new_for_path(path);
-  const info = await file.query_info_async("standard::type", 0 as c_uint, PRIORITY_DEFAULT, null);
+  // No flags, the default priority, nothing to cancel it: left out.
+  const info = await file.query_info_async("standard::type");
   g_object_unref(file);
   const found = info.get_file_type() as number;
   g_object_unref(info);
@@ -145,18 +146,18 @@ async function fileKind(path: string): Promise<number> {
 async function directories(path: string): Promise<void> {
   const directory = g_file_new_for_path(path);
   try {
-    await directory.delete_async(PRIORITY_DEFAULT, null);
+    await directory.delete_async();
   } catch {
     // Absent already, which is the usual case.
   }
-  const made = await directory.make_directory_async(PRIORITY_DEFAULT, null);
+  const made = await directory.make_directory_async();
   let again = "resolved";
   try {
-    await directory.make_directory_async(PRIORITY_DEFAULT, null);
+    await directory.make_directory_async();
   } catch (e) {
     again = (e as Error).message.length > 0 ? "rejected" : "rejected-empty";
   }
-  const removed = await directory.delete_async(PRIORITY_DEFAULT, null);
+  const removed = await directory.delete_async();
   g_object_unref(directory);
   folders = "made=" + String(made) + " again=" + again + " removed=" + String(removed);
 }
@@ -176,7 +177,7 @@ function main(): void {
   const application = gtk_application_new("dev.nts.GtkGir", ApplicationFlags.NON_UNIQUE as c_uint);
   let ticks = 0;
   let clicks = 0;
-  gio_application_connect_activate(application, "activate", () => {
+  application.connect("activate", () => {
     const window = asGtkWindow(gtk_application_window_new(application));
     const box = asGtkBox(gtk_box_new(Orientation.VERTICAL as c_uint, 4 as c_int));
     const label = asGtkLabel(gtk_label_new("start"));
@@ -196,11 +197,17 @@ function main(): void {
     box.append(button);
     window.set_child(box);
     window.present();
-    gtk_button_connect_clicked(button, "clicked", (self) => {
+    let order = "";
+    button.connect_after("clicked", () => {
+      order += "b";
+    });
+    button.connect("clicked", (self) => {
       clicks++;
+      order += "a";
       gir_log(asGtkButton(self) === null ? "clicked-not-a-button" : "clicked " + String(clicks));
-    }, CONNECT_DEFAULT);
+    });
     gir_emit(button, "clicked");
+    gir_log("order=" + order);
     g_idle_add_full(PRIORITY_DEFAULT, () => {
       gir_log("idle");
       return 0 as c_int;
@@ -215,7 +222,7 @@ function main(): void {
       application.quit();
       return 0 as c_int;
     });
-  }, CONNECT_DEFAULT);
+  });
   // `argv` as a `string[]`, lent to C as `char **` with `argc` beside it.
   // GApplication parses it, so it holds only the program name: an option it
   // does not know would end the run.

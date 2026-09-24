@@ -80,6 +80,8 @@ pub(crate) struct Record {
 pub(crate) struct Enum {
     pub(crate) name: String,
     pub(crate) c_type: Option<String>,
+    /// A `<bitfield>`: a set of flags, whose empty set, `0`, is "none".
+    pub(crate) flags: bool,
     pub(crate) members: Vec<Member>,
 }
 

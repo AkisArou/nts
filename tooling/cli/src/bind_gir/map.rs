@@ -58,7 +58,7 @@ pub(crate) enum TypeDecl {
     Class { name: String, tag: String, parent: Option<(String, String)> },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Function {
     /// The name the binding exports: the C symbol, or for a typed view of
     /// another function -- a signal's connect -- a name of its own.
@@ -88,6 +88,13 @@ pub(crate) struct Function {
     pub(crate) throws: Option<String>,
     /// For an `_async` method, the name of the method that finishes it.
     pub(crate) finish: Option<String>,
+    /// The parameters a caller may leave out, each with what stands for
+    /// leaving it out; which of them are written optional is the emitter's
+    /// call, since only a run at the end can be (`emit::defaults`).
+    pub(crate) omissible: BTreeMap<String, &'static str>,
+    /// Written only as a method: a signal's `connect`, which as a function
+    /// would be one more name per signal for the same call.
+    pub(crate) method_only: bool,
 }
 
 #[derive(Debug)]
@@ -279,7 +286,16 @@ pub(crate) fn bind<'a>(
         for signal in &class.signals {
             let label = format!("{}::{}", class.c_type.as_deref().unwrap_or(&class.name), signal.name);
             match mapper.signal(class, signal) {
-                Ok(function) => mapper.binding.functions.push(function),
+                Ok(connect) => {
+                    // `connect_after`: the same call with `G_CONNECT_AFTER`.
+                    let after = Function {
+                        name: connect.name.replacen("_connect_", "_connect_after_", 1),
+                        omissible: BTreeMap::from([("connect_flags".to_owned(), "1")]),
+                        method: connect.method.as_ref().map(|(class, _)| (class.clone(), "connect_after".to_owned())),
+                        ..connect.clone()
+                    };
+                    mapper.binding.functions.extend([connect, after]);
+                }
                 Err(reason) => mapper.binding.refused.push((label, reason)),
             }
         }
@@ -290,6 +306,21 @@ pub(crate) fn bind<'a>(
     // names of their own, which is what this compares.
     mapper.binding.functions.dedup_by(|a, b| a.name == b.name);
     mapper.binding
+}
+
+/// A method of the class its instance is: `this` on that class's methods.
+/// Only a plain or `Const` handle is an instance a method can be called on;
+/// an erased one is left a function.
+fn method_of(callable: &Callable, parameters: &[(String, Mapped)]) -> Option<(String, String)> {
+    if callable.kind != CallableKind::Method || callable.signature.instance.is_none() {
+        return None;
+    }
+    let (_, instance) = parameters.first()?;
+    let class = instance.ts.strip_prefix("Const<").and_then(|t| t.strip_suffix('>')).unwrap_or(&instance.ts);
+    class
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        .then(|| (class.to_owned(), identifier(&callable.name)))
 }
 
 /// What a qualified GIR name refers to.
@@ -386,6 +417,8 @@ impl<'a> Mapper<'a> {
                     method: None,
                     throws: None,
                     finish: None,
+                    omissible: BTreeMap::new(),
+                    method_only: false,
                 });
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
@@ -492,6 +525,7 @@ impl<'a> Mapper<'a> {
         // which the declaration does not spell and the caller does not pass.
         let mut hidden = BTreeSet::new();
         let mut no_escape = Vec::new();
+        let mut omissible = BTreeMap::new();
         // The parameters that hold an array's length, which the compiler fills
         // from the array: `index -> the array's index`.
         let lengths: BTreeMap<usize, usize> = signature
@@ -536,6 +570,9 @@ impl<'a> Mapper<'a> {
             }
             let mapped = self.value(param)?;
             c_parameters.push(mapped.c.clone());
+            if let Some(value) = self.omissible(param) {
+                omissible.insert(identifier(&param.name), value);
+            }
             parameters.push((identifier(&param.name), mapped));
         }
         let (result, free) = self.result(&signature.result)?;
@@ -557,16 +594,7 @@ impl<'a> Mapper<'a> {
                 _ => None,
             })
             .flatten();
-        // A method of the class its instance is: `this` on that class's
-        // methods. Only a plain or `Const` handle is an instance a method can
-        // be called on; an erased one is left a function.
-        let method = (callable.kind == CallableKind::Method && signature.instance.is_some())
-            .then(|| parameters.first())
-            .flatten()
-            .and_then(|(_, instance)| {
-                let class = instance.ts.strip_prefix("Const<").and_then(|t| t.strip_suffix('>')).unwrap_or(&instance.ts);
-                class.chars().all(|c| c.is_ascii_alphanumeric() || c == '_').then(|| (class.to_owned(), identifier(&callable.name)))
-            });
+        let method = method_of(callable, &parameters);
         Ok(Function {
             name: symbol.clone(),
             symbol,
@@ -580,7 +608,33 @@ impl<'a> Mapper<'a> {
             method,
             throws,
             finish: callable.finish.clone(),
+            omissible,
+            method_only: false,
         })
+    }
+
+    /// What stands for a parameter the caller leaves out, where `GLib` itself
+    /// names a "nothing": `0`, the empty set of any bitfield's flags; `0`,
+    /// `G_PRIORITY_DEFAULT`, for an `io_priority`; and `null` for a
+    /// `GCancellable *`, which every one of them accepts. No other parameter
+    /// is guessed at -- `window.set_child()` meaning "no child" would be a
+    /// default nobody chose.
+    fn omissible(&self, param: &Param) -> Option<&'static str> {
+        if param.direction != Direction::In {
+            return None;
+        }
+        let TypeRef::Named { name, c_type } = &param.ty else { return None };
+        let pointer = c_type.as_deref().is_some_and(|c| c.contains('*'));
+        let qualified = self.qualify(name);
+        if qualified == "Gio.Cancellable" && pointer && param.nullable {
+            return Some("null");
+        }
+        if name == "gint" && param.name == "io_priority" {
+            return Some("0");
+        }
+        let (namespace, local) = qualified.split_once('.')?;
+        let flags = self.repository.namespaces.get(namespace)?.enums.iter().any(|e| e.name == local && e.flags);
+        (flags && !pointer).then_some("0")
     }
 
     /// The result, and for a string the caller owns, what frees it.
@@ -961,9 +1015,14 @@ impl<'a> Mapper<'a> {
             free: None,
             no_escape: Vec::new(),
             returns: None,
-            method: None,
+            // `button.connect("clicked", handler)`, GJS's spelling: a method
+            // of the class, the flags left out -- `0`, and `1`,
+            // `G_CONNECT_AFTER`, for `connect_after`.
+            method: Some((local, "connect".to_owned())),
             throws: None,
             finish: None,
+            omissible: BTreeMap::from([("connect_flags".to_owned(), "0")]),
+            method_only: true,
         })
     }
 

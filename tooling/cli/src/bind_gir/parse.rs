@@ -123,9 +123,10 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                 class_struct: node.attribute((GLIB, "is-gtype-struct-for")).is_some(),
                 callables: callables(node),
             }),
-            "enumeration" | "bitfield" => namespace.enums.push(Enum {
+            kind @ ("enumeration" | "bitfield") => namespace.enums.push(Enum {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
                 c_type: c_attribute(node, "type").map(str::to_owned),
+                flags: kind == "bitfield",
                 members: node
                     .children()
                     .filter(|n| is(*n, "member"))

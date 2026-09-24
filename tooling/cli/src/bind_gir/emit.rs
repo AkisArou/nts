@@ -3,7 +3,7 @@
 
 use std::fmt::Write;
 
-use super::map::{Binding, Function, TypeDecl};
+use super::map::{Binding, Function, Mapped, TypeDecl};
 
 /// The declaration module: types, then functions, in a stable order.
 #[must_use]
@@ -73,12 +73,13 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         }
     }
     out.push('\n');
-    for function in &binding.functions {
-        notes(&mut out, function, function.name != function.symbol, "  ");
+    for function in binding.functions.iter().filter(|function| !function.method_only) {
+        let defaulted = defaults(function, &function.parameters);
+        notes(&mut out, function, function.name != function.symbol, &defaulted, "  ");
         let parameters = function
             .parameters
             .iter()
-            .map(|(name, mapped)| parameter(function, name, &mapped.ts))
+            .map(|(name, mapped)| parameter(function, &defaulted, name, &mapped.ts))
             .collect::<Vec<_>>()
             .join(", ");
         let _ = writeln!(
@@ -94,10 +95,12 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
 /// A function as a method of its class: `this` is its instance.
 fn method(out: &mut String, function: &Function) {
     let Some((_, name)) = &function.method else { return };
+    let defaulted = defaults(function, &function.parameters);
     let mut parameters = function.parameters.iter();
     let Some((_, instance)) = parameters.next() else { return };
-    notes(out, function, true, "    ");
-    let rest: Vec<String> = parameters.map(|(name, mapped)| parameter(function, name, &mapped.ts)).collect();
+    notes(out, function, true, &defaulted, "    ");
+    let rest: Vec<String> =
+        parameters.map(|(name, mapped)| parameter(function, &defaulted, name, &mapped.ts)).collect();
     let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    {name}({this}): {};", function.result.ts);
 }
@@ -194,27 +197,47 @@ fn settles(result: &super::map::Mapped) -> bool {
 /// the companion module defines (`@ntsCall`).
 fn promise_method(out: &mut String, start: &Function, finish: &Function) {
     let Some((_, name)) = &start.method else { return };
-    let mut parameters = start.parameters.iter();
+    // Without the callback, which the Promise stands in for.
+    let taken = &start.parameters[..start.parameters.len().saturating_sub(1)];
+    let defaulted = defaults(start, taken);
+    let mut parameters = taken.iter();
     let Some((_, instance)) = parameters.next() else { return };
-    let rest: Vec<String> = parameters
-        .take(start.parameters.len().saturating_sub(2))
-        .map(|(name, mapped)| parameter(start, name, &mapped.ts))
-        .collect();
+    let rest: Vec<String> = parameters.map(|(name, mapped)| parameter(start, &defaulted, name, &mapped.ts)).collect();
     let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    /**\n     * @ntsCall {}_promise\n     */", start.symbol);
     let _ = writeln!(out, "    {name}({this}): Promise<{}>;", finish.result.ts);
 }
 
+/// The parameters a caller may leave out of `parameters`, and what stands for
+/// each: the longest run at the end that `omissible` covers, stepping over
+/// the `@ntsThrows` slot, which is optional already. Only a run at the end,
+/// since TypeScript lets no required parameter follow an optional one.
+fn defaults<'f>(function: &'f Function, parameters: &'f [(String, Mapped)]) -> Vec<(&'f str, &'static str)> {
+    let mut run = Vec::new();
+    for (name, _) in parameters.iter().rev() {
+        if function.throws.as_deref() == Some(name.as_str()) {
+            continue;
+        }
+        match function.omissible.get(name) {
+            Some(value) => run.push((name.as_str(), *value)),
+            None => break,
+        }
+    }
+    run.reverse();
+    run
+}
+
 /// One parameter as TypeScript writes it: the `@ntsThrows` one optional, so a
-/// caller that leaves it out has the failure thrown.
-fn parameter(function: &Function, name: &str, ts: &str) -> String {
-    let optional = if function.throws.as_deref() == Some(name) { "?" } else { "" };
-    format!("{name}{optional}: {ts}")
+/// caller that leaves it out has the failure thrown, and so is each of
+/// `defaulted`, whose value the compiler passes instead (`@ntsDefault`).
+fn parameter(function: &Function, defaulted: &[(&str, &str)], name: &str, ts: &str) -> String {
+    let optional = function.throws.as_deref() == Some(name) || defaulted.iter().any(|(given, _)| *given == name);
+    format!("{name}{}: {ts}", if optional { "?" } else { "" })
 }
 
 /// The tags a declaration carries: one per line, since a tag's value runs to
 /// the end of its line. `symbol` when its name is not the C function's.
-fn notes(out: &mut String, function: &Function, symbol: bool, indent: &str) {
+fn notes(out: &mut String, function: &Function, symbol: bool, defaulted: &[(&str, &str)], indent: &str) {
     let mut notes = Vec::new();
     if function.deprecated {
         notes.push("@deprecated".to_owned());
@@ -233,6 +256,10 @@ fn notes(out: &mut String, function: &Function, symbol: bool, indent: &str) {
     }
     if let Some(slot) = &function.throws {
         notes.push(format!("@ntsThrows {slot} nts_gerror_take_message"));
+    }
+    if !defaulted.is_empty() {
+        let given: Vec<String> = defaulted.iter().map(|(name, value)| format!("{name}={value}")).collect();
+        notes.push(format!("@ntsDefault {}", given.join(" ")));
     }
     if !notes.is_empty() {
         let _ = writeln!(out, "{indent}/**");
@@ -350,7 +377,18 @@ fn module_of_type(binding: &Binding, name: &str) -> Option<String> {
 fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
     let taken = &start.parameters[..start.parameters.len().saturating_sub(1)];
     let Some((instance, _)) = taken.first() else { return };
-    let declared = taken.iter().map(|(name, mapped)| format!("{name}: {}", mapped.ts)).collect::<Vec<_>>().join(", ");
+    // The method leaves these out as the C one would; here they are ordinary
+    // default parameters, since this is the program's own function.
+    let defaulted = defaults(start, taken);
+    let declared = taken
+        .iter()
+        .map(|(name, mapped)| match defaulted.iter().find(|(given, _)| *given == name.as_str()) {
+            Some((_, "null")) => format!("{name}: {} = null", mapped.ts),
+            Some((_, value)) => format!("{name}: {ts} = {value} as {ts}", ts = mapped.ts),
+            None => format!("{name}: {}", mapped.ts),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
     let passed = taken.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>().join(", ");
     let _ = writeln!(
         out,

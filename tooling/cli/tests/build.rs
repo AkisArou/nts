@@ -4083,7 +4083,8 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         "export function demo_thing_count(thing: Const<DemoThing>): c_int;",
         "export function demo_on_tick(thing: DemoThing, tick: Closure<(thing: DemoThing) => void>): c_uint;",
         "export function demo_label_is_null(label: string | null): c_int;",
-        "export function demo_flags(flags: c_int): void;",
+        // A bitfield's flags, which a caller may leave out: none is `0`.
+        "   * @ntsDefault flags=0\n   */\n  export function demo_flags(flags?: c_int): void;",
         // Out parameters: a slot each, the optional one nullable, and both
         // stack storage the callee may not keep.
         "   * @ntsNoEscape width\n   * @ntsNoEscape height\n   */\n  \
@@ -4181,7 +4182,7 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     assert!(
         std::fs::read_to_string(project.join("types/gir/Demo-1.0.d.ts"))
             .expect("the rebound binding")
-            .contains("export function demo_flags(flags: c_int): void;"),
+            .contains("export function demo_flags(flags?: c_int): void;"),
         "the rebound binding is not the new GIR's"
     );
     // Another `nts` -- here a copy elsewhere, for a newer binder -- binds
