@@ -165,7 +165,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         assert!(line.contains(rest), "{name} at slot {slot}: {line}");
     };
     declared_in("export interface IJsonValueMethods", 7, "Stringify", "Stringify(this: IJsonValue): HString;");
-    declared_in("export interface IJsonValueMethods", 9, "GetNumber", "GetNumber(this: IJsonValue): c_double;");
+    declared_in("export interface IJsonValueMethods", 9, "GetNumber", "GetNumber(this: IJsonValue): CNumber<\"double\">;");
     declared_in("export namespace JsonValue", 6, "Parse", "function Parse(input: HString): JsonValue;");
     assert!(
         module.contains("@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C"),

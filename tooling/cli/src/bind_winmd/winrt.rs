@@ -76,7 +76,38 @@ pub(crate) fn write(namespaces: &[String], metadata: &Utf8Path, out: &Utf8Path, 
             index.contains_namespace(namespace),
             "the Windows Runtime metadata in {metadata} has no namespace `{namespace}`"
         );
-        let module = bind(index, namespace, command);
+    }
+    // **What the namespaces asked for reach, and no more.** A namespace asked
+    // for is bound whole; one its declarations only name -- `Windows.
+    // Foundation.Collections` for `IVectorView<T>` -- gets the types named,
+    // and whatever those name in turn, to a fixed point. Closing over whole
+    // namespaces instead reached most of the SDK from `Windows.Globalization`.
+    let mut wanted: std::collections::BTreeMap<String, Option<BTreeSet<String>>> =
+        namespaces.iter().map(|namespace| (namespace.clone(), None)).collect();
+    let modules = loop {
+        let mut modules = Vec::new();
+        let mut grew = false;
+        let current = wanted.clone();
+        for (namespace, only) in &current {
+            let module = bind(index, namespace, only.as_ref(), command);
+            for (other, names) in &module.references {
+                match wanted.entry(other.clone()).or_insert_with(|| Some(BTreeSet::new())) {
+                    None => {}
+                    Some(set) => {
+                        for name in names {
+                            grew |= set.insert(name.clone());
+                        }
+                    }
+                }
+            }
+            modules.push(module);
+        }
+        if !grew && wanted.len() == current.len() {
+            break modules;
+        }
+    };
+    for module in modules {
+        let namespace = &module.namespace.clone();
         let path = out.join(format!("{namespace}.d.ts"));
         std::fs::write(&path, &module.text).with_context(|| format!("writing {path}"))?;
         let refused = module.refused.iter().fold(String::new(), |mut text, (what, why)| {
@@ -111,6 +142,9 @@ pub(crate) fn metadata_marker(directory: &Utf8Path) -> Utf8PathBuf {
 /// counts the summary line reports.
 pub(crate) struct Module {
     pub(crate) namespace: String,
+    /// Every type this module names, by the namespace declaring it -- its own
+    /// included, which a module bound only in part must then declare.
+    pub(crate) references: std::collections::BTreeMap<String, BTreeSet<String>>,
     pub(crate) text: String,
     pub(crate) refused: Vec<(String, String)>,
     pub(crate) interfaces: usize,
@@ -119,17 +153,31 @@ pub(crate) struct Module {
 }
 
 /// `namespace` as a `winrt:` module.
-pub(crate) fn bind(index: &Index, namespace: &str, command: &str) -> Module {
-    let mut writer = Writer { index, namespace, brands: BTreeSet::new(), refused: Vec::new(), methods: 0 };
+/// `namespace` as a `winrt:` module: every type in it, or only those `only`
+/// names.
+pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String>>, command: &str) -> Module {
+    let mut writer = Writer {
+        index,
+        namespace,
+        brands: BTreeSet::new(),
+        references: std::collections::BTreeMap::new(),
+        generics: Vec::new(),
+        refused: Vec::new(),
+        methods: 0,
+    };
     let mut body = String::new();
     let mut interfaces = 0;
     let mut classes = 0;
-    let mut defs: Vec<TypeDef> = index.types().filter(|def| def.namespace() == namespace).collect();
+    let mut defs: Vec<TypeDef> = index
+        .types()
+        .filter(|def| def.namespace() == namespace)
+        .filter(|def| only.is_none_or(|names| names.contains(generic_base(def.name()))))
+        .collect();
     defs.sort_by_key(TypeDef::name);
     for def in &defs {
         let name = def.name();
-        if def.generic_params().next().is_some() {
-            writer.refuse(name, "a generic interface, whose instantiations' IIDs are computed rather than read");
+        if def.generic_params().next().is_some() && def.category() != TypeCategory::Interface {
+            writer.refuse(name, "a generic delegate");
             continue;
         }
         match def.category() {
@@ -156,7 +204,8 @@ pub(crate) fn bind(index: &Index, namespace: &str, command: &str) -> Module {
     let _ = writeln!(text, "// Each method is the slot of its interface's table the metadata gives it, named");
     let _ = writeln!(text, "// as the metadata names that slot; the compiler refuses the two disagreeing.");
     let _ = writeln!(text, "declare module \"winrt:{namespace}\" {{");
-    let c_types: Vec<&str> = writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || *brand == "CEnum").collect();
+    let c_types: Vec<&str> =
+        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber")).collect();
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
@@ -164,16 +213,31 @@ pub(crate) fn bind(index: &Index, namespace: &str, command: &str) -> Module {
     if !winrt.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
     }
+    for (other, names) in writer.references.iter().filter(|(other, _)| other.as_str() != namespace) {
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let _ = writeln!(text, "  import type {{ {} }} from \"winrt:{other}\";", names.join(", "));
+    }
     text.push('\n');
     text.push_str(&body);
     text.push_str("}\n");
-    Module { namespace: namespace.to_owned(), text, refused: writer.refused, interfaces, classes, methods: writer.methods }
+    Module {
+        namespace: namespace.to_owned(),
+        references: writer.references,
+        text,
+        refused: writer.refused,
+        interfaces,
+        classes,
+        methods: writer.methods,
+    }
 }
 
 struct Writer<'a> {
     index: &'a Index,
     namespace: &'a str,
     brands: BTreeSet<&'static str>,
+    references: std::collections::BTreeMap<String, BTreeSet<String>>,
+    /// The type parameters of the generic interface being written, by name.
+    generics: Vec<String>,
     refused: Vec<(String, String)>,
     methods: usize,
 }
@@ -185,7 +249,14 @@ impl Writer<'_> {
 
     /// `IJsonValue`: a `ComClass` and its methods, slot by slot.
     fn interface(&mut self, def: TypeDef, body: &mut String) -> bool {
-        let name = def.name();
+        // ``IVectorView`1`` is `IVectorView<T>`: a method call goes through the
+        // object's own table, whichever `T` it was made for, so the
+        // TypeScript generic is the whole of it here. The instantiation's own
+        // IID is computed (`iid::parameterized`) only where one is asked for.
+        let name = generic_base(def.name());
+        self.generics = def.generic_params().map(|param| param.name().to_owned()).collect();
+        let parameters = if self.generics.is_empty() { String::new() } else { format!("<{}>", self.generics.join(", ")) };
+        let this = format!("{name}{parameters}");
         let Some(iid) = iid(def) else {
             self.refuse(name, "an interface with no GuidAttribute");
             return false;
@@ -193,7 +264,7 @@ impl Writer<'_> {
         let mut methods = String::new();
         for (index, method) in def.methods().enumerate() {
             let slot = 6 + index;
-            match self.method(method, slot, Receiver::Instance(name)) {
+            match self.method(method, slot, Receiver::Instance(&this)) {
                 Ok(text) => {
                     methods.push_str(&text);
                     self.methods += 1;
@@ -203,13 +274,14 @@ impl Writer<'_> {
         }
         self.brands.insert("ComClass");
         let _ = writeln!(body, "  /** IID {iid} */");
-        let _ = writeln!(body, "  export interface {name}Methods {{");
+        let _ = writeln!(body, "  export interface {name}Methods{parameters} {{");
         body.push_str(&methods);
         let _ = writeln!(body, "  }}");
         // The tag is the C struct a handle points at, so a C identifier: the
         // namespace kept, since two namespaces may name an interface alike.
         let tag = format!("{}_{name}", self.namespace.replace('.', "_"));
-        let _ = writeln!(body, "  export type {name} = ComClass<\"{tag}\"> & {name}Methods;");
+        let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\"> & {name}Methods{parameters};");
+        self.generics.clear();
         true
     }
 
@@ -219,11 +291,9 @@ impl Writer<'_> {
         let name = def.name();
         let default = def.interface_impls().find(|implemented| implemented.has_attribute("DefaultAttribute"));
         let spelled = match default.map(|implemented| implemented.interface(&[])) {
-            Some(Type::ClassName(interface)) if interface.generics.is_empty() && interface.namespace == self.namespace => {
-                interface.name.clone()
-            }
+            Some(Type::ClassName(interface)) if interface.generics.is_empty() => self.named(&interface.namespace, &interface.name),
             Some(_) => {
-                self.refuse(name, "a runtime class whose default interface is generic or in another namespace");
+                self.refuse(name, "a runtime class whose default interface is generic");
                 return false;
             }
             // A static-only class (`Windows.Globalization.ApplicationLanguages`)
@@ -282,9 +352,17 @@ impl Writer<'_> {
         slot: usize,
         receiver: Receiver<'_>,
     ) -> Result<String, String> {
-        let signature = method.signature(&[]);
+        // A generic interface's own parameters stand for themselves: the
+        // signature reads `T` by its index, and is spelled back by name.
+        let parameters: Vec<Type> = self
+            .generics
+            .iter()
+            .enumerate()
+            .map(|(at, name)| Type::Generic(name.clone(), u16::try_from(at).unwrap_or(u16::MAX)))
+            .collect();
+        let signature = method.signature(&parameters);
         let named = method.params_by_sequence(signature.types.len()).map_err(|_| "a method whose parameters the metadata numbers wrongly".to_owned())?;
-        let mut parameters = Vec::new();
+        let mut parameters: Vec<String> = Vec::new();
         if let Receiver::Instance(this) = receiver {
             parameters.push(format!("this: {this}"));
         }
@@ -320,53 +398,69 @@ impl Writer<'_> {
             writer.brands.insert(brand);
             Ok(brand.to_owned())
         };
+        // A plain `number` wherever a double holds every value, as `bind-gir`
+        // spells them; a 64-bit integer keeps its exact `bigint` brand.
+        let number = |c: &str, writer: &mut Self| {
+            writer.brands.insert("CNumber");
+            Ok(format!("CNumber<\"{c}\">"))
+        };
         match ty {
-            Type::I8 => scalar("c_int8", self),
-            Type::U8 => scalar("c_uint8", self),
-            Type::I16 => scalar("c_int16", self),
-            Type::U16 | Type::Char => scalar("c_uint16", self),
-            Type::I32 => scalar("c_int32", self),
-            Type::U32 => scalar("c_uint32", self),
+            Type::I8 => number("int8", self),
+            Type::U8 => number("uint8", self),
+            Type::I16 => number("int16", self),
+            Type::U16 | Type::Char => number("uint16", self),
+            Type::I32 => number("int32", self),
+            Type::U32 => number("uint32", self),
             Type::I64 => scalar("c_int64", self),
             Type::U64 => scalar("c_uint64", self),
-            Type::F32 => scalar("c_float", self),
-            Type::F64 => scalar("c_double", self),
+            Type::F32 => number("float", self),
+            Type::F64 => number("double", self),
             Type::String => {
                 self.brands.insert("HString");
                 Ok("HString".to_owned())
             }
             // One byte, 0 or 1: C's `bool`.
             Type::Bool => Ok("boolean".to_owned()),
-            Type::ClassName(name) if !name.generics.is_empty() => Err(format!("`{}`, a generic instantiation", name.name)),
-            Type::ClassName(name) if name.namespace != self.namespace => {
-                Err(format!("`{}.{}`, from a namespace not bound with this one", name.namespace, name.name))
-            }
+            // A parameter of the generic interface being written, by name.
+            Type::Generic(name, _) if self.generics.iter().any(|known| known == name) => Ok(name.clone()),
+            Type::Generic(name, _) => Err(format!("`{name}`, a type parameter of something not being written")),
             Type::ClassName(name) => {
-                let Some(def) = self.index.get(&name.namespace, &name.name).next() else {
+                // The index keys a generic type by its name without the tick:
+                // ``IVectorView`1`` is found as `IVectorView`.
+                let Some(def) = self.index.get(&name.namespace, generic_base(&name.name)).next() else {
                     return Err(format!("`{}`, not in the metadata read", name.name));
                 };
-                match def.category() {
-                    TypeCategory::Delegate => Err(format!("`{}`, a delegate", name.name)),
-                    // An object may be null where it is passed, as WinRT's
-                    // projections all allow; a result is what C wrote.
-                    _ if argument => Ok(format!("{} | null", name.name)),
-                    _ => Ok(name.name.clone()),
+                if def.category() == TypeCategory::Delegate {
+                    return Err(format!("`{}`, a delegate", generic_base(&name.name)));
                 }
+                let base = self.named(&name.namespace, generic_base(&name.name));
+                // An instantiation, `IVectorView<HString>`: each argument as
+                // it is inside the type, which is never `null`.
+                let spelled = if name.generics.is_empty() {
+                    base
+                } else {
+                    let arguments = name.generics.iter().map(|argument| self.spell(argument, false)).collect::<Result<Vec<_>, _>>()?;
+                    format!("{base}<{}>", arguments.join(", "))
+                };
+                // An object may be null where it is passed, as WinRT's
+                // projections all allow; a result is what C wrote.
+                Ok(if argument { format!("{spelled} | null") } else { spelled })
             }
             Type::ValueName(name) => {
                 let Some(def) = self.index.get(&name.namespace, &name.name).next() else {
                     return Err(format!("`{}`, not in the metadata read", name.name));
                 };
-                if def.category() != TypeCategory::Enum || name.namespace != self.namespace {
-                    return Err(format!("`{}`, a struct or an enum from another namespace", name.name));
+                if def.category() != TypeCategory::Enum {
+                    return Err(format!("`{}`, a struct", name.name));
                 }
+                let enumeration = self.named(&name.namespace, &name.name);
                 let underlying = match def.underlying_type() {
                     Some(Type::U32) => "c_uint32",
                     _ => "c_int32",
                 };
                 self.brands.insert("CEnum");
                 self.brands.insert(underlying);
-                Ok(format!("CEnum<{}, {underlying}>", name.name))
+                Ok(format!("CEnum<{enumeration}, {underlying}>"))
             }
             Type::Object => Err("an `Object`, which is `IInspectable` of any class".to_owned()),
             Type::Array(_) => Err("an array".to_owned()),
@@ -374,6 +468,20 @@ impl Writer<'_> {
             other => Err(format!("{other:?}, a type WinRT does not use here")),
         }
     }
+}
+
+impl Writer<'_> {
+    /// A type's name as this module spells it: its own, imported from the
+    /// module of the namespace declaring it when that is another.
+    fn named(&mut self, namespace: &str, name: &str) -> String {
+        self.references.entry(namespace.to_owned()).or_default().insert(name.to_owned());
+        name.to_owned()
+    }
+}
+
+/// ``IVectorView`1`` as TypeScript names it: `IVectorView`.
+fn generic_base(name: &str) -> &str {
+    name.split('`').next().unwrap_or(name)
 }
 
 #[derive(Clone, Copy)]
