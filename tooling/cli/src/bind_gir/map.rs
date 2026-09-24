@@ -892,19 +892,20 @@ impl<'a> Mapper<'a> {
     /// and the `user_data` last, where the bridge takes the closure from.
     fn signal(&mut self, class: &'a Class, signal: &super::model::Signal) -> Result<Function, Reason> {
         let c_type = class.c_type.clone().ok_or_else(|| Reason::Unknown(class.name.clone()))?;
-        let tag = self.facts.tags.get(&c_type).cloned().ok_or_else(|| Reason::NoTag(c_type.clone()))?;
+        // `self: GtkButton` names the class's handle, which exists only for a
+        // tagged struct.
+        if !self.facts.tags.contains_key(&c_type) {
+            return Err(Reason::NoTag(c_type));
+        }
         let prefix = class.symbol_prefix.as_deref().ok_or(Reason::NoSymbol)?;
         let local = c_type.clone();
         self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "c_ulong"]);
-        let instance = Type::Pointer(Pointee::Opaque(Handle::from(tag)));
         let mut ts_parameters = vec![format!("self: {local}")];
-        let mut callback = vec![instance];
         for param in &signal.signature.parameters {
             if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename") {
                 return Err(Reason::StringInCallback);
             }
             let mapped = self.typed(&self.with_c_type(param))?;
-            callback.push(mapped.c.clone());
             ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
         }
         let result = match &signal.signature.result.ty {
@@ -916,7 +917,6 @@ impl<'a> Mapper<'a> {
         // The handler's C signature is the compiler's to derive from the
         // TypeScript one; mapping the parameters above is what refuses a
         // signal whose parameters have no C type here.
-        drop(callback);
         let erased = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void)));
         // `GClosureNotify`: `void (*)(gpointer, GClosure *)`, which the header
         // declares exactly and the self-check compares.
@@ -963,7 +963,7 @@ impl<'a> Mapper<'a> {
             returns: None,
             method: None,
             throws: None,
-                    finish: None,
+            finish: None,
         })
     }
 
