@@ -291,6 +291,14 @@ fn composable_classes_are_constructed_as_themselves() {
         button.contains("@ntsHresult composable\n     * @ntsFactory Windows.UI.Xaml.Controls.Button ") && button.contains("function CreateInstance(): Button;"),
         "{button}"
     );
+    // A class answers every interface of the classes it derives from, and a
+    // parameter taking a class takes its default interface.
+    let queries = &module[module.find("export interface ButtonInterfaces {").expect("no ButtonInterfaces")..];
+    let queries = &queries[..queries.find("\n  }").unwrap()];
+    for base in ["as_IButtonBase(this: Button)", "as_IContentControl(this: Button)", "as_IUIElement(this: Button)"] {
+        assert!(queries.contains(base), "no {base}:\n{queries}");
+    }
+    assert!(!queries.contains("Overrides"), "an overridable interface is queried:\n{queries}");
     // `Control`'s factory is protected: a control is only ever a subclass.
     let control = &module[module.find("export namespace Control {").expect("no Control namespace")..];
     assert!(!control.split("\n  }").next().unwrap_or("").contains("CreateInstance"), "a protected factory was bound");

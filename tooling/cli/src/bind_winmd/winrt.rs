@@ -480,12 +480,29 @@ impl Writer<'_> {
                 }
             }
         }
-        // The class's other interfaces, each reached by `QueryInterface`.
-        let others: Vec<Type> = def
+        // The class's other interfaces, each reached by `QueryInterface`, and
+        // every interface of each class it derives from: a `Button` is its
+        // `ButtonBase`'s `IButtonBase`, its `UIElement`'s `IUIElement`. Not
+        // the protected and overridable ones, which are a subclass's contract
+        // with its base rather than what the object answers to anyone.
+        let public = |implemented: &windows_metadata::reader::InterfaceImpl| {
+            !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute")
+        };
+        let mut others: Vec<Type> = def
             .interface_impls()
-            .filter(|implemented| !implemented.has_attribute("DefaultAttribute"))
+            .filter(|implemented| !implemented.has_attribute("DefaultAttribute") && public(implemented))
             .map(|implemented| implemented.interface(&[]))
             .collect();
+        let mut base = def.extends();
+        let mut depth = 0;
+        while let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) {
+            if parent.category() != TypeCategory::Class || depth > 16 {
+                break;
+            }
+            others.extend(parent.interface_impls().filter(public).map(|implemented| implemented.interface(&[])));
+            base = parent.extends();
+            depth += 1;
+        }
         let queries = self.queries(name, name, &others);
         if !queries.is_empty() {
             let _ = writeln!(body, "  export interface {name}Interfaces {{");
@@ -739,6 +756,19 @@ impl Writer<'_> {
                 // A class `class` refuses is not declared, so nothing may name it.
                 if def.category() == TypeCategory::Class && generic_default(def) {
                     return Err(format!("`{}`, a runtime class whose default interface is generic", name.name));
+                }
+                // A class where one is taken is its default interface, which is
+                // what the ABI passes: so an instance of it, or of a class
+                // derived from it once asked as that interface
+                // (`button.as_IUIElement()`), is accepted.
+                if argument
+                    && def.category() == TypeCategory::Class
+                    && let Some(Type::ClassName(interface)) = def
+                        .interface_impls()
+                        .find(|implemented| implemented.has_attribute("DefaultAttribute"))
+                        .map(|implemented| implemented.interface(&[]))
+                {
+                    return Ok(format!("{} | null", self.named(&interface.namespace, &interface.name)));
                 }
                 let base = self.named(&name.namespace, generic_base(&name.name));
                 // An instantiation, `IVectorView<HString>`: each argument as
