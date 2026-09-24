@@ -96,3 +96,45 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
         mine.len()
     );
 }
+
+/// **No tag sits above `NULL`**, because `typeof x === "object"` is emitted as
+/// the single comparison `tag >= OBJECT`.
+///
+/// `hir::tags` asserts at compile time that `NULL == OBJECT + 1`, and the message
+/// on that assertion says "and the last" -- which its predicate does not check. A
+/// tag added *above* `NULL` answers `"object"` to `typeof` exactly as surely as
+/// one inserted between `OBJECT` and `NULL`, and only the second was guarded.
+///
+/// The test above catches a tag added to the header alone, by counting. It does
+/// not catch one added to **both** tables, which is the shape a real change
+/// takes: the counts agree, every name matches, every assertion in `hir::tags`
+/// holds, and a value carrying the new tag answers `typeof === "object"`.
+///
+/// Not hypothetical. On 2026-09-24 the GTK lane proposed `NTS_TAG_NATIVE = 8` to
+/// carry a raw C pointer in a promise payload, reasoning correctly that 8 falls
+/// outside `NTS_TAG_IS_REFERENCE`'s range so retain, release and the tracer skip
+/// it. It does, and it would also have made a `GFileInfo *` answer
+/// `typeof === "object"` -- and then something would have read it as an
+/// `NtsHeader`. A separate slot on `NtsPromise` was taken instead.
+///
+/// Asserted over the **header's** parsed enum rather than over the list above,
+/// so that a tag someone adds to both tables is caught by this file rather than
+/// by a program answering the wrong thing.
+#[test]
+fn no_tag_sits_above_null_because_typeof_object_is_a_range() {
+    let header = header_tags();
+    assert!(
+        header.len() >= 7,
+        "the header's tag enum was not parsed: {header:?}"
+    );
+    for (name, value) in &header {
+        assert!(
+            *value <= tags::NULL,
+            "`{name}` is {value} and `NTS_TAG_NULL` is {}: `typeof x === \"object\"` is \
+             `tag >= NTS_TAG_OBJECT`, so a tag above NULL answers \"object\" whatever it \
+             holds. A payload that is not a reference needs somewhere other than the tag \
+             -- a slot on the structure that carries it.",
+            tags::NULL
+        );
+    }
+}
