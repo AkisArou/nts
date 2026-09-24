@@ -143,9 +143,14 @@ with the provider it lowered for.
   ARC-placed C oracle. `objc_arc.rs` checks the same rules on any host,
   against a stub runtime.
 
-**Known gap (A1b.2):** a handle held in a heap object's field is counted on
-store, but not released when that object is destroyed. It is a leak, not a
-dangling pointer, and the fix is a descriptor slot kind.
+**A1b.2, landed (`bb53d038`): handles in fields.** A handle held in a heap
+object's field, or captured by a closure, is released when the holder dies.
+`NtsDescriptor` carries a per-slot `NtsForeignSlot { offset, release }` table,
+and `nts_free` gives the slots up, so it covers both the count reaching zero
+and the cycle collector's sweep. Measured on the Mac (the `in a field` and
+`captured` lines) and by the stub test, each with a sabotage that fails.
+Making the LLVM descriptor type whole along the way cleared four examples'
+partial comparisons.
 
 **Speed items the benchmark will price, not guessed at:**
 - a send is a cached load, a never-taken branch and a direct
@@ -159,15 +164,11 @@ correctness does not depend on arm64 running by luck.
 
 ## Next
 
-1. **A1b.2, handles in fields.** A descriptor slot kind for foreign
-   references, so destroying an object releases the handles it holds. The
-   falsifier is the weak-reference arm, with the handle held in a class
-   field and in a closure capture.
-2. **A2, a window:** blocks, `extends NSObject`, the CFRunLoop host, and
+1. **A2, a window:** blocks, `extends NSObject`, the CFRunLoop host, and
    `macos-window` with a capturing target/action handler that starts a timer
    and an await.
-3. **A3:** `nts bind-objc` from SDK headers, with an ObjC witness.
-4. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
+2. **A3:** `nts bind-objc` from SDK headers, with an ObjC witness.
+3. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.
 
 ## Rules this lane keeps
