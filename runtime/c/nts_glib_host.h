@@ -22,6 +22,11 @@
 void nts_glib_host_attach(void);
 /* Detach, before `nts_uv_host_shutdown`. */
 void nts_glib_host_detach(void);
+/* What `nts_uv_host_run` is to a program on libuv alone: turn the default
+ * context until libuv has nothing alive and no callback C owes is out. The
+ * second is what a program that starts a GIO operation without an
+ * application's loop is waiting for, and libuv never hears of it. */
+void nts_glib_host_run(void);
 
 /* A `GError` as the message a thrown `Error` carries: a `malloc`'d copy of
  * `error->message`, and the error freed. The converter `bind-gir` names in

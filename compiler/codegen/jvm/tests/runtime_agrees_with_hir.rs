@@ -220,4 +220,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// 84 for `nts_promise_fulfill_pointer` and `nts_promise_pointer`, a promise
 /// settling with a C handle and an `await` reading it back: only a native
 /// call produces one.
-const REFUSED_FLOOR: usize = 84;
+///
+/// 86 for `nts_closure_lend_once` and `nts_closure_unlend_once`, the pair for
+/// a closure C calls once, later, counted while it is out: native calls again.
+const REFUSED_FLOOR: usize = 86;

@@ -4603,6 +4603,22 @@ void *nts_closure_lend(NtsHeader *closure) {
 
 void nts_closure_unlend(void *context) { nts_release((NtsHeader *)context); }
 
+/* Owner thread only, as the pair above: a bridge runs where C calls it, and
+ * the library calling it back is on the loop that lent it. */
+static size_t nts_owed_callbacks;
+
+void *nts_closure_lend_once(NtsHeader *closure) {
+  nts_owed_callbacks++;
+  return nts_closure_lend(closure);
+}
+
+void nts_closure_unlend_once(void *context) {
+  nts_owed_callbacks--;
+  nts_closure_unlend(context);
+}
+
+size_t nts_closures_owed(void) { return nts_owed_callbacks; }
+
 void (*nts_closure_notify(void))(void *) { return nts_closure_unlend; }
 
 /* The code units `trim` removes.

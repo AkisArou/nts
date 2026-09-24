@@ -2285,7 +2285,8 @@ void fire_all(void) {
 /// closure released at the end of `start` would be read after it was freed.
 /// Released after its one call instead: under reference counting, fifty more
 /// runs leave `nts_live_count` where it was, which a closure nobody gave back
-/// would not.
+/// would not. And counted while it is out -- a callback C still owes, which a
+/// `GLib` loop turns for: two after two starts, none after they fire.
 #[test]
 fn a_once_closure_is_released_after_its_one_call_on_both_backends() {
     let source = r"
@@ -2304,16 +2305,21 @@ export function run(): number {
     fire_all();
     return total;
 }
+export function started(): void { start(3); start(4); }
+export function fired(): void { fire_all(); }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let caller = counted_caller(
+            r#"printf("%.0f", run()); started(); printf(" owed=%zu", nts_closures_owed()); fired(); printf(" then=%zu", nts_closures_owed());"#,
+            "run();",
+        );
         let Some((text, outputs)) = run_on_both_backends("once", source, provider, ASYNC_LIBRARY, &caller) else { return; };
         assert!(text.contains("NtsBridgeOnce_"), "the bridge does not give the closure back");
-        assert!(text.contains("nts_closure_unlend(a1)"), "the once-bridge does not release its context");
+        assert!(text.contains("nts_closure_unlend_once(a1)"), "the once-bridge does not release its context");
         // 1 * 2 * 1 + 10 * 2 * 10, each exactly once: a second `fire_all`
         // finds nothing pending.
         for output in outputs {
-            assert_eq!(output, expect("202", provider), "{provider:?}");
+            assert_eq!(output, expect("202 owed=2 then=0", provider), "{provider:?}");
         }
     }
 }

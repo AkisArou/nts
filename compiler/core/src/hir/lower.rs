@@ -39929,8 +39929,11 @@ impl<'a> FuncBuilder<'a> {
                 ),
                 Role::ClosureData => {
                     let Some((closure, lifetime)) = lending else { continue };
+                    // Once: counted as a callback C still owes until the
+                    // bridge gives it back, which keeps a GLib loop turning.
+                    let helper = if lifetime == super::native::Lifetime::Once { "nts_closure_lend_once" } else { "nts_closure_lend" };
                     let context = self.runtime_call(
-                        "nts_closure_lend",
+                        helper,
                         vec![closure],
                         target.parameters[at].representation(),
                         origin.clone(),

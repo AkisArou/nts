@@ -1678,6 +1678,19 @@ NTS_ALLOCATES NtsString *nts_string_from_required_cstring(const char *c);
  * an object finalised -- and not when the call that registered it returns. */
 void *nts_closure_lend(NtsHeader *closure);
 void nts_closure_unlend(void *context);
+/* The same pair for a closure C calls once, later -- a GIO
+ * `GAsyncReadyCallback` -- counted while it is out: a callback C still owes.
+ * A loop with no other record of the operation behind it (GLib's, once
+ * module evaluation has returned) turns while any is owed, as a pending read
+ * keeps node's turning. The bridge gives it back after the one call.
+ *
+ * So a library that drops such a callback without calling it keeps the
+ * program running rather than letting it exit: node's rule for a handle
+ * never closed, and the thing to suspect when a GLib program will not end. */
+void *nts_closure_lend_once(NtsHeader *closure);
+void nts_closure_unlend_once(void *context);
+/* How many are out. */
+size_t nts_closures_owed(void);
 void (*nts_closure_notify(void))(void *);
 /* ECMAScript `Number::toString`, base 10. The shortest decimal that reads back
  * as the same double, laid out the way the specification lays it out -- which

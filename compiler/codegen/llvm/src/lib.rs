@@ -1111,7 +1111,7 @@ fn bridges(program: &Program, abi: NativeAbi) -> Result<String, Diagnostic> {
             // A once-bridge gives the closure back after its one call, before
             // leaving, as the C bridge does.
             let leave = if *once {
-                format!("  call void @nts_closure_unlend(ptr %a{last})\n  call void @nts_callback_leave()")
+                format!("  call void @nts_closure_unlend_once(ptr %a{last})\n  call void @nts_callback_leave()")
             } else {
                 "  call void @nts_callback_leave()".to_owned()
             };
@@ -1613,11 +1613,11 @@ fn externals(program: &Program) -> Vec<String> {
             lines.push(line);
         }
     }
-    // A once-bridge calls `nts_closure_unlend` from its own body, which no
-    // operation above names -- the bridges are emitted from the operations
+    // A once-bridge calls `nts_closure_unlend_once` from its own body, which
+    // no operation above names -- the bridges are emitted from the operations
     // that create them, not from calls.
     let once = program.funcs.iter().flat_map(|func| &func.values).any(|op| matches!(op.kind, OpKind::NativeBridge { once: true, .. }));
-    let unlend = "nts_closure_unlend".to_owned();
+    let unlend = "nts_closure_unlend_once".to_owned();
     if once && !seen.contains(&unlend)
         && let Some(line) = declaration(&unlend)
     {

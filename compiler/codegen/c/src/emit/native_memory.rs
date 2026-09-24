@@ -777,7 +777,7 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // says nothing.
         // A once-bridge gives the closure back after its one call: C passes
         // nothing that would, and will not call it again.
-        let unlend = if *once { format!(" nts_closure_unlend(a{last});") } else { String::new() };
+        let unlend = if *once { format!(" nts_closure_unlend_once(a{last});") } else { String::new() };
         let body = if matches!(&*signature.result, nts_core::hir::native::Type::Void) {
             format!("nts_callback_enter(); {call};{unlend} nts_callback_leave();")
         } else {

@@ -5,6 +5,7 @@
 
 #include "nts_glib_host.h"
 
+#include "nts_runtime.h"
 #include "nts_uv_host.h"
 
 #include <glib.h>
@@ -83,6 +84,14 @@ char *nts_gerror_take_message(struct _GError *error) {
   memcpy(message, text, length + 1);
   g_error_free(reported);
   return message;
+}
+
+void nts_glib_host_run(void) {
+  /* libuv's own answer to "anything alive?", which the source's prepare
+   * already asks: -1 is nothing. */
+  while (nts_uv_host_backend_timeout() >= 0 || nts_closures_owed() > 0) {
+    g_main_context_iteration(NULL, TRUE);
+  }
 }
 
 void nts_glib_host_detach(void) {

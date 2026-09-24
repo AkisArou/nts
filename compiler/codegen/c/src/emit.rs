@@ -147,6 +147,17 @@ impl LoopHost {
             Self::Win32 => Some("nts_win_host"),
         }
     }
+
+    /// What turns the loop once module evaluation returns. `GLib`'s context,
+    /// where it hosts: a GIO operation started without an application's loop
+    /// is in flight there, and libuv's loop alone would end the program
+    /// before its callback.
+    const fn run(self) -> &'static str {
+        match self {
+            Self::Glib => "nts_glib_host_run()",
+            Self::Libuv | Self::CoreFoundation | Self::Win32 => "nts_uv_host_run()",
+        }
+    }
 }
 
 
@@ -308,6 +319,7 @@ pub struct MainShape {
 #[must_use]
 pub fn main_for(shape: MainShape) -> String {
     let MainShape { initializes, host, autorelease_pool } = shape;
+    let run = host.run();
     // The adapter attaches after libuv is installed and before module
     // evaluation, which is where a program starts the platform's loop, and
     // makes a callback returning to that loop a checkpoint. The flag must
@@ -362,7 +374,7 @@ pub fn main_for(shape: MainShape) -> String {
          {evaluate}\
          \x20   /* Until nothing is runnable, no timer is pending, and no\n\
          \x20    * foreign completion is in flight. */\n\
-         \x20   nts_uv_host_run();\n\
+         \x20   {run};\n\
          {detach}\
          \x20   /* Closes every handle and drops whatever is still queued: a\n\
          \x20    * task owns a reference, and the contract is that whoever\n\
@@ -1360,6 +1372,7 @@ fn emit_bodies<'a>(
 const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_callback_task", 0),
     ("nts_closure_lend", 0),
+    ("nts_closure_lend_once", 0),
     ("nts_concat_into", 0),
     ("nts_environment_install_platform", 0),
     ("nts_number_to_string_into", 0),
