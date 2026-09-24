@@ -466,7 +466,7 @@ fn count_ops(
         if let OpKind::FieldSet { value: stored, .. }
         | OpKind::ArraySet { value: stored, .. }
         | OpKind::GlobalSet { value: stored, .. } = &kind
-            && func.values[stored.0 as usize].ty.may_hold_a_reference()
+            && func.values[stored.0 as usize].ty.is_counted()
         {
             // Nothing to give back when the slot's reference has already
             // been taken out of it by a load above, and nothing to give back

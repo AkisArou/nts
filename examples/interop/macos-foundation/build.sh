@@ -1,16 +1,25 @@
 #!/bin/sh
-# Foundation from TypeScript: the program's Objective-C messages, run on a Mac
-# and compared with the same messages sent from hand-written C.
+# Foundation from TypeScript: the program's Objective-C messages and the
+# lifetime of every object it holds, run on a Mac and compared with the same
+# messages sent from hand-written C.
 #
 # The arms:
 #
 # - **Oracle:** `reference/foundation.c` is compiled against the same SDK and
-#   run on the same Mac. Both programs call Apple's Foundation, so the
-#   expectation is the library's answer, not a second implementation's.
-# - **Main:** the TypeScript program built for macos-13 x86_64 prints exactly
-#   what the oracle prints.
-# - **Control:** a changed expectation is rejected, so "identical" cannot come
-#   from a comparison that always succeeds.
+#   run on the same Mac. It releases each object exactly where ARC would. Both
+#   programs call Apple's Foundation, so the expectation is the library's
+#   answer, not a second implementation's.
+# - **Main:** the program built with `--rc` for macos-13 x86_64 prints exactly
+#   what the oracle prints, including the two lines that say an object died
+#   where its last TypeScript reference did (observed with zeroing weak
+#   references, not `retainCount`).
+# - **LLVM:** the same program from the LLVM backend, also under `--rc`.
+# - **Control:** the same program under NoGc (no provider flag) differs from
+#   the oracle in exactly those two lines. There the objects outlive their
+#   scope, so the lifetime lines can fail and the rest cannot.
+# - **Pool:** stderr is empty on every run. A +0 result autoreleased with no
+#   pool in place leaks and says so there, which no stdout comparison sees.
+# - **Comparison:** a changed expectation is rejected.
 # - **arm64:** built, linked against libobjc and Foundation, and inspected.
 #   Never run here: the lane's Mac is x86_64 (tooling/apple/vm.md).
 #
@@ -40,7 +49,7 @@ fi
 
 mkdir -p "$out"
 log="$out/build.log"
-NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
+NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" --rc >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
 if grep -q "refused" "$log"; then
   cat "$log" >&2
@@ -78,12 +87,34 @@ case $status in
   *) echo "macos-foundation: the C oracle exited $status on the Mac" >&2; exit 1 ;;
 esac
 # An oracle that printed nothing would make every comparison below vacuous.
-[ "$(wc -l <"$out/expected.txt")" -eq 9 ] ||
-  { echo "macos-foundation: the oracle printed $(wc -l <"$out/expected.txt") lines, not 9" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 12 ] ||
+  { echo "macos-foundation: the oracle printed $(wc -l <"$out/expected.txt") lines, not 12" >&2; exit 1; }
 
-"$root/tooling/apple/run.sh" "$out/foundation/macos-13-x86_64/foundation" >"$out/actual.txt"
+# Runs a program on the Mac into `$2.txt`, and fails on anything on stderr.
+run_quietly() {
+  "$root/tooling/apple/run.sh" "$1" >"$2.txt" 2>"$2.err"
+  if [ -s "$2.err" ]; then
+    echo "macos-foundation: $1 wrote to stderr:" >&2
+    cat "$2.err" >&2
+    exit 1
+  fi
+}
+
+run_quietly "$out/foundation/macos-13-x86_64/foundation" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"
-echo "macos-x86_64: the TypeScript program's messages answer as the C oracle's, run on a Mac"
+echo "macos-x86_64: messages and lifetimes answer as the C oracle's, run on a Mac, stderr empty"
+
+# The control: one variable, the provider.
+nogc="$out/nogc"
+NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$nogc" >"$nogc.log" 2>&1 ||
+  { cat "$nogc.log" >&2; exit 1; }
+run_quietly "$nogc/foundation/macos-13-x86_64/foundation" "$out/nogc-actual"
+differs=$(diff "$out/expected.txt" "$out/nogc-actual.txt" | grep '^>' | tr '\n' '|')
+if [ "$differs" != "> scoped new alive|> scoped init alive|" ]; then
+  echo "macos-foundation: under NoGc the difference from the oracle was [$differs], not the two lifetime lines" >&2
+  exit 1
+fi
+echo "control: under NoGc the two scoped objects outlive their scope, and nothing else differs"
 
 # **The LLVM backend, same program, same oracle.** `nts build` drives the C
 # backend only, so this links `emit-llvm`'s IR with the C build's `main.c`,
@@ -91,7 +122,7 @@ echo "macos-x86_64: the TypeScript program's messages answer as the C oracle's, 
 llvm="$out/llvm"
 c_out="$out/foundation/macos-13-x86_64"
 mkdir -p "$llvm"
-"$nts" emit-llvm "$source/tsconfig.json" >"$llvm/program.ll" 2>"$llvm/emit.log" ||
+"$nts" emit-llvm "$source/tsconfig.json" --rc >"$llvm/program.ll" 2>"$llvm/emit.log" ||
   { cat "$llvm/emit.log" >&2; exit 1; }
 if grep -q "NTS[0-9]" "$llvm/emit.log"; then
   cat "$llvm/emit.log" >&2
@@ -102,13 +133,13 @@ set -- -target x86_64-apple-macos13 -isysroot "$sdk"
 clang "$@" -x ir -w -O2 -c "$llvm/program.ll" -o "$llvm/program.o"
 for unit in main nts_runtime nts_uv_host nts_unicode; do
   [ -f "$c_out/$unit.c" ] || continue
-  clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
+  clang "$@" -std=c11 -O2 -w -DNTS_PROVIDER_RC -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
 done
 clang "$@" -std=c11 -O2 -w -c "$source/native/report.c" -o "$llvm/report.o"
 clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework Foundation -o "$llvm/foundation"
-"$root/tooling/apple/run.sh" "$llvm/foundation" >"$llvm/actual.txt"
+run_quietly "$llvm/foundation" "$llvm/actual"
 diff -u "$out/expected.txt" "$llvm/actual.txt"
-echo "macos-x86_64 (LLVM): the same, from the LLVM backend"
+echo "macos-x86_64 (LLVM): the same, from the LLVM backend under --rc"
 
 sed 's/^count 2$/count 3/' "$out/expected.txt" >"$out/control.txt"
 if diff -q "$out/control.txt" "$out/actual.txt" >/dev/null; then

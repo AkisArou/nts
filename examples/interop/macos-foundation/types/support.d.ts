@@ -1,13 +1,15 @@
-// Hand-written. The fixture's output line, and the autorelease pool the
-// program pushes around its sends: `objc_autoreleasePoolPush`/`Pop` are C
-// functions libobjc exports, declared in no public header.
+// Hand-written. The fixture's output line, and a zeroing weak reference to
+// watch an object end: `weak_alive` answers false once the object has been
+// deallocated, which is what "the compiler released it" means, observed from
+// outside. Not `retainCount`, which Apple documents as meaningless.
 /**
  * @ntsHeader "report.h"
  */
 declare module "c:report" {
-  import type { Opaque } from "c:types";
-  export type Pool = Opaque<"nts_pool">;
+  import type { c_int } from "c:types";
+  import type { NSObject } from "objc:Foundation";
   export function report(line: string): void;
-  export function objc_autoreleasePoolPush(): Pool;
-  export function objc_autoreleasePoolPop(pool: Pool): void;
+  /** Starts watching `object`, and answers the watch's number. */
+  export function weak_watch(object: NSObject): c_int;
+  export function weak_alive(watch: c_int): boolean;
 }

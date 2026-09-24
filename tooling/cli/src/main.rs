@@ -2421,11 +2421,11 @@ fn write_standalone(
         )?;
     }
     let main_path = out.join("main.c");
-    let main = if glib {
-        nts_codegen_c::standalone_main_in_glib(initializes)
-    } else {
-        nts_codegen_c::standalone_main(initializes)
-    };
+    let main = nts_codegen_c::main_for(nts_codegen_c::MainShape {
+        initializes,
+        glib,
+        autorelease_pool: program.objc,
+    });
     std::fs::write(&main_path, main).with_context(|| format!("writing {main_path}"))?;
     // Named here for the reason the library path names it: it is the only
     // output whose value depends on a consumer choosing to include it, and an

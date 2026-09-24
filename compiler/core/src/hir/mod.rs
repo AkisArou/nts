@@ -372,6 +372,30 @@ impl HirType {
         matches!(self, Self::Managed(_) | Self::Erased)
     }
 
+    /// The functions a value of this type is retained and released with, when
+    /// it is a handle into an object system the program counts: an
+    /// Objective-C object's `objc_retain`/`objc_release`.
+    ///
+    /// Not part of [`Self::may_hold_a_reference`], whose question is the
+    /// collector's. A foreign object is never traced, never in a descriptor's
+    /// offsets, and never in a global. Only the reference-counting pass asks
+    /// this, through [`Self::is_counted`], and only the backends ask it for
+    /// the names.
+    #[must_use]
+    pub fn counting(&self) -> Option<native::Counting> {
+        match self {
+            Self::NativePointer(pointee) => pointee.counting(),
+            _ => None,
+        }
+    }
+
+    /// Whether the reference-counting pass tracks a value of this type: one
+    /// the collector sees, or a counted foreign handle.
+    #[must_use]
+    pub fn is_counted(&self) -> bool {
+        self.may_hold_a_reference() || self.counting().is_some()
+    }
+
     /// Whether a slot of this type holds a *pointer* a collector can follow.
     ///
     /// [`Self::may_hold_a_reference`] is the wider question, and the two are

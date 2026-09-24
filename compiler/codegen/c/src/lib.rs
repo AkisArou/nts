@@ -35,6 +35,8 @@ pub use emit::{
     UV_HOST_HEADER, UV_HOST_HEADER_NAME, UV_HOST_SOURCE, UV_HOST_SOURCE_NAME, Support, c_global, c_identifier, c_member, emit,
     GLIB_HOST_HEADER, GLIB_HOST_HEADER_NAME, GLIB_HOST_SOURCE, GLIB_HOST_SOURCE_NAME,
     support_files,
+    MainShape,
+    main_for,
     standalone_main,
     standalone_main_in_glib,
     leaves_the_program_inconsistent,

@@ -39260,6 +39260,8 @@ impl<'a> FuncBuilder<'a> {
             roles: vec![super::native::Role::Plain],
             returns_string: None,
             send: None,
+            returns_owned: false,
+            consumes: Vec::new(),
         });
         let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
         let message = self.push(
@@ -39286,6 +39288,8 @@ impl<'a> FuncBuilder<'a> {
             roles: vec![super::native::Role::Plain],
             returns_string: None,
             send: None,
+            returns_owned: false,
+            consumes: Vec::new(),
         });
         self.push(OpKind::Call { callee: Callee::Native(release), args: vec![message], frame: None }, HirType::Void, origin);
         self.throw_provided_error_text(id, "Error", text)?;
@@ -39439,6 +39443,8 @@ impl<'a> FuncBuilder<'a> {
                 roles: vec![super::native::Role::Plain],
                 returns_string: None,
                 send: None,
+                returns_owned: false,
+                consumes: Vec::new(),
             };
             self.push(
                 OpKind::Call { callee: Callee::Native(std::sync::Arc::new(release)), args: vec![pointer], frame: None },
@@ -39846,7 +39852,32 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decl) = declaration
             && let Some(selector) = self.node(decl).native.as_ref().and_then(|n| n.selector.clone())
         {
-            native.send = Some(self.objc_send(call, decl, &native, selector)?);
+            let send = self.objc_send(call, decl, &native, selector)?;
+            // A family is a claim about the returned *object*, so it applies
+            // only where the result is a pointer, as in clang: a `newValue`
+            // returning a number owns nothing.
+            let pointer = match &native.result {
+                super::native::Type::Pointer(pointee) => Some(pointee),
+                _ => None,
+            };
+            native.returns_owned =
+                pointer.is_some() && super::native::Send::returns_owned(&send.selector);
+            // An object handed over (+1) that the program does not count is
+            // an object nobody will release. The binding has to say what it
+            // is, which is `ObjcClass`, not `Class`.
+            if native.returns_owned && pointer.is_some_and(|pointee| pointee.counting().is_none()) {
+                return Err(self.unsupported(
+                    call,
+                    &format!(
+                        "`{}` hands back an object the caller owns, as a handle the program does not count; declare its class with `ObjcClass` from \"objc:types\", not `Class`",
+                        send.selector
+                    ),
+                ));
+            }
+            if send.class.is_none() && super::native::Send::consumes_receiver(&send.selector) {
+                native.consumes = vec![0];
+            }
+            native.send = Some(send);
         }
         if let Some(free) = declaration
             .and_then(|decl| self.node(decl).native.as_ref())
@@ -39979,6 +40010,18 @@ impl<'a> FuncBuilder<'a> {
         }
         if let Some(bad) = frameworks.iter().find(|name| !super::native::is_c_identifier(name)) {
             return Err(self.unsupported(call, &format!("@ntsFramework names frameworks by their names, as in `@ntsFramework Foundation`, and `{bad}` is not one")));
+        }
+        // An object the program counts is ARC's to retain and release. A
+        // binding that still declares `release` (as A1a's had to) would
+        // release behind the count's back: a use-after-free in a program that
+        // compiled the day before.
+        let counted_receiver = method
+            && matches!(&native.parameters[0], super::native::Type::Pointer(pointee) if pointee.counting().is_some());
+        if counted_receiver && super::native::ARC_OWNED_SELECTORS.contains(&selector.as_str()) {
+            return Err(self.unsupported(
+                call,
+                &format!("`{selector}` sent to an Objective-C object the program counts, which ARC reserves: the compiler retains and releases it"),
+            ));
         }
         Ok(super::native::Send { selector, class, frameworks })
     }

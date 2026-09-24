@@ -180,7 +180,7 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
 /// was never emitted is a link error.
 #[must_use]
 pub fn standalone_main(initializes: bool) -> String {
-    main_with(initializes, false)
+    main_for(MainShape { initializes, ..MainShape::default() })
 }
 
 /// [`standalone_main`] for a program that runs `GLib`'s main loop itself --
@@ -195,10 +195,33 @@ pub fn standalone_main(initializes: bool) -> String {
 /// evaluation, because the flag must never change after it starts.
 #[must_use]
 pub fn standalone_main_in_glib(initializes: bool) -> String {
-    main_with(initializes, true)
+    main_for(MainShape { initializes, glib: true, ..MainShape::default() })
 }
 
-fn main_with(initializes: bool, glib: bool) -> String {
+/// What a standalone program's `main` has to do besides run the loop.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MainShape {
+    /// The program has top-level code, so `module__init` exists and runs.
+    pub initializes: bool,
+    /// `GLib`'s main loop drives the program: see [`standalone_main_in_glib`].
+    pub glib: bool,
+    /// The program sends Objective-C messages, so an autorelease pool is in
+    /// place for the whole run.
+    ///
+    /// A message returning an object it does not hand over (+0) autoreleases
+    /// it. With no pool in place that object leaks, and the runtime says so on
+    /// stderr (`autoreleased with no pool in place - just leaking`). One pool
+    /// around the program makes every such object live until exit. Draining
+    /// once per host task is the run-loop host's job, which a Cocoa
+    /// application gets from `NSApplication` and a command-line one gets when
+    /// the CF host lands.
+    pub autorelease_pool: bool,
+}
+
+/// The `main` a standalone program is linked with.
+#[must_use]
+pub fn main_for(shape: MainShape) -> String {
+    let MainShape { initializes, glib, autorelease_pool } = shape;
     let (include, attach, detach) = if glib {
         (
             "#include \"nts_glib_host.h\"\n",
@@ -212,6 +235,17 @@ fn main_with(initializes: bool, glib: bool) -> String {
         "/* Emitted only when the program has top-level code to evaluate. */\nvoid module__init(void);\n\n"
     } else {
         ""
+    };
+    // Declared rather than included: libobjc exports these and no public
+    // header declares them. They are the calls clang's `@autoreleasepool` makes.
+    let (pool_declare, push, pop) = if autorelease_pool {
+        (
+            "void *objc_autoreleasePoolPush(void);\nvoid objc_autoreleasePoolPop(void *pool);\n\n",
+            "    void *nts_autorelease_pool = objc_autoreleasePoolPush();\n",
+            "    objc_autoreleasePoolPop(nts_autorelease_pool);\n",
+        )
+    } else {
+        ("", "", "")
     };
     let evaluate = if initializes {
         "    module__init();\n    /* Module evaluation is itself a job, so what it queued is drained\n     * here rather than at the first thing the loop runs. */\n    nts_enter();\n    nts_leave();\n"
@@ -231,7 +265,9 @@ fn main_with(initializes: bool, glib: bool) -> String {
          {include}\
          \n\
          {declare}\
+         {pool_declare}\
          int main(void) {{\n\
+         {push}\
          \x20   nts_uv_host_install(uv_default_loop());\n\
          {attach}\
          {evaluate}\
@@ -243,6 +279,7 @@ fn main_with(initializes: bool, glib: bool) -> String {
          \x20    * task owns a reference, and the contract is that whoever\n\
          \x20    * holds it either runs it or gives it back. */\n\
          \x20   nts_uv_host_shutdown();\n\
+         {pop}\
          \x20   return 0;\n\
          }}\n"
     )
@@ -657,6 +694,13 @@ pub fn emit(program: &Program) -> Emitted {
     writer.append(object_types);
     native_memory::helpers(&mut writer, &origin, program);
     objc::declarations(&mut writer, &origin, program);
+    // A foreign object system's retain and release, declared with the shape
+    // every such pair has (the object in, and for retain, the object back),
+    // for exactly the pairs this program calls.
+    for counting in nts_codegen_common::counting::foreign(program) {
+        writer.line(&origin, format!("extern void *{}(void *object);", counting.retain));
+        writer.line(&origin, format!("extern void {}(void *object);", counting.release));
+    }
 
     // Forward declarations, so a call does not depend on definition order — and
     // only for functions that actually have a definition. Before the
@@ -4601,17 +4645,20 @@ fn emit_op(
         // release it would for a reference and lets the tag decide -- which is
         // exactly the branch that specializing a site by its reaching
         // representations would remove.
-        OpKind::Retain(object) if func.value(*object).ty == HirType::Erased => {
-            format!("nts_value_retain({});", value_name(*object))
-        }
-        OpKind::Release(object) if func.value(*object).ty == HirType::Erased => {
-            format!("nts_value_release({});", value_name(*object))
-        }
-        OpKind::Retain(object) => {
-            format!("nts_retain((NtsHeader *){});", value_name(*object))
-        }
-        OpKind::Release(object) => {
-            format!("nts_release((NtsHeader *){});", value_name(*object))
+        OpKind::Retain(object) | OpKind::Release(object) => {
+            use nts_codegen_common::counting::{Counter, counter};
+            let retain = matches!(op.kind, OpKind::Retain(_));
+            let operand = value_name(*object);
+            match counter(&func.value(*object).ty)
+                .map_err(|why| Diagnostic::error("NTS2007", why, op.origin.location))?
+            {
+                Counter::Runtime if retain => format!("nts_retain((NtsHeader *){operand});"),
+                Counter::Runtime => format!("nts_release((NtsHeader *){operand});"),
+                Counter::Tagged if retain => format!("nts_value_retain({operand});"),
+                Counter::Tagged => format!("nts_value_release({operand});"),
+                Counter::Foreign(counting) if retain => format!("{}((void *){operand});", counting.retain),
+                Counter::Foreign(counting) => format!("{}((void *){operand});", counting.release),
+            }
         }
         OpKind::Convert(operand) => {
             // A C cast. Between an integer and a double this is one instruction,

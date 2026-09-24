@@ -3,6 +3,7 @@
   "include": [
     "src",
     "types",
-    "../../../runtime/native/libc.d.ts"
+    "../../../runtime/native/libc.d.ts",
+    "../../../runtime/objc/objc.d.ts"
   ]
 }

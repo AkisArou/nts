@@ -82,6 +82,10 @@ pub fn emit(program: &Program) -> Emitted {
     }
     text.push_str(&native_memory::helpers(program));
     text.push_str(&objc::module(program));
+    for counting in nts_codegen_common::counting::foreign(program) {
+        let _ = writeln!(text, "declare ptr @{}(ptr)", counting.retain);
+        let _ = writeln!(text, "declare void @{}(ptr)", counting.release);
+    }
     // What the runtime offers this backend, declared up front.
     //
     // `nts_to_int32` is `static inline` in the C header, which is right for C
@@ -2408,8 +2412,17 @@ fn counting_or_global(
                 name(*object)
             )
         }
-        OpKind::Retain(object) => format!("call void @nts_retain(ptr {})", name(*object)),
-        OpKind::Release(object) => format!("call void @nts_release(ptr {})", name(*object)),
+        OpKind::Retain(object) | OpKind::Release(object) => {
+            use nts_codegen_common::counting::{Counter, counter};
+            let retain = matches!(op.kind, OpKind::Retain(_));
+            let operand = name(*object);
+            match counter(&func.values[object.0 as usize].ty).map_err(|why| refuse(func, why))? {
+                Counter::Foreign(counting) if retain => format!("call ptr @{}(ptr {operand})", counting.retain),
+                Counter::Foreign(counting) => format!("call void @{}(ptr {operand})", counting.release),
+                _ if retain => format!("call void @nts_retain(ptr {operand})"),
+                _ => format!("call void @nts_release(ptr {operand})"),
+            }
+        }
         OpKind::GlobalGet(global) => {
             let ty = ty_of(&op.ty, func)?;
             format!(

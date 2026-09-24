@@ -272,11 +272,18 @@ fn handing_over(
                             .collect()
                     })
                     .unwrap_or_default(),
+                // A foreign function says which of its parameters it takes over
+                // (`init` consumes its receiver), and only for counted handles
+                // does the count here have anything to hand.
+                super::Callee::Native(target) => target
+                    .consumes
+                    .iter()
+                    .filter_map(|slot| args.get(*slot).copied())
+                    .filter(|arg| func.values[arg.0 as usize].ty.counting().is_some())
+                    .collect(),
                 // Which body a dispatch reaches is decided by a receiver this
                 // cannot see, and they need not agree about what they keep.
-                super::Callee::Virtual { .. }
-                | super::Callee::Closure { .. }
-                | super::Callee::Native(_) => Vec::new(),
+                super::Callee::Virtual { .. } | super::Callee::Closure { .. } => Vec::new(),
             };
             if !taken.is_empty() {
                 over.insert(*value, taken);
@@ -374,6 +381,15 @@ fn classify(
                 } else {
                     Ownership::Copied
                 }
+            } else if let OpKind::Call { callee: super::Callee::Native(target), .. } = kind
+                && func.values[value.0 as usize].ty.counting().is_some()
+            {
+                // A counted handle a foreign function returns is +1 only when
+                // the declaration says so (ARC's `alloc`/`new`/`copy`/
+                // `mutableCopy`/`init`). Otherwise it is borrowed from the
+                // callee, which for Objective-C means from the autorelease
+                // pool, and keeping it takes a reference of our own.
+                if target.returns_owned { Ownership::Produced } else { Ownership::Copied }
             } else if produces_owned(kind) {
                 Ownership::Produced
             } else if (is_load(kind) || repackages(kind))
@@ -1565,7 +1581,7 @@ fn counted_from(
     seen: &mut rustc_hash::FxHashSet<ValueId>,
 ) -> bool {
     let op = &func.values[value.0 as usize];
-    if !op.ty.may_hold_a_reference() {
+    if !op.ty.is_counted() {
         return false;
     }
     match op.kind {
@@ -2942,7 +2958,9 @@ pub(super) fn reference_fields(func: &Func, layouts: &[Layout], value: ValueId) 
         .fields
         .iter()
         .enumerate()
-        .filter(|(_, field)| field.ty.may_hold_a_reference())
+        // A counted handle too: a frame object that ends gives up the objects
+        // its fields hold, whichever system counts them.
+        .filter(|(_, field)| field.ty.is_counted())
         .filter_map(|(index, _)| u32::try_from(index).ok())
         .collect()
 }

@@ -47,7 +47,14 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     let mut tags: Vec<String> =
         elements.iter().map_while(|element| text(snapshot, *element).map(str::to_owned)).collect();
     let tag = tags.pop()?;
-    Some(Pointee::Opaque(super::Handle { tag, ancestors: tags }))
+    // `ObjcClass<Tag, Parent>` is `Class<Tag, Parent>` with this brand beside
+    // it: the same chain, an object the program counts.
+    let family = if marker(snapshot, ty, "___objc").is_some() {
+        super::Family::Objc
+    } else {
+        super::Family::C
+    };
+    Some(Pointee::Opaque(super::Handle { tag, ancestors: tags, family }))
 }
 
 /// A `Struct<...>` describes native storage; constructing its phantom marker as a

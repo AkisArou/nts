@@ -60,6 +60,19 @@ pub struct Function {
     /// backend links against. The call is `objc_msgSend` cast to exactly this
     /// function's type, with the receiver and the selector first.
     pub send: Option<Send>,
+    /// Whether the result is a reference the caller owns (+1), where the
+    /// result is a counted handle. Otherwise it is borrowed (+0), and a caller
+    /// that keeps it takes a reference of its own.
+    ///
+    /// Read by the ownership pass, which is all it needs to know: an
+    /// Objective-C binding sets it from ARC's method families (`alloc`,
+    /// `new`, `copy`, `mutableCopy`, `init`), and a `GObject` one would set it
+    /// from GIR's `transfer-ownership="full"`.
+    pub returns_owned: bool,
+    /// The C parameters whose reference the callee takes over, so the caller
+    /// hands the one it holds rather than releasing it after the call. `init`
+    /// consumes its receiver.
+    pub consumes: Vec<usize>,
 }
 
 /// An Objective-C message: `[receiver selector:arguments]`.
@@ -84,7 +97,40 @@ pub struct Send {
     pub frameworks: Vec<String>,
 }
 
+/// The selectors ARC reserves to itself. On an object the program counts,
+/// sending one would release (or retain, or free) behind the count's back.
+pub const ARC_OWNED_SELECTORS: [&str; 5] = ["retain", "release", "autorelease", "dealloc", "retainCount"];
+
 impl Send {
+    /// Whether the selector is in `family` by ARC's rule (clang's
+    /// `ObjCMethodFamily`): its first keyword, past leading underscores, is the
+    /// family's name, or starts with it and continues with anything but a
+    /// lowercase letter. So `copy` and `copyWithZone:` are in `copy`, and
+    /// `copyright` is not.
+    #[must_use]
+    pub fn in_family(selector: &str, family: &str) -> bool {
+        let first = selector.split(':').next().unwrap_or("").trim_start_matches('_');
+        first
+            .strip_prefix(family)
+            .is_some_and(|rest| !rest.starts_with(|c: char| c.is_ascii_lowercase()))
+    }
+
+    /// Whether the message hands back an object the caller owns (+1): ARC's
+    /// `alloc`, `new`, `copy`, `mutableCopy` and `init` families.
+    #[must_use]
+    pub fn returns_owned(selector: &str) -> bool {
+        ["alloc", "new", "copy", "mutableCopy", "init"]
+            .iter()
+            .any(|family| Self::in_family(selector, family))
+    }
+
+    /// Whether the message consumes its receiver: the `init` family, whose
+    /// method may free the object it was sent to and return another.
+    #[must_use]
+    pub fn consumes_receiver(selector: &str) -> bool {
+        Self::in_family(selector, "init")
+    }
+
     /// The arguments a selector takes: one per colon. `length` takes none,
     /// `initWithUTF8String:` one, and `setObject:forKey:` two.
     #[must_use]
@@ -520,14 +566,70 @@ pub enum Pointee {
 pub struct Handle {
     pub tag: String,
     pub ancestors: Vec<String>,
+    /// Whose object this is, which decides whether the program counts it.
+    pub family: Family,
+}
+
+/// The object system a handle belongs to.
+///
+/// A plain enum on purpose, where a flag would do for two members. Each object
+/// system with its own reference count is one more arm, whose answer is a pair
+/// of functions in [`Family::counting`]. `GObject`'s `g_object_ref`/`unref` is
+/// the next.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Family {
+    /// A C pointer the program never counts: its library's own functions
+    /// create and destroy it, and the binding calls them by hand.
+    #[default]
+    C,
+    /// An Objective-C object: `ObjcClass<Tag, Parent>`, retained and released
+    /// with the ARC entry points under the reference-counting provider.
+    Objc,
+}
+
+/// The two functions a counted handle is retained and released with. Both
+/// take the object; `retain` hands it back, as `objc_retain` and
+/// `g_object_ref` do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Counting {
+    pub retain: &'static str,
+    pub release: &'static str,
+}
+
+impl Family {
+    /// How this family's objects are counted, or `None` when the program does
+    /// not count them. The one place a family's functions are named: the
+    /// ownership pass asks it whether to count, and each backend asks it
+    /// what to call.
+    #[must_use]
+    pub const fn counting(self) -> Option<Counting> {
+        match self {
+            Self::C => None,
+            Self::Objc => Some(Counting { retain: "objc_retain", release: "objc_release" }),
+        }
+    }
+}
+
+impl Pointee {
+    /// How a handle to this is counted: its family's answer, through a
+    /// `const` view as well, since `Const<NSString>` is the same object.
+    #[must_use]
+    pub fn counting(&self) -> Option<Counting> {
+        match self {
+            Self::Opaque(handle) => handle.family.counting(),
+            Self::Const(inner) => inner.counting(),
+            _ => None,
+        }
+    }
 }
 
 impl Handle {
     /// Whether a pointer to this may be passed where one to `to` is wanted:
-    /// `to`'s whole chain is a strict prefix of this one's.
+    /// `to`'s whole chain is a strict prefix of this one's, in one family.
     #[must_use]
     pub fn upcasts_to(&self, to: &Self) -> bool {
-        self.ancestors.len() > to.ancestors.len()
+        self.family == to.family
+            && self.ancestors.len() > to.ancestors.len()
             && self.ancestors.starts_with(&to.ancestors)
             && self.ancestors[to.ancestors.len()] == to.tag
     }
@@ -535,7 +637,7 @@ impl Handle {
 
 impl From<String> for Handle {
     fn from(tag: String) -> Self {
-        Self { tag, ancestors: Vec::new() }
+        Self { tag, ancestors: Vec::new(), family: Family::C }
     }
 }
 
@@ -1150,6 +1252,8 @@ impl Function {
                 .map(|nullable| ReturnedString { nullable, free: None, array: true })
                 .or(returns_string),
             send: None,
+            returns_owned: false,
+            consumes: Vec::new(),
         })
     }
 }
@@ -1938,6 +2042,7 @@ mod handles {
         Pointee::Opaque(Handle {
             tag: (*tag).to_owned(),
             ancestors: ancestors.iter().map(|&a| a.to_owned()).collect(),
+            family: super::Family::C,
         })
     }
 

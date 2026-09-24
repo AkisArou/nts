@@ -7,34 +7,29 @@
 // methods, and each method names its selector and takes its instance as
 // `this`. A class method is a function that names its class.
 //
-// Ownership is manual in this version: `alloc`/`new`/`copy` return an object
-// the caller releases, and everything else is borrowed from the autorelease
-// pool the program pushes. Managed handles are A1b.
+// Every class is an `ObjcClass`, so the compiler counts its objects: under the
+// reference-counting provider each is released where its last TypeScript
+// reference dies. Nothing here declares `retain` or `release`, which ARC
+// reserves (a call to one is refused).
 /**
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { Class, Opaque, c_ulong } from "c:types";
+  import type { Opaque, c_ulong } from "c:types";
+  import type { ObjcClass } from "objc:types";
 
-  /** The class object `+class` answers, which `isKindOfClass:` takes. */
-  export type ObjcClass = Opaque<"objc_class">;
+  /** The class object `+class` answers, which `isKindOfClass:` takes. Not an
+   * object the program counts: a class lives as long as the process. */
+  export type ClassObject = Opaque<"objc_class">;
 
   export interface NSObjectOwnMethods {
     /**
-     * @ntsSelector retain
-     */
-    retain(this: NSObject): NSObject;
-    /**
-     * @ntsSelector release
-     */
-    release(this: NSObject): void;
-    /**
      * @ntsSelector isKindOfClass:
      */
-    isKindOfClass(this: NSObject, cls: ObjcClass): boolean;
+    isKindOfClass(this: NSObject, cls: ClassObject): boolean;
   }
   export type NSObjectMethods = NSObjectOwnMethods;
-  export type NSObject = Class<"NSObject"> & NSObjectMethods;
+  export type NSObject = ObjcClass<"NSObject"> & NSObjectMethods;
 
   export interface NSStringOwnMethods {
     /**
@@ -59,7 +54,7 @@ declare module "objc:Foundation" {
     isEqualToString(this: NSString, other: NSString): boolean;
   }
   export type NSStringMethods = NSStringOwnMethods & NSObjectMethods;
-  export type NSString = Class<"NSString", NSObject> & NSStringMethods;
+  export type NSString = ObjcClass<"NSString", NSObject> & NSStringMethods;
 
   export interface NSMutableArrayOwnMethods {
     /**
@@ -76,8 +71,13 @@ declare module "objc:Foundation" {
     objectAtIndex(this: NSMutableArray, index: c_ulong): NSObject;
   }
   export type NSMutableArrayMethods = NSMutableArrayOwnMethods & NSObjectMethods;
-  export type NSMutableArray = Class<"NSMutableArray", NSObject> & NSMutableArrayMethods;
+  export type NSMutableArray = ObjcClass<"NSMutableArray", NSObject> & NSMutableArrayMethods;
 
+  /**
+   * @ntsSelector new
+   * @ntsClass NSObject
+   */
+  export function newObject(): NSObject;
   /**
    * @ntsSelector alloc
    * @ntsClass NSString
@@ -92,12 +92,12 @@ declare module "objc:Foundation" {
    * @ntsSelector class
    * @ntsClass NSString
    */
-  export function classNSString(): ObjcClass;
+  export function classNSString(): ClassObject;
   /**
    * @ntsSelector class
    * @ntsClass NSMutableArray
    */
-  export function classNSMutableArray(): ObjcClass;
+  export function classNSMutableArray(): ClassObject;
   /**
    * @ntsSelector arrayWithCapacity:
    * @ntsClass NSMutableArray

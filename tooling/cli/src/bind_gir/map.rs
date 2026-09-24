@@ -727,7 +727,7 @@ impl<'a> Mapper<'a> {
         let tag = self.facts.tags.get("GError").cloned()?;
         let local = self.name_in(namespace, "GError");
         self.binding.brands.insert("Ptr");
-        let handle = Pointee::Opaque(Handle { tag, ancestors: Vec::new() });
+        let handle = Pointee::Opaque(Handle::from(tag));
         Some(Mapped {
             ts: format!("Ptr<{local} | null> | null"),
             c: Type::Pointer(Pointee::Pointer(Box::new(handle))),
@@ -892,7 +892,7 @@ impl<'a> Mapper<'a> {
         let prefix = class.symbol_prefix.as_deref().ok_or(Reason::NoSymbol)?;
         let local = c_type.clone();
         self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "c_ulong"]);
-        let instance = Type::Pointer(Pointee::Opaque(Handle { tag, ancestors: Vec::new() }));
+        let instance = Type::Pointer(Pointee::Opaque(Handle::from(tag)));
         let mut ts_parameters = vec![format!("self: {local}")];
         let mut callback = vec![instance];
         for param in &signal.signature.parameters {
@@ -917,7 +917,7 @@ impl<'a> Mapper<'a> {
         // `GClosureNotify`: `void (*)(gpointer, GClosure *)`, which the header
         // declares exactly and the self-check compares.
         let closure_tag = self.facts.tags.get("GClosure").cloned().ok_or_else(|| Reason::NoTag("GClosure".to_owned()))?;
-        let closure = Type::Pointer(Pointee::Opaque(Handle { tag: closure_tag, ancestors: Vec::new() }));
+        let closure = Type::Pointer(Pointee::Opaque(Handle::from(closure_tag)));
         let notify = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context.clone(), closure], Type::Void)));
         let objects = self
             .repository
@@ -993,7 +993,7 @@ impl<'a> Mapper<'a> {
 
     /// A pointer to a class or record, `const` where C says so.
     fn handle(&mut self, local: String, tag: &str, constant: bool, nullable: bool) -> Mapped {
-        let pointee = Pointee::Opaque(Handle { tag: tag.to_owned(), ancestors: Vec::new() });
+        let pointee = Pointee::Opaque(Handle::from(tag));
         let (pointee, local) = if constant {
             self.binding.brands.insert("Const");
             (Pointee::Const(Box::new(pointee)), format!("Const<{local}>"))
