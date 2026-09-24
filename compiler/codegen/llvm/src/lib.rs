@@ -48,6 +48,7 @@ mod indirect;
 pub use indirect::SLOTS as WIN64_INDIRECT_SLOTS;
 pub mod signatures;
 pub mod signatures_win64;
+pub mod signatures_arm64;
 
 use std::fmt::Write as _;
 
@@ -426,14 +427,49 @@ const ERASED_TYPE: &str = "{ i32, i64 }";
 
 /// An erased value handed to a runtime helper as operand `at` of one call:
 /// its two scalars on System V, where clang splits sixteen bytes into two
-/// registers, and a pointer to its copy on Win64 (`indirect`).
+/// registers, a pointer to its copy on Win64 (`indirect`), and on arm64 the
+/// two words AAPCS64 passes a sixteen-byte struct in, `[2 x i64]` -- the tag
+/// in the low half of the first, the payload the second.
 fn erased_argument(platform: Platform, value: &str, out: &str, at: usize, lines: &mut Vec<String>) -> String {
     if indirect::applies(platform) {
         return indirect::argument(ERASED_TYPE, value, at, lines);
     }
+    if platform.arch == Arch::Aarch64 {
+        lines.push(format!("{out}.t{at} = extractvalue {ERASED_TYPE} {value}, 0"));
+        lines.push(format!("{out}.w{at} = zext i32 {out}.t{at} to i64"));
+        lines.push(format!("{out}.p{at} = extractvalue {ERASED_TYPE} {value}, 1"));
+        lines.push(format!("{out}.h{at} = insertvalue [2 x i64] undef, i64 {out}.w{at}, 0"));
+        lines.push(format!("{out}.a{at} = insertvalue [2 x i64] {out}.h{at}, i64 {out}.p{at}, 1"));
+        return format!("[2 x i64] {out}.a{at}");
+    }
     lines.push(format!("{out}.t{at} = extractvalue {ERASED_TYPE} {value}, 0"));
     lines.push(format!("{out}.p{at} = extractvalue {ERASED_TYPE} {value}, 1"));
     format!("i32 {out}.t{at}, i64 {out}.p{at}")
+}
+
+/// A runtime helper's call when the platform answers its sixteen-byte result
+/// other than as the value: Win64 through a hidden pointer or XMM0
+/// (`indirect`), arm64 as two words. `None` where the result is the value.
+fn wide_result(platform: Platform, ty: &HirType, out: &str, callable: &str, arguments: &[String]) -> Option<String> {
+    if indirect::applies(platform) && indirect::is_indirect(ty) {
+        return Some(indirect::call_returning(out, callable, arguments.to_vec(), ty));
+    }
+    (platform.arch == Arch::Aarch64 && *ty == HirType::Erased).then(|| two_word_result(out, callable, arguments))
+}
+
+/// A runtime helper's erased result on arm64: AAPCS64 answers sixteen bytes
+/// in two registers, `[2 x i64]`, the tag the low half of the first -- the
+/// inverse of `erased_argument`'s spelling.
+fn two_word_result(out: &str, callable: &str, arguments: &[String]) -> String {
+    [
+        format!("{out}.a = call [2 x i64] {callable}({})", arguments.join(", ")),
+        format!("{out}.w = extractvalue [2 x i64] {out}.a, 0"),
+        format!("{out}.t = trunc i64 {out}.w to i32"),
+        format!("{out}.p = extractvalue [2 x i64] {out}.a, 1"),
+        format!("{out}.h = insertvalue {ERASED_TYPE} undef, i32 {out}.t, 0"),
+        format!("{out} = insertvalue {ERASED_TYPE} {out}.h, i64 {out}.p, 1"),
+    ]
+    .join("\n  ")
 }
 
 /// The tags, which are `typeof`'s answers in `typeof`'s order.
@@ -1382,14 +1418,8 @@ fn instance_of(
     // System V takes the two scalars, extracted once for every class; Win64 a
     // copy, stored again before each call because the callee owns it.
     let win64 = indirect::applies(platform);
-    let mut lines = if win64 {
-        Vec::new()
-    } else {
-        vec![
-            format!("{out}.t = extractvalue {ERASED_TYPE} {subject}, 0"),
-            format!("{out}.p = extractvalue {ERASED_TYPE} {subject}, 1"),
-        ]
-    };
+    let mut lines = Vec::new();
+    let shared = if win64 { String::new() } else { erased_argument(platform, &subject, out, 0, &mut lines) };
     let mut answers: Vec<String> = Vec::new();
     for class in classes {
         let Some(layout) = program
@@ -1403,7 +1433,7 @@ fn instance_of(
         let argument = if win64 {
             indirect::argument(ERASED_TYPE, &subject, 0, &mut lines)
         } else {
-            format!("i32 {out}.t, i64 {out}.p")
+            shared.clone()
         };
         lines.push(format!(
             "{at} = call zeroext i1 @nts_is_class({argument}, ptr @nts_desc_{})",
@@ -3137,6 +3167,17 @@ fn runtime_arguments(
     before: &mut Vec<String>,
     platform: Platform,
 ) -> Result<Vec<String>, Diagnostic> {
+    if platform.arch == Arch::Aarch64 {
+        let mut rendered = Vec::new();
+        for (at, arg) in args.iter().enumerate() {
+            if func.values[arg.0 as usize].ty == HirType::Erased {
+                rendered.push(erased_argument(platform, &name(*arg), out, at, before));
+            } else {
+                rendered.extend(arguments(func, out, &[*arg], before)?);
+            }
+        }
+        return Ok(rendered);
+    }
     if !indirect::applies(platform) {
         return arguments(func, out, args, before);
     }
@@ -3291,8 +3332,8 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
             };
             // A runtime helper is called at its declared result (`declared_result`).
             let declared = if into_c { signatures::signature_on(&called, platform) } else { None };
-            if declared.is_some() && indirect::applies(platform) && indirect::is_indirect(&op.ty) {
-                before.push(indirect::call_returning(&out, &callable, rendered, &op.ty));
+            if let Some(call) = declared.and_then(|_| wide_result(platform, &op.ty, &out, &callable, &rendered)) {
+                before.push(call);
                 return Ok(before.join("\n  "));
             }
             let (attribute, call_returns) =
@@ -4135,21 +4176,11 @@ fn unary(
             // against a float. clang said "floating point constant invalid for
             // type", and three examples could not be built through this
             // backend.
-            HirType::Erased if indirect::applies(platform) => {
+            HirType::Erased => {
                 let mut lines = Vec::new();
-                let argument = indirect::argument(ERASED_TYPE, &name(operand), 0, &mut lines);
+                let argument = erased_argument(platform, &name(operand), out, 0, &mut lines);
                 lines.push(format!("{out} = call zeroext i1 @nts_value_truthy_fn({argument})"));
                 lines.join("\n  ")
-            }
-            HirType::Erased => {
-                let tag = format!("{out}.t");
-                let bits = format!("{out}.p");
-                format!(
-                    "{tag} = extractvalue {ERASED_TYPE} {0}, 0\n  \
-                     {bits} = extractvalue {ERASED_TYPE} {0}, 1\n  \
-                     {out} = call zeroext i1 @nts_value_truthy_fn(i32 {tag}, i64 {bits})",
-                    name(operand)
-                )
             }
             _ => format!("{out} = fcmp one {ty} {}, 0.0", name(operand)),
         },

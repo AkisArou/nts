@@ -116,3 +116,46 @@ fn every_runtime_call_agrees_with_its_declaration() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// arm64: an erased value crosses into the runtime as AAPCS64's `[2 x i64]`
+/// and comes back the same way, so the program that reaches each hand-spelled
+/// path emits whole and every call agrees with `signatures_arm64.rs`, under
+/// both providers. Only an exported function crossing one is refused, as on
+/// Win64.
+#[test]
+fn arm64_passes_an_erased_value_as_two_words() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("nts-runtime-abi-arm64-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/main.ts"), PROGRAM).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "target": "ESNext", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
+    )
+    .unwrap();
+    let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let prepared = hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).unwrap();
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let emitted = nts_codegen_llvm::emit(&prepared.program, arm64);
+        // `run` is exported and returns a string, and takes `unknown[]` -- an
+        // array, not an erased value -- so nothing here is refused.
+        assert!(emitted.diagnostics.is_empty(), "arm64 {provider:?}: {:?}", emitted.diagnostics);
+        for helper in ["@nts_map_set(", "@nts_value_truthy_fn(", "@nts_value_strict_eq(", "@nts_is_class("] {
+            assert!(emitted.text.contains(helper), "arm64 {provider:?}: the program does not call {helper}");
+        }
+        assert!(emitted.text.contains("[2 x i64]"), "arm64 {provider:?}: no erased value crossed as two words");
+        let Some(found) = lint(&emitted.text, &format!("arm64-{provider:?}")) else {
+            eprintln!("skipped the lint: no opt");
+            return;
+        };
+        assert!(found.is_empty(), "arm64 {provider:?}: calls that disagree with their declarations:\n{}", found.join("\n"));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

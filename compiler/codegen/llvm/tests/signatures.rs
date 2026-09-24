@@ -30,6 +30,7 @@
 use std::fmt::Write as _;
 
 use nts_codegen_llvm::signatures::{SIGNATURES, Signature};
+use nts_codegen_llvm::signatures_arm64::SIGNATURES_ARM64;
 use nts_codegen_llvm::signatures_win64::SIGNATURES_WIN64;
 
 /// A generated table: where it lives, and what clang is asked with.
@@ -50,6 +51,24 @@ const WIN64: Table = Table {
     open: "pub const SIGNATURES_WIN64: &[Signature] = &[\n",
     rows: SIGNATURES_WIN64,
 };
+
+const ARM64: Table = Table {
+    file: "compiler/codegen/llvm/src/signatures_arm64.rs",
+    open: "pub const SIGNATURES_ARM64: &[Signature] = &[\n",
+    rows: SIGNATURES_ARM64,
+};
+
+/// clang's flags for arm64 macOS: the target and the SDK the Apple lane
+/// builds with (`NTS_APPLE_SDK`, or where `tooling/apple/sync-sdk.sh` puts
+/// it). `None` without it.
+fn arm64_flags() -> Option<Vec<String>> {
+    let sdk = std::env::var_os("NTS_APPLE_SDK").map(std::path::PathBuf::from).or_else(|| {
+        std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".cache/nts/apple/MacOSX.sdk"))
+    })?;
+    sdk.join("usr/include").is_dir().then(|| {
+        vec!["--target=arm64-apple-macos13".to_owned(), "-isysroot".to_owned(), sdk.to_string_lossy().into_owned()]
+    })
+}
 
 /// clang's flags for `x86_64` Windows: the target and zig's mingw headers,
 /// as `nts build` compiles the runtime there. `None` without zig.
@@ -373,6 +392,16 @@ fn the_win64_table_still_matches_the_header() {
         return;
     };
     check(&WIN64, &flags);
+}
+
+/// The same for arm64. Skips without the macOS SDK, which the Apple lane syncs.
+#[test]
+fn the_arm64_table_still_matches_the_header() {
+    let Some(flags) = arm64_flags() else {
+        eprintln!("SKIP: no macOS SDK to ask clang with (tooling/apple/sync-sdk.sh)");
+        return;
+    };
+    check(&ARM64, &flags);
 }
 
 fn check(table: &Table, flags: &[String]) {

@@ -1,50 +1,25 @@
-//! Every runtime function's signature, as clang reports it.
+//! Every runtime function's signature on arm64 (AAPCS64), as clang reports it
+//! for `arm64-apple-macos13` against the macOS SDK the Apple lane builds with.
 //!
-//! # Why this is generated
+//! The same header as `signatures.rs`, and not the same declarations, measured
+//! by the Apple lane over all 353: AAPCS64 passes and returns an erased value
+//! (sixteen bytes) as `[2 x i64]` where System V splits it into `i32, i64`,
+//! passes a record larger than sixteen bytes (`NtsTask`) as a pointer to a
+//! copy where System V copies it onto the stack (`byval`), and widens nothing
+//! a function returns. 52 differ; `tests/signatures.rs` generates this table
+//! and checks it exactly as it does `signatures.rs`, and skips without the SDK.
 //!
-//! The first version of this backend read a helper's signature off the *call
-//! site* -- the argument types the lowering chose and the result type the
-//! operation carries. That is sound only where the two already agree, and they
-//! do not: `nts_tag_name` takes a `uint32_t` and the lowering hands it a
-//! double, because C converts implicitly at the call and the C backend never
-//! had to think about it. LLVM has no implicit conversion, so the double went
-//! into an SSE register and the callee read an integer one. `typeof v` answered
-//! "undefined" for a number.
-//!
-//! So the signatures come from clang, which is the only thing that knows them.
-//! `tests/signatures.rs` regenerates this from `nts_runtime.h` and fails if it
-//! has drifted, which is what makes a generated file safe to check in.
-//!
-//! # The attributes are the point
-//!
-//! `NTS_READS_ONLY` is `__attribute__((pure))` on twenty-nine declarations, and
-//! the header explains why it is not decoration: `text.indexOf("brown")` in a
-//! loop is loop-invariant, and a compiler may only hoist it if it knows the
-//! call has no side effects. C carries that fact and the *generated C* carries
-//! it too, because the header is included. An LLVM module includes nothing --
-//! so without these the second backend would be the only one that could not
-//! hoist a search out of a loop.
-//!
-//! Taken from clang rather than restated: `pure` is `nounwind willreturn
-//! memory(read)` and that mapping is clang's business, not a thing to look up
-//! in a manual and get subtly wrong.
+//! Until the backend passes an erased value as `[2 x i64]`, a function holding
+//! one is refused on arm64 rather than emitted with System V's split, which
+//! this table's declarations would make a call that disagrees with its callee.
 
-/// A runtime function: its name, its result, its parameters, and what the
-/// runtime promises about it.
-#[derive(Debug)]
-pub struct Signature {
-    pub name: &'static str,
-    pub returns: &'static str,
-    pub params: &'static [&'static str],
-    /// Function attributes, in clang's spelling. Only the semantic ones: the
-    /// target and stack-protector settings belong to whoever links, not to a
-    /// declaration.
-    pub attributes: &'static [&'static str],
-}
+use super::signatures::Signature;
 
 /// Sorted by name, so a lookup is a binary search and a diff is readable.
-pub const SIGNATURES: &[Signature] = &[
+pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "fmod", returns: "double", params: &["double", "double"], attributes: &["nounwind"] },
+    Signature { name: "llvm.fabs.f32", returns: "float", params: &["float"], attributes: &["nocallback", "nocreateundeforpoison", "nofree", "nosync", "nounwind", "speculatable", "willreturn", "memory(none)"] },
+    Signature { name: "llvm.fabs.f64", returns: "double", params: &["double"], attributes: &["nocallback", "nocreateundeforpoison", "nofree", "nosync", "nounwind", "speculatable", "willreturn", "memory(none)"] },
     Signature { name: "llvm.floor.f64", returns: "double", params: &["double"], attributes: &["nocallback", "nocreateundeforpoison", "nofree", "nosync", "nounwind", "speculatable", "willreturn", "memory(none)"] },
     Signature { name: "llvm.is.fpclass.f64", returns: "i1", params: &["double", "i32 immarg"], attributes: &["nocallback", "nocreateundeforpoison", "nofree", "nosync", "nounwind", "speculatable", "willreturn", "memory(none)"] },
     Signature { name: "llvm.memcpy.p0.p0.i64", returns: "void", params: &["ptr noalias writeonly captures(none)", "ptr noalias readonly captures(none)", "i64", "i1 immarg"], attributes: &["nocallback", "nofree", "nounwind", "willreturn", "memory(argmem: readwrite)"] },
@@ -54,12 +29,12 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_array_at", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_at_foreign", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_at_ref", returns: "ptr", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_array_at_value", returns: "{ i32, i64 }", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_array_at_value", returns: "[2 x i64]", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_concat", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_concat_foreign", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_concat_ref", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_concat_value", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
-    Signature { name: "nts_array_element", returns: "{ i32, i64 }", params: &["i32", "i64", "double"], attributes: &[] },
+    Signature { name: "nts_array_element", returns: "[2 x i64]", params: &["[2 x i64]", "double"], attributes: &[] },
     Signature { name: "nts_array_extend", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_extend_foreign", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_extend_ref", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
@@ -72,11 +47,11 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_array_includes", returns: "zeroext i1", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_includes_ref", returns: "zeroext i1", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_includes_str", returns: "zeroext i1", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_array_includes_str_value", returns: "zeroext i1", params: &["ptr", "i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_array_includes_str_value", returns: "zeroext i1", params: &["ptr", "[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_index_of", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_index_of_ref", returns: "double", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_index_of_str", returns: "double", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_array_index_of_str_value", returns: "double", params: &["ptr", "i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_array_index_of_str_value", returns: "double", params: &["ptr", "[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_join_num", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_join_str", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_keep_first", returns: "void", params: &["ptr", "double"], attributes: &[] },
@@ -86,7 +61,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_array_of_numbers", returns: "noalias nonnull ptr", params: &["double"], attributes: &[] },
     Signature { name: "nts_array_pop", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_pop_ref", returns: "ptr", params: &["ptr"], attributes: &[] },
-    Signature { name: "nts_array_pop_value", returns: "{ i32, i64 }", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_array_pop_value", returns: "[2 x i64]", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_push", returns: "double", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_push_ref", returns: "double", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_reverse", returns: "ptr", params: &["ptr"], attributes: &[] },
@@ -97,7 +72,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_array_set_length_value", returns: "void", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_shift", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_shift_ref", returns: "ptr", params: &["ptr"], attributes: &[] },
-    Signature { name: "nts_array_shift_value", returns: "{ i32, i64 }", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_array_shift_value", returns: "[2 x i64]", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_slice", returns: "ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_array_slice_foreign", returns: "ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_array_slice_ref", returns: "ptr", params: &["ptr", "double", "double"], attributes: &[] },
@@ -180,13 +155,13 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_decode_uri", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_delay", returns: "double", params: &["double"], attributes: &[] },
     Signature { name: "nts_encode_uri", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
-    Signature { name: "nts_enqueue_microtask", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
-    Signature { name: "nts_enqueue_tick", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
+    Signature { name: "nts_enqueue_microtask", returns: "void", params: &["ptr dead_on_return"], attributes: &[] },
+    Signature { name: "nts_enqueue_tick", returns: "void", params: &["ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_enter", returns: "void", params: &[], attributes: &[] },
     Signature { name: "nts_environment_create", returns: "ptr", params: &[], attributes: &[] },
     Signature { name: "nts_environment_current", returns: "ptr", params: &[], attributes: &[] },
     Signature { name: "nts_environment_destroy", returns: "void", params: &["ptr"], attributes: &[] },
-    Signature { name: "nts_environment_enter", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_environment_enter", returns: "i64", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_environment_has_platform", returns: "zeroext i1", params: &[], attributes: &[] },
     Signature { name: "nts_environment_install_platform", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_environment_leave", returns: "void", params: &["ptr"], attributes: &[] },
@@ -195,37 +170,37 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_host_install", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_in_callback", returns: "zeroext i1", params: &[], attributes: &[] },
     Signature { name: "nts_index_fn", returns: "i32", params: &["ptr", "double"], attributes: &[] },
-    Signature { name: "nts_is_array", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_is_buffer", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_is_class", returns: "zeroext i1", params: &["i32", "i64", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_is_data_view", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_is_date", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_array", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_buffer", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_class", returns: "zeroext i1", params: &["[2 x i64]", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_data_view", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_date", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_is_finite", returns: "zeroext i1", params: &["double"], attributes: &[] },
     Signature { name: "nts_is_integer", returns: "zeroext i1", params: &["double"], attributes: &[] },
-    Signature { name: "nts_is_map", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_map", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_is_owner_thread", returns: "zeroext i1", params: &[], attributes: &[] },
-    Signature { name: "nts_is_promise", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_promise", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_is_safe_integer", returns: "zeroext i1", params: &["double"], attributes: &[] },
-    Signature { name: "nts_is_set", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_is_view_kind", returns: "zeroext i1", params: &["i32", "i64", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_set", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_view_kind", returns: "zeroext i1", params: &["[2 x i64]", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_landing_detail", returns: "ptr", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_landing_pop", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_landing_push", returns: "void", params: &["ptr"], attributes: &[] },
-    Signature { name: "nts_landing_thrown", returns: "{ i32, i64 }", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_landing_thrown", returns: "[2 x i64]", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_leave", returns: "void", params: &[], attributes: &[] },
     Signature { name: "nts_live_bytes", returns: "i64", params: &[], attributes: &[] },
     Signature { name: "nts_live_count", returns: "i64", params: &[], attributes: &[] },
     Signature { name: "nts_map_clear", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_map_copy", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
-    Signature { name: "nts_map_delete", returns: "zeroext i1", params: &["ptr", "i32", "i64"], attributes: &[] },
-    Signature { name: "nts_map_get", returns: "{ i32, i64 }", params: &["ptr", "i32", "i64"], attributes: &[] },
-    Signature { name: "nts_map_has", returns: "zeroext i1", params: &["ptr", "i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_map_key_at", returns: "{ i32, i64 }", params: &["ptr", "double"], attributes: &[] },
+    Signature { name: "nts_map_delete", returns: "zeroext i1", params: &["ptr", "[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_map_get", returns: "[2 x i64]", params: &["ptr", "[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_map_has", returns: "zeroext i1", params: &["ptr", "[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_map_key_at", returns: "[2 x i64]", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_map_keys_str", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_map_new", returns: "noalias nonnull ptr", params: &["double"], attributes: &[] },
     Signature { name: "nts_map_next", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_map_set", returns: "ptr", params: &["ptr", "i32", "i64", "i32", "i64"], attributes: &[] },
-    Signature { name: "nts_map_value_at", returns: "{ i32, i64 }", params: &["ptr", "double"], attributes: &[] },
+    Signature { name: "nts_map_set", returns: "ptr", params: &["ptr", "[2 x i64]", "[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_map_value_at", returns: "[2 x i64]", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_math_acos", returns: "double", params: &["double"], attributes: &[] },
     Signature { name: "nts_math_asin", returns: "double", params: &["double"], attributes: &[] },
     Signature { name: "nts_math_atan", returns: "double", params: &["double"], attributes: &[] },
@@ -263,12 +238,12 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_parse_float", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_parse_int", returns: "double", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_permanent_count", returns: "i64", params: &[], attributes: &[] },
-    Signature { name: "nts_post_delayed", returns: "i64", params: &["ptr byval(%struct.NtsTask) align 8", "double", "i1 zeroext"], attributes: &[] },
-    Signature { name: "nts_post_from_any_thread", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
-    Signature { name: "nts_post_task", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
+    Signature { name: "nts_post_delayed", returns: "i64", params: &["ptr dead_on_return", "double", "i1 zeroext"], attributes: &[] },
+    Signature { name: "nts_post_from_any_thread", returns: "void", params: &["ptr dead_on_return"], attributes: &[] },
+    Signature { name: "nts_post_task", returns: "void", params: &["ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_presence_clear_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_presence_has_fn", returns: "zeroext i1", params: &["ptr", "i32"], attributes: &[] },
-    Signature { name: "nts_presence_has_value", returns: "zeroext i1", params: &["i32", "i64", "i32"], attributes: &[] },
+    Signature { name: "nts_presence_has_value", returns: "zeroext i1", params: &["[2 x i64]", "i32"], attributes: &[] },
     Signature { name: "nts_presence_init_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_presence_set_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_promise_adopt", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
@@ -277,7 +252,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_promise_fulfill_pointer", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_reference", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_tagged", returns: "void", params: &["ptr", "ptr", "i32"], attributes: &[] },
-    Signature { name: "nts_promise_fulfill_value", returns: "void", params: &["ptr", "i32", "i64"], attributes: &[] },
+    Signature { name: "nts_promise_fulfill_value", returns: "void", params: &["ptr", "[2 x i64]"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_void", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_is_rejected", returns: "zeroext i1", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_join", returns: "i32", params: &["ptr"], attributes: &[] },
@@ -285,22 +260,22 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_promise_number", returns: "double", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_pointer", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_race", returns: "ptr", params: &["ptr"], attributes: &[] },
-    Signature { name: "nts_promise_reason", returns: "{ i32, i64 }", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_promise_reason", returns: "[2 x i64]", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_promise_reference", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_reject", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
-    Signature { name: "nts_promise_reject_value", returns: "void", params: &["ptr", "i32", "i64"], attributes: &[] },
+    Signature { name: "nts_promise_reject_value", returns: "void", params: &["ptr", "[2 x i64]"], attributes: &[] },
     Signature { name: "nts_promise_reject_with", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_state", returns: "double", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_promise_subscribe", returns: "void", params: &["ptr", "ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
-    Signature { name: "nts_promise_value", returns: "{ i32, i64 }", params: &["ptr"], attributes: &[] },
-    Signature { name: "nts_raise", returns: "void", params: &["i32", "i64"], attributes: &[] },
-    Signature { name: "nts_raise_take", returns: "{ i32, i64 }", params: &[], attributes: &[] },
+    Signature { name: "nts_promise_subscribe", returns: "void", params: &["ptr", "ptr dead_on_return"], attributes: &[] },
+    Signature { name: "nts_promise_value", returns: "[2 x i64]", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_raise", returns: "void", params: &["[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_raise_take", returns: "[2 x i64]", params: &[], attributes: &[] },
     Signature { name: "nts_raising", returns: "i32", params: &[], attributes: &[] },
     Signature { name: "nts_register_holders", returns: "void", params: &["i32", "ptr"], attributes: &[] },
     Signature { name: "nts_release", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_retain", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_round_fn", returns: "double", params: &["double"], attributes: &[] },
-    Signature { name: "nts_set_add", returns: "ptr", params: &["ptr", "i32", "i64"], attributes: &[] },
+    Signature { name: "nts_set_add", returns: "ptr", params: &["ptr", "[2 x i64]"], attributes: &[] },
     Signature { name: "nts_set_new", returns: "noalias nonnull ptr", params: &["double"], attributes: &[] },
     Signature { name: "nts_set_timeout", returns: "double", params: &["ptr", "double", "double", "i1 zeroext"], attributes: &[] },
     Signature { name: "nts_slot_or_grow_fn", returns: "i32", params: &["ptr", "double"], attributes: &[] },
@@ -363,8 +338,8 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_symbol_to_string", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_tag_name", returns: "ptr", params: &["i32"], attributes: &[] },
     Signature { name: "nts_tag_of_reference", returns: "i32", params: &["ptr"], attributes: &[] },
-    Signature { name: "nts_task_run", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
-    Signature { name: "nts_thrown_class", returns: "ptr", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_task_run", returns: "void", params: &["ptr dead_on_return"], attributes: &[] },
+    Signature { name: "nts_thrown_class", returns: "ptr", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_to_index", returns: "double", params: &["double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_to_int16_fn", returns: "signext i16", params: &["double"], attributes: &[] },
     Signature { name: "nts_to_int32_fn", returns: "i32", params: &["double"], attributes: &[] },
@@ -372,21 +347,21 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_to_uint16_fn", returns: "zeroext i16", params: &["double"], attributes: &[] },
     Signature { name: "nts_to_uint32_fn", returns: "i32", params: &["double"], attributes: &[] },
     Signature { name: "nts_to_uint8_fn", returns: "zeroext i8", params: &["double"], attributes: &[] },
-    Signature { name: "nts_uncaught", returns: "void", params: &["i32", "i64", "ptr"], attributes: &["noreturn"] },
+    Signature { name: "nts_uncaught", returns: "void", params: &["[2 x i64]", "ptr"], attributes: &["noreturn"] },
     Signature { name: "nts_unit_fn", returns: "zeroext i16", params: &["ptr", "i32"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_utf16_release", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
-    Signature { name: "nts_value_eq_boolean_fn", returns: "zeroext i1", params: &["i32", "i64", "i1 zeroext"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_value_eq_number_fn", returns: "zeroext i1", params: &["i32", "i64", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_value_eq_reference", returns: "zeroext i1", params: &["i32", "i64", "ptr"], attributes: &[] },
-    Signature { name: "nts_value_eq_string", returns: "zeroext i1", params: &["i32", "i64", "ptr"], attributes: &[] },
-    Signature { name: "nts_value_is_view", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_value_number_or", returns: "double", params: &["i32", "i64", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_value_release", returns: "void", params: &["i32", "i64"], attributes: &[] },
-    Signature { name: "nts_value_retain", returns: "void", params: &["i32", "i64"], attributes: &[] },
-    Signature { name: "nts_value_strict_eq", returns: "zeroext i1", params: &["i32", "i64", "i32", "i64"], attributes: &[] },
-    Signature { name: "nts_value_to_number", returns: "double", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
-    Signature { name: "nts_value_to_string", returns: "ptr", params: &["i32", "i64"], attributes: &[] },
-    Signature { name: "nts_value_truthy_fn", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_value_eq_boolean_fn", returns: "zeroext i1", params: &["[2 x i64]", "i1 zeroext"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_value_eq_number_fn", returns: "zeroext i1", params: &["[2 x i64]", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_value_eq_reference", returns: "zeroext i1", params: &["[2 x i64]", "ptr"], attributes: &[] },
+    Signature { name: "nts_value_eq_string", returns: "zeroext i1", params: &["[2 x i64]", "ptr"], attributes: &[] },
+    Signature { name: "nts_value_is_view", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_value_number_or", returns: "double", params: &["[2 x i64]", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_value_release", returns: "void", params: &["[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_value_retain", returns: "void", params: &["[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_value_strict_eq", returns: "zeroext i1", params: &["[2 x i64]", "[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_value_to_number", returns: "double", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_value_to_string", returns: "ptr", params: &["[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_value_truthy_fn", returns: "zeroext i1", params: &["[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_view_buffer", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_view_byte_length", returns: "double", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_view_byte_offset", returns: "double", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
@@ -405,62 +380,3 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_view_subarray", returns: "noalias ptr", params: &["ptr", "double", "double"], attributes: &[] },
     Signature { name: "nts_view_unlend", returns: "void", params: &["ptr"], attributes: &[] },
 ];
-
-/// The signature of a runtime function, if the runtime declares one.
-///
-/// System V's, which is also the one this backend's call sites are written
-/// against: an erased argument is its two scalars there. [`signature_on`] is
-/// the declaration a given platform links against.
-#[must_use]
-pub fn signature(name: &str) -> Option<&'static Signature> {
-    find(SIGNATURES, name)
-}
-
-/// The signature of a runtime function as `platform`'s C compiler declares it.
-#[must_use]
-pub fn signature_on(name: &str, platform: crate::Platform) -> Option<&'static Signature> {
-    find(table(platform), name)
-}
-
-/// The table clang generated for `platform`: its data model and its arch.
-#[must_use]
-pub fn table(platform: crate::Platform) -> &'static [Signature] {
-    match (platform.abi, platform.arch) {
-        (_, crate::Arch::Aarch64) => super::signatures_arm64::SIGNATURES_ARM64,
-        (nts_core::hir::native::NativeAbi::Win64, crate::Arch::X86_64) => super::signatures_win64::SIGNATURES_WIN64,
-        (nts_core::hir::native::NativeAbi::SysV, crate::Arch::X86_64) => SIGNATURES,
-    }
-}
-
-fn find(table: &'static [Signature], name: &str) -> Option<&'static Signature> {
-    table.binary_search_by(|known| known.name.cmp(name)).ok().map(|at| &table[at])
-}
-
-#[cfg(test)]
-mod tests {
-    use super::SIGNATURES;
-
-    /// The table is searched with `binary_search_by`, so its order is not a
-    /// matter of taste.
-    ///
-    /// An entry in the wrong place is not found, `signature` answers `None`,
-    /// and the backend refuses the call as one "the runtime declares only as a
-    /// `static inline` and so exposes no symbol for" -- which is a sentence
-    /// about the runtime that is simply false. `nts_str_to_lower_case` was
-    /// added three rows too late and cost the LLVM column of a whole benchmark
-    /// row, with a refusal message pointing at the wrong file.
-    ///
-    /// Nothing checked this before, and a lookup that silently answers `None`
-    /// for a name that is right there is the worst shape a table can have.
-    #[test]
-    fn the_table_is_sorted_because_it_is_binary_searched() {
-        for pair in SIGNATURES.windows(2).chain(super::super::signatures_win64::SIGNATURES_WIN64.windows(2)) {
-            assert!(
-                pair[0].name < pair[1].name,
-                "signatures out of order: `{}` must come after `{}`",
-                pair[0].name,
-                pair[1].name
-            );
-        }
-    }
-}

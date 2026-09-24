@@ -85,7 +85,14 @@ pub(crate) fn call_returning(out: &str, callable: &str, arguments: Vec<String>, 
 /// would answer this, and is not written yet.
 pub(crate) fn unexportable(func: &Func, platform: Platform) -> Option<&'static str> {
     let crosses = func.params.iter().any(|param| is_indirect(&param.ty)) || is_indirect(&func.return_type);
-    (func.exported && applies(platform) && crosses).then_some(
-        "an exported function taking or returning an erased value or a bigint under Win64, which C passes through memory there; the C backend builds it",
+    if func.exported && applies(platform) && crosses {
+        return Some(
+            "an exported function taking or returning an erased value or a bigint under Win64, which C passes through memory there; the C backend builds it",
+        );
+    }
+    // The same on arm64, where C passes an erased value as `[2 x i64]`.
+    let erased = func.params.iter().any(|param| param.ty == HirType::Erased) || func.return_type == HirType::Erased;
+    (func.exported && platform.arch == crate::Arch::Aarch64 && erased).then_some(
+        "an exported function taking or returning an erased value on arm64, which C passes as two words there; the C backend builds it",
     )
 }
