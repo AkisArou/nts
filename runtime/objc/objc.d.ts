@@ -11,7 +11,7 @@
 // other message lends one. So a binding never declares `retain`, `release`,
 // `autorelease`, `dealloc` or `retainCount`, and a call to one is refused.
 declare module "objc:types" {
-  import type { Class, ClassChain } from "c:types";
+  import type { Class, ClassChain, CNumber } from "c:types";
   import type { ClassObject } from "objc:runtime";
 
   export type ObjcClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
@@ -43,27 +43,28 @@ declare module "objc:types" {
   export type ObjcMeta<Tag extends string> = ClassObject & { readonly __objc_meta: Tag };
 
   // Swift's numbers, as a binding spells a parameter or a property: a plain
-  // `number` passes with no cast, and crosses as the C type the brand names.
-  // An integer past 2^53 rounds, as it does in any bridge to JavaScript; the
-  // `bigint` brands in `c:types` keep every bit where that matters.
-  export type Double = number & { readonly __c_double?: true };
-  export type Float = number & { readonly __c_float?: true };
+  // `number` passes with no cast, and crosses as the C type named, by the one
+  // definition `c:types` gives every binding (`CNumber`). An integer past 2^53
+  // rounds, as it does in any bridge to JavaScript; the `bigint` brands in
+  // `c:types` keep every bit where that matters.
+  export type Double = CNumber<"double">;
+  export type Float = CNumber<"float">;
   /** `CGFloat` is `double` on every 64-bit Apple target. */
   export type CGFloat = Double;
   /** `NSTimeInterval`, seconds. */
   export type TimeInterval = Double;
   /** `NSInteger`, 64 bits. */
-  export type Int = number & { readonly __c_long?: true };
+  export type Int = CNumber<"long">;
   /** `NSUInteger`, 64 bits. */
-  export type UInt = number & { readonly __c_ulong?: true };
-  export type Int8 = number & { readonly __c_int8?: true };
-  export type UInt8 = number & { readonly __c_uint8?: true };
-  export type Int16 = number & { readonly __c_int16?: true };
-  export type UInt16 = number & { readonly __c_uint16?: true };
-  export type Int32 = number & { readonly __c_int32?: true };
-  export type UInt32 = number & { readonly __c_uint32?: true };
-  export type Int64 = number & { readonly __c_int64?: true };
-  export type UInt64 = number & { readonly __c_uint64?: true };
+  export type UInt = CNumber<"ulong">;
+  export type Int8 = CNumber<"int8">;
+  export type UInt8 = CNumber<"uint8">;
+  export type Int16 = CNumber<"int16">;
+  export type UInt16 = CNumber<"uint16">;
+  export type Int32 = CNumber<"int32">;
+  export type UInt32 = CNumber<"uint32">;
+  export type Int64 = CNumber<"int64">;
+  export type UInt64 = CNumber<"uint64">;
 
   // A C string where an Objective-C message takes a `const char *`: in a
   // message a plain `string` is an `NSString`, as Swift's `String` is, so
