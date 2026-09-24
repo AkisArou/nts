@@ -1090,6 +1090,12 @@ fn bridges(program: &Program, abi: NativeAbi) -> Result<String, Diagnostic> {
                 parameters.push(format!("{from_ty} %a{at}"));
                 if from == to {
                     arguments.push(format!("{to_ty} %a{at}"));
+                } else if to == HirType::Bool {
+                    // A `gboolean` C passes, read as C reads it: any non-zero
+                    // is true, as `Convert` reads one -- a `trunc` to `i1`
+                    // would read 2 as false.
+                    let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{at}"), &from, from_ty, &format!("%a{at}")));
+                    arguments.push(format!("{to_ty} %p{at}"));
                 } else {
                     let instruction = conversion(&from, &to, compiled)?;
                     let _ = writeln!(body, "  %p{at} = {instruction} {from_ty} %a{at} to {to_ty}");

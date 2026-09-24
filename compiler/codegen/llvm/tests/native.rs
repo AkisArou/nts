@@ -2725,6 +2725,8 @@ int label_width(struct _Label *self) { return self->width; }
 /// a boolean. `true` and `false` arrive as 1 and 0; a C answer of 2 -- which
 /// C calls true -- is `true`, which a truncating conversion would read as
 /// `false` (2's low bit is 0); and an optional one takes its `@ntsDefault`.
+/// A callback's too, `GSourceFunc`'s shape: C's 2 arrives as `true`, and what
+/// the callback answers reaches C as exactly 1 or 0.
 #[test]
 fn a_c_int_boolean_crosses_as_a_boolean_on_both_backends() {
     let source = r#"
@@ -2746,6 +2748,9 @@ export function run(): number {
 // a value, not a call's result, which has to represent as a boolean too.
 function both(flag: boolean): boolean { return flag && two(); }
 export function narrowed(): number { return (both(true) ? 10 : 0) + (both(false) ? 1 : 0); }
+declare function ask(callback: (flag: CBool<c_int>) => CBool<c_int>): c_int;
+function negate(flag: boolean): boolean { return !flag; }
+export function asked(): number { return ask(negate) as number; }
 "#;
     let library = r"
 static int held = -1;
@@ -2754,15 +2759,17 @@ int remembered(void) { return held; }
 int two(void) { return 2; }
 int zero(void) { return 0; }
 int toggle(int on) { return on; }
+int ask(int (*callback)(int)) { return (callback(2) == 0) * 10 + (callback(0) == 1); }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f %.0f", run(), narrowed());"#, "run(); narrowed();");
+        let caller = counted_caller(r#"printf("%.0f %.0f %.0f", run(), narrowed(), asked());"#, "run(); narrowed(); asked();");
         let Some((text, outputs)) = run_on_both_backends("cbool", source, provider, library, &caller) else { return; };
         assert!(text.contains("void remember(int)"), "a `CBool<c_int>` is not C's int");
         // 1 and 0 arrive; 2 is true; 0 is false; the default is true and a
-        // written `false` is false.
+        // written `false` is false; the callback reads 2 as true and answers
+        // 0 for it, and 1 for 0.
         for output in outputs {
-            assert_eq!(output, expect("10101 10", provider), "{provider:?}");
+            assert_eq!(output, expect("10101 10 11", provider), "{provider:?}");
         }
     }
 }
