@@ -113,3 +113,13 @@ export function aClass(v: Quiet): string {
 export function throughAModule(n: number): number {
   return shapes.LIMIT + n;
 }
+
+/**
+ * A library receiver: declared outside the decoded files, so nothing here can
+ * say whether it is an interface. `Math` is the unambiguous half of that bucket
+ * -- it reads no slot this program lays out -- which is why the census prints
+ * two denominators rather than folding the bucket either way.
+ */
+export function throughALibrary(n: number): number {
+  return Math.PI * n;
+}

@@ -1636,8 +1636,17 @@ fn receivers_summary(census: &nts_core::receivers::Census) {
     let spared_most = interface - census.through_implemented();
     let spared_least = interface - census.through_satisfied();
     let share = f64::from(interface) * 100.0 / f64::from(total.max(1));
+    let generated = census.generated_fields();
+    let narrow_share = f64::from(interface) * 100.0 / f64::from(generated.max(1));
     println!(
-        "broad indirection costs {interface} of {total} field accesses ({share:.1}%)."
+        "broad indirection costs {interface} of {total} field accesses ({share:.1}%),"
+    );
+    // Two denominators, because a library receiver is two different things and
+    // this cannot tell which. `Math.PI` reads no slot of ours and dilutes the
+    // share; a `PropertyDescriptor` inhabited by a literal we built reads at a
+    // fixed offset and belongs in it. The true share is between them.
+    println!(
+        "or {narrow_share:.1}% of the {generated} through a type this program lays out itself."
     );
     println!(
         "a narrow rule would spare between {spared_least} and {spared_most} of them \

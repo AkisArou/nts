@@ -50,7 +50,16 @@ blind to the 77 refused sites that are the entire reason the question is open.
 | | field accesses | through an interface | |
 |---|---|---|---|
 | `runtime/node`, 185 files | 17,521 | **4,174** | **23.8%** |
+| the same, through types this program lays out | 15,681 | **4,174** | **26.6%** |
 | `benches/cases`, 61 cases | 694 | **10** | **1.4%** |
+
+**The share is bracketed, not picked.** 1,840 accesses go through a library
+receiver, and a library receiver is two different things that nothing here can
+separate: `Math.PI` reads no slot this program lays out, while a
+`PropertyDescriptor` inhabited by an object literal we built reads at a fixed
+offset and would become indirect. A symbol with no declaration in the decoded set
+says nothing about which. So both denominators are printed and the answer is
+**between 23.8% and 26.6%** — the same discipline as the inhabitability arms.
 
 Reads, writes and compound assignments together, because `FieldSet` goes through
 the same offset. A spread is held on its own row, because one `{ ...v }` is *N*

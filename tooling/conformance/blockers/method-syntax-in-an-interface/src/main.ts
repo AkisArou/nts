@@ -139,6 +139,7 @@
 //      | | field accesses | through an interface | |
 //      |---|---|---|---|
 //      | `runtime/node`, 185 files | 17,521 | **4,174** | **23.8%** |
+//      | the same, through types this program lays out | 15,681 | **4,174** | **26.6%** |
 //      | `benches/cases`, 61 cases | 694 | **10** | **1.4%** |
 //
 //      The denominator was 17,826 for an hour, until the census's own honesty
@@ -157,6 +158,14 @@
 //      about the figure's stability, and the reason to re-run the command rather
 //      than trust the row. Re-measured after an unrelated `SCHEMA_VERSION` bump
 //      invalidated every snapshot cache: identical.
+//
+//      **Two denominators, because a library receiver is two different things.**
+//      1,840 accesses go through a type declared outside the decoded files, and
+//      nothing here can say which kind it is: `Math.PI` reads no slot this
+//      program lays out and dilutes the share, while a `PropertyDescriptor`
+//      inhabited by an object literal we built reads at a fixed offset and
+//      belongs in it. So the share is bracketed rather than picked, the way the
+//      inhabitability arms bracket the narrow rule: **between 23.8% and 26.6%**.
 //
 //      Reads, writes and compound assignments together, since `FieldSet` goes
 //      through the same offset; a spread is held separately because one

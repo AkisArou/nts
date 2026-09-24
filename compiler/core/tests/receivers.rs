@@ -239,10 +239,26 @@ fn a_write_through_this_is_counted() {
 #[test]
 fn the_totals_are_what_the_cases_add_up_to() {
     let Some(census) = counted() else { return };
-    assert_eq!(census.total_fields(), 12);
+    assert_eq!(census.total_fields(), 13);
     assert_eq!(census.through_interfaces(), 10);
     assert_eq!(census.through(Shape::ClassInstance), 2);
     assert_eq!(census.distinct_interface_members(), 10);
+}
+
+/// The two denominators differ, which is the whole reason there are two.
+///
+/// `Math.PI` is a library receiver: it reads no slot this program lays out, so
+/// counting it dilutes the share. A library *interface* inhabited by a literal we
+/// built would read at a fixed offset and belong in it, and nothing here can tell
+/// the two apart — a symbol with no declaration in the decoded set says nothing
+/// about which it is. So the true share lies between the two, and this asserts
+/// they are actually distinct rather than one number printed twice.
+#[test]
+fn the_library_bucket_gives_a_second_denominator() {
+    let Some(census) = counted() else { return };
+    assert_eq!(census.through(Shape::Library), 1);
+    assert_eq!(census.generated_fields(), 12);
+    assert!(census.generated_fields() < census.total_fields());
 }
 
 /// A module member is not a field access, so it must not reach the denominator.
@@ -261,7 +277,7 @@ fn a_module_member_is_not_a_field_access() {
     let Some(census) = counted() else { return };
     assert_eq!(census.excluded.module_member, 1);
     assert!(of(&census, "LIMIT").is_empty());
-    assert_eq!(census.total_fields(), 12);
+    assert_eq!(census.total_fields(), 13);
 }
 
 /// **The density control**, and the reason this census may key on receiver

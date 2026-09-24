@@ -352,10 +352,30 @@ impl Census {
         self.fields_where(|site| site.shape == Shape::Interface && (site.satisfied || site.implemented))
     }
 
-    /// Every counted field access: the denominator.
+    /// Every counted field access: the widest denominator.
     #[must_use]
     pub fn total_fields(&self) -> u32 {
         self.fields_where(|_| true)
+    }
+
+    /// The same, less the library receivers: accesses through a type **this
+    /// program generates a layout for**.
+    ///
+    /// The narrower denominator, and the reason there are two. `Math.PI` is a
+    /// field access through a library receiver and reads no slot of ours, so
+    /// counting it dilutes the share. But a library *interface* —
+    /// `PropertyDescriptor` is the case — can be inhabited by an object literal
+    /// this program builds, and then a read through it **is** at a fixed offset
+    /// and would become indirect.
+    ///
+    /// The two cannot be separated from here for the reason [`Shape::Library`]
+    /// exists at all: a symbol with no declaration in the decoded set tells us
+    /// nothing about which of the two it is. So both denominators are printed and
+    /// the true share lies between them, exactly as the inhabitability arms
+    /// bracket the narrow rule rather than deciding it.
+    #[must_use]
+    pub fn generated_fields(&self) -> u32 {
+        self.fields_where(|site| site.shape != Shape::Library)
     }
 
     /// Field accesses through a receiver of this shape.
