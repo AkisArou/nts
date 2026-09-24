@@ -47,14 +47,17 @@ contract the noop renderer and the test host implement.
 first time it appears. The trampoline calls whatever handler the current
 props hold, so a re-render with a new closure (the common case) changes one
 field and never reconnects. A signal prop that goes away disconnects.
-Handlers run inside `discreteUpdates`, so a click is a discrete event, as
-in React DOM.
+The trampoline sets the current update priority to `DiscreteEventPriority`
+for the handler's duration, as React DOM's `dispatchDiscreteEvent` does, so
+a click is a discrete update (`resolveUpdatePriority` in the host config
+reads it back).
 
 **Containers differ by widget, and the renderer knows each protocol.**
-- `GtkBox`: `append`, `insert_child_after` (React's `insertBefore` is "after
-  the previous sibling"), and `remove`.
+- `GtkBox`: `append`, `remove`, and for React's `insertBefore(child, before)`,
+  `insert_child_after(child, before.get_prev_sibling())`, where a null
+  sibling prepends.
 - `GtkWindow`/`GtkApplicationWindow`: a single `set_child`.
-- `GtkListBox`: `append`, `insert` at an index, and `remove`.
+- `GtkListBox`: `append`, `remove`, and `insert` at the index of `before`'s row.
 
 A widget with no child protocol refuses children at `appendInitialChild`,
 with a message naming the widget.

@@ -61,8 +61,9 @@ build:
 In the `react` suite, upstream's own build fails the same 2 tests.
 
 **Native build.** native/probe compiles the runtime whole with nts. The
-census went from 1286 to 658 refusal lines, and creating a root now
-compiles. The remaining work on our side is in the census. The compiler
+census went from 1286 to 643 refusal lines. Creating a root compiles, and
+the render path runs from `updateContainer` to the commit, where it stops at
+exceptions thrown across calls. The remaining work on our side is in the census. The compiler
 capabilities React needs have been reported to the language lane:
 - exceptions across closures and methods, which Suspense and error
   boundaries rely on;
@@ -76,7 +77,7 @@ they are listed in PORTING.md and in the native config's comments.
 
 | Path | What it is |
 | --- | --- |
-| `packages/` | the runtime: `react`, `react-reconciler`, `scheduler`, `react-noop-renderer` and `shared`. Native twins sit beside the files they replace (`*.native.ts`) |
+| `packages/` | the runtime: `react`, `react-reconciler`, `scheduler`, `react-noop-renderer` and `shared`, plus `react-gtk` (a design draft so far). Native twins sit beside the files they replace (`*.native.ts`) |
 | `tsconfig.native.json` | the base of every native program: binds the twins, and maps packages to their sources |
 | `native/probe/` | a native program: the runtime, a typed test host and a deterministic scheduler host |
 | `conformance/` | the harness that runs upstream's tests, and the per-test ledgers |
