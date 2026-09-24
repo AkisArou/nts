@@ -1248,13 +1248,6 @@ fn entry_owned(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<ValueId
 ///
 /// Only the ones that are used. Stretching every entry-block value to every
 /// exit would delay frees nothing asked to delay and turn moves into copies.
-///
-/// And a third way: a counted handle converted to a type nothing counts -- a
-/// `GObject *` passed where C takes a `GTypeInstance *` or a `void *`. What is
-/// read afterwards is the conversion, which holds no reference, so the handle
-/// behind it has to outlive every use of it; without this its last use is the
-/// conversion itself, and a temporary is released before the call it was
-/// converted for.
 fn anchors(
     func: &Func,
     crossing: &rustc_hash::FxHashSet<ValueId>,
@@ -1313,15 +1306,6 @@ fn anchors(
                     }
                 }
             }
-        }
-    }
-    for op in &func.values {
-        if let OpKind::Convert(operand) = op.kind
-            && op.ty.counting().is_none()
-            && func.values[operand.0 as usize].ty.counting().is_some()
-            && !returned.contains(&operand)
-        {
-            kept.insert(operand);
         }
     }
     kept

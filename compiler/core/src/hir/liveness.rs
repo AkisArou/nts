@@ -128,6 +128,25 @@ pub fn analyze(func: &Func) -> Liveness {
     // and the frame has to. See `super::undominated_names` for the objects this
     // cannot be done for, which `place_allocations` keeps off the frame.
     let names = object_names(func);
+    // A counted handle converted to a type nothing counts -- a `GObject *`
+    // passed where C takes a `GTypeInstance *` or a `void *` -- is read through
+    // the conversion afterwards, which holds no reference: the handle is live
+    // wherever that view is, exactly as a frame object is wherever a name for
+    // it is. Without this the handle's last read is the conversion, and a
+    // temporary is released before the call it was converted for.
+    let viewed: FxHashMap<ValueId, ValueId> = func
+        .values
+        .iter()
+        .enumerate()
+        .filter_map(|(at, op)| match op.kind {
+            OpKind::Convert(operand)
+                if op.ty.counting().is_none() && func.values[operand.0 as usize].ty.counting().is_some() =>
+            {
+                Some((ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand))
+            }
+            _ => None,
+        })
+        .collect();
     let mut frame_named_by: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
     for (alias, roots) in &names {
         let framed: Vec<ValueId> = roots
@@ -174,6 +193,9 @@ pub fn analyze(func: &Func) -> Liveness {
             for value in entering.iter().copied().collect::<Vec<_>>() {
                 if let Some(named) = frame_named_by.get(&value) {
                     entering.extend(named.iter().copied());
+                }
+                if let Some(handle) = viewed.get(&value) {
+                    entering.insert(*handle);
                 }
             }
             for value in &defined[index] {
