@@ -4,6 +4,10 @@
 #include "nts_uv_host.h"
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <objc/message.h>
+#include <objc/runtime.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* libobjc exports these and no public header declares them; they are the
  * calls clang's `@autoreleasepool` makes. The CF host is only linked into a
@@ -132,4 +136,12 @@ void nts_cf_host_detach(void) {
   nts_cf_timer = NULL;
   nts_cf_source = NULL;
   nts_cf_descriptor = NULL;
+}
+
+char *nts_nserror_message(void *error) {
+  id description = ((id(*)(id, SEL))objc_msgSend)(
+      (id)error, sel_registerName("localizedDescription"));
+  const char *text = ((const char *(*)(id, SEL))objc_msgSend)(
+      description, sel_registerName("UTF8String"));
+  return strdup(text ? text : "");
 }

@@ -13,7 +13,7 @@
 // timeout may fire before the application has stopped.
 import { NSApplication, NSButton, NSEvent, NSWindow, Timer, type CGPoint, type CGRect } from "objc:AppKit";
 import { NtsWindowController } from "objc:Controller";
-import { actionImplementation, nested_while_readable, report, timerImplementation, window_control } from "c:support";
+import { actionImplementation, nested_while_readable, report, window_control } from "c:support";
 import { class_addMethod, objc_allocateClassPair, objc_getClass, objc_registerClassPair, sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
 import type { Ptr, c_size_t } from "c:types";
@@ -74,7 +74,7 @@ function main(): void {
       nested_while_readable();
     }
   });
-  const tick = timerImplementation((self, timer) => {
+  const tick = (timer: Timer): void => {
     ticks++;
     if (ticks <= 2) {
       button.performClick(null);
@@ -98,9 +98,8 @@ function main(): void {
     if (wake !== null) {
       app.postEvent(wake, { atStart: true });
     }
-  });
+  };
   class_addMethod(cls, sel_registerName("pressed:"), pressed, "v@:@");
-  class_addMethod(cls, sel_registerName("tick:"), tick, "v@:@");
   objc_registerClassPair(cls);
 
   const controller = new NtsWindowController();
@@ -115,7 +114,9 @@ function main(): void {
   const views = window.contentView?.subviews.length ?? 0;
   report(`window ${shown.size.width} button ${width}x${height} views ${views}`);
 
-  Timer.scheduledTimer({ timeInterval: 0.05, target: controller, selector: sel_registerName("tick:"), userInfo: null, repeats: true });
+  // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
+  // the closure a block the timer keeps, and calls from the run loop.
+  Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, tick);
   app.run();
   report("done");
 }

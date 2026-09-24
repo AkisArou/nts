@@ -1,6 +1,6 @@
 // Hand-written. Output, the control switch, and the method implementations
 // blocks make: `imp_implementationWithBlock`, typed once for a button's
-// action and once for a timer's, each block taking `self` first.
+// action, the block taking `self` first.
 /**
  * @ntsHeader "support.h"
  */
@@ -17,8 +17,4 @@ declare module "c:support" {
    * @ntsSymbol imp_implementationWithBlock
    */
   export function actionImplementation(block: Block<(self: NSObject, sender: NSObject) => void>): Implementation;
-  /**
-   * @ntsSymbol imp_implementationWithBlock
-   */
-  export function timerImplementation(block: Block<(self: NSObject, timer: Timer) => void>): Implementation;
 }

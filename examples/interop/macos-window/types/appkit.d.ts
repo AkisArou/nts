@@ -1012,6 +1012,16 @@ declare module "objc:AppKit" {
     replacingCharacters(labels: { in: ByValue<_NSRange>; with: string }): string;
     /** @ntsSelector stringByApplyingTransform:reverse: */
     applyingTransform(transform: string, labels: { reverse: boolean }): string | null;
+    /**
+     * @ntsSelector writeToURL:atomically:encoding:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    write(labels: { to: NSURL; atomically: boolean; encoding: UInt }): void;
+    /**
+     * @ntsSelector writeToFile:atomically:encoding:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    write(labels: { toFile: string; atomically: boolean; encoding: UInt }): void;
     /** @ntsSelector initWithUTF8String: */
     constructor(labels: { utf8String: CString });
     /** @ntsSelector initWithString: */
@@ -1020,6 +1030,16 @@ declare module "objc:AppKit" {
     constructor(labels: { data: NSData; encoding: UInt });
     /** @ntsSelector initWithCString:encoding: */
     constructor(labels: { cString: CString; encoding: UInt });
+    /**
+     * @ntsSelector initWithContentsOfURL:encoding:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    constructor(labels: { contentsOf: NSURL; encoding: UInt });
+    /**
+     * @ntsSelector initWithContentsOfFile:encoding:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    constructor(labels: { contentsOfFile: string; encoding: UInt });
     /** @ntsSelector propertyList */
     propertyList(): NSObject;
     /** @ntsSelector variantFittingPresentationWidth: */
@@ -1048,12 +1068,10 @@ declare module "objc:AppKit" {
     //   -uppercaseStringWithLocale:: Swift's `uppercased` is also a property here
     //   -lowercaseStringWithLocale:: Swift's `lowercased` is also a property here
     //   -capitalizedStringWithLocale:: Swift's `capitalized` is also a property here
-    //   -enumerateSubstringsInRange:options:usingBlock:: a block (closures come with S5)
-    //   -enumerateLinesUsingBlock:: a block (closures come with S5)
+    //   -enumerateSubstringsInRange:options:usingBlock:: a `NSRange`
+    //   -enumerateLinesUsingBlock:: a `BOOL *`
     //   -cStringUsingEncoding:: a `const char *`
     //   -getBytes:maxLength:usedLength:encoding:options:range:remainingRange:: a `void *`
-    //   -writeToURL:atomically:encoding:error:: Swift's `write(to:atomically:encoding:)` passes 3 of its 4 arguments (throws or async)
-    //   -writeToFile:atomically:encoding:error:: Swift's `write(toFile:atomically:encoding:)` passes 3 of its 4 arguments (throws or async)
     //   -initWithCharactersNoCopy:length:freeWhenDone:: a `unichar *`
     //   -initWithCharactersNoCopy:length:deallocator:: a `unichar *`
     //   -initWithCharacters:length:: a `const unichar *`
@@ -1062,10 +1080,8 @@ declare module "objc:AppKit" {
     //   -initWithBytes:length:encoding:: a `const void *`
     //   -initWithBytesNoCopy:length:encoding:freeWhenDone:: a `void *`
     //   -initWithBytesNoCopy:length:encoding:deallocator:: a `void *`
-    //   -initWithContentsOfURL:encoding:error:: Swift's `init(contentsOf:encoding:)` passes 2 of its 3 arguments (throws or async)
-    //   -initWithContentsOfFile:encoding:error:: Swift's `init(contentsOfFile:encoding:)` passes 2 of its 3 arguments (throws or async)
-    //   -initWithContentsOfURL:usedEncoding:error:: Swift's `init(contentsOf:usedEncoding:)` passes 2 of its 3 arguments (throws or async)
-    //   -initWithContentsOfFile:usedEncoding:error:: Swift's `init(contentsOfFile:usedEncoding:)` passes 2 of its 3 arguments (throws or async)
+    //   -initWithContentsOfURL:usedEncoding:error:: a `NSStringEncoding *`
+    //   -initWithContentsOfFile:usedEncoding:error:: a `NSStringEncoding *`
     //   +stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -propertyListFromStringsFileFormat: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -getCharacters:: a `unichar *`
@@ -1073,7 +1089,7 @@ declare module "objc:AppKit" {
     //   -stringByAddingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
     //   -stringByReplacingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
     //   -linguisticTagsInRange:scheme:options:orthography:tokenRanges:: an array of `NSValue *> * _Nullable`
-    //   -enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock:: a block (closures come with S5)
+    //   -enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock:: a `NSLinguisticTag`
   }
 
   /** @ntsClass NSTimer */
@@ -1091,6 +1107,12 @@ declare module "objc:AppKit" {
     constructor(labels: { timeInterval: TimeInterval; target: NSObject; selector: Selector; userInfo: NSObject | null; repeats: boolean });
     /** @ntsSelector scheduledTimerWithTimeInterval:target:selector:userInfo:repeats: */
     static scheduledTimer(labels: { timeInterval: TimeInterval; target: NSObject; selector: Selector; userInfo: NSObject | null; repeats: boolean }): Timer;
+    /** @ntsSelector +timerWithTimeInterval:repeats:block: */
+    constructor(labels: { timeInterval: TimeInterval; repeats: boolean }, block: (arg0: Timer) => void);
+    /** @ntsSelector scheduledTimerWithTimeInterval:repeats:block: */
+    static scheduledTimer(labels: { withTimeInterval: TimeInterval; repeats: boolean }, block: (arg0: Timer) => void): Timer;
+    /** @ntsSelector initWithFireDate:interval:repeats:block: */
+    constructor(labels: { fire: NSDate; interval: TimeInterval; repeats: boolean }, block: (arg0: Timer) => void);
     /** @ntsSelector initWithFireDate:interval:target:selector:userInfo:repeats: */
     constructor(labels: { fireAt: NSDate; interval: TimeInterval; target: NSObject; selector: Selector; userInfo: NSObject | null; repeats: boolean });
     /** @ntsSelector fire */
@@ -1101,10 +1123,6 @@ declare module "objc:AppKit" {
     constructor();
     /** @ntsSelector self */
     self(): Timer;
-    // Not bound, each for the reason given:
-    //   +timerWithTimeInterval:repeats:block:: a block (closures come with S5)
-    //   +scheduledTimerWithTimeInterval:repeats:block:: a block (closures come with S5)
-    //   -initWithFireDate:interval:repeats:block:: a block (closures come with S5)
   }
 
   /** @ntsClass NSView */
@@ -1942,13 +1960,13 @@ declare module "objc:AppKit" {
     //   @property backingLocation: deprecated in macOS 10.14
     //   @property windowRef: a `void *`
     //   @property drawers: deprecated in macOS 10.13
-    //   -beginSheet:completionHandler:: Swift's `beginSheet(_:)` passes 1 of its 2 arguments (throws or async)
-    //   -beginCriticalSheet:completionHandler:: Swift's `beginCriticalSheet(_:)` passes 1 of its 2 arguments (throws or async)
+    //   -beginSheet:completionHandler:: Swift's `beginSheet(_:)` awaits a completion handler it passes as `async` (S5)
+    //   -beginCriticalSheet:completionHandler:: Swift's `beginCriticalSheet(_:)` awaits a completion handler it passes as `async` (S5)
     //   +windowNumbersWithOptions:: a nullable array, which Swift reads as `[T]?`
     //   -transferWindowSharingToWindow:completionHandler:: introduced in macOS 13.3
     //   -requestSharingOfWindow:completionHandler:: introduced in macOS 15.0
     //   -requestSharingOfWindowUsingPreview:title:completionHandler:: introduced in macOS 15.0
-    //   -trackEventsMatchingMask:timeout:mode:handler:: a block (closures come with S5)
+    //   -trackEventsMatchingMask:timeout:mode:handler:: a `BOOL *`
     //   -beginDraggingSessionWithItems:event:source:: introduced in macOS 15.0
     //   -registerForDraggedTypes:: an array of `NSPasteboardType`
     //   -displayLinkWithTarget:selector:: introduced in macOS 14.0
@@ -2112,6 +2130,8 @@ declare module "objc:AppKit" {
     registerUserInterfaceItemSearchHandler(handler: NSObject): void;
     /** @ntsSelector unregisterUserInterfaceItemSearchHandler: */
     unregisterUserInterfaceItemSearchHandler(handler: NSObject): void;
+    /** @ntsSelector restoreWindowWithIdentifier:state:completionHandler: */
+    restoreWindow(labels: { withIdentifier: string; state: NSCoder }, completionHandler: (arg0: NSWindow | null, arg1: NSError | null) => void): boolean;
     /** @ntsSelector extendStateRestoration */
     extendStateRestoration(): void;
     /** @ntsSelector completeStateRestoration */
@@ -2131,7 +2151,7 @@ declare module "objc:AppKit" {
     //   -beginModalSessionForWindow:: a `struct _NSModalSession *`
     //   -runModalSession:: a `struct _NSModalSession *`
     //   -endModalSession:: a `struct _NSModalSession *`
-    //   -enumerateWindowsWithOptions:usingBlock:: a block (closures come with S5)
+    //   -enumerateWindowsWithOptions:usingBlock:: a `BOOL *`
     //   -registerServicesMenuSendTypes:returnTypes:: an array of `NSPasteboardType`
     //   -orderFrontStandardAboutPanelWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -beginSheet:modalForWindow:modalDelegate:didEndSelector:contextInfo:: deprecated in macOS 10.10
@@ -2139,7 +2159,6 @@ declare module "objc:AppKit" {
     //   -endSheet:returnCode:: deprecated in macOS 10.10
     //   -makeWindowsPerform:inOrder:: deprecated in macOS 10.14
     //   -searchString:inUserInterfaceItemString:searchRange:foundRange:: a `NSRange *`
-    //   -restoreWindowWithIdentifier:state:completionHandler:: a block (closures come with S5)
   }
 
   /** @ntsClass NSControl */
@@ -2318,6 +2337,10 @@ declare module "objc:AppKit" {
     static keyEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; characters: string; charactersIgnoringModifiers: string; isARepeat: boolean; keyCode: UInt16 }): NSEvent | null;
     /** @ntsSelector otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2: */
     static otherEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; subtype: Int16; data1: Int; data2: Int }): NSEvent | null;
+    /** @ntsSelector addGlobalMonitorForEventsMatchingMask:handler: */
+    static addGlobalMonitorForEvents(labels: { matching: CEnum<NSEvent.EventTypeMask | 0, UInt64> }, block: (arg0: NSEvent) => void): NSObject | null;
+    /** @ntsSelector addLocalMonitorForEventsMatchingMask:handler: */
+    static addLocalMonitorForEvents(labels: { matching: CEnum<NSEvent.EventTypeMask | 0, UInt64> }, block: (arg0: NSEvent) => NSEvent | null): NSObject | null;
     /** @ntsSelector removeMonitor: */
     static removeMonitor(eventMonitor: NSObject): void;
     /** @ntsSelector init */
@@ -2335,10 +2358,8 @@ declare module "objc:AppKit" {
     //   -touchesMatchingPhase:inView:: a collection, `NSSet`, which crosses as an object when it is bound
     //   -allTouches: a collection, `NSSet`, which crosses as an object when it is bound
     //   -touchesForView:: a collection, `NSSet`, which crosses as an object when it is bound
-    //   -trackSwipeEventWithOptions:dampenAmountThresholdMin:max:usingHandler:: a block (closures come with S5)
+    //   -trackSwipeEventWithOptions:dampenAmountThresholdMin:max:usingHandler:: a `BOOL *`
     //   +enterExitEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:trackingNumber:userData:: a `void *`
-    //   +addGlobalMonitorForEventsMatchingMask:handler:: a block (closures come with S5)
-    //   +addLocalMonitorForEventsMatchingMask:handler:: a block (closures come with S5)
   }
 
   /** @ntsClass NSButton */

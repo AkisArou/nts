@@ -371,13 +371,16 @@ fn bind_objc(rest: &[String]) -> Result<()> {
     if request.frameworks.is_empty() || request.classes.is_empty() {
         anyhow::bail!("`nts bind-objc` needs at least one `--framework` and one `--class`");
     }
-    let text = bind_objc::run(&request)?;
+    let output = bind_objc::run(&request)?;
+    if let Some(path) = single("--witness") {
+        std::fs::write(&path, &output.witness).with_context(|| format!("writing the witness to {path}"))?;
+    }
     match single("--out") {
         Some(path) => {
-            std::fs::write(&path, &text).with_context(|| format!("writing the binding to {path}"))?;
+            std::fs::write(&path, &output.binding).with_context(|| format!("writing the binding to {path}"))?;
             println!("wrote {path}");
         }
-        None => print!("{text}"),
+        None => print!("{}", output.binding),
     }
     Ok(())
 }

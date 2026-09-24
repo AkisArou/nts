@@ -2,7 +2,7 @@
 // inherited init, and a class method Swift imports as an init), methods,
 // properties read and written, a class property, and `instanceof`. Checked
 // against the same program in Objective-C (`reference/classes.m`).
-import { NSMutableArray, NSNumber, NSObject, NSOperation, NSProcessInfo, NSString } from "objc:Foundation";
+import { FileManager, NSMutableArray, NSNumber, NSObject, NSOperation, NSProcessInfo, NSString } from "objc:Foundation";
 import { report, weak_alive, weak_watch } from "c:support";
 import type { c_int } from "c:types";
 
@@ -58,6 +58,8 @@ function main(): void {
   report(`count ${list.count}`);
   list.insert(new NSNumber(0), { at: 0 });
   report(`inserted ${list.count} first ${(list.object(0) as NSNumber).intValue}`);
+  list.sort((a, b) => Math.sign((b as NSNumber).intValue - (a as NSNumber).intValue));
+  report(`sorted ${(list.object(0) as NSNumber).intValue} ${(list.object(3) as NSNumber).intValue}`);
 
   const answer = new NSNumber(42);
   report(`number ${answer.intValue} equal ${answer.isEqual(new NSNumber(42))}`);
@@ -82,6 +84,16 @@ function main(): void {
   more.addObjects({ from: [new NSNumber(7), new NSNumber(8)] });
   const both = more.adding({ contentsOf: [new NSNumber(9)] });
   report(`bridged ${more.count} ${both.length} ${(both[2] as NSNumber).intValue}`);
+
+  // Swift's `throws`: a reported `NSError` is a thrown `Error`.
+  const frameworks = FileManager.default.contentsOfDirectory({ atPath: "/System/Library/Frameworks/AppKit.framework" });
+  report(`listed ${frameworks.includes("Versions")}`);
+  try {
+    FileManager.default.contentsOfDirectory({ atPath: "/nts-no-such-directory" });
+    report("listed a missing directory");
+  } catch (error) {
+    report(`thrown ${(error as Error).message}`);
+  }
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.

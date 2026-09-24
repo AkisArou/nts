@@ -1792,12 +1792,12 @@ fn closure_slots(
         ));
     };
     let context = Type::Pointer(Pointee::Void);
+    if matches!(kind, ClosureKind::Block) {
+        return Ok(vec![(context, block_role(declared))]);
+    }
     let mut callback = declared.parameters.clone();
     callback.push(context.clone());
     let bridge = std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()));
-    if matches!(kind, ClosureKind::Block) {
-        return Ok(vec![(context, Role::Block { bridge, signature: declared })]);
-    }
     let lifetime = match kind {
         // A block returned above; its lend is the call's, as a scoped one's.
         ClosureKind::Scoped | ClosureKind::Block => Lifetime::Call,
@@ -1836,6 +1836,17 @@ fn closure_slots(
         }
     }
     Ok(slots)
+}
+
+/// A TypeScript function crossing as the Objective-C block of type
+/// `declared`: its one C slot is the block's address, and the trampoline the
+/// block's invoke calls takes the closure's context after the block's own
+/// parameters.
+pub(crate) fn block_role(declared: std::sync::Arc<FnPointer>) -> Role {
+    let mut callback = declared.parameters.clone();
+    callback.push(Type::Pointer(Pointee::Void));
+    let bridge = std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()));
+    Role::Block { bridge, signature: declared }
 }
 
 /// When a closure lent to C is given back, and by whom.

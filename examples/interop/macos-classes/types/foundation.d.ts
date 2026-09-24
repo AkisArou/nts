@@ -4,7 +4,7 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { CString, Int32, UInt } from "objc:types";
+  import type { CString, Int, Int32, UInt } from "objc:types";
 
   /** @ntsClass NSObject */
   export class NSObject {
@@ -59,6 +59,12 @@ declare module "objc:Foundation" {
     addObjects(labels: { from: NSObject[] }): void;
     /** @ntsSelector arrayByAddingObjectsFromArray: */
     adding(labels: { contentsOf: NSObject[] }): NSObject[];
+    /**
+     * Swift's trailing closure, `sort { a, b in ... }`: a block made of the
+     * function for the call.
+     * @ntsSelector sortUsingComparator:
+     */
+    sort(comparator: (a: NSObject, b: NSObject) => Int): void;
     /** @ntsSelector objectAtIndex: */
     object(at: UInt): NSObject;
     readonly count: UInt;
@@ -70,6 +76,19 @@ declare module "objc:Foundation" {
     readonly isCancelled: boolean;
     /** @ntsSelector cancel */
     cancel(): void;
+  }
+
+  /** @ntsClass NSFileManager */
+  export class FileManager extends NSObject {
+    /** @ntsSelector defaultManager */
+    static readonly default: FileManager;
+    /**
+     * Swift's `contentsOfDirectory(atPath:) throws -> [String]`: the
+     * `NSError **` left out, and a reported error thrown.
+     * @ntsSelector contentsOfDirectoryAtPath:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    contentsOfDirectory(labels: { atPath: string }): string[];
   }
 
   /** @ntsClass NSProcessInfo */

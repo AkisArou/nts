@@ -40625,6 +40625,9 @@ impl<'a> FuncBuilder<'a> {
         Ok(match inner {
             Role::NSString => self.ns_string_of(value, lent, &origin),
             Role::NSArray(element) => self.ns_array_of(id, value, element, &origin)?,
+            Role::Block { bridge, signature } => self
+                .lend_block(id, Some(value), (bridge.clone(), signature.clone()), slot.representation(), lent, &origin)?
+                .ok_or_else(|| self.unsupported(id, "a block label with no function"))?,
             Role::String(encoding) => {
                 let pointer = self.runtime_call(encoding.to_c(), vec![value], slot.representation(), origin);
                 lent.push(Lent::String { string: value, pointer, encoding: *encoding });
@@ -41343,6 +41346,9 @@ impl<'a> FuncBuilder<'a> {
             return Ok(Callee::External(name));
         }
         let ParameterTags { throws, defaults } = self.parameter_tags(call, declaration)?;
+        let selector =
+            selector.or_else(|| declaration.and_then(|decl| self.node(decl).native.as_ref().and_then(|n| n.selector.clone())));
+        let (throws, hidden) = split_hidden_throws(throws, selector.is_some(), signature);
         let mut native = super::native::Function::from_signature(
             self.snapshot,
             name,
@@ -41352,6 +41358,9 @@ impl<'a> FuncBuilder<'a> {
             &defaults,
         )
         .map_err(|why| self.unsupported(call, &why))?;
+        if let Some(converter) = hidden {
+            append_error_slot(&mut native, converter);
+        }
         // The module whose `@ntsHeader` covers this declaration, recorded where
         // the declaration node is still in hand. `collect_native_headers` reads
         // it, so a program carries the headers it reaches rather than every one
@@ -41361,38 +41370,10 @@ impl<'a> FuncBuilder<'a> {
             native.frameworks = self.declared_names(call, decl, LinkTag::FRAMEWORK)?;
             native.libraries = self.declared_names(call, decl, LinkTag::LIBRARY)?;
         }
-        let selector =
-            selector.or_else(|| declaration.and_then(|decl| self.node(decl).native.as_ref().and_then(|n| n.selector.clone())));
         if let Some(decl) = declaration
             && let Some(selector) = selector
         {
-            let send = self.objc_send(call, decl, &native, selector, class_send)?;
-            bridge_strings(&mut native, signature, self.snapshot);
-            // A family is a claim about the returned *object*, so it applies
-            // only where the result is a pointer, as in clang: a `newValue`
-            // returning a number owns nothing.
-            let pointer = match &native.result {
-                super::native::Type::Pointer(pointee) => Some(pointee),
-                _ => None,
-            };
-            native.returns_owned =
-                pointer.is_some() && super::native::Send::returns_owned(&send.selector);
-            // An object handed over (+1) that the program does not count is
-            // an object nobody will release. The binding has to say what it
-            // is, which is `ObjcClass`, not `Class`.
-            if native.returns_owned && pointer.is_some_and(|pointee| pointee.counting().is_none()) {
-                return Err(self.unsupported(
-                    call,
-                    &format!(
-                        "`{}` hands back an object the caller owns, as a handle the program does not count; declare its class with `ObjcClass` from \"objc:types\", not `Class`",
-                        send.selector
-                    ),
-                ));
-            }
-            if send.class.is_none() && super::native::Send::consumes_receiver(&send.selector) {
-                native.consumes = vec![0];
-            }
-            native.send = Some(send);
+            self.make_message(call, decl, &mut native, signature, selector, class_send)?;
         }
         self.refuse_unbridged(call, &native)?;
         if let Some(free) = declaration
@@ -41510,6 +41491,48 @@ impl<'a> FuncBuilder<'a> {
         let frameworks = self.declared_names(id, declaration, LinkTag::FRAMEWORK)?;
         let ty = HirType::NativePointer(super::native::Pointee::Opaque("objc_class".into()));
         Ok(Some(self.push(OpKind::ObjcClass { name, frameworks }, ty, self.origin(id))))
+    }
+
+    /// `native` as the Objective-C message `selector` names: its closures,
+    /// strings and arrays bridged as Swift's are, and the ownership ARC's
+    /// method families give its result and receiver.
+    fn make_message(
+        &self,
+        call: NodeId,
+        decl: NodeId,
+        native: &mut super::native::Function,
+        signature: &nts_semantic_schema::SignatureRecord,
+        selector: String,
+        class_send: Option<String>,
+    ) -> Result<(), Diagnostic> {
+        bridge_blocks(native, signature, self.snapshot);
+        let send = self.objc_send(call, decl, native, selector, class_send)?;
+        bridge_strings(native, signature, self.snapshot);
+        // A family is a claim about the returned *object*, so it applies
+        // only where the result is a pointer, as in clang: a `newValue`
+        // returning a number owns nothing.
+        let pointer = match &native.result {
+            super::native::Type::Pointer(pointee) => Some(pointee),
+            _ => None,
+        };
+        native.returns_owned = pointer.is_some() && super::native::Send::returns_owned(&send.selector);
+        // An object handed over (+1) that the program does not count is
+        // an object nobody will release. The binding has to say what it
+        // is, which is `ObjcClass`, not `Class`.
+        if native.returns_owned && pointer.is_some_and(|pointee| pointee.counting().is_none()) {
+            return Err(self.unsupported(
+                call,
+                &format!(
+                    "`{}` hands back an object the caller owns, as a handle the program does not count; declare its class with `ObjcClass` from \"objc:types\", not `Class`",
+                    send.selector
+                ),
+            ));
+        }
+        if send.class.is_none() && super::native::Send::consumes_receiver(&send.selector) {
+            native.consumes = vec![0];
+        }
+        native.send = Some(send);
+        Ok(())
     }
 
     /// An array a C function would take or return as Swift's `[T]`, which only
@@ -41859,6 +41882,7 @@ impl<'a> FuncBuilder<'a> {
                     | super::native::Role::Label { .. }
                     | super::native::Role::NSString
                     | super::native::Role::NSArray(_)
+                    | super::native::Role::ErrorSlot { .. }
             )
         }) {
             return Err(self.unsupported(call, "an Objective-C message taking a C callback, an array or an error slot; a callback crosses as a `Block<F>`"));
@@ -48957,6 +48981,61 @@ fn bridge_send(
         message.consumes = vec![0];
     }
     message
+}
+
+/// Swift's `throws`: a message's `@ntsThrows` naming no parameter is the
+/// `NSError **` Swift leaves out, a slot the program never writes -- answered
+/// as the converter of that hidden slot, and no longer a tag on a parameter.
+fn split_hidden_throws(
+    throws: Option<(String, String)>,
+    message: bool,
+    signature: &nts_semantic_schema::SignatureRecord,
+) -> (Option<(String, String)>, Option<String>) {
+    match throws {
+        Some((slot, converter)) if message && !signature.parameters.iter().any(|parameter| parameter.name == slot) => {
+            (None, Some(converter))
+        }
+        throws => (throws, None),
+    }
+}
+
+/// Swift's `throws`: the `NSError **` a message reports through, which the
+/// binding leaves out as Swift does, appended as the slot the compiler
+/// supplies and reads after the call.
+fn append_error_slot(native: &mut super::native::Function, converter: String) {
+    use super::native::{Handle, Pointee, Retention, Role, Type};
+    native.parameters.push(Type::Pointer(Pointee::Pointer(Box::new(Pointee::Opaque(Handle::objc("NSError"))))));
+    native.roles.push(Role::ErrorSlot { converter });
+    // Written through during the call and never kept: an out-parameter.
+    native.retention.push(Retention::NotRetained);
+}
+
+/// Swift's closures at an Objective-C message: a parameter of a plain function
+/// type is a block, as a Swift closure passed to one is, lent for the call and
+/// copied by a callee that keeps it. A C function's is a function pointer
+/// still, and a `Block<F>` is a block wherever it is written.
+fn bridge_blocks(native: &mut super::native::Function, signature: &nts_semantic_schema::SignatureRecord, snapshot: &SemanticSnapshot) {
+    use super::native::{Pointee, Role, Type};
+    let function = |ty: TypeId| matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Function(_)));
+    let slots: Vec<(usize, Option<usize>)> = native.slots().map(|(at, _, fed)| (at, fed)).collect();
+    for (at, fed) in slots {
+        let Some(parameter) = fed.and_then(|ts| signature.parameters.get(ts)) else { continue };
+        let Type::FnPointer(declared) = native.parameters[at].clone() else { continue };
+        match &mut native.roles[at] {
+            role @ Role::Plain if function(parameter.ty) => *role = super::native::block_role(declared),
+            Role::Label { key, inner, .. } if **inner == Role::Plain => {
+                let key = key.clone();
+                let label = super::native::labels_of(snapshot, parameter.ty)
+                    .and_then(|labels| labels.into_iter().find(|(named, _)| *named == key));
+                if !label.is_some_and(|(_, ty)| function(ty)) {
+                    continue;
+                }
+                **inner = super::native::block_role(declared);
+            }
+            _ => continue,
+        }
+        native.parameters[at] = Type::Pointer(Pointee::Void);
+    }
 }
 
 /// Swift's `String` at an Objective-C message: a plain `string` parameter is

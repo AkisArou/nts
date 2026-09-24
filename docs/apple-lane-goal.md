@@ -384,6 +384,43 @@ correctness does not depend on arm64 running by luck.
        - Each element *read* retains and releases around its use, where ARC
          passes a +0 borrow. That costs a count per read and holds the
          element to the end of the scope.
+   - **S5a, closures as Swift's, landed.** In a message, a plain function
+     type is a block, as a Swift closure passed to one is. It is lent for the
+     call and copied by a callee that keeps it. `Block<F>` is no longer needed
+     at a message, and a C function's function type is still a function
+     pointer.
+     - `bind-objc` reads clang's block spelling into a TypeScript function type,
+       and a block that is Swift's last argument is passed after the labels,
+       as Swift's trailing closure: `Timer.scheduledTimer({ withTimeInterval:
+       0.05, repeats: true }, (timer) => ...)`.
+     - A label may be a block too.
+     - Skipped, with reasons: a block taking a `BOOL *` (Swift's
+       `UnsafeMutablePointer<ObjCBool>`) and a block result.
+     - `macos-window`'s timer is now that trailing closure, kept by the timer
+       and called from the run loop, and `macos-classes` sorts with
+       `list.sort((a, b) => ...)` against ARC.
+   - **S5b, `throws`, landed.** Swift leaves out a method's trailing
+     `NSError **`, and so does the binding. `@ntsThrows error
+     nts_nserror_message` naming no parameter makes the compiler supply the
+     slot. A reported error is thrown as an `Error` whose message is its
+     `localizedDescription`, read by the CF host's `nts_nserror_message`.
+     - As in Swift, a throwing `BOOL` method returns nothing, and a throwing
+       object result is not optional.
+     - `macos-classes` lists a directory and catches the error for a missing
+       one, against ARC.
+     - Async (completion handler to `Promise`) is next.
+   - **S7, the witness, landed.** `nts bind-objc --witness out.c` writes, from
+     the same model the binding is written from, a plain C program that asks
+     the Mac's Objective-C runtime for every message the binding sends. That
+     covers each method, and each property's getter and setter, on the class
+     or an instance, with its arity. The headers say what a class declares;
+     only the runtime says what it implements.
+     - `macos-window` builds and runs it and compares the result with
+       `witness.expected`. Of 1143 messages, the runtime lacks 20, each
+       explained there. Two are installed lazily at a view's first `init`.
+       Eighteen are declared and not implemented: informal-protocol
+       categories and one setter. Swift exposes them too.
+     - A control with a bogus selector is caught.
    - **Optional chaining, as Swift's.** `window.contentView?.addSubview(button)`
      and `operation?.name ?? "unnamed"` send nothing to an absent receiver, and
      the chain is `undefined`. The checker adds that `undefined` to every

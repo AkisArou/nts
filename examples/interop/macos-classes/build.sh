@@ -48,7 +48,7 @@ build() {
   mkdir -p "$dir"
   NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$dir" "$@" >"$dir.log" 2>&1 ||
     { cat "$dir.log" >&2; exit 1; }
-  if grep -q "refused" "$dir.log"; then
+  if grep -qE "refused|NTS[0-9]{4}" "$dir.log"; then
     cat "$dir.log" >&2
     echo "macos-classes: nts build refused part of the program and exited 0" >&2
     exit 1
@@ -79,8 +79,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 17 ] ||
-  { echo "macos-classes: the oracle printed $(wc -l <"$out/expected.txt") lines, not 17" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 20 ] ||
+  { echo "macos-classes: the oracle printed $(wc -l <"$out/expected.txt") lines, not 20" >&2; exit 1; }
 
 run_quietly "$out/classes/macos-13-x86_64/classes" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"

@@ -27,4 +27,10 @@ void nts_cf_host_attach(void);
 /* Detach, before `nts_uv_host_shutdown`. */
 void nts_cf_host_detach(void);
 
+/* Swift's `throws`: the message of the `NSError` a Cocoa method reported
+ * through its `NSError **`, as `@ntsThrows error nts_nserror_message` names it
+ * -- its `localizedDescription`, copied into memory the caller frees. The
+ * error is not taken: an out-parameter's `NSError` is autoreleased. */
+char *nts_nserror_message(void *error);
+
 #endif /* NTS_CF_HOST_H */

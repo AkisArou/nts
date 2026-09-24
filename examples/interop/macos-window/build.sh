@@ -55,7 +55,7 @@ mkdir -p "$out"
 # NTS_REGENERATE=1 writes it instead.
 "$nts" bind-objc --sdk "$sdk" --module objc:AppKit --framework AppKit --framework Foundation \
   --class NSApplication --class NSWindow --class NSButton --class NSString --class NSTimer --class NSEvent \
-  --out "$out/appkit.d.ts" >/dev/null
+  --out "$out/appkit.d.ts" --witness "$out/witness.c" >/dev/null
 if [ "${NTS_REGENERATE:-}" = 1 ]; then
   command cp -f "$out/appkit.d.ts" "$source/types/appkit.d.ts"
 fi
@@ -68,7 +68,7 @@ echo "bind-objc: types/appkit.d.ts is the generator's, unchanged"
 log="$out/build.log"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
-if grep -q "refused" "$log"; then
+if grep -qE "refused|NTS[0-9]{4}" "$log"; then
   cat "$log" >&2
   echo "macos-window: nts build refused part of the program and exited 0" >&2
   exit 1
@@ -84,6 +84,17 @@ if ! "$root/tooling/apple/run.sh" --reachable; then
   echo "macos-window: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
+# The witness: every message the binding sends, asked of the Mac's runtime.
+# What it lacks is `witness.expected`, each line explained there; a change
+# either way is a binding that sends something new the runtime lacks, or a
+# baseline gone stale.
+clang -target x86_64-apple-macos13 -isysroot "$sdk" -fuse-ld=lld -framework AppKit -framework Foundation -lobjc -w \
+  "$out/witness.c" -o "$out/witness"
+timeout 60 "$root/tooling/apple/run.sh" "$out/witness" >"$out/witness.txt" 2>&1 || true
+grep -v '^#' "$source/witness.expected" | diff -u - "$out/witness.txt" ||
+  { echo "macos-window: the runtime's answer to the binding's messages changed (witness.expected)" >&2; exit 1; }
+echo "witness: $(tail -1 "$out/witness.txt")"
+
 # Runs the program on the Mac, bounded: a window whose loop never stops would
 # otherwise hold the gate.
 run() {

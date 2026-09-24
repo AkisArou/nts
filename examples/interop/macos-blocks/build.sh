@@ -49,7 +49,7 @@ build() {
   mkdir -p "$dir"
   NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$dir" "$@" >"$dir.log" 2>&1 ||
     { cat "$dir.log" >&2; exit 1; }
-  if grep -q "refused" "$dir.log"; then
+  if grep -qE "refused|NTS[0-9]{4}" "$dir.log"; then
     cat "$dir.log" >&2
     echo "macos-blocks: nts build refused part of the program and exited 0" >&2
     exit 1

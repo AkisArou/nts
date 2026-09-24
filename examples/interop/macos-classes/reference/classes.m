@@ -37,6 +37,8 @@ int main(void) {
     printf("count %lu\n", (unsigned long)list.count);
     [list insertObject:[NSNumber numberWithInt:0] atIndex:0];
     printf("inserted %lu first %d\n", (unsigned long)list.count, ((NSNumber *)[list objectAtIndex:0]).intValue);
+    [list sortUsingComparator:^NSComparisonResult(id a, id b) { return [b compare:a]; }];
+    printf("sorted %d %d\n", ((NSNumber *)list[0]).intValue, ((NSNumber *)list[3]).intValue);
     NSNumber *answer = [NSNumber numberWithInt:42];
     printf("number %d equal %s\n", answer.intValue, [answer isEqual:[NSNumber numberWithInt:42]] ? "true" : "false");
     printf("kinds %s %s %s\n", [answer isKindOfClass:[NSNumber class]] ? "true" : "false",
@@ -55,6 +57,14 @@ int main(void) {
     [more addObjectsFromArray:@[ @7, @8 ]];
     NSArray *both = [more arrayByAddingObjectsFromArray:@[ @9 ]];
     printf("bridged %lu %lu %d\n", (unsigned long)more.count, (unsigned long)both.count, [both[2] intValue]);
+    NSArray *frameworks = [NSFileManager.defaultManager contentsOfDirectoryAtPath:@"/System/Library/Frameworks/AppKit.framework" error:NULL];
+    printf("listed %s\n", [frameworks containsObject:@"Versions"] ? "true" : "false");
+    NSError *error = nil;
+    if ([NSFileManager.defaultManager contentsOfDirectoryAtPath:@"/nts-no-such-directory" error:&error]) {
+      printf("listed a missing directory\n");
+    } else {
+      printf("thrown %s\n", error.localizedDescription.UTF8String);
+    }
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.
     [operation cancel];

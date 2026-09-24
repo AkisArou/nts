@@ -1,0 +1,35 @@
+# What the Mac's runtime lacks of the messages types/appkit.d.ts sends, as
+# `nts bind-objc --witness` asks it (macOS 26.6, SDK 26.5). Two kinds, both
+# checked by hand on the Mac:
+#
+# - Installed lazily, and present: `safeAreaInsets` and
+#   `additionalSafeAreaInsets` are added to NSView when the first view is
+#   initialized, so a class asked before any exists has none. Every instance
+#   responds.
+# - Declared and not implemented: the ruler-marker delegation, the text finder
+#   action and `newWindowForTab:` are informal protocols -- categories naming a
+#   message a *subclass* may implement -- and
+#   `setTitlebarAccessoryViewControllers:` is a setter the header declares and
+#   the class does not have. No instance responds. Swift exposes them too; a
+#   call is an `unrecognized selector`, as it is there.
+missing -[NSResponder performTextFinderAction:]
+missing -[NSResponder newWindowForTab:]
+missing -[NSView safeAreaInsets]
+missing -[NSView additionalSafeAreaInsets]
+missing -[NSView setAdditionalSafeAreaInsets:]
+missing -[NSView reflectScrolledClipView:]
+missing -[NSView scrollClipView:toPoint:]
+missing -[NSView rulerView:shouldMoveMarker:]
+missing -[NSView rulerView:willMoveMarker:toLocation:]
+missing -[NSView rulerView:didMoveMarker:]
+missing -[NSView rulerView:shouldRemoveMarker:]
+missing -[NSView rulerView:didRemoveMarker:]
+missing -[NSView rulerView:shouldAddMarker:]
+missing -[NSView rulerView:willAddMarker:atLocation:]
+missing -[NSView rulerView:didAddMarker:]
+missing -[NSView rulerView:handleMouseDown:]
+missing -[NSView rulerView:willSetClientView:]
+missing -[NSView rulerView:locationForPoint:]
+missing -[NSView rulerView:pointForLocation:]
+missing -[NSWindow setTitlebarAccessoryViewControllers:]
+1143 messages checked, 20 the runtime does not have
