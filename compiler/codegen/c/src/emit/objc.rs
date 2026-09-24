@@ -19,60 +19,17 @@
 //! and not required to be: every send runs on the program's owner thread, as
 //! every other call does.
 
-use super::{CodeWriter, OpKind, Origin, Program};
-use nts_core::hir::Callee;
+use super::{CodeWriter, Origin, Program};
+use nts_codegen_common::objc::{class_symbol, lookups, selector_symbol};
 use nts_core::hir::native::{Function, Send, Type};
-
-/// Every selector and class this program sends to, in a stable order.
-fn reached(program: &Program) -> (Vec<&str>, Vec<&str>) {
-    let mut selectors = Vec::new();
-    let mut classes = Vec::new();
-    for func in &program.funcs {
-        for op in &func.values {
-            if let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind
-                && let Some(send) = &target.send
-            {
-                selectors.push(send.selector.as_str());
-                classes.extend(send.class.as_deref());
-            }
-        }
-    }
-    for list in [&mut selectors, &mut classes] {
-        list.sort_unstable();
-        list.dedup();
-    }
-    (selectors, classes)
-}
-
-/// `initWithUTF8String:` as a C identifier, injectively: `_` is `_u` and
-/// `:` is `_c`, so `a_b:` and `a:b` cannot meet.
-fn mangle(selector: &str) -> String {
-    let mut out = String::with_capacity(selector.len() + 4);
-    for character in selector.chars() {
-        match character {
-            '_' => out.push_str("_u"),
-            ':' => out.push_str("_c"),
-            other => out.push(other),
-        }
-    }
-    out
-}
-
-fn selector_function(selector: &str) -> String {
-    format!("nts_objc_sel_{}", mangle(selector))
-}
-
-fn class_function(class: &str) -> String {
-    format!("nts_objc_class_{}", mangle(class))
-}
 
 /// The runtime declarations and the lookup functions, when the program sends
 /// anything. Written before the function bodies, which call them.
-pub(super) fn lookups(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
     if !program.objc {
         return;
     }
-    let (selectors, classes) = reached(program);
+    let found = lookups(program);
     writer.line(origin, "/* The Objective-C runtime, declared rather than included: see `emit/objc.rs`. */");
     writer.line(origin, "struct objc_selector;");
     writer.line(origin, "struct objc_class;");
@@ -82,16 +39,16 @@ pub(super) fn lookups(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     // promised was an object. The required form ends the process, naming it.
     writer.line(origin, "extern struct objc_class *objc_getRequiredClass(const char *name);");
     writer.line(origin, "extern void objc_msgSend(void);");
-    for selector in selectors {
-        let name = selector_function(selector);
+    for selector in found.selectors {
+        let name = selector_symbol(selector);
         writer.line(origin, format!("static struct objc_selector *{name}(void) {{"));
         writer.line(origin, "    static struct objc_selector *cached;");
         writer.line(origin, format!("    if (!cached) cached = sel_registerName(\"{selector}\");"));
         writer.line(origin, "    return cached;");
         writer.line(origin, "}");
     }
-    for class in classes {
-        let name = class_function(class);
+    for class in found.classes {
+        let name = class_symbol(class);
         writer.line(origin, format!("static struct objc_class *{name}(void) {{"));
         writer.line(origin, "    static struct objc_class *cached;");
         writer.line(origin, format!("    if (!cached) cached = objc_getRequiredClass(\"{class}\");"));
@@ -122,7 +79,7 @@ fn result(ty: &Type) -> String {
 /// `((R (*)(const void *, struct objc_selector *, A...))objc_msgSend)(r, sel, a...)`.
 pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[String]) -> String {
     let (receiver, rest, receiver_type) = match &send.class {
-        Some(class) => (format!("{}()", class_function(class)), arguments, "struct objc_class *".to_owned()),
+        Some(class) => (format!("{}()", class_symbol(class)), arguments, "struct objc_class *".to_owned()),
         None => (
             arguments.first().cloned().unwrap_or_else(|| "0".to_owned()),
             arguments.get(1..).unwrap_or(&[]),
@@ -132,7 +89,7 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
     let skip = usize::from(send.class.is_none());
     let mut types = vec![receiver_type, "struct objc_selector *".to_owned()];
     types.extend(target.parameters.iter().skip(skip).map(parameter));
-    let mut values = vec![receiver, format!("{}()", selector_function(&send.selector))];
+    let mut values = vec![receiver, format!("{}()", selector_symbol(&send.selector))];
     values.extend(rest.iter().cloned());
     format!(
         "(({} (*)({}))objc_msgSend)({})",
@@ -140,16 +97,4 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
         types.join(", "),
         values.join(", ")
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::mangle;
-
-    #[test]
-    fn mangling_keeps_underscores_and_colons_apart() {
-        assert_eq!(mangle("initWithUTF8String:"), "initWithUTF8String_c");
-        assert_ne!(mangle("a_b:"), mangle("a:b_"));
-        assert_ne!(mangle("a_c"), mangle("a:"));
-    }
 }

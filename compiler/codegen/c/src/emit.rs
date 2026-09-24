@@ -656,7 +656,7 @@ pub fn emit(program: &Program) -> Emitted {
     }
     writer.append(object_types);
     native_memory::helpers(&mut writer, &origin, program);
-    objc::lookups(&mut writer, &origin, program);
+    objc::declarations(&mut writer, &origin, program);
 
     // Forward declarations, so a call does not depend on definition order — and
     // only for functions that actually have a definition. Before the
@@ -953,7 +953,7 @@ fn external_prototypes(program: &Program) -> Prototypes {
             };
             let target = match callee {
                 // A message has no symbol of its own to declare: its call is a
-                // cast of `objc_msgSend`, which `objc::lookups` declares.
+                // cast of `objc_msgSend`, which `objc::declarations` declares.
                 Callee::Native(target) if target.send.is_some() => continue,
                 Callee::Native(target) => target,
                 Callee::External(name) if !runtime_declares(name) => {

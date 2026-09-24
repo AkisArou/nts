@@ -27,3 +27,4 @@ pub use linearize::block_order;
 pub use writer::CodeWriter;
 
 pub mod native;
+pub mod objc;
