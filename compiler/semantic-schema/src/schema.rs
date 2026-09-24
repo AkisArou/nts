@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 22;
+pub const SCHEMA_VERSION: u32 = 23;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -728,6 +728,14 @@ pub struct NativeAttributes {
     /// refused there with a reason naming it.
     #[serde(default)]
     pub defaults: Option<String>,
+    /// `@ntsGet get_label` / `@ntsSet set_label`, on a property a binding
+    /// declares beside the methods it names: `label.label` reads through the
+    /// first and `label.label = t` writes through the second, each the method
+    /// call it names, with the receiver as its instance.
+    #[serde(default)]
+    pub get: Option<String>,
+    #[serde(default)]
+    pub set: Option<String>,
     /// `@ntsSelector initWithUTF8String:`: the declaration is an Objective-C
     /// message, not a C symbol. On a method, the receiver is `this`. On a
     /// function it is the class `@ntsClass` names.

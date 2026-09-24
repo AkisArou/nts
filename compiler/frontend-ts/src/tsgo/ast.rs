@@ -391,8 +391,10 @@ fn decode_nodes(
             // function as a method of the handle it takes: `set_label` on
             // `GtkButtonMethods`, tagged `@ntsSymbol gtk_button_set_label`.
             //
-            // And a property signature, an Objective-C property whose getter
-            // is not its name: `@ntsSelector isVisible` on `visible`.
+            // And a property signature: an Objective-C property whose getter
+            // is not its name, `@ntsSelector isVisible` on `visible`, or a
+            // binding's property read and written through the methods its
+            // `@ntsGet`/`@ntsSet` name.
             native: if matches!(
                 kind,
                 NodeKind::Syntax(
@@ -432,6 +434,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let throws = leading_tag(source, "@ntsThrows");
     let call = leading_tag(source, "@ntsCall");
     let defaults = leading_tag(source, "@ntsDefault");
+    let get = leading_tag(source, "@ntsGet");
+    let set = leading_tag(source, "@ntsSet");
     let selector = leading_tag(source, "@ntsSelector");
     let class = leading_tag(source, "@ntsClass");
     let frameworks = leading_tag(source, "@ntsFramework")
@@ -445,6 +449,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && throws.is_none()
         && call.is_none()
         && defaults.is_none()
+        && get.is_none()
+        && set.is_none()
         && selector.is_none()
         && class.is_none()
         && frameworks.is_none()
@@ -461,6 +467,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         throws,
         call,
         defaults,
+        get,
+        set,
         selector,
         class,
         frameworks,

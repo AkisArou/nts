@@ -2641,6 +2641,86 @@ export function errors(): number { return errors_seen(); }
     }
 }
 
+/// A binding's property on a handle (`@ntsGet`/`@ntsSet`): GJS's `label.text`
+/// and `label.text = t`, each the call to the method its tag names. A string
+/// is lent and copied back through the methods' own roles, a boolean crosses
+/// as C's `bool`, and an assignment is still the value it assigned. A read of
+/// a property with no `@ntsGet` is refused by name.
+#[test]
+fn a_native_property_reads_and_writes_through_its_methods_on_both_backends() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+interface LabelOwnMethods {
+    /** @ntsSymbol label_get_text */
+    get_text(this: Label): string;
+    /** @ntsSymbol label_set_text */
+    set_text(this: Label, text: string): void;
+    /** @ntsSymbol label_get_visible */
+    get_visible(this: Label): boolean;
+    /** @ntsSymbol label_set_visible */
+    set_visible(this: Label, visible: boolean): void;
+    /** @ntsSymbol label_set_width */
+    set_width(this: Label, width: c_int): void;
+    /**
+     * @ntsGet get_text
+     * @ntsSet set_text
+     */
+    text: string;
+    /**
+     * @ntsGet get_visible
+     * @ntsSet set_visible
+     */
+    visible: boolean;
+    /** @ntsSet set_width */
+    width: c_int;
+}
+type Label = Class<"_Label"> & LabelOwnMethods;
+declare function label_new(): Label;
+declare function label_width(label: Label): c_int;
+export function run(): number {
+    const label = label_new();
+    label.text = "h\u00e9llo";
+    const read = label.text;
+    label.visible = true;
+    const on = label.visible ? 1 : 0;
+    label.visible = false;
+    const assigned = (label.text = "ab");
+    label.width = 7 as c_int;
+    return read.length * 10000 + on * 1000 + (label.visible ? 100 : 0) + assigned.length * 10 + (label_width(label) as number);
+}
+"#;
+    let library = r"
+#include <stdbool.h>
+#include <string.h>
+struct _Label { char text[32]; bool visible; int width; };
+static struct _Label the;
+struct _Label *label_new(void) { return &the; }
+const char *label_get_text(struct _Label *self) { return self->text; }
+void label_set_text(struct _Label *self, const char *text) { strncpy(self->text, text, 31); }
+bool label_get_visible(struct _Label *self) { return self->visible; }
+void label_set_visible(struct _Label *self, bool visible) { self->visible = visible; }
+void label_set_width(struct _Label *self, int width) { self->width = width; }
+int label_width(struct _Label *self) { return self->width; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("accessors", source, provider, library, &caller) else { return; };
+        assert!(text.contains("label_set_text("), "the write is not the setter");
+        // "héllo" read back (5), `true` read back, `false` after, "ab" as the
+        // assignment's value, and 7 written through a set-only property.
+        for output in outputs {
+            assert_eq!(output, expect("51027", provider), "{provider:?}");
+        }
+    }
+    let unreadable = source.replace("(label_width(label) as number)", "(label.width as number)");
+    let Some((_, prepared)) = prepare("accessors-unreadable", &unreadable) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("a read of a native property no @ntsGet names a method for")),
+        "a set-only property was read: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// C behind the `@ntsDefault` test: each answer spells what arrived.
 const DEFAULTS_LIBRARY: &str = r"
 #include <stdbool.h>

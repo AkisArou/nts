@@ -25634,6 +25634,20 @@ impl<'a> FuncBuilder<'a> {
         if let Some(value) = self.lower_objc_property_set(id, target, source)? {
             return Ok(value);
         }
+        // `label.label = text`: the call to the method the property's
+        // `@ntsSet` names, with the value -- which is still what the
+        // assignment evaluates to.
+        if self.kind_of(target) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+            && let [object, member] = self.children(target).as_slice()
+            && self.is_accessor_property(*member)
+        {
+            let method = self.accessor(*member, true).ok_or_else(|| {
+                self.unsupported(id, "an assignment to a native property no @ntsSet names a method for")
+            })?;
+            let value = self.lower_expression(source)?;
+            self.lower_accessor(id, *object, &method, Some(value))?;
+            return Ok(value);
+        }
         let place = self.place_of(target)?;
         let value = match self.slot_type(id, &place)? {
             Some(want) => self.lower_expecting(source, &want)?,
@@ -25641,6 +25655,82 @@ impl<'a> FuncBuilder<'a> {
         };
         self.write_place(id, &place, value)?;
         Ok(value)
+    }
+
+    /// The property signatures a binding declares for the member at `member`
+    /// with an `@ntsGet` or `@ntsSet`: a property of a handle, reached through
+    /// methods rather than stored.
+    fn accessor_declarations(&self, member: NodeId) -> Vec<&nts_semantic_schema::NativeAttributes> {
+        let Some(symbol) = self.node(member).symbol else { return Vec::new() };
+        let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else { return Vec::new() };
+        record
+            .declarations
+            .iter()
+            .filter(|decl| self.kind_of(**decl) == Some(syntax::PROPERTY_SIGNATURE))
+            .filter_map(|decl| self.node(*decl).native.as_deref())
+            .filter(|native| native.get.is_some() || native.set.is_some())
+            .collect()
+    }
+
+    /// A read of a binding's property: `None` for any other member.
+    fn accessor_read(&mut self, id: NodeId, object: NodeId, member: NodeId) -> Option<Result<ValueId, Diagnostic>> {
+        if !self.is_accessor_property(member) {
+            return None;
+        }
+        Some(match self.accessor(member, false) {
+            Some(method) => self.lower_accessor(id, object, &method, None),
+            None => Err(self.unsupported(id, "a read of a native property no @ntsGet names a method for")),
+        })
+    }
+
+    fn is_accessor_property(&self, member: NodeId) -> bool {
+        !self.accessor_declarations(member).is_empty()
+    }
+
+    /// The method a property is read (`write` false) or written through.
+    fn accessor(&self, member: NodeId, write: bool) -> Option<String> {
+        self.accessor_declarations(member)
+            .into_iter()
+            .find_map(|native| if write { native.set.clone() } else { native.get.clone() })
+    }
+
+    /// `handle.name`, or `handle.name = value`: a call to `method`, a method
+    /// the handle's type declares, with the handle as its instance -- the
+    /// same call `handle.method(value)` is, through the same roles.
+    fn lower_accessor(&mut self, id: NodeId, object: NodeId, method: &str, value: Option<ValueId>) -> Result<ValueId, Diagnostic> {
+        let unknown = || format!("a native property whose accessor `{method}` the handle's type does not declare as a method");
+        let ty = self.snapshot.node_types.get(&object).copied().ok_or_else(|| self.unsupported(id, &unknown()))?;
+        let record = super::native::schema::property(self.snapshot, ty, method).ok_or_else(|| self.unsupported(id, &unknown()))?;
+        let declaration = record.declaration.ok_or_else(|| self.unsupported(id, &unknown()))?;
+        let Some(TypeKind::Function(signature)) = self.snapshot.types.get(record.ty.0 as usize).map(|t| &t.kind) else {
+            return Err(self.unsupported(id, &unknown()));
+        };
+        let mut with_this = self.snapshot.signatures[signature.0 as usize].clone();
+        let this = with_this.this_type.ok_or_else(|| self.unsupported(id, "a native property accessor with no `this` type"))?;
+        with_this.parameters.insert(
+            0,
+            nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false },
+        );
+        let receiver = self.lower_expression(object)?;
+        let callee = self.native_callee(id, Some(declaration), method.to_owned(), &with_this)?;
+        let Callee::Native(target) = &callee else {
+            return Err(self.unsupported(id, &unknown()));
+        };
+        // A plain C slot takes its value at its own representation; a
+        // string, an array or a closure is converted by its role.
+        let args: Vec<ValueId> = match value {
+            Some(value) => {
+                let value = match target.roles.get(1) {
+                    Some(super::native::Role::Plain) => self.coerce(value, &target.parameters[1].representation(), id)?,
+                    _ => value,
+                };
+                vec![value]
+            }
+            None => Vec::new(),
+        };
+        let written = args.len();
+        let (args, lent) = self.native_arguments(id, &target.clone(), args, written, Some(receiver))?;
+        self.finish_call(id, callee, args, lent, Some(declaration))
     }
 
     /// Assign through a pattern written as a literal.
@@ -33783,7 +33873,10 @@ impl<'a> FuncBuilder<'a> {
                     .is_some_and(|name| layout.fields.iter().any(|f| f.name == name)),
                 _ => false,
             };
-            if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field) {
+            // A binding's property, read through the method its tag names.
+            let accessor = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+                && children.last().is_some_and(|member| self.is_accessor_property(*member));
+            if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field || accessor) {
                 return Err(self.unsupported(id, "a property read through a native pointer"));
             }
         }
@@ -34019,6 +34112,11 @@ impl<'a> FuncBuilder<'a> {
         // place: that function already walks to the base, handles a receiver
         // that is a view, and names the owner from the hierarchy.
         if let Some(read) = self.super_getter_read(id, *object, *member) {
+            return read;
+        }
+        // **A binding's property on a handle** -- `label.label` -- which is
+        // the call to the method its `@ntsGet` names.
+        if let Some(read) = self.accessor_read(id, *object, *member) {
             return read;
         }
 
@@ -39897,8 +39995,26 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => None,
         };
-        let mut args = self.lower_written_arguments(id, callee, arguments, receiver.is_some(), tail.as_ref())?;
+        let args = self.lower_written_arguments(id, callee, arguments, receiver.is_some(), tail.as_ref())?;
         let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
+        self.native_arguments(id, &target.clone(), args, arguments.len(), receiver)
+    }
+
+    /// A foreign call's C arguments from the TypeScript ones already lowered:
+    /// the receiver first for a method, then each slot as its role says --
+    /// strings and arrays lent, closures bridged, lengths filled in, the error
+    /// slot supplied where the program wrote `written` arguments and left it
+    /// out. Separate from lowering them so an argument that is a value rather
+    /// than a node -- a property's assigned value -- goes through the same
+    /// roles.
+    fn native_arguments(
+        &mut self,
+        id: NodeId,
+        target: &std::sync::Arc<super::native::Function>,
+        mut args: Vec<ValueId>,
+        written: usize,
+        receiver: Option<ValueId>,
+    ) -> Result<(Vec<ValueId>, Vec<Lent>), Diagnostic> {
         let target = target.clone();
         let origin = self.origin(id);
         // A C method's receiver: its first argument, at the `this` type the
@@ -39921,9 +40037,9 @@ impl<'a> FuncBuilder<'a> {
                 // A slot the caller passed is theirs to read; one they left out
                 // is a zeroed local of ours, checked after the call.
                 Role::ErrorSlot { converter } => {
-                    // `fed` counts a method's receiver, which `arguments` --
-                    // the ones the program wrote after the dot -- does not.
-                    let written = fed.is_some_and(|ts| ts < arguments.len() + usize::from(receiver.is_some()));
+                    // `fed` counts a method's receiver, which `written` --
+                    // the arguments the program wrote after the dot -- does not.
+                    let written = fed.is_some_and(|ts| ts < written + usize::from(receiver.is_some()));
                     let ty = target.parameters[at].representation();
                     c_args.push(self.error_slot(argument.filter(|_| written), ty, converter, &mut lent, &origin));
                 }
@@ -40573,6 +40689,9 @@ impl<'a> FuncBuilder<'a> {
             Callee::Native(target) if target.returns_string.is_some() || target.result_as.is_some() => {
                 Some(target.result.representation())
             }
+            // And one returning nothing, whatever the node it lowers: a
+            // property's setter stands where the assigned value's type is.
+            Callee::Native(target) if target.result == super::native::Type::Void => Some(HirType::Void),
             // A record result is written into the call's destination, and the
             // call itself produces nothing.
             Callee::Native(target) if target.destination().is_some() => Some(target.call_result()),

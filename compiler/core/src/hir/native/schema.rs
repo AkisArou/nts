@@ -3,7 +3,8 @@
 use nts_semantic_schema::{LiteralValue, MemberKind, PropertyRecord, SemanticSnapshot, TypeId, TypeKind};
 use super::{Field, Pointee, Record, RecordKind, scalar};
 
-fn property<'a>(snapshot: &'a SemanticSnapshot, ty: TypeId, name: &str) -> Option<&'a PropertyRecord> {
+/// A member of `ty` by name, through an intersection's parts.
+pub(crate) fn property<'a>(snapshot: &'a SemanticSnapshot, ty: TypeId, name: &str) -> Option<&'a PropertyRecord> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Object { properties } => properties.iter().find(|p| p.name == name),
         TypeKind::Intersection(parts) => parts.iter().find_map(|part| property(snapshot, *part, name)),
