@@ -291,15 +291,49 @@ pub fn narrow(program: &mut Program, narrowed: &FieldWidths) -> usize {
     let mut retyped = 0;
     for func in &mut program.funcs {
         for index in 0..func.values.len() {
-            let OpKind::FieldGet { object, field } = func.values[index].kind else {
-                continue;
+            let narrowed = match &func.values[index].kind {
+                OpKind::FieldGet { object, field } => {
+                    let HirType::Managed(ManagedType::Object(id)) =
+                        func.values[object.0 as usize].ty
+                    else {
+                        continue;
+                    };
+                    by_type.get(&(id, *field)).cloned()
+                },
+                // **A shared read names its arms, not its operand's type.** Its
+                // operand is erased, so the lookup above finds nothing and the
+                // op kept the width lowering gave it while the layouts moved
+                // underneath -- a `double` local read out of an `int32_t` member,
+                // which is the exact sentence this function's header warns about
+                // and which the C backend refuses as `NTS2006 a shared field read
+                // at a type its arms do not declare`. Found by a two-class union,
+                // a shape no fixture had: every union fixture here is interfaces
+                // and object literals, whose fields nothing narrows.
+                //
+                // **Every arm, and not just the first.** The op's precondition is
+                // that the arms agree about this field's *representation*, and
+                // narrowing is per `(layout, field)` -- so it can narrow one arm
+                // and not another and quietly falsify it. Retyping on arm zero
+                // alone would then emit a load at a width the other arm does not
+                // hold. When they disagree the op is left as it was, and the
+                // backend's own check is what says so.
+                OpKind::SharedFieldGet { arms, field, .. } => {
+                    let mut agreed: Option<HirType> = None;
+                    let mut all = true;
+                    for arm in arms {
+                        match by_type.get(&(*arm, *field)) {
+                            Some(ty) if agreed.as_ref().is_none_or(|seen| seen == ty) => {
+                                agreed = Some(ty.clone());
+                            },
+                            _ => all = false,
+                        }
+                    }
+                    if all { agreed } else { None }
+                },
+                _ => continue,
             };
-            let HirType::Managed(ManagedType::Object(id)) = func.values[object.0 as usize].ty
-            else {
-                continue;
-            };
-            if let Some(ty) = by_type.get(&(id, field)) {
-                func.values[index].ty = ty.clone();
+            if let Some(ty) = narrowed {
+                func.values[index].ty = ty;
                 retyped += 1;
             }
         }
