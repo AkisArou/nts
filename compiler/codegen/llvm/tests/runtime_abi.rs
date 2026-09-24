@@ -1,5 +1,5 @@
 //! Every call this backend makes into the C runtime agrees with the runtime's
-//! declaration, on System V and on Win64.
+//! declaration, on System V, Win64 and arm64.
 //!
 //! **The verifier does not check this.** With opaque pointers a call's
 //! function type is its own, so `call ptr @f(i32 %t, i64 %p)` against
@@ -12,6 +12,17 @@
 //! registers, which is the difference a lint finding would be.
 //!
 //! First it shows lint reports a mismatch at all, so a clean answer is one.
+//!
+//! **A lint pass checks the declaration; only a run checks the convention.**
+//! Lint compares types and not attributes, so every ABI bug that lives in an
+//! attribute -- `byval`, `sret`, `zeroext`, `dead_on_return` -- is outside what
+//! it can see. Two were found there: the Win64 retain of an erased value
+//! (by the rc arm of `examples/interop/windows-winrt`, run on Windows), and an
+//! awaited task passed `byval` where AAPCS64 reads a pointer (by
+//! `examples/interop/linux-arm64`, run under qemu -- a segfault, with this
+//! test clean). Each platform's clean answer here is necessary, and the run of
+//! the same program on that platform, against the C backend's build, is what
+//! makes it sufficient.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
