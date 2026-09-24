@@ -401,6 +401,7 @@ fn decode_nodes(
                     nts_semantic_schema::syntax::FUNCTION_DECLARATION
                         | nts_semantic_schema::syntax::METHOD_SIGNATURE
                         | nts_semantic_schema::syntax::PROPERTY_SIGNATURE
+                        | nts_semantic_schema::syntax::CONSTRUCT_SIGNATURE
                         | nts_semantic_schema::syntax::MODULE_DECLARATION
                         | nts_semantic_schema::syntax::SOURCE_FILE
                 )
@@ -436,6 +437,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let defaults = leading_tag(source, "@ntsDefault");
     let get = leading_tag(source, "@ntsGet");
     let set = leading_tag(source, "@ntsSet");
+    let construct = leading_tag(source, "@ntsConstruct");
     let selector = leading_tag(source, "@ntsSelector");
     let class = leading_tag(source, "@ntsClass");
     let frameworks = leading_tag(source, "@ntsFramework")
@@ -451,6 +453,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && defaults.is_none()
         && get.is_none()
         && set.is_none()
+        && construct.is_none()
         && selector.is_none()
         && class.is_none()
         && frameworks.is_none()
@@ -469,6 +472,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         defaults,
         get,
         set,
+        construct,
         selector,
         class,
         frameworks,

@@ -243,6 +243,9 @@ pub const PREFIX_UNARY_EXPRESSION: u16 = 225;
 pub const POSTFIX_UNARY_EXPRESSION: u16 = 226;
 pub const PROPERTY_SIGNATURE: u16 = 172;
 pub const METHOD_SIGNATURE: u16 = 174;
+/// `new (props?: P): T` in an interface or type literal. After the call
+/// signature, as in TypeScript's own `SyntaxKind`.
+pub const CONSTRUCT_SIGNATURE: u16 = 181;
 pub const BINARY_EXPRESSION: u16 = 227;
 pub const CALL_EXPRESSION: u16 = 214;
 pub const BLOCK: u16 = 242;

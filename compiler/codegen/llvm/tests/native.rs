@@ -2767,6 +2767,79 @@ int toggle(int on) { return on; }
     }
 }
 
+/// GJS's construction, `new GtkButton({ label, width })`: the constructor
+/// `@ntsConstruct` names, then one setter per property the literal writes, in
+/// the literal's order and after its values are evaluated in that order --
+/// the fake records every setter call, so an order taken from the type rather
+/// than the literal, a property written that was not, or a value evaluated
+/// twice all change the record. A literal naming one property twice is
+/// TypeScript's own error (TS1117), so it has no arm. A props bag that is not
+/// a literal is refused by name.
+#[test]
+fn a_handle_is_constructed_with_properties_on_both_backends() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+interface ThingOwnMethods {
+    /** @ntsSymbol thing_set_label */
+    set_label(this: Thing, label: string): void;
+    /** @ntsSymbol thing_set_width */
+    set_width(this: Thing, width: c_int): void;
+    /** @ntsSymbol thing_set_height */
+    set_height(this: Thing, height: c_int): void;
+    /** @ntsSet set_label */
+    label: string;
+    /** @ntsSet set_width */
+    width: c_int;
+    /** @ntsSet set_height */
+    height: c_int;
+}
+type Thing = Class<"_Thing"> & ThingOwnMethods;
+interface ThingProps { label?: string; width?: c_int; height?: c_int }
+declare function thing_new(): Thing;
+declare const Thing: {
+    /** @ntsConstruct thing_new */
+    new (props?: ThingProps): Thing;
+};
+declare function thing_record(thing: Thing): c_int;
+let evaluated = 0;
+function next(): c_int { evaluated = evaluated * 10 + 1; return evaluated as c_int; }
+export function run(): number {
+    const label = "ab";
+    // Written width first, then label: the type declares label first.
+    const thing = new Thing({ width: next(), label, });
+    const plain = new Thing();
+    return (thing_record(thing) as number) * 10 + (thing_record(plain) as number);
+}
+"#;
+    let library = r"
+#include <string.h>
+typedef struct _Thing { int record; } Thing;
+static Thing things[2];
+static int made;
+struct _Thing *thing_new(void) { Thing *t = &things[made++ % 2]; t->record = 0; return t; }
+void thing_set_label(struct _Thing *t, const char *label) { t->record = t->record * 10 + 1 + (int)strlen(label) * 0; }
+void thing_set_width(struct _Thing *t, int width) { t->record = t->record * 10 + 2 + width * 0; t->record = t->record * 10 + width; }
+void thing_set_height(struct _Thing *t, int height) { t->record = t->record * 10 + 3 + height * 0; }
+int thing_record(struct _Thing *t) { return t->record; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((_, outputs)) = run_on_both_backends("construct", source, provider, library, &caller) else { return; };
+        // width (2, then its value 1), then label (1), and no height: 211;
+        // the plain one set nothing: 0.
+        for output in outputs {
+            assert_eq!(output, expect("2110", provider), "{provider:?}");
+        }
+    }
+    let bag = source.replace("new Thing({ width: next(), label, })", "new Thing(({ width: next(), label } as ThingProps))");
+    let Some((_, prepared)) = prepare("construct-bag", &bag) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("not written as an object literal")),
+        "a props bag that is not a literal was accepted: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// C behind the `@ntsDefault` test: each answer spells what arrived.
 const DEFAULTS_LIBRARY: &str = r"
 #include <stdbool.h>

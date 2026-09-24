@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 23;
+pub const SCHEMA_VERSION: u32 = 24;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -736,6 +736,12 @@ pub struct NativeAttributes {
     pub get: Option<String>,
     #[serde(default)]
     pub set: Option<String>,
+    /// `@ntsConstruct gtk_button_new`, on the construct signature of a value a
+    /// binding declares beside a handle's type: `new GtkButton({ label })` is
+    /// that function, called with nothing, and then the setter of each
+    /// property the literal writes, in order.
+    #[serde(default)]
+    pub construct: Option<String>,
     /// `@ntsSelector initWithUTF8String:`: the declaration is an Objective-C
     /// message, not a C symbol. On a method, the receiver is `this`. On a
     /// function it is the class `@ntsClass` names.

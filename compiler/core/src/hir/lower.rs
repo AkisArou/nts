@@ -25662,6 +25662,85 @@ impl<'a> FuncBuilder<'a> {
         Ok(value)
     }
 
+    /// `new GtkButton({ label: "Hi" })`, where the construct signature the
+    /// call resolved to carries `@ntsConstruct gtk_button_new`: that function,
+    /// called with nothing, then the setter each property's `@ntsSet` names,
+    /// in the order the literal writes them -- the literal is known here, so
+    /// no object is built and no property is tested for presence. `None` for
+    /// any other `new`.
+    fn native_construct(&mut self, id: NodeId) -> Option<Result<ValueId, Diagnostic>> {
+        let declaration = self.snapshot.call_targets.get(&id)?.callee?;
+        if self.kind_of(declaration) != Some(syntax::CONSTRUCT_SIGNATURE) {
+            return None;
+        }
+        let function = self.node(declaration).native.as_ref()?.construct.clone()?;
+        Some(self.lower_native_construct(id, &function))
+    }
+
+    fn lower_native_construct(&mut self, id: NodeId, function: &str) -> Result<ValueId, Diagnostic> {
+        // The constructor: a foreign function of that name, called with
+        // nothing -- its tags apply as at any call of it.
+        let found = (0..self.snapshot.nodes.len()).map(|at| NodeId(u32::try_from(at).unwrap_or(u32::MAX))).find(|node| {
+            self.kind_of(*node) == Some(syntax::FUNCTION_DECLARATION)
+                && !self.has_a_body(*node)
+                && self.declared_name(*node).as_deref() == Some(function)
+        });
+        let declaration = found.ok_or_else(|| {
+            self.unsupported(id, &format!("@ntsConstruct naming `{function}`, which no foreign function declares"))
+        })?;
+        // The construct signature is the constructor's, with the properties in
+        // front: its result is what the constructor answers, `Declared` and
+        // `Owned` as written, and the checker has resolved it here. The
+        // constructor's own declaration is in a binding nothing may call, which
+        // the frontend does not type node by node.
+        let construct = self.snapshot.call_targets.get(&id).map(|target| target.signature).ok_or_else(|| {
+            self.unsupported(id, &format!("@ntsConstruct naming `{function}` at a `new` the checker did not resolve"))
+        })?;
+        let record = nts_semantic_schema::SignatureRecord {
+            parameters: Vec::new(),
+            is_construct: false,
+            ..self.snapshot.signatures[construct.0 as usize].clone()
+        };
+        let callee = self.native_callee(id, Some(declaration), function.to_owned(), &record)?;
+        let Callee::Native(target) = &callee else {
+            return Err(self.unsupported(id, "@ntsConstruct naming a function that is not foreign"));
+        };
+        let (args, lent) = self.native_arguments(id, &target.clone(), Vec::new(), 0, None)?;
+        let handle = self.finish_call(id, callee, args, lent, Some(declaration))?;
+        // The properties, as the literal writes them.
+        let ty = self
+            .snapshot
+            .node_types
+            .get(&id)
+            .copied()
+            .ok_or_else(|| self.unsupported(id, "a constructed handle with no type"))?;
+        let arguments = self.arguments_of(id);
+        let literal = match arguments.as_slice() {
+            [] => return Ok(handle),
+            [literal] if self.kind_of(*literal) == Some(syntax::OBJECT_LITERAL_EXPRESSION) => *literal,
+            _ => {
+                return Err(self.unsupported(
+                    id,
+                    "a handle constructed from properties that are not written as an object literal, which is what lets them be set without building an object",
+                ));
+            }
+        };
+        for property in self.children(literal) {
+            // What an object literal's property is, read the literal's way:
+            // `{ label }` names the local, and a computed name is refused.
+            let (name, value) = self.property_parts(property, None)?;
+            let setter = super::native::schema::property(self.snapshot, ty, &name)
+                .and_then(|record| record.declaration)
+                .and_then(|declaration| self.node(declaration).native.as_ref())
+                .and_then(|native| native.set.clone())
+                .ok_or_else(|| {
+                    self.unsupported(property, &format!("a constructed property `{name}` no @ntsSet names a method for"))
+                })?;
+            self.lower_accessor_on(id, handle, ty, &setter, Some(value))?;
+        }
+        Ok(handle)
+    }
+
     /// The property signatures a binding declares for the member at `member`
     /// with an `@ntsGet` or `@ntsSet`: a property of a handle, reached through
     /// methods rather than stored.
@@ -25703,8 +25782,25 @@ impl<'a> FuncBuilder<'a> {
     /// the handle's type declares, with the handle as its instance -- the
     /// same call `handle.method(value)` is, through the same roles.
     fn lower_accessor(&mut self, id: NodeId, object: NodeId, method: &str, value: Option<ValueId>) -> Result<ValueId, Diagnostic> {
+        let ty = self.snapshot.node_types.get(&object).copied().ok_or_else(|| {
+            self.unsupported(id, &format!("a native property whose accessor `{method}` has no receiver type"))
+        })?;
+        let receiver = self.lower_expression(object)?;
+        self.lower_accessor_on(id, receiver, ty, method, value)
+    }
+
+    /// [`Self::lower_accessor`] on a receiver already lowered: the handle
+    /// `new` just made, whose properties the literal writes. Evaluated once
+    /// by construction -- there is no expression here to lower again.
+    fn lower_accessor_on(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        ty: TypeId,
+        method: &str,
+        value: Option<ValueId>,
+    ) -> Result<ValueId, Diagnostic> {
         let unknown = || format!("a native property whose accessor `{method}` the handle's type does not declare as a method");
-        let ty = self.snapshot.node_types.get(&object).copied().ok_or_else(|| self.unsupported(id, &unknown()))?;
         let record = super::native::schema::property(self.snapshot, ty, method).ok_or_else(|| self.unsupported(id, &unknown()))?;
         let declaration = record.declaration.ok_or_else(|| self.unsupported(id, &unknown()))?;
         let Some(TypeKind::Function(signature)) = self.snapshot.types.get(record.ty.0 as usize).map(|t| &t.kind) else {
@@ -25716,7 +25812,6 @@ impl<'a> FuncBuilder<'a> {
             0,
             nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false },
         );
-        let receiver = self.lower_expression(object)?;
         let callee = self.native_callee(id, Some(declaration), method.to_owned(), &with_this)?;
         let Callee::Native(target) = &callee else {
             return Err(self.unsupported(id, &unknown()));
@@ -28029,7 +28124,10 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::CONDITIONAL_EXPRESSION) => self.lower_conditional(id),
             Some(syntax::ARRAY_LITERAL_EXPRESSION) => self.lower_array_literal(id),
             Some(syntax::OBJECT_LITERAL_EXPRESSION) => self.lower_object_literal(id),
-            Some(syntax::NEW_EXPRESSION) => self.lower_new(id),
+            Some(syntax::NEW_EXPRESSION) => match self.native_construct(id) {
+                Some(constructed) => constructed,
+                None => self.lower_new(id),
+            },
             Some(syntax::ARROW_FUNCTION) => self.lower_arrow(id),
             Some(syntax::NULL_KEYWORD) => self.lower_absent(id),
             // `this` is parameter zero of a method. Outside one there is no
