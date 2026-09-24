@@ -77,6 +77,15 @@ declare module "c:types" {
   export type CStrings<Q extends "char" | "const" | "const const" = "const const"> = readonly string[] & {
     readonly __c_strings?: Q;
   };
+  // A `string` as NUL-terminated UTF-16, `const uint16_t *` -- Windows'
+  // `LPCWSTR`, which every `W` function takes. Callers pass an ordinary
+  // `string`; the brand is optional, so any `string` is one. Borrowed for the
+  // call and released after it, like a plain `string` parameter's UTF-8: a
+  // string already stored as UTF-16 is lent in place, with no copy. Named for
+  // the encoding and not "wide": `wchar_t` is four bytes on Linux. A lone
+  // surrogate crosses unchanged (Windows' strings are WTF-16), where the UTF-8
+  // crossing replaces it; U+0000 inside the string ends the process.
+  export type Utf16String = string & { readonly __c_utf16?: true };
   // A `Uint8Array` as C's pointer to its bytes -- `const guint8 *data` --
   // borrowed in place for the call: no copy in or out, so bytes C writes are
   // the ones the array holds when the call returns. `Q` is the header's

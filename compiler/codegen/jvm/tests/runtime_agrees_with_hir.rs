@@ -223,4 +223,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 86 for `nts_closure_lend_once` and `nts_closure_unlend_once`, the pair for
 /// a closure C calls once, later, counted while it is out: native calls again.
-const REFUSED_FLOOR: usize = 86;
+///
+/// 88 for `nts_string_to_utf16` and `nts_utf16_release`, which hand a
+/// `Utf16String` to a C function as `const uint16_t *`: native calls again.
+const REFUSED_FLOOR: usize = 88;

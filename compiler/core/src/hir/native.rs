@@ -231,16 +231,57 @@ pub struct ReturnedString {
 }
 
 /// What one C parameter of a foreign function receives.
+/// What a `string` becomes on its way to C: the conversion, its release, and
+/// the C type the callee reads. One place names all three, so a call cannot
+/// convert with one encoding's helper and release with the other's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Encoding {
+    /// `string`: `const char *`, UTF-8 (`nts_string_to_cstring`).
+    Utf8,
+    /// `Utf16String`: `const uint16_t *`, UTF-16 (`nts_string_to_utf16`) --
+    /// Windows' `LPCWSTR`. A two-byte string is lent in place.
+    Utf16,
+}
+
+impl Encoding {
+    /// The runtime helper that makes the C string.
+    #[must_use]
+    pub const fn to_c(self) -> &'static str {
+        match self {
+            Self::Utf8 => "nts_string_to_cstring",
+            Self::Utf16 => "nts_string_to_utf16",
+        }
+    }
+
+    /// The runtime helper that gives it back, given the string it came from.
+    #[must_use]
+    pub const fn release(self) -> &'static str {
+        match self {
+            Self::Utf8 => "nts_cstring_release",
+            Self::Utf16 => "nts_utf16_release",
+        }
+    }
+
+    /// The C parameter type: a pointer to const code units.
+    #[must_use]
+    pub fn c_type(self) -> Type {
+        let unit = match self {
+            Self::Utf8 => Scalar::Char,
+            Self::Utf16 => Scalar::UInt16,
+        };
+        Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(unit))))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Role {
     /// The argument as TypeScript passed it, converted to the ABI type.
     Plain,
-    /// A TypeScript `string` as `const char *`: NUL-terminated UTF-8, borrowed
-    /// by the callee for the call and released after it
-    /// (`nts_string_to_cstring` / `nts_cstring_release`). C that keeps the
-    /// pointer past the call must be declared `ConstPtr<c_char>` instead;
+    /// A TypeScript `string` as a NUL-terminated C string in `Encoding`,
+    /// borrowed by the callee for the call and released after it. C that
+    /// keeps the pointer past the call must be declared as a pointer instead;
     /// that is the contract of the spelling.
-    String,
+    String(Encoding),
     /// A TypeScript closure -- capturing or not -- as a C function pointer
     /// whose last parameter is the closure's context. `Closure<F>` in
     /// `c:types` when C keeps it (`scoped: false`, released by the notify
@@ -327,7 +368,7 @@ impl Function {
             let fed = match role {
                 Role::ClosureData | Role::ClosureNotify | Role::Length { .. } => None,
                 Role::Plain
-                | Role::String
+                | Role::String(_)
                 | Role::Closure { .. }
                 | Role::Block { .. }
                 | Role::Strings
@@ -2215,9 +2256,11 @@ fn c_parameter(
     if is_object_pointer(snapshot, parameter.ty) {
         return Ok(Some(vec![(Type::Pointer(Pointee::Void), Role::Plain)]));
     }
-    if is_string(snapshot, parameter.ty) || is_string_literal(snapshot, parameter.ty) {
-        let text = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))));
-        return Ok(Some(vec![(text, Role::String)]));
+    if let Some(encoding) = string_encoding(snapshot, parameter.ty) {
+        return Ok(Some(vec![(encoding.c_type(), Role::String(encoding))]));
+    }
+    if is_string_literal(snapshot, parameter.ty) {
+        return Ok(Some(vec![(Encoding::Utf8.c_type(), Role::String(Encoding::Utf8))]));
     }
     match closure(snapshot, parameter.ty) {
         Some((function, kind)) => closure_slots(snapshot, name, &parameter.name, function, kind).map(Some),
@@ -2235,17 +2278,48 @@ fn c_parameter(
 /// not the same: two absences make it an erased value, which is not the
 /// `NtsString *` the conversion reads, so it is left refused.
 fn is_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    string_encoding(snapshot, ty) == Some(Encoding::Utf8)
+}
+
+/// A `string` with an optional C-boundary brand (`Utf16String`): an
+/// intersection whose value is exactly a string.
+///
+/// **Exactly** that: two parts, `string` and an object whose only property is
+/// the optional, readonly `__c_utf16` marker. A required property, or any
+/// other one -- `string & { real: number }` -- is a value with a layout, and
+/// is not this.
+pub(crate) fn is_branded_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Intersection(_)))
+        && string_encoding(snapshot, ty).is_some()
+}
+
+/// How a `string` parameter crosses, or `None` for anything that is not one:
+/// `string` as UTF-8 and `Utf16String` -- `string` with the optional
+/// `__c_utf16` brand -- as UTF-16, either one optionally `| null`.
+fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    match kind(ty) {
-        Some(TypeKind::String) => true,
-        Some(TypeKind::Union(parts)) => {
-            let [a, b] = parts.as_slice() else { return false };
-            matches!(
-                (kind(*a), kind(*b)),
-                (Some(TypeKind::String), Some(TypeKind::Null)) | (Some(TypeKind::Null), Some(TypeKind::String))
-            )
+    match kind(ty)? {
+        TypeKind::String => Some(Encoding::Utf8),
+        TypeKind::Intersection(parts) => {
+            let [a, b] = parts.as_slice() else { return None };
+            let (text, brand) = if matches!(kind(*a), Some(TypeKind::String)) { (a, b) } else { (b, a) };
+            if !matches!(kind(*text), Some(TypeKind::String)) {
+                return None;
+            }
+            let TypeKind::Object { properties } = kind(*brand)? else { return None };
+            match properties.as_slice() {
+                [property] if property.name == "___c_utf16" && property.optional && property.readonly => {
+                    Some(Encoding::Utf16)
+                }
+                _ => None,
+            }
         }
-        _ => false,
+        TypeKind::Union(parts) => {
+            let [a, b] = parts.as_slice() else { return None };
+            let payload = if matches!(kind(*a), Some(TypeKind::Null)) { *b } else if matches!(kind(*b), Some(TypeKind::Null)) { *a } else { return None };
+            string_encoding(snapshot, payload)
+        }
+        _ => None,
     }
 }
 

@@ -29,10 +29,11 @@ let destroyed = 0;
 let ticks = 0;
 let closedBy = "nothing";
 
-// UTF-16 by hand, until a `string` crosses as `LPCWSTR` (W1).
-function wide(text: string): ConstPtr<c_uint16> {
+// A struct member keeps its pointer past any one call, which a lent string
+// cannot promise, so `WNDCLASSEXW.lpszClassName` gets UTF-16 units of its own.
+function classNameUnits(text: string): ConstPtr<c_uint16> {
   const out = malloc<c_uint16>((text.length + 1) * 2);
-  if (out === null) return wide("");
+  if (out === null) return classNameUnits("");
   for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) as c_uint16;
   out[text.length] = 0 as c_uint16;
   return out;
@@ -67,7 +68,10 @@ function procedure(hwnd: HWND, message: c_uint, wParam: c_uint64, lParam: c_int6
 
 function main(): void {
   const instance = GetModuleHandleW(null);
-  const name = wide("NtsWindow");
+  // The class name lives in the struct past the call that reads it, so it is
+  // stored as UTF-16 by hand there. Everywhere a `string` is an argument, it
+  // crosses as `Utf16String`, lent in place when it is already UTF-16.
+  const name = classNameUnits("NtsWindow");
   const cls = local<WNDCLASSEXW>();
   cls[0].cbSize = 80 as c_uint;
   cls[0].lpfnWndProc = procedure;
@@ -77,7 +81,7 @@ function main(): void {
     report("RegisterClassExW failed");
     return;
   }
-  const hwnd = CreateWindowExW(0n as c_ulong, name, wide("nts"), 0n as c_ulong,
+  const hwnd = CreateWindowExW(0n as c_ulong, "NtsWindow", "nts", 0n as c_ulong,
     0 as c_int, 0 as c_int, 320 as c_int, 240 as c_int, null, null, instance, null);
   if (hwnd === null) {
     report("CreateWindowExW failed");

@@ -3273,3 +3273,80 @@ export function realPointer(): number { return is_null(some_address()); }
         }
     }
 }
+
+/// A `Utf16String` crosses as NUL-terminated UTF-16, on both backends: lent in
+/// place when the string is stored as UTF-16, copied when it is one byte wide.
+///
+/// Each property is observed where C receives it:
+/// - `sum` adds the units and counts them, so the text is compared, not
+///   assumed.
+/// - `same` is given one string twice. Lent, that is one pointer; copied, two
+///   allocations alive at once, which can never be equal.
+/// - A lone surrogate arrives as the unit it is (0xD800), where the UTF-8
+///   crossing would have made it U+FFFD. It is built at run time: the literal
+///   `"\ud800"` reaches the program as three U+FFFD (`.length` is 3, node's
+///   is 1), which is `blockers/a-lone-surrogate-in-a-string-literal`.
+/// - `null` arrives as NULL.
+///
+/// Under reference counting, fifty more rounds must leave nothing live, so a
+/// copy that is never released shows up as a leak.
+#[test]
+fn a_utf16_string_crosses_lent_when_wide_and_copied_when_narrow_on_both_backends() {
+    let source = r#"
+import type { Utf16String, c_int } from "c:types";
+declare function sum(s: Utf16String): c_int;
+declare function same(a: Utf16String, b: Utf16String): c_int;
+declare function is_null(s: Utf16String | null): c_int;
+export function narrow(): number { return sum("AB"); }
+export function wide(): number { return sum("αβ"); }
+export function lone(): number { return sum(String.fromCharCode(0xd800)); }
+export function lentWide(): number { const s = "αβγ"; return same(s, s); }
+export function lentNarrow(): number { const s = "abc"; return same(s, s); }
+export function nothing(): number { return is_null(null); }
+"#;
+    let library = "#include <stdint.h>\n#include <stddef.h>\n\
+        int sum(const uint16_t *s) { int total = 0, n = 0; while (s[n]) total += s[n++]; return total * 10 + n; }\n\
+        int same(const uint16_t *a, const uint16_t *b) { return a == b; }\n\
+        int is_null(const uint16_t *s) { return s == NULL; }\n";
+    let caller = counted_caller(
+        r#"printf("%.0f %.0f %.0f %.0f %.0f %.0f", narrow(), wide(), lone(), lentWide(), lentNarrow(), nothing());"#,
+        "narrow(); wide(); lentWide(); lentNarrow();",
+    );
+    // "AB" = 65+66 = 131 over 2 units; "αβ" = 945+946 = 1891 over 2; a lone
+    // high surrogate is 55296 over 1.
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((text, outputs)) = run_on_both_backends("utf16-string", source, provider, library, &caller) else { return; };
+        assert!(text.contains("nts_string_to_utf16(") && text.contains("nts_utf16_release("), "the UTF-16 pair is not in the C program");
+        for output in outputs {
+            assert_eq!(output, expect("1312 18912 552961 1 0 1", provider), "{provider:?}");
+        }
+    }
+}
+
+/// Only `string` beside the optional `__c_utf16` marker is a `Utf16String`.
+/// `string & { real: number }` has a property a program can read, so it is a
+/// value with a layout: taken for a plain string, a read of `.real` would be
+/// at an offset nothing laid out. It is refused, not converted.
+#[test]
+fn a_string_intersected_with_a_real_property_is_not_a_utf16_string() {
+    let source = r#"
+import type { c_int } from "c:types";
+declare function take(s: string & { real: number }): c_int;
+export function go(s: string & { real: number }): number { return take(s); }
+"#;
+    let Some((_, prepared)) = prepare("utf16-not-a-brand", source) else { return; };
+    assert!(
+        // Refused where the value's type is read: `representation_of`'s
+        // intersection arm did not take it.
+        prepared.diagnostics.iter().any(|d| d.message.contains("unrepresentable type (an intersection)")),
+        "`string & {{ real: number }}` crossed as a string: {:?}",
+        prepared.diagnostics
+    );
+    assert!(
+        !prepared.program.funcs.iter().flat_map(|f| &f.values).any(|op| matches!(
+            &op.kind,
+            hir::OpKind::Call { callee: hir::Callee::External(name), .. } if name == "nts_string_to_utf16"
+        )),
+        "a UTF-16 conversion was emitted for a string that is not a Utf16String"
+    );
+}

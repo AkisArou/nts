@@ -4580,6 +4580,51 @@ void nts_cstring_release(const NtsString *s, const char *c) {
   free((void *)c);
 }
 
+/* The index of the first zero unit, or `length` when there is none. */
+static uint32_t nts_first_zero_unit(const NtsString *s) {
+  for (uint32_t at = 0; at < s->length; at++) {
+    if (nts_unit(s, at) == 0u) {
+      return at;
+    }
+  }
+  return s->length;
+}
+
+const uint16_t *nts_string_to_utf16(const NtsString *s) {
+  if (s == NULL) {
+    return NULL;
+  }
+  uint32_t zero = nts_first_zero_unit(s);
+  if (zero != s->length) {
+    fprintf(stderr,
+            "nts: a string containing U+0000 at index %u cannot cross to C "
+            "as a NUL-terminated UTF-16 string\n",
+            (unsigned)zero);
+    abort();
+  }
+  if (s->flags & NTS_TWO_BYTE) {
+    return NTS_ELEMENTS(s, uint16_t);
+  }
+  uint16_t *out = (uint16_t *)malloc(((size_t)s->length + 1u) * 2u);
+  if (!out) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
+  for (uint32_t at = 0; at < s->length; at++) {
+    out[at] = bytes[at];
+  }
+  out[s->length] = 0;
+  return out;
+}
+
+void nts_utf16_release(const NtsString *s, const uint16_t *units) {
+  if (s != NULL && units == NTS_ELEMENTS(s, uint16_t)) {
+    return;
+  }
+  free((void *)units);
+}
+
 NtsString *nts_string_from_cstring(const char *c) {
   if (c == NULL) {
     return NULL;

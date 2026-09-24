@@ -10596,6 +10596,18 @@ fn representation_of(
             }
         }
 
+        // **An optional brand never exists at run time, so this value is
+        // exactly a string**, and `Managed(String)` has no field layout to
+        // fabricate: not the case the comment below forbids. The shape is a
+        // `string` beside a brand only a C boundary reads (`Utf16String`,
+        // `string & { readonly __c_utf16?: true }`), and nothing else --
+        // `string & { real: number }` is not it. Keyed on the recogniser the
+        // call boundary uses, so the two cannot disagree about which types
+        // these are.
+        TypeKind::Intersection(_) if super::native::is_branded_string(snapshot, ty) => {
+            HirType::Managed(ManagedType::String)
+        }
+
         // `TypeKind::Intersection` falls here, and **that is a decision** rather
         // than an omission.
         //
@@ -11334,8 +11346,8 @@ struct ParameterTags {
 /// returns.
 #[derive(Debug, Clone)]
 enum Lent {
-    /// A C string, beside the string it was made from.
-    String { string: ValueId, pointer: ValueId },
+    /// A C string, beside the string it was made from and how it was encoded.
+    String { string: ValueId, pointer: ValueId, encoding: super::native::Encoding },
     /// A `char **` made from a `string[]`.
     Strings { pointer: ValueId },
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
@@ -39684,8 +39696,8 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         for lent in lent {
             match lent {
-                Lent::String { string, pointer } => {
-                    self.runtime_call("nts_cstring_release", vec![string, pointer], HirType::Void, origin.clone());
+                Lent::String { string, pointer, encoding } => {
+                    self.runtime_call(encoding.release(), vec![string, pointer], HirType::Void, origin.clone());
                 }
                 Lent::Closure { context } => {
                     self.runtime_call("nts_closure_unlend", vec![context], HirType::Void, origin.clone());
@@ -39937,15 +39949,15 @@ impl<'a> FuncBuilder<'a> {
                     let count = self.coerce(count, &target.parameters[at].representation(), id)?;
                     c_args.push(count);
                 }
-                Role::String => {
+                Role::String(encoding) => {
                     let Some(string) = argument else { continue };
                     let pointer = self.runtime_call(
-                        "nts_string_to_cstring",
+                        encoding.to_c(),
                         vec![string],
                         target.parameters[at].representation(),
                         origin.clone(),
                     );
-                    lent.push(Lent::String { string, pointer });
+                    lent.push(Lent::String { string, pointer, encoding });
                     c_args.push(pointer);
                 }
                 Role::Closure { lifetime, bridge } => {
@@ -40353,7 +40365,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(call, "an Objective-C message with a variadic tail or a managed ABI, which a cast to one C function type cannot carry"));
         }
         if native.roles.iter().any(|role| {
-            !matches!(role, super::native::Role::Plain | super::native::Role::String | super::native::Role::Block { .. })
+            !matches!(role, super::native::Role::Plain | super::native::Role::String(_) | super::native::Role::Block { .. })
         }) {
             return Err(self.unsupported(call, "an Objective-C message taking a C callback, an array or an error slot; a callback crosses as a `Block<F>`"));
         }

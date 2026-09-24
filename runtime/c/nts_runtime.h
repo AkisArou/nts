@@ -1624,9 +1624,34 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  *
  * **U+0000 inside the string ends the process**, naming the boundary. A C
  * string cannot hold one, and passing the prefix before it would be a callee
- * silently receiving different text from what the program wrote. */
+ * silently receiving different text from what the program wrote.
+ *
+ * **Its UTF-16 sibling below does not replace a lone surrogate.** UTF-8 cannot
+ * encode one, so here it becomes U+FFFD; UTF-16 can, and Windows' own strings
+ * are WTF-16 (a file name may hold one), so there it passes unchanged. The
+ * same string therefore reaches C differently through the two, on purpose:
+ * neither should be "fixed" to match the other. */
 const char *nts_string_to_cstring(const NtsString *s);
 void nts_cstring_release(const NtsString *s, const char *c);
+/* A string as NUL-terminated UTF-16, for a foreign parameter the binding
+ * declares as `Utf16String` -- Windows' `LPCWSTR`, `const uint16_t *` here,
+ * which is `const wchar_t *` on Windows and never on Linux, where `wchar_t` is
+ * four bytes. Borrowed by the callee for the call and handed back to
+ * `nts_utf16_release` with the string it came from. NULL is NULL.
+ *
+ * **A two-byte string is lent in place**, with no copy and no allocation:
+ * `nts_str_raw` NUL-terminates both widths, and its comment says it is the one
+ * place that has to hold. The callee receives `const`, so a write through the
+ * lent pointer is not something a binding can express -- the question the
+ * GTK lane settled for one-byte ASCII in `b8e0b3c7`, which must be asked again
+ * before this is extended to a writable `LPWSTR`. A one-byte string is widened
+ * into a fresh buffer.
+ *
+ * A lone surrogate passes through unchanged (see `nts_string_to_cstring` for
+ * why the UTF-8 path differs). U+0000 inside the string ends the process
+ * naming the index, as it does there. */
+const uint16_t *nts_string_to_utf16(const NtsString *s);
+void nts_utf16_release(const NtsString *s, const uint16_t *units);
 /* A `string[]` as C's NULL-terminated array of strings, for a parameter
  * declared `CStrings`: each element converted as `nts_string_to_cstring`
  * converts one, in one allocation with the table, and handed back to

@@ -4,7 +4,7 @@
  * @ntsHeader <windows.h>
  */
 declare module "c:win32" {
-  import type { ConstPtr, Opaque, Ptr, Struct, c_int, c_int64, c_long, c_uint, c_uint16, c_uint64, c_ulong } from "c:types";
+  import type { ConstPtr, Opaque, Ptr, Struct, Utf16String, c_int, c_int64, c_long, c_uint, c_uint16, c_uint64, c_ulong } from "c:types";
 
   export type HWND = Opaque<"HWND__">;
   export type HINSTANCE = Opaque<"HINSTANCE__">;
@@ -39,12 +39,12 @@ declare module "c:win32" {
     hIconSm: HICON | null;
   }, "tagWNDCLASSEXW">;
 
-  export function GetModuleHandleW(name: ConstPtr<c_uint16> | null): HINSTANCE | null;
+  export function GetModuleHandleW(name: Utf16String | null): HINSTANCE | null;
   /** Reads `cls` during the call and keeps no address into it.
    * @ntsNoEscape cls */
   export function RegisterClassExW(cls: ConstPtr<WNDCLASSEXW>): c_uint16;
   export function CreateWindowExW(
-    exStyle: c_ulong, className: ConstPtr<c_uint16>, windowName: ConstPtr<c_uint16>, style: c_ulong,
+    exStyle: c_ulong, className: Utf16String, windowName: Utf16String | null, style: c_ulong,
     x: c_int, y: c_int, width: c_int, height: c_int,
     parent: HWND | null, menu: HMENU | null, instance: HINSTANCE | null, param: Ptr<void> | null,
   ): HWND | null;
