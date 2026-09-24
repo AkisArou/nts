@@ -7,9 +7,9 @@
 //
 //   ymd=2026-9    `g_date_time_get_ymd` wrote two out parameters on the
 //                 stack, and took `null` for the third, which it may skip
-//   keyfile 1 5 no-error
-//                 a key file loaded and read, and the `GError **` slot beside
-//                 each call was left null
+//   keyfile true 5 no-error
+//                 a key file loaded -- its `gboolean` answer a boolean -- and
+//                 read, and the `GError **` slot beside each call left null
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   thrown        and the same call as a method, with no slot passed, threw an
 //                 `Error` carrying the `GError`'s message instead
@@ -31,7 +31,7 @@
 //                 through its `label` property, as GJS writes it -- the
 //                 `gtk_label_set_label` and `gtk_label_get_label` GIR names
 //   ticks=3       and the count it captured is what `main` reads afterwards
-//   made=1 again=rejected removed=1
+//   made=true again=rejected removed=true
 //                 `make_directory_async` and `delete_async` awaited: the
 //                 Promise forms the binding generates, resolving with what
 //                 `_finish` returns and rejecting with the `GError` it reports,

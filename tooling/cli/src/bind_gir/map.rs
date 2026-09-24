@@ -1134,13 +1134,27 @@ impl<'a> Mapper<'a> {
             Some(class) if callable.kind == CallableKind::Constructor => self.declared(result, class),
             _ => result,
         };
+        let result = self.truth(&callable.signature.result, result);
         Ok((self.owned(result, callable.signature.result.transfer == Transfer::Full), free))
+    }
+
+    /// A `gboolean` as the boolean it means: `CBool<c_int>`, where C still
+    /// sees the `int` it is. Only for a function's own parameters and result;
+    /// a callback's stay `c_int`, which is what its bridge converts.
+    fn truth(&mut self, param: &Param, mapped: Mapped) -> Mapped {
+        let gboolean = matches!(&param.ty, TypeRef::Named { name, .. } if name == "gboolean");
+        if !gboolean || mapped.c != Type::Scalar(Scalar::Int) {
+            return mapped;
+        }
+        self.binding.brands.insert("CBool");
+        Mapped { ts: "CBool<c_int>".to_owned(), ..mapped }
     }
 
     /// A parameter passed as it is -- a scalar, an enum, a handle -- with what
     /// it hands over (`Consumed`) and what stands for leaving it out.
     fn plain(&mut self, param: &Param) -> Result<(Mapped, Option<&'static str>), Reason> {
         let value = self.value(param)?;
+        let value = self.truth(param, value);
         Ok((self.handed_over(value, param.transfer == Transfer::Full), self.omissible(param)))
     }
 

@@ -401,7 +401,7 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
              export function as{class}(value: GTypeInstance | null): {class} | null {{\n\
              \x20 return unsafeDowncast<{class}>(\n\
              \x20   value,\n\
-             \x20   value !== null && g_type_check_instance_is_a(value, {get_type}()) !== 0,\n\
+             \x20   value !== null && g_type_check_instance_is_a(value, {get_type}()),\n\
              \x20 );\n\
              }}",
             class = cast.class,
