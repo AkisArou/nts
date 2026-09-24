@@ -1,0 +1,142 @@
+// Run upstream React's public-contract tests against one arm and write a
+// ledger with one row per test.
+//
+//   node run.mjs [--arm nts|upstream|stub] [--mode development|production]
+//                [--update] [test path patterns...]
+//
+// The upstream checkout is `NTS_REACT_UPSTREAM`, default
+// ~/.cache/nts-react/upstream. It must be at the commit pinned in
+// ../../upstream-compile/upstream.lock.json and have its dependencies
+// installed. The `upstream` arm also needs its stable build (see README.md).
+//
+// The ledger for the nts arm is checked in, so a run is judged by its diff
+// against the previous one, not only by its total. `--update` rewrites it.
+// Control arms write only under build/.
+
+import {spawnSync} from 'node:child_process';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {homedir} from 'node:os';
+import {dirname, join, relative, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const lane = resolve(here, '../..');
+
+const args = process.argv.slice(2);
+function option(name, fallback) {
+  const i = args.indexOf(`--${name}`);
+  if (i === -1) return fallback;
+  const value = args[i + 1];
+  args.splice(i, 2);
+  return value;
+}
+const arm = option('arm', 'nts');
+const mode = option('mode', 'development');
+const update = args.includes('--update');
+const patterns = args.filter(a => a !== '--update');
+if (patterns.length === 0) patterns.push('packages/react-reconciler/src/__tests__/');
+
+const upstream = process.env.NTS_REACT_UPSTREAM ?? join(homedir(), '.cache/nts-react/upstream');
+const lock = JSON.parse(readFileSync(join(lane, 'upstream-compile/upstream.lock.json'), 'utf8'));
+const head = spawnSync('git', ['-C', upstream, 'rev-parse', 'HEAD'], {encoding: 'utf8'});
+if (head.status !== 0 || head.stdout.trim() !== lock.commit) {
+  throw new Error(`${upstream} is not at the pinned commit ${lock.commit}`);
+}
+const armRoot = {
+  upstream: join(upstream, 'build/oss-stable/react'),
+  stub: join(lane, 'build/stub/react'),
+  nts: join(lane, 'build/js/react'),
+}[arm];
+if (armRoot === undefined) throw new Error(`unknown arm ${arm}`);
+if (!existsSync(armRoot)) throw new Error(`the ${arm} arm has no package at ${armRoot}`);
+
+const out = join(lane, 'build/conformance');
+mkdirSync(out, {recursive: true});
+const json = join(out, `${arm}-${mode}.jest.json`);
+
+const run = spawnSync(
+  process.execPath,
+  [
+    './scripts/jest/jest.js',
+    '--config',
+    join(here, 'jest.config.cjs'),
+    '--json',
+    `--outputFile=${json}`,
+    '--silent',
+    ...patterns,
+  ],
+  {
+    cwd: upstream,
+    stdio: ['ignore', 'ignore', 'pipe'],
+    encoding: 'utf8',
+    maxBuffer: 1 << 30,
+    env: {...process.env, NODE_ENV: mode, RELEASE_CHANNEL: 'stable', NTS_REACT_ARM: arm},
+  },
+);
+if (!existsSync(json)) {
+  process.stderr.write(run.stderr.slice(-4000));
+  throw new Error(`jest wrote no result (status ${run.status})`);
+}
+
+// A test file that requires another renderer or the server packages tests
+// that package, not this runtime. It stays in the ledger, marked out of scope,
+// so it can neither inflate nor depress the in-scope count.
+const foreign = /require\(['"](react-dom|react-server|react-client|react-test-renderer|react-art)(\/[^'"]*)?['"]\)/;
+const scopeOf = new Map();
+function scope(file) {
+  if (!scopeOf.has(file)) {
+    const match = foreign.exec(readFileSync(join(upstream, file), 'utf8'));
+    scopeOf.set(file, match === null ? 'in' : `out:${match[1]}`);
+  }
+  return scopeOf.get(file);
+}
+
+const report = JSON.parse(readFileSync(json, 'utf8'));
+const ledger = {};
+const counts = {passed: 0, failed: 0, pending: 0, todo: 0, suiteErrors: 0};
+const outOfScope = {passed: 0, failed: 0, pending: 0, todo: 0, suiteErrors: 0};
+for (const suite of report.testResults) {
+  const file = relative(upstream, suite.name);
+  const where = scope(file);
+  const tally = where === 'in' ? counts : outOfScope;
+  const mark = where === 'in' ? '' : ` [${where}]`;
+  if (suite.assertionResults.length === 0 && suite.status === 'failed') {
+    ledger[`${file} :: (suite did not load)`] = 'failed' + mark;
+    tally.suiteErrors++;
+    continue;
+  }
+  for (const test of suite.assertionResults) {
+    const key = `${file} :: ${[...test.ancestorTitles, test.title].join(' › ')}`;
+    // Upstream's `@gate` inverts a test whose gate is off in this channel: it
+    // must fail, and reports `passed` when it does. Any broken implementation
+    // passes those, so they are their own bucket and never count as passing.
+    const status = test.title.startsWith('[GATED, SHOULD FAIL]')
+      ? `gated-${test.status}`
+      : test.status;
+    ledger[key] = status + mark;
+    tally[status] = (tally[status] ?? 0) + 1;
+  }
+}
+const sorted = Object.fromEntries(Object.entries(ledger).sort(([a], [b]) => (a < b ? -1 : 1)));
+
+const ledgerPath =
+  arm === 'nts' ? join(here, 'ledger', `${mode}.json`) : join(out, `${arm}-${mode}.ledger.json`);
+const previous = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')).tests : {};
+const changes = [];
+for (const key of new Set([...Object.keys(previous), ...Object.keys(sorted)])) {
+  if (previous[key] !== sorted[key]) changes.push(`${previous[key] ?? '-'} -> ${sorted[key] ?? '-'}  ${key}`);
+}
+
+console.log(`${arm} ${mode}: in scope ${JSON.stringify(counts)}`);
+console.log(`${arm} ${mode}: out of scope ${JSON.stringify(outOfScope)}`);
+console.log(`${changes.length} test(s) changed against ${relative(lane, ledgerPath)}`);
+for (const line of changes.slice(0, 50)) console.log(`  ${line}`);
+if (changes.length > 50) console.log(`  ... ${changes.length - 50} more`);
+
+if (arm !== 'nts' || update) {
+  mkdirSync(dirname(ledgerPath), {recursive: true});
+  writeFileSync(
+    ledgerPath,
+    JSON.stringify({upstream: lock.commit, arm, mode, patterns, counts, outOfScope, tests: sorted}, null, 1) + '\n',
+  );
+}
