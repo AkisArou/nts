@@ -52,12 +52,13 @@ test moved.
 | stub | production | 1 | 556 | 19 | 309 |
 | stub | development | 1 | 579 | 19 | 286 |
 | **this runtime** | production | **557** | **0** | 19 | 309 |
-| **this runtime** | development | **573** | **7** | 19 | 286 |
+| **this runtime** | development | **580** | **0** | 19 | 286 |
 
 The one test the stub passes is `ReactIsomorphicAct-test.js :: behavior in
 production`. In development its body is empty; in production it asserts that
 `React` has no `act`, which an empty module satisfies.
 
-The seven development failures are all in `ReactPerformanceTrack-test.js`,
-which checks the performance-timeline instrumentation; that module is still a
-stub.
+Across every upstream package (`--suite all`), each in-scope test that fails
+here also fails under upstream's own build. Those are the nested-Jest
+`ReactClassEquivalence`, the DevTools `ReactHooksInspection`, and
+`react-refresh/babel`, which the control does not build.

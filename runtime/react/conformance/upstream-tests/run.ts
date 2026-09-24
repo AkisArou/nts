@@ -36,6 +36,8 @@ const suites: Record<string, string> = {
   reconciler: 'packages/react-reconciler/src/__tests__/',
   scheduler: 'packages/scheduler/src/__tests__/',
   react: 'packages/react/src/__tests__/',
+  // Every upstream package: the classifier decides which files are ours.
+  all: 'packages/',
 };
 
 const arm = option('arm', 'nts');
