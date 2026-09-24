@@ -374,12 +374,48 @@ keep-alive op. It would be a new op in four backends to save one call per
 `CBytes` argument, and the call has the shape `nts_cstring_release` already
 has for the same reason.
 
+**Enums as they are.** `import { Orientation } from "c:Gtk-4.0"` and
+`gtk_box_new(Orientation.VERTICAL, 4 as c_int)`: an enum parameter or result
+is `CEnum<GtkOrientation, c_uint>` (in `c:types`), so a member passes without a
+cast and another enum's member is TS2345. The enums are `const enum`s in the
+`c:` module, folded to their constants at the use, each also named by its C
+type, which is what signatures spell.
+
+**Constructors return their class.** `gtk_box_new(…)` is a `GtkBox`: GIR
+declares a constructor inside its class and gives it C's return type, and the
+binding writes `Declared<GtkBox, GtkWidget>` (244 constructors) -- the program
+has the class, the prototype and the witness keep `GtkWidget *`. GIR's word is
+trusted, as gtk-rs trusts it; `asGtkBox` stays for a handle known only as a
+widget.
+
+**GObjects are counted.** Under the reference-counting provider a
+`GObjectClass` handle (488 classes) is retained with `g_object_ref_sink` --
+which also takes a new widget's floating reference -- and released with
+`g_object_unref`, both through a NULL guard GLib's pair needs; a program
+never calls either, and the binding refuses them. `Owned<T>` (759 results)
+and `Consumed<T>` (44 parameters) carry GIR's `transfer-ownership="full"`.
+A counted handle may be passed where C takes its `GTypeInstance`, and
+liveness keeps it alive wherever that view is. A promise of one holds it in
+a box whose field is the handle, released by the box's descriptor. Under the
+no-GC provider nothing is freed, a GObject included.
+
+gtk-gir runs under `--rc` with `G_DEBUG=fatal-criticals` to the same log,
+except where it awaits a rejected promise: that reaches a use-after-free in
+the core's `try`/`await`/`catch` path, reproduced in plain TypeScript and
+predating this work, which MainClaude has. The example gains its `--rc` arm
+when that lands.
+
+**The loop.** A GIO operation started without an application's loop keeps
+the program running until it calls back (`nts_closures_owed`), as pending
+I/O keeps node's; and a handler that turns GLib's loop itself -- a modal
+dialog, a menu -- runs no libuv task under it (gtk-loop's `nested` arm).
+
 **Next in M3:**
 
-- Enums without `as c_uint`: `gtk_box_new(Orientation.VERTICAL, 4)`.
-- Construction and lifetime: `new Gtk.Button({ label })`, and a GObject
-  unreffed when the TypeScript value is released -- `Family::GObject` on the
-  foreign-slot release Apple landed (bb53d038).
+- `new Gtk.Button({ label })` -- construction with properties
+  (`g_object_new_with_properties`), and property getters and setters.
+- The toggle-ref problem: a signal handler capturing its own widget is a
+  cycle through a `GClosure` that the cycle collector cannot see.
 
 ## After M3
 
