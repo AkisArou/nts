@@ -41,6 +41,7 @@
     "native-closure/nts.config.ts",
     "android-shape/nts.config.ts",
     "java-from-ts/nts.config.ts",
-    "ts-from-java/nts.config.ts"
+    "ts-from-java/nts.config.ts",
+    "windows-hello/nts.config.ts"
   ]
 }
