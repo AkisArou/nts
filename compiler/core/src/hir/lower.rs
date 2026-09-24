@@ -30469,7 +30469,91 @@ impl<'a> FuncBuilder<'a> {
         if let Some(bound) = self.bound_method(id, value, member_name)? {
             return Ok(bound);
         }
+        if let Some(narrowed) = self.through_a_narrowed_class(id, value, type_id, member_name)? {
+            return Ok(narrowed);
+        }
         Err(self.absent_member(id, type_id, member_name))
+    }
+
+    /// `if (x instanceof Sub) x.own`, where `x` is declared at the base.
+    ///
+    /// The checker narrows `x` to `Sub` inside the guard and says so on the
+    /// **node**; the *value* keeps the representation its declaration gave it,
+    /// which is a pointer at the base. So the member is looked up in the base's
+    /// layout, is not there, and the read refused -- with a sentence about the
+    /// base, which is the type the program had already stopped talking about.
+    ///
+    /// Reported by the React lane, whose reconciler models tag-dependent fibre
+    /// fields as a sealed base-class hierarchy: a base-typed field is an 8-byte
+    /// `Managed(Object)` where a union of the same classes is a 16-byte `Erased`,
+    /// so this is what lets those fields be pointer-sized.
+    ///
+    /// # Why it goes through the erased pair
+    ///
+    /// The narrowing is a **downcast**, and the three backends do not agree
+    /// about what one costs. C and LLVM need nothing -- `put_bases_first`
+    /// guarantees the base is a prefix, so the pointer is already right -- and
+    /// the JVM needs a `checkcast`, which is the instruction `Unerase` already
+    /// emits. Erasing and reading back is therefore the downcast every backend
+    /// already has, rather than a fourth op for a fact three of them state
+    /// differently.
+    ///
+    /// `Absent::Impossible` because the narrowed type is `Sub` and not
+    /// `Sub | null`: whatever the declaration allowed, the guard has ruled the
+    /// absence out, which is the whole reason the read is licensed here.
+    fn through_a_narrowed_class(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        declared: TypeId,
+        member_name: &str,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let receiver = self.children(id).first().copied();
+        let Some(HirType::Managed(ManagedType::Object(narrowed))) =
+            receiver.and_then(|at| self.type_of(at))
+        else {
+            return Ok(None);
+        };
+        if narrowed == declared {
+            return Ok(None);
+        }
+        // Only *down* the chain the program declares, and only for a member the
+        // narrowed class really has. A cast to an unrelated type that happens to
+        // declare the name is the pointer cast this compiler refuses by name
+        // everywhere else.
+        let Ok(layout) = self.layout_of(id, narrowed) else {
+            return Ok(None);
+        };
+        if layout.index_of(member_name).is_none() {
+            return Ok(None);
+        }
+        let mut base = layout.base;
+        let mut steps = 0;
+        while let Some(at) = base {
+            if at == declared {
+                let origin = self.origin(id);
+                let erased = self.push(
+                    OpKind::Erase { value, absent: Absent::Impossible },
+                    HirType::Erased,
+                    origin.clone(),
+                );
+                let cast = self.push(
+                    OpKind::Unerase { value: erased },
+                    HirType::Managed(ManagedType::Object(narrowed)),
+                    origin,
+                );
+                return self.member_of(id, cast, member_name).map(Some);
+            }
+            // A bound rather than an algorithm, for the reason `walk::denoted`'s
+            // is: a cycle here would be a program this compiler cannot have
+            // built, and looping on one is worse than missing the read.
+            steps += 1;
+            if steps > 16 {
+                return Ok(None);
+            }
+            base = self.layout_of(id, at).ok().and_then(|it| it.base);
+        }
+        Ok(None)
     }
 
     /// `c.twice` where `twice` is a method -- a closure carrying the receiver.
