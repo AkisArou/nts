@@ -77,3 +77,34 @@ npx tsc -p packages/react-reconciler/tsconfig.json --noEmit
 Until every file exists, errors about a sibling module that is missing are
 expected. Every other error in a file you wrote is yours to fix. Do not run
 the conformance harness, cargo or git: the integrating session does that.
+
+## What a native build needs
+
+The native probe (`native/probe`, compiled whole by nts) found these. Each
+was confirmed on a reduced case. Ported code must follow them.
+
+- **No module-scope function values.** Not `const f = cond ? a : b`, not an
+  alias of a builtin, not a copy of another module's function. Use a function
+  declaration or a re-export (`export { a as b } from "..."`).
+- **No top-level read of an imported binding inside a module cycle.** A
+  module that reads what it imports while it evaluates must not be part of a
+  cycle. Break the cycle (see ReactFiberDevToolsPresence.ts), or re-export,
+  which is a live binding nobody reads during evaluation.
+- **No shapes without a fixed layout:**
+  - a union of `WeakMap` and `Map`;
+  - an intersection type;
+  - a parameter or return type that is just `null`;
+  - `new Map()` or `new Set()` without type arguments, which TypeScript
+    infers as `any`.
+- **Records are classes.** The fiber and the root are the classes
+  themselves, not interfaces over them: nts rejects a class whose
+  function-typed field implements an interface's.
+- **A generic function must have its type parameters pinned by an argument.**
+  Otherwise nothing instantiates it. When the value is erased anyway, write
+  it over `unknown`.
+- **A generic record has one layout per type argument.** Records stored side
+  by side (the hook and class update queues) are therefore non-generic, with
+  erased fields, and each reader projects its own type.
+- **Development-only code sits behind `if (isDevelopment)`.** The native
+  `Build.native.ts` binds that name to the literal `false`, and nts drops the
+  branch.

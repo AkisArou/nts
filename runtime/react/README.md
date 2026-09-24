@@ -45,13 +45,44 @@ stays uncompiled by React Compiler. It is still correct, only not memoised.
 bindings. There is no cross-platform `<View>` layer. Hooks and logic are what
 is shared with the web.
 
+## Status
+
+**Compatibility (JavaScript build).** Upstream React's own tests, run
+unmodified against this runtime, count only in-scope tests
+(conformance/upstream-tests/README.md). Every result equals upstream's own
+build:
+
+| Suite | Production | Development |
+| --- | --- | --- |
+| reconciler | 557 / 557 | 580 / 580 |
+| scheduler | 63 / 63 | 63 / 63 |
+| react | 51 / 53 | 51 / 53 |
+
+In the `react` suite, upstream's own build fails the same 2 tests.
+
+**Native build.** native/probe compiles the runtime whole with nts. The
+census went from 1286 to 658 refusal lines, and creating a root now
+compiles. The remaining work on our side is in the census. The compiler
+capabilities React needs have been reported to the language lane:
+- exceptions across closures and methods, which Suspense and error
+  boundaries rely on;
+- a base-class `instanceof` downcast;
+- weak collections.
+
+The rules nts imposes on this code are the ones ported code must follow;
+they are listed in PORTING.md and in the native config's comments.
+
 ## Layout
 
 | Path | What it is |
 | --- | --- |
-| `packages/` | the runtime: `react`, reconciler, scheduler, noop renderer (being built) |
-| `conformance/` | the harness that runs upstream's tests, and the per-test ledger (being built) |
-| `upstream-compile/` | the retired route: Flow→TS conversion of upstream React compiled through NTS. It is kept as a compiler stress corpus (a census of refusals over 57k lines) and as the exact-source JS behaviour oracle |
+| `packages/` | the runtime: `react`, `react-reconciler`, `scheduler`, `react-noop-renderer` and `shared`. Native twins sit beside the files they replace (`*.native.ts`) |
+| `tsconfig.native.json` | the base of every native program: binds the twins, and maps packages to their sources |
+| `native/probe/` | a native program: the runtime, a typed test host and a deterministic scheduler host |
+| `conformance/` | the harness that runs upstream's tests, and the per-test ledgers |
+| `compiler/AUDIT.md` | the upstream Rust React Compiler, audited as our memoizer |
+| `spikes/` | representation experiments the design rests on |
+| `upstream-compile/` | the retired route: the Flow→TS conversion of upstream React compiled through NTS. It is kept as a compiler stress corpus (a census of refusals over 57k lines) and as the exact-source JS behaviour oracle |
 
 ## Rules for the runtime source
 

@@ -39,8 +39,9 @@ export function keyedReorder(count: number): string {
   for (let i = 0; i < n; i++) {
     labels.push("k" + i);
   }
+  // One array child: a keyed list, exactly as a spread of the same elements.
   const render = (order: string[]) =>
-    createElement("ul", null, ...order.map((label) => createElement(Item, { key: label, label })));
+    createElement("ul", null, order.map((label) => createElement(Item, { key: label, label })));
   updateContainer(render(labels), root, null, null);
   drainHost();
   const first = container.serialize();
