@@ -1273,11 +1273,20 @@ fn insert_conversions(
                         },
                         _ => None,
                     };
+                    // A foreign callee's parameters are C's, and `specialize`
+                    // converts each argument to its own exactly. Widening an
+                    // integer to a double on the way would round a 64-bit one
+                    // -- a `GType` a tag passed straight from
+                    // `gtk_label_get_type()` -- through 53 bits.
+                    let native = matches!(callee, Callee::Native(_));
                     let args = args
                         .into_iter()
                         .enumerate()
                         .map(|(at, arg)| {
                             let target = wanted.and_then(|params| params.get(at));
+                            if native {
+                                return arg;
+                            }
                             match argument_conversion(func, arg, target) {
                                 Some(ty) => coerce(func, arg, &ty),
                                 None => arg,
