@@ -1,0 +1,10 @@
+{
+  "name": "react-reconciler",
+  "private": true,
+  "type": "module",
+  "//": "Internal: each renderer bundles its own copy, with the renderer's host config forked in for ReactFiberConfig.ts, as upstream builds its renderers.",
+  "internal": true,
+  "exports": {
+    "./*": "./src/*"
+  }
+}

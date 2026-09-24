@@ -1,0 +1,10 @@
+{
+  "name": "shared",
+  "private": true,
+  "type": "module",
+  "//": "Internal: bundled into each published entry, never an external of its own, like upstream's `shared/`.",
+  "internal": true,
+  "exports": {
+    "./*": "./src/*"
+  }
+}

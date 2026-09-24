@@ -9,7 +9,7 @@
 // bundles. So state shared across entries or packages (React's internals, the
 // scheduler a test has mocked) lives in exactly one module.
 
-import {build} from 'esbuild';
+import {build, type Plugin} from 'esbuild';
 import {mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -19,31 +19,76 @@ const packagesDir = join(lane, 'packages');
 const out = join(lane, 'build/js');
 const modes = ['development', 'production'];
 
+// An export's source, possibly per condition (`development` or `default`).
+type ExportTarget = string | { [condition: string]: string };
+
 interface Package {
   dir: string;
   name: string;
-  exports: Record<string, string>;
+  internal: boolean;
+  exports: Record<string, ExportTarget>;
+}
+
+function sourceFor(target: ExportTarget, mode: string): string {
+  if (typeof target === 'string') return target;
+  const source = target[mode] ?? target['default'];
+  if (source === undefined) throw new Error(`no ${mode} or default condition in ${JSON.stringify(target)}`);
+  return source;
 }
 
 const packages: Package[] = readdirSync(packagesDir).map(dir => {
   const manifest = JSON.parse(readFileSync(join(packagesDir, dir, 'package.json'), 'utf8'));
-  return {dir, name: manifest.name, exports: manifest.exports};
+  return {dir, name: manifest.name, internal: manifest.internal === true, exports: manifest.exports};
 });
-const external = packages.flatMap(p => [p.name, `${p.name}/*`]);
+// Published packages stay external bare specifiers; internal ones (shared,
+// the reconciler) are bundled into every entry that uses them.
+const published = packages.filter(p => !p.internal);
+const external = published.flatMap(p => [p.name, `${p.name}/*`]);
+
+// Upstream's forks: a module that resolves differently depending on the
+// bundle it is in. Keyed by the entry (`<package>/<entry>`) and the module's
+// path under packages/.
+const forks: {entry: string; module: string; use: string}[] = [
+  // Inside `react` itself the internals are the local object; everywhere
+  // else they are read from the `react` package.
+  {
+    entry: 'react/index',
+    module: 'react/src/ReactSharedInternals.ts',
+    use: 'react/src/ReactSharedInternalsClient.ts',
+  },
+];
+
+function forkPlugin(entry: string): Plugin {
+  const active = forks.filter(fork => fork.entry === entry);
+  return {
+    name: 'forks',
+    setup(pluginBuild) {
+      pluginBuild.onResolve({filter: /\.ts$/}, args => {
+        const resolved = resolve(args.resolveDir, args.path);
+        const fork = active.find(f => resolved === join(packagesDir, f.module));
+        return fork === undefined ? undefined : {path: join(packagesDir, fork.use)};
+      });
+    },
+  };
+}
 
 rmSync(out, {recursive: true, force: true});
-for (const pkg of packages) {
-  for (const [subpath, source] of Object.entries(pkg.exports)) {
+for (const pkg of published) {
+  for (const [subpath, target] of Object.entries(pkg.exports)) {
     const entry = subpath === '.' ? 'index' : subpath.slice(2);
     for (const mode of modes) {
       await build({
-        entryPoints: [join(packagesDir, pkg.dir, source)],
+        entryPoints: [join(packagesDir, pkg.dir, sourceFor(target, mode))],
         outfile: join(out, mode, pkg.name, `${entry}.js`),
         bundle: true,
         format: 'cjs',
         platform: 'node',
         target: 'es2022',
         external,
+        plugins: [forkPlugin(`${pkg.name}/${entry}`)],
+        // Fold `isDevelopment` to a literal and drop the dead branches.
+        define: {'process.env.NODE_ENV': JSON.stringify(mode)},
+        minifySyntax: true,
         logLevel: 'warning',
       });
     }
@@ -56,4 +101,6 @@ for (const pkg of packages) {
     );
   }
 }
-console.log(`built ${packages.map(p => p.name).join(', ')} into ${out}`);
+// The bundles are CommonJS; the lane's own package.json says "module".
+writeFileSync(join(out, 'package.json'), JSON.stringify({type: 'commonjs'}) + '\n');
+console.log(`built ${published.map(p => p.name).join(', ')} into ${out}`);

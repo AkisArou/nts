@@ -3,7 +3,13 @@
   "files": [],
   "references": [
     {
+      "path": "./packages/shared"
+    },
+    {
       "path": "./packages/scheduler"
+    },
+    {
+      "path": "./packages/react"
     },
     {
       "path": "./tools"
