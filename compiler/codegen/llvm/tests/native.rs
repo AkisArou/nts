@@ -2721,6 +2721,48 @@ int label_width(struct _Label *self) { return self->width; }
     );
 }
 
+/// `CBool<B>`: `GLib`'s `gboolean`, a C `int` the program reads and writes as
+/// a boolean. `true` and `false` arrive as 1 and 0; a C answer of 2 -- which
+/// C calls true -- is `true`, which a truncating conversion would read as
+/// `false` (2's low bit is 0); and an optional one takes its `@ntsDefault`.
+#[test]
+fn a_c_int_boolean_crosses_as_a_boolean_on_both_backends() {
+    let source = r#"
+import type { CBool, c_int } from "c:types";
+declare function remember(on: CBool<c_int>): void;
+declare function remembered(): c_int;
+declare function two(): CBool<c_int>;
+declare function zero(): CBool<c_int>;
+/** @ntsDefault on=1 */
+declare function toggle(on?: CBool<c_int>): CBool<c_int>;
+export function run(): number {
+    remember(true);
+    const was_true = remembered() as number;
+    remember(false);
+    const was_false = remembered() as number;
+    return was_true * 10000 + was_false * 1000 + (two() ? 100 : 0) + (zero() ? 1 : 0) * 10 + (toggle() && !toggle(false) ? 1 : 0);
+}
+"#;
+    let library = r"
+static int held = -1;
+void remember(int on) { held = on; }
+int remembered(void) { return held; }
+int two(void) { return 2; }
+int zero(void) { return 0; }
+int toggle(int on) { return on; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("cbool", source, provider, library, &caller) else { return; };
+        assert!(text.contains("void remember(int)"), "a `CBool<c_int>` is not C's int");
+        // 1 and 0 arrive; 2 is true; 0 is false; the default is true and a
+        // written `false` is false.
+        for output in outputs {
+            assert_eq!(output, expect("10101", provider), "{provider:?}");
+        }
+    }
+}
+
 /// C behind the `@ntsDefault` test: each answer spells what arrived.
 const DEFAULTS_LIBRARY: &str = r"
 #include <stdbool.h>

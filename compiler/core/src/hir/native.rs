@@ -1311,6 +1311,9 @@ impl Type {
 /// pointer for exactly the reason a function-typed parameter is, and two
 /// answers to that would be two places to keep in agreement.
     fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+        if let Some(scalar) = int_bool(snapshot, ty) {
+            return Some(Type::Scalar(scalar));
+        }
         if let Some(record) = schema::by_value(snapshot, ty) {
             return Some(Type::Record(record));
         }
@@ -2029,7 +2032,8 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
         result,
         string: array.map(|nullable| ReturnedString { nullable, free: None, array: true }).or(string),
         owned: owned_result(snapshot, name, ty)?,
-        program: declared.map(|(_, program)| program),
+        // A `CBool`'s integer, read back as a boolean.
+        program: declared.map(|(_, program)| program).or_else(|| int_bool(snapshot, ty).map(|_| Type::Bool)),
     })
 }
 
@@ -2167,7 +2171,7 @@ fn defaulted(
     let ty = match payload.as_slice() {
         [one] => abi_type(snapshot, *one),
         [_, _] if payload.iter().all(boolean) => Some(Type::Bool),
-        members => enum_members_scalar(snapshot, members).map(Type::Scalar),
+        members => enum_members_scalar(snapshot, members).or_else(|| int_bool_members(snapshot, members)).map(Type::Scalar),
     };
     match (value, ty) {
         (ParameterDefault::Int(value), Some(Type::Bool)) if !nullable => {
@@ -2701,8 +2705,36 @@ fn enum_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 /// flattened further -- an optional `CEnum` parameter is its members and
 /// `undefined`, in one union.
 fn enum_members_scalar(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Option<Scalar> {
+    branded_members(snapshot, members, |literal| matches!(literal, LiteralValue::Number(_)), "___c_enum")
+}
+
+/// `CBool<B>`: a boolean C holds in the integer brand `B` -- `GLib`'s
+/// `gboolean`, an `int`. `boolean & { readonly __c_bool?: B }`, which the
+/// checker distributes into `true & brand | false & brand`. A parameter so
+/// typed is `B`, and TypeScript's boolean widens into it; a result is `B`
+/// read back as `!= 0`, as C reads an `int` as a truth value.
+#[must_use]
+pub fn int_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
+    match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Union(parts) => int_bool_members(snapshot, parts),
+        _ => None,
+    }
+}
+
+fn int_bool_members(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Option<Scalar> {
+    branded_members(snapshot, members, |literal| matches!(literal, LiteralValue::Boolean(_)), "___c_bool")
+}
+
+/// A union whose every member is a literal `is_member` accepts intersected
+/// with one optional brand, `brand`, naming a C integer: `CEnum` and `CBool`.
+fn branded_members(
+    snapshot: &SemanticSnapshot,
+    members: &[TypeId],
+    is_literal: fn(&LiteralValue) -> bool,
+    brand_name: &str,
+) -> Option<Scalar> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let is_member = |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Number(_))));
+    let is_member = |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(literal)) if is_literal(literal));
     let mut brand = None;
     for &member in members {
         let TypeKind::Intersection(parts) = kind(member)? else { return None };
@@ -2720,7 +2752,7 @@ fn enum_members_scalar(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Optio
     let TypeKind::Object { properties } = kind(brand?)? else { return None };
     let [property] = properties.as_slice() else { return None };
     // tsgo's escaped name: a source name beginning `__` has one more `_`.
-    if property.name != "___c_enum" || !property.readonly || !property.optional || property.kind != MemberKind::Field {
+    if property.name != brand_name || !property.readonly || !property.optional || property.kind != MemberKind::Field {
         return None;
     }
     let given: Vec<TypeId> = match kind(property.ty)? {

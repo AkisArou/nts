@@ -114,6 +114,10 @@ declare module "c:types" {
   // `as c_uint`, and a member of another enum does not. A plain number is
   // still accepted, as C accepts one.
   export type CEnum<E extends number, B extends number> = E & { readonly __c_enum?: B };
+  // A boolean C holds in the integer `B` -- GLib's `gboolean`, an `int`. The
+  // program passes and reads `true` and `false`; C sees `1` and `0`, and any
+  // non-zero it answers is `true`.
+  export type CBool<B extends number> = boolean & { readonly __c_bool?: B };
   // A handle C declares as one of its ancestors: `gtk_box_new` returns the
   // `GtkBox` GIR says it does, which the header declares `GtkWidget *`. The
   // program has a `T`; C's prototype says `D`, which must be an ancestor of
