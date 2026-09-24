@@ -68,7 +68,7 @@ shape is the lane's sharpest example of how a correct guard goes wrong, and
 because the fix has a constraint the obvious version misses.
 
 `hir/lower.rs` refuses a call inside a `try`, by name, with the reason written
-out: *"a call inside a `try`, whose `throw` would not reach this handler"*. A
+out: *"a call inside a `try` whose `throw` would not reach this handler: a method, and a raising copy is made of plain functions only"*. A
 `throw` lowers to a jump to the handler block, which is a branch inside one
 function; a callee has no edge back to its caller's handler. The refusal is
 right and its comment says it was measured on all three backends.
@@ -77,7 +77,7 @@ right and its comment says it was measured on all three backends.
 
 | inside a `try` | what happens |
 | --- | --- |
-| `deep(n)`, a plain TypeScript call | `NTS1001 a call inside a `try`, whose `throw` would not reach this handler` |
+| `deep(n)`, a plain TypeScript call | `NTS1001 a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried` |
 | `catalog.parse("abc")`, a bound Java call | **was**: compiles clean, no exception table, aborts with `java.lang.NumberFormatException` where node prints `caught`. **Now**: the same `NTS1001` |
 | `getrusage(0, u)`, a native C call | compiles, and correctly so -- C cannot unwind into TypeScript, so there is nothing to catch |
 

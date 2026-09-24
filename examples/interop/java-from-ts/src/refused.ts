@@ -17,7 +17,8 @@ export function refused(catalog: Catalog): void {
   // Refused by the checker
   // ---------------------------------------------------------------------
 
-  // NTS1001: a call inside a `try`, whose `throw` would not reach this handler
+  // NTS1001: a call inside a `try` whose `throw` would not reach this handler:
+  // a method, and a raising copy is made of plain functions only
   //
   // A Java method can throw and a TypeScript `try` cannot catch it: a `throw`
   // lowers to a jump to the handler *block*, a branch inside one function, and

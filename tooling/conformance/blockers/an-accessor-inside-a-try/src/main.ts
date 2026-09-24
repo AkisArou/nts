@@ -1,4 +1,4 @@
-// expect: a call inside a `try`, whose `throw` would not reach this handler
+// expect: a call inside a `try` whose `throw` would not reach this handler: an accessor, which is a call
 
 // An accessor read inside a `try`. `examples/accessors` opens with the sentence
 // this is about -- "an accessor looks like a property and **is** a call" -- and
