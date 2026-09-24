@@ -3015,14 +3015,15 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
  * `state` says rejected only after the pointer is stored -- and a null answers
  * `undefined`, which is what a `catch` of one would see.
  *
- * **Returns a borrow, and so do `nts_promise_value` and `nts_promise_reference`.**
- * The promise owns the count; the caller must **not** release what it reads.
+ * **Returns a borrow, and so do `nts_promise_value` and
+ * `nts_promise_reference`.** The promise owns the count; the caller must
+ * **not** release what it reads.
  *
  * This had to be written down because it was not, and the two sides disagreed.
  * `nts_promise_fulfill` and `nts_promise_reject` each retain, so a promise owns
  * exactly one count on its payload -- and lowering released what it read here,
- * destroying that count. The slot then dangled and the cycle collector walked it.
- * Found under `--rc` with ASan by the GTK lane, from
+ * destroying that count. The slot then dangled and the cycle collector walked
+ * it. Found under `--rc` with ASan by the GTK lane, from
  * `g_file_make_directory_finish` failing an assertion on a heap corrupted long
  * before; reduced to `await` on a promise fulfilled with an object, with no
  * rejection involved at all.
