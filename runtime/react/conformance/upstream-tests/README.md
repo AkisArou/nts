@@ -12,20 +12,22 @@ the arm under test. Test files, `internal-test-utils`, `jest-react` and every
 package we do not implement stay upstream's own.
 
 ```sh
-runtime/react/tools/setup-upstream.sh                 # once: clone, install, build the control
-node runtime/react/conformance/upstream-tests/run.mjs --arm upstream   # control
-node runtime/react/conformance/upstream-tests/run.mjs --arm stub       # control
-node runtime/react/conformance/upstream-tests/run.mjs                  # this runtime
-node runtime/react/conformance/upstream-tests/run.mjs --mode production
-node runtime/react/conformance/upstream-tests/run.mjs --update         # accept the ledger
+runtime/react/tools/setup-upstream.sh          # once: clone, install, build the control
+npm --prefix runtime/react install              # the lane's toolchain and workspaces
+node runtime/react/tools/build-js.ts           # emit this runtime for the harness
+node runtime/react/conformance/upstream-tests/run.ts --arm upstream   # control
+node runtime/react/conformance/upstream-tests/run.ts --arm stub       # control
+node runtime/react/conformance/upstream-tests/run.ts --suite scheduler --mode production
+node runtime/react/conformance/upstream-tests/run.ts --update         # accept the ledger
 ```
 
-The default suite is `packages/react-reconciler/src/__tests__/`. Pass other
-test paths as arguments.
+Suites are `reconciler` (the default), `scheduler` and `react`, each an
+upstream `__tests__` directory with a ledger of its own. Extra arguments
+narrow a run to matching test files; a narrowed run never writes a ledger.
 
 ## Buckets
 
-Each test has one row in `ledger/<mode>.json`, and a run prints its diff
+Each test has one row in `ledger/<suite>.<mode>.json`, and a run prints its diff
 against that ledger. Only the diff says what changed; a total cannot say which
 test moved.
 

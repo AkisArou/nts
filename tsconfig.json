@@ -5,6 +5,7 @@
     { "path": "./tooling/config" },
     { "path": "./examples/library" },
     { "path": "./runtime/web-platform" },
-    { "path": "./runtime/node" }
+    { "path": "./runtime/node" },
+    { "path": "./runtime/react" }
   ]
 }

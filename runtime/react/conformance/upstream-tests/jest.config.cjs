@@ -41,4 +41,9 @@ for (const [pattern, path] of Object.entries(buildConfig.moduleNameMapper)) {
     : path;
 }
 
-module.exports = Object.assign({}, buildConfig, {moduleNameMapper});
+module.exports = Object.assign({}, buildConfig, {
+  moduleNameMapper,
+  // Like upstream's own build output, the arm's bundles are already
+  // JavaScript and must not go through upstream's Babel preprocessor.
+  transformIgnorePatterns: [...buildConfig.transformIgnorePatterns, `^${lane}/build/`],
+});

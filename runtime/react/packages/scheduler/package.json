@@ -1,0 +1,10 @@
+{
+  "name": "scheduler",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./unstable_mock": "./src/unstable_mock.ts",
+    "./unstable_post_task": "./src/unstable_post_task.ts"
+  }
+}

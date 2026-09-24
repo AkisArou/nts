@@ -1,0 +1,9 @@
+{
+  "//": "The lane's build and conformance scripts. Node runs them directly by stripping types; this project only checks them.",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "${configDir}/..",
+    "types": ["node"]
+  },
+  "include": ["${configDir}/*.ts", "${configDir}/../conformance/**/*.ts"]
+}

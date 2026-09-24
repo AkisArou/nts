@@ -1,0 +1,18 @@
+{
+  "name": "@nts/react-lane",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build-js.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "conformance": "node conformance/upstream-tests/run.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.5.2",
+    "esbuild": "^0.25.12",
+    "typescript": "7.0.2"
+  },
+  "workspaces": [
+    "packages/*"
+  ]
+}

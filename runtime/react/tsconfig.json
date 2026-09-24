@@ -1,0 +1,12 @@
+{
+  "//": "The React lane's solution: one project per package. Packages import each other by their public name (`react`, `scheduler`) through npm workspaces, never by a relative path. Under upstream's tests Jest mocks `scheduler` to `scheduler/unstable_mock`, and only a bare specifier sees that mock.",
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/scheduler"
+    },
+    {
+      "path": "./tools"
+    }
+  ]
+}
