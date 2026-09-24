@@ -112,15 +112,71 @@ interfaces, and anything the header and metadata disagree on. The raw
 Win32 surface is C-shaped (`CreateWindowExW` with twelve arguments); the
 idiomatic layer on top of it is W4.
 
+## W2, the Windows Runtime from TypeScript: where it stands
+
+`examples/interop/windows-winrt` runs on Windows on both backends and both
+providers. Each piece below is one line of its output, and a C oracle making
+the same vtable calls on the VM measured the behaviour first.
+
+- **Calls:** `@ntsVtable`, `@ntsHresult`, `@ntsFactory`, `Family::Com`,
+  HSTRING both ways, and a failed HRESULT thrown with the system's text.
+  (Landing now; the first three commits.)
+- **bind-winmd for WinRT:**
+  - interfaces slot for slot;
+  - generics, with instantiation IIDs computed by the pinterface SHA-1;
+  - `QueryInterface` by `as_X`, for a class's own interfaces and every base
+    class's;
+  - default constructors;
+  - structs by value;
+  - composable classes constructed as themselves.
+- **Delegates and events:**
+  - A TypeScript function is a COM delegate object whose `Invoke` is a
+    per-signature adapter. The closure is lent until the object's count
+    reaches zero.
+  - The object is not agile: a source on another thread must marshal to the
+    owner's.
+  - A handler that throws ends the process naming the boundary; it never
+    answers S_OK for a failure.
+- **Not yet:**
+  - `IAsyncOperation` as a Promise, which needs a decision about whether a
+    console program's loop pumps messages (the user's to make).
+  - `out` parameters other than the result.
+  - Arrays.
+  - Generic delegates whose IID depends on the interface's own parameters
+    (`IObservableMap<K, V>.MapChanged`).
+
+## W3, WinUI 3: where it stands
+
+`examples/interop/winui-hello` runs on Windows, in the signed-in session, on
+both backends and both providers:
+- an unpackaged program bootstraps the Windows App SDK 1.8;
+- `Application.Start` runs a TypeScript callback;
+- a `Window` holds a `Button` whose TypeScript `Click` handler UI Automation
+  presses;
+- a `setTimeout` fires from inside XAML's loop, and `Exit` returns from
+  `Start`.
+
+- **The SDK** is fetched by `tooling/windows/fetch-winappsdk.sh`, pinned in
+  `winrt.rs`. The bootstrapper is built beside the program and loaded on its
+  first `Microsoft.*` activation.
+- **The session:** XAML fails fast (0xC000027B) in ssh's session 0, so
+  `run.sh --interactive` runs a GUI program as a scheduled task in the
+  user's session.
+- **Next:**
+  - `class App extends Application`, meaning COM aggregation with an outer
+    object of the program's. Apple's `extends NSObject` has the
+    registration shape to share.
+  - XAML controls' default styles (`XamlControlsResources`).
+  - The idiomatic layer (W4).
+
 ## Next
 
 1. **W1 is closed.** One named gap: under LLVM on Win64, an exported
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
-2. **W2:** COM/WinRT: `@ntsVtable` calls, `Family::Com`, HSTRING,
-   activation, delegates, and `IAsyncOperation` as a Promise.
-3. **W3:** WinUI 3. **W4:** the idiomatic layer, packaging, and a benchmark
-   against C#/CsWinRT and C++/WinRT.
+2. **W2's rest** as listed above, then **W3's** subclassing.
+3. **W4:** the idiomatic layer, packaging, and a benchmark against
+   C#/CsWinRT and C++/WinRT.
 
 ## Rules this lane keeps
 
