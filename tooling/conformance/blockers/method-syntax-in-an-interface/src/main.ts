@@ -138,8 +138,14 @@
 //
 //      | | field accesses | through an interface | |
 //      |---|---|---|---|
-//      | `runtime/node`, 184 files | 17,826 | **4,174** | **23.4%** |
+//      | `runtime/node`, 185 files | 17,826 | **4,174** | **23.4%** |
 //      | `benches/cases`, 61 cases | 694 | **10** | **1.4%** |
+//
+//      The corpus was 184 files when this was first measured and 185 an hour
+//      later, **with both totals unchanged** -- which is the useful thing to know
+//      about the figure's stability, and the reason to re-run the command rather
+//      than trust the row. Re-measured after an unrelated `SCHEMA_VERSION` bump
+//      invalidated every snapshot cache: identical.
 //
 //      Reads, writes and compound assignments together, since `FieldSet` goes
 //      through the same offset; a spread is held separately because one

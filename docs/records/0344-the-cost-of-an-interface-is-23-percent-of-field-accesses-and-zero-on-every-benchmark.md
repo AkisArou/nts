@@ -49,7 +49,7 @@ blind to the 77 refused sites that are the entire reason the question is open.
 
 | | field accesses | through an interface | |
 |---|---|---|---|
-| `runtime/node`, 184 files | 17,826 | **4,174** | **23.4%** |
+| `runtime/node`, 185 files | 17,826 | **4,174** | **23.4%** |
 | `benches/cases`, 61 cases | 694 | **10** | **1.4%** |
 
 Reads, writes and compound assignments together, because `FieldSet` goes through
@@ -162,5 +162,10 @@ affordable — that is a benchmark question about a feature that does not exist,
 and finding 1 says the benchmarks could not answer it today even if it did. What
 it produces is the cost, the share of it that is provably wasted, and the
 observation that the design step's next question is narrower than 0294 left it.
+
+The corpus was 184 files at the first run and 185 an hour later, **both totals
+unchanged**, and the figures are identical after an unrelated `SCHEMA_VERSION`
+bump invalidated every snapshot cache. That is the evidence that the number is a
+number rather than a reading of one afternoon.
 
 Landed as `ff468115`.
