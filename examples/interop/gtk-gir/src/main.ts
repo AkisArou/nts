@@ -80,7 +80,7 @@ import {
   KeyFileFlags,
   type GError,
 } from "c:GLib-2.0";
-import type { CNumber, c_size_t } from "c:types";
+import type { CNumber } from "c:types";
 import { local } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
 import { asGtkBox, asGtkButton, asGtkLabel } from "../types/gir/Gtk-4.0.values.ts";
@@ -105,7 +105,7 @@ function outParameters(): void {
   const keys = g_key_file_new();
   const error = local<GError | null>();
   const text = "[a]\nk=5\n";
-  const loaded = g_key_file_load_from_data(keys, text, BigInt(text.length) as c_size_t, KeyFileFlags.NONE, error);
+  const loaded = g_key_file_load_from_data(keys, text, text.length, KeyFileFlags.NONE, error);
   const k = g_key_file_get_integer(keys, "a", "k", error);
   gir_log("keyfile " + String(loaded) + " " + String(k) + " " + (error[0] === null ? "no-error" : "error"));
   const missing = g_key_file_get_integer(keys, "a", "absent", error);

@@ -1004,9 +1004,10 @@ impl<'a> Mapper<'a> {
             if depth != 0 {
                 return Err(Reason::PointerDepth(c_type.to_owned()));
             }
-            // A plain `number` where a double holds every value, as GJS
-            // takes one; the exact `bigint` brand where it does not.
-            if scalar.needs_exact_integer() {
+            // A plain `number`, as GJS takes one -- a 64-bit size, length,
+            // offset or handler id rounds past 2^53 there too. `GType` is an
+            // identifier, not a quantity, and keeps every bit as a `bigint`.
+            if name == "GType" {
                 self.binding.brands.insert(brand);
                 return Ok(Mapped { shape: Shape::Other, ts: (*brand).to_owned(), c: Type::Scalar(*scalar) });
             }
@@ -1102,7 +1103,7 @@ impl<'a> Mapper<'a> {
         }
         let prefix = class.symbol_prefix.as_deref().ok_or(Reason::NoSymbol)?;
         let local = c_type.clone();
-        self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "c_ulong"]);
+        self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "CNumber"]);
         let mut ts_parameters = vec![format!("self: {local}")];
         for param in &signal.signature.parameters {
             if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename") {
@@ -1165,7 +1166,9 @@ impl<'a> Mapper<'a> {
                 ),
                 ("connect_flags".to_owned(), Mapped { shape: Shape::Other, ts: "c_uint".to_owned(), c: Type::Scalar(Scalar::UInt) }),
             ],
-            result: Mapped { shape: Shape::Other, ts: "c_ulong".to_owned(), c: Type::Scalar(Scalar::ULong) },
+            // A handler id, a number as GJS returns it, which
+            // `g_signal_handler_disconnect` takes back.
+            result: Mapped { shape: Shape::Other, ts: "CNumber<\"ulong\">".to_owned(), c: Type::Scalar(Scalar::ULong) },
             c_parameters: vec![context.clone(), string, erased, context, notify, Type::Scalar(Scalar::UInt)],
             deprecated: false,
             free: None,

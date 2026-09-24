@@ -2773,6 +2773,16 @@ impl Scalar {
     }
 }
 
+/// Whether a scalar brand's TypeScript side is a `bigint` (`c_int64`) rather
+/// than a `number` (`c_int`, `CNumber<"size_t">`, an enum member).
+#[must_use]
+pub fn over_bigint(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    let Some(TypeKind::Intersection(parts)) = snapshot.types.get(ty.0 as usize).map(|t| &t.kind) else {
+        return false;
+    };
+    parts.iter().any(|part| matches!(snapshot.types.get(part.0 as usize).map(|t| &t.kind), Some(TypeKind::BigInt)))
+}
+
 #[must_use]
 pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     if let Some(scalar) = enum_scalar(snapshot, ty) {

@@ -4154,7 +4154,7 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
          export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<CNumber<\"int\">>, height?: Ptr<CNumber<\"int\">> | null): void;",
         // Bytes borrowed in place, their length after them and hidden.
         "   * @ntsNoEscape data\n   */\n  \
-         export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, c_size_t, \"after\">): CNumber<\"int\">;",
+         export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, CNumber<\"size_t\">, \"after\">): CNumber<\"int\">;",
         // A returned `gchar **` the caller frees.
         "   * @ntsFree g_strfreev\n   */\n  export function demo_split(text: string): string[];",
         // `argc` before `argv`: hidden, and filled from the array.

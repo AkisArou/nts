@@ -10286,6 +10286,13 @@ enum Decided {
 /// class of its own, as Swift builds one.
 fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Decided> {
     if let Some(brand) = super::native::scalar(snapshot, ty) {
+        // What the program holds is what TypeScript says it is: a `number`
+        // over any brand is a number -- `CNumber<"size_t">`, Swift's `Int` --
+        // and C's width is the boundary's to convert to. Only a `bigint` base
+        // is a `bigint`, which `brand_representation` asks of the brand.
+        if !super::native::over_bigint(snapshot, ty) {
+            return Some(Decided::As(HirType::NUMBER));
+        }
         return Some(Decided::As(brand_representation(brand)));
     }
     if let Some(name) = super::native::pointer(snapshot, ty) {

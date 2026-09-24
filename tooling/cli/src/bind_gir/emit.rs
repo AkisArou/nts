@@ -304,7 +304,9 @@ fn settles(result: &super::map::Mapped) -> bool {
     use nts_core::hir::native::{Pointee, Type};
     match &result.c {
         Type::Void | Type::Bool | Type::Pointer(_) if !matches!(result.c, Type::Pointer(Pointee::Void)) => true,
-        Type::Scalar(scalar) => !scalar.needs_exact_integer(),
+        // A number the program reads as a `number` (`CNumber`), whatever C's
+        // width; not a `bigint`, which a promise's payload cannot carry.
+        Type::Scalar(scalar) => !scalar.needs_exact_integer() || result.ts.starts_with("CNumber<"),
         _ => false,
     }
 }

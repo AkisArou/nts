@@ -3882,7 +3882,10 @@ import type { CNumber } from "c:types";
 declare function add(a: CNumber<"int">, b: CNumber<"double">): CNumber<"int">;
 declare function halve(x: CNumber<"float">): CNumber<"double">;
 declare function twice(callback: (n: CNumber<"int">) => CNumber<"int">, n: CNumber<"int">): CNumber<"int">;
+declare function doubled(n: CNumber<"size_t">): CNumber<"size_t">;
 function plus_one(n: number): number { return n + 1; }
+// A 64-bit one crosses as C's `size_t` and is a `number` to the program.
+export function wide(): number { return doubled(3.5) / 2 + 0.5; }
 export function run(): number {
     const sum = add(2.9, 3.5);
     const half = halve(5);
@@ -3893,15 +3896,27 @@ export function run(): number {
 int add(int a, double b) { return a + (int)b; }
 double halve(float x) { return x / 2; }
 int twice(int (*callback)(int), int n) { return callback(callback(n)) - n; }
+#include <stddef.h>
+size_t doubled(size_t n) { return 2 * n + 1; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.2f", run());"#, "run();");
+        let caller = counted_caller(r#"printf("%.2f %.2f", run(), wide());"#, "run(); wide();");
         let Some((text, outputs)) = run_on_both_backends("cnumber", source, provider, library, &caller) else { return; };
         assert!(text.contains("int add(int, double)"), "a `CNumber` is not C's type");
         // add: 2 + 3 = 5 (2.9 truncates, 3.5 truncates in C), + 0.25 kept;
-        // halve(5) = 2.5; twice: 40 -> 41 -> 42, minus 40 = 2.
+        // halve(5) = 2.5; twice: 40 -> 41 -> 42, minus 40 = 2. wide: 3.5
+        // truncates to 3 in C, 2 * 3 + 1 = 7, / 2 = 3.5, + 0.5 = 4.
         for output in outputs {
-            assert_eq!(output, expect("5502.00", provider), "{provider:?}");
+            assert_eq!(output, expect("5502.00 4.00", provider), "{provider:?}");
         }
     }
+    // What the program holds is a `number` whatever C's width, so a promise
+    // of one settles -- the shape of every generated Promise form whose
+    // `_finish` returns a `gsize`. Held as a `bigint`, this was refused as
+    // "settling with a `bigint`".
+    let settled = format!(
+        "{source}\nexport function later(): Promise<CNumber<\"size_t\">> {{ return new Promise<CNumber<\"size_t\">>((resolve) => {{ resolve(doubled(3)); }}); }}\n"
+    );
+    let Some((_, prepared)) = prepare("cnumber-promise", &settled) else { return; };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
 }
