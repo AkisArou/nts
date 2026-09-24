@@ -1764,6 +1764,22 @@ pub const SYNTHETIC_TYPE_FLOOR: u32 = u32::MAX - (1 << 20);
 /// and no program to look it up in. So the space is partitioned rather than
 /// merely arranged.
 pub const SYNTHETIC_CELLS: u32 = SYNTHETIC_TYPE_FLOOR;
+
+/// The box a promise holds a counted `GObject` in, from the *top* of the
+/// cells' band: a cell in every respect the partition exists for -- one field,
+/// the compiler's own, never named by a program, `typeof` `"object"` -- whose
+/// field is a handle the box releases when it dies. Its own id rather than a
+/// cell index because nothing numbers it: the settle that makes one and the
+/// `await` that reads one are in different passes and share no counter.
+/// Nothing reads the band by range -- `cell_type` is its one other reader, by
+/// index from the bottom -- so this meets a variable's cell only past 262,143
+/// of them.
+///
+/// Why a box at all: a promise's own slot for a C handle holds no reference,
+/// and a counted one released after the settle would leave every reader a
+/// freed object. Boxed, the payload is an ordinary reference, and the handle
+/// is dropped by the box's descriptor like any counted field.
+pub const HANDLE_BOX_GOBJECT: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18) - 1;
 pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);
 pub const SYNTHETIC_CLOSURES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 19);
 

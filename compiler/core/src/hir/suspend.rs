@@ -1617,6 +1617,34 @@ fn read_settled(
         HirType::Void => return,
         payload => payload,
     };
+    // A counted handle, from the box the settle put it in: the box is the
+    // payload, and the handle its one field, read as the family's root and
+    // converted back to what was awaited.
+    if let HirType::NativePointer(pointee) = payload
+        && pointee.counting().is_some()
+    {
+        let boxed_ty = HirType::Managed(ManagedType::Object(TypeId(super::HANDLE_BOX_GOBJECT)));
+        let lent = build.push(
+            OpKind::Call {
+                callee: super::Callee::External("nts_promise_reference".to_owned()),
+                args: vec![held],
+                frame: None,
+            },
+            boxed_ty.clone(),
+        );
+        // Through a conversion, as every other reference an `await` reads:
+        // the reader lends the promise's reference, and an external call's
+        // result is counted as the caller's own, so the conversion is what
+        // takes the reference the call's release gives back.
+        let boxed = build.push(OpKind::Convert(lent), boxed_ty);
+        let root = build.push(OpKind::FieldGet { object: boxed, field: 0 }, HirType::NativePointer(super::native::gobject_root()));
+        build.values[awaited.0 as usize].kind = OpKind::Convert(root);
+        build.ops.push(awaited);
+        if let Some(slot) = slot_of.get(&awaited).copied() {
+            build.set(frame, slot, awaited);
+        }
+        return;
+    }
     let reader = match payload {
         HirType::Managed(_) => "nts_promise_reference",
         // A C handle, from the promise's slot for one.

@@ -15922,6 +15922,30 @@ impl<'a> FuncBuilder<'a> {
         self.boxed.iter().position(|held| *held == symbol)
     }
 
+    /// A counted handle in the box a promise holds it in
+    /// ([`super::HANDLE_BOX_GOBJECT`]): stored as the family's root, whose
+    /// release the box's descriptor calls when the box dies.
+    fn box_handle(&mut self, id: NodeId, value: ValueId, pointee: &super::native::Pointee) -> Result<ValueId, Diagnostic> {
+        if pointee.family() != Some(super::native::Family::GObject) {
+            return Err(self.unsupported(id, "a promise settling with a counted handle that is not a GObject"));
+        }
+        let origin = self.origin(id);
+        let root = HirType::NativePointer(super::native::gobject_root());
+        let handle = self.push(OpKind::Convert(value), root.clone(), origin.clone());
+        let ty = TypeId(super::HANDLE_BOX_GOBJECT);
+        self.layouts.push(Layout {
+            types: vec![ty],
+            name: "HandleBoxGObject".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![Field { name: "handle".to_owned(), ty: root, readonly: true, declared_by: None }],
+            methods: vec![None; self.hierarchy.table_size()],
+            base: None,
+        });
+        let boxed = self.push(OpKind::ObjectNew { frame: false }, HirType::Managed(ManagedType::Object(ty)), origin.clone());
+        self.field_set(boxed, 0, handle, &origin);
+        Ok(boxed)
+    }
+
     /// The one-field object a captured-and-written variable lives in.
     fn cell_layout(&self, index: usize, ty: HirType) -> Layout {
         let mut fields = vec![Field {
@@ -20974,6 +20998,13 @@ impl<'a> FuncBuilder<'a> {
             // A C handle -- `query_info_async`'s `GFileInfo *` -- into the
             // promise's own slot for one, never into its value, which the
             // collector reads.
+            // A counted one boxed, so the promise holds a reference to it.
+            (HirType::NativePointer(pointee), Some(value)) if pointee.counting().is_some() => {
+                let boxed = self.box_handle(id, value, pointee)?;
+                let tag = super::tags::of_reference(&ManagedType::Object(TypeId(super::HANDLE_BOX_GOBJECT)));
+                let tag = self.push(OpKind::ConstInt(i128::from(tag)), HirType::Int { bits: 32, signed: false }, self.origin(id));
+                ("nts_promise_fulfill_tagged", vec![result.promise, boxed, tag])
+            }
             (HirType::NativePointer(_), Some(value)) => ("nts_promise_fulfill_pointer", vec![result.promise, value]),
             (HirType::Void, _) | (_, None) => ("nts_promise_fulfill_void", vec![result.promise]),
             (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool, Some(value)) => {

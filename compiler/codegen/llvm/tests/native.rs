@@ -2540,6 +2540,59 @@ export function live(): number { return live_objects(); }
     }
 }
 
+/// A promise of a counted `GObject`: `await file.query_info_async(…)` under
+/// reference counting. The promise's own slot for a C handle holds no
+/// reference, so a counted one settles boxed -- an ordinary reference whose
+/// one field is the handle -- and the `await` reads it back out. Each handle
+/// is +1 from C, held across later awaits, read through, and dropped: fifty
+/// runs leave nothing alive and no unref of a freed object. The one it
+/// replaced left the promise a freed object the moment the settle returned.
+#[test]
+fn a_promise_of_a_gobject_holds_a_reference_on_both_backends() {
+    let source = r#"
+import type { Class, GObjectClass, Owned, c_int } from "c:types";
+type GTypeInstance = Class<"_GTypeInstance">;
+type GObject = GObjectClass<"_GObject", GTypeInstance>;
+type Thing = GObjectClass<"_Thing", GObject>;
+declare function thing_new_owned(value: c_int): Owned<Thing>;
+declare function instance_value(instance: GTypeInstance): c_int;
+declare function live_objects(): c_int;
+declare function errors_seen(): c_int;
+let total = 0;
+async function later(value: number): Promise<Thing> {
+    return thing_new_owned(value as c_int);
+}
+async function use(): Promise<void> {
+    const first = await later(4);
+    const second = await later(2);
+    const third = await later(7);
+    total = (instance_value(first) as number) * 100 + (instance_value(second) as number) * 10 + (instance_value(third) as number);
+}
+export function start(): void {
+    total = 0;
+    void use();
+}
+export function settled(): number { return total; }
+export function live(): number { return live_objects(); }
+export function errors(): number { return errors_seen(); }
+"#;
+    let caller = counted_caller(
+        r#"start(); nts_checkpoint(); printf("%.0f", settled());
+  for (int i = 0; i < 50; i++) { start(); nts_checkpoint(); }
+  printf(" live=%.0f errors=%.0f", live(), errors());"#,
+        "",
+    );
+    let Some((text, outputs)) =
+        run_on_both_backends("promised-gobject", source, hir::Provider::ReferenceCounting, GOBJECT_LIBRARY, &caller)
+    else {
+        return;
+    };
+    assert!(text.contains("HandleBoxGObject"), "the handle did not settle boxed");
+    for output in outputs {
+        assert_eq!(output, "427 live=0 errors=0 leak=0");
+    }
+}
+
 /// `Consumed<T>`: an argument C keeps (GIR's `transfer-ownership="full"`),
 /// so the caller hands a reference over instead of releasing its own after
 /// the call. A +1 temporary is handed as it is; a variable still used after
