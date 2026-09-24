@@ -2401,6 +2401,8 @@ declare const enum Sign { NEGATIVE = -3, POSITIVE = 5 }
 declare function orient(orientation: CEnum<Orientation, c_uint>, spacing: c_int): c_int;
 declare function signed_of(sign: CEnum<Sign, c_int>): c_int;
 declare function flipped(orientation: CEnum<Orientation, c_uint>): CEnum<Orientation, c_uint>;
+/** @ntsDefault orientation=1 */
+declare function orient_last(spacing: c_int, orientation?: CEnum<Orientation, c_uint>): c_int;
 export function run(): number {
     const n: number = 1;
     return orient(Orientation.VERTICAL, 4 as c_int) * 1000
@@ -2408,20 +2410,25 @@ export function run(): number {
         + signed_of(Sign.NEGATIVE) * 10
         + (flipped(Orientation.VERTICAL) === Orientation.HORIZONTAL ? 1 : 0);
 }
+// An enum parameter left out, `@ntsDefault`: optional, it is its members and
+// `undefined` in one union. VERTICAL, 1, beside a written HORIZONTAL.
+export function defaulted(): number { return orient_last(3 as c_int) * 100 + orient_last(3 as c_int, Orientation.HORIZONTAL); }
 "#;
     let library = r"
 int orient(unsigned orientation, int spacing) { return (int)orientation * 10 + spacing; }
 int signed_of(int sign) { return sign; }
 unsigned flipped(unsigned orientation) { return orientation ^ 1u; }
+int orient_last(int spacing, unsigned orientation) { return (int)orientation * 10 + spacing; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let caller = counted_caller(r#"printf("%.0f %.0f", run(), defaulted());"#, "run(); defaulted();");
         let Some((text, outputs)) = run_on_both_backends("enums", source, provider, library, &caller) else { return; };
         assert!(text.contains("int orient(unsigned int, int)"), "the enum is not C's unsigned int");
         assert!(text.contains("int signed_of(int)"), "the signed enum is not C's int");
         // 14 * 1000, 12 * 100, -3 * 10, and the flipped member compared.
         for output in outputs {
-            assert_eq!(output, expect("15171", provider), "{provider:?}");
+            // And 13 with the default, 3 with HORIZONTAL written.
+            assert_eq!(output, expect("15171 1303", provider), "{provider:?}");
         }
     }
     let other = source.replace("orient(n, 2 as c_int)", "orient(Sign.POSITIVE, 2 as c_int)");

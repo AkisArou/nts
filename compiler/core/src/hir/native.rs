@@ -1728,10 +1728,11 @@ fn defaulted(
     // `boolean` is `true | false` to the checker, so it arrives here as two
     // literals once `undefined` is gone.
     let boolean = |m: &TypeId| matches!(kind(*m), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
+    // And a `CEnum` is its members, each `member & brand`.
     let ty = match payload.as_slice() {
         [one] => abi_type(snapshot, *one),
         [_, _] if payload.iter().all(boolean) => Some(Type::Bool),
-        _ => None,
+        members => enum_members_scalar(snapshot, members).map(Type::Scalar),
     };
     match (value, ty) {
         (ParameterDefault::Int(value), Some(Type::Bool)) if !nullable => {
@@ -2150,15 +2151,21 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 /// brand the one object, and `B` (optional, so `B | undefined`) a C integer:
 /// an enum's members are integers, and nothing else is read as one.
 fn enum_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
+    match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Union(parts) => enum_members_scalar(snapshot, parts),
+        TypeKind::Intersection(_) => enum_members_scalar(snapshot, &[ty]),
+        _ => None,
+    }
+}
+
+/// [`enum_scalar`] over the members themselves, for a union the checker
+/// flattened further -- an optional `CEnum` parameter is its members and
+/// `undefined`, in one union.
+fn enum_members_scalar(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Option<Scalar> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let members = match kind(ty)? {
-        TypeKind::Union(parts) => parts.clone(),
-        TypeKind::Intersection(_) => vec![ty],
-        _ => return None,
-    };
     let is_member = |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Number(_))));
     let mut brand = None;
-    for member in members {
+    for &member in members {
         let TypeKind::Intersection(parts) = kind(member)? else { return None };
         let [a, b] = parts.as_slice() else { return None };
         let object = match (is_member(*a), is_member(*b)) {
