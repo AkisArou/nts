@@ -224,6 +224,10 @@ fn the_sound_narrow_figure_is_between_zero_and_the_broad_one() {
     // Nothing unexamined here, so the sound set is exactly the structural one.
     assert_eq!(sound, census.through_satisfied());
     assert_eq!(census.excluded.interfaces_unexamined, 0);
+    // And the figure is only sound while every class was examined: an
+    // unexamined class could inhabit anything. This is the precondition the
+    // number rests on, so it is asserted rather than assumed.
+    assert_eq!(census.excluded.classes_unexamined, 0);
 }
 
 /// A class receiver reads at a fixed offset today and would keep doing so.

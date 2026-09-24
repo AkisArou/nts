@@ -382,6 +382,12 @@ impl Census {
     /// inherited member counts for both sides, and a subclass has a superset of
     /// its base's members and so cannot escape a set its base is in.
     ///
+    /// And the claim needs every class to have been *looked at*: one whose
+    /// instance type carries no member list could inhabit anything, so
+    /// [`Excluded::classes_unexamined`] being non-zero makes this return the broad
+    /// figure instead. That reads zero in `runtime/node`, which is a fact about
+    /// one corpus rather than a property of this pass.
+    ///
     /// **The bound of the claim: classes this program declares.** `class_members`
     /// enumerates `CLASS_DECLARATION` and `CLASS_EXPRESSION` nodes in the decoded
     /// files, so a *library* class inhabiting one of these interfaces is invisible
@@ -394,6 +400,31 @@ impl Census {
     /// owes a decision about library classes rather than inheriting one.
     #[must_use]
     pub fn through_possibly_inhabited(&self) -> u32 {
+        // **If a class could not be examined, the set is not sound and this must
+        // not pretend otherwise.** A class whose instance type carries no member
+        // list — a generic class's uninstantiated form is the case — could
+        // inhabit *any* interface, so no interface can be shown uninhabitable
+        // and the honest answer collapses to the broad figure.
+        //
+        // **I could not make this arm fire, and that is worth writing down rather
+        // than leaving it to read as protection.** It is zero across
+        // `runtime/node`, and the shape I expected to produce it does not: a
+        // generic `class Holder<T> { held: T }` added to the fixture left it at
+        // zero, because `instance_type_of` goes through the *construct
+        // signature's result* and that decomposed. So this is a guard on a
+        // condition nothing currently reaches.
+        //
+        // It stays, because what it guards is the **precondition of a soundness
+        // claim** rather than a convenience: if the decomposer ever leaves a
+        // class's instance type as `Structured`, every interface becomes possibly
+        // inhabited and a narrow rule built on the number above would be unsound.
+        // A claim that silently depends on a corpus is the kind this ledger keeps
+        // paying for, so the dependency lives in the code and not in a sentence
+        // about it. `classes_unexamined` is printed either way, so a reader can
+        // see that it is zero rather than trust that it is.
+        if self.excluded.classes_unexamined > 0 {
+            return self.through_interfaces();
+        }
         self.fields_where(|site| {
             site.shape == Shape::Interface
                 && (site.implemented || site.satisfied || site.unexamined)
