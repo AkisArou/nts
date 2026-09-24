@@ -82,6 +82,20 @@ fn every_runtime_call_agrees_with_its_declaration() {
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    // Under reference counting as well: an erased value's retain and release
+    // are spelled by hand, and were System V's split on Win64 too -- a crash
+    // the first time a Windows program counted one.
+    let counted = hir::prepare_with(&snapshot, &hir::Options { provider: hir::Provider::ReferenceCounting, ..hir::Options::default() }).unwrap();
+    assert!(counted.diagnostics.is_empty(), "{:?}", counted.diagnostics);
+    for platform in [nts_codegen_llvm::Platform::SYSV_X86_64, nts_codegen_llvm::Platform::WIN64_X86_64] {
+        let emitted = nts_codegen_llvm::emit(&counted.program, platform);
+        assert!(emitted.diagnostics.is_empty(), "{platform:?} --rc: {:?}", emitted.diagnostics);
+        for helper in ["@nts_value_retain(", "@nts_value_release("] {
+            assert!(emitted.text.contains(helper), "{platform:?} --rc: the program does not call {helper}");
+        }
+        let found = lint(&emitted.text, &format!("{platform:?}-rc")).unwrap();
+        assert!(found.is_empty(), "{platform:?} --rc: calls that disagree with their declarations:\n{}", found.join("\n"));
+    }
     for platform in [nts_codegen_llvm::Platform::SYSV_X86_64, nts_codegen_llvm::Platform::WIN64_X86_64] {
         let emitted = nts_codegen_llvm::emit(&prepared.program, platform);
         assert!(emitted.diagnostics.is_empty(), "{platform:?}: {:?}", emitted.diagnostics);

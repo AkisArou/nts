@@ -2678,6 +2678,7 @@ fn counting_or_global(
     func: &Func,
     value: ValueId,
     out: &str,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
@@ -2699,12 +2700,14 @@ fn counting_or_global(
             } else {
                 "nts_value_release"
             };
-            format!(
-                "{out}.t = extractvalue {ERASED_TYPE} {0}, 0\n  \
-                 {out}.p = extractvalue {ERASED_TYPE} {0}, 1\n  \
-                 call void @{helper}(i32 {out}.t, i64 {out}.p)",
-                name(*object)
-            )
+            // Passed as every erased argument to C is on this platform: two
+            // scalars on System V, a pointer to a copy on Win64. Spelled here
+            // as the System V split, it crashed the first Windows program to
+            // count one -- a `throw` inside a delegate, under `--rc`.
+            let mut lines = Vec::new();
+            let argument = erased_argument(platform, &name(*object), &out, 0, &mut lines);
+            lines.push(format!("call void @{helper}({argument})"));
+            lines.join("\n  ")
         }
         OpKind::Retain(object) | OpKind::Release(object) => {
             use nts_codegen_common::counting::{Counter, counter};
@@ -3420,7 +3423,7 @@ fn memory_operation(
         | OpKind::Release(_)
         | OpKind::GlobalGet(_)
         | OpKind::GlobalSet { .. } => {
-            return counting_or_global(program, func, value, &out);
+            return counting_or_global(program, func, value, &out, platform);
         }
         // A field, at the offset this compiler computed.
         //
