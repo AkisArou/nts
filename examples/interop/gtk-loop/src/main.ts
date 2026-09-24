@@ -13,6 +13,11 @@
 //   click-sync    its handler queues a promise job,
 //   task-end      which must not run in the middle of the task
 //   micro-sync    but after it.
+//   nested        A third click, from GLib's dispatch again, whose handler
+//   spun          sets a timer and turns GLib's loop itself, as a modal
+//                 dialog would: libuv's source must not run the timer in there,
+//   micro-nested  with the handler's frames still below it -- its promise job
+//   timeout-nested  first, once the handler returns, and then the timer.
 //   quit
 import {
   g_application_run,
@@ -25,6 +30,7 @@ import {
   loop_click_later,
   loop_click_now,
   loop_connect,
+  loop_spin,
   loop_control,
   loop_log,
   loop_quit,
@@ -60,14 +66,21 @@ function main(): void {
           loop_log("task-start");
           loop_click_now(button);
           loop_log("task-end");
-          setTimeout(() => {
-            loop_log("quit");
-            loop_quit(app);
-          }, 0);
+          loop_click_later(button);
         }, 0);
-      } else {
+      } else if (clicks === 2) {
         loop_log("click-sync");
         void afterAJob("micro-sync");
+      } else {
+        loop_log("nested");
+        void afterAJob("micro-nested");
+        setTimeout(() => {
+          loop_log("timeout-nested");
+          loop_log("quit");
+          loop_quit(app);
+        }, 0);
+        loop_spin();
+        loop_log("spun");
       }
     });
     gtk_window_present(loop_as_window(window));

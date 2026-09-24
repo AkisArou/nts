@@ -37,6 +37,12 @@ void loop_click_now(GtkWidget *button) {
   g_signal_emit_by_name(button, "clicked");
 }
 
+void loop_spin(void) {
+  for (int i = 0; i < 20; i++) {
+    g_main_context_iteration(NULL, FALSE);
+  }
+}
+
 static gboolean loop_quit_now(gpointer app) {
   g_application_quit(app);
   return G_SOURCE_REMOVE;

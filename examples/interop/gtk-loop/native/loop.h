@@ -19,6 +19,10 @@ void loop_log(const char *line);
 void loop_click_later(GtkWidget *button);
 // Emit "clicked" now, synchronously, from whatever called this.
 void loop_click_now(GtkWidget *button);
+// Turn GLib's loop from inside whatever called this -- what a modal dialog,
+// a menu or drag and drop does inside a signal handler: every source that is
+// ready is dispatched, without blocking.
+void loop_spin(void);
 
 // `g_application_quit`, or with LOOP_LINGER=<ms> the same after that long
 // idle: nothing of libuv's is alive by then, so the process should sleep, and

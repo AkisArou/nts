@@ -44,7 +44,7 @@ early_while_running() {
   case $1 in *early-timer*done*) return 0 ;; *) return 1 ;; esac
 }
 
-expected="click micro timeout task-start click-sync task-end micro-sync quit done "
+expected="click micro timeout task-start click-sync task-end micro-sync nested spun micro-nested timeout-nested quit done "
 main=$(run)
 echo "main:     $main"
 if [ "$(without_early "$main")" != "$expected" ] || ! early_while_running "$main"; then

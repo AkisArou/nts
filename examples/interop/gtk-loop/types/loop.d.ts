@@ -29,6 +29,7 @@ declare module "c:gtk-loop" {
   export function loop_log(line: string): void;
   export function loop_click_later(button: GtkWidget): void;
   export function loop_click_now(button: GtkWidget): void;
+  export function loop_spin(): void;
   export function loop_control(app: GApplication): void;
   export function loop_quit(app: GApplication): void;
 }
