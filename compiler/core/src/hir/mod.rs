@@ -3930,12 +3930,22 @@ fn doomed_values(
         // Two ways to name a function that is gone: calling it, and *being* it.
         // The second is a closure over a refused function, which has no method
         // left to dispatch to -- see `uncallable_closures`.
+        //
+        // **Both spellings of the second, and the pair has to match the scan in
+        // `cascade_refusals` exactly.** A closure with no captures is a
+        // singleton and arrives as `ClosureStatic`; one the lowering gives a
+        // frame arrives as `ObjectNew`. When this knew only the first and the
+        // scan knew both, the scan kept finding an `ObjectNew` in the module
+        // initializer that this would not mark doomed -- so `excise_from_initializer`
+        // reported having excised something, the initializer survived with the
+        // allocation intact, and the next round found it again. `nts check
+        // runtime/node` ran for ten minutes at 100% and never finished.
         let absent = match &op.kind {
             OpKind::Call {
                 callee: Callee::Direct(name),
                 ..
             } if !present.contains(name.as_str()) => Some(name.clone()),
-            OpKind::ClosureStatic => match &op.ty {
+            OpKind::ClosureStatic | OpKind::ObjectNew { .. } => match &op.ty {
                 HirType::Managed(ManagedType::Object(ty)) => uncallable.get(ty).cloned(),
                 _ => None,
             },
@@ -4156,7 +4166,28 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
                         // Holding a closure whose method was refused is as
                         // fatal as calling the function directly, and quieter:
                         // the call would not link, and this compiles.
-                        OpKind::ClosureStatic => match &op.ty {
+                        //
+                        // **`ObjectNew` and not only `ClosureStatic`, and the
+                        // gap between them was a segfault.** A closure with no
+                        // captures is a singleton and arrives as
+                        // `ClosureStatic`; one the lowering gives a frame
+                        // arrives as `object.new frame : managed<closure#0>`,
+                        // and that is most of them. So a refused arrow body left
+                        // the *signature's* declaration shell in the dispatch
+                        // table -- a function whose one block is `unreachable`,
+                        // which is `__builtin_unreachable()` in C -- and the
+                        // indirect call jumped into it.
+                        //
+                        // Reported by the React lane: `k in c` written as a plain
+                        // function refuses and cascades correctly, and the same
+                        // expression written in an arrow compiled and died with
+                        // signal 11. A guard that runs on one path only, and the
+                        // path it missed is the common one.
+                        //
+                        // `uncallable` is keyed by closure type, so an ordinary
+                        // object's allocation finds nothing here and this is not
+                        // a test of every `ObjectNew` in the program.
+                        OpKind::ClosureStatic | OpKind::ObjectNew { .. } => match &op.ty {
                             HirType::Managed(ManagedType::Object(ty)) => uncallable
                                 .get(ty)
                                 .map(|lost| (lost.clone(), op.origin.clone())),
