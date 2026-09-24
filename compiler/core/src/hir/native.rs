@@ -2099,6 +2099,9 @@ impl Scalar {
 
 #[must_use]
 pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
+    if let Some(scalar) = enum_scalar(snapshot, ty) {
+        return Some(scalar);
+    }
     let TypeKind::Intersection(parts) = &snapshot.types.get(ty.0 as usize)?.kind else {
         return None;
     };
@@ -2137,6 +2140,49 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     // would notice.
     let brand = brand?;
     (base? == brand.needs_exact_integer()).then_some(brand)
+}
+
+/// `CEnum<E, B>`: an enum that C takes as the integer brand `B`.
+///
+/// `E & { readonly __c_enum?: B }`, which the checker distributes over `E`'s
+/// members, so it arrives as `member & brand` per member -- a union of them,
+/// or one for a single-member enum. Every member a number literal, every
+/// brand the one object, and `B` (optional, so `B | undefined`) a C integer:
+/// an enum's members are integers, and nothing else is read as one.
+fn enum_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let members = match kind(ty)? {
+        TypeKind::Union(parts) => parts.clone(),
+        TypeKind::Intersection(_) => vec![ty],
+        _ => return None,
+    };
+    let is_member = |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Number(_))));
+    let mut brand = None;
+    for member in members {
+        let TypeKind::Intersection(parts) = kind(member)? else { return None };
+        let [a, b] = parts.as_slice() else { return None };
+        let object = match (is_member(*a), is_member(*b)) {
+            (true, false) => *b,
+            (false, true) => *a,
+            _ => return None,
+        };
+        if brand.is_some_and(|seen| seen != object) {
+            return None;
+        }
+        brand = Some(object);
+    }
+    let TypeKind::Object { properties } = kind(brand?)? else { return None };
+    let [property] = properties.as_slice() else { return None };
+    // tsgo's escaped name: a source name beginning `__` has one more `_`.
+    if property.name != "___c_enum" || !property.readonly || !property.optional || property.kind != MemberKind::Field {
+        return None;
+    }
+    let given: Vec<TypeId> = match kind(property.ty)? {
+        TypeKind::Union(parts) => parts.iter().copied().filter(|p| !matches!(kind(*p), Some(TypeKind::Undefined))).collect(),
+        _ => vec![property.ty],
+    };
+    let [given] = given.as_slice() else { return None };
+    scalar(snapshot, *given).filter(|scalar| matches!(scalar.representation(), HirType::Int { .. }))
 }
 
 pub(crate) mod schema;

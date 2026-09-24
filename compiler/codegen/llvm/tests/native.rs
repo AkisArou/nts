@@ -45,6 +45,21 @@ fn prepare_with_files(name: &str, source: &str, provider: hir::Provider, declara
     Some((dir, hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).unwrap()))
 }
 
+/// What the checker says of `source`, for an arm whose refusal is the
+/// checker's rather than lowering's -- which `prepare` asserts never happens.
+fn checker_messages(name: &str, source: &str) -> Option<Vec<String>> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
+    let dir = root.join(format!("target/native-llvm-tests/{}-{name}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("tsconfig.json"), format!(
+        r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
+    )).unwrap();
+    std::fs::write(dir.join("main.ts"), source).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    Some(snapshot.diagnostics.iter().map(|d| d.message.clone()).collect())
+}
+
 fn clang(dir: &Utf8Path, args: &[&str]) {
     let result = Command::new("clang")
         .current_dir(dir)
@@ -2369,6 +2384,52 @@ export function run(): number {
             assert_eq!(output, expect("42052", provider), "{provider:?}");
         }
     }
+}
+
+/// An enum C takes as an integer (`CEnum<E, B>`), passed as its members are:
+/// no `as c_uint`. A member, a written number and a member of a negative
+/// enum through `c_int` each arrive as their value, and a result typed by the
+/// enum compares with its members. What the type checks -- another enum's
+/// member refused -- is the checker's, and is the `TS2345` arm below. Not a
+/// range check: a plain number is accepted, as C accepts one.
+#[test]
+fn an_enum_crosses_to_c_as_its_integer_on_both_backends() {
+    let source = r#"
+import type { CEnum, c_int, c_uint } from "c:types";
+declare const enum Orientation { HORIZONTAL = 0, VERTICAL = 1 }
+declare const enum Sign { NEGATIVE = -3, POSITIVE = 5 }
+declare function orient(orientation: CEnum<Orientation, c_uint>, spacing: c_int): c_int;
+declare function signed_of(sign: CEnum<Sign, c_int>): c_int;
+declare function flipped(orientation: CEnum<Orientation, c_uint>): CEnum<Orientation, c_uint>;
+export function run(): number {
+    const n: number = 1;
+    return orient(Orientation.VERTICAL, 4 as c_int) * 1000
+        + orient(n, 2 as c_int) * 100
+        + signed_of(Sign.NEGATIVE) * 10
+        + (flipped(Orientation.VERTICAL) === Orientation.HORIZONTAL ? 1 : 0);
+}
+"#;
+    let library = r"
+int orient(unsigned orientation, int spacing) { return (int)orientation * 10 + spacing; }
+int signed_of(int sign) { return sign; }
+unsigned flipped(unsigned orientation) { return orientation ^ 1u; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("enums", source, provider, library, &caller) else { return; };
+        assert!(text.contains("int orient(unsigned int, int)"), "the enum is not C's unsigned int");
+        assert!(text.contains("int signed_of(int)"), "the signed enum is not C's int");
+        // 14 * 1000, 12 * 100, -3 * 10, and the flipped member compared.
+        for output in outputs {
+            assert_eq!(output, expect("15171", provider), "{provider:?}");
+        }
+    }
+    let other = source.replace("orient(n, 2 as c_int)", "orient(Sign.POSITIVE, 2 as c_int)");
+    let Some(messages) = checker_messages("enums-other", &other) else { return; };
+    assert!(
+        messages.iter().any(|m| m.contains("'Sign.POSITIVE' is not assignable to parameter of type 'CEnum<Orientation, c_uint>'")),
+        "another enum's member was accepted: {messages:?}"
+    );
 }
 
 /// C behind the `@ntsDefault` test: each answer spells what arrived.

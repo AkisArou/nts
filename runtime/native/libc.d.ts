@@ -100,6 +100,11 @@ declare module "c:types" {
   // knows which handle it is: the instance of `g_signal_connect_data`, typed
   // by the signal it connects. Any `H` converts to it, and C sees `void *`.
   export type Erased<H extends ClassChain | Opaque<string>> = H & { readonly __c_erased?: true };
+  // An enum C takes as the integer `B` -- `GtkOrientation`, which the header
+  // makes an `unsigned int` -- so its members pass as they are, with no
+  // `as c_uint`, and a member of another enum does not. A plain number is
+  // still accepted, as C accepts one.
+  export type CEnum<E extends number, B extends number> = E & { readonly __c_enum?: B };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.
