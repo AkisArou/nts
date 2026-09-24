@@ -9,6 +9,8 @@
 //! - `-child` lends one (+0) the receiver owns, retained while held and given
 //!   back, never freed by the program;
 //! - `-init` consumes its receiver and hands over a different object;
+//! - an object held in a field of a heap object, or captured by a closure, is
+//!   released when that object dies (the descriptor's foreign slots);
 //! - under `NoGc` nothing is released (the control: the same program, one
 //!   variable).
 //!
@@ -65,6 +67,21 @@ function use(thing: Thing): void {
   thing.touch();
 }
 
+// Returned, so it lives on the heap, and its field is the only reference to
+// its thing. When the holder dies, its descriptor has to give the thing up.
+class Holder {
+  constructor(public thing: Thing) {}
+}
+function holding(): Holder {
+  return new Holder(newThing());
+}
+
+// The closure's environment is the only reference to `captured`.
+function capturing(): () => void {
+  const captured = newThing();
+  return () => captured.touch();
+}
+
 export function run(): number {
   const a = newThing();
   const b = a.copy();
@@ -74,6 +91,10 @@ export function run(): number {
   use(b);
   use(d);
   use(a);
+  const holder = holding();
+  use(holder.thing);
+  const touch = capturing();
+  touch();
   return 0;
 }
 "#;
@@ -226,20 +247,20 @@ fn every_object_the_program_owns_is_released_once_on_both_backends() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    // `new`, `copy`, `child`, `alloc` and the object `init` returns: five.
-    // All gone, `child` with its parent. No abort means no object was
-    // retained after it was freed, released below zero, or sent a message
-    // after it died.
+    // `new`, `copy`, `child`, `alloc`, the object `init` returns, the
+    // holder's and the closure's: seven. All gone, `child` with its parent.
+    // No abort means no object was retained after it was freed, released
+    // below zero, or sent a message after it died.
     for (backend, made, alive) in &counted {
-        assert_eq!(*made, 5, "{backend}: the program made {made} objects, not 5");
+        assert_eq!(*made, 7, "{backend}: the program made {made} objects, not 7");
         assert_eq!(*alive, 0, "{backend}: {alive} object(s) outlived the program's last reference");
     }
     // The control: the same program with nothing counted. `alloc`'s object is
-    // still consumed by `init` (the stub's `init` releases it), so four live on.
+    // still consumed by `init` (the stub's `init` releases it), so six live on.
     let Some(uncounted) = made_and_alive(hir::Provider::NoGc, "nogc") else { return };
     for (backend, made, alive) in &uncounted {
-        assert_eq!(*made, 5, "{backend}");
-        assert_eq!(*alive, 4, "{backend}: under NoGc {alive} object(s) are alive, where nothing releases them but init");
+        assert_eq!(*made, 7, "{backend}");
+        assert_eq!(*alive, 6, "{backend}: under NoGc {alive} object(s) are alive, where nothing releases them but init");
     }
 }
 

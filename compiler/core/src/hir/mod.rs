@@ -1635,6 +1635,22 @@ impl Layout {
             .collect()
     }
 
+    /// The fields an object of this layout owes something when it dies:
+    /// the references above, and the counted foreign handles beside them
+    /// ([`HirType::is_counted`]).
+    ///
+    /// The question the release walk, the inliner and a frame object's
+    /// zeroing all ask. It is not the collector's question, which is
+    /// [`Self::reference_fields`]: a foreign object is released, never traced.
+    #[must_use]
+    pub fn counted_fields(&self) -> Vec<&str> {
+        self.fields
+            .iter()
+            .filter(|field| field.ty.is_counted())
+            .map(|field| field.name.as_str())
+            .collect()
+    }
+
     /// The fields holding a *pointer*, which is the narrower question.
     ///
     /// A descriptor's two tables are built from the two: `offsets` from this

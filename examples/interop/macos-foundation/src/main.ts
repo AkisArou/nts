@@ -41,6 +41,32 @@ function initialised(): c_int {
   return weak_watch(text);
 }
 
+// A heap object whose field is the object's only reference: gone when the
+// holder is, which its descriptor's foreign slot sees to.
+class Holder {
+  constructor(public object: NSObject) {}
+}
+function holding(): Holder {
+  return new Holder(newObject());
+}
+function inAField(): c_int {
+  const holder = holding();
+  return weak_watch(holder.object);
+}
+
+// A closure's environment as the object's only reference.
+function capturing(): () => boolean {
+  const object = newObject();
+  watched = weak_watch(object);
+  return () => object.isKindOfClass(classNSString());
+}
+let watched = 0 as c_int;
+function captured(): c_int {
+  const check = capturing();
+  check();
+  return watched;
+}
+
 function main(): void {
   const owned = allocString().initWithUTF8String("α\u{1F600} hello");
   report("length " + String(owned.length()));
@@ -76,6 +102,8 @@ function main(): void {
   report("held again " + String(held.isKindOfClass(classNSString())));
   report("scoped new " + state(scoped()));
   report("scoped init " + state(initialised()));
+  report("in a field " + state(inAField()));
+  report("captured " + state(captured()));
 }
 
 main();

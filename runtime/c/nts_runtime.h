@@ -132,6 +132,15 @@
  * and carries `NTS_KIND_ARRAY`, which already answers `true`. */
 #define NTS_KIND_TUPLE 6u
 
+/* A field holding an object of a foreign object system the program counts --
+ * an Objective-C object -- and the function that gives it up. The function is
+ * per slot because it is per family: `objc_release` today, `g_object_unref`
+ * for a GObject. */
+typedef struct NtsForeignSlot {
+  uint32_t offset;
+  void (*release)(void *object);
+} NtsForeignSlot;
+
 typedef struct NtsDescriptor {
   uint32_t kind;
   uint32_t size;
@@ -212,6 +221,17 @@ typedef struct NtsDescriptor {
    * only where `kind` is `NTS_KIND_ARRAY`; every other descriptor says
    * `NTS_ARRAY_UNKNOWN` because the question does not apply to it. */
   uint32_t element;
+  /* Fields holding a counted foreign object: `foreign` of them, at
+   * `foreign_slots`. Given up when the object is freed, whether its count
+   * reached zero or the cycle collector found it garbage (`nts_free` is where
+   * both end).
+   *
+   * Never traced. A foreign object is not a managed one, the collector cannot
+   * see through it, and a cycle through a foreign system's objects is that
+   * system's to break. Last, after `element`, because descriptors in
+   * `runtime/node` set `element` positionally and zero-fill what follows. */
+  uint32_t foreign;
+  const NtsForeignSlot *foreign_slots;
 } NtsDescriptor;
 
 /* What an array's slots hold.

@@ -41,7 +41,9 @@ static const NtsDescriptor desc_strings = {NTS_KIND_ARRAY,
                                            "NtsString*[]",
                                            0u,
                                            0,
-                                           NTS_ARRAY_REFERENCE};
+                                           NTS_ARRAY_REFERENCE,
+                                           0u,
+                                           NULL};
 
 int main(void) {
   NtsArray *options = nts_array_new(&desc_strings, 0);

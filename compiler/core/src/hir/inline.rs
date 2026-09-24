@@ -153,7 +153,9 @@ fn hands_back_plain_storage(func: &Func, layouts: &[Layout], value: ValueId) -> 
     layouts
         .iter()
         .find(|layout| layout.types.contains(id))
-        .is_some_and(|layout| layout.reference_fields().is_empty())
+        // Counted handles owe a release as references do, so they draw the
+        // same line.
+        .is_some_and(|layout| layout.counted_fields().is_empty())
 }
 
 /// Which functions each function can reach through direct calls, transitively.

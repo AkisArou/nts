@@ -495,8 +495,14 @@ fn literal_table(program: &Program) -> Vec<String> {
 /// fields in the same order matches by construction -- which is the whole
 /// difference between this and deriving an ABI, and it is why there is nothing
 /// here to get wrong by four bytes.
+///
+/// **It was four bytes short**, which that sentence did not notice: the C
+/// struct ends in `element`, which this type left out, so an array descriptor
+/// this backend emitted had its element kind read from whatever followed it.
+/// Zero there refuses, which is how it went unseen. The type now carries every
+/// field, `foreign` and `foreign_slots` after `element` as in the runtime.
 const DESCRIPTOR_TYPE: &str =
-    "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, ptr }";
+    "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, ptr, i32, i32, ptr }";
 
 /// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
 const KIND_OBJECT: u32 = 2;
@@ -605,6 +611,7 @@ fn descriptors(program: &Program) -> String {
             .collect();
         let reference_table = offsets("refs", &references);
         let erased_table = offsets("erased", &erased);
+        let (foreign, foreign_table) = foreign_slots(&mut out, layout, &placed.offsets, &tag);
         // The class's dispatch table, where the hierarchy has one. A slot the
         // class does not implement is null, which is unreachable: a call only
         // uses a slot the receiver's static type declares, and every class at
@@ -636,7 +643,8 @@ fn descriptors(program: &Program) -> String {
             placed.size,
             references.len()
         );
-        let tail = format!("i32 {}, {erased_table}", erased.len());
+        // `element` is `NTS_ARRAY_UNKNOWN` for an object, as in C.
+        let tail = format!("i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}", erased.len());
         let _ = writeln!(
             out,
             "@nts_desc_{tag} = internal constant %NtsDescriptor \
@@ -644,8 +652,13 @@ fn descriptors(program: &Program) -> String {
         );
         class_descriptors(&mut out, program, layout, &tag, (&head, &tail));
     }
-    // One per scalar element type an array is made of. An array of references
-    // uses the runtime's `nts_desc_ref`, declared above.
+    array_descriptors(&mut out, program);
+    out
+}
+
+/// One descriptor per scalar element type an array is made of. An array of
+/// references uses the runtime's `nts_desc_ref`, declared above.
+fn array_descriptors(out: &mut String, program: &Program) {
     let mut seen: Vec<String> = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
@@ -667,7 +680,7 @@ fn descriptors(program: &Program) -> String {
             }
             seen.push(tag.clone());
             let _ = writeln!(
-                out,
+                *out,
                 "@nts_name_arr_{tag} = internal constant [{} x i8] c\"{tag}[]\\00\"",
                 tag.len() + 3
             );
@@ -677,15 +690,40 @@ fn descriptors(program: &Program) -> String {
             // would be released while something still pointed at it.
             let erased = u32::from(**element == HirType::Erased);
             let _ = writeln!(
-                out,
+                *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
                  i32 0, i32 0, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
-                 ptr null }}",
-                shape.size
+                 ptr null, i32 {}, i32 0, ptr null }}",
+                shape.size,
+                nts_codegen_common::counting::array_element(element)
             );
         }
     }
-    out
+}
+
+/// A layout's foreign slots: the fields holding a counted foreign object, each
+/// with its family's release, which `nts_free` calls when the object dies.
+/// Answers how many, and the table's operand (`ptr null` for none).
+fn foreign_slots(out: &mut String, layout: &nts_core::hir::Layout, offsets: &[u32], tag: &str) -> (usize, String) {
+    let slots: Vec<String> = layout
+        .fields
+        .iter()
+        .enumerate()
+        .filter_map(|(at, field)| {
+            let release = field.ty.counting()?.release;
+            Some(format!("{{ i32, ptr }} {{ i32 {}, ptr @{release} }}", offsets.get(at)?))
+        })
+        .collect();
+    if slots.is_empty() {
+        return (0, "ptr null".to_owned());
+    }
+    let _ = writeln!(
+        out,
+        "@nts_foreign_{tag} = internal constant [{} x {{ i32, ptr }}] [{}]",
+        slots.len(),
+        slots.join(", ")
+    );
+    (slots.len(), format!("ptr @nts_foreign_{tag}"))
 }
 
 /// A global's symbol, which is its source name.
@@ -2289,7 +2327,9 @@ fn frame_object(
         format!("store i32 0, ptr {out}.flags{}", tbaa("i32")),
     ];
     for (at, field) in layout.fields.iter().enumerate() {
-        if !field.ty.may_hold_a_reference() {
+        // The same fields the C backend zeroes (`Layout::counted_fields`): a
+        // counted handle's null is what its release walk must find.
+        if !field.ty.is_counted() {
             continue;
         }
         let Some(offset) = placed.offsets.get(at) else {

@@ -35,15 +35,42 @@ static void check(const char *what, bool ok) {
 /* One descriptor per element kind, in the shape `codegen/c` emits. Written out
  * rather than borrowed from the runtime's own so that this suite fails if the
  * emitter and the runtime ever disagree about the field's position. */
-static const NtsDescriptor desc_double = {
-    NTS_KIND_ARRAY, (uint32_t)sizeof(double), 0u, 0u, 0, 0, "double[]", 0u, 0,
-    NTS_ARRAY_FLOAT};
-static const NtsDescriptor desc_i64 = {
-    NTS_KIND_ARRAY, (uint32_t)sizeof(int64_t), 0u, 0u, 0, 0, "int64_t[]", 0u, 0,
-    NTS_ARRAY_INT};
-static const NtsDescriptor desc_i32 = {
-    NTS_KIND_ARRAY, (uint32_t)sizeof(int32_t), 0u, 0u, 0, 0, "int32_t[]", 0u, 0,
-    NTS_ARRAY_INT};
+static const NtsDescriptor desc_double = {NTS_KIND_ARRAY,
+                                          (uint32_t)sizeof(double),
+                                          0u,
+                                          0u,
+                                          0,
+                                          0,
+                                          "double[]",
+                                          0u,
+                                          0,
+                                          NTS_ARRAY_FLOAT,
+                                          0u,
+                                          NULL};
+static const NtsDescriptor desc_i64 = {NTS_KIND_ARRAY,
+                                       (uint32_t)sizeof(int64_t),
+                                       0u,
+                                       0u,
+                                       0,
+                                       0,
+                                       "int64_t[]",
+                                       0u,
+                                       0,
+                                       NTS_ARRAY_INT,
+                                       0u,
+                                       NULL};
+static const NtsDescriptor desc_i32 = {NTS_KIND_ARRAY,
+                                       (uint32_t)sizeof(int32_t),
+                                       0u,
+                                       0u,
+                                       0,
+                                       0,
+                                       "int32_t[]",
+                                       0u,
+                                       0,
+                                       NTS_ARRAY_INT,
+                                       0u,
+                                       NULL};
 static const NtsDescriptor desc_u32 = {NTS_KIND_ARRAY,
                                        (uint32_t)sizeof(uint32_t),
                                        0u,
@@ -53,10 +80,21 @@ static const NtsDescriptor desc_u32 = {NTS_KIND_ARRAY,
                                        "uint32_t[]",
                                        0u,
                                        0,
-                                       NTS_ARRAY_UINT};
-static const NtsDescriptor desc_bool = {
-    NTS_KIND_ARRAY, (uint32_t)sizeof(bool), 0u, 0u, 0, 0, "bool[]", 0u, 0,
-    NTS_ARRAY_BOOL};
+                                       NTS_ARRAY_UINT,
+                                       0u,
+                                       NULL};
+static const NtsDescriptor desc_bool = {NTS_KIND_ARRAY,
+                                        (uint32_t)sizeof(bool),
+                                        0u,
+                                        0u,
+                                        0,
+                                        0,
+                                        "bool[]",
+                                        0u,
+                                        0,
+                                        NTS_ARRAY_BOOL,
+                                        0u,
+                                        NULL};
 static const NtsDescriptor desc_value = {NTS_KIND_ARRAY,
                                          (uint32_t)sizeof(NtsValue),
                                          0u,
@@ -66,7 +104,9 @@ static const NtsDescriptor desc_value = {NTS_KIND_ARRAY,
                                          "NtsValue[]",
                                          1u,
                                          0,
-                                         NTS_ARRAY_VALUE};
+                                         NTS_ARRAY_VALUE,
+                                         0u,
+                                         NULL};
 
 /* The erased receiver the lowering hands the helper. */
 static NtsValue as_value(NtsArray *array) {

@@ -46,8 +46,8 @@ static const uint32_t box_erased[] = {(uint32_t)offsetof(Box, held)};
  * before erased slots existed sets only the seven and C zero-fills the rest,
  * which is why the two new members are last. */
 static const NtsDescriptor desc_box = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(Box), 0u, 1u, 0, 0, "Box", 1u,
-    box_erased,      NTS_ARRAY_UNKNOWN};
+    NTS_KIND_OBJECT, (uint32_t)sizeof(Box), 0u, 1u,  0, 0, "Box", 1u,
+    box_erased,      NTS_ARRAY_UNKNOWN,     0u, NULL};
 
 /* An array whose elements are erased values. `erased` is 1 for an array in the
  * same sense `references` is: a fact about every element, with no table. */
@@ -60,7 +60,9 @@ static const NtsDescriptor desc_values = {NTS_KIND_ARRAY,
                                           "unknown[]",
                                           1u,
                                           0,
-                                          NTS_ARRAY_VALUE};
+                                          NTS_ARRAY_VALUE,
+                                          0u,
+                                          NULL};
 
 /* Through the runtime's own constructors, like every other reader: the
  * representation is meant to be swappable in one file, and a test that built

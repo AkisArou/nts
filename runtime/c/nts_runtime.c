@@ -431,13 +431,24 @@ void nts_counting_reset(void) {
 
 /* Cyclic, because one descriptor serves every array of references and says
    nothing about what the elements point at. */
-const NtsDescriptor nts_desc_ref = {
-    NTS_KIND_ARRAY,     sizeof(void *), 1, 1, 0, 0, "reference", 0u, 0,
-    NTS_ARRAY_REFERENCE};
+const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY,
+                                    sizeof(void *),
+                                    1,
+                                    1,
+                                    0,
+                                    0,
+                                    "reference",
+                                    0u,
+                                    0,
+                                    NTS_ARRAY_REFERENCE,
+                                    0u,
+                                    NULL};
 const NtsDescriptor nts_desc_string1 = {
-    NTS_KIND_STRING, 1, 0, 0, 0, 0, "string", 0u, 0, NTS_ARRAY_UNKNOWN};
+    NTS_KIND_STRING,   1,  0,   0, 0, 0, "string", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL};
 const NtsDescriptor nts_desc_string2 = {
-    NTS_KIND_STRING, 2, 0, 0, 0, 0, "string", 0u, 0, NTS_ARRAY_UNKNOWN};
+    NTS_KIND_STRING,   2,  0,   0, 0, 0, "string", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL};
 
 /* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
  * bring-up, allocation testing and bounded-lifetime tools. It must never be
@@ -614,8 +625,25 @@ static void nts_free_storage(NtsHeader *object) {
   }
 }
 
+/* Give up the foreign objects an object's fields hold. Each slot is cleared
+ * before its release runs, so a release that reaches back into this runtime
+ * finds nothing to give up twice. */
+static void nts_release_foreign(NtsHeader *object) {
+  const NtsDescriptor *descriptor = object->descriptor;
+  for (uint32_t index = 0; index < descriptor->foreign; index++) {
+    const NtsForeignSlot *slot = &descriptor->foreign_slots[index];
+    void **field = (void **)((unsigned char *)object + slot->offset);
+    void *held = *field;
+    if (held) {
+      *field = 0;
+      slot->release(held);
+    }
+  }
+}
+
 /* Reclaim an object: what hangs off it, then the block itself. */
 static void nts_free(NtsHeader *object) {
+  nts_release_foreign(object);
   nts_free_storage(object);
   nts_free_block(object);
 }
@@ -1618,9 +1646,18 @@ static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor,
  * and anything else the source can read before it writes. */
 /* The same shape `codegen/c` emits for a `double` element type: kind, element
    size, no references, no erased elements, and a name the runtime prints. */
-static const NtsDescriptor nts_desc_number_array = {
-    NTS_KIND_ARRAY, (uint32_t)sizeof(double), 0, 0, 0, 0, "double[]", 0, 0,
-    NTS_ARRAY_FLOAT};
+static const NtsDescriptor nts_desc_number_array = {NTS_KIND_ARRAY,
+                                                    (uint32_t)sizeof(double),
+                                                    0,
+                                                    0,
+                                                    0,
+                                                    0,
+                                                    "double[]",
+                                                    0,
+                                                    0,
+                                                    NTS_ARRAY_FLOAT,
+                                                    0u,
+                                                    NULL};
 
 NtsArray *nts_array_of_numbers(double length) {
   return nts_array_new(&nts_desc_number_array, length);
@@ -5760,9 +5797,18 @@ nts_key_eq(NtsValue a, NtsValue b, uint32_t kind) {
  * same sense an array's is -- "the elements are `NtsValue`s" -- and where they
  * are is a walk rather than a fixed offset, so `nts_each_reference` has a case
  * for this kind. */
-static const NtsDescriptor nts_desc_map = {
-    NTS_KIND_MAP,     (uint32_t)sizeof(NtsMap), 0u, 1u, 0, 0, "Map", 1u, 0,
-    NTS_ARRAY_UNKNOWN};
+static const NtsDescriptor nts_desc_map = {NTS_KIND_MAP,
+                                           (uint32_t)sizeof(NtsMap),
+                                           0u,
+                                           1u,
+                                           0,
+                                           0,
+                                           "Map",
+                                           1u,
+                                           0,
+                                           NTS_ARRAY_UNKNOWN,
+                                           0u,
+                                           NULL};
 
 static NtsMap *nts_map_alloc(uint32_t kind, bool holds_values) {
   NtsMap *map = (NtsMap *)nts_alloc(sizeof(NtsMap));
@@ -5796,9 +5842,18 @@ static NtsMap *nts_map_alloc(uint32_t kind, bool holds_values) {
  * `new Date()` are refused at the lowering, because they read a clock this
  * runtime does not have and because no differential could check them: node
  * would answer with its instant and we with ours. */
-static const NtsDescriptor nts_desc_date = {
-    NTS_KIND_OBJECT,  (uint32_t)sizeof(NtsDate), 0u, 0u, 0, 0, "Date", 0u, 0,
-    NTS_ARRAY_UNKNOWN};
+static const NtsDescriptor nts_desc_date = {NTS_KIND_OBJECT,
+                                            (uint32_t)sizeof(NtsDate),
+                                            0u,
+                                            0u,
+                                            0,
+                                            0,
+                                            "Date",
+                                            0u,
+                                            0,
+                                            NTS_ARRAY_UNKNOWN,
+                                            0u,
+                                            NULL};
 
 /* The specification's `TimeClip`: truncate toward zero, and reject a magnitude
  * beyond 100,000,000 days either side of the epoch.
@@ -5851,7 +5906,9 @@ static const NtsDescriptor nts_desc_buffer = {NTS_KIND_BUFFER,
                                               "ArrayBuffer",
                                               0u,
                                               0,
-                                              NTS_ARRAY_UNKNOWN};
+                                              NTS_ARRAY_UNKNOWN,
+                                              0u,
+                                              NULL};
 
 /* A byte count, from a double the lowering has already made legal.
  *
@@ -6013,7 +6070,9 @@ static const NtsDescriptor nts_desc_dataview = {NTS_KIND_OBJECT,
                                                 "DataView",
                                                 0u,
                                                 0,
-                                                NTS_ARRAY_UNKNOWN};
+                                                NTS_ARRAY_UNKNOWN,
+                                                0u,
+                                                NULL};
 
 static NtsDataView *nts_dataview_make(NtsBuffer *buffer, double byte_offset,
                                       double byte_length, bool tracks) {
@@ -6311,7 +6370,7 @@ static const NtsDescriptor nts_desc_view = {
     /* One reference, at offset zero: the buffer. Cyclic because a view is an
        ordinary managed object and a program may put one in a cycle. */
     (const uint32_t[]){(uint32_t)offsetof(NtsView, buffer)}, 0, "TypedArray",
-    0u, 0, NTS_ARRAY_UNKNOWN};
+    0u, 0, NTS_ARRAY_UNKNOWN, 0u, NULL};
 
 /* Beside the descriptor it compares against, rather than with the other
  * `nts_is_*` helpers: a file-scope `static const` has no forward declaration
@@ -6805,7 +6864,9 @@ static const NtsDescriptor nts_desc_symbol = {NTS_KIND_SYMBOL,
                                               "Symbol",
                                               0u,
                                               0,
-                                              NTS_ARRAY_UNKNOWN};
+                                              NTS_ARRAY_UNKNOWN,
+                                              0u,
+                                              NULL};
 
 /* The `Symbol.for` registry: keys to the symbols made for them.
  *
@@ -7762,7 +7823,9 @@ static const NtsDescriptor nts_desc_reaction = {NTS_KIND_OBJECT,
                                                 "Reaction",
                                                 0u,
                                                 0,
-                                                NTS_ARRAY_UNKNOWN};
+                                                NTS_ARRAY_UNKNOWN,
+                                                0u,
+                                                NULL};
 
 /* The fulfilled payload is *not* here: it is an erased slot, listed below, and
  * listing it in both tables would make `nts_each_reference` visit it twice --
@@ -7786,7 +7849,9 @@ static const NtsDescriptor nts_desc_promise = {NTS_KIND_OBJECT,
                                                "Promise",
                                                1u,
                                                nts_promise_erased,
-                                               NTS_ARRAY_UNKNOWN};
+                                               NTS_ARRAY_UNKNOWN,
+                                               0u,
+                                               NULL};
 
 bool nts_is_promise(NtsValue value) {
   if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
@@ -8113,7 +8178,9 @@ static const NtsDescriptor nts_desc_combinator = {
     "Combinator",
     0u,
     0,
-    NTS_ARRAY_UNKNOWN};
+    NTS_ARRAY_UNKNOWN,
+    0u,
+    NULL};
 
 static const uint32_t nts_combinator_slot_offsets[] = {
     (uint32_t)offsetof(NtsCombinatorSlot, combinator),
@@ -8130,7 +8197,9 @@ static const NtsDescriptor nts_desc_combinator_slot = {
     "CombinatorSlot",
     0u,
     0,
-    NTS_ARRAY_UNKNOWN};
+    NTS_ARRAY_UNKNOWN,
+    0u,
+    NULL};
 
 /* Copy a settled promise's payload onto another promise. `race` is exactly
  * this, and `all`'s rejection is the same thing for the rejected case. */
@@ -8297,7 +8366,9 @@ static const NtsDescriptor nts_desc_adoption = {NTS_KIND_OBJECT,
                                                 "Adoption",
                                                 0u,
                                                 0,
-                                                NTS_ARRAY_UNKNOWN};
+                                                NTS_ARRAY_UNKNOWN,
+                                                0u,
+                                                NULL};
 
 static void nts_adoption_drop(void *state) { nts_release((NtsHeader *)state); }
 
@@ -8365,7 +8436,9 @@ static const NtsDescriptor nts_desc_callback = {NTS_KIND_OBJECT,
                                                 "Callback",
                                                 0u,
                                                 0,
-                                                NTS_ARRAY_UNKNOWN};
+                                                NTS_ARRAY_UNKNOWN,
+                                                0u,
+                                                NULL};
 
 static void nts_callback_call(NtsCallback *entry) {
   NtsHeader *callback = entry->callback;

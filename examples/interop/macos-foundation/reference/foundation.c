@@ -92,6 +92,26 @@ int main(void) {
   }
   printf("scoped init %s\n", state(&init_weak));
 
+  /* `inAField()`: the holder's field is the only reference, released when
+   * the holder dies. */
+  id field_weak = 0;
+  {
+    id object = SEND0(id, NSObject, "new");
+    objc_initWeak(&field_weak, object);
+    objc_release(object);
+  }
+  printf("in a field %s\n", state(&field_weak));
+
+  /* `captured()`: the closure's environment is the only reference. */
+  id captured_weak = 0;
+  {
+    id object = SEND0(id, NSObject, "new");
+    objc_initWeak(&captured_weak, object);
+    (void)SEND1(BOOL, Class, object, "isKindOfClass:", SEND0(Class, NSString, "class"));
+    objc_release(object);
+  }
+  printf("captured %s\n", state(&captured_weak));
+
   objc_release(held);
   objc_release(owned);
   objc_autoreleasePoolPop(pool);

@@ -41,11 +41,37 @@ pub fn counter(ty: &HirType) -> Result<Counter, &'static str> {
     }
 }
 
+/// What an array's elements are, as `nts_runtime.h` numbers `NTS_ARRAY_*`, for
+/// a backend that writes descriptors as numbers. Zero is `NTS_ARRAY_UNKNOWN`,
+/// which the runtime refuses to read rather than guess. The C backend spells the
+/// same answer by name from the element's C type, and a test there holds the
+/// two together.
+#[must_use]
+pub const fn array_element(ty: &HirType) -> u32 {
+    match ty {
+        HirType::Managed(_) => 1,
+        HirType::Erased => 2,
+        HirType::Float { .. } => 3,
+        HirType::Int { signed: true, .. } => 4,
+        HirType::Int { signed: false, .. } => 5,
+        HirType::Bool => 6,
+        _ => 0,
+    }
+}
+
 /// Every foreign pair the program calls, in a stable order, so each backend
-/// declares exactly the functions it will call.
+/// declares exactly the functions it will call: from its `Retain`/`Release`
+/// ops, and from the fields a descriptor releases when an object dies.
 #[must_use]
 pub fn foreign(program: &Program) -> Vec<Counting> {
     let mut found: Vec<Counting> = Vec::new();
+    for field in program.layouts.iter().flat_map(|layout| &layout.fields) {
+        if let Some(counting) = field.ty.counting()
+            && !found.contains(&counting)
+        {
+            found.push(counting);
+        }
+    }
     for func in &program.funcs {
         for op in &func.values {
             if let OpKind::Retain(object) | OpKind::Release(object) = op.kind

@@ -1226,7 +1226,13 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # `an-identifier-c-cannot-spell`. 306 on 2026-09-22, when the gate for
   # `4ff149b6` asked for it: 306 of 307 pass under `rc`, with
   # `this-in-a-field-initializer` the known one.
-  backend_examples 306 "through the LLVM backend, counting" "" 14 ); }
+  #
+  # Partial ceiling 14 -> 10 on 2026-09-24: the LLVM descriptor type now carries
+  # `element`, which it had left out, so its array descriptors stopped reading
+  # their element kind from past their own end (zero, "unknown", a refusal).
+  # `an-array-literal-at-the-slots-element`, `an-out-of-range-read-the-program-
+  # handles`, `dynamic-element` and `optional-access` now compare every case.
+  backend_examples 306 "through the LLVM backend, counting" "" 10 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1256,7 +1262,9 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # `a-generic-instantiated-from-a-generic`, checked on c, llvm, jvm and both
 # reference-counting lanes at 261 cases across 9 functions.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 308 "through the LLVM backend" "" 14 ); }
+  # Partial ceiling 14 -> 10 on 2026-09-24, for the same four examples and the
+  # same fix as `llvm_rc` above.
+  backend_examples 308 "through the LLVM backend" "" 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform

@@ -10,13 +10,14 @@
 #   programs call Apple's Foundation, so the expectation is the library's
 #   answer, not a second implementation's.
 # - **Main:** the program built with `--rc` for macos-13 x86_64 prints exactly
-#   what the oracle prints, including the two lines that say an object died
-#   where its last TypeScript reference did (observed with zeroing weak
-#   references, not `retainCount`).
+#   what the oracle prints, including the four lines that say an object died
+#   where its last TypeScript reference did: a local, an `init` result, a
+#   field of a heap object, and a closure's capture (observed with zeroing
+#   weak references, not `retainCount`).
 # - **LLVM:** the same program from the LLVM backend, also under `--rc`.
 # - **Control:** the same program under NoGc (no provider flag) differs from
-#   the oracle in exactly those two lines. There the objects outlive their
-#   scope, so the lifetime lines can fail and the rest cannot.
+#   the oracle in exactly those four lines. There the objects outlive their
+#   owners, so the lifetime lines can fail and the rest cannot.
 # - **Pool:** stderr is empty on every run. A +0 result autoreleased with no
 #   pool in place leaks and says so there, which no stdout comparison sees.
 # - **Comparison:** a changed expectation is rejected.
@@ -87,8 +88,8 @@ case $status in
   *) echo "macos-foundation: the C oracle exited $status on the Mac" >&2; exit 1 ;;
 esac
 # An oracle that printed nothing would make every comparison below vacuous.
-[ "$(wc -l <"$out/expected.txt")" -eq 12 ] ||
-  { echo "macos-foundation: the oracle printed $(wc -l <"$out/expected.txt") lines, not 12" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 14 ] ||
+  { echo "macos-foundation: the oracle printed $(wc -l <"$out/expected.txt") lines, not 14" >&2; exit 1; }
 
 # Runs a program on the Mac into `$2.txt`, and fails on anything on stderr.
 run_quietly() {
@@ -110,11 +111,11 @@ NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json
   { cat "$nogc.log" >&2; exit 1; }
 run_quietly "$nogc/foundation/macos-13-x86_64/foundation" "$out/nogc-actual"
 differs=$(diff "$out/expected.txt" "$out/nogc-actual.txt" | grep '^>' | tr '\n' '|')
-if [ "$differs" != "> scoped new alive|> scoped init alive|" ]; then
-  echo "macos-foundation: under NoGc the difference from the oracle was [$differs], not the two lifetime lines" >&2
+if [ "$differs" != "> scoped new alive|> scoped init alive|> in a field alive|> captured alive|" ]; then
+  echo "macos-foundation: under NoGc the difference from the oracle was [$differs], not the four lifetime lines" >&2
   exit 1
 fi
-echo "control: under NoGc the two scoped objects outlive their scope, and nothing else differs"
+echo "control: under NoGc the four released objects outlive their owners, and nothing else differs"
 
 # **The LLVM backend, same program, same oracle.** `nts build` drives the C
 # backend only, so this links `emit-llvm`'s IR with the C build's `main.c`,

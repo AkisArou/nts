@@ -2723,7 +2723,11 @@ fn emit_object_descriptors(
             "{kind}, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}",
             references.len()
         );
-        let tail = format!("{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN", erased.len());
+        let (foreign, foreign_slots) = foreign_slot_table(writer, origin, layout, &name);
+        let tail = format!(
+            "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}",
+            erased.len()
+        );
         emit_layout_descriptors(writer, origin, program, layout, &name, (&shared, &tail));
         if published.contains(&index) {
             // **The published class's identity, not the shape's.** A layout is
@@ -2769,6 +2773,34 @@ fn construction_hole(name: &str, descriptor: &str) -> String {
     format!("NtsHeader *nts_construct_{name}(void) {{ return nts_object_new(&{descriptor}); }}")
 }
 
+/// A layout's foreign slots: the fields holding a counted foreign object, each
+/// with its family's release, which `nts_free` calls when the object dies.
+/// Answers how many, and the table's name (`0` for none).
+fn foreign_slot_table(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    layout: &nts_core::hir::Layout,
+    name: &str,
+) -> (usize, String) {
+    let slots: Vec<String> = layout
+        .fields
+        .iter()
+        .enumerate()
+        .filter_map(|(at, field)| {
+            let release = field.ty.counting()?.release;
+            Some(format!("{{ offsetof({name}, {}), {release} }}", c_member_at(layout, at)))
+        })
+        .collect();
+    if slots.is_empty() {
+        return (0, "0".to_owned());
+    }
+    writer.line(
+        origin,
+        format!("static const NtsForeignSlot nts_foreign_{name}[] = {{ {} }};", slots.join(", ")),
+    );
+    (slots.len(), format!("nts_foreign_{name}"))
+}
+
 /// Whether anything in the program refers to this layout's single instance.
 ///
 /// Asked of the IR rather than tracked alongside it: `ClosureStatic` is the
@@ -2794,7 +2826,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0, {} }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0, {}, 0u, 0 }};",
                 descriptor_name(element),
                 // For an array, `erased` is a fact about every element rather
                 // than a table of offsets -- exactly as `references` is. An
@@ -4291,7 +4323,10 @@ fn start_frame_object(
     // holds because of what escape analysis happens to decide, and the cost is
     // a `uint32_t` store beside the two this function already emits.
     writer.line(origin, format!("{name}_frame.header.flags = 0;"));
-    for field in layout.reference_fields() {
+    // A counted handle is zeroed too: the frame's release walk gives its
+    // fields up at the end of the frame, and one never assigned (a
+    // `field!: NSWindow`) must be a null release, not an uninitialised one.
+    for field in layout.counted_fields() {
         // An erased field's zero is `undefined`, and it has to be spelled --
         // the tag is a struct member, not a pointer, so `= 0` is not C. That
         // this *is* the zero is what makes an omitted optional property
@@ -4920,6 +4955,44 @@ mod tests {
             std::mem::size_of::<i64>(),
             "if these ever differ, the field is answering a question nobody asks",
         );
+    }
+
+    /// The LLVM backend writes an array's element kind as the number the
+    /// runtime `#define`s, from `nts_codegen_common::counting::array_element`;
+    /// this backend writes it by name from the element's C type. Two
+    /// derivations of one fact, held together here, and both held to the
+    /// runtime header's own numbering.
+    #[test]
+    fn both_backends_answer_an_array_element_alike() {
+        let defined = |name: &str| -> u32 {
+            let line = RUNTIME_HEADER
+                .lines()
+                .find(|line| line.starts_with(&format!("#define {name} ")))
+                .unwrap_or_else(|| panic!("{name} is not defined in nts_runtime.h"));
+            line.rsplit(' ')
+                .next()
+                .and_then(|value| value.trim_end_matches('u').parse().ok())
+                .unwrap_or_else(|| panic!("{name} is not defined as a number: {line}"))
+        };
+        let origin = Origin::source(nts_diagnostics::Location {
+            file: nts_diagnostics::SourceId(0),
+            span: nts_diagnostics::Span { start: 0, end: 0 },
+        });
+        let mut scalars = vec![HirType::Bool, HirType::Erased, HirType::Float { bits: 64 }, HirType::Float { bits: 32 }];
+        for bits in [8, 16, 32, 64] {
+            scalars.push(HirType::Int { bits, signed: true });
+            scalars.push(HirType::Int { bits, signed: false });
+        }
+        for ty in scalars {
+            let spelling = c_type(&ty, &origin).unwrap_or_else(|_| panic!("{ty:?} has no C spelling"));
+            let by_name = array_element_kind(spelling);
+            assert_eq!(
+                defined(by_name),
+                nts_codegen_common::counting::array_element(&ty),
+                "{ty:?}: C says {by_name}, LLVM says {}",
+                nts_codegen_common::counting::array_element(&ty)
+            );
+        }
     }
 
     #[test]
