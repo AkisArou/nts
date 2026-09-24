@@ -335,6 +335,14 @@ pub enum Role {
     /// that one TypeScript argument, and `last` closes the group. The object
     /// is never built: each property is lowered on its own and passed here.
     Label { key: String, last: bool },
+    /// A TypeScript `string` where an Objective-C message takes an
+    /// `NSString *`, as Swift's `String` crosses: its UTF-16 lent for the
+    /// call, an `NSString` made of it (`CFStringCreateWithCharacters`, +1, so
+    /// the program's count releases it), and the object passed. Set on a
+    /// message's plain `string` parameter where its callee is built; a C
+    /// string in a message is `CString`, and a C function's `string` is
+    /// still one.
+    NSString,
 }
 
 /// The labels of a parameter declared as an object type literal --
@@ -407,6 +415,7 @@ impl Function {
             let fed = match role {
                 Role::ClosureData | Role::ClosureNotify | Role::Length { .. } => None,
                 Role::Plain
+                | Role::NSString
                 | Role::String(_)
                 | Role::Closure { .. }
                 | Role::Block { .. }
@@ -875,6 +884,15 @@ impl From<String> for Handle {
 impl From<&str> for Handle {
     fn from(tag: &str) -> Self {
         tag.to_owned().into()
+    }
+}
+
+impl Handle {
+    /// Foundation's `NSString`, which a `string` crosses an Objective-C
+    /// message as.
+    #[must_use]
+    pub fn ns_string() -> Self {
+        Self { tag: "NSString".to_owned(), ancestors: vec!["NSObject".to_owned()], family: Family::Objc }
     }
 }
 
@@ -2395,6 +2413,11 @@ fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> 
             match properties.as_slice() {
                 [property] if property.name == "___c_utf16" && property.optional && property.readonly => {
                     Some(Encoding::Utf16)
+                }
+                // `CString`: UTF-8 said out loud, where a plain `string` would
+                // be an `NSString` -- in an Objective-C message.
+                [property] if property.name == "___c_utf8" && property.optional && property.readonly => {
+                    Some(Encoding::Utf8)
                 }
                 _ => None,
             }

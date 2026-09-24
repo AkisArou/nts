@@ -39955,6 +39955,46 @@ impl<'a> FuncBuilder<'a> {
     /// raise test, and the copy and the free are runtime calls that cannot
     /// raise either. The free comes after the copy, which is the one order in
     /// which C's string is never read after it is released.
+    /// A labelled argument: the property of the labels literal its key names,
+    /// at the slot's type. `placeholder` is what the literal lowered to.
+    fn label_argument(&mut self, id: NodeId, placeholder: Option<ValueId>, key: &str, slot: &super::native::Type) -> Result<ValueId, Diagnostic> {
+        let value = placeholder
+            .and_then(|placeholder| self.labels_lowered.get(&placeholder))
+            .and_then(|values| values.iter().find(|(named, _)| named == key))
+            .map(|(_, value)| *value)
+            .ok_or_else(|| self.unsupported(id, &format!("a call missing its `{key}` label")))?;
+        self.coerce(value, &slot.representation(), id)
+    }
+
+    /// A `string` as the `NSString` an Objective-C message takes: its UTF-16
+    /// lent for the call (given back after it, as any lent string is), and an
+    /// object made of it by `CFStringCreateWithCharacters`, which hands it
+    /// over -- so the program's count releases it once the message is sent.
+    fn ns_string_of(&mut self, string: ValueId, lent: &mut Vec<Lent>, origin: &Origin) -> ValueId {
+        use super::native::{Encoding, Pointee, Scalar, Type};
+        let characters = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt16))));
+        let pointer = self.runtime_call(Encoding::Utf16.to_c(), vec![string], characters.representation(), origin.clone());
+        lent.push(Lent::String { string, pointer, encoding: Encoding::Utf16 });
+        // A `number`, which the specializer converts to the parameter's
+        // `CFIndex` as it converts every native argument.
+        let length = self.push(OpKind::Length(string), HirType::NUMBER, origin.clone());
+        let allocator = self.push(OpKind::ConstNull, HirType::NativePointer(Pointee::Void), origin.clone());
+        let object = Type::Pointer(Pointee::Opaque(super::native::Handle::ns_string()));
+        let mut create = synthesized(
+            "CFStringCreateWithCharacters",
+            vec![Type::Pointer(Pointee::Void), characters, Type::Scalar(Scalar::Long)],
+            object.clone(),
+            None,
+            vec!["CoreFoundation".to_owned()],
+        );
+        create.returns_owned = true;
+        self.push(
+            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(create)), args: vec![allocator, pointer, length], frame: None },
+            object.representation(),
+            origin.clone(),
+        )
+    }
+
     fn read_native_string(
         &mut self,
         id: NodeId,
@@ -39963,6 +40003,23 @@ impl<'a> FuncBuilder<'a> {
         string: &super::native::ReturnedString,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
+        // A message that returns an `NSString` the program reads as a
+        // `string`: its UTF-8, which the object owns and keeps while it lives,
+        // copied at once below. A nil object answers a NULL pointer, which the
+        // nullable copy reads as `null`.
+        let pointer = if target.send.is_some() && matches!(target.result, super::native::Type::Pointer(super::native::Pointee::Opaque(_))) {
+            let utf8 = synthesized(
+                "UTF8String",
+                vec![target.result.clone()],
+                super::native::Type::Pointer(super::native::Pointee::Const(Box::new(super::native::Pointee::Scalar(super::native::Scalar::Char)))),
+                Some(super::native::Send { selector: "UTF8String".to_owned(), class: None }),
+                Vec::new(),
+            );
+            let ty = utf8.result.representation();
+            self.push(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(utf8)), args: vec![pointer], frame: None }, ty, origin.clone())
+        } else {
+            pointer
+        };
         let value = if string.array {
             // Every element copied, so the array is the program's whatever C
             // does with its own afterwards. `required` is the declaration's
@@ -40328,17 +40385,7 @@ impl<'a> FuncBuilder<'a> {
             let argument = fed.and_then(|ts| args.get(ts).copied());
             match role {
                 Role::Plain => c_args.extend(argument),
-                // A labelled argument: the property of the labels literal
-                // its key names, at the slot's type.
-                Role::Label { key, .. } => {
-                    let value = argument
-                        .and_then(|placeholder| self.labels_lowered.get(&placeholder))
-                        .and_then(|values| values.iter().find(|(named, _)| *named == key))
-                        .map(|(_, value)| *value)
-                        .ok_or_else(|| self.unsupported(id, &format!("a call missing its `{key}` label")))?;
-                    let want = target.parameters[at].representation();
-                    c_args.push(self.coerce(value, &want, id)?);
-                }
+                Role::Label { key, .. } => c_args.push(self.label_argument(id, argument, &key, &target.parameters[at])?),
                 // A slot the caller passed is theirs to read; one they left out
                 // is a zeroed local of ours, checked after the call.
                 Role::ErrorSlot { converter } => {
@@ -40380,6 +40427,7 @@ impl<'a> FuncBuilder<'a> {
                     let count = self.coerce(count, &target.parameters[at].representation(), id)?;
                     c_args.push(count);
                 }
+                Role::NSString => c_args.extend(argument.map(|string| self.ns_string_of(string, &mut lent, &origin))),
                 Role::String(encoding) => {
                     let Some(string) = argument else { continue };
                     let pointer = self.runtime_call(
@@ -40632,6 +40680,7 @@ impl<'a> FuncBuilder<'a> {
             && let Some(selector) = selector
         {
             let send = self.objc_send(call, decl, &native, selector, class_send)?;
+            bridge_strings(&mut native, signature, self.snapshot);
             // A family is a claim about the returned *object*, so it applies
             // only where the result is a pointer, as in clang: a `newValue`
             // returning a number owns nothing.
@@ -40974,24 +41023,13 @@ impl<'a> FuncBuilder<'a> {
         let HirType::NativePointer(class_pointee) = class_type else {
             return Err(self.unsupported(rhs, "an Objective-C class that is not a class object"));
         };
-        let is_kind = super::native::Function {
-            name: "isKindOfClass:".to_owned(),
-            convention: super::native::Convention::C,
-            parameters: vec![super::native::Type::Pointer(pointee), super::native::Type::Pointer(class_pointee)],
-            result: super::native::Type::Bool,
-            retention: vec![super::native::Retention::Unknown; 2],
-            variadic: None,
-            declared_at: None,
-            roles: vec![super::native::Role::Plain; 2],
-            returns_string: None,
-            send: Some(super::native::Send { selector: "isKindOfClass:".to_owned(), class: None }),
-            returns_owned: false,
-            consumes: Vec::new(),
-            frameworks: Vec::new(),
-            libraries: Vec::new(),
-            defaults: Vec::new(),
-            result_as: None,
-        };
+        let is_kind = synthesized(
+            "isKindOfClass:",
+            vec![super::native::Type::Pointer(pointee), super::native::Type::Pointer(class_pointee)],
+            super::native::Type::Bool,
+            Some(super::native::Send { selector: "isKindOfClass:".to_owned(), class: None }),
+            Vec::new(),
+        );
         let origin = self.origin(id);
         Ok(Some(self.push(
             OpKind::Call { callee: Callee::Native(std::sync::Arc::new(is_kind)), args: vec![object, class], frame: None },
@@ -41083,6 +41121,7 @@ impl<'a> FuncBuilder<'a> {
                     | super::native::Role::String(_)
                     | super::native::Role::Block { .. }
                     | super::native::Role::Label { .. }
+                    | super::native::Role::NSString
             )
         }) {
             return Err(self.unsupported(call, "an Objective-C message taking a C callback, an array or an error slot; a callback crosses as a `Block<F>`"));
@@ -48079,4 +48118,64 @@ struct ObjcClassMember {
     /// The class's Objective-C name.
     class: String,
     is_static: bool,
+}
+
+/// A foreign function the compiler calls on its own account -- a C function,
+/// or an Objective-C message when `send` is one -- rather than one a binding
+/// declares: plain arguments, nothing retained or lent, owning nothing.
+fn synthesized(
+    name: &str,
+    parameters: Vec<super::native::Type>,
+    result: super::native::Type,
+    send: Option<super::native::Send>,
+    frameworks: Vec<String>,
+) -> super::native::Function {
+    super::native::Function {
+        name: name.to_owned(),
+        convention: super::native::Convention::C,
+        retention: vec![super::native::Retention::Unknown; parameters.len()],
+        roles: vec![super::native::Role::Plain; parameters.len()],
+        parameters,
+        result,
+        variadic: None,
+        declared_at: None,
+        returns_string: None,
+        send,
+        returns_owned: false,
+        consumes: Vec::new(),
+        frameworks,
+        libraries: Vec::new(),
+        defaults: Vec::new(),
+        result_as: None,
+    }
+}
+
+/// Swift's `String` at an Objective-C message: a plain `string` parameter is
+/// an `NSString` (`Role::NSString`), and a plain `string` result is one the
+/// program reads back as text. A `CString` stays a C string, and so does
+/// anything a C function takes.
+fn bridge_strings(native: &mut super::native::Function, signature: &nts_semantic_schema::SignatureRecord, snapshot: &SemanticSnapshot) {
+    let plain = |ty: TypeId| {
+        let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+        match kind(ty) {
+            Some(TypeKind::String) => true,
+            Some(TypeKind::Union(parts)) => {
+                parts.iter().any(|part| matches!(kind(*part), Some(TypeKind::String)))
+                    && parts.iter().all(|part| matches!(kind(*part), Some(TypeKind::String | TypeKind::Null)))
+            }
+            _ => false,
+        }
+    };
+    let slots: Vec<(usize, Option<usize>)> = native.slots().map(|(at, _, fed)| (at, fed)).collect();
+    for (at, fed) in slots {
+        if native.roles[at] == super::native::Role::String(super::native::Encoding::Utf8)
+            && fed.and_then(|ts| signature.parameters.get(ts)).is_some_and(|parameter| plain(parameter.ty))
+        {
+            native.roles[at] = super::native::Role::NSString;
+            native.parameters[at] = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::ns_string()));
+        }
+    }
+    if native.returns_string.as_ref().is_some_and(|returned| !returned.array) && plain(signature.return_type) {
+        native.result = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::ns_string()));
+    }
 }

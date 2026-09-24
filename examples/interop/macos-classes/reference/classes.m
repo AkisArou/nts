@@ -25,10 +25,10 @@ int main(void) {
     printf("processors %s\n", NSProcessInfo.processInfo.processorCount > 0 ? "true" : "false");
     NSString *text = [[NSString alloc] initWithUTF8String:"worker"];
     printf("length %lu\n", (unsigned long)text.length);
-    printf("upper %s\n", text.uppercaseString.UTF8String);
+    printf("upper %s appended %s\n", text.uppercaseString.UTF8String, [text stringByAppendingString:@"!"].UTF8String);
     NSOperation *operation = [[NSOperation alloc] init];
-    operation.name = text;
-    if (operation.name) printf("name %s\n", operation.name.UTF8String);
+    operation.name = @"worker";
+    if (operation.name) printf("name %s %lu\n", operation.name.UTF8String, (unsigned long)operation.name.length);
   }
   @autoreleasepool {
     made();

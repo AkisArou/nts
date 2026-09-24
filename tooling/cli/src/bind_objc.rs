@@ -554,8 +554,10 @@ impl Model {
             if supers.contains_key(base) {
                 return Ok(or_null(self.object(base, supers, bound)));
             }
+            // A C string in a message is `CString`: there a plain `string` is
+            // an `NSString`, as Swift's `String` is.
             if position == Position::Parameter && (pointee == "const char" || pointee == "char") {
-                return Ok("string".to_owned());
+                return Ok("CString".to_owned());
             }
             return Err(format!("a `{desugared}`"));
         }
@@ -704,7 +706,7 @@ fn render(request: &Request, model: &Model) -> String {
         out,
         "  import type {{ ByValue, Struct, c_char, c_double, c_float, c_int, c_int8, c_int16, c_int64, c_long, c_uint, c_uint8, c_uint16, c_uint64, c_ulong }} from \"c:types\";"
     );
-    let _ = writeln!(out, "  import type {{ ObjcClass, ObjcMeta }} from \"objc:types\";");
+    let _ = writeln!(out, "  import type {{ CString, ObjcClass, ObjcMeta }} from \"objc:types\";");
     let _ = writeln!(out, "  import type {{ ClassObject, Selector }} from \"objc:runtime\";");
     for name in &model.used_records {
         let fields = model.records.get(name).map(Vec::as_slice).unwrap_or_default();

@@ -310,6 +310,20 @@ correctness does not depend on arm64 running by luck.
      `Int` is 64 bits over a `number`, so a value past 2^53 rounds as it does in
      any JavaScript bridge; the `bigint` brands in `c:types` keep every bit.
      `macos-classes` has no cast left.
+   - **S3b, strings, landed.** In an Objective-C message a plain `string` is
+     an `NSString`, as Swift's `String` is:
+     - An argument's UTF-16 is lent, and an object is made of it
+       (`CFStringCreateWithCharacters`, +1, released by the program's count
+       after the send).
+     - A result is read back through `UTF8String` and copied.
+     - A C string in a message is `CString` (`objc:types`), and a C
+       function's `string` is unchanged.
+     - `bind-objc` writes `CString` for `char *`.
+     - `macos-classes` appends, uppercases and names by `string` on both
+       backends.
+
+     Measured cost is still owed: a string crossing copies into an
+     `NSString`, and the same copy Swift makes has not been compared yet.
    - **Objective-C handles narrow and assert.** `instanceof` narrows an
      Objective-C object to a subclass, and `as` asserts one, unchecked as every
      TypeScript assertion is. Any other opaque pointer is still refused.

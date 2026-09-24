@@ -4,7 +4,7 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { Int32, UInt } from "objc:types";
+  import type { CString, Int32, UInt } from "objc:types";
 
   /** @ntsClass NSObject */
   export class NSObject {
@@ -17,9 +17,12 @@ declare module "objc:Foundation" {
   /** @ntsClass NSString */
   export class NSString extends NSObject {
     /** @ntsSelector initWithUTF8String: */
-    constructor(text: string);
+    constructor(text: CString);
     readonly length: UInt;
-    readonly uppercaseString: NSString;
+    /** Swift's `String`, both ways: a `string` crosses as an `NSString`. */
+    readonly uppercaseString: string;
+    /** @ntsSelector stringByAppendingString: */
+    appending(other: string): string;
   }
 
   /** @ntsClass NSNumber */
@@ -49,7 +52,7 @@ declare module "objc:Foundation" {
 
   /** @ntsClass NSOperation */
   export class NSOperation extends NSObject {
-    name: NSString | null;
+    name: string | null;
   }
 
   /** @ntsClass NSProcessInfo */

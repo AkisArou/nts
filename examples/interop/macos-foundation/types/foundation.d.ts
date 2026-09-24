@@ -16,7 +16,7 @@
  */
 declare module "objc:Foundation" {
   import type { Opaque, c_ulong } from "c:types";
-  import type { ObjcClass } from "objc:types";
+  import type { CString, ObjcClass } from "objc:types";
 
   /** The class object `+class` answers, which `isKindOfClass:` takes. Not an
    * object the program counts: a class lives as long as the process. */
@@ -35,7 +35,7 @@ declare module "objc:Foundation" {
     /**
      * @ntsSelector initWithUTF8String:
      */
-    initWithUTF8String(this: NSString, text: string): NSString;
+    initWithUTF8String(this: NSString, text: CString): NSString;
     /**
      * @ntsSelector length
      */
@@ -43,7 +43,7 @@ declare module "objc:Foundation" {
     /**
      * @ntsSelector UTF8String
      */
-    UTF8String(this: NSString): string;
+    UTF8String(this: NSString): CString;
     /**
      * @ntsSelector uppercaseString
      */
@@ -87,7 +87,7 @@ declare module "objc:Foundation" {
    * @ntsSelector stringWithUTF8String:
    * @ntsClass NSString
    */
-  export function stringWithUTF8String(text: string): NSString;
+  export function stringWithUTF8String(text: CString): NSString;
   /**
    * @ntsSelector class
    * @ntsClass NSString

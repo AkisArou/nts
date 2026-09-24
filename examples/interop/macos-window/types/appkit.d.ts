@@ -7,7 +7,7 @@
  */
 declare module "objc:AppKit" {
   import type { ByValue, Struct, c_char, c_double, c_float, c_int, c_int8, c_int16, c_int64, c_long, c_uint, c_uint8, c_uint16, c_uint64, c_ulong } from "c:types";
-  import type { ObjcClass, ObjcMeta } from "objc:types";
+  import type { CString, ObjcClass, ObjcMeta } from "objc:types";
   import type { ClassObject, Selector } from "objc:runtime";
 
   export type CGPoint = Struct<{ x: c_double; y: c_double }, "CGPoint">;
@@ -623,7 +623,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector canBeConvertedToEncoding: */
     canBeConvertedToEncoding(this: NSString, encoding: c_ulong): boolean;
     /** @ntsSelector getCString:maxLength:encoding: */
-    getCStringMaxLengthEncoding(this: NSString, buffer: string, maxBufferCount: c_ulong, encoding: c_ulong): boolean;
+    getCStringMaxLengthEncoding(this: NSString, buffer: CString, maxBufferCount: c_ulong, encoding: c_ulong): boolean;
     /** @ntsSelector maximumLengthOfBytesUsingEncoding: */
     maximumLengthOfBytesUsingEncoding(this: NSString, enc: c_ulong): c_ulong;
     /** @ntsSelector lengthOfBytesUsingEncoding: */
@@ -653,13 +653,13 @@ declare module "objc:AppKit" {
     readonly description: NSString;
     readonly hash: c_ulong;
     /** @ntsSelector initWithUTF8String: */
-    initWithUTF8String(this: NSString, nullTerminatedCString: string): NSString | null;
+    initWithUTF8String(this: NSString, nullTerminatedCString: CString): NSString | null;
     /** @ntsSelector initWithString: */
     initWithString(this: NSString, aString: NSString): NSString;
     /** @ntsSelector initWithData:encoding: */
     initWithDataEncoding(this: NSString, data: NSData, encoding: c_ulong): NSString | null;
     /** @ntsSelector initWithCString:encoding: */
-    initWithCStringEncoding(this: NSString, nullTerminatedCString: string, encoding: c_ulong): NSString | null;
+    initWithCStringEncoding(this: NSString, nullTerminatedCString: CString, encoding: c_ulong): NSString | null;
     /** @ntsSelector propertyList */
     propertyList(this: NSString): NSObject;
     /** @ntsSelector propertyListFromStringsFileFormat */
@@ -667,9 +667,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector cStringLength */
     cStringLength(this: NSString): c_ulong;
     /** @ntsSelector getCString: */
-    getCString(this: NSString, bytes: string): void;
+    getCString(this: NSString, bytes: CString): void;
     /** @ntsSelector getCString:maxLength: */
-    getCStringMaxLength(this: NSString, bytes: string, maxLength: c_ulong): void;
+    getCStringMaxLength(this: NSString, bytes: CString, maxLength: c_ulong): void;
     /** @ntsSelector writeToFile:atomically: */
     writeToFileAtomically(this: NSString, path: NSString, useAuxiliaryFile: boolean): boolean;
     /** @ntsSelector writeToURL:atomically: */
@@ -679,11 +679,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector initWithContentsOfURL: */
     initWithContentsOfURL(this: NSString, url: NSURL): NSObject | null;
     /** @ntsSelector initWithCStringNoCopy:length:freeWhenDone: */
-    initWithCStringNoCopyLengthFreeWhenDone(this: NSString, bytes: string, length: c_ulong, freeBuffer: boolean): NSObject | null;
+    initWithCStringNoCopyLengthFreeWhenDone(this: NSString, bytes: CString, length: c_ulong, freeBuffer: boolean): NSObject | null;
     /** @ntsSelector initWithCString:length: */
-    initWithCStringLength(this: NSString, bytes: string, length: c_ulong): NSObject | null;
+    initWithCStringLength(this: NSString, bytes: CString, length: c_ulong): NSObject | null;
     /** @ntsSelector initWithCString: */
-    initWithCString(this: NSString, bytes: string): NSObject | null;
+    initWithCString(this: NSString, bytes: CString): NSObject | null;
     /** @ntsSelector variantFittingPresentationWidth: */
     variantFittingPresentationWidth(this: NSString, width: c_long): NSString;
     readonly pathComponents: NSArray;
@@ -704,7 +704,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector stringsByAppendingPaths: */
     stringsByAppendingPaths(this: NSString, paths: NSArray): NSArray;
     /** @ntsSelector getFileSystemRepresentation:maxLength: */
-    getFileSystemRepresentationMaxLength(this: NSString, cname: string, max: c_ulong): boolean;
+    getFileSystemRepresentationMaxLength(this: NSString, cname: CString, max: c_ulong): boolean;
     /** @ntsSelector stringByAddingPercentEncodingWithAllowedCharacters: */
     stringByAddingPercentEncodingWithAllowedCharacters(this: NSString, allowedCharacters: NSCharacterSet): NSString | null;
     readonly stringByRemovingPercentEncoding: NSString | null;
@@ -745,17 +745,17 @@ declare module "objc:AppKit" {
     /** @ntsSelector stringWithString: */
     stringWithString(this: NSStringMeta, string: NSString): NSString;
     /** @ntsSelector stringWithUTF8String: */
-    stringWithUTF8String(this: NSStringMeta, nullTerminatedCString: string): NSString | null;
+    stringWithUTF8String(this: NSStringMeta, nullTerminatedCString: CString): NSString | null;
     /** @ntsSelector stringWithCString:encoding: */
-    stringWithCStringEncoding(this: NSStringMeta, cString: string, enc: c_ulong): NSString | null;
+    stringWithCStringEncoding(this: NSStringMeta, cString: CString, enc: c_ulong): NSString | null;
     /** @ntsSelector stringWithContentsOfFile: */
     stringWithContentsOfFile(this: NSStringMeta, path: NSString): NSObject | null;
     /** @ntsSelector stringWithContentsOfURL: */
     stringWithContentsOfURL(this: NSStringMeta, url: NSURL): NSObject | null;
     /** @ntsSelector stringWithCString:length: */
-    stringWithCStringLength(this: NSStringMeta, bytes: string, length: c_ulong): NSObject | null;
+    stringWithCStringLength(this: NSStringMeta, bytes: CString, length: c_ulong): NSObject | null;
     /** @ntsSelector stringWithCString: */
-    stringWithCString(this: NSStringMeta, bytes: string): NSObject | null;
+    stringWithCString(this: NSStringMeta, bytes: CString): NSObject | null;
     /** @ntsSelector pathWithComponents: */
     pathWithComponents(this: NSStringMeta, components: NSArray): NSString;
     /** @ntsSelector load */

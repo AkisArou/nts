@@ -3,7 +3,7 @@
 // properties read and written, a class property, and `instanceof`. Checked
 // against the same program in Objective-C (`reference/classes.m`).
 import { NSMutableArray, NSNumber, NSObject, NSOperation, NSProcessInfo, NSString } from "objc:Foundation";
-import { report, report_string, weak_alive, weak_watch } from "c:support";
+import { report, weak_alive, weak_watch } from "c:support";
 import type { c_int } from "c:types";
 
 let watch = 0 as c_int;
@@ -32,12 +32,12 @@ function main(): void {
 
   const text = new NSString("worker");
   report(`length ${text.length}`);
-  report_string("upper", text.uppercaseString);
+  report(`upper ${text.uppercaseString} appended ${text.appending("!")}`);
   const operation = new NSOperation();
-  operation.name = text;
+  operation.name = "worker";
   const name = operation.name;
   if (name !== null) {
-    report_string("name", name);
+    report(`name ${name} ${name.length}`);
   }
 
   made();

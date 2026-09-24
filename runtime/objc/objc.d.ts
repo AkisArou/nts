@@ -64,6 +64,11 @@ declare module "objc:types" {
   export type UInt32 = number & { readonly __c_uint32?: true };
   export type Int64 = number & { readonly __c_int64?: true };
   export type UInt64 = number & { readonly __c_uint64?: true };
+
+  // A C string where an Objective-C message takes a `const char *`: in a
+  // message a plain `string` is an `NSString`, as Swift's `String` is, so
+  // the rare `char *` says so. A plain string passes; it crosses as UTF-8.
+  export type CString = string & { readonly __c_utf8?: true };
 }
 
 // Hand-written. The Objective-C runtime's C API: what defining a class at run
