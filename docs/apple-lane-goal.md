@@ -448,6 +448,17 @@ correctness does not depend on arm64 running by luck.
        has no room for one yet), a constructor, a static member, an accessor,
        `super` calls, and protocols (`implements NSWindowDelegate`), which
        will build on GTK's `__c_implements`.
+   - **Every LLVM arm is `nts build`'s (2026-09-25).** Each macOS fixture's
+     LLVM arm was `emit-llvm`, clang and a hand link against the C build's
+     units. Now each fixture declares a second product for the LLVM backend
+     (`classesLlvm`, `windowLlvm`, ...), which `nts build` compiles and links
+     with the same runtime and host units (the Windows lane's 8daaa920).
+     - Each arm asserts that its program was compiled from `program.ll` and
+       that `program.c`, which the C emission also writes, never was. So a
+       build that fell back to C cannot pass as LLVM's.
+     - Still x86_64 only, as before: arm64 LLVM refuses a record crossing a
+       call, and the arm64 signature table has not yet been compared with
+       clang's for `arm64-apple-macos`.
    - **Against Swift, measured (2026-09-25).**
      `examples/interop/macos-bench/bench.sh` runs the same loops in
      TypeScript and in Swift (`reference/bench.swift`, `swiftc -O`) on the

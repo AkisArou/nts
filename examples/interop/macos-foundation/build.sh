@@ -119,28 +119,13 @@ if [ "$differs" != "> scoped new alive|> scoped init alive|> in a field alive|> 
 fi
 echo "control: under NoGc the four released objects outlive their owners, and nothing else differs"
 
-# **The LLVM backend, same program, same oracle.** `nts build` drives the C
-# backend only, so this links `emit-llvm`'s IR with the C build's `main.c`,
-# runtime and shim, which is how the gate's LLVM steps build too.
-llvm="$out/llvm"
-c_out="$out/foundation/macos-13-x86_64"
-mkdir -p "$llvm"
-"$nts" emit-llvm "$source/tsconfig.json" --rc >"$llvm/program.ll" 2>"$llvm/emit.log" ||
-  { cat "$llvm/emit.log" >&2; exit 1; }
-if grep -q "NTS[0-9]" "$llvm/emit.log"; then
-  cat "$llvm/emit.log" >&2
-  echo "macos-foundation: emit-llvm refused part of the program" >&2
-  exit 1
-fi
-set -- -target x86_64-apple-macos13 -isysroot "$sdk"
-clang "$@" -x ir -w -O2 -c "$llvm/program.ll" -o "$llvm/program.o"
-for unit in main nts_runtime nts_uv_host nts_cf_host nts_unicode; do
-  [ -f "$c_out/$unit.c" ] || continue
-  clang "$@" -std=c11 -O2 -w -DNTS_PROVIDER_RC -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
-done
-clang "$@" -std=c11 -O2 -w -c "$source/native/report.c" -o "$llvm/report.o"
-clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework Foundation -framework CoreFoundation -o "$llvm/foundation"
-run_quietly "$llvm/foundation" "$llvm/actual"
+# LLVM: the `foundationLlvm` product, which `nts build` compiled and linked with
+# the C runtime and host units, as it did the C product. Compiled from
+# `program.ll`, and the `program.c` the C emission also writes never compiled.
+llvm="$out/foundationLlvm/macos-13-x86_64"
+[ -f "$llvm/program.ll.o" ] && [ ! -f "$llvm/program.c.o" ] ||
+  { echo "macos-foundation: foundationLlvm was not compiled from LLVM IR" >&2; exit 1; }
+run_quietly "$llvm/foundationLlvm" "$llvm/actual"
 diff -u "$out/expected.txt" "$llvm/actual.txt"
 echo "macos-x86_64 (LLVM): the same, from the LLVM backend under --rc"
 

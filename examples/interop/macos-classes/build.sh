@@ -86,27 +86,15 @@ run_quietly "$out/classes/macos-13-x86_64/classes" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"
 echo "macos-x86_64: Foundation classes as TypeScript classes, as clang sends to them, stderr empty"
 
-# LLVM, linked with the C build's runtime, main and shim.
-llvm="$out/llvm"
-c_out="$out/classes/macos-13-x86_64"
-mkdir -p "$llvm"
-"$nts" emit-llvm "$source/tsconfig.json" --rc >"$llvm/program.ll" 2>"$llvm/emit.log" ||
-  { cat "$llvm/emit.log" >&2; exit 1; }
-if grep -q "NTS[0-9]" "$llvm/emit.log"; then
-  cat "$llvm/emit.log" >&2
-  echo "macos-classes: emit-llvm refused part of the program" >&2
-  exit 1
-fi
-clang "$@" -x ir -w -O2 -c "$llvm/program.ll" -o "$llvm/program.o"
-for unit in main nts_runtime nts_uv_host nts_cf_host nts_unicode; do
-  [ -f "$c_out/$unit.c" ] || continue
-  clang "$@" -std=c11 -O2 -w -DNTS_PROVIDER_RC -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
-done
-clang "$@" -std=c11 -O2 -w -I"$c_out" -c "$source/native/support.c" -o "$llvm/support.o"
-clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework Foundation -framework CoreFoundation \
-  -o "$llvm/classes"
-run_quietly "$llvm/classes" "$llvm/actual"
-diff -u "$out/expected.txt" "$llvm/actual.txt"
+# LLVM: the `classesLlvm` product, which `nts build` compiled and linked with
+# the C runtime and host units, as it did the C product.
+llvm="$out/classesLlvm/macos-13-x86_64"
+# The program is LLVM's: compiled from `program.ll`, and the `program.c` the C
+# emission also writes (for main and the host units) never compiled.
+[ -f "$llvm/program.ll.o" ] && [ ! -f "$llvm/program.c.o" ] ||
+  { echo "macos-classes: classesLlvm was not compiled from LLVM IR" >&2; exit 1; }
+run_quietly "$llvm/classesLlvm" "$out/llvm-actual"
+diff -u "$out/expected.txt" "$out/llvm-actual.txt"
 echo "macos-x86_64 (LLVM): the same, from the LLVM backend"
 
 nogc="$out/nogc"

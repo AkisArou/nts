@@ -85,28 +85,15 @@ run_quietly "$out/geometry/macos-13-x86_64/geometry" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"
 echo "macos-x86_64: records sent, returned and passed to C as clang passes them, stderr empty"
 
-# LLVM, linked with the C build's runtime, main and host.
-llvm="$out/llvm"
-c_out="$out/geometry/macos-13-x86_64"
-mkdir -p "$llvm"
-"$nts" emit-llvm "$source/tsconfig.json" >"$llvm/program.ll" 2>"$llvm/emit.log" ||
-  { cat "$llvm/emit.log" >&2; exit 1; }
-if grep -q "NTS[0-9]" "$llvm/emit.log"; then
-  cat "$llvm/emit.log" >&2
-  echo "macos-geometry: emit-llvm refused part of the program" >&2
-  exit 1
-fi
+# LLVM: the `geometryLlvm` product, which `nts build` compiled and linked with
+# the C runtime and host units, as it did the C product. Compiled from
+# `program.ll`, and the `program.c` the C emission also writes never compiled.
+llvm="$out/geometryLlvm/macos-13-x86_64"
+[ -f "$llvm/program.ll.o" ] && [ ! -f "$llvm/program.c.o" ] ||
+  { echo "macos-geometry: geometryLlvm was not compiled from LLVM IR" >&2; exit 1; }
 grep -q "call void (ptr, ptr, ptr) @objc_msgSend_stret(ptr sret" "$llvm/program.ll" ||
   { echo "macos-geometry: the LLVM rectValue is not an sret call to objc_msgSend_stret" >&2; exit 1; }
-clang "$@" -x ir -w -O2 -c "$llvm/program.ll" -o "$llvm/program.o"
-for unit in main nts_runtime nts_uv_host nts_cf_host nts_unicode; do
-  [ -f "$c_out/$unit.c" ] || continue
-  clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
-done
-clang "$@" -std=c11 -O2 -w -I"$source/native" -c "$source/native/report.c" -o "$llvm/report.o"
-clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework Foundation -framework CoreFoundation \
-  -o "$llvm/geometry"
-run_quietly "$llvm/geometry" "$llvm/actual"
+run_quietly "$llvm/geometryLlvm" "$llvm/actual"
 diff -u "$out/expected.txt" "$llvm/actual.txt"
 echo "macos-x86_64 (LLVM): the same, from the LLVM backend"
 

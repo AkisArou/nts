@@ -141,27 +141,13 @@ grep -v '^nested-cpu-ms ' "$out/nested.txt" | LC_ALL=C sort >"$out/nested.sorted
 LC_ALL=C sort "$out/expected.txt" | diff -u - "$out/nested.sorted"
 echo "nested: a second-long loop inside a callback, kqueue readable, ran no task and took ${cpu} ms of CPU"
 
-# LLVM, linked with the C build's runtime, main and host.
-llvm="$out/llvm"
-c_out="$out/window/macos-13-x86_64"
-mkdir -p "$llvm"
-"$nts" emit-llvm "$source/tsconfig.json" >"$llvm/program.ll" 2>"$llvm/emit.log" ||
-  { cat "$llvm/emit.log" >&2; exit 1; }
-if grep -q "NTS[0-9]" "$llvm/emit.log"; then
-  cat "$llvm/emit.log" >&2
-  echo "macos-window: emit-llvm refused part of the program" >&2
-  exit 1
-fi
-set -- -target x86_64-apple-macos13 -isysroot "$sdk"
-clang "$@" -x ir -w -O2 -c "$llvm/program.ll" -o "$llvm/program.o"
-for unit in main nts_runtime nts_uv_host nts_cf_host nts_unicode; do
-  [ -f "$c_out/$unit.c" ] || continue
-  clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -c "$c_out/$unit.c" -o "$llvm/$unit.o"
-done
-clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -I"$source/native" -c "$source/native/support.c" -o "$llvm/support.o"
-clang "$@" -fuse-ld=lld "$llvm"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework AppKit -framework Foundation \
-  -framework CoreFoundation -o "$llvm/window"
-timeout 60 "$root/tooling/apple/run.sh" "$llvm/window" >"$llvm/main.txt" 2>"$llvm/main.err" ||
+# LLVM: the `windowLlvm` product, which `nts build` compiled and linked with
+# the C runtime and host units, as it did the C product. Compiled from
+# `program.ll`, and the `program.c` the C emission also writes never compiled.
+llvm="$out/windowLlvm/macos-13-x86_64"
+[ -f "$llvm/program.ll.o" ] && [ ! -f "$llvm/program.c.o" ] ||
+  { echo "macos-window: windowLlvm was not compiled from LLVM IR" >&2; exit 1; }
+timeout 60 "$root/tooling/apple/run.sh" "$llvm/windowLlvm" >"$llvm/main.txt" 2>"$llvm/main.err" ||
   { cat "$llvm/main.txt" "$llvm/main.err" >&2; exit 1; }
 [ -s "$llvm/main.err" ] && { cat "$llvm/main.err" >&2; exit 1; }
 diff -u "$out/expected.txt" "$llvm/main.txt"
