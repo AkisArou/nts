@@ -1617,10 +1617,11 @@ fn read_settled(
         HirType::Void => return,
         payload => payload,
     };
-    let reader = if matches!(payload, HirType::Managed(_)) {
-        "nts_promise_reference"
-    } else {
-        "nts_promise_number"
+    let reader = match payload {
+        HirType::Managed(_) => "nts_promise_reference",
+        // A C handle, from the promise's slot for one.
+        HirType::NativePointer(_) => "nts_promise_pointer",
+        _ => "nts_promise_number",
     };
     let value = build.push(
         OpKind::Call {

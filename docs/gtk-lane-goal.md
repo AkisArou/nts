@@ -303,20 +303,28 @@ called with the receiver first.
 Counted, since an absent overload fails nothing (`*.promises.txt`, and the
 binder's summary line), of GTK 4.22's 134 async methods:
 
-| | |
-|---|---|
-| 59 | a Promise form: `_finish` returns nothing, a number, a boolean or a string |
-| 48 | none: `_finish` returns a handle (`query_info_async`'s `GFileInfo`) |
-| 15 | none: `_finish` is not bound |
-| 8 | none: `_finish` takes more than the result |
-| 4 | none: `_finish` returns a 64-bit integer |
+| before the handle slot | after | |
+|---|---|---|
+| 59 | 107 | a Promise form |
+| 48 | 0 | none: `_finish` returns a handle |
+| 15 | 15 | none: `_finish` is not bound |
+| 8 | 8 | none: `_finish` takes more than the result |
+| 4 | 4 | none: `_finish` returns a 64-bit integer |
 
-A promise cannot carry a handle or a 64-bit integer yet. The shape agreed
-with the language lane for a handle is a slot of its own on `NtsPromise`:
-not a value tag, since the tag space is full by construction -- a
-non-reference tag must sit outside `STRING..=OBJECT` and below `OBJECT`,
-which leaves only the three taken -- and a tag above `NULL` would answer
-`typeof x === "object"`, which `2fa3d575` now guards.
+**A handle, awaited.** `await file.query_info_async(…)` settles with a
+`GFileInfo *`, which is not a value -- the collector may not read it and
+reference counting may not retain it -- so a promise holds a C handle in a
+slot of its own (`NtsPromise::pointer`), outside its value and in neither of
+its descriptor's tables. Not a value tag: the tag space is full by
+construction -- a non-reference tag must sit outside `STRING..=OBJECT` and
+below `OBJECT`, which leaves only the three taken -- and a tag above `NULL`
+would answer `typeof x === "object"`, which `2fa3d575` guards. The generic
+readers refuse such a promise rather than read `undefined` from it. Checked
+on C and LLVM under both providers with a handle held across a second
+`await`.
+
+The 4 returning a 64-bit integer need a `bigint` payload, a different
+question; the 15 with no bound `_finish` are the next to look at.
 
 **Next in M3:**
 

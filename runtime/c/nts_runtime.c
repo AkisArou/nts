@@ -7964,6 +7964,26 @@ double nts_promise_number(const NtsPromise *promise) {
   return nts_value_number(promise->value);
 }
 
+void nts_promise_fulfill_pointer(NtsPromise *promise, void *pointer) {
+  nts_promise_require_owner("nts_promise_fulfill_pointer");
+  if (promise->state != NTS_PROMISE_PENDING) {
+    return;
+  }
+  NtsValue value = nts_value_of_undefined();
+  value.as.native = pointer;
+  promise->native = true;
+  nts_promise_fulfill(promise, value);
+}
+
+void *nts_promise_pointer(const NtsPromise *promise) {
+  if (promise->state != NTS_PROMISE_FULFILLED || !promise->native) {
+    fprintf(stderr,
+            "nts: read a C handle from a promise holding something else\n");
+    abort();
+  }
+  return promise->value.as.native;
+}
+
 NtsHeader *nts_promise_reference(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_FULFILLED ||
       !NTS_TAG_IS_REFERENCE(nts_value_tag(promise->value))) {
@@ -7984,6 +8004,13 @@ NtsValue nts_promise_value(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_FULFILLED) {
     fprintf(stderr,
             "nts: read an erased value from a promise that is not fulfilled\n");
+    abort();
+  }
+  /* An assertion, not a policy: lowering never reads a handle-carrying
+   * promise through the erased reader, and if it ever did, `undefined` in
+   * the handle's place would be a wrong answer rather than a refusal. */
+  if (promise->native) {
+    fprintf(stderr, "nts: read a C handle from a promise as a value\n");
     abort();
   }
   return promise->value;
@@ -8116,6 +8143,10 @@ static void nts_promise_forward(NtsPromise *to, const NtsPromise *from) {
    * own -- it is a tag like any other -- which is what the old `default:`
    * quietly stood in for, and what made an erased payload fulfil with
    * `undefined` when its arm was missing. */
+  if (from->native) {
+    nts_promise_fulfill_pointer(to, from->value.as.native);
+    return;
+  }
   nts_promise_fulfill_value(to, from->value);
 }
 
@@ -8131,6 +8162,13 @@ static void nts_combinator_settled(void *state) {
   } else if (slot->source->state == NTS_PROMISE_REJECTED) {
     nts_promise_reject(all->result, slot->source->reason);
   } else {
+    /* An assertion: lowering refuses `Promise.all` over promises of C
+     * handles (`combinator` in `hir/lower.rs` asks, rather than relying on
+     * `Array<NativePointer>` being unrepresentable). */
+    if (slot->source->native) {
+      fprintf(stderr, "nts: a C handle settled a promise in `Promise.all`\n");
+      abort();
+    }
     if (all->values->header.descriptor->references) {
       NtsHeader *value = nts_value_reference(slot->source->value);
       nts_retain(value);

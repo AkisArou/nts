@@ -126,27 +126,16 @@ function outParameters(): void {
   gir_log("sha256=" + (digest === null ? "none" : digest.slice(0, 8)));
 }
 
-// GIO's asynchronous shape as a Promise: start, and settle from the one
-// callback C makes, reading the result -- or the error -- through `_finish`.
-// What M3's generated methods will be, written out once by hand.
-function fileKind(path: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const file = g_file_new_for_path(path);
-    file.query_info_async("standard::type", 0 as c_uint, PRIORITY_DEFAULT, null, (_source, result) => {
-      const error = local<GError | null>();
-      const info = file.query_info_finish(result, error);
-      const failure = error[0];
-      g_object_unref(file);
-      if (failure !== null) {
-        g_error_free(failure);
-        reject(new Error("query failed"));
-        return;
-      }
-      const kind = info.get_file_type() as number;
-      g_object_unref(info);
-      resolve(kind);
-    });
-  });
+// A handle, awaited: `query_info_async`'s `_finish` returns a `GFileInfo *`,
+// which the promise carries in a slot of its own -- a C pointer is not a
+// value the collector may read.
+async function fileKind(path: string): Promise<number> {
+  const file = g_file_new_for_path(path);
+  const info = await file.query_info_async("standard::type", 0 as c_uint, PRIORITY_DEFAULT, null);
+  g_object_unref(file);
+  const found = info.get_file_type() as number;
+  g_object_unref(info);
+  return found;
 }
 
 // GIO's asynchronous methods, awaited: without its callback an `_async`

@@ -2449,3 +2449,73 @@ export function run(): number {
         }
     }
 }
+
+/// A promise that settles with a C handle, awaited: GIO's
+/// `await file.query_info_async(…)`, whose `_finish` returns a
+/// `GFileInfo *`.
+///
+/// A handle is not a value -- the collector may not read it, and reference
+/// counting may not retain it -- so the promise holds it in a slot of its own
+/// (`nts_promise_fulfill_pointer` / `nts_promise_pointer`). The first handle is
+/// held across two more `await`s, so it is spilled into the suspended frame and
+/// read back after repeated suspension; all three are then used through a
+/// method. And `Promise.all` over such promises is refused at compile time. Under reference
+/// counting, fifty more runs leave nothing alive: the frames and promises are
+/// released, and nothing tried to release the handles.
+#[test]
+fn a_promise_carries_a_c_handle_across_an_await_on_both_backends() {
+    let source = r#"
+import type { Class, c_int } from "c:types";
+interface WidgetOwnMethods {
+    /** @ntsSymbol widget_get_width */
+    get_width(this: Widget): c_int;
+}
+type Widget = Class<"_Widget"> & WidgetOwnMethods;
+type Button = Class<"_Button", Widget> & WidgetOwnMethods;
+declare function button_new(): Button;
+let total = 0;
+async function later(): Promise<Button> {
+    return button_new();
+}
+async function use(): Promise<void> {
+    const first = await later();
+    const second = await later();
+    const third = await later();
+    total = (first.get_width() as number) * 10000 + (second.get_width() as number) * 100 + (third.get_width() as number);
+}
+export function start(): void {
+    total = 0;
+    void use();
+}
+export function settled(): number { return total; }
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"start(); nts_checkpoint(); printf("%.0f", settled());"#, "start(); nts_checkpoint();");
+        let Some((text, outputs)) = run_on_both_backends("promised-handle", source, provider, METHODS_LIBRARY, &caller) else { return; };
+        assert!(text.contains("nts_promise_fulfill_pointer("), "the handle did not settle into the promise's slot");
+        assert!(text.contains("nts_promise_pointer("), "the await did not read the handle from its slot");
+        for output in outputs {
+            assert_eq!(output, expect("424242", provider), "{provider:?}");
+        }
+    }
+
+    // `Promise.all` collects values, and a handle settles outside the value:
+    // refused where it is lowered, not left to the array being
+    // unrepresentable.
+    let all = r#"
+import type { Class } from "c:types";
+type Button = Class<"_Button">;
+declare function button_new(): Button;
+async function later(): Promise<Button> { return button_new(); }
+export async function both(): Promise<void> {
+    const pair = await Promise.all([later(), later()]);
+    void pair;
+}
+"#;
+    let Some((_, prepared)) = prepare("promised-handle-all", all) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("over promises of C handles")),
+        "`Promise.all` over handle promises was not refused where it is lowered: {:?}",
+        prepared.diagnostics
+    );
+}

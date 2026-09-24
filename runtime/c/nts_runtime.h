@@ -522,6 +522,11 @@ typedef struct NtsValue {
     /* `NtsHeader *` and not `void *`: everything this member can hold that
      * is reference-counted is one, and `nts_retain` takes one. */
     NtsHeader *reference;
+    /* A C handle a promise settled with (`nts_promise_fulfill_pointer`), under
+     * the `UNDEFINED` tag so that no visitor reads it: it is not a value, and
+     * the promise's own `native` flag is the only thing that says it is here.
+     * Nothing else stores one. */
+    void *native;
   } as;
 } NtsValue;
 
@@ -2830,6 +2835,12 @@ typedef struct NtsReaction {
 typedef struct NtsPromise {
   NtsHeader header;
   uint32_t state; /* NTS_PROMISE_* */
+  /* Settled with a C handle -- `await file.query_info_async(...)`'s
+   * `GFileInfo *` -- held in `value.as.native` under the `UNDEFINED` tag. Not
+   * a value tag of its own: the tag space is full by construction, and a tag
+   * above `NULL` would answer `typeof === "object"`. In the padding after
+   * `state`, so a promise is no larger for it. */
+  bool native;
   /* What it settled with, whatever that turned out to be.
    *
    * One representation for every fulfilment path: a number, a reference and
@@ -2878,6 +2889,8 @@ void nts_promise_fulfill_tagged(NtsPromise *promise, NtsHeader *value,
  * this one with the tag known at compile time, so a promise's payload is not a
  * special shape and the readers below differ only in what they assert. */
 void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value);
+/* Settle with a C handle, into the promise's own slot for one. */
+void nts_promise_fulfill_pointer(NtsPromise *promise, void *pointer);
 void nts_promise_reject(NtsPromise *promise, NtsHeader *reason);
 
 /* Run `reaction` when it settles, or on the microtask queue if it already has.
@@ -2893,6 +2906,9 @@ void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction);
  * guess. */
 double nts_promise_number(const NtsPromise *promise);
 NtsHeader *nts_promise_reference(const NtsPromise *promise);
+/* The C handle a promise fulfilled with through `nts_promise_fulfill_pointer`.
+ */
+void *nts_promise_pointer(const NtsPromise *promise);
 /* The erased reader, for the case the sentence above does not cover: when the
  * awaited type is `unknown` the compiler cannot know which of the two readers
  * to call, which is exactly why neither of them will do. Asserts only that the

@@ -9753,7 +9753,9 @@ fn representation_within(
             element.as_ref(),
             HirType::NativePointer(_) | HirType::Void | HirType::Never
         ),
-        HirType::Managed(ManagedType::Set(element) | ManagedType::Promise(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
+        // A promise has a slot of its own for a C handle
+        // (`nts_promise_fulfill_pointer`), outside its value; a set has none.
+        HirType::Managed(ManagedType::Set(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
         HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => !matches!(key.as_ref(), HirType::NativePointer(_)) && !matches!(value.as_ref(), HirType::NativePointer(_)),
         _ => true,
     })
@@ -20510,12 +20512,6 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
         collecting: bool,
     ) -> Result<ValueId, Diagnostic> {
-        let ty = self
-            .type_of(id)
-            .ok_or_else(|| self.unrepresentable(id, "a `Promise` combinator result"))?;
-        let HirType::Managed(ManagedType::Promise(payload)) = ty.clone() else {
-            return Err(self.unrepresentable(id, "a `Promise` combinator result"));
-        };
         let [only] = arguments else {
             // `Promise.all()` and `Promise.all(a, b)` are both type errors, so
             // arriving here means the shape is not what this reads.
@@ -20535,6 +20531,20 @@ impl<'a> FuncBuilder<'a> {
             // value is a promise at all, which is a different mechanism from
             // this one rather than a bigger version of it.
             return Err(self.unsupported(id, "a `Promise` combinator over non-promises"));
+        };
+        // Asked of the promises, before the result type: a promise of a C
+        // handle settles outside the value `all` collects
+        // (`NtsPromise::native`), and the runtime's collector reads values.
+        // Not left to `Array<NativePointer>` being unrepresentable -- the day
+        // it represents, this still refuses.
+        if collecting && matches!(*settles, HirType::NativePointer(_)) {
+            return Err(self.unsupported(id, "`Promise.all` over promises of C handles, which settle outside the value it collects"));
+        }
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `Promise` combinator result"))?;
+        let HirType::Managed(ManagedType::Promise(payload)) = ty.clone() else {
+            return Err(self.unrepresentable(id, "a `Promise` combinator result"));
         };
         let origin = self.origin(id);
         if !collecting {
@@ -20905,7 +20915,10 @@ impl<'a> FuncBuilder<'a> {
         };
         let origin = self.origin(id);
         let (helper, args) = match (&result.payload, value) {
-            (HirType::NativePointer(_), Some(_)) => return Err(self.unsupported(id, "an opaque C pointer in a promise payload")),
+            // A C handle -- `query_info_async`'s `GFileInfo *` -- into the
+            // promise's own slot for one, never into its value, which the
+            // collector reads.
+            (HirType::NativePointer(_), Some(value)) => ("nts_promise_fulfill_pointer", vec![result.promise, value]),
             (HirType::Void, _) | (_, None) => ("nts_promise_fulfill_void", vec![result.promise]),
             (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool, Some(value)) => {
                 ("nts_promise_fulfill_number", vec![result.promise, value])

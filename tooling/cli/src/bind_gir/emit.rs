@@ -170,22 +170,20 @@ fn why_no_promise(binding: &Binding, start: &Function) -> &'static str {
     }
     match &finish.result.c {
         nts_core::hir::native::Type::Scalar(_) => "no Promise form: its `_finish` returns a 64-bit integer",
-        nts_core::hir::native::Type::Pointer(_) => "no Promise form: its `_finish` returns a handle",
+        nts_core::hir::native::Type::Pointer(_) => "no Promise form: its `_finish` returns an untyped pointer",
         _ => "no Promise form: its `_finish` returns what a promise cannot carry",
     }
 }
 
 /// Whether a promise can carry what a `_finish` returns: nothing, a number,
-/// a boolean or a string. Not a handle -- a promise's value is a number or a
-/// *managed* reference, and a C pointer is neither -- and not a 64-bit
-/// integer, which a number cannot hold. Those `_async` methods keep only
-/// their callback form.
+/// a boolean, a string, or a handle -- which the promise holds in a slot of
+/// its own, outside its value. Not a 64-bit integer, which a number cannot
+/// hold; those `_async` methods keep only their callback form.
 fn settles(result: &super::map::Mapped) -> bool {
-    use nts_core::hir::native::Type;
+    use nts_core::hir::native::{Pointee, Type};
     match &result.c {
-        Type::Void | Type::Bool => true,
+        Type::Void | Type::Bool | Type::Pointer(_) if !matches!(result.c, Type::Pointer(Pointee::Void)) => true,
         Type::Scalar(scalar) => !scalar.needs_exact_integer(),
-        Type::Pointer(_) => result.ts.starts_with("string"),
         _ => false,
     }
 }
