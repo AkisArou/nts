@@ -1813,7 +1813,10 @@ interop() {
   # 22: `gtk-loop` (`9055d56b`), libuv driven from a GLib main loop.
   # 23: `gtk-gir` (`2fdd62ee`), a GTK program on bindings `nts build` generates
   #     from GIR. It SKIPs without gtk4, xvfb-run or Gtk-4.0.gir.
-  interop_floor=23
+  # 24: `macos-foundation` (`cfc1f567`), Objective-C messages from TypeScript,
+  #     compared on a Mac against the same messages sent from C. It SKIPs
+  #     without a macOS SDK, and says "not run" by name with no Mac reachable.
+  interop_floor=24
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
