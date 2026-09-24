@@ -3,7 +3,7 @@
 
 use std::fmt::Write;
 
-use super::map::{Binding, Function, Mapped, TypeDecl};
+use super::map::{Binding, Function, Mapped, Shape, TypeDecl};
 
 /// The declaration module: types, then functions, in a stable order.
 #[must_use]
@@ -119,7 +119,7 @@ pub(crate) fn promise_forms(binding: &Binding) -> Vec<(&Function, &Function)> {
             let (class, _) = start.method.as_ref()?;
             let finish_name = start.finish.as_ref()?;
             let (_, callback) = start.parameters.last()?;
-            if !callback.ts.starts_with("OnceClosure<") {
+            if callback.shape != Shape::Once {
                 return None;
             }
             let finish = binding
@@ -144,7 +144,7 @@ pub(crate) fn promise_census(binding: &Binding) -> Vec<(String, &'static str)> {
         .filter(|start| {
             start.method.is_some()
                 && start.finish.is_some()
-                && start.parameters.last().is_some_and(|(_, callback)| callback.ts.starts_with("OnceClosure<"))
+                && start.parameters.last().is_some_and(|(_, callback)| callback.shape == Shape::Once)
         })
         .map(|start| {
             let outcome = if made.contains(start.symbol.as_str()) {
@@ -329,6 +329,9 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
         let own = imports.entry(binding.module.clone()).or_default();
         own.push(start.symbol.clone());
         own.push(finish.symbol.clone());
+        // Every name the wrapper's signature prints, to import from where it
+        // is declared: read from the spelling, since the spelling is exactly
+        // what has to resolve, and a `Declared<GtkBox, GtkWidget>` names two.
         let spellings = start.parameters.iter().map(|(_, mapped)| mapped.ts.as_str()).chain([finish.result.ts.as_str()]);
         for name in spellings.flat_map(|ts| ts.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))) {
             if let Some(module) = module_of_type(binding, name) {

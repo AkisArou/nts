@@ -112,6 +112,21 @@ pub(crate) struct EnumDecl {
 pub(crate) struct Mapped {
     pub(crate) ts: String,
     pub(crate) c: Type,
+    /// What a later step asks of the spelling, said where it is made rather
+    /// than read back out of `ts`.
+    pub(crate) shape: Shape,
+}
+
+/// What a [`Mapped`] is, where something after mapping needs to know.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Shape {
+    Other,
+    /// A handle to `class` (`GtkBox`, through `Const<…>` too), and whether it
+    /// admits `null`.
+    Handle { class: String, nullable: bool },
+    /// A callback C calls once, after the call returns: a `OnceClosure`,
+    /// which a Promise form stands in for.
+    Once,
 }
 
 /// Why something was not bound. Counted, so the most common one is the next
@@ -326,11 +341,10 @@ fn method_of(callable: &Callable, parameters: &[(String, Mapped)]) -> Option<(St
         return None;
     }
     let (_, instance) = parameters.first()?;
-    let class = instance.ts.strip_prefix("Const<").and_then(|t| t.strip_suffix('>')).unwrap_or(&instance.ts);
-    class
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        .then(|| (class.to_owned(), identifier(&callable.name)))
+    match &instance.shape {
+        Shape::Handle { class, nullable: false } => Some((class.clone(), identifier(&callable.name))),
+        _ => None,
+    }
 }
 
 /// What a qualified GIR name refers to.
@@ -419,7 +433,7 @@ impl<'a> Mapper<'a> {
                     name: get_type.clone(),
                     symbol: get_type.clone(),
                     parameters: Vec::new(),
-                    result: Mapped { ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) },
+                    result: Mapped { shape: Shape::Other, ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) },
                     c_parameters: Vec::new(),
                     deprecated: false,
                     free: None,
@@ -653,7 +667,7 @@ impl<'a> Mapper<'a> {
     fn result(&mut self, result: &Param) -> Result<(Mapped, Option<String>), Reason> {
         match &result.ty {
             TypeRef::Named { name, .. } if name == "none" => {
-                Ok((Mapped { ts: "void".to_owned(), c: Type::Void }, None))
+                Ok((Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void }, None))
             }
             // A returned string is copied at the call. Transfer-full is
             // GLib's `g_malloc`, so `g_free` releases it, and it is spelled
@@ -667,9 +681,9 @@ impl<'a> Mapper<'a> {
                 let char = Pointee::Scalar(Scalar::Char);
                 let c = if owned { Type::Pointer(char) } else { Type::Pointer(Pointee::Const(Box::new(char))) };
                 let ts = if result.nullable { "string | null" } else { "string" };
-                Ok((Mapped { ts: ts.to_owned(), c }, owned.then(|| "g_free".to_owned())))
+                Ok((Mapped { shape: Shape::Other, ts: ts.to_owned(), c }, owned.then(|| "g_free".to_owned())))
             }
-            TypeRef::Missing => Ok((Mapped { ts: "void".to_owned(), c: Type::Void }, None)),
+            TypeRef::Missing => Ok((Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void }, None)),
             TypeRef::Array(array) => Self::returned_strings(result, array),
             _ => self.typed(result).map(|mapped| (mapped, None)),
         }
@@ -714,7 +728,7 @@ impl<'a> Mapper<'a> {
         self.binding.brands.insert("Ptr");
         let ts = format!("Ptr<{slot}>");
         let ts = if param.optional { format!("{ts} | null") } else { ts };
-        Ok(Mapped { ts, c: Type::Pointer(pointee) })
+        Ok(Mapped { shape: Shape::Other, ts, c: Type::Pointer(pointee) })
     }
 
     /// An array the callee reads (or fills) during the call: strings as
@@ -786,7 +800,7 @@ impl<'a> Mapper<'a> {
         if param.nullable {
             ts.push_str(" | null");
         }
-        Ok(Mapped { ts, c })
+        Ok(Mapped { shape: Shape::Other, ts, c })
     }
 
     /// `error: Ptr<GError | null> | null` -- C's `GError **error`, which the
@@ -799,6 +813,7 @@ impl<'a> Mapper<'a> {
         self.binding.brands.insert("Ptr");
         let handle = Pointee::Opaque(Handle::from(tag));
         Some(Mapped {
+            shape: Shape::Other,
             ts: format!("Ptr<{local} | null> | null"),
             c: Type::Pointer(Pointee::Pointer(Box::new(handle))),
         })
@@ -827,7 +842,7 @@ impl<'a> Mapper<'a> {
             _ => return Err(Reason::Array),
         };
         let ts = if result.nullable { "string[] | null" } else { "string[]" };
-        Ok((Mapped { ts: ts.to_owned(), c }, free))
+        Ok((Mapped { shape: Shape::Other, ts: ts.to_owned(), c }, free))
     }
 
     /// An in parameter or an instance.
@@ -852,6 +867,7 @@ impl<'a> Mapper<'a> {
                 return Err(Reason::WritableBuffer);
             }
             return Ok(Mapped {
+                shape: Shape::Other,
                 ts: if param.nullable { "string | null" } else { "string" }.to_owned(),
                 c: Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char)))),
             });
@@ -875,6 +891,7 @@ impl<'a> Mapper<'a> {
         // it points at; both stay refused.
         if name == "gpointer" && param.direction == Direction::In && c_type != "gconstpointer" && !c_type.starts_with("const") {
             return Ok(Mapped {
+                shape: Shape::Other,
                 ts: if param.nullable { "object | null" } else { "object" }.to_owned(),
                 c: Type::Pointer(Pointee::Void),
             });
@@ -885,7 +902,7 @@ impl<'a> Mapper<'a> {
         // C99's `bool`, which GIR's scanner reports as `gboolean` -- an `int`
         // -- although the ABI is one byte. `c:type` says which it is.
         if c_type == "bool" || c_type == "_Bool" {
-            return Ok(Mapped { ts: "boolean".to_owned(), c: Type::Bool });
+            return Ok(Mapped { shape: Shape::Other, ts: "boolean".to_owned(), c: Type::Bool });
         }
         let depth = c_type.matches('*').count();
         // A scalar only where C passes one: `const guint8 *` is named `guint8`
@@ -895,7 +912,7 @@ impl<'a> Mapper<'a> {
                 return Err(Reason::PointerDepth(c_type.to_owned()));
             }
             self.binding.brands.insert(brand);
-            return Ok(Mapped { ts: (*brand).to_owned(), c: Type::Scalar(*scalar) });
+            return Ok(Mapped { shape: Shape::Other, ts: (*brand).to_owned(), c: Type::Scalar(*scalar) });
         }
         let qualified = self.qualify(name);
         // A handle is what C says it points at. GIR's name can be more
@@ -918,7 +935,7 @@ impl<'a> Mapper<'a> {
             self.binding.brands.insert("Erased");
             let ts = format!("Erased<{local}>");
             let ts = if param.nullable { format!("{ts} | null") } else { ts };
-            return Ok(Mapped { ts, c: Type::Pointer(Pointee::Void) });
+            return Ok(Mapped { shape: Shape::Other, ts, c: Type::Pointer(Pointee::Void) });
         }
         if depth == 1
             && let Some(namespace) = self.c_types.get(base).copied()
@@ -944,7 +961,7 @@ impl<'a> Mapper<'a> {
                     }
                     None => brand.to_owned(),
                 };
-                Ok(Mapped { ts, c: Type::Scalar(scalar) })
+                Ok(Mapped { shape: Shape::Other, ts, c: Type::Scalar(scalar) })
             }
             Some(Resolved::Record) if depth == 0 => Err(Reason::RecordByValue),
             Some(Resolved::Callback(_)) => {
@@ -988,7 +1005,7 @@ impl<'a> Mapper<'a> {
             ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
         }
         let result = match &signal.signature.result.ty {
-            TypeRef::Named { name, .. } if name == "none" => Mapped { ts: "void".to_owned(), c: Type::Void },
+            TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
             TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => return Err(Reason::StringInCallback),
             _ => self.typed(&self.with_c_type(&signal.signature.result))?,
         };
@@ -1019,11 +1036,12 @@ impl<'a> Mapper<'a> {
             name,
             symbol: "g_signal_connect_data".to_owned(),
             parameters: vec![
-                ("instance".to_owned(), Mapped { ts: format!("Erased<{local}>"), c: context.clone() }),
-                ("detailed_signal".to_owned(), Mapped { ts: format!("\"{}\"", signal.name), c: string.clone() }),
+                ("instance".to_owned(), Mapped { shape: Shape::Other, ts: format!("Erased<{local}>"), c: context.clone() }),
+                ("detailed_signal".to_owned(), Mapped { shape: Shape::Other, ts: format!("\"{}\"", signal.name), c: string.clone() }),
                 (
                     "handler".to_owned(),
                     Mapped {
+                        shape: Shape::Other,
                         ts: format!(
                             "ErasedClosure<({}) => {}, (data: Ptr<unknown>, closure: {gclosure}) => void>",
                             ts_parameters.join(", "),
@@ -1032,9 +1050,9 @@ impl<'a> Mapper<'a> {
                         c: erased.clone(),
                     },
                 ),
-                ("connect_flags".to_owned(), Mapped { ts: "c_uint".to_owned(), c: Type::Scalar(Scalar::UInt) }),
+                ("connect_flags".to_owned(), Mapped { shape: Shape::Other, ts: "c_uint".to_owned(), c: Type::Scalar(Scalar::UInt) }),
             ],
-            result: Mapped { ts: "c_ulong".to_owned(), c: Type::Scalar(Scalar::ULong) },
+            result: Mapped { shape: Shape::Other, ts: "c_ulong".to_owned(), c: Type::Scalar(Scalar::ULong) },
             c_parameters: vec![context.clone(), string, erased, context, notify, Type::Scalar(Scalar::UInt)],
             deprecated: false,
             free: None,
@@ -1097,8 +1115,7 @@ impl<'a> Mapper<'a> {
     /// GIR's word is trusted, as gtk-rs trusts it; anything else -- the same
     /// class, or one GIR does not say descends from C's -- is left as C has it.
     fn declared(&mut self, result: Mapped, class: &'a Class) -> Mapped {
-        let nullable = result.ts.ends_with(" | null");
-        let declared = result.ts.trim_end_matches(" | null").to_owned();
+        let Shape::Handle { class: declared, nullable } = result.shape.clone() else { return result };
         let namespace = self.namespace;
         let Some(c_type) = class.c_type.as_deref() else { return result };
         if c_type == declared || !self.facts.tags.contains_key(c_type) || !self.descends(namespace, class, &declared) {
@@ -1107,7 +1124,7 @@ impl<'a> Mapper<'a> {
         let local = self.name_in(namespace, c_type);
         self.binding.brands.insert("Declared");
         let ts = format!("Declared<{local}, {declared}>{}", if nullable { " | null" } else { "" });
-        Mapped { ts, c: result.c }
+        Mapped { shape: Shape::Handle { class: local, nullable }, ts, c: result.c }
     }
 
     /// Whether GIR says `class` descends from the class C calls `ancestor`.
@@ -1128,6 +1145,7 @@ impl<'a> Mapper<'a> {
 
     fn handle(&mut self, local: String, tag: &str, constant: bool, nullable: bool) -> Mapped {
         let pointee = Pointee::Opaque(Handle::from(tag));
+        let class = local.clone();
         let (pointee, local) = if constant {
             self.binding.brands.insert("Const");
             (Pointee::Const(Box::new(pointee)), format!("Const<{local}>"))
@@ -1135,7 +1153,7 @@ impl<'a> Mapper<'a> {
             (pointee, local)
         };
         let ts = if nullable { format!("{local} | null") } else { local };
-        Mapped { ts, c: Type::Pointer(pointee) }
+        Mapped { shape: Shape::Handle { class, nullable }, ts, c: Type::Pointer(pointee) }
     }
 
     /// A callback parameter, with the C slots that travel with it: the
@@ -1208,7 +1226,7 @@ impl<'a> Mapper<'a> {
             return Err(Reason::StringInCallback);
         }
         let result = match &signature.result.ty {
-            TypeRef::Named { name, .. } if name == "none" => Mapped { ts: "void".to_owned(), c: Type::Void },
+            TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
             _ => self.typed(&signature.result)?,
         };
         let context = Type::Pointer(Pointee::Void);
@@ -1225,7 +1243,8 @@ impl<'a> Mapper<'a> {
         let ts = format!("{wrapper}<({}) => {}>", ts_parameters.join(", "), result.ts);
         // The Mapped's C type is the function pointer alone; the slots carry
         // the rest.
-        Ok(Some((Mapped { ts, c: slots[0].clone() }, slots)))
+        let shape = if scope == Scope::Async { Shape::Once } else { Shape::Other };
+        Ok(Some((Mapped { shape, ts, c: slots[0].clone() }, slots)))
     }
 }
 
