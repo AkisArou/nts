@@ -45,6 +45,9 @@ pub(crate) struct Binding {
     /// property of the class's methods is the emitter's call, since it depends
     /// on which of those methods the self-check kept.
     pub(crate) properties: BTreeMap<String, Vec<Accessor>>,
+    /// Each class's zero-argument constructor (`gtk_button_new`), by the
+    /// class's C type: what `new GtkButton({ … })` calls before its setters.
+    pub(crate) constructors: BTreeMap<String, String>,
 }
 
 /// A property as the binding names it (`icon_name`), and the methods GIR
@@ -323,7 +326,18 @@ pub(crate) fn bind<'a>(
     for (callable, owner) in callables {
         let name = callable.c_identifier.clone().unwrap_or_else(|| callable.name.clone());
         match mapper.function(callable, owner) {
-            Ok(function) => mapper.binding.functions.push(function),
+            Ok(function) => {
+                // `new GtkButton({ … })` calls the class's `new`, when it
+                // takes nothing.
+                if callable.kind == CallableKind::Constructor
+                    && callable.name == "new"
+                    && callable.signature.parameters.is_empty()
+                    && let Some(c_type) = owner.and_then(|class| class.c_type.clone())
+                {
+                    mapper.binding.constructors.insert(c_type, function.symbol.clone());
+                }
+                mapper.binding.functions.push(function);
+            }
             // The entry GIR names instead is bound under the same symbol;
             // this one is a duplicate, not something missing.
             Err(Reason::Shadowed) => {}
@@ -446,6 +460,7 @@ impl<'a> Mapper<'a> {
                 && !module.is_empty()
             {
                 self.binding.imports.entry(module.clone()).or_default().insert(format!("{name}Methods"));
+                self.binding.imports.entry(module.clone()).or_default().insert(format!("{name}Props"));
             }
             self.binding.brands.insert("Class");
             if let Some(get_type) = &class.get_type

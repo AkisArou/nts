@@ -17,6 +17,9 @@
 //                 and released by the binding's `g_strfreev`
 //   sha256=ba7816bf  the bytes "abc", from offset 1 of a larger `Uint8Array`,
 //                 borrowed in place as `const guint8 *` with their length
+//   made press false  `new GtkButton({ label: "press", has_frame: false })`:
+//                 `gtk_button_new`, then each setter the literal writes -- a
+//                 frame is on by default, so `false` is the setter's doing
 //   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned, held as
 //                 a plain `GtkWidget`
 //   cast-null     `asGtkLabel` answers null for that same widget
@@ -45,11 +48,11 @@ import {
   gtk_application_window_new,
   gtk_box_append,
   gtk_box_new,
-  gtk_button_new_with_label,
   gtk_label_new,
   gtk_window_present,
   gtk_window_set_child,
   Orientation,
+  GtkButton,
   type GtkWidget,
 } from "c:Gtk-4.0";
 import {
@@ -184,7 +187,10 @@ function main(): void {
     const window = gtk_application_window_new(application);
     const box = gtk_box_new(Orientation.VERTICAL, 4 as c_int);
     const label = gtk_label_new("start");
-    const button = gtk_button_new_with_label("press");
+    // GJS's construction: `gtk_button_new`, then the setter of each
+    // property the literal writes, in its order.
+    const button = new GtkButton({ label: "press", has_frame: false });
+    gir_log("made " + String(button.label) + " " + String(button.has_frame));
     // A checked downcast, for a handle known only as a widget.
     const widget: GtkWidget = box;
     gir_log(asGtkBox(widget) === null ? "cast-failed" : "cast-ok");

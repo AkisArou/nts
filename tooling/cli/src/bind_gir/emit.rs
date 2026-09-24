@@ -75,6 +75,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods;");
                     let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\"> & {name}Methods;");
                 }
+                construction(&mut out, binding, &own, name, parent.as_ref().map(|(_, parent)| parent.as_str()));
             }
         }
     }
@@ -103,25 +104,13 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
 /// `label.label = "Hi"`. Typed by what the getter returns; the setter joins
 /// only where it takes exactly that, since a getter answering `string | null`
 /// beside a setter taking `string` would let `null` be assigned -- such a
-/// property is read-only, and `set_label` is still there. A property whose
+/// property is read-only, and `set_label` is still there. Its `@ntsSet` stays:
+/// `new GtkButton({ label })` writes it through the setter at the setter's own
+/// type, which `readonly` does not stop and should not. A property whose
 /// name a method of the class already has, or that no kept method serves, is
 /// left out.
 fn accessor(out: &mut String, own: &[&Function], property: &str, getter: Option<&str>, setter: Option<&str>) {
-    let find = |method: Option<&str>| {
-        let method = method?;
-        own.iter().copied().find(|f| f.method.as_ref().is_some_and(|(_, name)| name == method))
-    };
-    if own.iter().any(|f| f.method.as_ref().is_some_and(|(_, name)| name == property)) {
-        return;
-    }
-    let get = find(getter).filter(|f| f.parameters.len() == 1 && f.result.ts != "void" && f.throws.is_none());
-    let set = find(setter).filter(|f| f.parameters.len() == 2 && f.result.ts == "void" && f.throws.is_none());
-    let (ts, set) = match (get, set) {
-        (Some(get), Some(set)) if set.parameters[1].1.ts == get.result.ts => (get.result.ts.clone(), Some(set)),
-        (Some(get), _) => (get.result.ts.clone(), None),
-        (None, Some(set)) => (set.parameters[1].1.ts.clone(), Some(set)),
-        (None, None) => return,
-    };
+    let Some(Decided { ts, get, set, assignable }) = decide(own, property, getter, setter) else { return };
     let mut tags = Vec::new();
     if let Some((_, name)) = get.and_then(|f| f.method.as_ref()) {
         tags.push(format!("@ntsGet {name}"));
@@ -134,8 +123,79 @@ fn accessor(out: &mut String, own: &[&Function], property: &str, getter: Option<
         let _ = writeln!(out, "     * {tag}");
     }
     let _ = writeln!(out, "     */");
-    let readonly = if set.is_none() { "readonly " } else { "" };
+    let readonly = if assignable { "" } else { "readonly " };
     let _ = writeln!(out, "    {readonly}{property}: {ts};");
+}
+
+/// What a property is on its class, once its methods are known: its type, the
+/// methods it is read and written through, and whether an assignment may write
+/// it -- only where the setter takes what the getter answers. `None` where it
+/// is left out.
+struct Decided<'f> {
+    ts: String,
+    get: Option<&'f Function>,
+    set: Option<&'f Function>,
+    assignable: bool,
+}
+
+fn decide<'f>(own: &[&'f Function], property: &str, getter: Option<&str>, setter: Option<&str>) -> Option<Decided<'f>> {
+    if own_method(own, Some(property)).is_some() {
+        return None;
+    }
+    let get = own_method(own, getter)
+        .filter(|f| f.parameters.len() == 1 && f.result.ts != "void" && f.throws.is_none());
+    let set = settable(own, property, setter);
+    let (ts, assignable) = match (get, set) {
+        (Some(get), Some(set)) => (get.result.ts.clone(), set.parameters[1].1.ts == get.result.ts),
+        (Some(get), None) => (get.result.ts.clone(), false),
+        (None, Some(set)) => (set.parameters[1].1.ts.clone(), true),
+        (None, None) => return None,
+    };
+    Some(Decided { ts, get, set, assignable })
+}
+
+/// The method a property is written through, where there is one a plain
+/// assignment can call: it takes the instance and the value, answers nothing
+/// and throws nothing, and no method of the class takes the property's name.
+fn settable<'f>(own: &[&'f Function], property: &str, setter: Option<&str>) -> Option<&'f Function> {
+    if own_method(own, Some(property)).is_some() {
+        return None;
+    }
+    own_method(own, setter).filter(|f| f.parameters.len() == 2 && f.result.ts == "void" && f.throws.is_none())
+}
+
+fn own_method<'f>(own: &[&'f Function], method: Option<&str>) -> Option<&'f Function> {
+    let method = method?;
+    own.iter().copied().find(|f| f.method.as_ref().is_some_and(|(_, name)| name == method))
+}
+
+/// GJS's construction: `…Props`, the class's writable properties -- each
+/// optional, typed as its setter takes it -- extending the parent's; and,
+/// where the class has a zero-argument `new` the self-check kept, a value of
+/// the class's name to construct it with, `new GtkButton({ label })`, which
+/// calls that `new` and then the setter of each property the literal writes
+/// (`@ntsConstruct`). A class only extended, or constructed some other way,
+/// has the interface and not the value.
+fn construction(out: &mut String, binding: &Binding, own: &[&Function], name: &str, parent: Option<&str>) {
+    let extends = parent.map(|parent| format!(" extends {parent}Props")).unwrap_or_default();
+    let _ = writeln!(out, "  export interface {name}Props{extends} {{");
+    for property in binding.properties.get(name).into_iter().flatten() {
+        let Some(set) = settable(own, &property.name, property.setter.as_deref()) else { continue };
+        let _ = writeln!(out, "    {}?: {};", property.name, set.parameters[1].1.ts);
+    }
+    out.push_str("  }\n");
+    let Some(constructor) = binding.constructors.get(name).and_then(|symbol| {
+        binding.functions.iter().find(|f| f.symbol == *symbol && f.parameters.is_empty() && f.throws.is_none())
+    }) else {
+        return;
+    };
+    // Its result is the constructor's, as written: the lowering calls the
+    // constructor through this signature, less the properties.
+    let _ = writeln!(
+        out,
+        "  export const {name}: {{\n    /**\n     * @ntsConstruct {}\n     */\n    new (props?: {name}Props): {};\n  }};",
+        constructor.symbol, constructor.result.ts,
+    );
 }
 
 /// A function as a method of its class: `this` is its instance.
