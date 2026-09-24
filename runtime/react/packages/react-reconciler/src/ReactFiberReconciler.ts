@@ -5,7 +5,7 @@ import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableSchedulingProfiler } from "shared/ReactFeatureFlags.ts";
 import type { ErrorInfo, Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import type { RootTag } from "./ReactRootTags.ts";
-import type { Container, PublicInstance } from "./ReactFiberConfig.ts";
+import type { Container, PublicInstance } from "react-reconciler/ReactFiberConfig.ts";
 import type { Lane } from "./ReactFiberLane.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";
 import type { SuspenseState } from "./ReactFiberSuspenseComponent.ts";
@@ -14,7 +14,7 @@ import { findCurrentHostFiber, findCurrentHostFiberWithNoPortals } from "./React
 import { ActivityComponent, ClassComponent, HostComponent, HostRoot, HostSingleton, SuspenseComponent } from "./ReactWorkTags.ts";
 import { getComponentNameFromFiber } from "./getComponentNameFromFiber.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
-import { extraDevToolsConfig, getPublicInstance, rendererPackageName, rendererVersion } from "./ReactFiberConfig.ts";
+import { extraDevToolsConfig, getPublicInstance, rendererPackageName, rendererVersion } from "react-reconciler/ReactFiberConfig.ts";
 import {
   emptyContextObject,
   findCurrentUnmaskedContext,

@@ -2,12 +2,12 @@ import type { ReactContext } from "shared/ReactTypes.ts";
 import type { Fiber, ContextDependency, Dependencies } from "./ReactInternalTypes.ts";
 import type { StackCursor } from "./ReactFiberStack.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
-import type { TransitionStatus } from "./ReactFiberConfig.ts";
+import type { TransitionStatus } from "react-reconciler/ReactFiberConfig.ts";
 import type { Hook } from "./ReactFiberHooks.ts";
 import type { SuspenseState } from "./ReactFiberSuspenseComponent.ts";
 
 import { isDevelopment } from "shared/Build.ts";
-import { isPrimaryRenderer, HostTransitionContext } from "./ReactFiberConfig.ts";
+import { isPrimaryRenderer, HostTransitionContext } from "react-reconciler/ReactFiberConfig.ts";
 import { createCursor, push, pop } from "./ReactFiberStack.ts";
 import { ContextProvider, DehydratedFragment, SuspenseComponent } from "./ReactWorkTags.ts";
 import { NoLanes, isSubsetOfLanes, mergeLanes } from "./ReactFiberLane.ts";

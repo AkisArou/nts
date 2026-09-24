@@ -4,7 +4,7 @@
 
 import type { ReactContext } from "shared/ReactTypes.ts";
 import { enableScopeAPI } from "shared/ReactFeatureFlags.ts";
-import { getInstanceFromNode, getInstanceFromScope, getPublicInstance } from "./ReactFiberConfig.ts";
+import { getInstanceFromNode, getInstanceFromScope, getPublicInstance } from "react-reconciler/ReactFiberConfig.ts";
 import { isFiberSuspenseAndTimedOut } from "./ReactFiberTreeReflection.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import { ContextProvider, HostComponent, ScopeComponent } from "./ReactWorkTags.ts";

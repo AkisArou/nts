@@ -16,7 +16,7 @@ import type { Fiber, FiberRoot, HookType, MemoCache } from "./ReactInternalTypes
 import type { Lanes, Lane } from "./ReactFiberLane.ts";
 import type { HookFlags } from "./ReactHookEffectTags.ts";
 import type { Flags } from "./ReactFiberFlags.ts";
-import type { TransitionStatus } from "./ReactFiberConfig.ts";
+import type { TransitionStatus } from "react-reconciler/ReactFiberConfig.ts";
 import type { ThenableState } from "./ReactFiberThenable.ts";
 
 import { isDevelopment } from "shared/Build.ts";
@@ -25,7 +25,7 @@ import {
   NotPendingTransition as NoPendingHostTransition,
   setCurrentUpdatePriority,
   getCurrentUpdatePriority,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
 import {
   enableSchedulingProfiler,

@@ -6,7 +6,7 @@ import {
   enableProfilerTimer,
 } from "shared/ReactFeatureFlags.ts";
 import type { CapturedValue } from "./ReactCapturedValue.ts";
-import { resolveEventTimeStamp, resolveEventType } from "./ReactFiberConfig.ts";
+import { resolveEventTimeStamp, resolveEventType } from "react-reconciler/ReactFiberConfig.ts";
 import type { Lane, Lanes } from "./ReactFiberLane.ts";
 import {
   includesBlockingLane,

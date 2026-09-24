@@ -1,6 +1,6 @@
 import { enableFragmentRefsTextNodes } from "shared/ReactFeatureFlags.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";
-import type { ActivityInstance, Container, Instance, SuspenseInstance, TextInstance } from "./ReactFiberConfig.ts";
+import type { ActivityInstance, Container, Instance, SuspenseInstance, TextInstance } from "react-reconciler/ReactFiberConfig.ts";
 import { Hydrating, NoFlags, Placement } from "./ReactFiberFlags.ts";
 import type { SuspenseState } from "./ReactFiberSuspenseComponent.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";

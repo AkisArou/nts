@@ -3,7 +3,7 @@ import type { Thenable, Transition } from "shared/ReactTypes.ts";
 import { entangleAsyncAction, peekEntangledActionLane } from "./ReactFiberAsyncAction.ts";
 import type { Cache, SpawnedCachePool } from "./ReactFiberCacheComponent.ts";
 import { CacheContext, createCache, retainCache } from "./ReactFiberCacheComponent.ts";
-import { isPrimaryRenderer } from "./ReactFiberConfig.ts";
+import { isPrimaryRenderer } from "react-reconciler/ReactFiberConfig.ts";
 import { NoLane, type Lanes } from "./ReactFiberLane.ts";
 import { firstScheduledRoot } from "./ReactFiberRootScheduler.ts";
 import type { StackCursor } from "./ReactFiberStack.ts";

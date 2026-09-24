@@ -10,7 +10,7 @@ import type { Fiber } from "./ReactInternalTypes.ts";
 import type { UpdateQueue } from "./ReactFiberClassUpdateQueue.ts";
 import type { FunctionComponentUpdateQueue } from "./ReactFiberHooks.ts";
 import type { HookFlags } from "./ReactHookEffectTags.ts";
-import type { FragmentInstanceType } from "./ReactFiberConfig.ts";
+import type { FragmentInstanceType } from "react-reconciler/ReactFiberConfig.ts";
 import type { ViewTransitionProps, ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 import type { ClassInstance } from "./ReactFiberCallUserSpace.ts";
 
@@ -31,7 +31,7 @@ import { resolveClassComponentProps } from "./ReactFiberClassComponent.ts";
 import { isCurrentUpdateNested, recordEffectDuration, startEffectTimer } from "./ReactProfilerTimer.ts";
 import { NoMode, ProfileMode } from "./ReactTypeOfMode.ts";
 import { commitCallbacks, commitHiddenCallbacks } from "./ReactFiberClassUpdateQueue.ts";
-import { createFragmentInstance, createViewTransitionInstance, getPublicInstance } from "./ReactFiberConfig.ts";
+import { createFragmentInstance, createViewTransitionInstance, getPublicInstance } from "react-reconciler/ReactFiberConfig.ts";
 import { captureCommitPhaseError, setIsRunningInsertionEffect } from "./ReactFiberWorkLoop.ts";
 import {
   Insertion as HookInsertion,

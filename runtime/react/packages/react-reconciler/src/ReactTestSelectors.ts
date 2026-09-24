@@ -3,7 +3,7 @@
 
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
-import type { Instance } from "./ReactFiberConfig.ts";
+import type { Instance } from "react-reconciler/ReactFiberConfig.ts";
 import { HostComponent, HostHoistable, HostSingleton, HostText } from "./ReactWorkTags.ts";
 import {
   findFiberRoot,
@@ -15,7 +15,7 @@ import {
   setFocusIfFocusable,
   setupIntersectionObserver,
   supportsTestSelectors,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 
 const COMPONENT_TYPE: symbol = Symbol.for("selector.component");
 const HAS_PSEUDO_CLASS_TYPE: symbol = Symbol.for("selector.has_pseudo_class");

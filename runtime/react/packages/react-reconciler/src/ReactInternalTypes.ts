@@ -10,7 +10,7 @@
 import type { ReactContext, ReactDebugInfo, ReactKey, RefObject, Transition, TransitionTypes, Wakeable } from "shared/ReactTypes.ts";
 import type { Cache } from "./ReactFiberCacheComponent.ts";
 import type { ConcurrentUpdate } from "./ReactFiberConcurrentUpdates.ts";
-import type { Container, Instance, NoTimeout, TimeoutHandle } from "./ReactFiberConfig.ts";
+import type { Container, Instance, NoTimeout, TimeoutHandle } from "react-reconciler/ReactFiberConfig.ts";
 import type { Flags } from "./ReactFiberFlags.ts";
 import type { Lane, LaneMap, Lanes } from "./ReactFiberLane.ts";
 import type { ThenableState } from "./ReactFiberThenable.ts";

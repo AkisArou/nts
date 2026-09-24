@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./unstable_mock": "./src/unstable_mock.ts",
-    "./unstable_post_task": "./src/unstable_post_task.ts"
+    "./unstable_post_task": "./src/unstable_post_task.ts",
+    "./src/*": "./src/*"
   }
 }

@@ -23,7 +23,7 @@ import type {
   SuspendedState,
   SuspenseInstance,
   TextInstance,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
 import {
@@ -174,7 +174,7 @@ import {
   suspendResource,
   unmountHoistable,
   updateFragmentInstanceFiber,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import {
   markCommitTimeOfFallback,
   resolveRetryWakeable,

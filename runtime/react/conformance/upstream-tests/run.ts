@@ -14,7 +14,7 @@
 // Control arms write only under build/.
 
 import {spawnSync} from 'node:child_process';
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {dirname, join, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -67,6 +67,27 @@ const armRoots: Record<string, string> = {
 const armRoot = armRoots[arm];
 if (armRoot === undefined) throw new Error(`unknown arm ${arm}`);
 if (!existsSync(armRoot)) throw new Error(`the ${arm} arm has not been built: ${armRoot}`);
+if (arm === 'nts') {
+  // Refuse to measure bundles older than their sources: a failed build
+  // leaves the previous bundles in place, and they would pass.
+  const stamp = join(armRoot, '.built');
+  const builtAt = existsSync(stamp) ? statSync(stamp).mtimeMs : 0;
+  const stale = newestSource(join(lane, 'packages'));
+  if (stale.mtime > builtAt) {
+    throw new Error(`build/js is older than ${relative(lane, stale.path)}; run tools/build-js.ts`);
+  }
+}
+
+function newestSource(dir: string): {path: string; mtime: number} {
+  let newest = {path: dir, mtime: 0};
+  for (const entry of readdirSync(dir, {withFileTypes: true})) {
+    if (entry.name === 'node_modules') continue;
+    const path = join(dir, entry.name);
+    const candidate = entry.isDirectory() ? newestSource(path) : {path, mtime: statSync(path).mtimeMs};
+    if (candidate.mtime > newest.mtime) newest = candidate;
+  }
+  return newest;
+}
 
 const out = join(lane, 'build/conformance');
 mkdirSync(out, {recursive: true});

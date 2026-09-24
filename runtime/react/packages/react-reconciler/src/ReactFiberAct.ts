@@ -1,7 +1,7 @@
 import { isDevelopment } from "shared/Build.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
-import { warnsIfNotActing } from "./ReactFiberConfig.ts";
+import { warnsIfNotActing } from "react-reconciler/ReactFiberConfig.ts";
 
 // The globals a test environment sets to say it wraps updates in `act`.
 interface ActEnvironmentGlobals {

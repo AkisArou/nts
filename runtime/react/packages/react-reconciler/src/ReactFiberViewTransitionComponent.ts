@@ -1,4 +1,4 @@
-import type { Instance, ViewTransitionInstance } from "./ReactFiberConfig.ts";
+import type { Instance, ViewTransitionInstance } from "react-reconciler/ReactFiberConfig.ts";
 import { getCommittingRoot, getPendingTransitionTypes } from "./ReactFiberWorkLoop.ts";
 import type { FiberRoot } from "./ReactInternalTypes.ts";
 

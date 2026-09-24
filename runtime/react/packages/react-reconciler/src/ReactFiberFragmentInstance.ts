@@ -3,11 +3,11 @@
 //
 // Port of upstream's ReactFiberFragmentInstance.js.
 
-import type { FragmentInstanceType, Instance, TextInstance } from "./ReactFiberConfig.ts";
+import type { FragmentInstanceType, Instance, TextInstance } from "react-reconciler/ReactFiberConfig.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 
 import { Fragment, HostComponent, HostRoot, HostSingleton, HostText } from "./ReactWorkTags.ts";
-import { commitNewChildToFragmentInstance, deleteChildFromFragmentInstance, supportsSingletons } from "./ReactFiberConfig.ts";
+import { commitNewChildToFragmentInstance, deleteChildFromFragmentInstance, supportsSingletons } from "react-reconciler/ReactFiberConfig.ts";
 import { enableFragmentRefsTextNodes } from "shared/ReactFeatureFlags.ts";
 
 export function commitNewChildToFragmentInstances(

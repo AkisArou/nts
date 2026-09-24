@@ -19,7 +19,7 @@ import { resetChildFibers } from "./ReactChildFiber.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";
 import type { Cache, SpawnedCachePool } from "./ReactFiberCacheComponent.ts";
 import { popCacheProvider } from "./ReactFiberCacheComponent.ts";
-import type { ChildSet, Container, Instance, Props, Resource, TextInstance, Type } from "./ReactFiberConfig.ts";
+import type { ChildSet, Container, Instance, Props, Resource, TextInstance, Type } from "react-reconciler/ReactFiberConfig.ts";
 import {
   appendChildToContainerChildSet,
   appendInitialChild,
@@ -45,7 +45,7 @@ import {
   supportsPersistence,
   supportsResources,
   supportsSingletons,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import type { Flags } from "./ReactFiberFlags.ts";
 import {
   ChildDeletion,

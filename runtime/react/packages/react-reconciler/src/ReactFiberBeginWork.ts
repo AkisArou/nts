@@ -59,7 +59,7 @@ import {
   suspendIfUpdateReadFromEntangledAsyncAction,
 } from "./ReactFiberClassUpdateQueue.ts";
 import { enqueueConcurrentRenderForLane } from "./ReactFiberConcurrentUpdates.ts";
-import type { ActivityInstance, Container, Props, SuspenseInstance, Type } from "./ReactFiberConfig.ts";
+import type { ActivityInstance, Container, Props, SuspenseInstance, Type } from "react-reconciler/ReactFiberConfig.ts";
 import {
   createHoistableInstance,
   getResource,
@@ -72,7 +72,7 @@ import {
   supportsHydration,
   supportsResources,
   supportsSingletons,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import { markComponentRenderStarted, markComponentRenderStopped, setIsStrictModeForDevtools } from "./ReactFiberDevToolsHook.ts";
 import {
   Callback,

@@ -1,4 +1,4 @@
-import { requestPostPaintCallback } from "./ReactFiberConfig.ts";
+import { requestPostPaintCallback } from "react-reconciler/ReactFiberConfig.ts";
 
 let postPaintCallbackScheduled = false;
 let callbacks: ((endTime: number) => void)[] = [];

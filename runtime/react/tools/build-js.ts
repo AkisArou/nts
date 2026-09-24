@@ -77,13 +77,33 @@ const forks: {entry: string; module: string; use: string}[] = [
   },
 ];
 
+// The file a relative or package-qualified `.ts` specifier names, by the
+// workspace packages' own `exports` patterns (the rule Node applies), or null
+// for anything else.
+function resolveSource(specifier: string, resolveDir: string): string | null {
+  if (specifier.startsWith('.')) return resolve(resolveDir, specifier);
+  for (const pkg of packages) {
+    if (!specifier.startsWith(pkg.name + '/')) continue;
+    const subpath = './' + specifier.slice(pkg.name.length + 1);
+    for (const [pattern, target] of Object.entries(pkg.exports)) {
+      if (typeof target !== 'string' || !pattern.endsWith('*')) continue;
+      const prefix = pattern.slice(0, -1);
+      if (subpath.startsWith(prefix)) {
+        return join(packagesDir, pkg.dir, target.slice(0, -1) + subpath.slice(prefix.length));
+      }
+    }
+  }
+  return null;
+}
+
 function forkPlugin(entry: string): Plugin {
   const active = forks.filter(fork => fork.entry === entry);
   return {
     name: 'forks',
     setup(pluginBuild) {
+      // A fork point may be imported relatively or by its package path.
       pluginBuild.onResolve({filter: /\.ts$/}, args => {
-        const resolved = resolve(args.resolveDir, args.path);
+        const resolved = resolveSource(args.path, args.resolveDir);
         const fork = active.find(f => resolved === join(packagesDir, f.module));
         return fork === undefined ? undefined : {path: join(packagesDir, fork.use)};
       });
@@ -94,6 +114,9 @@ function forkPlugin(entry: string): Plugin {
 rmSync(out, {recursive: true, force: true});
 for (const pkg of published) {
   for (const [subpath, target] of Object.entries(pkg.exports)) {
+    // Patterns (`./src/*`) expose sources to other packages; only exact
+    // subpaths are published entries.
+    if (subpath.includes('*')) continue;
     const entry = subpath === '.' ? 'index' : subpath.slice(2);
     for (const mode of modes) {
       await build({
@@ -128,6 +151,10 @@ for (const pkg of published) {
     JSON.stringify({name: pkg.name, version: pkg.version, main: 'index.js'}, null, 2) + '\n',
   );
 }
+
+// When the build finished, for the harness to check that it is not
+// measuring bundles older than the sources.
+writeFileSync(join(out, '.built'), new Date().toISOString() + '\n');
 
 // The bundles are CommonJS; the lane's own package.json says "module".
 writeFileSync(join(out, 'package.json'), JSON.stringify({type: 'commonjs'}) + '\n');

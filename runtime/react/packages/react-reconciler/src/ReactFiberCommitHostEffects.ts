@@ -14,7 +14,7 @@ import type {
   Props,
   SuspenseInstance,
   TextInstance,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 
 import { isDevelopment } from "shared/Build.ts";
@@ -49,7 +49,7 @@ import {
   unhideDehydratedBoundary,
   unhideInstance,
   unhideTextInstance,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import { captureCommitPhaseError } from "./ReactFiberWorkLoop.ts";
 import { trackHostMutation } from "./ReactFiberMutationTracking.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";

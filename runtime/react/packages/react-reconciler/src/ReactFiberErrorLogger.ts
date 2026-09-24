@@ -1,7 +1,7 @@
 import { isDevelopment } from "shared/Build.ts";
 import { reportGlobalError } from "shared/reportGlobalError.ts";
 import type { CapturedValue } from "./ReactCapturedValue.ts";
-import { bindToConsole } from "./ReactFiberConfig.ts";
+import { bindToConsole } from "react-reconciler/ReactFiberConfig.ts";
 import type { ErrorInfo, Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
 import { ClassComponent } from "./ReactWorkTags.ts";

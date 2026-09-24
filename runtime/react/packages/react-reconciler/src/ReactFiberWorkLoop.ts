@@ -34,7 +34,7 @@ import type { SuspenseState } from "./ReactFiberSuspenseComponent.ts";
 import type { FunctionComponentUpdateQueue } from "./ReactFiberHooks.ts";
 import type { PendingBoundaries, PendingTransitionCallbacks, TransitionAbort } from "./ReactFiberTracingMarkerComponent.ts";
 import type { OffscreenInstance } from "./ReactFiberOffscreenComponent.ts";
-import type { RunningViewTransition, SuspendedState, ViewTransitionInstance } from "./ReactFiberConfig.ts";
+import type { RunningViewTransition, SuspendedState, ViewTransitionInstance } from "react-reconciler/ReactFiberConfig.ts";
 import type { RootState } from "./ReactFiberRoot.ts";
 import { getViewTransitionName, type ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
@@ -92,8 +92,8 @@ import {
   suspendOnActiveViewTransition,
   trackSchedulerEvent,
   waitForCommitToBeReady,
-} from "./ReactFiberConfig.ts";
-import type { Props } from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
+import type { Props } from "react-reconciler/ReactFiberConfig.ts";
 import { createWorkInProgress, resetWorkInProgress } from "./ReactFiber.ts";
 import { isRootDehydrated } from "./ReactFiberShellHydration.ts";
 import { getIsHydrating, popHydrationStateOnInterruptedWork } from "./ReactFiberHydrationContext.ts";

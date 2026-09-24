@@ -22,8 +22,15 @@ diff maps file by file onto this port.
    React's internals come from `./ReactSharedInternals.ts`. The scheduler is
    imported by its package name, through `./Scheduler.ts`: Jest mocks the
    bare `scheduler` specifier, so a relative path would miss the mock. Host
-   operations come from `./ReactFiberConfig.ts`; that module is only a
-   contract, and each renderer's bundle replaces it.
+   operations come from `react-reconciler/ReactFiberConfig.ts`; that module
+   is only a contract, and each renderer's build replaces it.
+
+   **A module that a build replaces (a fork point) is always imported by its
+   package path, never relatively.** Examples are the host config, the
+   scheduler's host (`scheduler/src/Host.ts`) and `shared/Build.ts`. The
+   JavaScript build replaces them through the forks table in
+   `tools/build-js.ts`. A native build replaces them through `paths` in its
+   tsconfig, and `paths` only applies to package paths.
 3. **Feature flags.** Import them from `shared/ReactFeatureFlags.ts` and keep
    upstream's `if (enableX)` branches, so the file stays diffable.
    `__DEV__` becomes `isDevelopment` from `shared/Build.ts`. `__PROFILE__`

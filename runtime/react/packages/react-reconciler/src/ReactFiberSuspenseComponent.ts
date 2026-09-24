@@ -1,7 +1,7 @@
 import type { Wakeable } from "shared/ReactTypes.ts";
 import type { CapturedValue } from "./ReactCapturedValue.ts";
-import type { SuspenseInstance } from "./ReactFiberConfig.ts";
-import { isSuspenseInstanceFallback, isSuspenseInstancePending } from "./ReactFiberConfig.ts";
+import type { SuspenseInstance } from "react-reconciler/ReactFiberConfig.ts";
+import { isSuspenseInstanceFallback, isSuspenseInstancePending } from "react-reconciler/ReactFiberConfig.ts";
 import { DidCapture, NoFlags } from "./ReactFiberFlags.ts";
 import type { Lane } from "./ReactFiberLane.ts";
 import type { TreeContext } from "./ReactFiberTreeContext.ts";

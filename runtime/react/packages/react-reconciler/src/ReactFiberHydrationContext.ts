@@ -18,7 +18,7 @@ import type {
   SuspenseInstance,
   TextInstance,
   Type,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import {
   canHydrateActivityInstance,
   canHydrateFormStateMarker,
@@ -49,7 +49,7 @@ import {
   supportsSingletons,
   validateHydratableInstance,
   validateHydratableTextInstance,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import { getHostContext, getRootHostContainer } from "./ReactFiberHostContext.ts";
 import type { HydrationDiffNode } from "./ReactFiberHydrationDiffs.ts";
 import { describeDiff } from "./ReactFiberHydrationDiffs.ts";

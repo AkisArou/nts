@@ -1,12 +1,12 @@
 import { isDevelopment } from "shared/Build.ts";
-import type { Container, HostContext, TransitionStatus } from "./ReactFiberConfig.ts";
+import type { Container, HostContext, TransitionStatus } from "react-reconciler/ReactFiberConfig.ts";
 import {
   getChildHostContext,
   getRootHostContext,
   HostTransitionContext,
   isPrimaryRenderer,
   NotPendingTransition,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import type { Hook } from "./ReactFiberHooks.ts";
 import type { StackCursor } from "./ReactFiberStack.ts";
 import { createCursor, pop, push } from "./ReactFiberStack.ts";

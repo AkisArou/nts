@@ -1,5 +1,5 @@
 import type { CapturedValue } from "./ReactCapturedValue.ts";
-import type { ActivityInstance } from "./ReactFiberConfig.ts";
+import type { ActivityInstance } from "react-reconciler/ReactFiberConfig.ts";
 import type { Lane } from "./ReactFiberLane.ts";
 import type { TreeContext } from "./ReactFiberTreeContext.ts";
 

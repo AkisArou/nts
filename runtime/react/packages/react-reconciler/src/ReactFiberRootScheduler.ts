@@ -69,7 +69,7 @@ import {
   shouldAttemptEagerTransition,
   supportsMicrotasks,
   trackSchedulerEvent,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
 import { resetNestedUpdateFlag, syncNestedUpdateFlag } from "./ReactProfilerTimer.ts";
 import {

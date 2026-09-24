@@ -8,7 +8,7 @@
 // the `gesture` parameters stay for upstream's signatures and are false in
 // every stable caller.
 
-import type { Instance, InstanceMeasurement, Props } from "./ReactFiberConfig.ts";
+import type { Instance, InstanceMeasurement, Props } from "react-reconciler/ReactFiberConfig.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import type { ViewTransitionProps, ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 
@@ -30,7 +30,7 @@ import {
   restoreViewTransitionName,
   supportsMutation,
   wasInstanceInViewport,
-} from "./ReactFiberConfig.ts";
+} from "react-reconciler/ReactFiberConfig.ts";
 import { scheduleViewTransitionEvent } from "./ReactFiberWorkLoop.ts";
 import { getViewTransitionClassName, getViewTransitionName } from "./ReactFiberViewTransitionComponent.ts";
 import { trackAnimatingTask } from "./ReactProfilerTimer.ts";

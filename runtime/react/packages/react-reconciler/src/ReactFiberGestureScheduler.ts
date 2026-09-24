@@ -2,7 +2,7 @@
 // off in the stable channel, so no gesture is ever scheduled: these keep
 // upstream's exports and signatures, and the work loop never reaches them.
 import type { TransitionTypes } from "shared/ReactTypes.ts";
-import type { GestureTimeline, RunningViewTransition } from "./ReactFiberConfig.ts";
+import type { GestureTimeline, RunningViewTransition } from "react-reconciler/ReactFiberConfig.ts";
 import type { Lane } from "./ReactFiberLane.ts";
 import type { FiberRoot } from "./ReactInternalTypes.ts";
 
