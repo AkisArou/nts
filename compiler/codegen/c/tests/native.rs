@@ -772,7 +772,7 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
     let (unsigned_dir, unsigned) = witness_of("witness-unsigned", "c_uint16").unwrap();
 
     assert!(
-        signed.contains("extern int poll(struct pollfd *, unsigned long, int);"),
+        signed.contains("extern int (poll)(struct pollfd *, unsigned long, int);"),
         "the prototype is the check a merely-convertible call expression is not:\n{signed}"
     );
 
