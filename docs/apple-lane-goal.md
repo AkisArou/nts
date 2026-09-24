@@ -439,6 +439,11 @@ correctness does not depend on arm64 running by luck.
      - `macos-window`'s button target is now this class. AppKit sends it
        `pressed:` on both backends, the nested-loop arm included, which
        replaces the runtime-API controller it had.
+     - It is the window's delegate too: `windowWillClose(notification)` is
+       Swift's `windowWillClose(_:)`, whose selector a one-argument method
+       gets by the same rule, and AppKit sends it when the timer closes the
+       window. A delegate with a method of more than one argument waits for
+       protocols, whose declarations name the selector.
      - Refused by name until the second half: a field (the runtime's object
        has no room for one yet), a constructor, a static member, an accessor,
        `super` calls, and protocols (`implements NSWindowDelegate`), which

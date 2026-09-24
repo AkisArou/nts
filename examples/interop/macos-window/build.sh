@@ -116,10 +116,11 @@ pressed 2
 micro 2
 timeout 2
 stopped
+closing
 done
 EXPECTED
 diff -u "$out/expected.txt" "$out/main.txt"
-echo "main: a closure as a button's action, its job and its timeout run inside [NSApp run], in order"
+echo "main: a class's method as a button's action and a window's delegate, its job and its timeout inside [NSApp run], in order"
 
 run --env WINDOW_NESTED=1 >"$out/nested.txt" 2>"$out/nested.err" || { cat "$out/nested.txt" "$out/nested.err" >&2; exit 1; }
 cpu=$(sed -n 's/^nested-cpu-ms \([0-9]*\)$/\1/p' "$out/nested.txt")

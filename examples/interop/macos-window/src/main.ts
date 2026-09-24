@@ -48,6 +48,12 @@ class Controller extends NSObject {
       nested_while_readable();
     }
   }
+
+  // Swift's `windowWillClose(_:)`: the window's delegate, sent `windowWillClose:`
+  // when the timer closes it.
+  windowWillClose(notification: NSObject): void {
+    report("closing");
+  }
 }
 
 function main(): void {
@@ -79,6 +85,7 @@ function main(): void {
     }
     timer.invalidate();
     report("stopped");
+    window.close();
     app.stop(null);
     // `stop:` is seen when the loop next finishes an event, so one is posted.
     const wake = NSEvent.otherEvent({
@@ -98,6 +105,7 @@ function main(): void {
   };
   const controller = new Controller();
   button.target = controller;
+  window.delegate = controller;
   button.action = sel_registerName("pressed:");
   window.makeKeyAndOrderFront(null);
   const shown = window.frame;
