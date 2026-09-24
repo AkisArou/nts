@@ -118,6 +118,14 @@ declare module "c:types" {
   // program passes and reads `true` and `false`; C sees `1` and `0`, and any
   // non-zero it answers is `true`.
   export type CBool<B extends number> = boolean & { readonly __c_bool?: B };
+  // A C number a binding takes and gives as a plain `number`: `C` names the
+  // C type (`"int"` is `int`, `"double"` is `double`), and a program writes
+  // `box.spacing = 4` with no cast. Only for a type a double holds exactly;
+  // a 64-bit integer keeps its `bigint` brand, which keeps every bit. The
+  // same optional brand `objc:types` spells Swift's numbers with.
+  export type CNumber<
+    C extends "char" | "int8" | "uint8" | "int16" | "uint16" | "int" | "uint" | "int32" | "uint32" | "float" | "double",
+  > = number & { readonly [K in `__c_${C}`]?: true };
   // A handle C declares as one of its ancestors: `gtk_box_new` returns the
   // `GtkBox` GIR says it does, which the header declares `GtkWidget *`. The
   // program has a `T`; C's prototype says `D`, which must be an ancestor of

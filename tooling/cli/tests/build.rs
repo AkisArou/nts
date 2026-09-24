@@ -4137,12 +4137,12 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         "export type DemoThing = Class<\"demo_thing_impl\"> & DemoThingMethods;",
         // GIR's methods, as methods of the handle: `thing.count()` is
         // `demo_thing_count(thing)`, its instance `this`.
-        "     * @ntsSymbol demo_thing_count\n     */\n    count(this: Const<DemoThing>): c_int;",
+        "     * @ntsSymbol demo_thing_count\n     */\n    count(this: Const<DemoThing>): CNumber<\"int\">;",
         "  export type DemoThingMethods = DemoThingOwnMethods;",
         "export function demo_thing_new(name: string): DemoThing;",
-        "export function demo_thing_count(thing: Const<DemoThing>): c_int;",
-        "export function demo_on_tick(thing: DemoThing, tick: Closure<(thing: DemoThing) => void>): c_uint;",
-        "export function demo_label_is_null(label: string | null): c_int;",
+        "export function demo_thing_count(thing: Const<DemoThing>): CNumber<\"int\">;",
+        "export function demo_on_tick(thing: DemoThing, tick: Closure<(thing: DemoThing) => void>): CNumber<\"uint\">;",
+        "export function demo_label_is_null(label: string | null): CNumber<\"int\">;",
         // A bitfield's flags, which a caller may leave out: none is `0`. The
         // enum is declared in the module by its GIR name and aliased by its
         // C name, which is what the signature spells.
@@ -4151,15 +4151,15 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         // Out parameters: a slot each, the optional one nullable, and both
         // stack storage the callee may not keep.
         "   * @ntsNoEscape width\n   * @ntsNoEscape height\n   */\n  \
-         export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<c_int>, height: Ptr<c_int> | null): void;",
+         export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<CNumber<\"int\">>, height: Ptr<CNumber<\"int\">> | null): void;",
         // Bytes borrowed in place, their length after them and hidden.
         "   * @ntsNoEscape data\n   */\n  \
-         export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, c_size_t, \"after\">): c_int;",
+         export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, c_size_t, \"after\">): CNumber<\"int\">;",
         // A returned `gchar **` the caller frees.
         "   * @ntsFree g_strfreev\n   */\n  export function demo_split(text: string): string[];",
         // `argc` before `argv`: hidden, and filled from the array.
         "   * @ntsNoEscape argv\n   */\n  \
-         export function demo_count_args(argv: Counted<CStrings<\"char\">, c_int, \"before\"> | null): c_int;",
+         export function demo_count_args(argv: Counted<CStrings<\"char\">, CNumber<\"int\">, \"before\"> | null): CNumber<\"int\">;",
     ] {
         assert!(binding.contains(expected), "missing `{expected}` from:\n{binding}");
     }

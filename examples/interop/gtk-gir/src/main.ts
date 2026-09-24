@@ -80,24 +80,24 @@ import {
   KeyFileFlags,
   type GError,
 } from "c:GLib-2.0";
-import type { c_double, c_int, c_size_t, c_uint } from "c:types";
+import type { CNumber, c_size_t } from "c:types";
 import { local } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
 import { asGtkBox, asGtkButton, asGtkLabel } from "../types/gir/Gtk-4.0.values.ts";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
-const PRIORITY_DEFAULT = 0 as c_int;
+const PRIORITY_DEFAULT = 0;
 
 // Out parameters, `GError **` among them: slots on this function's stack that
 // C writes through during the call, read once it returns.
 function outParameters(): void {
-  const when = g_date_time_new_utc(2026 as c_int, 9 as c_int, 24 as c_int, 0 as c_int, 0 as c_int, 0 as c_double);
+  const when = g_date_time_new_utc(2026, 9, 24, 0, 0, 0);
   if (when === null) {
     gir_log("no-date");
     return;
   }
-  const year = local<c_int>();
-  const month = local<c_int>();
+  const year = local<CNumber<"int">>();
+  const month = local<CNumber<"int">>();
   g_date_time_get_ymd(when, year, month, null);
   gir_log("ymd=" + String(year[0]) + "-" + String(month[0]));
   g_date_time_unref(when);
@@ -124,7 +124,7 @@ function outParameters(): void {
   }
   g_key_file_unref(keys);
 
-  gir_log("split=" + g_strsplit("a,b,c", ",", -1 as c_int).join("|"));
+  gir_log("split=" + g_strsplit("a,b,c", ",", -1).join("|"));
 
   // `subarray` starts one byte in, so a pointer to the buffer rather than the
   // view would hash "_ab" instead.
@@ -186,7 +186,7 @@ function main(): void {
     // Each constructor returns its class, as GIR declares it -- a `GtkBox`
     // from `gtk_box_new`, which C declares `GtkWidget *`.
     const window = gtk_application_window_new(application);
-    const box = gtk_box_new(Orientation.VERTICAL, 4 as c_int);
+    const box = gtk_box_new(Orientation.VERTICAL, 4);
     // No `new` of its own taking nothing: made by its `GType`, as GJS does.
     const label = new GtkLabel({ label: "start", selectable: true });
     // GJS's construction: `gtk_button_new`, then the setter of each
@@ -194,8 +194,8 @@ function main(): void {
     const button = new GtkButton({ label: "press", has_frame: false });
     gir_log("made " + String(button.label) + " " + String(button.has_frame));
     // Not floating: the program's own reference, which `--rc` releases once.
-    const buffer = new GtkEntryBuffer({ max_length: 2 as c_int });
-    buffer.set_text("abc", -1 as c_int);
+    const buffer = new GtkEntryBuffer({ max_length: 2 });
+    buffer.set_text("abc", -1);
     gir_log("buffer " + buffer.text + " " + String(label.selectable));
     // A checked downcast, for a handle known only as a widget.
     const widget: GtkWidget = box;
@@ -226,7 +226,7 @@ function main(): void {
       gir_log("idle");
       return false;
     });
-    g_timeout_add_full(PRIORITY_DEFAULT, 10 as c_uint, () => {
+    g_timeout_add_full(PRIORITY_DEFAULT, 10, () => {
       ticks++;
       label.label = "tick " + String(ticks);
       // And the query answered, so the log does not depend on which of the

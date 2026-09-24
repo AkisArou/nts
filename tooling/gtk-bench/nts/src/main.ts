@@ -5,7 +5,6 @@
 import { gtk_init, GtkAdjustment, GtkApplication, GtkButton, GtkLabel, GtkWindow } from "c:Gtk-4.0";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { bench_case, bench_log, bench_now } from "c:bench";
-import type { c_double } from "c:types";
 
 function best(name: string, n: number, run: (n: number) => void): void {
   run(n);
@@ -22,14 +21,14 @@ function best(name: string, n: number, run: (n: number) => void): void {
 // A signal's round trip: out to GTK, and back to a handler. A new value
 // emits `value-changed` synchronously; a button's `activate` animates first.
 function signal(): void {
-  const adjustment = new GtkAdjustment({ upper: 1e12 as c_double });
+  const adjustment = new GtkAdjustment({ upper: 1e12 });
   let changes = 0;
   let value = 0;
   adjustment.connect("value-changed", () => {
     changes++;
   });
   best("signal", 500000, (n) => {
-    for (let i = 0; i < n; i++) adjustment.set_value(++value as c_double);
+    for (let i = 0; i < n; i++) adjustment.set_value(++value);
   });
   if (changes !== 500000 * 4) bench_log("signal: wrong count " + String(changes));
 }

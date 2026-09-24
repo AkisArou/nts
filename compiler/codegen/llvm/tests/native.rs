@@ -3869,3 +3869,39 @@ export function live(): number { return live_objects() as number; }
         assert_eq!(output, "6 8 6 8 5 9 errors=0 live=0 leak=0");
     }
 }
+
+/// `CNumber<C>`: a C number a binding takes and gives as a plain `number`, as
+/// GJS does -- `gtk_box_new(VERTICAL, 4)`, no cast. The argument converts to
+/// C's type at the call (2.9 to an `int` is 2, as a cast was), a result reads
+/// back as a `number` that arithmetic keeps fractional, and a callback's
+/// parameter and result cross the same way both directions.
+#[test]
+fn a_plain_number_crosses_as_its_c_type_on_both_backends() {
+    let source = r#"
+import type { CNumber } from "c:types";
+declare function add(a: CNumber<"int">, b: CNumber<"double">): CNumber<"int">;
+declare function halve(x: CNumber<"float">): CNumber<"double">;
+declare function twice(callback: (n: CNumber<"int">) => CNumber<"int">, n: CNumber<"int">): CNumber<"int">;
+function plus_one(n: number): number { return n + 1; }
+export function run(): number {
+    const sum = add(2.9, 3.5);
+    const half = halve(5);
+    return (sum + 0.25) * 1000 + half * 100 + twice(plus_one, 40);
+}
+"#;
+    let library = r"
+int add(int a, double b) { return a + (int)b; }
+double halve(float x) { return x / 2; }
+int twice(int (*callback)(int), int n) { return callback(callback(n)) - n; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.2f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("cnumber", source, provider, library, &caller) else { return; };
+        assert!(text.contains("int add(int, double)"), "a `CNumber` is not C's type");
+        // add: 2 + 3 = 5 (2.9 truncates, 3.5 truncates in C), + 0.25 kept;
+        // halve(5) = 2.5; twice: 40 -> 41 -> 42, minus 40 = 2.
+        for output in outputs {
+            assert_eq!(output, expect("5502.00", provider), "{provider:?}");
+        }
+    }
+}

@@ -978,8 +978,15 @@ impl<'a> Mapper<'a> {
             if depth != 0 {
                 return Err(Reason::PointerDepth(c_type.to_owned()));
             }
-            self.binding.brands.insert(brand);
-            return Ok(Mapped { shape: Shape::Other, ts: (*brand).to_owned(), c: Type::Scalar(*scalar) });
+            // A plain `number` where a double holds every value, as GJS
+            // takes one; the exact `bigint` brand where it does not.
+            if scalar.needs_exact_integer() {
+                self.binding.brands.insert(brand);
+                return Ok(Mapped { shape: Shape::Other, ts: (*brand).to_owned(), c: Type::Scalar(*scalar) });
+            }
+            self.binding.brands.insert("CNumber");
+            let c = brand.strip_prefix("c_").unwrap_or(brand);
+            return Ok(Mapped { shape: Shape::Other, ts: format!("CNumber<\"{c}\">"), c: Type::Scalar(*scalar) });
         }
         let qualified = self.qualify(name);
         // A handle is what C says it points at. GIR's name can be more
@@ -1200,7 +1207,7 @@ impl<'a> Mapper<'a> {
         if !gboolean || mapped.c != Type::Scalar(Scalar::Int) {
             return mapped;
         }
-        self.binding.brands.insert("CBool");
+        self.binding.brands.extend(["CBool", "c_int"]);
         Mapped { ts: "CBool<c_int>".to_owned(), ..mapped }
     }
 
