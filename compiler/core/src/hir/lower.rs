@@ -11875,6 +11875,48 @@ impl<'a> FuncBuilder<'a> {
     /// An index link is deliberately **not** a caller: `a?.m()[i]` and
     /// `a?.p[i]` agree with node today, so guarding them would refuse working
     /// code to be tidy.
+    /// The type of a link of an optional chain in the arm where the chain is
+    /// present. The checker types every link after a `?.` with `undefined`
+    /// added -- `void | undefined` for `view?.addSubview(b)` -- which is the
+    /// chain's absence, answered by the branch around the link. A native
+    /// message or function has no `undefined`, and was refused for one.
+    ///
+    /// With several members left, the union the declaration itself names
+    /// (`NSView | null`): the checker interned it, and a type is found by its
+    /// members rather than made here.
+    fn without_chain_absence(&self, link: NodeId, ty: TypeId) -> TypeId {
+        if !self.ends_an_optional_chain(link) {
+            return ty;
+        }
+        let kind = |id: TypeId| self.snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+        let Some(TypeKind::Union(members)) = kind(ty) else { return ty };
+        let rest: Vec<TypeId> = members.iter().copied().filter(|m| !matches!(kind(*m), Some(TypeKind::Undefined))).collect();
+        let boolean = |id: &TypeId| matches!(kind(*id), Some(TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(_))));
+        match rest.as_slice() {
+            [] => ty,
+            [one] => *one,
+            // `true | false` is `boolean`, which the checker keeps as a type
+            // of its own rather than as the union it is.
+            [a, b] if boolean(a) && boolean(b) => self
+                .snapshot
+                .types
+                .iter()
+                .position(|record| matches!(record.kind, TypeKind::Boolean))
+                .and_then(|at| u32::try_from(at).ok())
+                .map_or(ty, TypeId),
+            _ => self
+                .snapshot
+                .types
+                .iter()
+                .position(|record| {
+                    matches!(&record.kind, TypeKind::Union(other)
+                        if other.len() == rest.len() && rest.iter().all(|m| other.contains(m)))
+                })
+                .and_then(|at| u32::try_from(at).ok())
+                .map_or(ty, TypeId),
+        }
+    }
+
     fn ends_an_optional_chain(&self, id: NodeId) -> bool {
         if !matches!(
             self.kind_of(id),
@@ -34074,6 +34116,11 @@ impl<'a> FuncBuilder<'a> {
             // A binding's property, read through the method its tag names.
             let accessor = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
                 && children.last().is_some_and(|member| self.is_accessor_property(*member));
+            // An Objective-C property, read with its getter -- here only as
+            // `a?.b`, whose arm sends it; the plain read is sent before this.
+            let accessor = accessor
+                || self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+                    && children.first().zip(children.last()).is_some_and(|(object, member)| self.objc_property(*object, *member).is_some());
             if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field || accessor) {
                 return Err(self.unsupported(id, "a property read through a native pointer"));
             }
@@ -35677,6 +35724,14 @@ impl<'a> FuncBuilder<'a> {
                     }
                     None => receiver,
                 };
+                // An Objective-C property: its getter, sent to the receiver
+                // this arm knows is there.
+                if let Some(&object) = self.children(id).first()
+                    && let Some(property) = self.objc_property(object, member)
+                    && let Some(read) = self.read_objc_property(id, object, &property, (!property.is_static).then_some(receiver))?
+                {
+                    return Ok(read);
+                }
                 self.member_of(id, receiver, &name)
             }
             // At the type the whole expression has, which is what `id` is.
@@ -39637,6 +39692,7 @@ impl<'a> FuncBuilder<'a> {
             Callee::Native(target) if target.destination().is_some() => args.last().copied(),
             _ => None,
         };
+        let typed = ty.clone();
         let call = self.push_call(id, callee, args, declaration, ty)?;
         // A failure is checked *before* the result is read: a function that
         // reports one returns nothing meaningful -- GLib returns NULL where it
@@ -39655,7 +39711,7 @@ impl<'a> FuncBuilder<'a> {
             self.throw_if_reported(id, slot, &converter, &lent)?;
         }
         let value = match (returned, result_as) {
-            (Some((target, string)), _) => self.read_native_string(id, call, &target, &string)?,
+            (Some((target, string)), _) => self.read_native_string(id, call, &target, &string, typed)?,
             // The handle GIR says it is, from the ancestor C declares.
             (None, Some(ty)) => self.push(OpKind::Convert(call), ty, self.origin(id)),
             (None, None) => call,
@@ -39932,13 +39988,18 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let mut with_this = self.snapshot.signatures[signature.0 as usize].clone();
+        let chained = self.without_chain_absence(id, with_this.return_type);
+        // In a chain, the message's value is the method's type; the branch
+        // around it makes the chain's.
+        let typed = if chained == with_this.return_type { None } else { self.represent(chained) };
+        with_this.return_type = chained;
         let name = self.node(member).text.clone().unwrap_or_default();
         // A class method is sent to the class, which the send looks up
         // itself: the receiver the program wrote is the class, as a value.
         if self.objc_class_member(declaration).is_some_and(|member| member.is_static) {
             let callee = self.native_callee(id, Some(declaration), name, &with_this)?;
             let (args, lent) = self.lower_call_arguments(id, &callee, arguments, None)?;
-            return self.finish_call(id, callee, args, lent, Some(declaration));
+            return self.finish_call_typed(id, callee, args, lent, Some(declaration), typed);
         }
         // An Objective-C class's method has no written `this`: it is the
         // object the method is called on, at the type the program has it.
@@ -39952,7 +40013,7 @@ impl<'a> FuncBuilder<'a> {
         );
         let callee = self.native_callee(id, Some(declaration), name, &with_this)?;
         let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
-        self.finish_call(id, callee, args, lent, Some(declaration))
+        self.finish_call_typed(id, callee, args, lent, Some(declaration), typed)
     }
 
     /// The string a native function returned: C's `const char *`, copied,
@@ -40009,6 +40070,7 @@ impl<'a> FuncBuilder<'a> {
         pointer: ValueId,
         target: &super::native::Function,
         string: &super::native::ReturnedString,
+        typed: Option<HirType>,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         // A message that returns an `NSString` the program reads as a
@@ -40036,7 +40098,7 @@ impl<'a> FuncBuilder<'a> {
             let ty = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
             self.runtime_call("nts_strings_from_cstrings", vec![pointer, required], ty, origin.clone())
         } else {
-            let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
+            let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
             let copy = if string.nullable { "nts_string_from_cstring" } else { "nts_string_from_required_cstring" };
             self.runtime_call(copy, vec![pointer], ty, origin.clone())
         };
@@ -40862,6 +40924,19 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|record| record.declarations.iter().copied().find(objc))
             .or_else(|| {
                 let ty = self.snapshot.node_types.get(&object)?;
+                // Through the absences of an optional receiver: `w?.contentView`
+                // reads it on `NSWindow | null`.
+                let ty = match &self.snapshot.types.get(ty.0 as usize)?.kind {
+                    TypeKind::Union(members) => {
+                        let mut present = members.iter().filter(|m| absence_of_member(self.snapshot, **m).is_none());
+                        let only = present.next()?;
+                        if present.next().is_some() {
+                            return None;
+                        }
+                        only
+                    }
+                    _ => ty,
+                };
                 let TypeKind::Object { properties } = &self.snapshot.types.get(ty.0 as usize)?.kind else { return None };
                 properties.iter().find(|p| p.name == name).and_then(|p| p.declaration).filter(objc)
             })?;
@@ -40882,6 +40957,14 @@ impl<'a> FuncBuilder<'a> {
     /// `object.property` as a message: the getter, sent to the object.
     fn lower_objc_property_get(&mut self, id: NodeId, object: NodeId, member: NodeId) -> Result<Option<ValueId>, Diagnostic> {
         let Some(property) = self.objc_property(object, member) else { return Ok(None) };
+        let receiver = if property.is_static { None } else { Some(self.lower_expression(object)?) };
+        self.read_objc_property(id, object, &property, receiver)
+    }
+
+    /// The getter of `property`, sent to `receiver` (lowered already, which
+    /// is how `a?.b` reads it in the arm where `a` is present), or to the
+    /// class for a class property.
+    fn read_objc_property(&mut self, id: NodeId, object: NodeId, property: &ObjcProperty, receiver: Option<ValueId>) -> Result<Option<ValueId>, Diagnostic> {
         // The access's type is the property's: the checker gives the member's
         // symbol none of its own.
         let (Some(receiver_ty), Some(ty)) =
@@ -40889,11 +40972,14 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Ok(None);
         };
-        let receiver = if property.is_static { None } else { Some(self.lower_expression(object)?) };
-        let signature = accessor_signature(receiver.map(|_| receiver_ty), None, ty);
+        let chained = self.without_chain_absence(id, ty);
+        let signature = accessor_signature(receiver.map(|_| receiver_ty), None, chained);
         let callee = self.native_callee_sending(id, property.declaration, &property.getter, &signature)?;
         let (args, lent) = self.lower_call_arguments(id, &callee, &[], receiver)?;
-        self.finish_call(id, callee, args, lent, Some(property.declaration)).map(Some)
+        // In a chain, the getter's value is the property's type; the branch
+        // around it makes the chain's.
+        let typed = if chained == ty { None } else { self.represent(chained) };
+        self.finish_call_typed(id, callee, args, lent, Some(property.declaration), typed).map(Some)
     }
 
     /// `object.property = value` as a message: the setter, sent to the

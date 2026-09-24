@@ -352,6 +352,14 @@ correctness does not depend on arm64 running by luck.
      - Found on the way: the binding's classes had entered the program's
        class hierarchy, and one override anywhere refused every C callback
        bridge. Both are fixed (`Layout::closure_call`).
+   - **Optional chaining, as Swift's.** `window.contentView?.addSubview(button)`
+     and `operation?.name ?? "unnamed"` send nothing to an absent receiver, and
+     the chain is `undefined`. The checker adds that `undefined` to every
+     link's type. A message has none, so the link is sent at the method's own
+     type and the branch around it makes the chain's. Still refused: a link
+     whose value is an object (`a?.b?.c`), since `NSView | null | undefined`
+     needs a tagged value that can hold a counted foreign pointer. That is the
+     same mechanism arrays of handles need (S3c).
    - **Objective-C handles narrow and assert.** `instanceof` narrows an
      Objective-C object to a subclass, and `as` asserts one, unchecked as every
      TypeScript assertion is. Any other opaque pointer is still refused.

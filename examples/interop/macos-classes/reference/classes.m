@@ -29,6 +29,10 @@ int main(void) {
     NSOperation *operation = [[NSOperation alloc] init];
     operation.name = @"worker";
     if (operation.name) printf("name %s %lu\n", operation.name.UTF8String, (unsigned long)operation.name.length);
+    // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
+    // JavaScript both answer without a message.
+    [operation cancel];
+    printf("optional %s %s absent unnamed\n", operation.isCancelled ? "true" : "false", operation.name.UTF8String);
   }
   @autoreleasepool {
     made();

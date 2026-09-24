@@ -15,6 +15,11 @@ function made(): void {
   watch = weak_watch(object);
 }
 
+function optional(operation: NSOperation | null): string {
+  operation?.cancel();
+  return `${operation?.isCancelled ?? "absent"} ${operation?.name ?? "unnamed"}`;
+}
+
 function main(): void {
   const list = new NSMutableArray();
   report(`empty ${list.count}`);
@@ -39,6 +44,10 @@ function main(): void {
   if (name !== null) {
     report(`name ${name} ${name.length}`);
   }
+
+  // Swift's optional chaining: a message to an absent receiver is not sent,
+  // and the chain is `undefined`.
+  report(`optional ${optional(operation)} ${optional(null)}`);
 
   made();
   report(`object ${weak_alive(watch) ? "alive" : "gone"}`);

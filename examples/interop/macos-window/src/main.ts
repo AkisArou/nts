@@ -53,11 +53,8 @@ function main(): void {
   setRect(buttonFrame, 110, 80, 100, 32);
   const button = new NSButton({ frame: buttonFrame });
   button.title = "Press";
-  // `contentView` is `nullable` in NSWindow.h.
-  const content = window.contentView;
-  if (content !== null) {
-    content.addSubview(button);
-  }
+  // `contentView` is `nullable` in NSWindow.h: Swift's optional chaining.
+  window.contentView?.addSubview(button);
 
   // The controller is defined at run time, which `class ... extends NSObject`
   // will do once subclassing lands.

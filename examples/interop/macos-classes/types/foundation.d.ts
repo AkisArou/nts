@@ -53,6 +53,9 @@ declare module "objc:Foundation" {
   /** @ntsClass NSOperation */
   export class NSOperation extends NSObject {
     name: string | null;
+    readonly isCancelled: boolean;
+    /** @ntsSelector cancel */
+    cancel(): void;
   }
 
   /** @ntsClass NSProcessInfo */
