@@ -1,95 +1,62 @@
-# Native React experiment
+# React for NTS
 
-This directory asks one question with executable evidence: how much adaptation
-is required to compile upstream React and React Compiler output with NTS while
-keeping React semantics and native representations?
+This lane has one goal. An application written against React's public API
+should compile to native code with NTS. The same hooks and components should
+also run unchanged on the web against real React.
 
-The current result and recommended implementation order are in
-`reports/native-react-assessment.md`.
+## Route
 
-The upstream checkout is source-of-truth input. Its exact revision is recorded
-in `upstream.lock.json`. Files under `generated/` are disposable and must never
-be edited. Mechanical transforms, explicit semantic overrides, external
-requirements and conformance evidence remain separate.
+**We are writing our own React runtime. It must be 100% compatible with
+React's observable behaviour.**
 
-## Boundary
+**Same public API and behaviour as React:**
+- elements and keys;
+- every hook;
+- class components, `memo`, `forwardRef`, context, `lazy`, `Suspense`,
+  transitions and `startTransition`;
+- error boundaries and `StrictMode`.
 
-All writes made by this experiment stay below `runtime/react`. The NTS compiler,
-the C and JVM runtimes, and the React checkout may be read and executed. Missing
-capabilities are reduced to cases under `blockers/` for their owning workstream.
+It must also match the order of render, commit and effects, bailouts, batching,
+priorities, Suspense retry, and error recovery.
 
-## First profile
+**Different internals.** A Fiber is a typed record. Hook state lives in typed
+storage. React Compiler's memo cache becomes a typed class per component. Props
+of known host elements are fixed records. NTS lowers all of these to fixed
+native layouts; none of them passes through a 16-byte erased value on the hot
+path.
 
-`client-mutation-production` selects the public React client, Scheduler, the
-client reconciler, production constants and an NTS-owned mutation HostConfig.
-It deliberately excludes DOM, server components, Flight and hydration from the
-first dependency closure. Those are later profiles, not semantic substitutes.
+**Upstream React is the reference, never shipped code.** Compatibility is
+measured with upstream's own reconciler tests: about 1000 tests over
+`react-noop-renderer` and `scheduler/unstable_mock`, pinned at the commit in
+`upstream-compile/upstream.lock.json`. They run against this runtime, and a
+ledger records pass or fail for each test. When React releases a new version,
+we move the pin and review which tests changed.
 
-The profile uses the upstream default React and Scheduler feature flags. The
-HostConfig is virtual because its implementation belongs to the recording host
-being built in this directory.
+**Application code** goes through three steps:
+1. **tsgo** checks the original TS/TSX. Types come from this checked program.
+2. **React Compiler** runs, using upstream's Rust port.
+3. **Typed JSX lowering** runs, as the lane's own pass.
 
-## Commands
+Then NTS compiles the result. A component whose output cannot be fully typed
+stays uncompiled by React Compiler. It is still correct, only not memoised.
 
-Install the local toolchain and produce the dependency and syntax baseline:
+**Hosts are per platform.** The first real host is GTK. A GTK app imports
+`{ Button } from "react-gtk"`, and props and signals are typed from the bind-gir
+bindings. There is no cross-platform `<View>` layer. Hooks and logic are what
+is shared with the web.
 
-```sh
-npm install --prefix runtime/react
-npm run --prefix runtime/react analyze
-```
+## Layout
 
-Verify that checked-in reports still match the pinned upstream commit:
+| Path | What it is |
+| --- | --- |
+| `packages/` | the runtime: `react`, reconciler, scheduler, noop renderer (being built) |
+| `conformance/` | the harness that runs upstream's tests, and the per-test ledger (being built) |
+| `upstream-compile/` | the retired route: Flow→TS conversion of upstream React compiled through NTS. It is kept as a compiler stress corpus (a census of refusals over 57k lines) and as the exact-source JS behaviour oracle |
 
-```sh
-npm run --prefix runtime/react check
-```
+## Rules for the runtime source
 
-The analyzer verifies the checkout SHA before reading sources. Reports contain
-the SHA-256 provenance of every source file in the resolved closure.
-
-The strict runtime gate uses native TypeScript 7.0.2. The separate
-`typescript` dependency aliases the final JavaScript TypeScript 6 API only for
-tools that call `createProgram` and inspect checker/AST objects; TypeScript 7
-does not yet expose a compatible in-process API.
-
-Useful individual probes are:
-
-```sh
-npm run --prefix runtime/react normalize:probe
-npm run --prefix runtime/react profile:specialize
-npm run --prefix runtime/react link:specialize
-npm run --prefix runtime/react runtime:typecheck
-npm run --prefix runtime/react runtime:escape-audit
-npm run --prefix runtime/react runtime:native-probe
-npm run --prefix runtime/react blockers:probe
-npm run --prefix runtime/react compiler:probe
-npm run --prefix runtime/react compiler:goldens
-npm run --prefix runtime/react compiler:nts
-npm run --prefix runtime/react conformance:upstream
-npm run --prefix runtime/react representation:probe
-```
-
-The exact-source upstream oracle executes eight scenarios, including keyed
-reconciliation, hooks, effects, classes, Suspense and recovered React Compiler
-output. The same recording host kernel executes through NTS C. All normalized,
-specialized and linked runtime trees pass native TypeScript 7.0.2 with zero
-diagnostics, and an AST audit finds no `any`, suppression directive or nested
-assertion in 369 generated files.
-
-The full reconciler is not yet a usable native runtime. The NTS probe reports
-every refusal, HIR verifier failure and missing public reconciler export even
-when the compiler command exits zero. Minimal strict fixtures under `blockers/`
-separate compiler conformance defects, documented gaps, native host bindings
-and explicit JavaScript object-model incompatibilities.
-
-## Representation direction under test
-
-Correctness starts with checked heterogeneous storage backed by NTS erased
-values. Performance experiments then move erasure to genuine existential
-boundaries: a Fiber points at an arbitrary component, while the invoked
-component uses typed props, a component-specific hook frame, monomorphized
-update queues and typed constant-index React Compiler cache slots.
-
-No performance claim is accepted from source shape alone. The experiment must
-inspect generated HIR and backend output and measure allocation, packing,
-checks, indirect calls, hook access, reconciliation and code size.
+- NTS must compile it with zero refusals:
+  - no `any`, prototype manipulation, extra fields added at runtime, or weak collections;
+  - classes, closures, discriminated unions, and `unknown` only behind a checked narrowing.
+- A missing NTS feature becomes a reduced fixture handed to the lane that owns
+  it. This lane does not edit `compiler/` or `runtime/c`.

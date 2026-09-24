@@ -1437,7 +1437,7 @@ states the rule over both sides. A foreign layout is the fourth member.
 
 `declare module "java:com.example" { export class Session { … } }` is ordinary
 TypeScript and **needs no resolver change**: this tree already ships ambient
-module declarations at `runtime/react/generated/compiler-output/ambient.d.ts`.
+module declarations at `runtime/react/upstream-compile/generated/compiler-output/ambient.d.ts`.
 The generator emits one ambient module per Java package; `tsc` resolves the
 import against it; our frontend sees an ordinary import.
 
