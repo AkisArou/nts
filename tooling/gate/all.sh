@@ -1840,7 +1840,10 @@ interop() {
   # 32: `gtk-cycles`, signal handlers capturing their own widgets under
   #     reference counting, collected through the instance's node. It SKIPs
   #     without gtk4, xvfb-run or Gtk-4.0.gir.
-  interop_floor=32
+  # 33: `gtk-notes`, a notes application on the GIR bindings -- an entry, a
+  #     list, its file loaded and saved through Gio -- run twice. It SKIPs
+  #     as gtk-cycles does.
+  interop_floor=33
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"
