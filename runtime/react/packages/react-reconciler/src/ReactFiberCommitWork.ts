@@ -189,7 +189,8 @@ import {
   Layout as HookLayout,
   Passive as HookPassive,
 } from "./ReactHookEffectTags.ts";
-import { isDevToolsPresent, onCommitUnmount } from "./ReactFiberDevToolsHook.ts";
+import { onCommitUnmount } from "./ReactFiberDevToolsHook.ts";
+import { isDevToolsPresent } from "react-reconciler/ReactFiberDevToolsPresence.ts";
 import { releaseCache, retainCache } from "./ReactFiberCacheComponent.ts";
 import { OffscreenPassiveEffectsConnected, OffscreenVisible } from "./ReactFiberOffscreenComponent.ts";
 import { getViewTransitionClassName } from "./ReactFiberViewTransitionComponent.ts";

@@ -4,8 +4,8 @@
 
 import { hydratableInstanceOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
-import type { CapturedValue } from "./ReactCapturedValue.ts";
-import { createCapturedValueAtFiber } from "./ReactCapturedValue.ts";
+import type { CapturedValue } from "react-reconciler/ReactCapturedValue.ts";
+import { createCapturedValueAtFiber } from "react-reconciler/ReactCapturedValue.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 import { createFiberFromDehydratedFragment } from "./ReactFiber.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";

@@ -146,10 +146,12 @@ export function enqueueConcurrentHookUpdateAndEagerlyBailout<S, A>(
   }
 }
 
-export function enqueueConcurrentClassUpdate<State>(
+// Non-generic over the state it carries: the class queue's state is erased,
+// and a generic here would be one no call pins down.
+export function enqueueConcurrentClassUpdate(
   fiber: Fiber,
-  queue: ClassQueue<State>,
-  update: ClassUpdate<State>,
+  queue: ClassQueue<unknown>,
+  update: ClassUpdate<unknown>,
   lane: Lane,
 ): FiberRoot | null {
   enqueueUpdate(fiber, asConcurrentQueue(queue), asConcurrentUpdate(update), lane);

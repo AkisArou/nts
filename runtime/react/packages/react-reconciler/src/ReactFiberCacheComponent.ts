@@ -7,39 +7,31 @@ import { REACT_CONTEXT_TYPE } from "shared/ReactSymbols.ts";
 import { pushProvider, popProvider } from "./ReactFiberNewContext.ts";
 import { scheduleCallback, NormalPriority } from "./Scheduler.ts";
 
-// In environments without AbortController (e.g. tests)
-// replace it with a lightweight shim that only has the features we use.
-interface CacheController {
-  readonly signal: { readonly aborted: boolean; addEventListener(type: string, listener: () => void): void };
-  abort(): void;
+// What a cache aborts when its last owner releases it. Upstream uses the
+// host's AbortController where there is one and this shim otherwise. On the
+// client a cache's signal is never observable (`cacheSignal()` is null
+// outside Server Components), so the shim serves every host, including those
+// without an AbortController, and has a fixed layout.
+class CacheSignal {
+  aborted = false;
+  readonly listeners: (() => void)[] = [];
+
+  addEventListener(_type: string, listener: () => void): void {
+    this.listeners.push(listener);
+  }
 }
 
-class AbortControllerShim implements CacheController {
-  readonly signal: { aborted: boolean; addEventListener(type: string, listener: () => void): void };
-  private readonly listeners: (() => void)[] = [];
-
-  constructor() {
-    const listeners = this.listeners;
-    this.signal = {
-      aborted: false,
-      addEventListener: (_type: string, listener: () => void) => {
-        listeners.push(listener);
-      },
-    };
-  }
+class CacheController {
+  readonly signal: CacheSignal = new CacheSignal();
 
   abort(): void {
     this.signal.aborted = true;
-    this.listeners.forEach((listener) => listener());
+    this.signal.listeners.forEach((listener) => listener());
   }
 }
 
-// A real AbortController where the host has one, a shim otherwise. Decided
-// once, when the module loads, as upstream does.
-const hasAbortController = typeof AbortController !== "undefined";
-
 function createController(): CacheController {
-  return hasAbortController ? new AbortController() : new AbortControllerShim();
+  return new CacheController();
 }
 
 export interface Cache {

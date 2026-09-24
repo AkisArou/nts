@@ -1,7 +1,15 @@
 {
   "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"]
-  }
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "exclude": [
+    "${configDir}/src/**/*.native.ts"
+  ]
 }

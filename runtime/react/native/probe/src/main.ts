@@ -7,8 +7,8 @@ import type { ReactElement } from "shared/ReactTypes.ts";
 import { createContainer, updateContainer } from "react-reconciler/ReactFiberReconciler.ts";
 import { ConcurrentRoot } from "react-reconciler/ReactRootTags.ts";
 import type * as Contract from "react-reconciler/ReactFiberConfig.ts";
-import type * as TestHost from "./ReactFiberConfigTestHost.ts";
-import { TestContainer } from "./ReactFiberConfigTestHost.ts";
+import type * as TestHost from "./ReactFiberConfig.ts";
+import { TestContainer } from "./ReactFiberConfig.ts";
 import { drainHost } from "./SchedulerHost.ts";
 
 // The test host must supply every name the contract declares.

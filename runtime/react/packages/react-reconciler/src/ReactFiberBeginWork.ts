@@ -21,7 +21,7 @@ import {
 import { REACT_CONTEXT_TYPE, REACT_FORWARD_REF_TYPE, REACT_LAZY_TYPE, REACT_MEMO_TYPE } from "shared/ReactSymbols.ts";
 import type { LazyComponent as LazyComponentType, ReactConsumerType, ReactContext, Transition } from "shared/ReactTypes.ts";
 import { getComponentNameFromFiber } from "./getComponentNameFromFiber.ts";
-import { createCapturedValueAtFiber, createCapturedValueFromError } from "./ReactCapturedValue.ts";
+import { createCapturedValueAtFiber, createCapturedValueFromError } from "react-reconciler/ReactCapturedValue.ts";
 import {
   cloneChildFibers,
   mountChildFibers,

@@ -222,7 +222,7 @@ import {
   type SavedDispatcher,
 } from "react-reconciler/ReactFiberHooksDispatcher.ts";
 import { DefaultAsyncDispatcher } from "./ReactFiberAsyncDispatcher.ts";
-import { type CapturedValue, createCapturedValueAtFiber } from "./ReactCapturedValue.ts";
+import { type CapturedValue, createCapturedValueAtFiber } from "react-reconciler/ReactCapturedValue.ts";
 import {
   enqueueConcurrentRenderForLane,
   finishQueueingConcurrentUpdates,

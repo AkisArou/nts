@@ -1,19 +1,23 @@
 // A wrapper around the `scheduler` package, imported by its bare name: under
 // upstream's tests Jest mocks `scheduler` to `scheduler/unstable_mock`, and
-// only a bare specifier sees that mock.
+// only a bare specifier sees that mock. Re-exports, not module-scope copies
+// of the functions, so every call goes to whichever module is loaded.
 import * as Scheduler from "scheduler";
 
-export const scheduleCallback = Scheduler.unstable_scheduleCallback;
-export const cancelCallback = Scheduler.unstable_cancelCallback;
-export const shouldYield = Scheduler.unstable_shouldYield;
-export const requestPaint = Scheduler.unstable_requestPaint;
-export const now = Scheduler.unstable_now;
-export const getCurrentPriorityLevel = Scheduler.unstable_getCurrentPriorityLevel;
-export const ImmediatePriority = Scheduler.unstable_ImmediatePriority;
-export const UserBlockingPriority = Scheduler.unstable_UserBlockingPriority;
-export const NormalPriority = Scheduler.unstable_NormalPriority;
-export const LowPriority = Scheduler.unstable_LowPriority;
-export const IdlePriority = Scheduler.unstable_IdlePriority;
+export {
+  unstable_cancelCallback as cancelCallback,
+  unstable_getCurrentPriorityLevel as getCurrentPriorityLevel,
+  unstable_IdlePriority as IdlePriority,
+  unstable_ImmediatePriority as ImmediatePriority,
+  unstable_LowPriority as LowPriority,
+  unstable_NormalPriority as NormalPriority,
+  unstable_now as now,
+  unstable_requestPaint as requestPaint,
+  unstable_scheduleCallback as scheduleCallback,
+  unstable_shouldYield as shouldYield,
+  unstable_UserBlockingPriority as UserBlockingPriority,
+} from "scheduler";
+
 export type SchedulerCallback = (isSync: boolean) => SchedulerCallback | null | undefined;
 
 // These do not exist on the production scheduler, but they do on
@@ -22,7 +26,16 @@ interface MockSchedulerExtras {
   log?: (value: unknown) => void;
   unstable_setDisableYieldValue?: (newValue: boolean) => void;
 }
-const mockExtras: MockSchedulerExtras = Scheduler as MockSchedulerExtras;
-export const log: ((value: unknown) => void) | undefined = mockExtras.log;
-export const unstable_setDisableYieldValue: ((newValue: boolean) => void) | undefined =
-  mockExtras.unstable_setDisableYieldValue;
+
+function mockExtras(): MockSchedulerExtras {
+  return Scheduler as MockSchedulerExtras;
+}
+
+// Whether the loaded scheduler is the test mock, which has `log`.
+export function isMockScheduler(): boolean {
+  return typeof mockExtras().log === "function";
+}
+
+export function setDisableYieldValue(newValue: boolean): void {
+  mockExtras().unstable_setDisableYieldValue?.(newValue);
+}

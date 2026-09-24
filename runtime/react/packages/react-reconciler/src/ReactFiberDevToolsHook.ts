@@ -18,9 +18,9 @@ import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import {
   IdlePriority as IdleSchedulerPriority,
   ImmediatePriority as ImmediateSchedulerPriority,
-  log,
+  isMockScheduler,
   NormalPriority as NormalSchedulerPriority,
-  unstable_setDisableYieldValue,
+  setDisableYieldValue,
   UserBlockingPriority as UserBlockingSchedulerPriority,
 } from "./Scheduler.ts";
 
@@ -80,7 +80,7 @@ let injectedHook: DevToolsHook | null = null;
 let injectedProfilingHooks: DevToolsProfilingHooks | null = null;
 let hasLoggedError = false;
 
-export const isDevToolsPresent: boolean = typeof readGlobalHook() !== "undefined";
+export { isDevToolsPresent } from "react-reconciler/ReactFiberDevToolsPresence.ts";
 
 function logInstrumentationError(err: unknown): void {
   if (isDevelopment && !hasLoggedError) {
@@ -198,11 +198,11 @@ export function onCommitUnmount(fiber: Fiber): void {
 }
 
 export function setIsStrictModeForDevtools(newIsStrictMode: boolean): void {
-  if (typeof log === "function") {
+  if (isMockScheduler()) {
     // We're in a test because Scheduler.log only exists
     // in SchedulerMock. To reduce the noise in strict mode tests,
     // suppress warnings and disable scheduler yielding during the double render
-    unstable_setDisableYieldValue?.(newIsStrictMode);
+    setDisableYieldValue(newIsStrictMode);
   }
 
   if (injectedHook && typeof injectedHook.setStrictMode === "function") {

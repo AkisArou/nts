@@ -2,7 +2,15 @@
   "//": "The JavaScript host (src/Host.ts) runs in node or a browser, and chooses between their APIs as upstream's does, hence both sets of types.",
   "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"]
-  }
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "exclude": [
+    "${configDir}/src/**/*.native.ts"
+  ]
 }

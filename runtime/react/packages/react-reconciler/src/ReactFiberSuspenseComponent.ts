@@ -1,5 +1,5 @@
 import type { Wakeable } from "shared/ReactTypes.ts";
-import type { CapturedValue } from "./ReactCapturedValue.ts";
+import type { CapturedValue } from "react-reconciler/ReactCapturedValue.ts";
 import type { SuspenseInstance } from "react-reconciler/ReactFiberConfig.ts";
 import { isSuspenseInstanceFallback, isSuspenseInstancePending } from "react-reconciler/ReactFiberConfig.ts";
 import { DidCapture, NoFlags } from "./ReactFiberFlags.ts";

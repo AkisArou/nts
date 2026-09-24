@@ -75,7 +75,7 @@ import {
   RerenderInDEVKind,
   UpdateKind,
   UpdateInDEVKind,
-} from "./ReactFiberHooksDispatcher.ts";
+} from "react-reconciler/ReactFiberHooksDispatcher.ts";
 
 // The phase a hook runs in. Outside means no component is rendering: only
 // readContext and use are allowed then, as upstream's ContextOnlyKind.

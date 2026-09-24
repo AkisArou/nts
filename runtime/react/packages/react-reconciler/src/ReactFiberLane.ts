@@ -14,7 +14,7 @@ import {
 } from "shared/ReactFeatureFlags.ts";
 import { isDevelopment } from "shared/Build.ts";
 import type { ConcurrentUpdate } from "./ReactFiberConcurrentUpdates.ts";
-import { isDevToolsPresent } from "./ReactFiberDevToolsHook.ts";
+import { isDevToolsPresent } from "react-reconciler/ReactFiberDevToolsPresence.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import { clz32 } from "./clz32.ts";
 import { LegacyRoot } from "./ReactRootTags.ts";

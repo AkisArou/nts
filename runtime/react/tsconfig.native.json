@@ -1,0 +1,61 @@
+{
+  "//": "The base of every native program built from this lane. Fork points are bound to their `.native.ts` twins; every workspace package is mapped to its real sources, since nts does not lower files it reaches through node_modules. A native program extends this and supplies the two host-specific fork points as files of its own: src/ReactFiberConfig.ts (its renderer's host config) and src/SchedulerHost.ts (its event loop and clock). Specific paths come before the package wildcards.",
+  "extends": "../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
+    "skipLibCheck": true,
+    "paths": {
+      "react-reconciler/ReactFiberConfig.ts": [
+        "${configDir}/src/ReactFiberConfig.ts"
+      ],
+      "scheduler/src/Host.ts": [
+        "${configDir}/src/SchedulerHost.ts"
+      ],
+      "shared/Build.ts": [
+        "./packages/shared/src/Build.native.ts"
+      ],
+      "shared/reportGlobalError.ts": [
+        "./packages/shared/src/reportGlobalError.native.ts"
+      ],
+      "react/ReactHooks.ts": [
+        "./packages/react/src/ReactHooks.native.ts"
+      ],
+      "react/ReactBaseClasses.ts": [
+        "./packages/react/src/ReactBaseClasses.native.ts"
+      ],
+      "react-reconciler/ReactFiberHooksDispatcher.ts": [
+        "./packages/react-reconciler/src/ReactFiberHooksDispatcher.native.ts"
+      ],
+      "react-reconciler/ReactCapturedValue.ts": [
+        "./packages/react-reconciler/src/ReactCapturedValue.native.ts"
+      ],
+      "react-reconciler/ReactFiberDevToolsPresence.ts": [
+        "./packages/react-reconciler/src/ReactFiberDevToolsPresence.native.ts"
+      ],
+      "shared/*": [
+        "./packages/shared/src/*"
+      ],
+      "react": [
+        "./packages/react/src/index.ts"
+      ],
+      "react/*": [
+        "./packages/react/src/*"
+      ],
+      "scheduler": [
+        "./packages/scheduler/src/index.ts"
+      ],
+      "scheduler/src/*": [
+        "./packages/scheduler/src/*"
+      ],
+      "react-reconciler/*": [
+        "./packages/react-reconciler/src/*"
+      ]
+    }
+  }
+}

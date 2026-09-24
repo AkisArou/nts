@@ -6,14 +6,14 @@ import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableUpdaterTracking } from "shared/ReactFeatureFlags.ts";
 import type { Wakeable } from "shared/ReactTypes.ts";
 import { getComponentNameFromFiber } from "./getComponentNameFromFiber.ts";
-import type { CapturedValue } from "./ReactCapturedValue.ts";
-import { createCapturedValueAtFiber } from "./ReactCapturedValue.ts";
+import type { CapturedValue } from "react-reconciler/ReactCapturedValue.ts";
+import { createCapturedValueAtFiber } from "react-reconciler/ReactCapturedValue.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 import type { ClassInstance as UserSpaceClassInstance } from "./ReactFiberCallUserSpace.ts";
 import { callComponentDidCatchInDEV } from "./ReactFiberCallUserSpace.ts";
 import type { Update } from "./ReactFiberClassUpdateQueue.ts";
 import { CaptureUpdate, createUpdate, enqueueCapturedUpdate, enqueueUpdate, ForceUpdate } from "./ReactFiberClassUpdateQueue.ts";
-import { isDevToolsPresent } from "./ReactFiberDevToolsHook.ts";
+import { isDevToolsPresent } from "react-reconciler/ReactFiberDevToolsPresence.ts";
 import { logCaughtError, logUncaughtError } from "./ReactFiberErrorLogger.ts";
 import {
   DidCapture,

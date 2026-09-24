@@ -17,7 +17,7 @@ import {
   addValueToProperties,
   type PropertyRow,
 } from "shared/ReactPerformanceTrackProperties.ts";
-import type { CapturedValue } from "./ReactCapturedValue.ts";
+import type { CapturedValue } from "react-reconciler/ReactCapturedValue.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
 import {
   getGroupNameOfHighestPriorityLane,

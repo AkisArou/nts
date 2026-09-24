@@ -73,7 +73,7 @@ import {
   ViewTransitionComponent,
 } from "./ReactWorkTags.ts";
 import { getComponentNameFromOwner } from "./getComponentNameFromFiber.ts";
-import { isDevToolsPresent } from "./ReactFiberDevToolsHook.ts";
+import { isDevToolsPresent } from "react-reconciler/ReactFiberDevToolsPresence.ts";
 import { resolveTypeForHotReloading } from "./ReactFiberHotReloading.ts";
 import { NoLanes } from "./ReactFiberLane.ts";
 import {

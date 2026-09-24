@@ -1,8 +1,26 @@
 {
   "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"]
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ]
   },
-  "references": [{ "path": "../shared" }, { "path": "../react" }, { "path": "../scheduler" }]
+  "references": [
+    {
+      "path": "../shared"
+    },
+    {
+      "path": "../react"
+    },
+    {
+      "path": "../scheduler"
+    }
+  ],
+  "exclude": [
+    "${configDir}/src/**/*.native.ts"
+  ]
 }

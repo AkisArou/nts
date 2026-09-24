@@ -1,54 +1,6 @@
 {
-  "//": "A native program made of this lane's runtime: react, the reconciler and the production scheduler. Its fork points (build constants, the global error reporter, the scheduler's host, the host config, and the hook dispatch: react's hooks and the reconciler's dispatcher) are bound to native twins through `paths`, and every workspace package is mapped to its real source directory: nts does not lower files it reaches through node_modules. `nts check` compiles it and compares its exported functions with node.",
-  "extends": "../../../../tsconfig.fixtures.json",
-  "compilerOptions": {
-    "types": [
-      "node"
-    ],
-    "paths": {
-      "shared/Build.ts": [
-        "./src/Build.ts"
-      ],
-      "shared/reportGlobalError.ts": [
-        "./src/reportGlobalError.ts"
-      ],
-      "scheduler/src/Host.ts": [
-        "./src/SchedulerHost.ts"
-      ],
-      "react-reconciler/ReactFiberConfig.ts": [
-        "./src/ReactFiberConfigTestHost.ts"
-      ],
-      "react/ReactHooks.ts": [
-        "./src/ReactHooks.ts"
-      ],
-      "react-reconciler/ReactFiberHooksDispatcher.ts": [
-        "./src/ReactFiberHooksDispatcher.ts"
-      ],
-      "shared/*": [
-        "../../packages/shared/src/*"
-      ],
-      "react": [
-        "../../packages/react/src/index.ts"
-      ],
-      "react/*": [
-        "../../packages/react/src/*"
-      ],
-      "scheduler": [
-        "../../packages/scheduler/src/index.ts"
-      ],
-      "scheduler/src/*": [
-        "../../packages/scheduler/src/*"
-      ],
-      "react-reconciler/*": [
-        "../../packages/react-reconciler/src/*"
-      ]
-    },
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
-    "skipLibCheck": true
-  },
+  "//": "The native probe: this lane's runtime compiled whole by nts, with a typed test host (src/ReactFiberConfig.ts) and a deterministic scheduler host (src/SchedulerHost.ts). `nts check` compiles it and compares its exported functions with node.",
+  "extends": "../../tsconfig.native.json",
   "include": [
     "src"
   ]

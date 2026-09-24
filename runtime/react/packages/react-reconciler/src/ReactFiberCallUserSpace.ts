@@ -8,7 +8,7 @@
 // nothing where they are not called.
 
 import type { LazyComponent } from "shared/ReactTypes.ts";
-import type { CapturedValue } from "./ReactCapturedValue.ts";
+import type { CapturedValue } from "react-reconciler/ReactCapturedValue.ts";
 import { isRendering, setIsRendering } from "./ReactCurrentFiber.ts";
 import type { Effect } from "./ReactFiberHooks.ts";
 import { captureCommitPhaseError } from "./ReactFiberWorkLoop.ts";

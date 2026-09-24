@@ -16,7 +16,7 @@ export const version = "19.3.0";
 
 export { ReactSharedInternals as __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE } from "./ReactSharedInternalsClient.ts";
 export { ReactCompilerRuntime as __COMPILER_RUNTIME };
-export { Component, PureComponent } from "./ReactBaseClasses.ts";
+export { Component, PureComponent } from "react/ReactBaseClasses.ts";
 export { cache, cacheSignal } from "./ReactCacheClient.ts";
 export { createContext } from "./ReactContext.ts";
 export { createRef } from "./ReactCreateRef.ts";
