@@ -166,7 +166,12 @@ both backends and both providers:
   - `class App extends Application`, meaning COM aggregation with an outer
     object of the program's. Apple's `extends NSObject` has the
     registration shape to share.
-  - XAML controls' default styles (`XamlControlsResources`).
+  - XAML controls' default styles. Without them a `Button` has no template
+    and measures `ActualWidth` 0. Measured on the VM: `Application.get_Resources`
+    answers E_UNEXPECTED on a plain `Application`, and activating
+    `XamlControlsResources` answers E_FAIL. Both point at the resource system
+    of an unpackaged program, which WinUI's own build feeds a `resources.pri`
+    (MRT) that this build does not make yet.
   - The idiomatic layer (W4).
 
 ## Next

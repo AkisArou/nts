@@ -776,7 +776,7 @@ impl Writer<'_> {
                 let spelled = if name.generics.is_empty() {
                     base
                 } else {
-                    let arguments = name.generics.iter().map(|argument| self.spell(argument, false)).collect::<Result<Vec<_>, _>>()?;
+                    let arguments = name.generics.iter().map(|argument| self.type_argument(argument)).collect::<Result<Vec<_>, _>>()?;
                     format!("{base}<{}>", arguments.join(", "))
                 };
                 // An object may be null where it is passed, as WinRT's
@@ -858,6 +858,27 @@ impl Writer<'_> {
         let iid = self.interface_iid(ty)?;
         self.brands.insert("Delegate");
         Ok(format!("Delegate<({}) => void, \"{iid}\">", parameters.join(", ")))
+    }
+
+    /// A type argument of an instantiation, `T` in `IVector<T>`: as a value,
+    /// except that a class is its default interface -- what the ABI passes
+    /// either way, and a `T` a method takes as well as answers. So
+    /// `IVector<ResourceDictionary>.Append` takes an `IResourceDictionary`,
+    /// which a derived class asked as that interface is.
+    fn type_argument(&mut self, ty: &Type) -> Result<String, String> {
+        if let Type::ClassName(named) = ty
+            && named.generics.is_empty()
+            && let Ok(def) = self.find(&named.namespace, &named.name)
+            && def.category() == TypeCategory::Class
+            && !generic_default(def)
+            && let Some(Type::ClassName(interface)) = def
+                .interface_impls()
+                .find(|implemented| implemented.has_attribute("DefaultAttribute"))
+                .map(|implemented| implemented.interface(&[]))
+        {
+            return Ok(self.named(&interface.namespace, &interface.name));
+        }
+        self.spell(ty, false)
     }
 
     /// The IID of an interface or an instantiation of one: the metadata's
