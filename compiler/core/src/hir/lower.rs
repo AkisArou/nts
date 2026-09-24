@@ -10607,6 +10607,11 @@ fn representation_of(
         TypeKind::Intersection(_) if super::native::is_branded_string(snapshot, ty) => {
             HirType::Managed(ManagedType::String)
         }
+        // And one half of a `CBool` (`true & brand`): exactly a boolean, for
+        // the same reason -- its brand is optional and never exists. A whole
+        // `CBool` is the union of both, which the union arm above builds from
+        // this.
+        TypeKind::Intersection(_) if super::native::is_branded_bool(snapshot, ty) => HirType::Bool,
 
         // `TypeKind::Intersection` falls here, and **that is a decision** rather
         // than an omission.

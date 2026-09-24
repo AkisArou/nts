@@ -2285,6 +2285,26 @@ fn is_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     string_encoding(snapshot, ty) == Some(Encoding::Utf8)
 }
 
+/// One half of a `CBool` as a value (`true & brand`): exactly a boolean at
+/// run time, since the brand is optional and never exists. Two parts, a
+/// boolean literal and an object whose only property is the optional,
+/// readonly `__c_bool`.
+pub(crate) fn is_branded_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    match kind(ty) {
+        Some(TypeKind::Intersection(parts)) => {
+            let [a, b] = parts.as_slice() else { return false };
+            let literal = |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
+            let brand = |id: TypeId| {
+                matches!(kind(id), Some(TypeKind::Object { properties })
+                    if matches!(properties.as_slice(), [p] if p.name == "___c_bool" && p.optional && p.readonly))
+            };
+            (literal(*a) && brand(*b)) || (literal(*b) && brand(*a))
+        }
+        _ => false,
+    }
+}
+
 /// A `string` with an optional C-boundary brand (`Utf16String`): an
 /// intersection whose value is exactly a string.
 ///

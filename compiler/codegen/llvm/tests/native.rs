@@ -2742,6 +2742,10 @@ export function run(): number {
     const was_false = remembered() as number;
     return was_true * 10000 + was_false * 1000 + (two() ? 100 : 0) + (zero() ? 1 : 0) * 10 + (toggle() && !toggle(false) ? 1 : 0);
 }
+// `false | CBool<c_int>`, as `value !== null && is_a(value, type)` is typed:
+// a value, not a call's result, which has to represent as a boolean too.
+function both(flag: boolean): boolean { return flag && two(); }
+export function narrowed(): number { return (both(true) ? 10 : 0) + (both(false) ? 1 : 0); }
 "#;
     let library = r"
 static int held = -1;
@@ -2752,13 +2756,13 @@ int zero(void) { return 0; }
 int toggle(int on) { return on; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let caller = counted_caller(r#"printf("%.0f %.0f", run(), narrowed());"#, "run(); narrowed();");
         let Some((text, outputs)) = run_on_both_backends("cbool", source, provider, library, &caller) else { return; };
         assert!(text.contains("void remember(int)"), "a `CBool<c_int>` is not C's int");
         // 1 and 0 arrive; 2 is true; 0 is false; the default is true and a
         // written `false` is false.
         for output in outputs {
-            assert_eq!(output, expect("10101", provider), "{provider:?}");
+            assert_eq!(output, expect("10101 10", provider), "{provider:?}");
         }
     }
 }
