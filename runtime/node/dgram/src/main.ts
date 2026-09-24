@@ -1060,7 +1060,17 @@ export class Socket extends EventEmitter {
 
   async [Symbol.asyncDispose](): Promise<void> {
     if (this.#handle === null) return;
-    await new Promise<void>((resolve) => this.close(resolve));
+    // `this.close(resolve)` is refused: the executor's body is lowered where the
+    // promise is built, so `resolve` is a settle rather than a value and there is
+    // nothing to pass to `close`. `Promise.withResolvers()` gives a capability
+    // that survives being stored and read back -- see
+    // `examples/promise-with-resolvers` -- and the callback calls it as a
+    // *member*, which is a settle with the promise as receiver. Extracting
+    // `closed.resolve` and passing that would be refused for the same reason
+    // `resolve` is.
+    const closed = Promise.withResolvers<void>();
+    this.close((): void => closed.resolve());
+    await closed.promise;
   }
 
   address(): AddressInfo {
