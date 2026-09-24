@@ -14357,8 +14357,11 @@ impl<'a> FuncBuilder<'a> {
             .get(&call)
             .and_then(|target| target.callee)
             .is_some_and(|declaration| {
-                self.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION)
-                    && !self.defines(declaration)
+                let function = self.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION) && !self.defines(declaration);
+                // And a C method a binding declares on a handle, which
+                // `native_method` lowers to its C function.
+                let method = self.native_method(call).is_some();
+                (function || method)
                     && self.node(declaration).native.as_ref().and_then(|n| n.abi.as_deref()).is_none()
             });
         if in_c && super::native::is_object_pointer(self.snapshot, ty) {
@@ -37395,6 +37398,12 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        // A method a binding declares on a C handle: the C function itself.
+        if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_))
+            && let Some(method) = self.native_method(id)
+        {
+            return self.lower_native_method_call(id, receiver, method, member, arguments);
+        }
 
         // `big.toString()` is the same `ToString` one type over, and
         // [`Self::as_string`] has picked `nts_bigint_to_string` for a `BigInt`
@@ -38988,8 +38997,21 @@ impl<'a> FuncBuilder<'a> {
             self.native_callee(id, declaration, name, signature)?
         };
 
-        let (args, lent) = self.lower_call_arguments(id, &callee, &arguments)?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, &arguments, None)?;
+        self.finish_call(id, callee, args, lent, declaration)
+    }
 
+    /// The call itself, then what a native one owes after it: the string it
+    /// returned read into one the program owns, and what it was lent given
+    /// back.
+    fn finish_call(
+        &mut self,
+        id: NodeId,
+        callee: Callee,
+        args: Vec<ValueId>,
+        lent: Vec<Lent>,
+        declaration: Option<NodeId>,
+    ) -> Result<ValueId, Diagnostic> {
         let returned = match &callee {
             Callee::Native(target) => target.returns_string.clone().map(|string| (target.clone(), string)),
             _ => None,
@@ -39001,6 +39023,45 @@ impl<'a> FuncBuilder<'a> {
         };
         self.give_back(id, lent);
         Ok(value)
+    }
+
+    /// The method a binding declares on a C handle, when the call at `id`
+    /// resolved to one: a method signature naming its C function with
+    /// `@ntsSymbol` and its instance with `this: T` -- what `bind-gir` writes
+    /// on `GtkButtonMethods` for `button.set_label(text)`.
+    fn native_method(&self, id: NodeId) -> Option<(NodeId, nts_semantic_schema::SignatureId)> {
+        let target = self.snapshot.call_targets.get(&id)?;
+        let declaration = target.callee?;
+        let signature = &self.snapshot.signatures[target.signature.0 as usize];
+        (self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE)
+            && self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some())
+            && signature.this_type.is_some())
+        .then_some((declaration, target.signature))
+    }
+
+    /// `handle.method(args)` as the C call `symbol(handle, args)`: the
+    /// declared `this` is the C function's first parameter, and the receiver
+    /// is passed there -- converted, so a `GtkToggleButton` reaches a method
+    /// `GtkButton` declares. No wrapper object and no dispatch: the method
+    /// *is* the C function.
+    fn lower_native_method_call(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        (declaration, signature): (NodeId, nts_semantic_schema::SignatureId),
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let mut with_this = self.snapshot.signatures[signature.0 as usize].clone();
+        let this = with_this.this_type.ok_or_else(|| self.unsupported(id, "a C method with no `this` type"))?;
+        with_this.parameters.insert(
+            0,
+            nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false },
+        );
+        let name = self.node(member).text.clone().unwrap_or_default();
+        let callee = self.native_callee(id, Some(declaration), name, &with_this)?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
+        self.finish_call(id, callee, args, lent, Some(declaration))
     }
 
     /// The string a native function returned: C's `const char *`, copied,
@@ -39201,6 +39262,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         callee: &Callee,
         arguments: &[NodeId],
+        receiver: Option<ValueId>,
     ) -> Result<(Vec<ValueId>, Vec<Lent>), Diagnostic> {
         let tail = match callee {
             Callee::Native(target) => {
@@ -39208,13 +39270,21 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => None,
         };
-        let args = match &tail {
+        let mut args = match &tail {
             Some(element) => self.lower_native_arguments(id, arguments, element)?,
             None => self.lower_arguments(id, arguments)?,
         };
         let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
         let target = target.clone();
         let origin = self.origin(id);
+        // A C method's receiver: its first argument, at the `this` type the
+        // method declares.
+        if let Some(receiver) = receiver {
+            let want = target.parameters.first().map(super::native::Type::representation).ok_or_else(|| {
+                self.unsupported(id, "a C method whose function takes no instance")
+            })?;
+            args.insert(0, self.coerce(receiver, &want, id)?);
+        }
         let mut lent = Vec::new();
         let mut c_args = Vec::with_capacity(target.parameters.len());
         // The closure the context slots that follow a closure slot belong to.

@@ -3,7 +3,7 @@
 
 use std::fmt::Write;
 
-use super::map::{Binding, TypeDecl};
+use super::map::{Binding, Function, TypeDecl};
 
 /// The declaration module: types, then functions, in a stable order.
 #[must_use]
@@ -38,44 +38,38 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         );
     }
     out.push('\n');
+    // The methods of each class, from the functions the self-check kept.
+    let mut methods: std::collections::BTreeMap<&str, Vec<&Function>> = std::collections::BTreeMap::new();
+    for function in &binding.functions {
+        if let Some((class, _)) = &function.method {
+            methods.entry(class.as_str()).or_default().push(function);
+        }
+    }
     for decl in &binding.types {
         match decl {
-            TypeDecl::Class { name, tag, parent } => match parent {
-                Some((_, parent)) => {
-                    let _ = writeln!(out, "  export type {name} = Class<\"{tag}\", {parent}>;");
+            TypeDecl::Class { name, tag, parent } => {
+                // `button.set_label(text)`: each method is the C function it
+                // names, with the receiver as its `this`. Intersected rather
+                // than extended, so a subclass method that shares a name with
+                // an ancestor's is an overload and not a conflicting redeclaration.
+                let _ = writeln!(out, "  export interface {name}OwnMethods {{");
+                for function in methods.get(name.as_str()).into_iter().flatten() {
+                    method(&mut out, function);
                 }
-                None => {
-                    let _ = writeln!(out, "  export type {name} = Class<\"{tag}\">;");
+                out.push_str("  }\n");
+                if let Some((_, parent)) = parent {
+                    let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods & {parent}Methods;");
+                    let _ = writeln!(out, "  export type {name} = Class<\"{tag}\", {parent}> & {name}Methods;");
+                } else {
+                    let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods;");
+                    let _ = writeln!(out, "  export type {name} = Class<\"{tag}\"> & {name}Methods;");
                 }
-            },
+            }
         }
     }
     out.push('\n');
     for function in &binding.functions {
-        let mut notes = Vec::new();
-        if function.deprecated {
-            notes.push("@deprecated".to_owned());
-        }
-        if let Some(returns) = &function.returns {
-            notes.push(format!("GIR: returns a `{returns}`."));
-        }
-        if let Some(free) = &function.free {
-            notes.push(format!("@ntsFree {free}"));
-        }
-        for name in &function.no_escape {
-            notes.push(format!("@ntsNoEscape {name}"));
-        }
-        if function.name != function.symbol {
-            notes.push(format!("@ntsSymbol {}", function.symbol));
-        }
-        if !notes.is_empty() {
-            // One tag per line, since a tag's value runs to the end of its line.
-            let _ = writeln!(out, "  /**");
-            for note in notes {
-                let _ = writeln!(out, "   * {note}");
-            }
-            let _ = writeln!(out, "   */");
-        }
+        notes(&mut out, function, function.name != function.symbol, "  ");
         let parameters = function
             .parameters
             .iter()
@@ -90,6 +84,45 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     }
     out.push_str("}\n");
     out
+}
+
+/// A function as a method of its class: `this` is its instance.
+fn method(out: &mut String, function: &Function) {
+    let Some((_, name)) = &function.method else { return };
+    let mut parameters = function.parameters.iter();
+    let Some((_, instance)) = parameters.next() else { return };
+    notes(out, function, true, "    ");
+    let rest: Vec<String> = parameters.map(|(name, mapped)| format!("{name}: {}", mapped.ts)).collect();
+    let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
+    let _ = writeln!(out, "    {name}({this}): {};", function.result.ts);
+}
+
+/// The tags a declaration carries: one per line, since a tag's value runs to
+/// the end of its line. `symbol` when its name is not the C function's.
+fn notes(out: &mut String, function: &Function, symbol: bool, indent: &str) {
+    let mut notes = Vec::new();
+    if function.deprecated {
+        notes.push("@deprecated".to_owned());
+    }
+    if let Some(returns) = &function.returns {
+        notes.push(format!("GIR: returns a `{returns}`."));
+    }
+    if let Some(free) = &function.free {
+        notes.push(format!("@ntsFree {free}"));
+    }
+    for name in &function.no_escape {
+        notes.push(format!("@ntsNoEscape {name}"));
+    }
+    if symbol {
+        notes.push(format!("@ntsSymbol {}", function.symbol));
+    }
+    if !notes.is_empty() {
+        let _ = writeln!(out, "{indent}/**");
+        for note in notes {
+            let _ = writeln!(out, "{indent} * {note}");
+        }
+        let _ = writeln!(out, "{indent} */");
+    }
 }
 
 /// The companion module: what a declaration file cannot carry.

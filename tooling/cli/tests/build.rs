@@ -3956,7 +3956,11 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     assert!(run.status.success(), "{stdout}{}", String::from_utf8_lossy(&run.stderr));
     let binding = std::fs::read_to_string(out.join("Demo-1.0.d.ts")).expect("the binding");
     for expected in [
-        "export type DemoThing = Class<\"demo_thing_impl\">;",
+        "export type DemoThing = Class<\"demo_thing_impl\"> & DemoThingMethods;",
+        // GIR's methods, as methods of the handle: `thing.count()` is
+        // `demo_thing_count(thing)`, its instance `this`.
+        "     * @ntsSymbol demo_thing_count\n     */\n    count(this: Const<DemoThing>): c_int;",
+        "  export type DemoThingMethods = DemoThingOwnMethods;",
         "export function demo_thing_new(name: string): DemoThing;",
         "export function demo_thing_count(thing: Const<DemoThing>): c_int;",
         "export function demo_on_tick(thing: DemoThing, tick: Closure<(thing: DemoThing) => void>): c_uint;",

@@ -1543,6 +1543,20 @@ impl<'a> Decomposer<'a> {
                 }
             });
 
+        // `this: T`, which the checker keeps apart from the parameters. Asked
+        // for only where the signature says it has one, so a program that
+        // declares none pays no round trip for it.
+        let this_type = match signature.this_parameter {
+            Some(_) => match self.client.this_parameter_of_signature(self.handle, &self.project, signature.id)? {
+                Some(this) => {
+                    let types = self.client.types_of_symbols(self.handle, &self.project, vec![this.id])?;
+                    self.intern_all(snapshot, &types, walk).first().copied()
+                }
+                None => None,
+            },
+            None => None,
+        };
+
         let id = SignatureId(u32::try_from(snapshot.signatures.len()).unwrap_or(u32::MAX));
         snapshot.signatures.push(SignatureRecord {
             parameters,
@@ -1550,6 +1564,7 @@ impl<'a> Decomposer<'a> {
             type_parameters,
             is_construct: signature.flags & signature_flags::CONSTRUCT != 0,
             type_predicate: predicate,
+            this_type,
         });
         Ok(id)
     }

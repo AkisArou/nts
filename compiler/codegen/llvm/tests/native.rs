@@ -2264,3 +2264,71 @@ export function run(): number {
         }
     }
 }
+
+/// A small class hierarchy in C, with functions taking an instance first.
+const METHODS_LIBRARY: &str = r#"
+#include <stdlib.h>
+#include <string.h>
+struct _Widget { int width; };
+struct _Button { struct _Widget parent; char label[32]; };
+static struct _Button the = { { 42 }, "" };
+struct _Button *button_new(void) { return &the; }
+int widget_get_width(struct _Widget *self) { return self->width; }
+void button_set_label(struct _Button *self, const char *label) { strncpy(self->label, label, 31); }
+char *button_dup_label(struct _Button *self) { char *out = malloc(strlen(self->label) + 1); strcpy(out, self->label); return out; }
+int button_count(struct _Button *self, const char *const *names) { (void)self; int n = 0; while (names[n]) n++; return n; }
+"#;
+
+/// A C function declared as a method of the handle it takes first:
+/// `button.set_label(text)` is `button_set_label(button, text)`, with no
+/// wrapper object and no dispatch -- what `bind-gir` writes for every GIR
+/// method, on an `…OwnMethods` interface, with `this: T` for the instance.
+///
+/// Each arm is a way the lowering could get it wrong: a method declared on
+/// the parent (`get_width`, `this: Widget`) called on a `Button`, whose
+/// receiver must upcast; a `string` argument, lent and given back; a
+/// `CStrings` one, which only a call known to be C's takes as `char **`; and
+/// a returned string the caller frees. Under reference counting, fifty more
+/// runs leave nothing alive.
+#[test]
+fn a_c_function_is_a_method_of_the_handle_it_takes_on_both_backends() {
+    let source = r#"
+import type { Class, CStrings, c_int } from "c:types";
+interface WidgetOwnMethods {
+    /** @ntsSymbol widget_get_width */
+    get_width(this: Widget): c_int;
+}
+interface ButtonOwnMethods {
+    /** @ntsSymbol button_set_label */
+    set_label(this: Button, label: string): void;
+    /**
+     * @ntsFree free
+     * @ntsSymbol button_dup_label
+     */
+    dup_label(this: Button): string;
+    /**
+     * @ntsNoEscape names
+     * @ntsSymbol button_count
+     */
+    count(this: Button, names: CStrings): c_int;
+}
+type Widget = Class<"_Widget"> & WidgetOwnMethods;
+type Button = Class<"_Button", Widget> & ButtonOwnMethods & WidgetOwnMethods;
+declare function button_new(): Button;
+export function run(): number {
+    const button = button_new();
+    button.set_label("héllo");
+    return button.get_width() * 1000 + button.dup_label().length * 10 + button.count(["a", "b"]);
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("methods", source, provider, METHODS_LIBRARY, &caller) else { return; };
+        assert!(text.contains("button_set_label(v"), "the method is not the C function");
+        // 42 from the parent's method, "héllo" read back as 5 units, and two
+        // names counted to the terminator.
+        for output in outputs {
+            assert_eq!(output, expect("42052", provider), "{provider:?}");
+        }
+    }
+}

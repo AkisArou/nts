@@ -242,12 +242,42 @@ Two binder fixes it needed:
 
 The binder's `*.refused.txt` is the queue.
 
-## After M2
+## M3, the idiomatic layer: where it stands
 
-- **M3: the idiomatic layer.** Zero-cost methods on handles
-  (`button.set_label("x")` lowering to `gtk_button_set_label(button, "x")`,
-  with no wrapper object), typed `connect`, and GObject lifetime tied to the
-  TypeScript value.
+**Methods on handles.** Every GIR method is also a method of its class:
+
+```ts
+box.append(label);            // gtk_box_append(box, label)
+window.present();             // gtk_window_present(window), via the chain
+application.run(["gir"]);     // g_application_run, from GIO, on a GtkApplication
+file.query_info_async(...);   // an interface's method, with a OnceClosure
+```
+
+No wrapper object and no dispatch: each is the C function its `@ntsSymbol`
+names, and the call site compiles to that call with the receiver first. The
+binding declares it on an `…OwnMethods` interface with `this: T` for the
+instance, and a class's `…Methods` is its own intersected with its parent's --
+intersected rather than extended, so a subclass method sharing a name with an
+ancestor's is an overload and not a conflicting redeclaration. The compiler
+reads `this: T` from the checker (`SignatureRecord::this_type`, fetched only
+for signatures that declare one) and passes the receiver there, converted
+along the chain.
+
+Cost, measured on gtk-gir's pre-M3 program with both binaries: 2.37 s ->
+2.66 s to build, the same 140 MB peak, `Gtk-4.0.d.ts` 513 KB -> 962 KB.
+
+**Next in M3:**
+
+- Errors thrown: a method whose C function reports through `GError **` throws
+  an `Error` carrying the `GError`'s message instead of taking the slot.
+- Async methods as Promises: `await file.query_info("standard::type")`,
+  from the `_async`/`_finish` pair.
+- Typed `connect`: `button.connect("clicked", handler)`.
+- Construction and lifetime: `new Gtk.Button({ label })`, and a GObject
+  unreffed when the TypeScript value is released.
+
+## After M3
+
 - **M4: a real application,** benchmarked against GJS: startup to first frame,
   RSS, signal dispatch.
 

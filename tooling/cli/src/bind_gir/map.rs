@@ -79,6 +79,10 @@ pub(crate) struct Function {
     /// GIR's own name for the result where the C type is less specific --
     /// `gtk_button_new` returns a `GtkWidget *` that GIR says is a Button.
     pub(crate) returns: Option<String>,
+    /// `(class, method)` where GIR declares this a method of a class: it is
+    /// also written as `method(this: Class, ...)` on that class's methods, so
+    /// `button.set_label(text)` calls it.
+    pub(crate) method: Option<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -349,6 +353,12 @@ impl<'a> Mapper<'a> {
             let Some(c_type) = &class.c_type else { continue };
             let Some(tag) = self.facts.tags.get(c_type).cloned() else { continue };
             let parent = self.parent_of(class);
+            // The parent's methods come with it, from its own module.
+            if let Some((module, name)) = &parent
+                && !module.is_empty()
+            {
+                self.binding.imports.entry(module.clone()).or_default().insert(format!("{name}Methods"));
+            }
             self.binding.brands.insert("Class");
             if let Some(get_type) = &class.get_type
                 && !class.interface
@@ -364,6 +374,7 @@ impl<'a> Mapper<'a> {
                     free: None,
                     no_escape: Vec::new(),
                     returns: None,
+                    method: None,
                 });
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
@@ -534,6 +545,16 @@ impl<'a> Mapper<'a> {
                 _ => None,
             })
             .flatten();
+        // A method of the class its instance is: `this` on that class's
+        // methods. Only a plain or `Const` handle is an instance a method can
+        // be called on; an erased one is left a function.
+        let method = (callable.kind == CallableKind::Method && signature.instance.is_some())
+            .then(|| parameters.first())
+            .flatten()
+            .and_then(|(_, instance)| {
+                let class = instance.ts.strip_prefix("Const<").and_then(|t| t.strip_suffix('>')).unwrap_or(&instance.ts);
+                class.chars().all(|c| c.is_ascii_alphanumeric() || c == '_').then(|| (class.to_owned(), identifier(&callable.name)))
+            });
         Ok(Function {
             name: symbol.clone(),
             symbol,
@@ -544,6 +565,7 @@ impl<'a> Mapper<'a> {
             free,
             no_escape,
             returns,
+            method,
         })
     }
 
@@ -925,6 +947,7 @@ impl<'a> Mapper<'a> {
             free: None,
             no_escape: Vec::new(),
             returns: None,
+            method: None,
         })
     }
 

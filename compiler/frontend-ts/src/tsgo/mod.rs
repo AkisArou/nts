@@ -571,6 +571,23 @@ impl Client {
     }
 
     /// What a type-guard signature narrows, if anything.
+    /// The declared `this` parameter of a signature, if it has one.
+    pub fn this_parameter_of_signature(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        signature: u64,
+    ) -> Result<Option<SymbolResponse>, TsgoError> {
+        self.request(
+            proto::method::GET_THIS_PARAMETER_OF_SIGNATURE,
+            &GetSignaturePropertyParams {
+                snapshot,
+                project: project.clone(),
+                signature,
+            },
+        )
+    }
+
     pub fn type_predicate_of_signature(
         &mut self,
         snapshot: SnapshotHandle,

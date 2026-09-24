@@ -44,6 +44,7 @@ pub mod method {
     pub const GET_INDEX_INFOS_OF_TYPE: &str = "getIndexInfosOfType";
     pub const GET_CONSTANT_VALUE: &str = "getConstantValue";
     pub const GET_PARAMETERS_OF_SIGNATURE: &str = "getParametersOfSignature";
+    pub const GET_THIS_PARAMETER_OF_SIGNATURE: &str = "getThisParameterOfSignature";
     pub const GET_EXPORTS_OF_MODULE: &str = "getExportsOfModule";
     /// What an import or re-export alias actually refers to.
     ///
@@ -392,6 +393,11 @@ pub struct SignatureResponse {
     /// Symbols of the declared parameters, in order.
     #[serde(default)]
     pub parameters: Vec<u32>,
+    /// The declared `this` parameter's symbol, when the signature has one --
+    /// read only to know whether to ask for it, since like `parameters` the id
+    /// is unregistered.
+    #[serde(default)]
+    pub this_parameter: Option<u32>,
     #[serde(default)]
     pub type_parameters: Vec<u32>,
 }

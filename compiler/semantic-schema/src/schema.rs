@@ -29,7 +29,7 @@ use crate::origin::Origin;
 /// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
 /// action-cache key, so a stale snapshot cannot be silently reused across a
 /// schema change.
-pub const SCHEMA_VERSION: u32 = 17;
+pub const SCHEMA_VERSION: u32 = 18;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -604,6 +604,11 @@ pub struct SignatureRecord {
     pub is_construct: bool,
     /// What a call to this narrows, for a type-guard function.
     pub type_predicate: Option<TypePredicate>,
+    /// A declared `this: T` parameter's type, which is not among
+    /// `parameters`: what a method bound to a C function takes as its
+    /// instance.
+    #[serde(default)]
+    pub this_type: Option<TypeId>,
 }
 
 /// One parameter of a signature.

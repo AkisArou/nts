@@ -122,9 +122,9 @@ function outParameters(): void {
 function fileKind(path: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const file = g_file_new_for_path(path);
-    g_file_query_info_async(file, "standard::type", 0 as c_uint, PRIORITY_DEFAULT, null, (_source, result) => {
+    file.query_info_async("standard::type", 0 as c_uint, PRIORITY_DEFAULT, null, (_source, result) => {
       const error = local<GError | null>();
-      const info = g_file_query_info_finish(file, result, error);
+      const info = file.query_info_finish(result, error);
       const failure = error[0];
       g_object_unref(file);
       if (failure !== null) {
@@ -132,7 +132,7 @@ function fileKind(path: string): Promise<number> {
         reject(new Error("query failed"));
         return;
       }
-      const kind = g_file_info_get_file_type(info) as number;
+      const kind = info.get_file_type() as number;
       g_object_unref(info);
       resolve(kind);
     });
@@ -158,15 +158,19 @@ function main(): void {
     const button = asGtkButton(gtk_button_new_with_label("press"));
     if (window === null || box === null || label === null || button === null) {
       gir_log("cast-failed");
-      g_application_quit(application);
+      application.quit();
       return;
     }
     gir_log("cast-ok");
     gir_log(asGtkLabel(box) === null ? "cast-null" : "cast-wrong");
-    gtk_box_append(box, label);
-    gtk_box_append(box, button);
-    gtk_window_set_child(window, box);
-    gtk_window_present(window);
+    // Methods on the handles: each is the C function it names, called with
+    // the handle as its instance -- `box.append(label)` is
+    // `gtk_box_append(box, label)`, and `window.present()` reaches
+    // `gtk_window_present` through `GtkApplicationWindow`'s chain.
+    box.append(label);
+    box.append(button);
+    window.set_child(box);
+    window.present();
     gtk_button_connect_clicked(button, "clicked", (self) => {
       clicks++;
       gir_log(asGtkButton(self) === null ? "clicked-not-a-button" : "clicked " + String(clicks));
@@ -178,19 +182,19 @@ function main(): void {
     });
     g_timeout_add_full(PRIORITY_DEFAULT, 10 as c_uint, () => {
       ticks++;
-      gtk_label_set_text(label, "tick " + String(ticks));
+      label.set_text("tick " + String(ticks));
       // And the query answered, so the log does not depend on which of the
       // two a loaded machine finishes first.
       if (ticks < 3 || kind === -1) return 1 as c_int;
-      gir_log("label=" + gtk_label_get_text(label));
-      g_application_quit(application);
+      gir_log("label=" + label.get_text());
+      application.quit();
       return 0 as c_int;
     });
   }, CONNECT_DEFAULT);
   // `argv` as a `string[]`, lent to C as `char **` with `argc` beside it.
   // GApplication parses it, so it holds only the program name: an option it
   // does not know would end the run.
-  const status = g_application_run(application, ["gir"]);
+  const status = application.run(["gir"]);
   gir_log("status=" + String(status));
   g_object_unref(application);
   gir_log("ticks=" + String(ticks));
