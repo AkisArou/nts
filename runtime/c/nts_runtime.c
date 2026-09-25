@@ -652,11 +652,77 @@ static void nts_free_storage(NtsHeader *object) {
   }
 }
 
+/* Every erased slot an object holds -- a map's keys and values, an erased
+ * array's elements, an erased field (`erased_offsets`) -- handed to `each`
+ * with `visit` passed through. The one enumeration of where an object keeps
+ * `NtsValue`s: `nts_each_reference` visits the managed references in them and
+ * `nts_release_foreign` gives back the handles, and a new kind of erased
+ * storage added here reaches both. Inlined with each constant `each`, so the
+ * collector's walks pay no call per slot. */
+static inline __attribute__((always_inline)) void
+nts_each_erased_slot(NtsHeader *object,
+                     void (*each)(NtsValue *slot, void (*visit)(NtsHeader *)),
+                     void (*visit)(NtsHeader *)) {
+  const NtsDescriptor *descriptor = object->descriptor;
+  /* A map's are in two heap arrays rather than at fixed offsets. Holes carry a
+   * tag that is neither a reference nor a handle, so skipping them needs no
+   * test of its own. */
+  if (descriptor->kind == NTS_KIND_MAP) {
+    NtsMap *map = (NtsMap *)object;
+    for (uint32_t at = 0; at < map->used; at++) {
+      each(&map->keys[at], visit);
+      if (map->values) {
+        each(&map->values[at], visit);
+      }
+    }
+    return;
+  }
+  if (descriptor->kind == NTS_KIND_ARRAY) {
+    if (descriptor->erased) {
+      NtsValue *slots = NTS_ITEMS((NtsArray *)object, NtsValue);
+      for (uint32_t index = 0; index < object->length; index++) {
+        each(&slots[index], visit);
+      }
+    }
+    return;
+  }
+  for (uint32_t index = 0; index < descriptor->erased; index++) {
+    each((NtsValue *)((unsigned char *)object +
+                      descriptor->erased_offsets[index]),
+         visit);
+  }
+}
+
+/* An erased slot holding a C library's object -- a tag in the handle block --
+ * given back through its family, the slot cleared first. */
+static inline __attribute__((always_inline)) void
+nts_release_handle_slot(NtsValue *slot, void (*unused)(NtsHeader *)) {
+  (void)unused;
+  NtsValue held = *slot;
+  if (NTS_TAG_IS_HANDLE(held.tag) && held.as.native) {
+    slot->tag = NTS_TAG_UNDEFINED;
+    nts_value_release(held);
+  }
+}
+
+/* A managed reference an erased slot holds, handed to `visit`. */
+static inline __attribute__((always_inline)) void
+nts_visit_managed(NtsValue *slot, void (*visit)(NtsHeader *)) {
+  if (NTS_TAG_IS_MANAGED(nts_value_tag(*slot)) && nts_value_reference(*slot)) {
+    visit(nts_value_reference(*slot));
+  }
+}
+
 /* Give up the foreign objects an object's fields hold. Each slot is cleared
  * before its release runs, so a release that reaches back into this runtime
  * finds nothing to give up twice. */
 static void nts_release_foreign(NtsHeader *object) {
   const NtsDescriptor *descriptor = object->descriptor;
+  /* The handles its erased slots hold. `nts_each_reference` visits managed
+   * references only, and a handle is not one: a container's own death gives
+   * them back here, where the typed foreign slots are. A box used to be
+   * managed, and its finalizer did this. */
+  nts_each_erased_slot(object, nts_release_handle_slot, 0);
   /* An array of them: every element, through the one slot's family. */
   if (descriptor->kind == NTS_KIND_ARRAY &&
       descriptor->element == NTS_ARRAY_FOREIGN) {
@@ -815,40 +881,18 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
   if (descriptor->references == 0 && descriptor->erased == 0) {
     return;
   }
-  /* A map's references are in two heap arrays rather than at fixed offsets,
-   * so it gets a case here for the same reason an array does. Holes carry a
-   * tag that is not a reference, so skipping them needs no test of its own. */
-  if (descriptor->kind == NTS_KIND_MAP) {
-    const NtsMap *map = (const NtsMap *)object;
-    for (uint32_t at = 0; at < map->used; at++) {
-      NtsValue key = map->keys[at];
-      if (NTS_TAG_IS_MANAGED(nts_value_tag(key)) && nts_value_reference(key)) {
-        visit(nts_value_reference(key));
-      }
-      if (!map->values) {
-        continue;
-      }
-      NtsValue value = map->values[at];
-      if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) &&
-          nts_value_reference(value)) {
-        visit(nts_value_reference(value));
-      }
-    }
+  /* The references in its erased slots -- a map's, an erased array's, an
+   * erased field's -- through the one enumeration of them. A handle in one is
+   * not visited: it is not an object of this heap. Where a handle's family
+   * holds a managed object of ours (a GObject subclass's fields), that edge is
+   * the holder mechanism's (`nts_is_holder`), not this walk's; a family that
+   * held one some other way would be a cycle this walk cannot see. */
+  if (descriptor->kind == NTS_KIND_MAP ||
+      (descriptor->kind == NTS_KIND_ARRAY && descriptor->erased)) {
+    nts_each_erased_slot(object, nts_visit_managed, visit);
     return;
   }
   if (descriptor->kind == NTS_KIND_ARRAY) {
-    /* An array of erased values: every element is an `NtsValue` and each one
-     * is a reference only when its own tag says so. */
-    if (descriptor->erased) {
-      NtsValue *slots = NTS_ITEMS((const NtsArray *)object, NtsValue);
-      for (uint32_t index = 0; index < object->length; index++) {
-        if (NTS_TAG_IS_MANAGED(nts_value_tag(slots[index])) &&
-            nts_value_reference(slots[index])) {
-          visit(nts_value_reference(slots[index]));
-        }
-      }
-      return;
-    }
     NtsHeader **slots = NTS_ITEMS((const NtsArray *)object, NtsHeader *);
     for (uint32_t index = 0; index < object->length; index++) {
       if (slots[index]) {
@@ -872,15 +916,7 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
    * stored whole rather than decomposed into a tag beside a typed slot at every
    * kind of storage -- one concept here, against a parallel tag slot in object
    * layout, array layout, globals and closure captures. */
-  for (uint32_t index = 0; index < descriptor->erased; index++) {
-    unsigned char *slot =
-        (unsigned char *)object + descriptor->erased_offsets[index];
-    NtsValue value = *(const NtsValue *)slot;
-    if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) &&
-        nts_value_reference(value)) {
-      visit(nts_value_reference(value));
-    }
-  }
+  nts_each_erased_slot(object, nts_visit_managed, visit);
 }
 
 /* The out-of-line half of erased strict equality. Declared beside the inline

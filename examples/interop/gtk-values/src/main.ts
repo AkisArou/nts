@@ -28,6 +28,10 @@
 //                 this failed -- `stash` routes around the shape by returning
 //                 before the delete, and a fixture that avoids the shape
 //                 cannot see it
+//   dropped gone gone  a map, then an `unknown[]`, that dies holding a
+//                 button's last reference gives it back (`alive alive` without
+//                 counting). Before, a container's death visited only managed
+//                 references, and a tagged handle is not one
 import { GtkButton, GtkLabel, gtk_init } from "c:Gtk-4.0";
 import { sub_gone, sub_log, sub_watch } from "c:sub";
 
@@ -97,6 +101,29 @@ function temporary(): string {
   return (early ? "early" : "held") + " " + (gone ? "gone" : "alive");
 }
 
+// A container that dies holding a button's last reference gives it back: a
+// map, and an `unknown[]`, each gone when its function returns. The button
+// is watched through the container, so no local holds it past the return.
+function dropMap(): void {
+  const m = new Map<string, GtkButton>();
+  m.set("d", new GtkButton());
+  watchEntry(m, "d");
+}
+
+function dropArray(): void {
+  const xs: unknown[] = [];
+  xs.push(new GtkButton());
+  const first = xs[0];
+  if (first instanceof GtkButton) sub_watch(first);
+}
+
+function dropped(): string {
+  dropMap();
+  const map = sub_gone() ? "gone" : "alive";
+  dropArray();
+  return map + " " + (sub_gone() ? "gone" : "alive");
+}
+
 function main(): void {
   gtk_init();
   const b = new GtkButton({ label: "b" });
@@ -127,6 +154,7 @@ function main(): void {
   sub_log("walked " + walked.trim());
   sub_log("watch " + released());
   sub_log("temporary " + temporary());
+  sub_log("dropped " + dropped());
 }
 
 main();

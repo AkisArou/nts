@@ -21,8 +21,9 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
 fi
 for mode in plain rc; do
   watch="held alive"
-  [ "$mode" = rc ] && watch="held gone"
-  expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch temporary $watch "
+  dropped="alive alive"
+  [ "$mode" = rc ] && watch="held gone" && dropped="gone gone"
+  expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch temporary $watch dropped $dropped "
   flag=""
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086

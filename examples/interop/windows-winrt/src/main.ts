@@ -31,10 +31,13 @@
 // - `global`: a handle held at module scope, read from a function (`held`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
-//   call that was handed it -- and 35 under `--rc` (`expected-rc.txt`),
-//   those two and one for each object handed over, among them: the four
-//   references `erased` holds (`seven`, the map's entry, the array's element
-//   and the one `get` hands back; a run without the arm measured four fewer),
+//   call that was handed it -- and 37 under `--rc` (`expected-rc.txt`),
+//   those two and one for each object handed over, among them: the six
+//   releases of `erased`'s one object -- `seven`'s own, `back`'s own, the
+//   erased copy `map.set` is passed, the erased value `get` hands back, and
+//   the map's entry and the array's element, each given back when its
+//   container dies (35 before a container's death released the handles it
+//   held erased: `seven` ended with two references nothing gave back),
 //   `value`, `list`, `made`, the `Parse("false")`
 //   read once and dropped, the languages, the array, its `IVector` and the
 //   item read from it, `built`, the number put in it, `built` as its
