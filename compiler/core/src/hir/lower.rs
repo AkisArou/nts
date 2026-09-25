@@ -11346,6 +11346,45 @@ fn numeric_array_method(
     })
 }
 
+/// What a built-in method's omitted argument is, where its runtime helper takes
+/// every argument explicitly: `position` counts from 1 after the receiver, and
+/// `given` is how many the call wrote. The language converts an absent
+/// argument as it converts `undefined`, and this is that conversion, row by
+/// row:
+///
+/// | method | position | an absence is | why |
+/// |---|---|---|---|
+/// | `slice`, `substring` | 1 | 0 | `ToIntegerOrInfinity(undefined)`: the start |
+/// | `slice`, `substring` | 2 | Infinity | "to the end", clamped to the length |
+/// | `at`, `charAt`, `codePointAt` | 1 | 0 | the first element or character |
+/// | `repeat` | 1 | 0 | a count of 0: `""`, where Infinity throws a `RangeError` |
+/// | `padStart`, `padEnd` | 1 | 0 | a length of 0: the string unchanged |
+/// | `padStart`, `padEnd` | 2 | `" "` | the filler, supplied by `fill_string_arguments` |
+/// | `splice` | 1 | 0 | the start |
+/// | `splice` | 2 | 0 if nothing was given, else Infinity | `splice()` removes nothing; `splice(i)` removes to the end |
+/// | `fill` | 1 | NaN | `undefined` stored in an array of numbers |
+/// | `indexOf`, `lastIndexOf`, `includes`, `startsWith`, `endsWith` | 1 | refused | a search for `undefined` -- the string `"undefined"` in a string -- which no helper takes; refused rather than answered with a search for Infinity, which would say -1 forever |
+/// | anything else | any | Infinity | "to the end" |
+///
+/// `concat()` with nothing never reaches this: it is `slice`'s copy for an
+/// array and the string itself for a string, decided where the method is.
+///
+/// **Not "to the end" everywhere.** That was every row once, which is right
+/// for a second argument and made `xs.slice()` `xs.slice(Infinity, Infinity)`,
+/// an empty array, and `"abc".slice()` `""`. Three sites padded, and they
+/// agreed on the wrong thing.
+fn absent_argument(method: &str, position: usize, given: usize) -> Result<f64, &'static str> {
+    match (method, position) {
+        ("slice" | "substring" | "at" | "charAt" | "codePointAt" | "repeat" | "padStart" | "padEnd" | "splice", 1) => Ok(0.0),
+        ("splice", 2) if given == 0 => Ok(0.0),
+        ("fill", 1) => Ok(f64::NAN),
+        ("indexOf" | "lastIndexOf" | "includes" | "startsWith" | "endsWith", 1) => {
+            Err("a search with no argument, which looks for `undefined`")
+        }
+        _ => Ok(f64::INFINITY),
+    }
+}
+
 /// Which end of the array a walk starts from.
 ///
 /// `findLast`, `findLastIndex` and `reduceRight` are `find`, `findIndex` and
@@ -32332,35 +32371,47 @@ impl<'a> FuncBuilder<'a> {
             _ => unreachable!("`property_name` refuses every other kind of property"),
         }
     }
+    /// The trailing arguments an array method's call owes the runtime: each
+    /// the number [`absent_argument`] says.
+    fn fill_array_arguments(&mut self, (id, method): (NodeId, &str), arity: usize, args: &mut Vec<ValueId>, origin: &Origin) -> Result<(), Diagnostic> {
+        let given = args.len() - 1;
+        while args.len() < arity + 1 {
+            let value = absent_argument(method, args.len(), given).map_err(|why| self.unsupported(id, why))?;
+            let absent = self.push(OpKind::ConstFloat(value), HirType::NUMBER, origin.clone());
+            args.push(absent);
+        }
+        Ok(())
+    }
+
     /// The trailing arguments a string method's call owes the runtime.
     ///
     /// `padStart(n)` and `padEnd(n)` pad with a single space, and every other
-    /// two-argument member here defaults its second to "to the end", which is
-    /// an infinity. Passing them explicitly means the runtime has one signature
-    /// rather than two and the default is written down once.
+    /// omitted argument is the number [`absent_argument`] says. Passing them
+    /// explicitly means the runtime has one signature rather than two and the
+    /// default is written down once.
     fn fill_string_arguments(
         &mut self,
-        id: NodeId,
+        (id, method): (NodeId, &str),
         helper: &str,
         arity: usize,
         args: &mut Vec<ValueId>,
         origin: &Origin,
     ) -> Result<(), Diagnostic> {
-        if matches!(helper, "nts_str_pad_start" | "nts_str_pad_end") && args.len() == 2 {
-            let space = self.push(
-                OpKind::ConstString(" ".to_owned()),
-                HirType::Managed(ManagedType::String),
-                origin.clone(),
-            );
-            args.push(space);
-        }
+        let given = args.len() - 1;
         while args.len() < arity + 1 {
-            let end = self.push(
-                OpKind::ConstFloat(f64::INFINITY),
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            args.push(end);
+            let position = args.len();
+            if matches!(helper, "nts_str_pad_start" | "nts_str_pad_end") && position == 2 {
+                let space = self.push(
+                    OpKind::ConstString(" ".to_owned()),
+                    HirType::Managed(ManagedType::String),
+                    origin.clone(),
+                );
+                args.push(space);
+                continue;
+            }
+            let value = absent_argument(method, position, given).map_err(|why| self.unsupported(id, why))?;
+            let absent = self.push(OpKind::ConstFloat(value), HirType::NUMBER, origin.clone());
+            args.push(absent);
         }
         if args.len() != arity + 1 {
             return Err(self.unsupported(id, "a string method with this many arguments"));
@@ -47200,6 +47251,10 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
 
+        // `s.concat()` concatenates nothing: `s` itself, which is immutable.
+        if name == "concat" && arguments.is_empty() {
+            return Ok(receiver);
+        }
         let (helper, arity, ty) = match name.as_str() {
             "codePointAt" => ("nts_str_code_point_at", 1, HirType::NUMBER),
             "indexOf" if arguments.len() == 2 => ("nts_str_index_of_from", 2, HirType::NUMBER),
@@ -47293,7 +47348,7 @@ impl<'a> FuncBuilder<'a> {
             self.guard_repeat_count(id, args[1])?;
         }
 
-        self.fill_string_arguments(id, helper, arity, &mut args, &origin)?;
+        self.fill_string_arguments((id, name.as_str()), helper, arity, &mut args, &origin)?;
 
         // A regular expression is a pattern `String.prototype.replace` accepts
         // and this does not. It has to be named and refused *here*: everything
@@ -47536,6 +47591,8 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_sort(id, (member, &name), (receiver, &array, false), arguments);
         }
 
+        // `xs.concat()` concatenates nothing: a copy, which is `slice`'s.
+        let name = if name == "concat" && arguments.is_empty() { "slice".to_owned() } else { name };
         let Some((helper, arity, ty)) = numeric_array_method(&name, absent_result, &array) else {
             return Err(self.unsupported(member, "this array method"));
         };
@@ -47545,14 +47602,7 @@ impl<'a> FuncBuilder<'a> {
             args.push(self.lower_expression(*argument)?);
         }
         let origin = self.origin(id);
-        while args.len() < arity + 1 {
-            let end = self.push(
-                OpKind::ConstFloat(f64::INFINITY),
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            args.push(end);
-        }
+        self.fill_array_arguments((id, &name), arity, &mut args, &origin)?;
         if args.len() != arity + 1 {
             return Err(self.unsupported(id, "an array method with this many arguments"));
         }
@@ -47922,6 +47972,8 @@ impl<'a> FuncBuilder<'a> {
             .get(1)
             .is_some_and(|value| self.values[value.0 as usize].ty == HirType::Erased);
 
+        // `xs.concat()` concatenates nothing: a copy, which is `slice`'s.
+        let name = if name == "concat" && arguments.is_empty() { "slice" } else { name };
         let (helper, arity, ty) = match name {
             "pop" => ("nts_array_pop_ref", 0, of_element),
             "shift" => ("nts_array_shift_ref", 0, of_element),
@@ -47960,14 +48012,7 @@ impl<'a> FuncBuilder<'a> {
             }
         };
         let origin = self.origin(id);
-        while args.len() < arity + 1 {
-            let end = self.push(
-                OpKind::ConstFloat(f64::INFINITY),
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            args.push(end);
-        }
+        self.fill_array_arguments((id, name), arity, &mut args, &origin)?;
         if args.len() != arity + 1 {
             return Err(self.unsupported(id, "an array method with this many arguments"));
         }
