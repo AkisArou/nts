@@ -831,6 +831,16 @@ const HARNESS_PRELUDE: &str =
           * bound rather than a guess: a program that starves the loop fails\n\
           * here instead of hanging the run. */\n\
          static void nts_check_show_settled(const char *name, int at, NtsPromise *p) {\n\
+         \x20   /* **This harness is the handler.** It inspects the outcome below,\n\
+         \x20    * which is what handling a rejection means -- and it does so by\n\
+         \x20    * polling rather than by subscribing, so nothing else says it.\n\
+         \x20    * Without this an exported `async` function that rejects ends the\n\
+         \x20    * process at the next checkpoint, since an unhandled rejection is\n\
+         \x20    * node`s status 1: `promise-constructor` went from 174 cases to 162\n\
+         \x20    * and `async` from 986 to 148 the hour that landed. The node side\n\
+         \x20    * of the comparison awaits the same promise, so marking it here is\n\
+         \x20    * what makes the two sides ask one question. */\n\
+         \x20   p->handled = true;\n\
          \x20   /* Until it settles, not until the loop falls quiet. `await` on\n\
          \x20    * node returns when its promise does, and the two differ as\n\
          \x20    * soon as timers exist: a program that left another timer\n\

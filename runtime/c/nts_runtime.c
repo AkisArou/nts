@@ -218,6 +218,12 @@ struct NtsEnvironment {
   bool join_active;
   NtsQueue microtask_queue;
   NtsQueue tick_queue;
+  /* Promises that rejected with nothing listening, this turn. Usually empty:
+     an `await` subscribes before the operation can settle, so only a rejection
+     nobody is waiting for lands here. Checked and cleared by the checkpoint. */
+  NtsPromise **rejected;
+  uint32_t rejected_len;
+  uint32_t rejected_cap;
   NtsMap *symbol_registry;
   /* The Web-platform runtime, as one managed reference. Not traced by the
      cycle collector: an environment is not an `NtsHeader` and cannot be part
@@ -8017,6 +8023,65 @@ static void nts_collect_at_checkpoint(void) {
   nts_collect_cycles();
 }
 
+/* A promise that rejected with nothing listening, remembered until the
+   checkpoint can decide. Retained: the program may hold no other reference to
+   it, and the report needs its reason. */
+static void nts_rejection_candidate(NtsPromise *promise) {
+  if (nts_env->rejected_len == nts_env->rejected_cap) {
+    uint32_t want = nts_env->rejected_cap == 0 ? 4 : nts_env->rejected_cap * 2;
+    NtsPromise **grown =
+        realloc(nts_env->rejected, (size_t)want * sizeof *grown);
+    if (grown == 0) {
+      fprintf(stderr, "nts: out of memory recording a rejected promise\n");
+      abort();
+    }
+    nts_env->rejected = grown;
+    nts_env->rejected_cap = want;
+  }
+  nts_retain((NtsHeader *)promise);
+  nts_env->rejected[nts_env->rejected_len++] = promise;
+}
+
+/* **The half `nts_process_ticks_and_rejections` was named for and did not do.**
+ *
+ * Node's `processTicksAndRejections` drains the queues and then reports every
+ * rejection still unhandled; this runtime borrowed the name and only ever
+ * drained. The cost was the worst shape a defect has: an `async` entry point
+ * that threw printed nothing and exited **0**, so every failing async program
+ * read as a clean run. It was found by a WinRT fixture whose missing line
+ * looked like a missing feature.
+ *
+ * After the drain, because that is the rule: a handler attached during the turn
+ * -- `p.catch(...)` on the next line, an `await` in a task the queue held --
+ * handles the rejection, and one attached later does not.
+ *
+ * `nts_uncaught` is the reporter rather than a sentence of its own: node ends
+ * an unhandled rejection exactly as it ends an uncaught throw, an embedder that
+ * wants the value gets it through the same path, and the exit status is 1 for
+ * the same reason. The detail is NULL, which is a real limitation and not an
+ * oversight -- the runtime cannot find `message` by name, since a descriptor
+ * records where an object's references are and not what they are called, so the
+ * line reads `nts: uncaught Error` where node prints the message too. Closing
+ * it means the compiler passing the field it already knows how to find
+ * (`message_field`), which is a change to every rejection's emitted code and so
+ * its own decision. */
+static void nts_report_unhandled_rejections(void) {
+  uint32_t at = 0;
+  while (at < nts_env->rejected_len) {
+    NtsPromise *promise = nts_env->rejected[at++];
+    if (promise->state == NTS_PROMISE_REJECTED && !promise->handled) {
+      /* The list is not cleared first: `nts_uncaught` does not return, and an
+         embedder that survives it will see the same promise again only if it
+         rejects again. */
+      nts_uncaught(nts_value_of_reference(
+                       promise->reason, nts_tag_of_reference(promise->reason)),
+                   0);
+    }
+    nts_release((NtsHeader *)promise);
+  }
+  nts_env->rejected_len = 0;
+}
+
 static void nts_process_ticks_and_rejections(void) {
   bool previous = nts_env->checkpoint_active;
   nts_env->checkpoint_active = true;
@@ -8031,6 +8096,13 @@ static void nts_process_ticks_and_rejections(void) {
   } while (nts_env->tick_queue.len != 0);
   nts_collect_at_checkpoint();
   nts_env->checkpoint_active = previous;
+  /* Only the outermost checkpoint reports. A nested one -- a capability that
+     re-enters compiled code and checkpoints inside its own work -- has not
+     finished the turn, so a handler still to be attached would be called
+     unhandled. */
+  if (!previous) {
+    nts_report_unhandled_rejections();
+  }
 }
 
 void nts_enter(void) { nts_env->depth++; }
@@ -8100,10 +8172,18 @@ bool nts_is_owner_thread(void) {
          nts_env->host.is_owner_thread(nts_env->host.state);
 }
 
-NtsPromiseJoinResult nts_promise_join(const NtsPromise *promise) {
+NtsPromiseJoinResult nts_promise_join(NtsPromise *promise) {
   if (!nts_is_owner_thread()) {
     return NTS_JOIN_WRONG_THREAD;
   }
+  /* **Joining is handling it**, and the promise has to be marked before the
+     checkpoint below: a join on a rejected promise reads the reason back, which
+     is an observation, and the checkpoint inside this loop would otherwise
+     report it as unhandled and end the process before the join could return
+     `NTS_JOIN_REJECTED`. That is not hypothetical -- it is what happened to
+     `promise_join.c`'s own rejection arm the hour the report was added, which
+     is why this function no longer takes a `const` promise: it observes one. */
+  promise->handled = true;
   if (nts_env->depth || nts_env->checkpoint_active || nts_env->join_active) {
     return NTS_JOIN_REENTRANT;
   }
@@ -8392,13 +8472,24 @@ void nts_promise_reject(NtsPromise *promise, NtsHeader *reason) {
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
+  /* Asked **before** settling, because settling consumes the list: it reverses
+     the reactions into subscription order and queues them, leaving `reactions`
+     null whether or not there were any. */
+  bool listened = promise->reactions != 0 || promise->handled;
   nts_retain(reason);
   promise->reason = reason;
   nts_promise_settle(promise, NTS_PROMISE_REJECTED);
+  if (!listened) {
+    nts_rejection_candidate(promise);
+  }
 }
 
 void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction) {
   nts_promise_require_owner("nts_promise_subscribe");
+  /* Before the settled test, so that subscribing to an *already rejected*
+     promise handles it: that is the `p.catch(...)` written on the line after
+     the rejection, and it is inside the same turn. */
+  promise->handled = true;
   if (promise->state != NTS_PROMISE_PENDING) {
     /* Settled already -- but still a microtask, not an inline call. Running it
      * here would resolve one tick early, and the difference is observable

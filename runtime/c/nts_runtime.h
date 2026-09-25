@@ -3229,6 +3229,17 @@ typedef struct NtsPromise {
    * above `NULL` would answer `typeof === "object"`. In the padding after
    * `state`, so a promise is no larger for it. */
   bool native;
+  /* Whether anything ever subscribed to it, which is how an **unhandled
+   * rejection** is told from a handled one.
+   *
+   * Set by `nts_promise_subscribe` whether the promise is pending or already
+   * settled, because node's rule is per *turn*: a handler attached before the
+   * microtask queue drains handles the rejection, and one attached after it
+   * does not. So the flag records "somebody listened at some point" and the
+   * drain decides.
+   *
+   * In the padding beside `native`, so a promise is no larger for it. */
+  bool handled;
   /* What it settled with, whatever that turned out to be.
    *
    * One representation for every fulfilment path: a number, a reference and
@@ -3392,7 +3403,7 @@ typedef enum NtsPromiseJoinResult {
  * Read a fulfilled value with nts_promise_value, a rejection with
  * nts_promise_reason. The current turn's full checkpoint finishes before
  * returning; unrelated repeating timers do not have to stop. */
-NtsPromiseJoinResult nts_promise_join(const NtsPromise *promise);
+NtsPromiseJoinResult nts_promise_join(NtsPromise *promise);
 /* Reject with a reason that arrives erased.
  *
  * `nts_promise_reject` takes an `NtsHeader *` because a reason is always a

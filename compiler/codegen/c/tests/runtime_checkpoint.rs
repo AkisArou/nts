@@ -133,6 +133,17 @@ fn an_outstanding_operation_holds_the_libuv_loop() {
 /// A foreign loop's pump consumes the wakeup a post from another thread left
 /// in libuv's backend, with nothing else alive, and registers the handle's
 /// descriptor before the first pump: a CoreFoundation run loop watching the
+/// An unhandled rejection ends the process, and a handled one does not.
+///
+/// `runtime/c/tests/rejections.c` forks for the arms that report, because the
+/// report is `exit(1)` by design: node ends an unhandled rejection exactly as it
+/// ends an uncaught throw, and a suite that called it directly would end with it.
+#[test]
+fn an_unhandled_rejection_ends_the_process() {
+    let report = run_suite("rejections", &[]);
+    assert!(checks(&report) >= 6, "{report}");
+}
+
 /// descriptor for an edge otherwise slept with a completion queued. The
 /// suite's own controls are the posts: each must make the descriptor readable.
 #[test]
