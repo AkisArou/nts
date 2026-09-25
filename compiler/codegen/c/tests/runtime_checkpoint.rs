@@ -77,6 +77,11 @@ fn run_suite_with(name: &str, provider: &[&str], sources: &[&str], link: &[&str]
         run.status.success(),
         "the {name} suite disagrees with node:\n{report}"
     );
+    // Removed once it passed, and kept when it did not, since the binary is
+    // what a person reads next. Every run made one, per process, and none was
+    // removed: 16,108 of them filled /tmp until javac reported "Disk quota
+    // exceeded" in an unrelated test.
+    let _ = std::fs::remove_dir_all(&out);
     report
 }
 
@@ -480,6 +485,9 @@ fn the_bigint_upper_endpoint_is_refused_rather_than_converted() {
         said.contains("outside the 128 bits a bigint has"),
         "the refusal should name the reason:\n{said}"
     );
+    // Only once both assertions held, as `run_suite_with` keeps a failing
+    // suite's binary.
+    let _ = std::fs::remove_dir_all(&out);
 }
 
 #[test]

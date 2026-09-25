@@ -90,6 +90,7 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Reported>>
         .arg(dir.join("probe.c"))
         .output()
         .ok()?;
+    let _ = std::fs::remove_dir_all(&dir);
     assert!(
         output.status.success(),
         "clang refused the header:\n{}",
