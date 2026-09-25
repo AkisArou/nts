@@ -30,6 +30,8 @@
 //   `Button`'s, back, and out through the slot's result pointer -- so
 //   `measured` counts them and `styled=true` says each arrived whole. The
 //   interface's other slots, `ArrangeOverride` among them, are `Button`'s.
+// - `PressButton`'s constructor takes its label, as a C# control's would:
+//   `super()` composes it, and the body sets its content with `this`.
 // - Each class keeps its counters in fields, as C#'s do. The runtime holds
 //   them beside the instance it composes (`nts_com_state`), and the timer
 //   reads the button's from outside it.
@@ -66,6 +68,13 @@ class PressButton extends Button {
   templated = 0;
   measured = 0;
   states = "";
+  label: string;
+
+  constructor(label: string) {
+    super();
+    this.label = label;
+    this.as_IContentControl().put_Content(PropertyValue.CreateString(label));
+  }
 
   OnPointerEntered(_e: IPointerRoutedEventArgs | null): void {
     this.entered += 1;
@@ -94,8 +103,7 @@ class App extends Application {
     this.get_Resources().get_MergedDictionaries().Append(XamlControlsResources.create().as_IResourceDictionary());
     const window = Window.CreateInstance();
     window.put_Title("nts");
-    const button = new PressButton();
-    button.as_IContentControl().put_Content(PropertyValue.CreateString("Press"));
+    const button = new PressButton("Press");
     button.as_IButtonBase().add_Click(() => {
       this.clicks += 1;
     });
@@ -109,7 +117,7 @@ class App extends Application {
       report(
         "title=" + window.get_Title() + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
           " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-          " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states,
+          " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label,
       );
       this.Exit();
     }, 1500);

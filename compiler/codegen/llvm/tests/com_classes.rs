@@ -358,6 +358,37 @@ fn a_string_argument_is_the_text_of_the_lent_hstring() {
     assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
 }
 
+/// A constructor, as C#'s `public App(string name) { ... }`: `new App("ada")`
+/// calls `App#new`, whose `super()` composes the instance -- its fields
+/// already made -- and whose body then runs with `this`.
+#[test]
+fn a_composed_class_constructor_runs_after_its_composition() {
+    let source = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\nclass App extends Application {\n  label = \"\";\n  constructor(name: string) {\n    super();\n    this.label = \"hello \" + name;\n  }\n  OnLaunched(_args: IInspectable | null): void {}\n}\nexport function start(): string {\n  return new App(\"ada\").label;\n}\n";
+    let Some((dir, prepared)) = prepare("constructor", source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    let start = text.lines().position(|line| line.contains(" App__new(") && line.ends_with('{')).unwrap_or_else(|| panic!("no App#new:\n{text}"));
+    let body = text.lines().skip(start + 1).take_while(|line| *line != "}").collect::<Vec<_>>().join("\n");
+    assert!(body.contains("nts_com_compose_named("), "the constructor does not compose:\n{body}");
+    assert!(body.contains("nts_com_state("), "the body does not write a field:\n{body}");
+    assert!(text.contains("App__new("), "`new App(...)` does not call the constructor:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
 /// `super.OnLaunched(args)` in an override is the base's own implementation
 /// of the interface, from the runtime (`nts_com_base`, which answers the
 /// program's reference), called through the override's slot with its
@@ -464,15 +495,15 @@ fn a_slot_the_class_leaves_is_forwarded_to_its_base() {
 
 /// What a composed class cannot be yet, refused where it is written, naming
 /// it: an interface overridden in part whose other slot cannot be forwarded,
-/// a constructor, and a field initialiser that could reach the half-made
-/// instance.
+/// a constructor that does not open with its `super()`, and a field
+/// initialiser that could reach the half-made instance.
 #[test]
 fn what_a_composed_class_cannot_hold_is_refused_by_name() {
     let head = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\n";
     let tail = "export function start(): void {\n  new App();\n}\n";
     for (name, body, refusal) in [
         ("unforwardable", "  Fourth(): void {}\n", "`Third`, whose base's is forwarded to and cannot be: a result the binding spells as `out` parameters' fields"),
-        ("constructor", "  constructor() {\n    super();\n  }\n  OnLaunched(_args: IInspectable | null): void {}\n", "constructor"),
+        ("late-super", "  constructor() {\n    const early = 1;\n    super();\n    void early;\n  }\n  OnLaunched(_args: IInspectable | null): void {}\n", "does not open with its `super()`"),
         ("reaching-initializer", "  me = this;\n  OnLaunched(_args: IInspectable | null): void {}\n", "a field initialiser of a class extending a foreign class"),
     ] {
         let source = format!("{head}class App extends Application {{\n{body}}}\n{tail}");

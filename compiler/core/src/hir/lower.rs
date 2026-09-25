@@ -6015,7 +6015,7 @@ fn lower_class(
             // its interface answers, and nothing else yet -- no constructor
             // of its own, which `new` does not run, and no field.
             if super::native::extends_com(snapshot, class) && !is_static_member(snapshot, member) {
-                let lowered_member = builder.lower_com_member(class, member, instance).map(|(func, method)| (func, Some(method)));
+                let lowered_member = builder.lower_com_member(class, member, instance);
                 keep_foreign_member(snapshot, member, lowered_member, &mut com_methods, lowered);
                 wanted.extend(builder.used_closures.iter().copied());
                 collect_layouts(&mut lowered.program, builder.layouts);
@@ -11811,6 +11811,9 @@ struct FuncBuilder<'a> {
     /// The name of the class over a `GObject` class whose constructor is
     /// being lowered: its `super(...)` makes the instance (`gobject_super`).
     gobject_construct: Option<String>,
+    /// The name of the class over a composable Windows Runtime class whose
+    /// constructor is being lowered: its `super()` composes the instance.
+    com_construct: Option<String>,
     /// The chain-up (`super.vfunc_clicked()`) whose callee is being built
     /// from the overridden declaration, which is a virtual function a direct
     /// call of is otherwise refused.
@@ -12095,6 +12098,7 @@ impl<'a> FuncBuilder<'a> {
             in_constructor: false,
             objc_construct: None,
             gobject_construct: None,
+            com_construct: None,
             chaining_up: None,
             objc_entry: None,
             record_out: None,
@@ -14163,12 +14167,10 @@ impl<'a> FuncBuilder<'a> {
         class: NodeId,
         member: NodeId,
         instance: Option<TypeId>,
-    ) -> Result<(Func, super::ForeignMethod), Diagnostic> {
+    ) -> Result<(Func, Option<super::ForeignMethod>), Diagnostic> {
         match self.kind_of(member) {
             Some(syntax::METHOD_DECLARATION) => {}
-            Some(syntax::CONSTRUCTOR) => {
-                return Err(self.unsupported(member, "a constructor of a class written over a composable Windows Runtime class, which the runtime composes"));
-            }
+            Some(syntax::CONSTRUCTOR) => return Ok((self.lower_com_constructor(class, member, instance)?, None)),
             _ => return Err(self.unsupported(member, "a member of a class written over a composable Windows Runtime class that is not a method")),
         }
         let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
@@ -14197,7 +14199,7 @@ impl<'a> FuncBuilder<'a> {
             function: func.name.clone(),
             signature: std::sync::Arc::new(adapter),
         };
-        Ok((func, method))
+        Ok((func, Some(method)))
     }
 
     /// The slots of the interfaces the class overrides some of that it does
@@ -14443,6 +14445,71 @@ impl<'a> FuncBuilder<'a> {
                         && self.children(*call).first().is_some_and(|callee| self.kind_of(*callee) == Some(syntax::SUPER_KEYWORD))
                 })
         })
+    }
+
+    /// A constructor of a class the program writes over a composable Windows
+    /// Runtime class, as C#'s `public App() { ... }`: `{Class}#new`, taking
+    /// the constructor's parameters and answering the instance (+1). Its
+    /// `super()` composes the instance (`com_super`), whose fields the runtime
+    /// has made already, and the body runs with `this`.
+    fn lower_com_constructor(&mut self, class: NodeId, member: NodeId, instance: Option<TypeId>) -> Result<Func, Diagnostic> {
+        let name = foreign_class_name(self.snapshot, class).ok_or_else(|| self.unsupported(member, "a constructor of a class with no name"))?;
+        let instance = instance
+            .or_else(|| instance_type_of(self.snapshot, class))
+            .ok_or_else(|| self.unsupported(member, "a constructor of a composed class with no instance type"))?;
+        let Some(ty @ HirType::NativePointer(_)) = self.represent(instance) else {
+            return Err(self.unsupported(member, "a constructor of a composed class whose instances are not its base's handle"));
+        };
+        let body = self.method_body(member, false)?.ok_or_else(|| self.unsupported(member, "a composed class's constructor with no body"))?;
+        if !self.opens_with_super(body) {
+            return Err(self.unsupported(member, "a constructor of a class over a composable Windows Runtime class that does not open with its `super()`"));
+        }
+        let origin = self.origin(member);
+        self.this = None;
+        self.in_constructor = true;
+        let mut params = Vec::new();
+        for child in self.children(member) {
+            if self.kind_of(child) != Some(syntax::PARAMETER) {
+                continue;
+            }
+            if self.declares_a_field(child) {
+                return Err(self.unsupported(child, "a constructor parameter that declares a field of a class over a composable Windows Runtime class"));
+            }
+            let index = u32::try_from(params.len()).unwrap_or(0);
+            params.extend(self.lower_param(child, index)?);
+        }
+        self.com_construct = Some(name.clone());
+        self.returns = ty.clone();
+        self.lower_block(body)?;
+        if !self.is_terminated() {
+            let made = self.this.ok_or_else(|| self.unsupported(member, "a composed class's constructor that made no instance"))?;
+            self.terminate(Terminator::Return(Some(made)));
+        }
+        Ok(self.finish(format!("{name}#new"), params, ty, origin, false))
+    }
+
+    /// `super()` in such a constructor: the instance, composed by the runtime
+    /// by the class's name, and `this` from here on. The base's composable
+    /// factory takes nothing of the program's, so neither does `super`.
+    fn com_super(&mut self, id: NodeId, name: &str, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        if self.this.is_some() {
+            return Err(self.unsupported(id, "a second `super()`"));
+        }
+        if !arguments.is_empty() {
+            return Err(self.unsupported(id, "a `super(...)` with arguments in a class over a composable Windows Runtime class, whose factory takes none"));
+        }
+        let Some(ty @ HirType::NativePointer(_)) = self.represent(self.this_instance_type(id)?) else {
+            return Err(self.unsupported(id, "a composed class whose instances are not its base's handle"));
+        };
+        let made = self.compose_named(name, ty, &self.origin(id));
+        self.this = Some(made);
+        Ok(made)
+    }
+
+    /// The runtime's composition of the class registered as `name` (+1).
+    fn compose_named(&mut self, name: &str, ty: HirType, origin: &Origin) -> ValueId {
+        let name = self.push(OpKind::ConstString(name.to_owned()), HirType::Managed(ManagedType::String), origin.clone());
+        self.runtime_call("nts_com_compose_named", vec![name], ty, origin.clone())
     }
 
     /// A constructor of a class the program writes over a `GObject` class, as
@@ -45225,22 +45292,24 @@ impl<'a> FuncBuilder<'a> {
         if !super::native::extends_com(self.snapshot, class) {
             return Ok(None);
         }
-        if !self.arguments_of(id).is_empty() {
-            return Err(self.unsupported(id, "a `new` with arguments of a class written over a composable Windows Runtime class"));
-        }
-        let Some(name) = self
-            .children(class)
-            .into_iter()
-            .find_map(|child| (self.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| self.node(child).text.clone()).flatten())
-        else {
+        let Some(name) = foreign_class_name(self.snapshot, class) else {
             return Err(self.unsupported(id, "a `new` of an anonymous class written over a composable Windows Runtime class"));
         };
+        // A class with a constructor is made by it: `{Class}#new`, whose
+        // `super()` composes the instance.
+        if let Some(constructor) = self.children(class).into_iter().find(|member| self.kind_of(*member) == Some(syntax::CONSTRUCTOR)) {
+            let callee = Callee::Direct(format!("{name}#new"));
+            let arguments = self.arguments_of(id);
+            let (args, lent) = self.lower_call_arguments(id, &callee, &arguments, None)?;
+            return self.finish_call(id, callee, args, lent, Some(constructor)).map(Some);
+        }
+        if !self.arguments_of(id).is_empty() {
+            return Err(self.unsupported(id, "a `new` with arguments of a class written over a composable Windows Runtime class that declares no constructor"));
+        }
         let Some(ty @ HirType::NativePointer(_)) = self.type_of(id) else {
             return Err(self.unsupported(id, "a class written over a composable Windows Runtime class whose instances are not its base's handle"));
         };
-        let origin = self.origin(id);
-        let name = self.push(OpKind::ConstString(name), HirType::Managed(ManagedType::String), origin.clone());
-        Ok(Some(self.runtime_call("nts_com_compose_named", vec![name], ty, origin)))
+        Ok(Some(self.compose_named(&name, ty, &self.origin(id))))
     }
 
     /// The class declaration a `new` constructs, through its expression's
@@ -49588,6 +49657,9 @@ impl<'a> FuncBuilder<'a> {
         if let Some(call) = self.gobject_super_call(id, member, arguments) {
             return call;
         }
+        if let Some(call) = self.com_super_call(id, member, arguments) {
+            return call;
+        }
         let base = self
             .base
             .clone()
@@ -49617,13 +49689,6 @@ impl<'a> FuncBuilder<'a> {
         let receiver = self
             .this
             .ok_or_else(|| self.unsupported(id, "`super` outside a method"))?;
-
-        // A composable Windows Runtime class's overridable method:
-        // `super.OnGotFocus(e)`, through its slot of the base's own
-        // implementation of the interface, past this class's override.
-        if let Some((method, tag)) = self.overridable_target(id, member) {
-            return self.lower_com_super(id, receiver, method, &tag, arguments);
-        }
 
         // A superclass a binding declares, an Objective-C class: `[super m]`,
         // the message sent past this class's own implementation.
@@ -49824,6 +49889,23 @@ impl<'a> FuncBuilder<'a> {
         let sent = self.lower_native_method_call(id, (receiver, object), method, member, arguments);
         self.super_send = None;
         sent
+    }
+
+    /// `super()` and `super.OnGotFocus(e)` in a class the program writes over
+    /// a composable Windows Runtime class: its constructor's composition, or
+    /// the base's own implementation of a method it overrides, through the
+    /// method's slot past this class's override. `None` for any other
+    /// `super`.
+    fn com_super_call(&mut self, id: NodeId, member: &str, arguments: &[NodeId]) -> Option<Result<ValueId, Diagnostic>> {
+        if member == "constructor" {
+            let name = self.com_construct.clone()?;
+            return Some(self.com_super(id, &name, arguments));
+        }
+        let (method, tag) = self.overridable_target(id, member)?;
+        let Some(receiver) = self.this else {
+            return Some(Err(self.unsupported(id, "`super` outside a method")));
+        };
+        Some(self.lower_com_super(id, receiver, method, &tag, arguments))
     }
 
     /// The method a `super.m(...)` calls and its `@ntsOverride` tag, where
