@@ -360,9 +360,17 @@ Application.Start(() => { new App(); });
      same object. Narrowing an `unknown` by `instanceof` a WinRT class is not
      done yet; GObject's `lower_gobject_instanceof` is the shape, with
      `QueryInterface` as the class check.
-   - Not yet: events (`add_Click`), generic interfaces (`IVector`), static
-     properties, struct fields (`size.Width`), and strings boxed where a slot
-     takes `IInspectable`. Also started: a record a call takes by value may be
+   - **Events, as the DOM and WinJS spell them:** `button.addEventListener(
+     "click", f)` and `removeEventListener`. Each class has a
+     `{Class}EventMap` extending its base's, keyed by the event's name
+     lower-cased; each listener is an `Event<F, IID, "<interface IID> <add>
+     <remove>">`. The runtime (`nts_winrt_listen`) asks the object for the
+     interface, calls its `add_`, and keeps the token by the object's
+     `IUnknown`, the event and the function's closure. So a function added
+     twice is added once, and a removal finds its token.
+   - Not yet: generic interfaces (`IVector`), static properties, struct
+     fields (`size.Width`), and strings boxed where a slot takes
+     `IInspectable`. Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
    record stays `ByValue<T>`.

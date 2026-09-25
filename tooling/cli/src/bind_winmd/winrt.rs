@@ -292,7 +292,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
-    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable" | "Delegate" | "EventRegistrationToken" | "Guid")).collect();
+    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable" | "Delegate" | "Event" | "EventRegistrationToken" | "Guid")).collect();
     if !winrt.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
     }
@@ -511,12 +511,17 @@ impl Writer<'_> {
     /// program writes over it -- is not asked again. The ABI's own names stay on each interface, reached by
     /// `as_I…()`.
     ///
-    /// Not yet: events (`add_Click`), which want their own shape, and
-    /// generic interfaces (`IVector<T>`). A name two interfaces give is left
-    /// out and reported, not given to whichever came first.
+    /// Events follow as the DOM declares them: a `{Class}EventMap` extending
+    /// its base's, and `addEventListener` over it where the class raises
+    /// events of its own.
+    ///
+    /// Not yet: generic interfaces (`IVector<T>`). A name two interfaces give
+    /// is left out and reported, not given to whichever came first.
     fn members(&mut self, class: &str, def: TypeDef, default: Option<&Type>) -> String {
         let mut declared: BTreeMap<String, usize> = BTreeMap::new();
         let mut texts: Vec<(String, String)> = Vec::new();
+        let mut raised: BTreeMap<String, usize> = BTreeMap::new();
+        let mut events: Vec<(String, String)> = Vec::new();
         let own = def
             .interface_impls()
             .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"))
@@ -536,6 +541,10 @@ impl Writer<'_> {
                 *declared.entry(name.clone()).or_default() += 1;
                 texts.push((name, text));
             }
+            for (name, text) in self.interface_events(interface_def) {
+                *raised.entry(name.clone()).or_default() += 1;
+                events.push((name, text));
+            }
         }
         let base = def
             .extends()
@@ -545,7 +554,8 @@ impl Writer<'_> {
                 // names it is asked for declares the base -- and its surface --
                 // this one extends.
                 self.named(base.namespace(), base.name());
-                self.named(base.namespace(), &format!("{}Members", base.name()))
+                let events = self.named(base.namespace(), &format!("{}EventMap", base.name()));
+                (self.named(base.namespace(), &format!("{}Members", base.name())), events)
             });
         // A name a base's surface gives already: C# hides the base's member
         // behind the class's (`new`), and TypeScript's `extends` refuses the
@@ -558,12 +568,33 @@ impl Writer<'_> {
             }
         }
         declared.retain(|name, _| !inherited.contains(name));
+        let inherited = self.inherited_event_names(def);
+        for (name, count) in &raised {
+            if inherited.contains(name) {
+                self.refuse(&format!("{class}.{name}"), "an event a base class raises already; added through its interface's `add_`");
+            } else if *count > 1 {
+                self.refuse(&format!("{class}.{name}"), "an event two of the class's interfaces raise; each is added through its interface's `add_`");
+            }
+        }
+        raised.retain(|name, count| *count == 1 && !inherited.contains(name));
         let mut out = String::new();
-        let extends = base.map(|base| format!(" extends {base}")).unwrap_or_default();
+        let (members_base, events_base) = base.unzip();
+        let extends = members_base.map(|base| format!(" extends {base}")).unwrap_or_default();
         let _ = writeln!(out, "  export interface {class}Members{extends} {{");
         for (name, text) in texts {
             if declared.get(&name) == Some(&1) {
                 out.push_str(&text);
+            }
+        }
+        // `addEventListener` over the events the class raises and those its
+        // bases do: declared where a class adds events of its own, and
+        // inherited where it adds none.
+        if !raised.is_empty() {
+            for direction in ["add", "remove"] {
+                let _ = writeln!(
+                    out,
+                    "    /**\n     * @ntsListener {direction}\n     */\n    {direction}EventListener<K extends keyof {class}EventMap>(type: K, listener: {class}EventMap[K]): void;"
+                );
             }
         }
         let _ = writeln!(out, "  }}");
@@ -572,7 +603,65 @@ impl Writer<'_> {
                 self.refuse(&format!("{class}.{name}"), "an idiomatic name two of the class's interfaces give; each is reached through its interface");
             }
         }
+        // The events, by the name `addEventListener` takes -- the metadata's,
+        // lower-cased, as the Windows Runtime's JavaScript projection named
+        // them (`click`, `pointerentered`) -- each the listener it takes.
+        let extends = events_base.map(|base| format!(" extends {base}")).unwrap_or_default();
+        let _ = writeln!(out, "  export interface {class}EventMap{extends} {{");
+        for (name, text) in events {
+            if raised.contains_key(&name) {
+                out.push_str(&text);
+            }
+        }
+        let _ = writeln!(out, "  }}");
         out
+    }
+
+    /// The events of one interface, as [`Self::members`] maps them: `(name,
+    /// text)` for each `add_X` with its `remove_X`, whose listener is its
+    /// `add_`'s delegate as an `Event` (`winrt:types`) naming the interface
+    /// and the two slots, which the runtime calls.
+    fn interface_events(&mut self, def: TypeDef) -> Vec<(String, String)> {
+        let Some(iid) = iid(def) else { return Vec::new() };
+        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def.methods().enumerate().map(|(index, method)| (6 + index, method)).collect();
+        let mut events = Vec::new();
+        for &(add, method) in &methods {
+            let abi = method_name(method);
+            let Some(event) = abi.strip_prefix("add_") else { continue };
+            let Some(remove) = methods.iter().find(|(_, method)| method_name(*method) == format!("remove_{event}")).map(|(slot, _)| *slot) else {
+                continue;
+            };
+            let signature = method.signature(&[]);
+            let [handler] = signature.types.as_slice() else { continue };
+            let Ok(delegate) = self.spell(handler, true) else { continue };
+            let Some(function) = delegate.strip_prefix("Delegate<").and_then(|rest| rest.strip_suffix('>')) else { continue };
+            self.brands.insert("Event");
+            let name = event.to_lowercase();
+            events.push((name.clone(), format!("    {name}: Event<{function}, \"{iid} {add} {remove}\">;\n")));
+        }
+        events
+    }
+
+    /// Every event name the event maps of `def`'s base classes declare.
+    fn inherited_event_names(&self, def: TypeDef) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
+        let mut base = def.extends();
+        for _ in 0..32 {
+            let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) else { break };
+            if parent.category() != TypeCategory::Class {
+                break;
+            }
+            let public = parent
+                .interface_impls()
+                .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"));
+            for implemented in public {
+                let Type::ClassName(declared) = implemented.interface(&[]) else { continue };
+                let Some(interface) = self.index.get(&declared.namespace, &declared.name).next() else { continue };
+                names.extend(interface.methods().filter_map(|method| method_name(method).strip_prefix("add_").map(str::to_lowercase)));
+            }
+            base = parent.extends();
+        }
+        names
     }
 
     /// Every idiomatic name the surfaces of `def`'s base classes declare,

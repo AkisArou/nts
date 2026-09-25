@@ -378,6 +378,147 @@ void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high) {
   return nts_query(object, &wanted);
 }
 
+/* Events, as `addEventListener` registers them: an object's event and a
+ * function, and the token the event's `add_` answered, which its `remove_`
+ * takes back. Keyed as the DOM keys a listener -- the object by its
+ * `IUnknown`, the one pointer every interface of it answers; the event by its
+ * interface and `add_` slot; the function by its closure, the delegate's
+ * context, which is one object however many times the program names it -- so
+ * a function added twice is registered once, and removing one that was never
+ * added does nothing.
+ *
+ * The object is not counted: the source keeps each delegate, and the table
+ * keeps only what the removal needs. An object that ends with a listener
+ * still added leaves its entry, which an object later made at the same
+ * address, with a listener whose closure is at the same address, would
+ * match. */
+typedef struct {
+  void *object;
+  IID iid;
+  uint32_t add;
+  void *listener;
+  int64_t token;
+} NtsListening;
+
+static NtsListening *listenings;
+static size_t listening_count;
+static size_t listening_capacity;
+
+/* The event `nts_winrt_listen` is handed: `<IID> <add> <remove>`, as the
+ * compiler writes it from the listener's `Event<F, IID, Slots>`. */
+typedef struct {
+  IID iid;
+  uint32_t add;
+  uint32_t remove;
+} NtsEvent;
+
+static int nts_hex(const char **at, unsigned digits, uint64_t *out) {
+  uint64_t value = 0;
+  for (unsigned i = 0; i < digits; i++, (*at)++) {
+    char c = **at;
+    unsigned digit;
+    if (c >= '0' && c <= '9') {
+      digit = (unsigned)(c - '0');
+    } else if (c >= 'a' && c <= 'f') {
+      digit = (unsigned)(c - 'a' + 10);
+    } else if (c >= 'A' && c <= 'F') {
+      digit = (unsigned)(c - 'A' + 10);
+    } else {
+      return 0;
+    }
+    value = value << 4 | digit;
+  }
+  *out = value;
+  return 1;
+}
+
+static NtsEvent nts_event(const char *text) {
+  NtsEvent event;
+  const char *at = text;
+  uint64_t part;
+  int ok = nts_hex(&at, 8, &part) && *at++ == '-';
+  event.iid.Data1 = (unsigned long)part;
+  ok = ok && nts_hex(&at, 4, &part) && *at++ == '-';
+  event.iid.Data2 = (unsigned short)part;
+  ok = ok && nts_hex(&at, 4, &part) && *at++ == '-';
+  event.iid.Data3 = (unsigned short)part;
+  for (unsigned i = 0; ok && i < 8; i++) {
+    ok = (i != 2 || *at++ == '-') && nts_hex(&at, 2, &part);
+    event.iid.Data4[i] = (unsigned char)part;
+  }
+  char *end = 0;
+  event.add = ok ? (uint32_t)strtoul(at, &end, 10) : 0;
+  ok = ok && end != at;
+  at = end;
+  event.remove = ok ? (uint32_t)strtoul(at, &end, 10) : 0;
+  if (!ok || end == at || *end != '\0') {
+    fprintf(stderr, "nts: an event the compiler wrote unreadably: %s\n", text);
+    abort();
+  }
+  return event;
+}
+
+static size_t nts_listening(void *object, const NtsEvent *event,
+                            void *listener) {
+  for (size_t at = 0; at < listening_count; at++) {
+    const NtsListening *entry = &listenings[at];
+    if (entry->object == object && entry->listener == listener &&
+        entry->add == event->add &&
+        memcmp(&entry->iid, &event->iid, sizeof entry->iid) == 0) {
+      return at;
+    }
+  }
+  return listening_count;
+}
+
+int32_t nts_winrt_listen(void *object, const char *text, void *delegate) {
+  NtsEvent event = nts_event(text);
+  void *identity = nts_query(object, &nts_iid_unknown);
+  void *listener = ((NtsComDelegate *)delegate)->context;
+  HRESULT hr = S_OK;
+  if (nts_listening(identity, &event, listener) == listening_count) {
+    if (listening_count == listening_capacity) {
+      size_t capacity = listening_capacity == 0 ? 8 : listening_capacity * 2;
+      NtsListening *grown = realloc(listenings, capacity * sizeof *listenings);
+      if (grown == 0) {
+        fprintf(stderr, "nts: out of memory adding an event listener\n");
+        abort();
+      }
+      listenings = grown;
+      listening_capacity = capacity;
+    }
+    void *face = nts_query(object, &event.iid);
+    int64_t token = 0;
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, void *, int64_t *))(
+        *(void ***)face)[event.add])(face, delegate, &token);
+    nts_unknown_release(face);
+    if (SUCCEEDED(hr)) {
+      listenings[listening_count++] =
+          (NtsListening){identity, event.iid, event.add, listener, token};
+    }
+  }
+  nts_unknown_release(identity);
+  return hr;
+}
+
+int32_t nts_winrt_unlisten(void *object, const char *text, void *delegate) {
+  NtsEvent event = nts_event(text);
+  void *identity = nts_query(object, &nts_iid_unknown);
+  size_t at =
+      nts_listening(identity, &event, ((NtsComDelegate *)delegate)->context);
+  nts_unknown_release(identity);
+  if (at == listening_count) {
+    return S_OK;
+  }
+  int64_t token = listenings[at].token;
+  listenings[at] = listenings[--listening_count];
+  void *face = nts_query(object, &event.iid);
+  HRESULT hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, int64_t))(
+      *(void ***)face)[event.remove])(face, token);
+  nts_unknown_release(face);
+  return hr;
+}
+
 /* One activated factory: its class's name as UTF-16, which the cache owns,
  * the interface it was asked as, and the object. */
 typedef struct NtsFactory {

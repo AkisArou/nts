@@ -39,10 +39,12 @@
 // - Each class keeps its counters in fields, as C#'s do. The runtime holds
 //   them beside the instance it composes (`nts_com_state`), and the timer
 //   reads the button's from outside it.
-// - The button's `Click` handler is a TypeScript function counting into the
-//   application's `clicks` field. The timer presses it the way an accessibility client does
-//   -- its automation peer's `IInvokeProvider.Invoke` -- so no person is
-//   needed, and `clicks` shows the handler ran once.
+// - The button's `click` listener (`addEventListener`) is a TypeScript
+//   function counting into the application's `clicks` field. The timer presses
+//   it the way an accessibility client does -- its automation peer's
+//   `IInvokeProvider.Invoke` -- so no person is needed, and `clicks` shows the
+//   listener ran once: added twice, it is added once, and a second listener,
+//   removed, adds nothing.
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
 import { report } from "c:report";
 import type { ByValue } from "c:types";
@@ -127,9 +129,19 @@ class App extends Application {
     const window = new Window();
     window.title = "nts";
     const button = new PressButton("Press");
-    button.as_IButtonBase().add_Click(() => {
+    // Listeners as the DOM keeps them: one function added twice is added
+    // once, and one removed hears nothing -- so a click counts 1, where
+    // either going wrong counts 2 or 101.
+    const counted = (): void => {
       this.clicks += 1;
-    });
+    };
+    button.addEventListener("click", counted);
+    button.addEventListener("click", counted);
+    const removed = (): void => {
+      this.clicks += 100;
+    };
+    button.addEventListener("click", removed);
+    button.removeEventListener("click", removed);
     window.content = button;
     window.activate();
     setTimeout(() => this.whenLaidOut(window, button), 200);

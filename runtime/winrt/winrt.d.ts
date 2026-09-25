@@ -63,6 +63,19 @@ declare module "winrt:types" {
     readonly __c_iid?: IID;
   };
 
+  // An event a class raises, as `addEventListener` takes its listener: the
+  // delegate, and the event it is for -- `"<IID> <add> <remove>"`, the
+  // interface declaring the event and its `add_` and `remove_` slots. The
+  // runtime keeps the token `add_` answers, by object and listener, for
+  // `removeEventListener` to give back. One object beside `F`, as
+  // `Delegate`'s is, not `Delegate<F, IID>` and a second: a closure's markers
+  // are read from one part.
+  export type Event<F extends (...args: never[]) => void, IID extends string, Slots extends string> = F & {
+    readonly __c_closure?: "delegate";
+    readonly __c_iid?: IID;
+    readonly __c_event?: Slots;
+  };
+
   // What an event's `add_` answers and its `remove_` takes: a struct of one
   // `int64`, which both calling conventions pass exactly as the integer.
   export type EventRegistrationToken = c_int64;

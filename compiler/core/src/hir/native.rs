@@ -2154,6 +2154,34 @@ enum ClosureKind {
     Delegate(std::sync::Arc<str>),
 }
 
+/// The event an `Event<F, IID, Slots>` (`winrt:types`) is for: its `Slots`,
+/// `"<IID> <add> <remove>"` -- the interface declaring the event, and the
+/// slots of its `add_` and `remove_`. Read from the object beside `F`, where
+/// [`closure`] reads the delegate's markers.
+pub(crate) fn event_slots(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(String, u32, u32)> {
+    let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let TypeKind::Intersection(parts) = kind_of(ty)? else {
+        return None;
+    };
+    let text = parts.iter().find_map(|part| {
+        let TypeKind::Object { properties } = kind_of(*part)? else { return None };
+        let event = properties.iter().find(|p| p.name == "___c_event")?;
+        let defined = match kind_of(event.ty)? {
+            TypeKind::Union(members) => members.iter().copied().find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined)))?,
+            _ => event.ty,
+        };
+        match kind_of(defined)? {
+            TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+            _ => None,
+        }
+    })?;
+    let mut words = text.split_whitespace();
+    let iid = words.next()?.to_owned();
+    let add = words.next()?.parse().ok()?;
+    let remove = words.next()?.parse().ok()?;
+    (words.next().is_none() && is_interface_id(&iid)).then_some((iid, add, remove))
+}
+
 /// The function type inside a `Closure<F>` or `ScopedClosure<F>`, and whether
 /// it is the scoped one.
 ///

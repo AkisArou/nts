@@ -765,3 +765,74 @@ fn a_handle_passed_as_its_base_is_asked_for_the_base_interface() {
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(llvm.text.contains("nts_com_query"), "the IR does not ask:\n{}", llvm.text);
 }
+
+/// A class's events as `bind-winmd` writes them: a map from each event's
+/// name to its listener, an `Event<F, IID, Slots>` naming the interface and
+/// its `add_`/`remove_` slots, and `addEventListener` over the map.
+const EVENTS: &str = r#"declare module "winrt:Test.Events" {
+  import type { ComClass, Event, IInspectable } from "winrt:types";
+  export type IButton = ComClass<"Test_IButton">;
+  export interface ButtonEventMap {
+    click: Event<(sender: IInspectable, e: IInspectable) => void, "A856E674-B0B6-4BC3-BBA8-1BA06E40D4B5", "0B0B0B0B-1111-2222-3333-444444444444 14 15">;
+  }
+  export interface ButtonMembers {
+    /**
+     * @ntsListener add
+     */
+    addEventListener<K extends keyof ButtonEventMap>(type: K, listener: ButtonEventMap[K]): void;
+    /**
+     * @ntsListener remove
+     */
+    removeEventListener<K extends keyof ButtonEventMap>(type: K, listener: ButtonEventMap[K]): void;
+  }
+  export type Button = IButton & ButtonMembers;
+}
+"#;
+
+/// `addEventListener("click", f)`: the runtime's `nts_winrt_listen`, handed
+/// the event the listener's type names -- the interface and its slots -- and
+/// `f` made a delegate of the event's IID; `removeEventListener` the
+/// runtime's `nts_winrt_unlisten`, over the same. Each answers an HRESULT,
+/// which is thrown when it fails.
+#[test]
+fn an_event_listener_is_added_and_removed_by_the_runtime() {
+    let source = "import type { Button } from \"winrt:Test.Events\";\nlet clicks = 0;\nconst onClick = (): void => {\n  clicks += 1;\n};\nexport function wire(b: Button): number {\n  b.addEventListener(\"click\", onClick);\n  b.removeEventListener(\"click\", onClick);\n  return clicks;\n}\n";
+    let Some((dir, prepared)) = prepare_with("events", EVENTS, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("nts_winrt_listen(") && text.contains("nts_winrt_unlisten("), "not the runtime's:\n{text}");
+    // A string constant is its bytes.
+    let event = "0B0B0B0B-1111-2222-3333-444444444444 14 15".bytes().map(|byte| byte.to_string()).collect::<Vec<_>>().join(", ");
+    assert!(text.contains(&format!("{{ {event}, 0 }}")), "not the event the type names:\n{text}");
+    assert!(text.contains("int32_t nts_winrt_listen(void *, const char *, void *);"), "not the runtime's signature:\n{text}");
+    assert!(text.contains("nts_com_delegate("), "the listener is not made a delegate:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("@nts_winrt_listen("), "the IR does not listen:\n{}", llvm.text);
+}
+
+/// A listener whose type is a plain function, naming no event, is refused
+/// by name: there is no interface or slot to add it through.
+#[test]
+fn a_listener_naming_no_event_is_refused() {
+    let binding = EVENTS.replace(
+        "Event<(sender: IInspectable, e: IInspectable) => void, \"A856E674-B0B6-4BC3-BBA8-1BA06E40D4B5\", \"0B0B0B0B-1111-2222-3333-444444444444 14 15\">",
+        "(sender: IInspectable, e: IInspectable) => void",
+    );
+    let source = "import type { Button } from \"winrt:Test.Events\";\nexport function wire(b: Button): void {\n  b.addEventListener(\"click\", () => {});\n}\n";
+    let Some((_, prepared)) = prepare_with("events-no-event", &binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("an event listener whose type names no event")),
+        "{:?}",
+        prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}

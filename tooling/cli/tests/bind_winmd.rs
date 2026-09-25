@@ -466,6 +466,19 @@ fn composable_classes_are_constructed_as_themselves() {
         module.contains("export type IButton = ComClass<\"Windows_UI_Xaml_Controls_IButton\", IButtonBase> & IButtonMethods & IButtonBaseMethods & IContentControlMethods & IControlMethods & IFrameworkElementMethods & IUIElementMethods & IDependencyObjectMethods;"),
         "IButton is not in its base's chain"
     );
+    // Events by the lower-cased name `addEventListener` takes, each a
+    // listener naming its interface and `add_`/`remove_` slots; the map
+    // inherited along the class chain, and `addEventListener` declared where
+    // a class raises events of its own.
+    assert!(module.contains("export interface ButtonEventMap extends ButtonBaseEventMap {"), "the event map is not inherited");
+    assert!(
+        module.contains("    isenabledchanged: Event<(sender: IInspectable, e: DependencyPropertyChangedEventArgs) => void, \"09223E5A-75BE-4499-8180-1DDC005421C0\", \"A8912263-2951-4F58-A9C5-5A134EAA7F07 43 44\">;"),
+        "IsEnabledChanged is not an event of IControl's slots 43 and 44"
+    );
+    assert!(
+        module.contains("     * @ntsListener add\n     */\n    addEventListener<K extends keyof ControlEventMap>(type: K, listener: ControlEventMap[K]): void;"),
+        "Control does not listen over its events"
+    );
     // A static beside its ABI name, one slot.
     assert!(module.contains("     * @ntsFactory Windows.UI.Xaml.Controls.Button 80A13C19-843A-451C-8CF5-44C701B0E216\n     */\n    function createInstance(): Button;"), "no camelCase static");
     let _ = std::fs::remove_dir_all(&out);
