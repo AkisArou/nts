@@ -618,6 +618,25 @@ fn unify(
         }
         return;
     }
+    // **Through a tuple's positions**, which is where the rest of React's hook
+    // family lives. `useState<S>(...): [S, Dispatch<BasicStateAction<S>>]`
+    // mentions `S` in its return only inside a tuple, and this function had arms
+    // for an array's element and a signature's parameters and result but none for
+    // a tuple -- so `mountState`, `updateReducer` and `dispatchSetStateInternal`
+    // stayed unpinned after the union arm above cleared the other four.
+    //
+    // Position by position, and **only at equal arity**. Two tuples of different
+    // lengths have nothing to pair: `[S]` against `[number, string]` would bind
+    // `S` from position 0 and silently ignore the rest, which is the same wrong
+    // binding the instantiation-arguments arm below refuses for the same reason.
+    if let (TypeKind::Tuple(ours), TypeKind::Tuple(theirs)) = (&generic.kind, &actual.kind)
+        && ours.len() == theirs.len()
+    {
+        let (ours, theirs) = (ours.clone(), theirs.clone());
+        for (ours, theirs) in ours.iter().zip(&theirs) {
+            unify(snapshot, *ours, *theirs, into, sources, deferred, depth + 1);
+        }
+    }
     if let (TypeKind::Function(generic_signature), TypeKind::Function(actual_signature)) =
         (&generic.kind, &actual.kind)
         && let (Some(declared), Some(resolved)) = (
