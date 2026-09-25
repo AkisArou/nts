@@ -475,6 +475,11 @@ pub fn analyze(
     for anchor in anchors(func, &crossing, &held) {
         live.hold_to_every_exit(func, anchor);
     }
+    // And a foreign counted handle a name still holds, which is an anchor for a
+    // reason *no* analysis here can see. See `held_to_the_end`.
+    for handle in held_to_the_end(func) {
+        live.hold_to_every_exit(func, handle);
+    }
 
     let live = &*live;
     let hands_over = handing_over(func, summaries);
@@ -663,6 +668,150 @@ fn control_flow(func: &Func) -> (Vec<Option<usize>>, Vec<rustc_hash::FxHashSet<u
         reaches.push(seen);
     }
     (defined_in, reaches)
+}
+
+/// A foreign counted handle whose release belongs at the function's end rather
+/// than at its last *read*.
+///
+/// **The dependency this exists for is not in the IR and cannot be.** A
+/// `GtkTextIter` points into its buffer's btree without taking a reference --
+/// GTK's documented contract is that the caller keeps the buffer alive -- so
+/// `buffer.get_bounds(start, end)` makes `start` and `end` depend on `buffer`
+/// with nothing in the HIR saying so. Under `--rc` the buffer's last read was
+/// `get_text`, its release landed on the edge after it, GTK freed the buffer, and
+/// reading the iterators printed a critical under `G_DEBUG=fatal-warnings`. GJS
+/// keeps the buffer while the name is reachable, and so does every other binding
+/// language; this is the closest a compiler can come without an edge to follow.
+///
+/// So it is an **anchor** in this file's sense -- *"a place alive for a reason
+/// nothing here can affect"* -- and it takes the same stretch, in the same place,
+/// for the reason the header of [`analyze`] gives: a rule that reads liveness and
+/// a rule that changes it must not be two passes apart.
+///
+/// `rc::release_at_last_use` already said this in words -- *"A foreign object
+/// keeps the block's end. The platform may hold it without a count and nothing
+/// here can see that"* -- and it was not true, because the **edge** path releases
+/// what a successor does not read and has no such filter. Stretching the range
+/// fixes both without either path knowing: a value live to every exit is not dying
+/// on any edge.
+///
+/// # Four conditions, each one a measurement
+///
+/// **Counted**: an uncounted handle has no release to place.
+///
+/// **Nothing else may be holding it.** A handle stored into a field or an array,
+/// or handed to a *runtime* helper, belongs to that container, which gives it up
+/// when it is overwritten or freed -- so stretching the temporary would make an
+/// object outlive the only thing holding it. `examples/interop/macos-classes`
+/// asserts that through a weak watch: `objects[0] = new NSObject()` replaces the
+/// one `watched()` made, and it must read `gone`. A **native** call is not a
+/// holder -- C borrows its arguments for the call, and that unrecorded borrow is
+/// the entire reason this rule exists -- which is the line `Callee::Native` draws.
+///
+/// **A holder is recognised by op shape, and one shape is left out on purpose.** A
+/// handle may reach a table through an `Erase` -- `erase(handle)`, then the erased
+/// value as the argument -- so the handle itself is only the `Erase` operand and
+/// this sees no holder. For a `GObject` or COM handle that changes nothing
+/// observable: such a local was already held to its block's end, which in
+/// straight-line code is the function's. It is left out rather than guessed at
+/// because no fixture witnesses it, and a guard nothing reaches reads as
+/// protection. **It becomes real the day an Objective-C handle stops being boxed on
+/// its way into a table**, since `examples/interop/macos-classes` watches a map
+/// entry weakly and must read `gone`: whoever makes that change should read the HIR
+/// diff of `maps()` asking not only whether the retains match, but whether the
+/// handle is still an argument to a store or a runtime call on its way in.
+///
+/// **Defined outside every cycle.** A handle made in a loop keeps today's
+/// placement: one `ValueId` stands for every iteration's handle, so holding it to
+/// the exit would release the last and leak the rest. What it wants is the end of
+/// its *iteration*, which is a different change with a different fixture;
+/// `examples/interop/gtk-iter-lifetime/escape` records that the
+/// invisible-dependency problem is not fully closed.
+///
+/// **Its definition dominates every exit.** [`liveness::Liveness::
+/// hold_to_every_exit`] makes a value available in *every* block, so a release
+/// lands in each terminal one -- and in a **resumed** function, whose entry
+/// dispatches to one state per suspension, a value defined in one state's block is
+/// not available at an exit reached from another. Without this guard `verify`
+/// answered `NotDominated { func: "use__resume", … }` eighteen times for one test.
+/// The same guard `super::undominated_names` applies to a frame object's names,
+/// through the same dominator walk.
+fn held_to_the_end(func: &Func) -> Vec<ValueId> {
+    let exits: Vec<BlockId> = func
+        .blocks
+        .iter()
+        .enumerate()
+        .filter(|(_, block)| block.terminator.successors().is_empty())
+        .map(|(at, _)| BlockId(u32::try_from(at).unwrap_or(0)))
+        .collect();
+    if exits.is_empty() {
+        return Vec::new();
+    }
+    let held_by_something: rustc_hash::FxHashSet<ValueId> = func
+        .values
+        .iter()
+        .flat_map(|op| match &op.kind {
+            OpKind::FieldSet { value, .. } | OpKind::ArraySet { value, .. } => vec![*value],
+            OpKind::Call { callee, args, .. } => match callee {
+                // A native call *borrows* its arguments for the call, and that
+                // unrecorded borrow is the whole reason this rule exists -- except
+                // for the parameters whose reference it takes over. `alloc()` then
+                // `init(o)` is Objective-C's two-step, and `init` consumes its
+                // receiver: holding the `alloc` result to the end leaves a second
+                // reference to the *same object* alive, so
+                // `examples/interop/macos-classes`' map entry read `alive` where it
+                // must read `gone`. See `native::Function::consumes`.
+                super::Callee::Native(function) => function
+                    .consumes
+                    .iter()
+                    .filter_map(|at| args.get(*at).copied())
+                    .collect(),
+                _ => args.clone(),
+            },
+            _ => Vec::new(),
+        })
+        .collect();
+    let mut defined_in: Vec<Option<BlockId>> = vec![None; func.values.len()];
+    for (index, block) in func.blocks.iter().enumerate() {
+        let at = BlockId(u32::try_from(index).unwrap_or(0));
+        for value in block.ops.iter().chain(&block.params) {
+            if let Some(slot) = defined_in.get_mut(value.0 as usize) {
+                *slot = Some(at);
+            }
+        }
+    }
+    let reachable = super::verify::reachable_blocks(func);
+    let idom = super::verify::dominators(func, &reachable);
+    let dominates = |over: BlockId, under: BlockId| {
+        let mut at = Some(under);
+        while let Some(block) = at {
+            if block == over {
+                return true;
+            }
+            at = idom[block.0 as usize];
+        }
+        false
+    };
+    let mut found = Vec::new();
+    for (at, op) in func.values.iter().enumerate() {
+        if op.ty.counting().is_none() {
+            continue;
+        }
+        let value = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+        if held_by_something.contains(&value) {
+            continue;
+        }
+        let Some(Some(block)) = defined_in.get(value.0 as usize).copied() else {
+            continue;
+        };
+        if super::loops::in_a_cycle(func, block) {
+            continue;
+        }
+        if exits.iter().all(|exit| dominates(block, *exit)) {
+            found.push(value);
+        }
+    }
+    found
 }
 
 /// Whether a container is alive for a reason nothing here can affect.

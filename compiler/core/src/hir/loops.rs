@@ -166,6 +166,19 @@ fn headers(func: &Func) -> Vec<BlockId> {
     found
 }
 
+/// Whether a block is inside a cycle: control leaves it and can come back.
+///
+/// The same question [`headers`] asks of a back edge, from the other end -- and
+/// spelled through [`reaches`] rather than beside it, because `reaches(b, b)` is
+/// trivially true and a second walk written for this would answer that instead.
+pub(super) fn in_a_cycle(func: &Func, block: BlockId) -> bool {
+    func.blocks[block.0 as usize]
+        .terminator
+        .successors()
+        .into_iter()
+        .any(|successor| reaches(func, successor, block))
+}
+
 /// Whether control can get from one block to another.
 fn reaches(func: &Func, from: BlockId, to: BlockId) -> bool {
     let mut seen = FxHashSet::default();
