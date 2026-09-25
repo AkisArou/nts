@@ -202,6 +202,54 @@ declare module "c:types" {
   // parameter: the caller hands its reference over instead of dropping it
   // after the call, taking one first if it has only a borrowed handle.
   export type Consumed<T extends ClassChain> = T & { readonly __c_consumed?: true };
+  // The signals a GObject class the program writes declares, GJS's
+  // `Signals`, by name and parameters: `class Counter extends
+  // GtkButton<{ incremented: [by: number] }>` registers `incremented` on
+  // `Counter`'s `GType`, with one `double` parameter, and types
+  // `this.emit("incremented", 1)` and `counter.connect("incremented",
+  // (self, by) => ...)`. A parameter is a `number` (`G_TYPE_DOUBLE`), a
+  // `boolean`, a `string` or a GObject class's handle.
+  export type SignalMap = { readonly [name: string]: readonly unknown[] };
+  // A signal's parameters as C passes them to a handler: a `number` is the
+  // `double` it was registered as, a `boolean` GLib's `gboolean`. Both are
+  // their TypeScript types still, so a handler reads them as it would.
+  export type SignalArgs<T extends readonly unknown[]> = {
+    [I in keyof T]: T[I] extends number ? CNumber<"double"> : T[I] extends boolean ? CBool<c_int> : T[I];
+  };
+  export interface WithSignals<Sig extends SignalMap> {
+    // What the compiler reads the map from: the snapshot is structural, and
+    // this member is where `Sig` survives into the class's instance type.
+    readonly __c_signals?: Sig;
+    /**
+     * @ntsSymbol nts_gobject_connect
+     * @ntsDefault connect_flags=0
+     */
+    connect<S extends ClassChain, K extends keyof Sig & string>(
+      this: S,
+      detailed_signal: K,
+      handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
+      connect_flags?: c_uint,
+    ): CNumber<"ulong">;
+    /**
+     * @ntsSymbol nts_gobject_connect
+     * @ntsDefault connect_flags=1
+     */
+    connect_after<S extends ClassChain, K extends keyof Sig & string>(
+      this: S,
+      detailed_signal: K,
+      handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
+      connect_flags?: c_uint,
+    ): CNumber<"ulong">;
+    // Lowered as a call of a thunk the compiler defines per signal, which
+    // emits by the signal's id: the symbol names no C function.
+    /**
+     * @ntsSymbol nts_gobject_emit
+     */
+    emit<S extends ClassChain, K extends keyof Sig & string>(this: S, detailed_signal: K, ...args: SignalArgs<Sig[K]>): void;
+  }
+  // A class's instance type with the signals a subclass adds: itself where
+  // it adds none, so a binding's own errors read as they did.
+  export type Signalled<T, Sig extends SignalMap> = {} extends Sig ? T : T & WithSignals<Sig>;
   // A GLib boxed record -- a C struct GLib copies and frees by its `GType`
   // (`g_boxed_copy`, `g_boxed_free`): `GtkTextIter`, `GdkRGBA`. The program
   // holds one by reference, as JavaScript holds any object, in a box of its

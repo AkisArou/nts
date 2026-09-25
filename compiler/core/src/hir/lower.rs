@@ -6008,6 +6008,7 @@ fn register_objc_class(
         protocols,
         state,
         composition: None,
+        signals: Vec::new(),
     });
 }
 
@@ -6173,6 +6174,22 @@ fn register_gobject_class(
     lowered: &mut Lowered,
 ) {
     let Some(name) = foreign_class_name(snapshot, class) else { return };
+    // Signals are declared on the class over a binding's (`extends
+    // GtkButton<{ ... }>`); one over a class the program wrote inherits its
+    // parent's, which `emit` finds by name on the instance's type.
+    let signals = if parent.starts_with(super::native::PROGRAM_GTYPE) {
+        Vec::new()
+    } else {
+        match gobject_signals(snapshot, class) {
+            Ok(signals) => signals,
+            Err(why) => {
+                let diagnostic = FuncBuilder::probe(snapshot).unsupported(class, &why);
+                note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+                lowered.diagnostics.push(diagnostic);
+                return;
+            }
+        }
+    };
     lowered.program.foreign_classes.push(super::ForeignClass {
         family: super::native::Family::GObject,
         name,
@@ -6181,7 +6198,72 @@ fn register_gobject_class(
         protocols: Vec::new(),
         state,
         composition: None,
+        signals,
     });
+}
+
+/// The signals a class declares, read off its instance type's
+/// `__c_signals` (see `WithSignals` in `c:types`), in the order it writes
+/// them. A parameter is a `number` (`d`), a `boolean` (`b`) or a `GObject`
+/// handle (`o`); anything else is refused by name.
+fn gobject_signals(snapshot: &SemanticSnapshot, class: NodeId) -> Result<Vec<super::ForeignSignal>, String> {
+    let Some(instance) = instance_type_of(snapshot, class) else { return Ok(Vec::new()) };
+    signals_of_type(snapshot, instance)
+}
+
+/// The signals an instance type carries -- its own and its ancestors', since
+/// `__c_signals` is inherited -- with each parameter's kind. One reading for
+/// the registration and for `emit`, so the two cannot spell a signal apart.
+/// A type parameter (the polymorphic `this` of a method) is read through its
+/// constraint.
+fn signals_of_type(snapshot: &SemanticSnapshot, instance: nts_semantic_schema::TypeId) -> Result<Vec<super::ForeignSignal>, String> {
+    let kind = |ty: nts_semantic_schema::TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+    let mut instance = instance;
+    // Bounded: a chain of constraints is as long as the generics written.
+    for _ in 0..8 {
+        match kind(instance) {
+            Some(TypeKind::TypeParameter { constraint: Some(constraint), .. }) => instance = *constraint,
+            _ => break,
+        }
+    }
+    let Some(declared) = super::native::schema::property(snapshot, instance, "___c_signals") else { return Ok(Vec::new()) };
+    // Optional, so `Sig | undefined`.
+    let map = match kind(declared.ty) {
+        Some(TypeKind::Union(parts)) => parts.iter().copied().find(|part| !matches!(kind(*part), Some(TypeKind::Undefined))),
+        _ => Some(declared.ty),
+    };
+    let Some(TypeKind::Object { properties, .. }) = map.and_then(kind) else { return Ok(Vec::new()) };
+    let mut signals = Vec::new();
+    for signal in properties {
+        let Some(TypeKind::Tuple(elements)) = kind(signal.ty) else {
+            return Err(format!("a signal `{}` whose parameters are not written as a tuple", signal.name));
+        };
+        let mut kinds = String::new();
+        for element in elements {
+            let is_boolean = match kind(*element) {
+                Some(TypeKind::Boolean) => true,
+                Some(TypeKind::Union(parts)) => parts.iter().all(|part| matches!(kind(*part), Some(TypeKind::Literal(LiteralValue::Boolean(_))))),
+                _ => false,
+            };
+            kinds.push(match kind(*element) {
+                Some(TypeKind::Number) => 'd',
+                _ if is_boolean => 'b',
+                _ if matches!(
+                    super::native::pointer(snapshot, *element),
+                    Some(super::native::Pointee::Opaque(ref handle)) if handle.family == super::native::Family::GObject
+                ) => 'o',
+                _ => {
+                    return Err(format!(
+                        "a signal `{}` with a parameter of type {}, where a signal takes a `number`, a `boolean` or a GObject",
+                        signal.name,
+                        describe(snapshot, *element)
+                    ));
+                }
+            });
+        }
+        signals.push(super::ForeignSignal { name: signal.name.clone(), kinds });
+    }
+    Ok(signals)
 }
 
 /// A member of a class over a foreign one, lowered by its family's own
@@ -6288,6 +6370,7 @@ fn register_com_class(
         protocols: Vec::new(),
         state,
         composition: Some(composition),
+        signals: Vec::new(),
     });
 }
 
@@ -44327,6 +44410,11 @@ impl<'a> FuncBuilder<'a> {
         if let Some(direction) = self.node(declaration).native.as_ref().and_then(|n| n.listener.clone()) {
             return self.lower_event_listener(id, receiver, &direction, &with_this, arguments);
         }
+        // `this.emit("incremented", 1)`: a signal a class the program wrote
+        // declares, emitted by its id (`WithSignals` in `c:types`).
+        if self.node(declaration).native.as_ref().and_then(|n| n.symbol.as_deref()) == Some("nts_gobject_emit") {
+            return self.lower_gobject_emit(id, (receiver, receiver_node), declaration, with_this, arguments);
+        }
         // A class method is sent to the class, which the send looks up
         // itself: the receiver the program wrote is the class, as a value.
         if self.objc_class_member(declaration).is_some_and(|member| member.is_static) {
@@ -44351,13 +44439,90 @@ impl<'a> FuncBuilder<'a> {
             0,
             nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false },
         );
-        let callee = self.native_callee(id, Some(declaration), name, &with_this)?;
+        let mut callee = self.native_callee(id, Some(declaration), name, &with_this)?;
+        // `nts_gobject_connect` takes the instance as the `gpointer` it is in
+        // C, whichever class a declaration names -- a binding's `Erased<X>`, or
+        // the class a program wrote (`WithSignals`, whose `this` is the class
+        // itself so that the handler's `self` is) -- so every call prints the
+        // one prototype.
+        if let Callee::Native(target) = &mut callee
+            && target.name == "nts_gobject_connect"
+            && let Some(first) = std::sync::Arc::make_mut(target).parameters.first_mut()
+        {
+            *first = super::native::Type::Pointer(super::native::Pointee::Void);
+        }
         let (receiver, queried) = self.via_receiver(id, declaration, receiver)?;
         let callee = via_callee(callee, queried.is_some());
         let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
         let answer = self.finish_call_typed(id, callee, args, lent, Some(declaration), typed)?;
         self.release_via(id, queried);
         Ok(answer)
+    }
+
+    /// `emit(name, ...args)` of a signal a `GObject` class the program writes
+    /// declares: a call of `nts_gobject_emit_{kinds}__{name}`, which each
+    /// backend defines beside the registration as `g_signal_emit` by the
+    /// signal's id, found on the instance's type and kept for the next call.
+    /// No variadic call, and no name parsed per emit: the name is the
+    /// thunk's, and the arguments are its parameters, typed as the handler
+    /// receives them (`SignalArgs`).
+    fn lower_gobject_emit(
+        &mut self,
+        id: NodeId,
+        (receiver, receiver_node): (ValueId, NodeId),
+        declaration: NodeId,
+        mut with_this: nts_semantic_schema::SignatureRecord,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let (name_node, rest) = arguments.split_first().ok_or_else(|| self.unsupported(id, "`emit` with no signal"))?;
+        let signal = self
+            .constant_member_name(*name_node)
+            .ok_or_else(|| self.unsupported(*name_node, "`emit` of a signal whose name is not a literal"))?;
+        // The receiver's type as the method call has it: the declared `this`,
+        // or the class the receiver is an instance of.
+        let this_ty = with_this
+            .this_type
+            .or_else(|| self.snapshot.node_types.get(&receiver_node).map(|ty| self.class_behind(self.present_part(*ty).unwrap_or(*ty))))
+            .ok_or_else(|| self.unsupported(id, "`emit` with no receiver type"))?;
+        let declared = signals_of_type(self.snapshot, this_ty).map_err(|why| self.unsupported(id, &why))?;
+        let kinds = declared
+            .iter()
+            .find(|declared| declared.name == signal)
+            .map(|declared| declared.kinds.clone())
+            .ok_or_else(|| self.unsupported(*name_node, &format!("`emit` of `{signal}`, which no class the program wrote declares")))?;
+        // `this`, then each of the signal's parameters in place of the name
+        // and the rest: the thunk's own signature.
+        let rest_ty = with_this.parameters.last().filter(|p| p.rest).map(|p| p.ty);
+        let Some(TypeKind::Tuple(elements)) = rest_ty.and_then(|ty| self.snapshot.types.get(ty.0 as usize)).map(|record| record.kind.clone())
+        else {
+            return Err(self.unsupported(id, "`emit` whose arguments are not a signal's parameters"));
+        };
+        with_this.parameters =
+            vec![nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this_ty, optional: false, rest: false }];
+        for (at, element) in elements.iter().enumerate() {
+            with_this.parameters.push(nts_semantic_schema::ParameterRecord {
+                name: format!("a{at}"),
+                ty: *element,
+                optional: false,
+                rest: false,
+            });
+        }
+        let Callee::Native(mut target) = self.native_callee(id, Some(declaration), signal.clone(), &with_this)? else {
+            return Err(self.unsupported(id, "`emit` that is not foreign"));
+        };
+        let thunk = std::sync::Arc::make_mut(&mut target);
+        thunk.name = super::ForeignSignal::emit_thunk(&signal, &kinds);
+        thunk.declared_at = None;
+        // Each argument as written, then converted to the thunk's parameter
+        // (`native_arguments`): not `lower_call_arguments`, which reads the
+        // call's own signature by position, where the name comes first.
+        let mut written = Vec::with_capacity(rest.len());
+        for argument in rest {
+            written.push(self.lower_expression(*argument)?);
+        }
+        let (args, lent) = self.native_arguments(id, &target.clone(), written, rest.len(), Some(receiver))?;
+        let callee = Callee::Native(target);
+        self.finish_call(id, callee, args, lent, Some(declaration))
     }
 
     /// `addEventListener(type, listener)` or `removeEventListener`, which a

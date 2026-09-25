@@ -63,11 +63,19 @@ pub(super) fn is_chain(name: &str) -> bool {
     name.starts_with("nts_gobject_chain_")
 }
 
+/// Whether a native callee is a thunk this module defines -- a chain-up or a
+/// signal's emit -- which the program therefore must not also declare: LLVM
+/// refuses a definition of a name already declared.
+pub(super) fn defined_here(name: &str) -> bool {
+    is_chain(name) || name.starts_with("nts_gobject_emit_")
+}
+
 pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
     // A parent's `get_type`, declared once however many classes extend it
     // and chain up to it: LLVM, unlike C, refuses a second declaration.
     let mut parents = std::collections::BTreeSet::new();
     let mut out = chains(program, platform, &mut parents)?;
+    out.push_str(&emits(program, platform)?);
     let classes = registered(program);
     if classes.is_empty() {
         return Ok(out);
@@ -76,6 +84,9 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
     out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
+    if classes.iter().any(|class| !class.signals.is_empty()) {
+        out.push_str("declare i32 @nts_gobject_add_signal(i64, ptr, ptr)\n");
+    }
     for class in classes {
         let name = &class.name;
         let mut slots = Vec::new();
@@ -123,6 +134,16 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             }
             None => "null".to_owned(),
         };
+        // Its signals, added to the type the moment it exists.
+        let mut signals = String::new();
+        for (at, signal) in class.signals.iter().enumerate() {
+            bytes_constant(&mut out, &format!("nts_gobject_signal_{name}_{at}"), &signal.name);
+            bytes_constant(&mut out, &format!("nts_gobject_kinds_{name}_{at}"), &signal.kinds);
+            let _ = writeln!(
+                signals,
+                "  call i32 @nts_gobject_add_signal(i64 %made, ptr @nts_gobject_signal_{name}_{at}, ptr @nts_gobject_kinds_{name}_{at})"
+            );
+        }
         // A parent the program wrote is defined here, not declared.
         let parent = &class.superclass;
         if !parent.starts_with(PROGRAM_GTYPE) && !called(program, parent) && parents.insert(parent.clone()) {
@@ -136,6 +157,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
              \x20 br i1 %none, label %register, label %done\n\
              register:\n  %parent = call i64 @{parent}()\n\
              \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @nts_gobject_name_{name}, ptr {table}, i64 {}, ptr {make_state})\n\
+             {signals}\
              \x20 store i64 %made, ptr @nts_gobject_type_{name}.cache\n  br label %done\n\
              done:\n  %type = phi i64 [ %cached, %entry ], [ %made, %register ]\n  ret i64 %type\n}}",
             slots.len()
@@ -147,6 +169,76 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
                 maker(class)
             );
         }
+    }
+    Ok(out)
+}
+
+/// A NUL-terminated byte string constant, escaped as IR spells one: a signal's
+/// name is a property name the program wrote, and may hold anything.
+fn bytes_constant(out: &mut String, name: &str, value: &str) {
+    let mut escaped = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'"' | b'\\' => {
+                let _ = write!(escaped, "\\{byte:02X}");
+            }
+            b' '..=b'~' => escaped.push(char::from(byte)),
+            _ => {
+                let _ = write!(escaped, "\\{byte:02X}");
+            }
+        }
+    }
+    let _ = writeln!(out, "@{name} = private unnamed_addr constant [{} x i8] c\"{escaped}\\00\"", value.len() + 1);
+}
+
+/// Each `nts_gobject_emit_{kinds}__{name}` the program calls, defined as its
+/// prototype declares it: `g_signal_emit` by the signal's id, which
+/// `nts_gobject_signal_id` finds on the instance's type once and keeps in
+/// the thunk's cache. `g_signal_emit` is variadic, and C promotes what it
+/// passes there: a `bool` is widened to the `int` a `gboolean` is.
+fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
+    let mut out = String::new();
+    let mut done = std::collections::BTreeSet::new();
+    for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_emit_") => Some((func, target)),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((_, signal)) = target.name.trim_start_matches("nts_gobject_emit_").split_once("__") else {
+            return Err(refuse(func, "an emit thunk whose name does not say its signal"));
+        };
+        if done.len() == 1 {
+            out.push_str("declare i32 @nts_gobject_signal_id(ptr, ptr, ptr)\ndeclare void @g_signal_emit(ptr, i32, i32, ...)\n");
+        }
+        let thunk = &target.name;
+        bytes_constant(&mut out, &format!("{thunk}.name"), signal);
+        let types = target.parameters.iter().map(|ty| ty_of(&ty.abi(platform.abi), func).map(str::to_owned)).collect::<Result<Vec<_>, _>>()?;
+        let parameters: Vec<String> = types.iter().enumerate().map(|(at, ty)| format!("{ty} %a{at}")).collect();
+        let mut body = String::new();
+        let mut passed = Vec::new();
+        for (at, ty) in types.iter().enumerate().skip(1) {
+            if matches!(ty.as_str(), "i1" | "i8" | "i16") {
+                let _ = writeln!(body, "  %p{at} = zext {ty} %a{at} to i32");
+                passed.push(format!("i32 %p{at}"));
+            } else {
+                passed.push(format!("{ty} %a{at}"));
+            }
+        }
+        let mut rest = String::new();
+        for arg in &passed {
+            let _ = write!(rest, ", {arg}");
+        }
+        let _ = writeln!(
+            out,
+            "@{thunk}.cache = internal global [2 x i64] zeroinitializer\n\
+             define void @{thunk}({}) nounwind {{\nentry:\n\
+             \x20 %id = call i32 @nts_gobject_signal_id(ptr %a0, ptr @{thunk}.name, ptr @{thunk}.cache)\n\
+             {body}\
+             \x20 call void (ptr, i32, i32, ...) @g_signal_emit(ptr %a0, i32 %id, i32 0{rest})\n  ret void\n}}",
+            parameters.join(", ")
+        );
     }
     Ok(out)
 }

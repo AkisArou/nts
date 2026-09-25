@@ -1637,6 +1637,10 @@ impl Type {
         match &snapshot.types.get(ty.0 as usize)?.kind {
             TypeKind::Boolean => Some(Type::Bool),
             TypeKind::Void => Some(Type::Void),
+            // A type parameter is what its constraint is: the polymorphic `this`
+            // of a method, whose constraint is the class -- `this.emit(...)`
+            // inside a GObject subclass passes the instance as the handle it is.
+            TypeKind::TypeParameter { constraint: Some(constraint), .. } => abi_type(snapshot, *constraint),
             // `F | null`: the same function pointer, which C passes as NULL
             // when the program passes `null`. A null pointer and a valid one
             // share a representation, as they do for `Ptr<T> | null`.
@@ -1668,11 +1672,23 @@ impl Type {
             // point where it would have been emitted.
             TypeKind::Function(id) => {
                 let signature = snapshot.signatures.get(id.0 as usize)?;
-                let parameters = signature
-                    .parameters
-                    .iter()
-                    .map(|parameter| abi_type(snapshot, parameter.ty))
-                    .collect::<Option<Vec<_>>>()?;
+                // A rest parameter of a fixed tuple is its elements, which is
+                // what TypeScript means by it: `(self: S, ...args: [by: number])`
+                // is a handler taking `self` and a `double`, the shape a signal
+                // map (`WithSignals`) instantiates to. A rest of an array has no
+                // fixed arity for C to call with, and stays refused.
+                let mut parameters = Vec::with_capacity(signature.parameters.len());
+                for parameter in &signature.parameters {
+                    match &snapshot.types.get(parameter.ty.0 as usize)?.kind {
+                        TypeKind::Tuple(elements) if parameter.rest => {
+                            for element in elements {
+                                parameters.push(abi_type(snapshot, *element)?);
+                            }
+                        }
+                        _ if parameter.rest => return None,
+                        _ => parameters.push(abi_type(snapshot, parameter.ty)?),
+                    }
+                }
                 let result = abi_type(snapshot, signature.return_type)?;
                 // A callback taking or returning a record by value would need
                 // its bridge to do what a call does here; nothing does yet.

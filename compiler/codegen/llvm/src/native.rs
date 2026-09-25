@@ -91,7 +91,7 @@ pub(super) fn declarations(program: &Program, platform: Platform) -> Result<Vec<
             }
             // `new` of a GObject class the program writes, and its `GType`
             // function, which `gobject` defines rather than declares.
-            if super::gobject::is_chain(&target.name)
+            if super::gobject::defined_here(&target.name)
                 || target.name.starts_with(nts_core::hir::native::PROGRAM_GTYPE)
                 || program.foreign_classes.iter().any(|class| class.family == nts_core::hir::native::Family::GObject && super::gobject::maker(class) == target.name)
             {

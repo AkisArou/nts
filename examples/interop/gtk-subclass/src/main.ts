@@ -20,6 +20,12 @@
 //                 caller's props object through (`super(props)`): the child
 //                 label, a handle held erased in an optional field, `sensitive`
 //                 false and `name` are set; `label`, not given, is not
+//   tally +2=2+3=5 on kid  signals `Tally` declares (`extends GtkButton<{
+//                 ... }>`): `incremented` emitted by a method, with the
+//                 number it carries and the handler reading the instance's
+//                 field; `toggled` with a boolean, `adopted` with a GObject.
+//                 Registered on `Tally`'s own `GType`, so nothing is emitted
+//                 by name: a class that declared none reads `tally` alone
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
@@ -105,6 +111,40 @@ function framed(): string {
     f.label ?? "unset",
     g_type_name_from_instance(f),
   ].join(" ");
+}
+
+// Signals a class declares, GJS's `Signals`: `incremented` carries a number,
+// `toggled` a boolean and `adopted` a handle.
+class Tally extends GtkButton<{
+  incremented: [by: number];
+  toggled: [on: boolean];
+  adopted: [child: GtkLabel];
+}> {
+  total = 0;
+
+  bump(by: number): void {
+    this.total += by;
+    this.emit("incremented", by);
+  }
+}
+
+function tally(): string {
+  const t = new Tally({ label: "t" });
+  let seen = "";
+  t.connect("incremented", (self, by) => {
+    seen += "+" + String(by) + "=" + String(self.total);
+  });
+  t.connect("toggled", (_self, on) => {
+    seen += on ? " on" : " off";
+  });
+  t.connect("adopted", (_self, child) => {
+    seen += " " + (child.label ?? "");
+  });
+  t.bump(2);
+  t.bump(3);
+  t.emit("toggled", true);
+  t.emit("adopted", new GtkLabel({ label: "kid" }));
+  return "tally " + seen.trim();
 }
 
 class Square extends GtkWidget {
@@ -228,6 +268,7 @@ function main(): void {
   sub_emit(greeter, "clicked");
   sub_log("greeter " + g_type_name_from_instance(greeter));
   sub_log(framed());
+  sub_log(tally());
 
   const square = new Square({});
   const width = local<CNumber<"int">>();

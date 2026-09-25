@@ -2192,6 +2192,30 @@ pub struct ForeignClass {
     /// For a class written over a composable Windows Runtime class, the
     /// factory composing one (`@ntsComposable`). `None` for Objective-C.
     pub composition: Option<native::Composable>,
+    /// The signals a `GObject` class declares (`extends GtkButton<{ ... }>`,
+    /// `WithSignals` in `c:types`), registered on its `GType` after it.
+    /// Empty for every other family.
+    pub signals: Vec<ForeignSignal>,
+}
+
+/// One signal a `GObject` class the program writes declares: its name, and
+/// each parameter's kind as the registration and the emit thunks spell it --
+/// `d` a `double`, `b` a `gboolean`, `o` a `GObject`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeignSignal {
+    pub name: String,
+    pub kinds: String,
+}
+
+impl ForeignSignal {
+    /// The C function `emit` calls for a signal with these parameter kinds:
+    /// `nts_gobject_emit_{kinds}__{name}`, `-` read as `_` as `GLib` reads it.
+    /// Keyed by name and kinds, not class, because the thunk finds the
+    /// signal's id on the instance's own type.
+    #[must_use]
+    pub fn emit_thunk(name: &str, kinds: &str) -> String {
+        format!("nts_gobject_emit_{kinds}__{}", name.replace('-', "_"))
+    }
 }
 
 /// One method of a [`ForeignClass`]: how the runtime dispatches to it, the

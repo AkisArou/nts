@@ -22,6 +22,8 @@
 //! `nts_gobject_type_Base` as its parent, so `Base` is registered wherever a
 //! `Derived` is made, whether or not the program makes a `Base` itself.
 
+use std::fmt::Write as _;
+
 use nts_core::hir::native::{Family, PROGRAM_GTYPE, Type};
 use nts_core::hir::{Callee, ForeignClass, OpKind, Program};
 
@@ -121,33 +123,22 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // The fields' maker, which `instance_init` calls wherever GTK makes
         // one -- a builder file's included -- so it enters and leaves as an
         // entry point does.
-        let make_state = match &class.state {
-            Some(state) => {
-                let compiled = program
-                    .funcs
-                    .iter()
-                    .find(|func| &func.name == state)
-                    .ok_or_else(|| refuse("a GObject class whose fields' maker this program does not define"))?;
-                writer.line(
-                    origin,
-                    format!(
-                        "static void *nts_gobject_state_maker_{name}(void) {{ nts_callback_enter(); void *made = (void *){}(); nts_callback_leave(); return made; }}",
-                        c_identifier(&compiled.name)
-                    ),
-                );
-                format!("nts_gobject_state_maker_{name}")
-            }
-            None => "0".to_owned(),
-        };
+        let make_state = state_maker(writer, origin, program, class)?;
         let parent = &class.superclass;
         if !parent.starts_with(PROGRAM_GTYPE) {
             writer.line(origin, format!("size_t {parent}(void);"));
         }
+        // Its signals, added to the type the moment it exists: before any
+        // instance can be made or connected to.
+        let signals = registrations(class);
+        if !signals.is_empty() {
+            writer.line(origin, "unsigned nts_gobject_add_signal(size_t type, const char *name, const char *kinds);");
+        }
         writer.line(
             origin,
             format!(
-                "size_t nts_gobject_type_{name}(void) {{ static size_t type = 0; if (type == 0) \
-                 type = nts_gobject_register({parent}(), \"Nts_{name}\", {table}, {}u, {make_state}); return type; }}",
+                "size_t nts_gobject_type_{name}(void) {{ static size_t type = 0; if (type == 0) {{ \
+                 type = nts_gobject_register({parent}(), \"Nts_{name}\", {table}, {}u, {make_state});{signals} }} return type; }}",
                 slots.len()
             ),
         );
@@ -162,14 +153,105 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             writer.line(origin, format!("{result} {make}(void) {{ return ({result})nts_gobject_new(nts_gobject_type_{name}()); }}"));
         }
     }
-    chains(writer, origin, program, wrote)?;
+    let wrote = chains(writer, origin, program, wrote)?;
+    emits(writer, origin, program, wrote);
     Ok(())
+}
+
+/// The maker of a class's fields, entered and left as an entry point is, or
+/// `0` for a class with none.
+fn state_maker(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass) -> Result<String, Diagnostic> {
+    let Some(state) = &class.state else { return Ok("0".to_owned()) };
+    let compiled = program.funcs.iter().find(|func| &func.name == state).ok_or_else(|| {
+        Diagnostic::error("NTS2006", "a GObject class whose fields' maker this program does not define".to_owned(), origin.location)
+    })?;
+    let name = &class.name;
+    writer.line(
+        origin,
+        format!(
+            "static void *nts_gobject_state_maker_{name}(void) {{ nts_callback_enter(); void *made = (void *){}(); nts_callback_leave(); return made; }}",
+            c_identifier(&compiled.name)
+        ),
+    );
+    Ok(format!("nts_gobject_state_maker_{name}"))
+}
+
+/// The calls adding a class's signals to its `GType`, one per signal.
+fn registrations(class: &ForeignClass) -> String {
+    let mut out = String::new();
+    for signal in &class.signals {
+        let _ = write!(out, " nts_gobject_add_signal(type, {}, \"{}\");", c_string(&signal.name), signal.kinds);
+    }
+    out
+}
+
+/// A C string literal: the signal names a program declares are TypeScript
+/// property names, which may hold anything a C literal must escape.
+fn c_string(text: &str) -> String {
+    let mut out = String::from("\"");
+    for byte in text.bytes() {
+        match byte {
+            b'"' | b'\\' => {
+                out.push('\\');
+                out.push(char::from(byte));
+            }
+            b' '..=b'~' => out.push(char::from(byte)),
+            _ => {
+                let _ = write!(out, "\\{byte:03o}");
+            }
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Each `nts_gobject_emit_{kinds}__{name}` the program calls -- `emit` of a
+/// signal a class it wrote declares -- defined as its prototype declares it:
+/// `g_signal_emit` by the signal's id, which `nts_gobject_signal_id` finds
+/// on the instance's type once and keeps. The name is the thunk's, read
+/// back with `_` for `-`, which `GLib` treats as the same signal.
+fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) {
+    let mut done = std::collections::BTreeSet::new();
+    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_emit_") => Some(target),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((_, signal)) = target.name.trim_start_matches("nts_gobject_emit_").split_once("__") else { continue };
+        if !wrote {
+            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            wrote = true;
+        }
+        if done.len() == 1 {
+            writer.line(origin, "unsigned nts_gobject_signal_id(void *instance, const char *name, size_t cache[2]);");
+            writer.line(origin, "void g_signal_emit(void *instance, unsigned signal, unsigned detail, ...);");
+        }
+        let parameters: Vec<String> = target.parameters.iter().enumerate().map(|(at, ty)| format!("{} a{at}", ty.c_type())).collect();
+        let mut arguments = String::new();
+        for at in 1..target.parameters.len() {
+            let _ = write!(arguments, ", a{at}");
+        }
+        writer.line(
+            origin,
+            format!(
+                "void {}({}) {{ static size_t cache[2]; g_signal_emit(a0, nts_gobject_signal_id(a0, {}, cache), 0u{arguments}); }}",
+                target.name,
+                parameters.join(", "),
+                c_string(signal),
+            ),
+        );
+    }
+    if wrote {
+        writer.blank(origin);
+    }
 }
 
 /// Each `nts_gobject_chain_{Class}_{offset}` the program calls -- a chain-up,
 /// `super.vfunc_clicked()` -- defined as its prototype declares it: the
 /// parent's slot at `offset`, called if it is there and skipped if not.
-fn chains(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> Result<(), Diagnostic> {
+fn chains(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> Result<bool, Diagnostic> {
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     let mut done = std::collections::BTreeSet::new();
     for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
@@ -220,8 +302,5 @@ fn chains(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote
             ),
         );
     }
-    if wrote {
-        writer.blank(origin);
-    }
-    Ok(())
+    Ok(wrote)
 }

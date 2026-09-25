@@ -642,7 +642,7 @@ impl<'a> Mapper<'a> {
                     .collect(),
             );
             if counted {
-                self.binding.brands.insert("GObjectClass");
+                self.binding.brands.extend(["GObjectClass", "SignalMap", "Signalled"]);
             }
             let implements = if counted {
                 let mut implements = self.implements(class);

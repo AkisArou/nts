@@ -293,7 +293,8 @@ fn construction(
             _ => return None,
         };
         let optional = if constructor.from.is_empty() { "?" } else { "" };
-        Some(format!("    /**\n     * @ntsConstruct {tag}\n     */\n    new (props{optional}: {name}Props): {name};\n"))
+        let (generic, made) = made_by(name, gtype.is_some());
+        Some(format!("    /**\n     * @ntsConstruct {tag}\n     */\n    new {generic}(props{optional}: {name}Props): {made};\n"))
     });
     // The class's constructors and functions, as GJS has them on the class:
     // `GtkStringObject.new("x")`, `GtkButton.new_with_label("Add")`.
@@ -311,7 +312,8 @@ fn construction(
     // signature of its own (`GtkWidget`, abstract) gets an abstract one, so it
     // can be extended and still not constructed.
     let abstract_construct = if construct.is_none() && gtype.is_some() {
-        format!("(abstract new (props?: {name}Props) => {name}) & ")
+        let (generic, made) = made_by(name, true);
+        format!("(abstract new {generic}(props?: {name}Props) => {made}) & ")
     } else {
         String::new()
     };
@@ -329,6 +331,17 @@ fn construction(
         static_member(out, function);
     }
     out.push_str("  };\n");
+}
+
+/// What a `GObject` class's `new` makes: generic in the signals a subclass the
+/// program writes declares (`extends GtkButton<{ incremented: [by: number] }>`,
+/// see `Signalled` in `c:types`), and the class itself for anything else.
+fn made_by(name: &str, gobject: bool) -> (&'static str, String) {
+    if gobject {
+        ("<Sig extends SignalMap = {}>", format!("Signalled<{name}, Sig>"))
+    } else {
+        ("", name.to_owned())
+    }
 }
 
 /// A boxed record's value: `new GtkTextIter()`, a zeroed record of the

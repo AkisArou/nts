@@ -377,6 +377,40 @@ void *nts_gobject_parent_slot(size_t parent, size_t offset) {
   return slot;
 }
 
+unsigned nts_gobject_add_signal(size_t type, const char *name,
+                                const char *kinds) {
+  GType params[16];
+  guint count = (guint)strlen(kinds);
+  g_return_val_if_fail(count <= G_N_ELEMENTS(params), 0);
+  for (guint at = 0; at < count; at++) {
+    switch (kinds[at]) {
+    case 'd':
+      params[at] = G_TYPE_DOUBLE;
+      break;
+    case 'b':
+      params[at] = G_TYPE_BOOLEAN;
+      break;
+    default:
+      params[at] = G_TYPE_OBJECT;
+      break;
+    }
+  }
+  /* No class closure and no accumulator, and GLib's generic marshaller: a
+   * handler's C signature is what its bridge was compiled to. */
+  return g_signal_newv(name, (GType)type, G_SIGNAL_RUN_LAST, NULL, NULL, NULL,
+                       NULL, G_TYPE_NONE, count, params);
+}
+
+unsigned nts_gobject_signal_id(void *instance, const char *name,
+                               size_t cache[2]) {
+  GType type = G_TYPE_FROM_INSTANCE(instance);
+  if (cache[0] != (size_t)type) {
+    cache[1] = g_signal_lookup(name, type);
+    cache[0] = (size_t)type;
+  }
+  return (unsigned)cache[1];
+}
+
 /* How a `GObject` held by an erased value is counted: a value that holds one
  * owns one reference, as it does a managed object. Registered before any
  * program code runs, since a constructor runs at load. */
