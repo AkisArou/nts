@@ -31,6 +31,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 # nts's frontend, used as a library: the tsgo client and the snapshot it
 # decodes. Nothing under compiler/ is edited for this crate.
+nts-diagnostics = { path = "../../../../compiler/diagnostics" }
 nts-frontend-ts = { path = "../../../../compiler/frontend-ts" }
 nts-semantic-schema = { path = "../../../../compiler/semantic-schema" }
 # The upstream Rust React Compiler, pinned to the commit the lane's

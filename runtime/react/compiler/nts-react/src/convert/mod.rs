@@ -66,7 +66,7 @@ impl Converter<'_> {
     }
 
     fn record(&self, id: NodeId) -> &nts_semantic_schema::NodeRecord {
-        &self.nodes.snapshot.nodes[id.0 as usize]
+        self.nodes.record(id)
     }
 
     /// The node's own text: an identifier's name, a literal's cooked value.

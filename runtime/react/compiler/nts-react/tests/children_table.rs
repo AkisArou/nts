@@ -42,7 +42,7 @@ fn check(relative: &str, at_least: usize) {
             "node {index} (kind {kind}) has presence bits beyond its {} table properties",
             properties.len(),
         );
-        let filled = Nodes::new(&snapshot).property_children(nts_semantic_schema::NodeId(u32::try_from(index).unwrap())).count();
+        let filled = Nodes::new(&snapshot.nodes).property_children(nts_semantic_schema::NodeId(u32::try_from(index).unwrap())).count();
         assert_eq!(
             present.count_ones() as usize,
             filled,

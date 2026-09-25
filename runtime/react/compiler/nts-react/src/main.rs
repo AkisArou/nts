@@ -53,17 +53,17 @@ fn run() -> Result<()> {
 
 fn convert(tsconfig: &str, out: &str) -> Result<()> {
     let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
-    let project = tsconfig.parent().context("a tsconfig path has a directory")?.to_owned();
     let out = camino::Utf8PathBuf::from(out);
     std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
-    let snapshot = nts_react::project::snapshot(&tsconfig)?;
-    let nodes = nts_react::tsgo::Nodes::new(&snapshot);
+    let mut session = nts_react::project::Session::open(&tsconfig)?;
     let (mut converted, mut unsupported) = (0, 0);
-    for source in nts_react::project::own_sources(&snapshot, &project) {
-        let text = std::fs::read_to_string(&source.path).with_context(|| format!("cannot read {}", source.path))?;
-        let text = nts_react::convert::text::SourceText::new(&text);
-        let name = source.path.file_name().unwrap_or("source");
-        match nts_react::convert::convert_file(nodes, source.root, &text) {
+    for path in session.own_sources()? {
+        let tree = session.file(&path)?;
+        let code = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
+        let text = nts_react::convert::text::SourceText::new(&code);
+        let name = path.file_name().unwrap_or("source");
+        let nodes = nts_react::tsgo::Nodes::new(&tree.nodes);
+        match nts_react::convert::convert_file(nodes, nts_semantic_schema::NodeId(0), &text) {
             Ok(file) => {
                 let scope = nts_react::scope::build(&file);
                 std::fs::write(out.join(format!("{name}.ast.json")), serde_json::to_string(&file)?)?;
@@ -82,19 +82,19 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
 
 fn compile(tsconfig: &str, options: &str, out: &str) -> Result<()> {
     let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
-    let project = tsconfig.parent().context("a tsconfig path has a directory")?.to_owned();
     let options: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(options).with_context(|| format!("cannot read {options}"))?)?;
     let out = camino::Utf8PathBuf::from(out);
     std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
-    let snapshot = nts_react::project::snapshot(&tsconfig)?;
-    let nodes = nts_react::tsgo::Nodes::new(&snapshot);
+    let mut session = nts_react::project::Session::open(&tsconfig)?;
     let (mut compiled, mut unsupported) = (0, 0);
-    for source in nts_react::project::own_sources(&snapshot, &project) {
-        let code = std::fs::read_to_string(&source.path).with_context(|| format!("cannot read {}", source.path))?;
+    for path in session.own_sources()? {
+        let tree = session.file(&path)?;
+        let code = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
         let text = nts_react::convert::text::SourceText::new(&code);
-        let name = source.path.file_name().unwrap_or("source");
-        let Ok(file) = nts_react::convert::convert_file(nodes, source.root, &text) else {
+        let name = path.file_name().unwrap_or("source");
+        let nodes = nts_react::tsgo::Nodes::new(&tree.nodes);
+        let Ok(file) = nts_react::convert::convert_file(nodes, nts_semantic_schema::NodeId(0), &text) else {
             unsupported += 1;
             continue;
         };

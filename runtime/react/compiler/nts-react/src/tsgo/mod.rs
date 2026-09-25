@@ -16,24 +16,30 @@
 pub mod children;
 pub mod kinds;
 
-use nts_semantic_schema::{NodeData, NodeId, NodeKind, SemanticSnapshot};
+use nts_semantic_schema::{NodeData, NodeId, NodeKind, NodeRecord};
 
-/// A program's nodes, read by property.
+/// Decoded nodes -- one file's, or a whole snapshot's -- read by property.
+/// A node's id is its index in the slice.
 #[derive(Debug, Clone, Copy)]
 pub struct Nodes<'a> {
-    pub snapshot: &'a SemanticSnapshot,
+    pub nodes: &'a [NodeRecord],
 }
 
 impl<'a> Nodes<'a> {
     #[must_use]
-    pub fn new(snapshot: &'a SemanticSnapshot) -> Self {
-        Self { snapshot }
+    pub fn new(nodes: &'a [NodeRecord]) -> Self {
+        Self { nodes }
+    }
+
+    #[must_use]
+    pub fn record(self, id: NodeId) -> &'a NodeRecord {
+        &self.nodes[id.0 as usize]
     }
 
     /// The node's syntax kind, or `None` for a list node.
     #[must_use]
     pub fn kind(self, id: NodeId) -> Option<u16> {
-        match self.snapshot.nodes.get(id.0 as usize)?.kind {
+        match self.nodes.get(id.0 as usize)?.kind {
             NodeKind::Syntax(kind) => Some(kind),
             NodeKind::List => None,
         }
@@ -41,7 +47,7 @@ impl<'a> Nodes<'a> {
 
     /// The presence mask of a node's child properties, if it has any.
     fn present(self, id: NodeId) -> Option<u8> {
-        match self.snapshot.nodes.get(id.0 as usize)?.data {
+        match self.nodes.get(id.0 as usize)?.data {
             NodeData::Children { present, .. } => Some(present),
             _ => None,
         }
@@ -65,7 +71,7 @@ impl<'a> Nodes<'a> {
 
     /// A node's children that fill its properties: all of them but its `JSDoc`.
     pub fn property_children(self, id: NodeId) -> impl Iterator<Item = NodeId> + 'a {
-        let nodes = &self.snapshot.nodes;
+        let nodes = self.nodes;
         nodes[id.0 as usize]
             .children
             .iter()
@@ -76,7 +82,7 @@ impl<'a> Nodes<'a> {
     /// The elements of a list node.
     #[must_use]
     pub fn items(self, list: NodeId) -> &'a [NodeId] {
-        match self.snapshot.nodes.get(list.0 as usize) {
+        match self.nodes.get(list.0 as usize) {
             Some(node) if node.kind == NodeKind::List => &node.children,
             _ => &[],
         }

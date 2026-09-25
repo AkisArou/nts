@@ -164,6 +164,7 @@ dependencies = [
  "anyhow",
  "camino",
  "indexmap",
+ "nts-diagnostics",
  "nts-frontend-ts",
  "nts-semantic-schema",
  "react_compiler",
