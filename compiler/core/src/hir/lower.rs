@@ -40545,7 +40545,7 @@ impl<'a> FuncBuilder<'a> {
                 return self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments);
             }
             if let Some(function) = self.called_method(id)? {
-                return self.lower_called_method(id, receiver, function, arguments);
+                return self.lower_called_method(id, Some(receiver), function, arguments);
             }
             if let Some(method) = self.program_objc_method(id) {
                 return self.lower_program_objc_call(id, receiver, method, arguments);
@@ -42729,7 +42729,7 @@ impl<'a> FuncBuilder<'a> {
     fn lower_called_method(
         &mut self,
         id: NodeId,
-        receiver: ValueId,
+        receiver: Option<ValueId>,
         function: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
@@ -42752,12 +42752,18 @@ impl<'a> FuncBuilder<'a> {
         let want = |this: &Self, parameter: NodeId| {
             this.type_of(parameter).ok_or_else(|| this.unsupported(id, "an @ntsCall function parameter of unrepresentable type"))
         };
-        let first = parameters.first().ok_or_else(|| self.unsupported(id, "an @ntsCall function that takes no receiver"))?;
-        let first = want(self, *first)?;
-        let mut args = vec![self.coerce(receiver, &first, id)?];
+        // The receiver is the function's first parameter; a static member's
+        // call has none.
+        let skip = usize::from(receiver.is_some());
+        let mut args = Vec::new();
+        if let Some(receiver) = receiver {
+            let first = parameters.first().ok_or_else(|| self.unsupported(id, "an @ntsCall function that takes no receiver"))?;
+            let first = want(self, *first)?;
+            args.push(self.coerce(receiver, &first, id)?);
+        }
         for (at, argument) in arguments.iter().enumerate() {
             let parameter = parameters
-                .get(at + 1)
+                .get(at + skip)
                 .copied()
                 .filter(|_| self.kind_of(*argument) != Some(syntax::SPREAD_ELEMENT))
                 .ok_or_else(|| self.unsupported(*argument, "an argument an @ntsCall function has no parameter for"))?;
@@ -42770,7 +42776,7 @@ impl<'a> FuncBuilder<'a> {
         // default would run it out of order with an argument to its right,
         // and in a scope where the parameters before it are not bound. A
         // constant has neither problem, and it is what a binding writes.
-        for parameter in parameters.iter().skip(1 + arguments.len()) {
+        for parameter in parameters.iter().skip(skip + arguments.len()) {
             let default = self.default_of(*parameter).ok_or_else(|| {
                 self.unsupported(id, "an argument left out where the @ntsCall function has no default for it")
             })?;
@@ -45043,6 +45049,12 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        // A class method's `@ntsCall`: Swift's `async` form of one --
+        // `NSAnimationContext.runAnimationGroup` -- whose body is the values
+        // module's function, taking no receiver.
+        if let Some(function) = self.called_method(id)? {
+            return self.lower_called_method(id, None, function, arguments);
+        }
         // The *last* child. `Box.#check` is an object beside a name, and
         // looking for the first identifier found `Box` -- which named the
         // method after its class for every static call whose receiver is a

@@ -698,6 +698,9 @@ struct Model<'a> {
 /// handler settles.
 struct Promise {
     function: String,
+    /// A class method's: the function takes no receiver, and calls the
+    /// method on the class.
+    is_static: bool,
     /// The TypeScript class the method is on: the function's first parameter.
     receiver: String,
     /// The method taking the handler, as TypeScript calls it.
@@ -1061,9 +1064,9 @@ impl<'a> Model<'a> {
     /// promise is a function of the values module, which calls the method
     /// with a handler that settles it.
     fn promise(&mut self, class: &Class, decl: &Value, symbol: &Symbol, asynchronous: &Symbol) -> std::result::Result<String, String> {
-        if decl.get("instance").and_then(Value::as_bool) == Some(false) {
-            return Err("a class method, whose `async` form is not bound yet".to_owned());
-        }
+        // A class method's form is a static member, and its function takes
+        // no receiver: `NSAnimationContext.runAnimationGroup(changes)`.
+        let is_static = decl.get("instance").and_then(Value::as_bool) == Some(false);
         let parameters = parameters_of(decl);
         let Some((handler, leading)) = parameters.split_last() else {
             return Err("no completion handler".to_owned());
@@ -1110,9 +1113,11 @@ impl<'a> Model<'a> {
         while self.promises.iter().any(|promise| promise.function == function) {
             function.push('_');
         }
-        let overload = format!("    /** @ntsCall {function} */\n    {}({arguments}): Promise<{value}>;", quoted(&base));
+        let modifier = if is_static { "static " } else { "" };
+        let overload = format!("    /** @ntsCall {function} */\n    {modifier}{}({arguments}): Promise<{value}>;", quoted(&base));
         self.promises.push(Promise {
             function,
+            is_static,
             receiver: class.swift.rsplit('.').next().unwrap_or_default().to_owned(),
             method: quoted(&method),
             parameters: arguments,
@@ -1973,12 +1978,19 @@ fn render_values(request: &Request, model: &Model) -> String {
             arguments.push(format!("({}) => {{\n      nts_pending_end();\n      resolve({settled});\n    }}", names.join(", ")));
             "(resolve)"
         };
-        let parameters = if promise.parameters.is_empty() { String::new() } else { format!(", {}", promise.parameters) };
+        // An instance method's function takes the receiver first; a class
+        // method's sends to the class.
+        let (parameters, target) = if promise.is_static {
+            (promise.parameters.clone(), promise.receiver.clone())
+        } else if promise.parameters.is_empty() {
+            (format!("self: {}", promise.receiver), "self".to_owned())
+        } else {
+            (format!("self: {}, {}", promise.receiver, promise.parameters), "self".to_owned())
+        };
         let _ = write!(
             bodies,
-            "\nexport function {}(self: {}{parameters}): Promise<{}> {{\n  return new Promise({executor} => {{\n    nts_pending_begin();\n    self.{}({});\n  }});\n}}\n",
+            "\nexport function {}({parameters}): Promise<{}> {{\n  return new Promise({executor} => {{\n    nts_pending_begin();\n    {target}.{}({});\n  }});\n}}\n",
             promise.function,
-            promise.receiver,
             promise.value,
             promise.method,
             arguments.join(", ")
@@ -2140,6 +2152,7 @@ typedef NSInteger Response;
 - (void)settleWith:(Shape *)other completionHandler:(void (^)(Response))handler;
 - (void)fetchNamed:(NSString *)name completionHandler:(void (^)(Shape * _Nullable, NSError * _Nullable))handler;
 - (void)pairWithCompletionHandler:(void (^)(Shape * _Nullable, NSString * _Nullable, NSError * _Nullable))handler;
++ (void)runGroup:(void (^)(Shape *))changes completionHandler:(void (^)(void))handler;
 @end
 @interface Circle : Shape
 @end
@@ -2226,6 +2239,8 @@ NS_ASSUME_NONNULL_END
             throwing.to_owned(),
             symbol("c:objc(cs)NSError", "swift.class", "NSError", &["NSError"], ""),
             symbol("c:objc(cs)Shape(im)pairWithCompletionHandler:", "swift.method", "pair(completionHandler:)", &["Shape", "pair(completionHandler:)"], ""),
+            symbol("c:objc(cs)Shape(cm)runGroup:completionHandler:", "swift.type.method", "runGroup(_:completionHandler:)", &["Shape", "runGroup(_:completionHandler:)"], ""),
+            r#"{"identifier":{"precise":"c:objc(cs)Shape(cm)runGroup:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.type.method"},"names":{"title":"runGroup(_:)"},"pathComponents":["Shape","runGroup(_:)"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"class func runGroup(_ changes: (Shape) -> Void) async"}]}"#.to_owned(),
             r#"{"identifier":{"precise":"c:objc(cs)Shape(im)pairWithCompletionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"pair()"},"pathComponents":["Shape","pair()"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"func pair() async throws -> (Shape, String)"}]}"#.to_owned(),
         ];
         let optional = ["shapeDidRename:", "shape:didRenameTo:", "shape:shouldHide:"].map(|selector| {
@@ -2364,6 +2379,12 @@ NS_ASSUME_NONNULL_END
         // What Swift does not import has no member here: `alloc`, and Swift's
         // own methods.
         assert!(!text.contains("alloc") && !text.contains("swifty"), "{text}");
+        assert_async(&text, &values);
+    }
+
+    /// Swift's `async` import, as `a_framework_is_bound_as_swift_imports_it`
+    /// bound it.
+    fn assert_async(text: &str, values: &str) {
         // Swift's `async` import: the method taking the handler, whose block's
         // typedef'd parameter is its width, and beside it the form returning a
         // promise, whose body is the values module's.
@@ -2374,6 +2395,8 @@ NS_ASSUME_NONNULL_END
             // Several values are Swift's tuple; a handler's values cross as
             // the objects they are, as a block's do.
             "    /** @ntsCall nts_async_Shape_pair */\n    pair(): Promise<[Shape, NSString]>;",
+            // A class method's: a static, as Swift's `class func` is.
+            "    /** @ntsCall nts_async_Shape_runGroup */\n    static runGroup(changes: (arg0: Shape) => void): Promise<void>;",
         ] {
             assert!(text.contains(expected), "no `{expected}` in:\n{text}");
         }
@@ -2393,6 +2416,10 @@ NS_ASSUME_NONNULL_END
              self.fetch(labels, (value, error) => {\n      nts_pending_end();\n      \
              if (error !== null) {\n        reject(new Error(error.localizedDescription));\n      \
              } else {\n        resolve(value!);\n      }\n    });\n  });\n}",
+            // Sent to the class, which the wrapper names, having no `self`.
+            "export function nts_async_Shape_runGroup(changes: (arg0: Shape) => void): Promise<void> {\n  \
+             return new Promise((resolve) => {\n    nts_pending_begin();\n    \
+             Shape.runGroup(changes, () => {\n      nts_pending_end();\n      resolve();\n    });\n  });\n}",
         ] {
             assert!(values.contains(expected), "no `{expected}` in:\n{values}");
         }

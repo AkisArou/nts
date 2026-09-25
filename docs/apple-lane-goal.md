@@ -499,7 +499,18 @@ correctness does not depend on arm64 running by luck.
        expects. Under reference counting the adapter autoreleases the
        closure's count. `macos-blocks` watches such an object go once its
        caller lets go.
-     - Not yet, skipped with its reason: a class method.
+     - A class method's form is a static, as Swift's `class func` is:
+       `await NSAnimationContext.runAnimationGroup((context) => ...)`. Its
+       wrapper sends to the class, which it names. `macos-window` awaits
+       one before the loop starts, and it prints `animated 0` on both
+       backends.
+     - That wrapper passes its own closure parameter on to the block, so a
+       closure reached C through a value of a bare function type for the
+       first time. The bridge called the type's `call` by name, which is a
+       stub, and the C did not compile. Such a bridge now dispatches
+       through the lent closure's own table, as any call through a function
+       value does, in both backends. A C-callback test sends two different
+       closures through one parameter, and it fails without the fix.
      - A handler the platform calls off the main thread is carried to it
        (below), so a completion on a background queue settles the promise
        on the owning thread, which is what Swift's `@MainActor` resumption

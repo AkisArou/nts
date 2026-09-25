@@ -12,6 +12,7 @@
 // loop. The presses and the stop still happen, since Cocoa drives them, but no
 // timeout may fire before the application has stopped.
 import {
+  NSAnimationContext,
   NSApplication,
   Bundle,
   NSButton,
@@ -159,6 +160,17 @@ function makeSheet(): NSWindow {
   });
 }
 
+// Swift's `await NSAnimationContext.runAnimationGroup { context in ... }`: a
+// class method taking a completion handler is a static returning a promise.
+async function animated(): Promise<void> {
+  let duration = -1;
+  await NSAnimationContext.runAnimationGroup((context) => {
+    context.duration = 0;
+    duration = context.duration;
+  });
+  report(`animated ${duration}`);
+}
+
 // Swift's `await window.beginSheet(sheet)`: the method taking a completion
 // handler, as the promise the handler settles (`types/appkit.values.ts`).
 async function sheet(window: NSWindow, panel: NSWindow): Promise<void> {
@@ -279,6 +291,7 @@ function main(): void {
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
   // the closure a block the timer keeps, and calls from the run loop.
+  void animated();
   Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, tick);
   app.run();
   report("done");

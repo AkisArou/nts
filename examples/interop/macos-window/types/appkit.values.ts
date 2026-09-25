@@ -3,7 +3,7 @@
 // Swift's `async` imports: each method taking a completion handler, as a
 // function returning a promise the handler settles, which the binding's
 // `@ntsCall` overload names.
-import { NSWindow } from "objc:AppKit";
+import { NSAnimationContext, NSWindow } from "objc:AppKit";
 import { nts_pending_begin, nts_pending_end } from "c:pending";
 import type { Int } from "objc:types";
 
@@ -23,6 +23,16 @@ export function nts_async_NSWindow_beginCriticalSheet(self: NSWindow, sheetWindo
     self.beginCriticalSheet(sheetWindow, (value) => {
       nts_pending_end();
       resolve(value);
+    });
+  });
+}
+
+export function nts_async_NSAnimationContext_runAnimationGroup(changes: (arg0: NSAnimationContext) => void): Promise<void> {
+  return new Promise((resolve) => {
+    nts_pending_begin();
+    NSAnimationContext.runAnimationGroup(changes, () => {
+      nts_pending_end();
+      resolve();
     });
   });
 }
