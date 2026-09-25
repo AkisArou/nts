@@ -50,6 +50,7 @@
     "macos-geometry/nts.config.ts",
     "macos-window/nts.config.ts",
     "macos-classes/nts.config.ts",
+    "macos-draw/nts.config.ts",
     "macos-notes/nts.config.ts",
     "native-string/nts.config.ts",
     "native-closure/nts.config.ts",

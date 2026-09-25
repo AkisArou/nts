@@ -913,6 +913,42 @@ correctness does not depend on arm64 running by luck.
    - **Objective-C handles narrow and assert.** `instanceof` narrows an
      Objective-C object to a subclass, and `as` asserts one, unchecked as every
      TypeScript assertion is. Any other opaque pointer is still refused.
+   - **S8, Core Graphics as Swift imports it (2026-09-25).**
+     `context.fill(rect)`, `context.setFillColor(CGColor({ red: 1, green: 0,
+     blue: 0, alpha: 1 }))`, `context.width`: the C functions Swift makes
+     members of its Core Foundation classes.
+     - Swift's symbol graph puts each C function, by its clang USR
+       (`c:@F@CGContextFillRect`), under the class Swift makes of its
+       `Ref` (`c:@T@CGContextRef`), with labels from the SDK's API notes.
+       `bind-objc --class CGContext` binds such a class (`bind_objc/cf.rs`).
+       Its `self` is the one parameter of the class's own type, since the
+       importer requires one, so it is read from the types. A function with
+       two such parameters is skipped with that reason.
+     - A class is `ObjcClass<Tag>`, a handle the program counts. A Core
+       Foundation object is an Objective-C object on Apple's platforms, and
+       `objc_retain`/`objc_release` count it. Its methods are an interface
+       of C functions with `this` (`CGContextOwnMethods`), the shape every
+       C handle has. A property is read through its function (`@ntsGet`),
+       now excluded from the "properties are messages" rule. Its
+       initializers are a function of its name, `CGColor({ red, ... })`,
+       which is Swift's `CGColor(red:green:blue:alpha:)`.
+     - Core Foundation's create rule: a function named `Create` or `Copy`
+       returns `Owned<T>`. Swift's optionality decides a result's `| null`,
+       since the API notes tighten the header (`CGColorSpaceCreateDeviceRGB`
+       is not optional). `void *` is `Ptr<unknown>`, Swift's
+       `UnsafeMutableRawPointer`. `--function` binds a free function.
+     - A module of C frameworks alone names their headers (`@ntsHeader
+       <CoreGraphics/CoreGraphics.h>`), so the native witness compares every
+       prototype with the SDK's.
+     - What Swift hides behind its own overlay is not bound:
+       `CGContextMoveToPoint` is `SwiftPrivate`, and `move(to:)` is Swift
+       code with an `s:` USR and no C symbol.
+     - `macos-draw` draws into a bitmap context the program owns, with a
+       rectangle as a colour, as components, as fields in a variable, an
+       ellipse, and a cleared pixel. It compares every pixel with the same
+       drawing in C, on both backends. The colours are released (an
+       Objective-C weak reference goes nil), and under NoGc that line alone
+       differs.
    - **A record written as its fields (2026-09-25).** Swift writes
      `NSRect(x: 200, y: 200, width: 320, height: 200)`. Here it is
      `contentRect: { origin: { x: 200, y: 200 }, size: { width: 320,

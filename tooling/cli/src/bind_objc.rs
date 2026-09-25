@@ -56,6 +56,8 @@ use std::fmt::Write as _;
 use std::io::BufReader;
 use std::process::{Command, Stdio};
 
+mod cf;
+
 /// What to bind, and from where.
 pub(crate) struct Request {
     /// Frameworks to import, and to link: `AppKit`, `Foundation`.
@@ -68,6 +70,10 @@ pub(crate) struct Request {
     /// The protocols to declare, each an interface a class the program writes
     /// can adopt: `NSWindowDelegate`.
     pub(crate) protocols: Vec<String>,
+    /// C functions Swift imports as free functions, to declare as it does:
+    /// `CGColorSpaceCreateDeviceRGB`. A Core Foundation class's own -- its
+    /// methods and initializers -- come with the class.
+    pub(crate) functions: Vec<String>,
     /// The macOS SDK.
     pub(crate) sdk: String,
     /// The clang target, `x86_64-apple-macos13`, whose version is the
@@ -97,15 +103,21 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     }
     let unit = translation_unit(request)?;
     let headers = dump(request, &unit, &Wanted::Headers)?;
-    let bound = closure(&request.classes, &headers.supers)?;
-    let protocols: BTreeSet<String> = request.protocols.iter().cloned().collect();
-    let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols))?;
     let symbols = match &request.symbols {
         Some(directory) => directory.clone(),
         None => default_symbols(&request.sdk)?,
     };
     let swift = Swift::read(&symbols, &request.frameworks)?;
-    let model = Model::read(&swift, &headers, &bodies, &bound, deployment_target(&request.target)?);
+    // A Core Foundation class is not an Objective-C one: its members are C
+    // functions, which the second pass keeps the declarations of.
+    let cf_types = cf::requested(&swift, &headers.typedefs, &request.classes);
+    let objc: Vec<String> = request.classes.iter().filter(|c| !cf_types.values().any(|name| name == *c)).cloned().collect();
+    let bound = closure(&objc, &headers.supers)?;
+    let protocols: BTreeSet<String> = request.protocols.iter().cloned().collect();
+    let functions = cf::functions(&swift, &cf_types, &request.functions);
+    let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols, &functions))?;
+    let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, deployment_target(&request.target)?);
+    model.read_cf(&bodies.functions, &request.functions);
     Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model) })
 }
 
@@ -195,8 +207,8 @@ enum Wanted<'a> {
     /// Headers only: supers, enum widths, and struct definitions.
     Headers,
     /// The bodies of these classes, and of the categories on them, and of
-    /// these protocols.
-    Bodies(&'a BTreeSet<String>, &'a BTreeSet<String>),
+    /// these protocols; and the declarations of these C functions.
+    Bodies(&'a BTreeSet<String>, &'a BTreeSet<String>, &'a BTreeSet<String>),
 }
 
 /// What one pass read.
@@ -216,6 +228,8 @@ struct Dumped {
     root_protocol: Vec<Value>,
     /// The requested protocols' methods, by protocol.
     protocols: BTreeMap<String, Vec<Value>>,
+    /// The requested C functions' declarations: their type and parameters.
+    functions: BTreeMap<String, Value>,
     /// Every typedef, and the type it names with its sugar taken off: what a
     /// block's parameter spelled `NSModalResponse` is, since a block's type
     /// arrives as one string clang did not desugar.
@@ -326,6 +340,7 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
         let mut complete = false;
         let mut body = None;
         let mut aliased = None;
+        let mut function = None;
         while let Some(key) = map.next_key::<String>()? {
             match key.as_str() {
                 "kind" => kind = map.next_value()?,
@@ -339,10 +354,11 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                 "type" if kind == "TypedefDecl" && matches!(self.wanted, Wanted::Headers) => {
                     aliased = desugared(&map.next_value::<Value>()?);
                 }
+                "type" if kind == "FunctionDecl" => function = Some(map.next_value::<Value>()?),
                 "inner" => {
                     let keep = match self.wanted {
                         Wanted::Headers => (kind == "RecordDecl" && complete) || kind == "EnumDecl",
-                        Wanted::Bodies(bound, protocols) => match kind.as_str() {
+                        Wanted::Bodies(bound, protocols, functions) => match kind.as_str() {
                             "ObjCInterfaceDecl" => name.as_ref().is_some_and(|n| bound.contains(n)),
                             // A category on NSObject is every framework's
                             // extension of every object, hundreds of methods;
@@ -351,6 +367,7 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                             "ObjCProtocolDecl" => name.as_ref().is_some_and(|n| {
                                 (n == "NSObject" && bound.contains("NSObject")) || protocols.contains(n)
                             }),
+                            "FunctionDecl" => name.as_ref().is_some_and(|n| functions.contains(n)),
                             _ => false,
                         },
                     };
@@ -390,9 +407,14 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                     if name == "NSObject" {
                         out.root_protocol.extend(members.iter().cloned());
                     }
-                    if matches!(self.wanted, Wanted::Bodies(_, protocols) if protocols.contains(&name)) {
+                    if matches!(self.wanted, Wanted::Bodies(_, protocols, _) if protocols.contains(&name)) {
                         out.protocols.entry(name).or_default().extend(members);
                     }
+                }
+            }
+            ("FunctionDecl", Some(name)) => {
+                if let (Some(ty), Some(inner)) = (function, body) {
+                    out.functions.insert(name, serde_json::json!({ "type": ty, "inner": inner }));
                 }
             }
             ("EnumDecl", Some(name)) => {
@@ -691,6 +713,12 @@ struct Model<'a> {
     imports: BTreeMap<&'static str, BTreeSet<&'static str>>,
     /// Swift's `async` imports, each a function of the values module.
     promises: Vec<Promise>,
+    /// The Core Foundation classes requested, by the C pointer type their
+    /// `Ref` is (`struct CGContext *`): what a signature naming one spells.
+    cf_types: BTreeMap<String, String>,
+    cf_classes: Vec<cf::CfClass>,
+    /// The free functions requested, as the binding declares each.
+    functions: Vec<String>,
 }
 
 /// A method's `async` form: a function of the values module, which the
@@ -743,7 +771,14 @@ struct Reading<'v> {
 }
 
 impl<'a> Model<'a> {
-    fn read(swift: &'a Swift, headers: &'a Dumped, bodies: &'a Dumped, bound: &'a BTreeSet<String>, target: Version) -> Self {
+    fn read(
+        swift: &'a Swift,
+        headers: &'a Dumped,
+        bodies: &'a Dumped,
+        bound: &'a BTreeSet<String>,
+        cf_types: BTreeMap<String, String>,
+        target: Version,
+    ) -> Self {
         let mut typedefs = headers.typedefs.clone();
         for decl in bodies.bodies.values().flatten() {
             if decl.get("kind").and_then(Value::as_str) == Some("ObjCTypeParamDecl")
@@ -766,6 +801,9 @@ impl<'a> Model<'a> {
             enums: BTreeMap::new(),
             imports: BTreeMap::new(),
             promises: Vec::new(),
+            cf_types,
+            cf_classes: Vec::new(),
+            functions: Vec::new(),
         };
         let mut read: BTreeMap<String, Reading<'a>> = BTreeMap::new();
         for (class, parent) in root_first(bound, &headers.supers) {
@@ -1284,6 +1322,11 @@ impl<'a> Model<'a> {
         if let Some(name) = desugared.strip_prefix("enum ") {
             return self.enumeration(name);
         }
+        // A Core Foundation class: `CGContextRef` is `CGContext`.
+        if let Some(name) = self.cf_types.get(desugared.as_str()).cloned() {
+            self.import("objc:types", "ObjcClass");
+            return Ok(or_null(name));
+        }
         if let Some(pointee) = desugared.strip_suffix(" *") {
             let pointee = pointee.trim_start_matches("__kindof ");
             let base = pointee.split('<').next().unwrap_or_default().trim();
@@ -1310,48 +1353,61 @@ impl<'a> Model<'a> {
             if self.headers.supers.contains_key(base) {
                 return Ok(or_null(self.object(base)));
             }
-            if position == Position::Parameter && (pointee == "const char" || pointee == "char") {
-                self.import("objc:types", "CString");
-                return Ok("CString".to_owned());
-            }
-            // Swift's `UnsafeMutablePointer<ObjCBool>`: a `BOOL *`, like
-            // `fileExists(atPath:isDirectory:)`'s, whose byte is read as `[0]`
-            // -- or a block's `stop`, which the closure writes.
-            if matches!(position, Position::Parameter | Position::Block) && written.trim_start_matches("const ").starts_with("BOOL") {
-                self.import("objc:types", "ObjCBool");
-                self.import("c:types", "Ptr");
-                return Ok(or_null("Ptr<ObjCBool>".to_owned()));
-            }
-            // Swift's `UnsafeMutablePointer<CGFloat>`, an out parameter like
-            // `getRed(_:green:blue:alpha:)`'s: the address of the number, which
-            // a program passes as `local<CGFloat>()` and reads as `[0]`.
-            if position == Position::Parameter
-                && !pointee.contains('*')
-                && let Some(number) = swift_number(
-                    written.split('*').next().unwrap_or_default().trim().trim_start_matches("const ").trim(),
-                    pointee.trim_start_matches("const "),
-                )
-            {
-                self.import("objc:types", number);
-                self.import("c:types", "Ptr");
-                return Ok(or_null(format!("Ptr<{number}>")));
-            }
-            // Swift's `UnsafeMutablePointer<NSRange>` -- an out parameter, or
-            // a record read in place -- as the address a program passes:
-            // `local<NSRange>()`.
-            if position == Position::Parameter
-                && let Some(name) = struct_through_typedefs(&self.typedefs, pointee.trim_start_matches("const "))
-                && self.headers.records.contains_key(&name)
-            {
-                let name = name.as_str();
-                self.record(name)?;
-                self.import("c:types", "Ptr");
-                return Ok(or_null(format!("Ptr<{}>", record_name(&self.typedefs, name))));
-            }
-            return Err(format!("a `{desugared}`"));
+            return self.unsafe_pointer(&written, pointee, &desugared, position);
         }
         if let Some(name) = desugared.strip_prefix("struct ").filter(|name| !name.ends_with('*')) {
             return self.by_value(name, position);
+        }
+        Err(format!("a `{desugared}`"))
+    }
+
+    /// A pointer to something that is not an object: Swift's `Unsafe...Pointer`
+    /// types, each as the address a program passes or is handed.
+    fn unsafe_pointer(&mut self, written: &str, pointee: &str, desugared: &str, position: Position) -> Spelled {
+        let or_null = |text: String| if written.contains("_Nullable") { format!("{text} | null") } else { text };
+        if position == Position::Parameter && (pointee == "const char" || pointee == "char") {
+            self.import("objc:types", "CString");
+            return Ok("CString".to_owned());
+        }
+        // Swift's `UnsafeMutablePointer<ObjCBool>`: a `BOOL *`, like
+        // `fileExists(atPath:isDirectory:)`'s, whose byte is read as `[0]`
+        // -- or a block's `stop`, which the closure writes.
+        if matches!(position, Position::Parameter | Position::Block) && written.trim_start_matches("const ").starts_with("BOOL") {
+            self.import("objc:types", "ObjCBool");
+            self.import("c:types", "Ptr");
+            return Ok(or_null("Ptr<ObjCBool>".to_owned()));
+        }
+        // Swift's `UnsafeMutablePointer<CGFloat>`, an out parameter like
+        // `getRed(_:green:blue:alpha:)`'s: the address of the number, which
+        // a program passes as `local<CGFloat>()` and reads as `[0]`.
+        if position == Position::Parameter
+            && !pointee.contains('*')
+            && let Some(number) = swift_number(
+                written.split('*').next().unwrap_or_default().trim().trim_start_matches("const ").trim(),
+                pointee.trim_start_matches("const "),
+            )
+        {
+            self.import("objc:types", number);
+            self.import("c:types", "Ptr");
+            return Ok(or_null(format!("Ptr<{number}>")));
+        }
+        // Swift's `UnsafeMutablePointer<NSRange>` -- an out parameter, or
+        // a record read in place -- as the address a program passes:
+        // `local<NSRange>()`.
+        if position == Position::Parameter
+            && let Some(name) = struct_through_typedefs(&self.typedefs, pointee.trim_start_matches("const "))
+            && self.headers.records.contains_key(&name)
+        {
+            let name = name.as_str();
+            self.record(name)?;
+            self.import("c:types", "Ptr");
+            return Ok(or_null(format!("Ptr<{}>", record_name(&self.typedefs, name))));
+        }
+        // Swift's `UnsafeMutableRawPointer`: an address the program
+        // passes, or is handed, and does not read as any type.
+        if pointee.trim_start_matches("const ") == "void" && position != Position::Block {
+            self.import("c:types", "Ptr");
+            return Ok(or_null("Ptr<unknown>".to_owned()));
         }
         Err(format!("a `{desugared}`"))
     }
@@ -1868,12 +1924,22 @@ fn render(request: &Request, model: &Model) -> String {
             .iter()
             .map(|c| format!("--class {c}"))
             .chain(request.protocols.iter().map(|p| format!("--protocol {p}")))
+            .chain(request.functions.iter().map(|f| format!("--function {f}")))
             .collect::<Vec<_>>()
             .join(" ")
     );
     let _ = writeln!(out, "/**");
     for framework in &request.frameworks {
         let _ = writeln!(out, " * @ntsFramework {framework}");
+    }
+    // A module of C frameworks alone -- Core Graphics -- names their headers,
+    // which C can include: the records are theirs, and the witness compares
+    // each function's prototype with the header's. An Objective-C header
+    // cannot be included from C, so a module binding a class names none.
+    if model.classes.is_empty() {
+        for framework in &request.frameworks {
+            let _ = writeln!(out, " * @ntsHeader <{framework}/{framework}.h>");
+        }
     }
     let _ = writeln!(out, " */\ndeclare module \"{}\" {{", request.module);
     for (module, names) in &model.imports {
@@ -1937,6 +2003,12 @@ fn render(request: &Request, model: &Model) -> String {
         }
         let _ = writeln!(text, "  }}");
         nest(&mut out, &path, &text);
+    }
+    for class in &model.cf_classes {
+        cf::render(&mut out, class);
+    }
+    for function in &model.functions {
+        let _ = writeln!(out, "{function}");
     }
     for (name, parent) in &model.mentioned {
         let extends = parent.as_ref().map(|p| format!(" extends {}", model.swift.class(p))).unwrap_or_default();
@@ -2184,6 +2256,11 @@ typedef NSInteger Response;
 @property int size;
 @end
 NS_ASSUME_NONNULL_END
+typedef struct Pen *PenRef;
+PenRef PenCreate(CGFloat width);
+void PenStroke(PenRef pen, CGPoint at);
+CGFloat PenGetWidth(PenRef pen);
+PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
 "#;
 
     /// What Swift's importer says of `FAKE`, in a symbol graph's shape.
@@ -2257,6 +2334,13 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)fetchNamed:completionHandler:", "swift.method", "fetch(named:completionHandler:)", &["Shape", "fetch(named:completionHandler:)"], ""),
             throwing.to_owned(),
             symbol("c:objc(cs)NSError", "swift.class", "NSError", &["NSError"], ""),
+            // A Core Foundation class: its `Ref` is a class, and the functions
+            // Swift makes its members are its initializer, method and property.
+            symbol("c:@T@PenRef", "swift.class", "Pen", &["Pen"], ""),
+            symbol("c:@F@PenCreate", "swift.init", "init(width:)", &["Pen", "init(width:)"], ""),
+            symbol("c:@F@PenStroke", "swift.method", "stroke(at:)", &["Pen", "stroke(at:)"], ""),
+            symbol("c:@F@PenGetWidth", "swift.property", "width", &["Pen", "width"], ""),
+            symbol("c:@F@PenCopyTwin", "swift.method", "twin(_:)", &["Pen", "twin(_:)"], ""),
             symbol("c:objc(cs)Shape(im)pairWithCompletionHandler:", "swift.method", "pair(completionHandler:)", &["Shape", "pair(completionHandler:)"], ""),
             symbol("c:objc(cs)Shape(cm)runGroup:completionHandler:", "swift.type.method", "runGroup(_:completionHandler:)", &["Shape", "runGroup(_:completionHandler:)"], ""),
             r#"{"identifier":{"precise":"c:objc(cs)Shape(cm)runGroup:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.type.method"},"names":{"title":"runGroup(_:)"},"pathComponents":["Shape","runGroup(_:)"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"class func runGroup(_ changes: (Shape) -> Void) async"}]}"#.to_owned(),
@@ -2284,8 +2368,9 @@ NS_ASSUME_NONNULL_END
             frameworks: vec!["Fake".to_owned()],
             module: "objc:Fake".to_owned(),
             // `NSError`, for the throwing `async` form's description.
-            classes: vec!["Circle".to_owned()],
+            classes: vec!["Circle".to_owned(), "Pen".to_owned()],
             protocols: vec!["ShapeDelegate".to_owned()],
+            functions: Vec::new(),
             sdk: root.to_string_lossy().into_owned(),
             target: "x86_64-apple-macos13".to_owned(),
             symbols: Some(symbols),
@@ -2402,6 +2487,27 @@ NS_ASSUME_NONNULL_END
         // own methods.
         assert!(!text.contains("alloc") && !text.contains("swifty"), "{text}");
         assert_async(&text, &values);
+        assert_cf(&text);
+    }
+
+    /// A Core Foundation class, as Swift imports it: a handle the program
+    /// counts, its members the C functions taking it, `self` found by type.
+    fn assert_cf(text: &str) {
+        for expected in [
+            "  export interface PenOwnMethods {",
+            "    /** @ntsSymbol PenStroke */\n    stroke(this: Pen, labels: { at: ByValue<CGPoint> | Fields<CGPoint> }): void;",
+            // A property is read through its function, which is declared
+            // beside it for `@ntsGet` to name.
+            "    /** @ntsSymbol PenGetWidth */\n    PenGetWidth(this: Pen): CGFloat;\n    /** @ntsGet PenGetWidth */\n    readonly width: CGFloat;",
+            "  export type Pen = ObjcClass<\"Pen\"> & PenOwnMethods;",
+            // An initializer is the class's name, and `Create` hands over a
+            // reference the program owns.
+            "  /** @ntsSymbol PenCreate */\n  export function Pen(labels: { width: CGFloat }): Owned<Pen>;",
+            // Two parameters of the class's type: no telling which is `self`.
+            "    //   PenCopyTwin: more than one parameter of the class's type",
+        ] {
+            assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+        }
     }
 
     /// Swift's `async` import, as `a_framework_is_bound_as_swift_imports_it`

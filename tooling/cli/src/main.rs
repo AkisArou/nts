@@ -345,7 +345,7 @@ fn bind_gir(rest: &[String]) -> Result<()> {
 }
 
 /// `nts bind-objc --module objc:AppKit --framework AppKit --class NSWindow ...
-/// [--protocol NSWindowDelegate ...] [--values appkit.values.ts]`
+/// [--protocol NSWindowDelegate ...] [--function CGColorSpaceCreateDeviceRGB ...] [--values appkit.values.ts]`
 ///
 /// The SDK is `--sdk`, else `NTS_APPLE_SDK`, else the one
 /// `tooling/apple/sync-sdk.sh` keeps: a real SDK, since zig's Darwin libc
@@ -366,6 +366,7 @@ fn bind_objc(rest: &[String]) -> Result<()> {
         module: single("--module").ok_or_else(|| anyhow::anyhow!("`nts bind-objc` needs `--module objc:<name>`"))?,
         classes: repeated("--class"),
         protocols: repeated("--protocol"),
+        functions: repeated("--function"),
         sdk,
         target: single("--target").unwrap_or_else(|| "x86_64-apple-macos13".to_owned()),
         symbols: single("--symbols").map(std::path::PathBuf::from),

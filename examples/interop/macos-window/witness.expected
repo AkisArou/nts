@@ -1,5 +1,6 @@
 missing -[NSResponder performTextFinderAction:]
 missing -[NSResponder newWindowForTab:]
+missing -[NSString initWithBytes:length:encoding:]
 missing -[NSView safeAreaInsets]
 missing -[NSView additionalSafeAreaInsets]
 missing -[NSView setAdditionalSafeAreaInsets:]
@@ -18,4 +19,4 @@ missing -[NSView rulerView:willSetClientView:]
 missing -[NSView rulerView:locationForPoint:]
 missing -[NSView rulerView:pointForLocation:]
 missing -[NSWindow setTitlebarAccessoryViewControllers:]
-1246 messages checked, 20 the runtime does not have
+1258 messages checked, 21 the runtime does not have

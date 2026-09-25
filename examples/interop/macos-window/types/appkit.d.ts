@@ -441,6 +441,13 @@ declare module "objc:AppKit" {
   }
 
   export namespace NSString {
+    export const enum EncodingConversionOptions {
+      allowLossy = 1,
+      externalRepresentation = 2,
+    }
+  }
+
+  export namespace NSString {
     export const enum EnumerationOptions {
       byLines = 0,
       byParagraphs = 1,
@@ -835,6 +842,8 @@ declare module "objc:AppKit" {
     supplementalTarget(labels: { forAction: Selector; sender: NSObject | null }): NSObject | null;
     /** @ntsSelector validateProposedFirstResponder:forEvent: */
     validateProposedFirstResponder(responder: NSResponder, labels: { for: NSEvent | null }): boolean;
+    /** @ntsSelector presentError:modalForWindow:delegate:didPresentSelector:contextInfo: */
+    presentError(error: NSError, labels: { modalFor: NSWindow; delegate: NSObject | null; didPresent: Selector; contextInfo: Ptr<unknown> | null }): void;
     /** @ntsSelector presentError: */
     presentError(error: NSError): boolean;
     /** @ntsSelector willPresentError: */
@@ -860,7 +869,6 @@ declare module "objc:AppKit" {
     // Not bound, each for the reason given:
     //   -mouseCancelled:: introduced in macOS 26.0
     //   -contextMenuKeyDown:: introduced in macOS 15.0
-    //   -presentError:modalForWindow:delegate:didPresentSelector:contextInfo:: a `void *`
     //   -showWritingTools:: introduced in macOS 15.2
     //   +allowedClassesForRestorableStateKeyPath:: an array of `Class`
   }
@@ -925,6 +933,10 @@ declare module "objc:AppKit" {
     constructor(labels: { string: string });
     /** @ntsSelector initWithData:encoding: */
     constructor(labels: { data: NSData; encoding: UInt });
+    /** @ntsSelector initWithBytes:length:encoding: */
+    constructor(labels: { bytes: Ptr<unknown>; length: UInt; encoding: UInt });
+    /** @ntsSelector initWithBytesNoCopy:length:encoding:freeWhenDone: */
+    constructor(labels: { bytesNoCopy: Ptr<unknown>; length: UInt; encoding: UInt; freeWhenDone: boolean });
     /** @ntsSelector initWithCString:encoding: */
     constructor(labels: { cString: CString; encoding: UInt });
     /**
@@ -1023,6 +1035,8 @@ declare module "objc:AppKit" {
     canBeConverted(labels: { to: UInt }): boolean;
     /** @ntsSelector getCString:maxLength:encoding: */
     getCString(buffer: CString, labels: { maxLength: UInt; encoding: UInt }): boolean;
+    /** @ntsSelector getBytes:maxLength:usedLength:encoding:options:range:remainingRange: */
+    getBytes(buffer: Ptr<unknown> | null, labels: { maxLength: UInt; usedLength: Ptr<UInt> | null; encoding: UInt; options: CEnum<NSString.EncodingConversionOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange>; remaining: Ptr<NSRange> | null }): boolean;
     /** @ntsSelector maximumLengthOfBytesUsingEncoding: */
     maximumLengthOfBytes(labels: { using: UInt }): UInt;
     /** @ntsSelector lengthOfBytesUsingEncoding: */
@@ -1083,14 +1097,11 @@ declare module "objc:AppKit" {
     //   @property fileSystemRepresentation: a `const char *`
     //   -getCharacters:range:: a `unichar *`
     //   -cStringUsingEncoding:: a `const char *`
-    //   -getBytes:maxLength:usedLength:encoding:options:range:remainingRange:: a `void *`
     //   -initWithCharactersNoCopy:length:freeWhenDone:: a `unichar *`
     //   -initWithCharactersNoCopy:length:deallocator:: a `unichar *`
     //   -initWithCharacters:length:: a `const unichar *`
     //   -initWithFormat:arguments:: a `struct __va_list_tag *`
     //   -initWithFormat:locale:arguments:: a `struct __va_list_tag *`
-    //   -initWithBytes:length:encoding:: a `const void *`
-    //   -initWithBytesNoCopy:length:encoding:freeWhenDone:: a `void *`
     //   -initWithBytesNoCopy:length:encoding:deallocator:: a `void *`
     //   -initWithContentsOfURL:usedEncoding:error:: a `NSStringEncoding *`
     //   -initWithContentsOfFile:usedEncoding:error:: a `NSStringEncoding *`
@@ -1453,6 +1464,8 @@ declare module "objc:AppKit" {
     willOpenMenu(menu: NSMenu, labels: { with: NSEvent }): void;
     /** @ntsSelector didCloseMenu:withEvent: */
     didCloseMenu(menu: NSMenu, labels: { with: NSEvent | null }): void;
+    /** @ntsSelector addToolTipRect:owner:userData: */
+    addToolTip(rect: ByValue<CGRect> | Fields<CGRect>, labels: { owner: NSObject; userData: Ptr<unknown> | null }): Int;
     /** @ntsSelector removeToolTip: */
     removeToolTip(tag: Int): void;
     /** @ntsSelector removeAllToolTips */
@@ -1539,6 +1552,8 @@ declare module "objc:AppKit" {
     discardCursorRects(): void;
     /** @ntsSelector resetCursorRects */
     resetCursorRects(): void;
+    /** @ntsSelector addTrackingRect:owner:userData:assumeInside: */
+    addTrackingRect(rect: ByValue<CGRect> | Fields<CGRect>, labels: { owner: NSObject; userData: Ptr<unknown> | null; assumeInside: boolean }): Int;
     /** @ntsSelector removeTrackingRect: */
     removeTrackingRect(tag: Int): void;
     /** @ntsSelector reflectScrolledClipView: */
@@ -1617,9 +1632,7 @@ declare module "objc:AppKit" {
     //   -lockFocusIfCanDraw: deprecated in macOS 10.14
     //   -lockFocusIfCanDrawInContext:: deprecated in macOS 10.13
     //   -scrollRect:by:: deprecated in macOS 10.14
-    //   -addToolTipRect:owner:userData:: a `void *`
     //   -drawSheetBorderWithSize:: deprecated in macOS 10.14
-    //   -addTrackingRect:owner:userData:assumeInside:: a `void *`
     //   -displayLinkWithTarget:selector:: introduced in macOS 14.0
     //   -dragFile:fromRect:slideBack:event:: deprecated in macOS 10.13
     //   -dragPromisedFilesOfTypes:fromRect:source:slideBack:event:: deprecated in macOS 10.13
@@ -1814,6 +1827,7 @@ declare module "objc:AppKit" {
     get areCursorRectsEnabled(): boolean;
     get showsResizeIndicator(): boolean;
     set showsResizeIndicator(value: boolean);
+    get windowRef(): Ptr<unknown>;
     get hasCloseBox(): boolean;
     get hasTitleBar(): boolean;
     get isFloatingPanel(): boolean;
@@ -1844,6 +1858,8 @@ declare module "objc:AppKit" {
     constructor(labels: { contentRect: ByValue<CGRect> | Fields<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt>; backing: CEnum<NSWindow.BackingStoreType, UInt>; defer: boolean; screen: NSScreen | null });
     /** @ntsSelector +windowWithContentViewController: */
     constructor(labels: { contentViewController: NSViewController });
+    /** @ntsSelector initWithWindowRef: */
+    constructor(labels: { windowRef: Ptr<unknown> });
     /** @ntsSelector init */
     constructor();
     /** @ntsSelector addTitlebarAccessoryViewController: */
@@ -2101,7 +2117,6 @@ declare module "objc:AppKit" {
     //   @property oneShot: deprecated in macOS 10.14
     //   @property preferredBackingLocation: deprecated in macOS 10.14
     //   @property backingLocation: deprecated in macOS 10.14
-    //   @property windowRef: a `void *`
     //   @property drawers: deprecated in macOS 10.13
     //   -transferWindowSharingToWindow:completionHandler:: introduced in macOS 13.3
     //   -requestSharingOfWindow:completionHandler:: introduced in macOS 15.0
@@ -2119,7 +2134,6 @@ declare module "objc:AppKit" {
     //   -enableFlushWindow: deprecated in macOS 10.14
     //   -flushWindow: deprecated in macOS 10.14
     //   -flushWindowIfNeeded: deprecated in macOS 10.14
-    //   -initWithWindowRef:: a `void *`
   }
 
   /** @ntsClass NSAnimationContext */
@@ -2592,10 +2606,12 @@ declare module "objc:AppKit" {
     get isARepeat(): boolean;
     get keyCode(): UInt16;
     get trackingNumber(): Int;
+    get userData(): Ptr<unknown> | null;
     get trackingArea(): NSTrackingArea | null;
     get subtype(): CEnum<NSEvent.EventSubtype, Int16>;
     get data1(): Int;
     get data2(): Int;
+    get eventRef(): Ptr<unknown> | null;
     static get isMouseCoalescingEnabled(): boolean;
     /** @ntsSet setMouseCoalescingEnabled: */
     static set isMouseCoalescingEnabled(value: boolean);
@@ -2632,6 +2648,10 @@ declare module "objc:AppKit" {
     static get keyRepeatInterval(): TimeInterval;
     /** @ntsSelector charactersByApplyingModifiers: */
     charactersByApplyingModifiers(modifiers: CEnum<NSEvent.ModifierFlags | 0, UInt>): string | null;
+    /** @ntsSelector +eventWithEventRef: */
+    constructor(labels: { eventRef: Ptr<unknown> });
+    /** @ntsSelector init */
+    constructor();
     /** @ntsSelector coalescedTouchesForTouch: */
     coalescedTouches(labels: { for: NSTouch }): NSTouch[];
     /** @ntsSelector trackSwipeEventWithOptions:dampenAmountThresholdMin:max:usingHandler: */
@@ -2644,6 +2664,8 @@ declare module "objc:AppKit" {
     static mouseEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; eventNumber: Int; clickCount: Int; pressure: Float }): NSEvent | null;
     /** @ntsSelector keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode: */
     static keyEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; characters: string; charactersIgnoringModifiers: string; isARepeat: boolean; keyCode: UInt16 }): NSEvent | null;
+    /** @ntsSelector enterExitEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:trackingNumber:userData: */
+    static enterExitEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; eventNumber: Int; trackingNumber: Int; userData: Ptr<unknown> | null }): NSEvent | null;
     /** @ntsSelector otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2: */
     static otherEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; subtype: Int16; data1: Int; data2: Int }): NSEvent | null;
     /** @ntsSelector addGlobalMonitorForEventsMatchingMask:handler: */
@@ -2652,21 +2674,15 @@ declare module "objc:AppKit" {
     static addLocalMonitorForEvents(labels: { matching: CEnum<NSEvent.EventTypeMask | 0, UInt64> }, block: (arg0: NSEvent) => NSEvent | null): NSObject | null;
     /** @ntsSelector removeMonitor: */
     static removeMonitor(eventMonitor: NSObject): void;
-    /** @ntsSelector init */
-    constructor();
     /** @ntsSelector self */
     self(): NSEvent;
     // Not bound, each for the reason given:
     //   @property context: deprecated in macOS 10.12
-    //   @property userData: a `void *`
-    //   @property eventRef: a `const void *`
     //   @property CGEvent: a `struct __CGEvent *`
-    //   +eventWithEventRef:: a `const void *`
     //   +eventWithCGEvent:: a `struct __CGEvent *`
     //   -touchesMatchingPhase:inView:: a collection, `NSSet`, which crosses as an object when it is bound
     //   -allTouches: a collection, `NSSet`, which crosses as an object when it is bound
     //   -touchesForView:: a collection, `NSSet`, which crosses as an object when it is bound
-    //   +enterExitEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:trackingNumber:userData:: a `void *`
   }
 
   /** @ntsClass NSButton */

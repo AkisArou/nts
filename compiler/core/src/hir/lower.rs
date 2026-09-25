@@ -44735,7 +44735,13 @@ impl<'a> FuncBuilder<'a> {
         // Objective-C class a binding declares -- a class property when
         // `static`, whose accessors are sent to the class.
         let objc = |declaration: &NodeId| match self.kind_of(*declaration) {
-            Some(syntax::PROPERTY_SIGNATURE) => self.in_objc_module(*declaration),
+            // Not one read through a function (`@ntsGet`): a Core Foundation
+            // class's property is a C function of the instance, which is not
+            // an Objective-C message.
+            Some(syntax::PROPERTY_SIGNATURE) => {
+                self.in_objc_module(*declaration)
+                    && !self.node(*declaration).native.as_deref().is_some_and(|n| n.get.is_some() || n.set.is_some())
+            }
             Some(syntax::PROPERTY_DECLARATION) => self.objc_class_member(*declaration).is_some(),
             // A binding's property, as the accessors an Objective-C property
             // is; or an accessor of a class the program writes over one,
