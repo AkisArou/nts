@@ -344,8 +344,11 @@ correctness does not depend on arm64 running by luck.
        overloads. So a class declaring a name repeats its ancestors'
        overloads of it (`isEqual(_:)` beside `isEqual(to:)`), and repeats
        their initializers. Where Swift has a property and a method of one
-       name (`menu`, `menu(for:)`), the property wins and the method is
-       skipped with a reason.
+       name (`menu`, `menu(for:)`), the property keeps the name. The method
+       takes its first label into its name, as its selector does:
+       `menuFor(event)`, `frameForAlignmentRect(rect)`, `uppercasedWith(locale)`.
+       One whose first argument has no label (`splitView(_:…)`) is still
+       skipped, and those are 8 of AppKit's former 45.
      - Skipped, with reasons: blocks (S5), collections (S3c), members Swift
        throws or awaits (S5), and a label Swift repeats (`perform(_:with:with:)`).
      - The binding's cost to the checker: the 2.6k-line `macos-window`

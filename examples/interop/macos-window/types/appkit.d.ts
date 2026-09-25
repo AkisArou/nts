@@ -976,6 +976,12 @@ declare module "objc:AppKit" {
     rangeOfComposedCharacterSequences(labels: { for: ByValue<_NSRange> }): ByValue<_NSRange>;
     /** @ntsSelector stringByAppendingString: */
     appending(aString: string): string;
+    /** @ntsSelector uppercaseStringWithLocale: */
+    uppercasedWith(locale: NSLocale | null): string;
+    /** @ntsSelector lowercaseStringWithLocale: */
+    lowercasedWith(locale: NSLocale | null): string;
+    /** @ntsSelector capitalizedStringWithLocale: */
+    capitalizedWith(locale: NSLocale | null): string;
     /** @ntsSelector getLineStart:end:contentsEnd:forRange: */
     getLineStart(startPtr: UInt, labels: { end: UInt; contentsEnd: UInt; for: ByValue<_NSRange> }): void;
     /** @ntsSelector lineRangeForRange: */
@@ -1069,9 +1075,6 @@ declare module "objc:AppKit" {
     //   @property availableStringEncodings: a `const NSStringEncoding *`
     //   @property fileSystemRepresentation: a `const char *`
     //   -getCharacters:range:: a `unichar *`
-    //   -uppercaseStringWithLocale:: Swift's `uppercased` is also a property here
-    //   -lowercaseStringWithLocale:: Swift's `lowercased` is also a property here
-    //   -capitalizedStringWithLocale:: Swift's `capitalized` is also a property here
     //   -enumerateSubstringsInRange:options:usingBlock:: a `BOOL *`
     //   -enumerateLinesUsingBlock:: a `BOOL *`
     //   -cStringUsingEncoding:: a `const char *`
@@ -1434,6 +1437,8 @@ declare module "objc:AppKit" {
     layoutSubtreeIfNeeded(): void;
     /** @ntsSelector layout */
     layout(): void;
+    /** @ntsSelector menuForEvent: */
+    menuFor(event: NSEvent): NSMenu | null;
     /** @ntsSelector willOpenMenu:withEvent: */
     willOpenMenu(menu: NSMenu, labels: { with: NSEvent }): void;
     /** @ntsSelector didCloseMenu:withEvent: */
@@ -1534,6 +1539,8 @@ declare module "objc:AppKit" {
     updateConstraints(): void;
     /** @ntsSelector alignmentRectForFrame: */
     alignmentRect(labels: { forFrame: ByValue<CGRect> }): ByValue<CGRect>;
+    /** @ntsSelector frameForAlignmentRect: */
+    frameForAlignmentRect(alignmentRect: ByValue<CGRect>): ByValue<CGRect>;
     /** @ntsSelector invalidateIntrinsicContentSize */
     invalidateIntrinsicContentSize(): void;
     /** @ntsSelector contentHuggingPriorityForOrientation: */
@@ -1596,7 +1603,6 @@ declare module "objc:AppKit" {
     //   -lockFocusIfCanDraw: deprecated in macOS 10.14
     //   -lockFocusIfCanDrawInContext:: deprecated in macOS 10.13
     //   -scrollRect:by:: deprecated in macOS 10.14
-    //   -menuForEvent:: Swift's `menu` is also a property here
     //   -addToolTipRect:owner:userData:: a `void *`
     //   -getRectsExposedDuringLiveResize:count:: a `NSRect *`
     //   -knowsPageRange:: a `NSRange *`
@@ -1614,7 +1620,6 @@ declare module "objc:AppKit" {
     //   -releaseGState: deprecated in macOS 10.10
     //   -setUpGState: deprecated in macOS 10.10
     //   -renewGState: deprecated in macOS 10.10
-    //   -frameForAlignmentRect:: Swift's `frame` is also a property here
   }
 
   /** @ntsClass NSWindow */
@@ -2586,6 +2591,8 @@ declare module "objc:AppKit" {
     static get doubleClickInterval(): TimeInterval;
     static get keyRepeatDelay(): TimeInterval;
     static get keyRepeatInterval(): TimeInterval;
+    /** @ntsSelector charactersByApplyingModifiers: */
+    charactersByApplyingModifiers(modifiers: CEnum<NSEvent.ModifierFlags | 0, UInt>): string | null;
     /** @ntsSelector coalescedTouchesForTouch: */
     coalescedTouches(labels: { for: NSTouch }): NSTouch[];
     /** @ntsSelector startPeriodicEventsAfterDelay:withPeriod: */
@@ -2613,7 +2620,6 @@ declare module "objc:AppKit" {
     //   @property userData: a `void *`
     //   @property eventRef: a `const void *`
     //   @property CGEvent: a `struct __CGEvent *`
-    //   -charactersByApplyingModifiers:: Swift's `characters` is also a property here
     //   +eventWithEventRef:: a `const void *`
     //   +eventWithCGEvent:: a `struct __CGEvent *`
     //   -touchesMatchingPhase:inView:: a collection, `NSSet`, which crosses as an object when it is bound

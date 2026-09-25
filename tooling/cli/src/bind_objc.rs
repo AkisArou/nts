@@ -905,16 +905,27 @@ impl<'a> Model<'a> {
         }
         // Swift does not import it -- `alloc`, `new`, what it marks
         // unavailable -- so there is no such member to bind, and nothing to say.
-        let Some(symbol) = self.swift.get(&usr).cloned() else { return };
+        let Some(mut symbol) = self.swift.get(&usr).cloned() else { return };
+        // Swift has `var menu` and `func menu(for:)` on one class, and
+        // TypeScript one member per name. Properties are read first and keep
+        // theirs; the method takes its first label into its name, as the
+        // selector does: `menuFor(event)`, `frameForAlignmentRect(rect)`.
+        let (is_static, name, named_as) = Self::shape(&symbol);
+        if let Some(name) = name
+            && named_as == Named::Method
+            && reading.names.get(&(is_static, name)) == Some(&Named::Property)
+            && let Some(renamed) = folded_label(&symbol.names.title)
+        {
+            symbol.names.title = renamed;
+        }
         let bound = self.available(&symbol).and_then(|()| {
             let text = if decl.get("kind").and_then(Value::as_str) == Some("ObjCMethodDecl") {
                 self.method(class, decl, &symbol)?
             } else {
                 self.property(class, decl, &symbol)?
             };
-            // Swift has `menu` and `menu(for:)` on one class, and TypeScript
-            // one member per name: the first bound keeps it, and properties
-            // are read first.
+            // A clash the first label could not settle -- `menu(_:)` -- is
+            // skipped: the first bound keeps the name.
             let (is_static, name, named_as) = Self::shape(&symbol);
             if let Some(name) = name {
                 match reading.names.get(&(is_static, name.clone())) {
@@ -1498,6 +1509,18 @@ fn documented(tags: &[String]) -> String {
 }
 
 /// `setFrame(_:display:)` as its base name and its labels, `_` for none.
+/// A method's Swift name with its first label moved into the base name:
+/// `menu(for:inRect:)` is `menuFor(_:inRect:)`. None when the first argument
+/// has no label.
+fn folded_label(title: &str) -> Option<String> {
+    let (base, rest) = title.split_once('(')?;
+    let (first, others) = rest.split_once(':')?;
+    if first.is_empty() || first == "_" {
+        return None;
+    }
+    Some(format!("{base}{}(_:{others}", capitalized(first)))
+}
+
 fn swift_name(title: &str) -> (String, Vec<String>) {
     let Some((base, rest)) = title.split_once('(') else { return (title.to_owned(), Vec::new()) };
     let labels = rest.trim_end_matches(')').split(':').filter(|l| !l.is_empty()).map(str::to_owned).collect();
@@ -1875,6 +1898,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)adopt:(NSArray<Shape *> *)shapes;
 - (void)registerTypes:(NSArray<ShapeKind> *)kinds;
 - (NSArray<Shape<ShapeDelegate> *> *)delegates;
+- (Shape *)twinOfShape:(Shape *)other;
+@property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
 @property (class, readonly) Shape *unit;
@@ -1936,6 +1961,8 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)adopt:", "swift.method", "adopt(_:)", &["Shape", "adopt(_:)"], ""),
             symbol("c:objc(cs)Shape(im)registerTypes:", "swift.method", "register(_:)", &["Shape", "register(_:)"], ""),
             symbol("c:objc(cs)Shape(im)delegates", "swift.method", "delegates()", &["Shape", "delegates()"], ""),
+            symbol("c:objc(cs)Shape(im)twinOfShape:", "swift.method", "twin(of:)", &["Shape", "twin(of:)"], ""),
+            symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
             symbol("c:objc(cs)Shape(cpy)unit", "swift.type.property", "unit", &["Shape", "unit"], ""),
@@ -2040,6 +2067,10 @@ NS_ASSUME_NONNULL_END
             // and a class qualified by a protocol, which the element drops.
             "    /** @ntsSelector registerTypes: */\n    register(kinds: string[]): void;",
             "    /** @ntsSelector delegates */\n    delegates(): Shape[];",
+            // Swift's `var twin` beside `func twin(of:)`: the method takes its
+            // first label into its name.
+            "    get twin(): Shape;",
+            "    /** @ntsSelector twinOfShape: */\n    twinOf(other: Shape): Shape;",
             // A struct passed by value is declared, in Swift's numbers.
             "export type CGPoint = Struct<{ x: Double; y: Double }, \"CGPoint\">;",
             // And what is not bound is said, with why.
