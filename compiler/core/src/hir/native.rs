@@ -110,6 +110,12 @@ pub enum Hresult {
     /// the declared parameters and the result slot (`Role::Outer`,
     /// `Role::Inner`).
     Composable,
+    /// `@ntsHresult out`: a method with `[out]` parameters, whose declared
+    /// result is an object type literal holding them -- one field per
+    /// parameter in C's order, then `returnValue` for the `[out, retval]` if
+    /// there is one -- as the Windows Runtime's JavaScript projection returned
+    /// them. Each field is a `Role::Result` slot of its own.
+    Out,
 }
 
 /// What `@ntsDefault` gives an optional parameter: an integer for a C integer
@@ -415,7 +421,9 @@ pub enum Role {
     /// Where C writes the call's declared result, returning a status instead
     /// (`@ntsHresult`): a slot of the compiler's, read after the call once the
     /// status says it succeeded, as `written` says. Hidden from TypeScript.
-    Result { written: Written },
+    /// `field` is the property of the call's value it is read into, for an
+    /// `@ntsHresult out` method; otherwise the slot's value is the call's.
+    Result { written: Written, field: Option<std::sync::Arc<str>> },
     /// A composable factory's outer object: NULL, since the class is made as
     /// itself and not as the base of an object of the program's. Hidden from
     /// TypeScript.
@@ -2332,7 +2340,9 @@ fn tags_name_parameters(
 
 /// What an `@ntsHresult` function hands back: an HRESULT, with the declared
 /// result moved to a `Role::Result` slot at the end of the C parameters --
-/// where a Windows Runtime method's `[out, retval]` is.
+/// where a Windows Runtime method's `[out, retval]` is. For `@ntsHresult out`,
+/// one slot per field of the declared object type, in its order: the `[out]`
+/// parameters, then `returnValue`, the `[out, retval]`.
 ///
 /// The slot holds what C writes: a pointer to a handle, a scalar, or an
 /// `HSTRING` for an `HString` result. What reading it means -- a `+1` handle,
@@ -2345,6 +2355,32 @@ fn hresult_result(
     shape: Hresult,
     (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>),
 ) -> Result<Returned, String> {
+    let status = Returned { result: Type::Scalar(Scalar::Int32), array: None, string: None, owned: false, program: None };
+    if shape == Hresult::Out {
+        let fields = labels_of(snapshot, ty).ok_or_else(|| {
+            format!("foreign function `{name}` is `@ntsHresult out` and its result is not an object type literal of required fields")
+        })?;
+        for (at, (field, ty)) in fields.iter().enumerate() {
+            if field == "returnValue" && at + 1 != fields.len() {
+                return Err(format!(
+                    "foreign function `{name}` is `@ntsHresult out` with `returnValue`, the `[out, retval]`, before an `[out]` parameter"
+                ));
+            }
+            let Some((pointer, written)) = written_slot(snapshot, name, *ty, abi)? else {
+                return Err(format!("foreign function `{name}` is `@ntsHresult out` with a `void` field `{field}`"));
+            };
+            // The slot is the record's storage, which cannot also be a field
+            // of an object of the program's.
+            if written == Written::Record {
+                return Err(format!(
+                    "foreign function `{name}` is `@ntsHresult out` with a struct field `{field}`, which is refused"
+                ));
+            }
+            parameters.push(pointer);
+            roles.push(Role::Result { written, field: Some(field.as_str().into()) });
+        }
+        return Ok(status);
+    }
     // A composable factory's outer and inner objects come before the result.
     if shape == Hresult::Composable {
         parameters.push(Type::Pointer(Pointee::Void));
@@ -2352,6 +2388,16 @@ fn hresult_result(
         parameters.push(Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void))));
         roles.push(Role::Inner);
     }
+    if let Some((pointer, written)) = written_slot(snapshot, name, ty, abi)? {
+        parameters.push(pointer);
+        roles.push(Role::Result { written, field: None });
+    }
+    Ok(status)
+}
+
+/// The pointer C writes a value of TypeScript type `ty` through, and how the
+/// slot is read after: `None` for `void`, which is written nowhere.
+fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&str>) -> Result<Option<(Type, Written)>, String> {
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
     } else {
@@ -2377,21 +2423,17 @@ fn hresult_result(
         }
     };
     let pointee = match written {
-        Type::Void => None,
-        Type::Pointer(pointee) => Some(Pointee::Pointer(Box::new(pointee))),
-        Type::Scalar(scalar) => Some(Pointee::Scalar(scalar)),
-        Type::Record(record) => Some(Pointee::Record(record)),
+        Type::Void => return Ok(None),
+        Type::Pointer(pointee) => Pointee::Pointer(Box::new(pointee)),
+        Type::Scalar(scalar) => Pointee::Scalar(scalar),
+        Type::Record(record) => Pointee::Record(record),
         _ => {
             return Err(format!(
                 "foreign function `{name}` is `@ntsHresult` with a result written through a pointer as something other than a handle, a string, a C scalar or a record"
             ));
         }
     };
-    if let Some(pointee) = pointee {
-        parameters.push(Type::Pointer(pointee));
-        roles.push(Role::Result { written: kind });
-    }
-    Ok(Returned { result: Type::Scalar(Scalar::Int32), array: None, string: None, owned: false, program: None })
+    Ok(Some((Type::Pointer(pointee), kind)))
 }
 
 /// What a foreign function hands back, read from its declared return type.

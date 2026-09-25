@@ -659,35 +659,72 @@ impl Writer<'_> {
         let signature = method.signature(&parameters);
         let named = method.params_by_sequence(signature.types.len()).map_err(|_| "a method whose parameters the metadata numbers wrongly".to_owned())?;
         let out = |at: usize| named.params().get(at).copied().flatten().is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out));
+        let count = signature.types.len();
+        let composed = count >= 2
+            && matches!(signature.types[count - 2], Type::Object)
+            && matches!(&signature.types[count - 1], Type::Object | Type::RefMut(_) if match &signature.types[count - 1] { Type::RefMut(inner) => matches!(**inner, Type::Object), _ => true })
+            && !out(count - 2)
+            && out(count - 1);
         let declared = if matches!(receiver, Receiver::Composable { .. }) {
-            let count = signature.types.len();
-            let composed = count >= 2
-                && matches!(signature.types[count - 2], Type::Object)
-                && matches!(&signature.types[count - 1], Type::Object | Type::RefMut(_) if match &signature.types[count - 1] { Type::RefMut(inner) => matches!(**inner, Type::Object), _ => true })
-                && !out(count - 2)
-                && out(count - 1);
             if !composed {
                 return Err("a composable factory method not ending in the outer and inner objects".to_owned());
             }
             count - 2
+        } else if composed && matches!(receiver, Receiver::Instance(_)) {
+            // A factory interface's own method, which the class it makes
+            // calls as its constructor (`Receiver::Composable`): as an
+            // interface method it would hand the program an inner object.
+            return Err("a composable factory method, called as its class's constructor".to_owned());
         } else {
-            signature.types.len()
+            count
         };
         let mut parameters: Vec<String> = Vec::new();
         if let Receiver::Instance(this) = receiver {
             parameters.push(format!("this: {this}"));
         }
+        // `[out]` parameters are the result's fields, as the Windows
+        // Runtime's JavaScript projection returned them: `TryParse(input)`
+        // answers `{ result: JsonValue; returnValue: boolean }`. They follow
+        // every `[in]` one, which is where C takes them too.
+        let mut outs: Vec<String> = Vec::new();
         for (at, ty) in signature.types.iter().enumerate().take(declared) {
             let row = named.params().get(at).copied().flatten();
-            if row.is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out)) {
-                return Err("an `out` parameter".to_owned());
-            }
             let name = row.map_or_else(|| format!("param{at}"), |row| safe(row.name()));
-            parameters.push(format!("{name}: {}", self.spell(ty, true)?));
+            if out(at) {
+                let written = match ty {
+                    Type::RefMut(written) => written,
+                    // `GetMany`'s buffer, which the caller allocates and the
+                    // callee fills.
+                    Type::Array(_) => return Err("an array".to_owned()),
+                    _ => return Err("an `out` parameter not written through a pointer".to_owned()),
+                };
+                if let Type::ValueName(value) = &**written
+                    && self.index.get(&value.namespace, &value.name).next().is_some_and(|def| def.category() == TypeCategory::Struct)
+                {
+                    return Err("a struct `out` parameter".to_owned());
+                }
+                if name == "returnValue" {
+                    return Err("an `out` parameter named `returnValue`".to_owned());
+                }
+                // An object may be null where the method wrote none: a failed
+                // `TryParse`'s `result`.
+                let spelled = self.spell(written, false)?;
+                outs.push(if matches!(**written, Type::Object | Type::ClassName(_)) {
+                    format!("{name}: {spelled} | null")
+                } else {
+                    format!("{name}: {spelled}")
+                });
+            } else if !outs.is_empty() {
+                return Err("an `in` parameter after an `out` one".to_owned());
+            } else {
+                parameters.push(format!("{name}: {}", self.spell(ty, true)?));
+            }
         }
         let result = match &signature.return_type {
-            Type::Void => "void".to_owned(),
-            other => self.spell(other, false)?,
+            Type::Void if outs.is_empty() => "void".to_owned(),
+            Type::Void => format!("{{ {} }}", outs.join("; ")),
+            other if outs.is_empty() => self.spell(other, false)?,
+            other => format!("{{ {}; returnValue: {} }}", outs.join("; "), self.spell(other, false)?),
         };
         let mut text = String::new();
         let _ = writeln!(text, "    /**");
@@ -698,8 +735,11 @@ impl Writer<'_> {
                 let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
             }
             Receiver::Factory { class, iid } => {
-                let _ = writeln!(text, "     * @ntsHresult");
+                let _ = writeln!(text, "     * @ntsHresult{}", if outs.is_empty() { "" } else { " out" });
                 let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
+            }
+            Receiver::Instance(_) if !outs.is_empty() => {
+                let _ = writeln!(text, "     * @ntsHresult out");
             }
             Receiver::Instance(_) => {
                 let _ = writeln!(text, "     * @ntsHresult");

@@ -145,7 +145,7 @@ fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
         format!("    /**\n     * @ntsVtable {slot_and_name}\n     * @ntsHresult\n     */\n    {method}(this: IJsonValue): c_double;")
     };
     // (name, method spliced in, function spliced in, the call, the refusal)
-    let cases: [(&str, String, String, &str, &str); 7] = [
+    let cases: [(&str, String, String, &str, &str); 9] = [
         (
             "mismatched",
             method_named("9 GetNumber", "GetString"),
@@ -195,6 +195,20 @@ fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
             "Parse(\"1\").GetString()",
             "a Windows Runtime string is `HString`",
         ),
+        (
+            "out-retval-first",
+            String::new(),
+            format!("{OUT_TAGS}  export function Early(input: HString): {{ returnValue: boolean; result: IJsonValue | null }};"),
+            "Early(\"1\")",
+            "`returnValue`, the `[out, retval]`, before an `[out]` parameter",
+        ),
+        (
+            "out-not-a-literal",
+            String::new(),
+            format!("{OUT_TAGS}  export function Bare(input: HString): IJsonValue;"),
+            "Bare(\"1\")",
+            "not an object type literal",
+        ),
     ];
     for (name, method, function, call, refusal) in cases {
         let imports = if function.is_empty() { "Parse" } else { &format!("Parse, {}", call.split('(').next().unwrap()) };
@@ -211,6 +225,48 @@ fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
             prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
+}
+
+/// `@ntsHresult out` on `IJsonValueStatics`' slot 7, as `bind-winmd` writes
+/// `TryParse`, less the function line.
+const OUT_TAGS: &str = "  /**\n   * @ntsVtable 7 TryParse\n   * @ntsHresult out\n   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C\n   */\n";
+
+/// `[out]` parameters are the result's fields: one slot of the compiler's per
+/// field, in C's order after the declared arguments, each read as a result is
+/// -- the object `nts_com_take`n, the `boolean` a byte compared with zero --
+/// and the object holding them made only once the HRESULT says the call
+/// succeeded, so a failed one throws with nothing allocated.
+#[test]
+fn out_parameters_are_the_fields_of_the_result() {
+    let function = format!(
+        "{OUT_TAGS}  export function TryParse(input: HString): {{ result: IJsonValue | null; returnValue: boolean }};"
+    );
+    let source = r#"import { TryParse } from "winrt:Windows.Data.Json";
+export function run(): string {
+  const parsed = TryParse("1");
+  return String(parsed.returnValue) + (parsed.result === null ? "none" : parsed.result.Stringify());
+}
+"#;
+    let Some((dir, prepared)) = prepare("out", &binding("", &function), source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    // The receiver, the string, then the two slots: four arguments.
+    let call = text.find("[7])(").unwrap_or_else(|| panic!("no call through slot 7:\n{text}")) + "[7])(".len();
+    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(arguments, 4, "TryParse is not called with its receiver, input and two slots:\n{text}");
+    assert!(text.contains("nts_com_take("), "the object written to `result` is not taken:\n{text}");
+    let checked = text.find("nts_hresult_message(").unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
+    for field in ["->result = ", "->returnValue = "] {
+        let stored = text.find(field).unwrap_or_else(|| panic!("no store to `{field}`:\n{text}"));
+        assert!(stored > checked, "`{field}` is stored before the HRESULT is checked:\n{text}");
+    }
+
+    windows_syntax(&dir, &emitted);
 }
 
 /// Two tags on one line are one tag with the second's text in it: the reader

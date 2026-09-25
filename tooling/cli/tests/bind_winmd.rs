@@ -183,10 +183,17 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         "JsonArray is not queried for IVector<IJsonValue> by its computed IID:\n{module}"
     );
     assert!(module.contains("export type JsonArray = IJsonArray & JsonArrayInterfaces;"), "{module}");
-    // Refused, each with the reason, and not written.
-    assert!(refused.contains("IJsonValueStatics.TryParse\tan `out` parameter"), "{refused}");
     declared_in("export interface IJsonValueMethods", 10, "GetBoolean", "GetBoolean(this: IJsonValue): boolean;");
-    assert!(!module.contains("TryParse("), "a refused method was written:\n{module}");
+    // `[out]` parameters are the result's fields beside `returnValue`, as
+    // the Windows Runtime's JavaScript projection returned them; an object
+    // written there may be null.
+    assert!(
+        module.contains(
+            "@ntsVtable 7 TryParse\n     * @ntsHresult out\n     * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C\n     */\n    function TryParse(input: HString): { result: JsonValue | null; returnValue: boolean };"
+        ),
+        "TryParse's `[out]` parameter is not the field of its result:\n{module}"
+    );
+    assert!(refused.is_empty(), "Windows.Data.Json refused something:\n{refused}");
 }
 
 /// An event: `add_Closed` takes its handler as a `Delegate` whose function is
@@ -290,6 +297,14 @@ fn composable_classes_are_constructed_as_themselves() {
     assert!(
         button.contains("@ntsHresult composable\n     * @ntsFactory Windows.UI.Xaml.Controls.Button ") && button.contains("function CreateInstance(): Button;"),
         "{button}"
+    );
+    // The factory interface's own method is that constructor, not a method
+    // to call with an outer object and answer an inner one: refused, saying
+    // so, rather than as the `[out]` parameter its inner object is.
+    let refused = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
+    assert!(
+        refused.contains("IButtonFactory.CreateInstance\ta composable factory method, called as its class's constructor"),
+        "{refused}"
     );
     // A class answers every interface of the classes it derives from, and a
     // parameter taking a class takes its default interface.

@@ -24,6 +24,7 @@
 // - `threw`: an HRESULT failure, thrown as an `Error` naming the code.
 // - `closed`: an event, a TypeScript function as a delegate (see `events`).
 // - `structs`: records by value, both sizes Win64 passes (see `structs`).
+// - `outs`: `[out]` parameters, as fields of the result (see `outs`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
 //   call that was handed it -- and 19 under `--rc`, those two and one for
@@ -77,6 +78,25 @@ function structs(): string {
   const back = transform.get_Bounds();
   return String(year) + "+" + String(days) + "d,bounds=" + String(back[0].X) + "," + String(back[0].Y) + "," +
     String(back[0].Width) + "x" + String(back[0].Height);
+}
+
+// `[out]` parameters, which a method answers as fields of its result beside
+// `returnValue`: `TryParse` on text that parses, whose `result` is the value,
+// and on text that does not, which answers `false` and still writes an object
+// -- a JSON `null`, which `Stringify` shows as `null` (a C oracle making the
+// same call reads `ok=0`, a result of `JsonValueType.Null`); and
+// `IndexOf`, a `uint32` beside the `boolean`, on an item the vector holds (the
+// object itself, found at 1) and on an equal number that is another object,
+// which is not found.
+function outs(): string {
+  const good = JsonValue.TryParse("7");
+  const bad = JsonValue.TryParse("{nope");
+  const parsed = good.result === null ? "null" : String(good.result.GetNumber());
+  const vector = JsonArray.Parse("[1, 2]").as_IVector();
+  const found = vector.IndexOf(vector.GetAt(1));
+  const missing = vector.IndexOf(JsonValue.CreateNumberValue(2));
+  return String(good.returnValue) + ":" + parsed + "," + String(bad.returnValue) + ":" + (bad.result === null ? "none" : bad.result.Stringify()) +
+    ",index=" + String(found.returnValue) + ":" + String(found.index) + "," + String(missing.returnValue);
 }
 
 // An event: two TypeScript functions handed to `add_Closed` as delegates, one
@@ -150,7 +170,7 @@ function run(): string {
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
-    " closed=" + events() + " structs=" + structs();
+    " closed=" + events() + " structs=" + structs() + " outs=" + outs();
 }
 
 if (asked("throw")) {

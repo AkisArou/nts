@@ -11572,8 +11572,9 @@ struct ParameterTags {
 enum Lent {
     /// A C string, beside the string it was made from and how it was encoded.
     String { string: ValueId, pointer: ValueId, encoding: super::native::Encoding },
-    /// The slot an `@ntsHresult` call writes its result to, read after it.
-    Result { slot: ValueId, written: super::native::Written },
+    /// The slot an `@ntsHresult` call writes its result to, read after it:
+    /// the call's value, or the field of it an `@ntsHresult out` names.
+    Result { slot: ValueId, written: super::native::Written, field: Option<std::sync::Arc<str>> },
     /// A `char **` made from a `string[]`.
     Strings { pointer: ValueId },
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
@@ -41196,14 +41197,22 @@ impl<'a> FuncBuilder<'a> {
         // the empty string, and the failing path drops it unread. Read after
         // the branch, the slot was used in two blocks, and every Windows
         // Runtime call in a loop was refused.
-        let written = lent.iter().find_map(|lent| match lent {
-            Lent::Result { slot, written } => Some((*slot, *written)),
-            _ => None,
-        });
-        let value = match written {
-            None => self.push(OpKind::ConstUndefined, typed.unwrap_or(HirType::Void), origin.clone()),
-            Some((slot, written)) => self.read_written(id, slot, written, &origin)?,
-        };
+        let written: Vec<_> = lent
+            .iter()
+            .filter_map(|lent| match lent {
+                Lent::Result { slot, written, field } => Some((*slot, *written, field.clone())),
+                _ => None,
+            })
+            .collect();
+        let mut value = None;
+        let mut fields = Vec::new();
+        for (slot, written, field) in written {
+            let read = self.read_written(id, slot, written, &origin)?;
+            match field {
+                Some(field) => fields.push((field, read)),
+                None => value = Some(read),
+            }
+        }
         let lent: Vec<Lent> = lent
             .into_iter()
             .map(|lent| match lent {
@@ -41231,7 +41240,31 @@ impl<'a> FuncBuilder<'a> {
         self.throw_c_message(id, message, &origin)?;
         self.switch_to(after);
         self.give_back(id, lent);
-        Ok(value)
+        if fields.is_empty() {
+            return Ok(match value {
+                Some(value) => value,
+                None => self.push(OpKind::ConstUndefined, typed.unwrap_or(HirType::Void), origin),
+            });
+        }
+        // `@ntsHresult out`: an object of the call's type, one field per
+        // slot, made only once the call succeeded -- a failed one throws
+        // with nothing allocated. Its values were read before the branch;
+        // only the slots have to be.
+        // No type given is the node's own, as `push_call` reads it.
+        let Some(HirType::Managed(ManagedType::Object(type_id))) = typed.or_else(|| self.type_of(id)) else {
+            return Err(self.unsupported(id, "an `@ntsHresult out` call whose value is not an object"));
+        };
+        let layout = self.layout_of(id, type_id)?;
+        let object = self.push(OpKind::ObjectNew { frame: false }, HirType::Managed(ManagedType::Object(type_id)), origin.clone());
+        for (field, read) in fields {
+            let Some(index) = layout.index_of(&field) else {
+                return Err(self.unsupported(id, "an `@ntsHresult out` field the result's type does not declare"));
+            };
+            let want = layout.fields[index as usize].ty.clone();
+            let read = self.coerce(read, &want, id)?;
+            self.field_set(object, index, read, &origin);
+        }
+        Ok(object)
     }
 
     /// What an `@ntsHresult` call wrote to its result slot, as the program
@@ -41924,8 +41957,8 @@ impl<'a> FuncBuilder<'a> {
         Ok(Some(self.push(OpKind::NativeBlock { invoke, context, signature }, want, origin.clone())))
     }
 
-    /// What a declaration's `@ntsHresult` says, if it has one: plain, or
-    /// `composable`.
+    /// What a declaration's `@ntsHresult` says, if it has one: plain,
+    /// `composable`, or `out`.
     fn hresult_shape(&self, call: NodeId, declaration: Option<NodeId>) -> Result<Option<super::native::Hresult>, Diagnostic> {
         let Some(shape) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.hresult.as_deref()) else {
             return Ok(None);
@@ -41933,7 +41966,8 @@ impl<'a> FuncBuilder<'a> {
         match shape.trim() {
             "" => Ok(Some(super::native::Hresult::Plain)),
             "composable" => Ok(Some(super::native::Hresult::Composable)),
-            _ => Err(self.unsupported(call, "@ntsHresult with a shape other than `composable`")),
+            "out" => Ok(Some(super::native::Hresult::Out)),
+            _ => Err(self.unsupported(call, "@ntsHresult with a shape other than `composable` or `out`")),
         }
     }
 
@@ -41943,9 +41977,9 @@ impl<'a> FuncBuilder<'a> {
         match role {
             // Where C writes the result: a zeroed local, read by
             // `finish_hresult_call` once the HRESULT says it was written.
-            super::native::Role::Result { written } => {
+            super::native::Role::Result { written, field } => {
                 let slot = self.push(OpKind::NativeLocal { count: 1 }, want, origin.clone());
-                lent.push(Lent::Result { slot, written: *written });
+                lent.push(Lent::Result { slot, written: *written, field: field.clone() });
                 slot
             }
             // No outer object: the class is made as itself.
