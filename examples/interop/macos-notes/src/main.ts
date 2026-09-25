@@ -1,0 +1,170 @@
+// A notes application, as a Swift AppKit programmer writes one: a window
+// with a text field, an Add button and a table of notes, whose controller is
+// the button's target and the table's data source, and is handed what it
+// controls when it is made. Notes are read from a file when it opens and
+// written back once they are added. It drives itself -- three notes typed and
+// added, then it quits -- so `build.sh` can run it twice and check that the
+// second run finds what the first saved.
+//
+// The log, in order:
+//   loaded N   notes read through `NSString(contentsOfFile:encoding:)`, which
+//              throws on the first run, when there is no file
+//   added T    each note typed into the field and added by the button's
+//              action, which reads the field's `stringValue` and clears it
+//   rows N     the table's `numberOfRows`, which asks the data source
+//   saved N    the notes written back through `write(toFile:atomically:encoding:)`
+import {
+  NSApplication,
+  NSButton,
+  NSEvent,
+  NSObject,
+  NSScrollView,
+  NSString,
+  NSTableColumn,
+  NSTableView,
+  NSTextField,
+  NSWindow,
+  Timer,
+  type CGPoint,
+  type CGRect,
+  type NSTableViewDataSource,
+} from "objc:AppKit";
+import { report } from "c:support";
+import { sel_registerName } from "objc:runtime";
+import { local } from "c:memory";
+import type { Ptr } from "c:types";
+import type { Int } from "objc:types";
+
+const PATH = "/tmp/nts-macos-notes.txt";
+// `String.Encoding.utf8`, `NSUTF8StringEncoding`.
+const UTF8 = 4;
+
+function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: number): void {
+  r.origin.x = x;
+  r.origin.y = y;
+  r.size.width = width;
+  r.size.height = height;
+}
+
+// Swift's `try String(contentsOfFile:encoding:)`, which throws when there is
+// no file yet: an empty list then.
+function load(): string[] {
+  try {
+    const text = new NSString({ contentsOfFile: PATH, encoding: UTF8 });
+    return text.components({ separatedBy: "\n" }).filter((line) => line.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+// Swift's `class Notes: NSObject, NSTableViewDataSource`, whose `init` takes
+// the notes and the views it works with.
+class Notes extends NSObject implements NSTableViewDataSource {
+  constructor(
+    private readonly notes: string[],
+    private readonly field: NSTextField,
+    private readonly table: NSTableView,
+  ) {
+    super();
+  }
+
+  // The button's action, `add:`: the field's text as a note, and the table
+  // told to ask again.
+  add(sender: NSObject): void {
+    const text = this.field.stringValue;
+    this.notes.push(text);
+    this.field.stringValue = "";
+    this.table.reloadData();
+    report(`added ${text}`);
+  }
+
+  // `NSTableViewDataSource`: how many rows, and what each shows.
+  numberOfRows(tableView: NSTableView): Int {
+    return this.notes.length;
+  }
+
+  tableViewObjectValueFor(tableView: NSTableView, tableColumn: NSTableColumn | null, row: Int): NSObject | null {
+    return new NSString({ string: this.notes[row] });
+  }
+
+  save(): number {
+    new NSString({ string: this.notes.join("\n") }).write({ toFile: PATH, atomically: true, encoding: UTF8 });
+    return this.notes.length;
+  }
+}
+
+function main(): void {
+  const app = NSApplication.shared;
+  app.setActivationPolicy(NSApplication.ActivationPolicy.regular);
+  const frame = local<CGRect>();
+  setRect(frame, 200, 200, 360, 300);
+  const window = new NSWindow({
+    contentRect: frame,
+    styleMask: NSWindow.StyleMask.titled | NSWindow.StyleMask.closable,
+    backing: NSWindow.BackingStoreType.buffered,
+    defer: false,
+  });
+  window.title = "Notes";
+
+  const fieldFrame = local<CGRect>();
+  setRect(fieldFrame, 20, 260, 240, 24);
+  const field = new NSTextField({ frame: fieldFrame });
+  const buttonFrame = local<CGRect>();
+  setRect(buttonFrame, 270, 256, 70, 32);
+  const button = new NSButton({ frame: buttonFrame });
+  button.title = "Add";
+  const listFrame = local<CGRect>();
+  setRect(listFrame, 20, 20, 320, 220);
+  const scroll = new NSScrollView({ frame: listFrame });
+  const table = new NSTableView({ frame: listFrame });
+  table.addTableColumn(new NSTableColumn({ identifier: "note" }));
+  scroll.documentView = table;
+  window.contentView?.addSubview(field);
+  window.contentView?.addSubview(button);
+  window.contentView?.addSubview(scroll);
+
+  const loaded = load();
+  // The controller keeps this array and adds to it, so its length is read
+  // now, before any note is.
+  const initially = loaded.length;
+  report(`loaded ${initially}`);
+  const notes = new Notes(loaded, field, table);
+  table.dataSource = notes;
+  button.target = notes;
+  button.action = sel_registerName("add:");
+  window.makeKeyAndOrderFront(null);
+
+  // Typed and pressed from a timer, as a person would, then saved and quit.
+  let typed = 0;
+  Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, (timer) => {
+    typed++;
+    if (typed <= 3) {
+      field.stringValue = `note ${typed} of ${initially + typed}`;
+      button.performClick(null);
+      return;
+    }
+    timer.invalidate();
+    report(`rows ${table.numberOfRows}`);
+    report(`saved ${notes.save()}`);
+    window.close();
+    app.stop(null);
+    // `stop:` is seen when the loop next finishes an event, so one is posted.
+    const wake = NSEvent.otherEvent({
+      with: NSEvent.EventType.applicationDefined,
+      location: local<CGPoint>(),
+      modifierFlags: 0,
+      timestamp: 0,
+      windowNumber: 0,
+      context: null,
+      subtype: 0,
+      data1: 0,
+      data2: 0,
+    });
+    if (wake !== null) {
+      app.postEvent(wake, { atStart: true });
+    }
+  });
+  app.run();
+}
+
+main();

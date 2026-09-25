@@ -672,6 +672,20 @@ correctness does not depend on arm64 running by luck.
        program's alone: a global and a function, as any class's is, and not a
        class method the runtime is told of. `Ledger` counts the ledgers its
        constructor opens.
+   - **An application, end to end (2026-09-25).** `macos-notes` is a notes
+     app as Swift writes one: a window with a text field, an Add button and
+     an `NSTableView`, and a controller that is the button's target and the
+     table's data source.
+     - The controller takes the notes and the views in its constructor, as
+       parameter properties.
+     - Notes are read with a throwing `NSString(contentsOfFile:encoding:)`
+       and written back with `write(toFile:atomically:encoding:)`.
+     - It drives itself and quits, and runs four times on one file: C twice,
+       then LLVM, then C under reference counting, each finding what the last
+       saved.
+     - It found that a throwing constructor's `+alloc` inherited the
+       constructor's error slot. A declaration's `@ntsThrows` is now its own
+       selector's alone.
    - **S6, protocols landed (2026-09-25).** `class Elements extends NSObject
      implements XMLParserDelegate` is Swift's `class Elements: NSObject,
      XMLParserDelegate`.

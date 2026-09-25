@@ -42945,8 +42945,13 @@ impl<'a> FuncBuilder<'a> {
             return Ok(Callee::External(name));
         }
         let ParameterTags { throws, defaults } = self.parameter_tags(call, declaration)?;
-        let selector =
-            selector.or_else(|| declaration.and_then(|decl| self.node(decl).native.as_ref().and_then(|n| n.selector.clone())));
+        let declared = declaration.and_then(|decl| self.node(decl).native.as_ref().and_then(|n| n.selector.clone()));
+        // A declaration's `@ntsThrows` is its own selector's: the `+alloc` a
+        // throwing constructor sends first takes no error slot.
+        let throws = throws.filter(|_| {
+            selector.as_deref().is_none_or(|sent| declared.as_deref().is_none_or(|own| own.trim_start_matches('+') == sent))
+        });
+        let selector = selector.or(declared);
         let (throws, hidden) = split_hidden_throws(throws, selector.is_some(), signature);
         let hresult = self.hresult_shape(call, declaration)?;
         let mut native = super::native::Function::from_signature(
