@@ -24,6 +24,11 @@ export function defines(_ctor: unknown, instance: object, lifecycle: number): bo
   return typeof (instance as unknown as { readonly [name: string]: unknown })[name] === "function";
 }
 
+/** `setState`'s merge of `partial` into `prev`, for a class `ctor`: a copy with both. */
+export function mergeState(_ctor: unknown, prev: unknown, partial: unknown): unknown {
+  return Object.assign({}, prev, partial);
+}
+
 /** Whether a fiber's `type` is a class component. */
 export function isClassComponentType(type: unknown): boolean {
   if (type instanceof ClassComponentType) {

@@ -80,6 +80,18 @@ when the method is absent, wherever upstream has one (`shouldComponentUpdate`
 returns true, and PureComponent's compares shallowly). The reconciler asks
 the mask, not the method, whether a class defines it.
 
+**State merges by type.** Upstream merges `setState`'s partial state
+with `Object.assign({}, prev, partial)`, a property walk nts does not
+have on a record. The descriptor carries `mergeState`, which the stage
+writes over the class's own state type:
+`{ ...(prev as C["state"]), ...(partial as Partial<C["state"]>) }`. The
+class update queue also serves the root, whose type is null. The native
+seam merges a `RootState` field by field with `in`, which keeps
+`Object.assign`'s presence semantics, and the three places that build a
+root's payload type it as `Partial<RootState>` so its layout is that
+one. nts refuses the spread of a `Partial` record today (reported); the
+field-wise form, which it compiles, shows it is representable.
+
 **One seam for the three reliances**, `ReactFiberClassComponentHost.ts` with
 a `.native.ts` twin, bound like the other fork points:
 
@@ -88,6 +100,7 @@ a `.native.ts` twin, bound like the other fork points:
 | `construct(ctor, props, context)` | `new ctor(props, context)`, or `ctor.create` for a descriptor | `ctor.create(props, context)` |
 | `defines(ctor, instance, Lifecycle.X)` | `typeof instance.x === "function"` | `(ctor.lifecycles & Lifecycle.X) !== 0` |
 | `isClassComponent(type)` | `shouldConstruct(type)`, or a descriptor | `type instanceof ClassComponentType` |
+| `mergeState(ctor, prev, partial)` | `Object.assign({}, prev, partial)` | the descriptor's `mergeState`, or the root's typed merge |
 
 The JavaScript build accepts both a class and a descriptor. That's what makes
 the design testable before the native runtime renders: the staged probe
@@ -124,8 +137,10 @@ the plain probe, which passes classes.
    that fix.
    Measured with the three invalid-HIR defects worked around locally, the
    probe emits, with 215 root refusals. Those on this path: the lifecycle
-   calls above, the state merge (`Object.assign` onto a record, still ours
-   to design), and `ctor.prototype && ...` (an object's truthiness).
+   calls above, and `ctor.prototype && ...` (an object's truthiness). The
+   state merge is designed (above); its native form waits on the `Partial`
+   spread. probe-agree covers it with a two-field state, and a control that
+   replaces state instead of merging breaks classLifecycles.
 
 ## Left out
 

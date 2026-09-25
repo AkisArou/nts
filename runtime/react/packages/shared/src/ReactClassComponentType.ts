@@ -70,6 +70,12 @@ export class ClassComponentType {
   readonly displayName: string | undefined;
   /** The class's constructor, as a closure that names the class. */
   readonly create: (props: unknown, context: unknown) => object;
+  /**
+   * `setState`'s merge, `{ ...prev, ...partial }` over the class's own state
+   * type, where upstream copies properties with `Object.assign`; null for a
+   * class that declares no state type.
+   */
+  readonly mergeState: ((prev: unknown, partial: unknown) => unknown) | null;
   /** The lifecycle methods the class defines, inherited ones included. */
   readonly lifecycles: number;
   readonly prototype: ClassComponentPrototype;
@@ -84,6 +90,7 @@ export class ClassComponentType {
   constructor(
     name: string,
     create: (props: unknown, context: unknown) => object,
+    mergeState: ((prev: unknown, partial: unknown) => unknown) | null,
     lifecycles: number,
     isPure: boolean,
     statics: ClassComponentStatics,
@@ -91,6 +98,7 @@ export class ClassComponentType {
     this.name = name;
     this.displayName = statics.displayName ?? undefined;
     this.create = create;
+    this.mergeState = mergeState;
     this.lifecycles = lifecycles;
     this.prototype = new ClassComponentPrototype(isPure);
     this.contextType = statics.contextType ?? undefined;

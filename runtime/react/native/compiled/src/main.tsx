@@ -99,10 +99,11 @@ export function changedHookOrder(start: number): string {
 
 type Note = (line: string) => void;
 type TickerProps = { start: number; note: Note };
-type TickerState = { count: number };
+type TickerState = { count: number; label: string };
 
 class Ticker extends Component<TickerProps, TickerState> {
-  state: TickerState = { count: this.props.start };
+  // `label` is set once: setState({ count }) must keep it.
+  state: TickerState = { count: this.props.start, label: "t" + this.props.start };
 
   componentDidMount(): void {
     this.props.note("mount " + this.state.count);
@@ -120,7 +121,11 @@ class Ticker extends Component<TickerProps, TickerState> {
   }
 
   render() {
-    return <span>count {this.state.count}</span>;
+    return (
+      <span>
+        count {this.state.count} {this.state.label}
+      </span>
+    );
   }
 }
 

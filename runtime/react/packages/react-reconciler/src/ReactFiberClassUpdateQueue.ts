@@ -76,6 +76,7 @@
 // regardless of priority. Intermediate state may vary according to system
 // resources, but the final state is always the same.
 
+import { mergeState } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import type { Lanes, Lane } from "./ReactFiberLane.ts";
 
@@ -402,7 +403,7 @@ function getStateFromUpdate<State>(
         return prevState;
       }
       // Merge the partial state and the previous state.
-      return Object.assign({}, prevState, partialState) as State;
+      return mergeState(workInProgress.type, prevState, partialState) as State;
     }
     case ForceUpdate: {
       hasForceUpdate = true;

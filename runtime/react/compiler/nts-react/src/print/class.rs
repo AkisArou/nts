@@ -55,6 +55,8 @@ struct Known {
     /// Whether its constructor takes the context: React passes it as the
     /// second argument, and a class declaring `constructor(props)` takes one.
     takes_context: bool,
+    /// Whether it has a state type to merge `setState`'s partial state into.
+    has_state: bool,
 }
 
 /// The class components of one file, found in order.
@@ -133,6 +135,7 @@ impl ClassComponents {
         let mut named = Vec::new();
         let mut statics = BTreeSet::new();
         let mut constructor_parameters = None;
+        let mut declares_state = false;
         for m in &members {
             let kind = member(m, "memberKind").unwrap_or_default();
             if kind == "constructor" {
@@ -140,6 +143,9 @@ impl ClassComponents {
                 continue;
             }
             let Some(member_name) = member(m, "name") else { continue };
+            if !is_static(m) && member_name == "state" {
+                declares_state = true;
+            }
             if is_static(m) {
                 if STATICS.contains(&member_name.as_str()) {
                     statics.insert(member_name);
@@ -155,15 +161,27 @@ impl ClassComponents {
             }
         }
 
-        let (pure, inherited_statics, inherited_context, lifecycles) = match &base {
-            Base::React { pure } => (*pure, BTreeSet::new(), true, own.to_string()),
+        let (pure, inherited_statics, inherited_context, inherited_state, lifecycles) = match &base {
+            Base::React { pure } => (*pure, BTreeSet::new(), true, false, own.to_string()),
             Base::Class { name: parent, known } => {
-                (known.pure, known.statics.clone(), known.takes_context, format!("{parent}.$$type.lifecycles | {own}"))
+                (known.pure, known.statics.clone(), known.takes_context, known.has_state, format!("{parent}.$$type.lifecycles | {own}"))
             }
         };
         statics.extend(inherited_statics);
         let takes_context = constructor_parameters.map_or(inherited_context, |n| n >= 2);
-        self.known.insert(name.clone(), Known { pure, statics: statics.clone(), takes_context });
+        // `Component<Props, State>` names a state type, as does a `state` member.
+        let state_argument = class
+            .super_type_parameters
+            .as_ref()
+            .and_then(|raw| raw.parse_value().get("params").and_then(Value::as_array).map(Vec::len))
+            .is_some_and(|n| n >= 2);
+        let has_state = state_argument || declares_state || inherited_state;
+        self.known.insert(name.clone(), Known { pure, statics: statics.clone(), takes_context, has_state });
+        let merge = if has_state {
+            format!("(prev, partial) => ({{ ...(prev as {name}[\"state\"]), ...(partial as Partial<{name}[\"state\"]>) }})")
+        } else {
+            "null".to_owned()
+        };
 
         let props = format!("props as ConstructorParameters<typeof {name}>[0]");
         let create = if takes_context {
@@ -175,7 +193,7 @@ impl ClassComponents {
         let statics_text: Vec<String> = statics.iter().map(|s| static_entry(&name, s)).collect();
         let statics_text = if statics_text.is_empty() { "{}".to_owned() } else { format!("{{ {} }}", statics_text.join(", ")) };
         Some(format!(
-            "\n  // The descriptor the native build holds for this class (written by the React stage).\n  static readonly $$type = new {runtime}(\n    {},\n    {create},\n    {mask_comment}{lifecycles},\n    {pure},\n    {statics_text},\n  );\n",
+            "\n  // The descriptor the native build holds for this class (written by the React stage).\n  static readonly $$type = new {runtime}(\n    {},\n    {create},\n    {merge},\n    {mask_comment}{lifecycles},\n    {pure},\n    {statics_text},\n  );\n",
             quote_ascii(&name),
         ))
     }

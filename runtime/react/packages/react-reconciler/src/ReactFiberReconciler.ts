@@ -1,6 +1,7 @@
 // The reconciler's public API: what a renderer calls to create roots,
 // render into them and flush work.
 
+import type { RootState } from "./ReactFiberRoot.ts";
 import { hostNodeOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableSchedulingProfiler } from "shared/ReactFeatureFlags.ts";
@@ -333,7 +334,9 @@ function updateContainerImpl(
   const update = createUpdate(lane);
   // Caution: React DevTools currently depends on this property
   // being called "element".
-  update.payload = { element };
+  // Typed as the root's partial state: that is what the queue merges it into.
+  const payload: Partial<RootState> = { element };
+  update.payload = payload;
 
   const updateCallback = callback === undefined ? null : callback;
   if (updateCallback !== null) {

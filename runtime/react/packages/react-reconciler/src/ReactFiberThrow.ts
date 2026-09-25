@@ -2,6 +2,7 @@
 // thenable suspends to the nearest Suspense (or Activity/Offscreen) boundary,
 // and an error is captured by the nearest error boundary or the root.
 
+import type { RootState } from "./ReactFiberRoot.ts";
 import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentDidCatch } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
@@ -83,7 +84,8 @@ function createRootErrorUpdate(root: FiberRoot, errorInfo: CapturedValue, lane: 
   update.tag = CaptureUpdate;
   // Caution: React DevTools currently depends on this property
   // being called "element".
-  update.payload = { element: null };
+  const payload: Partial<RootState> = { element: null };
+  update.payload = payload;
   update.callback = () => {
     if (isDevelopment) {
       runWithFiberInDEV(errorInfo.source, () => logUncaughtError(root, errorInfo));

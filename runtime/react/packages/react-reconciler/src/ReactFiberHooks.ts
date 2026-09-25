@@ -12,6 +12,7 @@ import type {
   Usable,
   MemoCacheShape,
 } from "shared/ReactTypes.ts";
+import type { RootState } from "./ReactFiberRoot.ts";
 import type { Fiber, FiberRoot, HookType, MemoCache } from "./ReactInternalTypes.ts";
 import type { Lanes, Lane } from "./ReactFiberLane.ts";
 import type { HookFlags } from "./ReactHookEffectTags.ts";
@@ -3181,7 +3182,7 @@ function refreshCache<T>(fiber: Fiber, seedKey: (() => T) | null | undefined, se
           }
         }
 
-        const payload = {
+        const payload: Partial<RootState> = {
           cache: seededCache,
         };
         refreshUpdate.payload = payload;

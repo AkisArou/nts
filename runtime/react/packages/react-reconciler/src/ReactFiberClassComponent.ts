@@ -1,5 +1,5 @@
 import type { Props, ReactContextBase } from "shared/ReactTypes.ts";
-import { construct, defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
+import { construct, defines, mergeState } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import type { ClassComponentType } from "shared/ReactClassComponentType.ts";
 import { ComponentDidMount, ComponentDidUpdate, ComponentWillMount, ComponentWillReceiveProps, ComponentWillUpdate, GetSnapshotBeforeUpdate, ShouldComponentUpdate, UnsafeComponentWillMount, UnsafeComponentWillReceiveProps, UnsafeComponentWillUpdate } from "shared/ReactClassComponentType.ts";
 import { shallowEqual } from "shared/shallowEqual.ts";
@@ -161,7 +161,7 @@ function applyDerivedStateFromProps(
   }
   // Merge the partial state and the previous state.
   const memoizedState =
-    partialState === null || partialState === undefined ? prevState : Object.assign({}, prevState, partialState);
+    partialState === null || partialState === undefined ? prevState : mergeState(ctor, prevState, partialState);
   workInProgress.memoizedState = memoizedState;
 
   // Once the update queue is empty, persist the derived state onto the
