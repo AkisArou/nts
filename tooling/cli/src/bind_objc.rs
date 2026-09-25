@@ -1187,8 +1187,12 @@ impl<'a> Model<'a> {
         let desugared = desugared(ty).unwrap_or_default();
         let or_null = |text: String| if written.contains("_Nullable") { format!("{text} | null") } else { text };
         if written.contains("(^") || desugared.contains("(^") {
+            // A block type the header names by a typedef --
+            // `NSTableViewDiffableDataSourceCellProvider` -- is read from what
+            // the typedef spells.
+            let spelled = if written.contains("(^") { written.clone() } else { desugared.clone() };
             return match position {
-                Position::Parameter => self.block(class, &written),
+                Position::Parameter => self.block(class, &spelled),
                 Position::Block => Err("a block that takes or returns a block".to_owned()),
                 // A block the program is handed has no closure to be.
                 Position::Result => Err("a block as a result or a property".to_owned()),
@@ -2003,6 +2007,8 @@ typedef NSString *ShapeKind;
 - (instancetype)init;
 - (BOOL)isEqual:(Root *)other;
 @end
+@class Shape;
+typedef Shape * _Nonnull (^ShapeMaker)(NSInteger count);
 NS_ASSUME_NONNULL_BEGIN
 @interface Shape : Root
 - (instancetype)initWithOrigin:(CGPoint)origin mode:(Mode)mode;
@@ -2025,6 +2031,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)holdsAt:(NSString *)name inside:(BOOL *)inside;
 - (void)placeShapes:(NSDictionary<ShapeKind, Shape *> *)shapes;
 - (NSDictionary<NSString *, NSString *> *)labels;
+- (void)fillWith:(ShapeMaker)maker;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
@@ -2094,6 +2101,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)holdsAt:inside:", "swift.method", "holds(at:inside:)", &["Shape", "holds(at:inside:)"], ""),
             symbol("c:objc(cs)Shape(im)placeShapes:", "swift.method", "place(_:)", &["Shape", "place(_:)"], ""),
             symbol("c:objc(cs)Shape(im)labels", "swift.method", "labels()", &["Shape", "labels()"], ""),
+            symbol("c:objc(cs)Shape(im)fillWith:", "swift.method", "fill(with:)", &["Shape", "fill(with:)"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2217,6 +2225,8 @@ NS_ASSUME_NONNULL_END
             // Swift's `[ShapeKind: Shape]`: string keys through their typedef.
             "    /** @ntsSelector placeShapes: */\n    place(shapes: Map<string, Shape>): void;",
             "    /** @ntsSelector labels */\n    labels(): Map<string, string>;",
+            // A block type the header names by a typedef, read from what it spells.
+            "    /** @ntsSelector fillWith: */\n    fill(maker: (arg0: Int) => Shape): void;",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",

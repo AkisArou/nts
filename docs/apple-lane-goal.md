@@ -472,6 +472,14 @@ correctness does not depend on arm64 running by luck.
        `macos-blocks` runs a console program with no run loop that awaits a
        completion arriving 100 ms later from another thread, on both
        backends. The control drops the bracket, and that program ends first.
+     - A block type a header names by a typedef, such as
+       `NSTableViewDiffableDataSourceCellProvider`, is read from what the
+       typedef spells, so the diffable data sources bind with a trailing
+       closure.
+     - A block returning an object hands it back at +0, as ARC's caller
+       expects. Under reference counting the adapter autoreleases the
+       closure's count. `macos-blocks` watches such an object go once its
+       caller lets go.
      - Not yet, skipped with its reason: a class method.
      - A handler the platform calls off the main thread is carried to it
        (below), so a completion on a background queue settles the promise
