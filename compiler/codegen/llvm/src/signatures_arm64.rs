@@ -64,6 +64,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_array_pop_value", returns: "[2 x i64]", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_push", returns: "double", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_push_ref", returns: "double", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_array_push_value", returns: "double", params: &["ptr", "[2 x i64]"], attributes: &[] },
     Signature { name: "nts_array_reverse", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_reverse_ref", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_set_length", returns: "void", params: &["ptr", "double"], attributes: &[] },

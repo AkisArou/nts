@@ -3825,6 +3825,18 @@ NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count) {
   return nts_array_splice_at(a, start, count, sizeof(void *));
 }
 
+/* `push` on an array whose elements are erased. See the header for what
+ * `_value` means here, and for the three members of this family that are named
+ * for their result instead. */
+double nts_array_push_value(NtsArray *a, NtsValue value) {
+  nts_array_reserve(a);
+  NTS_ITEMS(a, NtsValue)[a->header.length] = value;
+  a->header.length++;
+  return (double)a->header.length;
+}
+
+
+
 /* `xs.concat(ys)`, one argument.
  *
  * Uninitialized, like `slice` and `splice` beside it: every slot of the result

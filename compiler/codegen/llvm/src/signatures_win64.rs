@@ -64,6 +64,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_array_pop_value", returns: "void", params: &["ptr dead_on_unwind writable sret({ i32, i64 }) align 8", "ptr"], attributes: &[] },
     Signature { name: "nts_array_push", returns: "double", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_push_ref", returns: "double", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_array_push_value", returns: "double", params: &["ptr", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_array_reverse", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_reverse_ref", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_set_length", returns: "void", params: &["ptr", "double"], attributes: &[] },

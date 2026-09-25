@@ -44424,13 +44424,7 @@ impl<'a> FuncBuilder<'a> {
         // `index_of` and `includes` do not — so the message names that rather
         // than a shape the program does not have.
         if matches!(element, HirType::Erased) {
-            return Err(self.unsupported(
-                id,
-                &format!(
-                    "`{name}` on an array of erased elements, which needs a `_value` helper this \
-                     runtime does not have"
-                ),
-            ));
+            return self.lower_erased_array_method(id, &name, receiver, arguments);
         }
         if !matches!(
             element,
@@ -44805,6 +44799,50 @@ impl<'a> FuncBuilder<'a> {
         };
         let copy = self.call_runtime(slice, vec![receiver, zero, end], ty.clone(), &origin);
         self.call_runtime(reverse, vec![copy], ty.clone(), &origin)
+    }
+
+    /// An array method where the **elements** are erased.
+    ///
+    /// `unknown[]`, an array of a union, an array of an unpinned type parameter.
+    /// The element is a sixteen-byte `NtsValue`, so every method that *writes* or
+    /// *copies* one needs an entry point that knows that width -- reading needs
+    /// none, because the emitter indexes `NTS_ITEMS(a, NtsValue)` directly. That
+    /// is why an index read on an `unknown[]` has always worked where
+    /// `xs.push(v)` had not.
+    ///
+    /// **`push` is the one that has its helper.** The React lane's runtime keeps
+    /// `unknown[]` for children, logs and error lists, and `push` on one was 10
+    /// root refusals there. `slice` and `splice` were written with it and
+    /// withdrawn: `slice` needs a `nts_value_retain` per copied element and both
+    /// need the argument defaults JavaScript gives them, and a helper nothing
+    /// calls is scaffolding.
+    ///
+    /// The argument needs no conversion of its own: `lower_pushes` asks `coerce`
+    /// per argument, and `coerce` of anything to `Erased` is the `Erase` it
+    /// already emits.
+    fn lower_erased_array_method(
+        &mut self,
+        id: NodeId,
+        name: &str,
+        receiver: ValueId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        if name == "push" {
+            return self.lower_pushes(
+                id,
+                "nts_array_push_value",
+                receiver,
+                arguments,
+                &HirType::Erased,
+            );
+        }
+        Err(self.unsupported(
+            id,
+            &format!(
+                "`{name}` on an array of erased elements, which needs a `_value` helper this \
+                 runtime does not have"
+            ),
+        ))
     }
 
     /// An array method where the elements are references.

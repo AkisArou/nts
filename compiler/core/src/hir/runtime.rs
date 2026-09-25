@@ -68,6 +68,10 @@ static SIGNATURES: &[Declared] = &[
     ("nts_array_pop", &[None], Some(HirType::Float { bits: 64 })),
     ("nts_array_push", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_array_push_ref", &[None, None], Some(HirType::Float { bits: 64 })),
+    // `push` on an array whose *elements* are erased. `unknown[]` and an array of
+    // a union are the shapes; the element is a sixteen-byte `NtsValue`, which is
+    // why it needs a row of its own rather than the widths above.
+    ("nts_array_push_value", &[None, None], Some(HirType::Float { bits: 64 })),
     ("nts_array_set_length", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_array_set_length_foreign", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_array_set_length_ref", &[None, Some(HirType::Float { bits: 64 })], None),

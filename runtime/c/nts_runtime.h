@@ -2107,6 +2107,23 @@ double nts_array_shift(NtsArray *a);
 void nts_array_set_length(NtsArray *a, double n);
 void nts_array_set_length_ref(NtsArray *a, double n);
 void nts_array_set_length_value(NtsArray *a, double n);
+
+/* `push` on an array whose **elements** are erased.
+ *
+ * `unknown[]`, an array of a union, an array of an unpinned type parameter: the
+ * element is a sixteen-byte `NtsValue` and the slot may or may not hold a
+ * reference, which the tag says. Reading one needs no helper -- the emitter
+ * indexes `NTS_ITEMS(a, NtsValue)` directly -- so the ones that have to know a
+ * width are the mutating and copying methods.
+ *
+ * **Consuming**, like `nts_array_push_ref`: the caller owes a reference and the
+ * array takes it.
+ *
+ * `slice` and `splice` on such an array are still refused. They were written
+ * with this one and withdrawn, because landing a helper nothing calls is
+ * scaffolding: `slice` needs `nts_value_retain` per copied element and both need
+ * the argument defaults JavaScript gives them, which is the lowering's half. */
+double nts_array_push_value(NtsArray *a, NtsValue value);
 NtsArray *nts_array_splice(NtsArray *a, double start, double count);
 /* `concat(ys)`, one array argument. See the note beside the definition for what
  * the other shapes are and why they are refused instead. */
@@ -2135,7 +2152,25 @@ double nts_array_unshift(NtsArray *a, double value);
 /* `pop` and `at` with the `undefined` the checker already gave them. A number
  * has no bit pattern for absence, so `T | undefined` is an erased value and
  * these are what produce one. The doubles above answer NaN and are reached
- * only where the result was narrowed back to a number. */
+ * only where the result was narrowed back to a number.
+ *
+ * # `_value` means two different things, and these three are the odd ones
+ *
+ * Everywhere else in this family a suffix names the **element's** width --
+ * nothing for a `double`, `_ref` for a pointer, `_str`, `_foreign` -- and
+ * `_value` is the `NtsValue` element: `nts_array_set_length_value`,
+ * `nts_array_concat_value`, and the push/slice/splice below.
+ *
+ * These three are named for their **result** instead. They take an array of
+ * doubles and answer an erased value, because that is what `T | undefined` is
+ * for a number. So `nts_array_pop_value` and `nts_array_push_value` look like a
+ * pair and are not one: the first reads a `double` array, the second writes an
+ * `NtsValue` one.
+ *
+ * Recorded rather than renamed, because the collision predates the split and
+ * both halves are reached from lowering by name. A reader who assumes the
+ * suffix means one thing gets the wrong element width, which is unrelated
+ * memory rather than a wrong answer. */
 NtsValue nts_array_pop_value(NtsArray *a);
 NtsValue nts_array_shift_value(NtsArray *a);
 NTS_READS_ONLY NtsValue nts_array_at_value(const NtsArray *a, double at);

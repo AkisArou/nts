@@ -140,7 +140,11 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
     // on. So the class comes from the argument's type -- which cannot be
     // wrong -- and the suffix only chooses among the forms.
     let (method, signature) = match stem {
-        "push" | "push_ref" => ("push", format!("(L{class};{element})D")),
+        // `push_value` too: an `NtsValue` element is a reference here, so the
+        // class is `NtsArrayL` and `Object` is the parameter it takes. See the
+        // suffix note above -- this is the *element* sense of `_value`, and
+        // `pop_value` two lines down is the *result* sense.
+        "push" | "push_ref" | "push_value" => ("push", format!("(L{class};{element})D")),
         "pop" => ("pop", format!("(L{class};){element}")),
         "pop_value" | "pop_ref" => ("popValue", format!("(L{class};){VALUE}")),
         "shift" => ("shift", format!("(L{class};){element}")),
