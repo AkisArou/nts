@@ -18,8 +18,10 @@ export interface DispatcherHolder {
   H: unknown;
 }
 
-// A component function or class, as React describes it.
-export type ComponentFunction = Function & {
+// A component function or class, as React describes it. The exports take the
+// component as `unknown`, so that a caller passes a fiber's type as it is and
+// the native twin, which reads only a name, needs no callable type.
+type ComponentFunction = Function & {
   displayName?: unknown;
   prototype?: object;
 };
@@ -92,11 +94,8 @@ function displayNameOf(fn: ComponentFunction): string {
  * JS object model: this constructs or calls the component with a throwing
  * `props` setter on a fake prototype, as upstream does.
  */
-export function describeNativeComponentFrame(
-  fn: ComponentFunction | null | undefined,
-  construct: boolean,
-  internals: DispatcherHolder,
-): string {
+export function describeNativeComponentFrame(component: unknown, construct: boolean, internals: DispatcherHolder): string {
+  const fn = component as ComponentFunction | null | undefined;
   // If something asked for a stack inside a fake render, it should get ignored.
   if (!fn || reentry) {
     return "";
@@ -289,10 +288,10 @@ export function describeNativeComponentFrame(
   return syntheticFrame;
 }
 
-export function describeClassComponentFrame(ctor: ComponentFunction, internals: DispatcherHolder): string {
+export function describeClassComponentFrame(ctor: unknown, internals: DispatcherHolder): string {
   return describeNativeComponentFrame(ctor, true, internals);
 }
 
-export function describeFunctionComponentFrame(fn: ComponentFunction, internals: DispatcherHolder): string {
+export function describeFunctionComponentFrame(fn: unknown, internals: DispatcherHolder): string {
   return describeNativeComponentFrame(fn, false, internals);
 }

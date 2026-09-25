@@ -23,6 +23,9 @@
       "shared/reportGlobalError.ts": [
         "./packages/shared/src/reportGlobalError.native.ts"
       ],
+      "shared/ReactComponentStackFrame.ts": [
+        "./packages/shared/src/ReactComponentStackFrame.native.ts"
+      ],
       "react/ReactHooks.ts": [
         "./packages/react/src/ReactHooks.native.ts"
       ],

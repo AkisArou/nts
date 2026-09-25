@@ -1,7 +1,6 @@
 import { isDevelopment } from "shared/Build.ts";
 import { enableViewTransition } from "shared/ReactFeatureFlags.ts";
 import {
-  type ComponentFunction,
   describeBuiltInComponentFrame,
   describeClassComponentFrame,
   describeDebugInfoFrame,
@@ -36,8 +35,8 @@ interface ReactComponentInfo {
   readonly tag?: undefined;
 }
 
-function renderOf(type: unknown): ComponentFunction {
-  return (type as { render: ComponentFunction }).render;
+function renderOf(type: unknown): unknown {
+  return (type as { render?: unknown }).render;
 }
 
 function describeFiber(fiber: Fiber, childFiber: Fiber | null): string {
@@ -59,11 +58,11 @@ function describeFiber(fiber: Fiber, childFiber: Fiber | null): string {
       return describeBuiltInComponentFrame("SuspenseList");
     case FunctionComponent:
     case SimpleMemoComponent:
-      return describeFunctionComponentFrame(fiber.type as ComponentFunction, ReactSharedInternals);
+      return describeFunctionComponentFrame(fiber.type, ReactSharedInternals);
     case ForwardRef:
       return describeFunctionComponentFrame(renderOf(fiber.type), ReactSharedInternals);
     case ClassComponent:
-      return describeClassComponentFrame(fiber.type as ComponentFunction, ReactSharedInternals);
+      return describeClassComponentFrame(fiber.type, ReactSharedInternals);
     case ActivityComponent:
       return describeBuiltInComponentFrame("Activity");
     case ViewTransitionComponent:
@@ -109,10 +108,18 @@ export function getStackByFiberInDevAndProd(workInProgress: Fiber): string {
   }
 }
 
-function describeFunctionComponentFrameWithoutLineNumber(fn: ComponentFunction | null | undefined): string {
+function describeFunctionComponentFrameWithoutLineNumber(fn: unknown): string {
   // We use this because we don't actually want to describe the line of the component
   // but just the component name.
-  const name = fn ? (fn.displayName ? String(fn.displayName) : fn.name) : "";
+  let name = "";
+  if (typeof fn === "function") {
+    const named = fn as { readonly displayName?: unknown; readonly name?: unknown };
+    if (typeof named.displayName === "string" && named.displayName !== "") {
+      name = named.displayName;
+    } else if (typeof named.name === "string") {
+      name = named.name;
+    }
+  }
   return name ? describeBuiltInComponentFrame(name) : "";
 }
 
@@ -215,7 +222,7 @@ export function getOwnerStackByFiberInDev(start: Fiber): string {
 // name as the single stack frame.
 function describeRootComponentName(workInProgress: Fiber, info: string): string {
   if (!workInProgress._debugOwner && info === "") {
-    return describeFunctionComponentFrameWithoutLineNumber(workInProgress.type as ComponentFunction);
+    return describeFunctionComponentFrameWithoutLineNumber(workInProgress.type);
   }
   return "";
 }
