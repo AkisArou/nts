@@ -20,5 +20,7 @@ declare module "c:support" {
   export function complete_pair_off_thread(
     block: Block<(first: NSObject | null, second: NSObject | null, error: NSError | null) => void>,
   ): void;
+  export function complete_later(ms: c_int, block: Block<(value: NSObject | null, error: NSError | null) => void>): void;
   export function off_thread_arm(): boolean;
+  export function console_arm(): c_int;
 }

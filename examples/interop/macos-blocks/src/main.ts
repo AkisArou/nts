@@ -20,12 +20,15 @@ import {
   call_held_off_thread,
   complete_off_thread,
   complete_pair_off_thread,
+  complete_later,
+  console_arm,
   off_thread_arm,
   on_main_thread,
   report,
   weak_alive,
   weak_watch,
 } from "c:support";
+import { nts_pending_begin, nts_pending_end } from "c:pending";
 import { arrayWithCapacity, newObject, scheduledTimer, type NSObject } from "objc:Foundation";
 import type { c_double, c_int, c_ulong } from "c:types";
 
@@ -96,28 +99,51 @@ function offThread(): void {
 // completion handler settles, with the object, or rejected with the error's
 // description -- the handler called on a background thread.
 function completed(fail: boolean): Promise<NSObject> {
-  return new Promise((resolve, reject) =>
+  return new Promise((resolve, reject) => {
+    nts_pending_begin();
     complete_off_thread(fail, (value, error) => {
+      nts_pending_end();
       if (error !== null) {
         reject(new Error(error.localizedDescription));
       } else {
         resolve(value!);
       }
-    }),
-  );
+    });
+  });
 }
 
 // And Swift's tuple, `async throws -> (A, B)`: two objects in one promise.
 function pair(): Promise<[NSObject, NSObject]> {
-  return new Promise((resolve, reject) =>
+  return new Promise((resolve, reject) => {
+    nts_pending_begin();
     complete_pair_off_thread((first, second, error) => {
+      nts_pending_end();
       if (error !== null) {
         reject(new Error(error.localizedDescription));
       } else {
         resolve([first!, second!]);
       }
-    }),
-  );
+    });
+  });
+}
+
+// A console program, with no run loop: the awaited operation is all that
+// keeps it alive until its completion arrives from another thread, 100 ms
+// later (`c:pending`). The control is the same promise without the bracket,
+// and that program ends before the completion.
+function later(held: boolean): Promise<NSObject> {
+  return new Promise((resolve) => {
+    if (held) nts_pending_begin();
+    complete_later(100 as c_int, (value) => {
+      if (held) nts_pending_end();
+      resolve(value!);
+    });
+  });
+}
+
+async function consoleAwait(held: boolean): Promise<void> {
+  const value = await later(held);
+  report(`console: resolved ${value === null ? "nothing" : "an object"} on the main thread ${on_main_thread()}`);
 }
 
 async function offThreadAll(): Promise<void> {
@@ -148,6 +174,11 @@ function finish(): void {
 }
 
 function main(): void {
+  const arm = console_arm();
+  if (arm !== 0) {
+    void consoleAwait(arm === 1);
+    return;
+  }
   setTimeout(() => {
     enumerate();
     cancelledWatch = cancelled();

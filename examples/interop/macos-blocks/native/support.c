@@ -6,6 +6,8 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 // libobjc's weak-reference entry points, which no public header declares.
 id objc_initWeak(id *location, id value);
@@ -48,6 +50,11 @@ static void *call_held(void *unused) {
 
 bool off_thread_arm(void) { return getenv("BLOCKS_OFF_THREAD") != NULL; }
 
+int console_arm(void) {
+  const char *arm = getenv("BLOCKS_CONSOLE");
+  return arm == NULL ? 0 : strcmp(arm, "unheld") == 0 ? 2 : 1;
+}
+
 void call_held_off_thread(struct NSObject *value, int n) {
   passed = value;
   passed_n = n;
@@ -86,6 +93,31 @@ static void *complete_pair(void *block) {
   handler((struct NSObject *)CFSTR("left"), (struct NSObject *)CFSTR("right"), NULL);
   _Block_release(block);
   return NULL;
+}
+
+typedef struct Later {
+  void *block;
+  int ms;
+} Later;
+
+static void *complete_after(void *state) {
+  Later *later = state;
+  usleep((useconds_t)later->ms * 1000);
+  void (^handler)(struct NSObject *, struct NSError *) = later->block;
+  handler((struct NSObject *)CFSTR("later"), NULL);
+  _Block_release(later->block);
+  free(later);
+  return NULL;
+}
+
+void complete_later(int ms, void *block) {
+  Later *later = malloc(sizeof *later);
+  if (!later) abort();
+  later->block = _Block_copy(block);
+  later->ms = ms;
+  pthread_t thread;
+  pthread_create(&thread, NULL, complete_after, later);
+  pthread_detach(thread);
 }
 
 void complete_pair_off_thread(void *block) {

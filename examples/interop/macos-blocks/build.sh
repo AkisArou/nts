@@ -128,3 +128,22 @@ for product in blocks blocksLlvm; do
     "off thread: closure gone" | diff -u - "$out/$product-off.lines"
 done
 echo "off thread: a handler called and released on another thread runs and is released on this one, on both backends"
+
+# A console program awaiting a completion from another thread, with no run
+# loop: the awaited operation keeps it alive (`c:pending`) until the handler,
+# on both backends. The control drops the bracket and ends first.
+for product in blocks blocksLlvm; do
+  "$root/tooling/apple/run.sh" --env BLOCKS_CONSOLE=held "$out/$product/macos-13-x86_64/$product" \
+    >"$out/$product-console.txt" 2>"$out/$product-console.err" ||
+    { cat "$out/$product-console.txt" "$out/$product-console.err" >&2; exit 1; }
+  [ -s "$out/$product-console.err" ] && { cat "$out/$product-console.err" >&2; exit 1; }
+  [ "$(cat "$out/$product-console.txt")" = "console: resolved an object on the main thread true" ] ||
+    { echo "macos-blocks: $product's console program printed [$(cat "$out/$product-console.txt")]" >&2; exit 1; }
+  "$root/tooling/apple/run.sh" --env BLOCKS_CONSOLE=unheld "$out/$product/macos-13-x86_64/$product" \
+    >"$out/$product-unheld.txt" 2>"$out/$product-unheld.err" || true
+  if grep -q "^console:" "$out/$product-unheld.txt"; then
+    echo "macos-blocks: without the bracket $product still waited for the completion" >&2
+    exit 1
+  fi
+done
+echo "console: an awaited completion from another thread keeps a program with no run loop alive, and without it the program ends first"

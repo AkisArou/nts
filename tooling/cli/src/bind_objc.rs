@@ -1753,22 +1753,27 @@ fn render_values(request: &Request, model: &Model) -> String {
             [one] => format!("{one}{unwrap}"),
             many => format!("[{}]", many.iter().map(|n| format!("{n}{unwrap}")).collect::<Vec<_>>().join(", ")),
         };
+        // The operation is outstanding from before the message -- a handler
+        // Cocoa calls at once, inside it, ends what was begun -- until the
+        // handler's first statement, so a program with nothing else to do
+        // waits for it (`c:pending`). The message itself cannot throw: a
+        // method taking a completion handler reports through the handler.
         let executor = if promise.throws {
             let mut given = names.clone();
             given.push("error".to_owned());
             arguments.push(format!(
-                "({}) => {{\n      if (error !== null) {{\n        reject(new Error(error.localizedDescription));\n      }} else {{\n        resolve({settled});\n      }}\n    }}",
+                "({}) => {{\n      nts_pending_end();\n      if (error !== null) {{\n        reject(new Error(error.localizedDescription));\n      }} else {{\n        resolve({settled});\n      }}\n    }}",
                 given.join(", ")
             ));
             "(resolve, reject)"
         } else {
-            arguments.push(format!("({}) => resolve({settled})", names.join(", ")));
+            arguments.push(format!("({}) => {{\n      nts_pending_end();\n      resolve({settled});\n    }}", names.join(", ")));
             "(resolve)"
         };
         let parameters = if promise.parameters.is_empty() { String::new() } else { format!(", {}", promise.parameters) };
         let _ = write!(
             bodies,
-            "\nexport function {}(self: {}{parameters}): Promise<{}> {{\n  return new Promise({executor} => self.{}({}));\n}}\n",
+            "\nexport function {}(self: {}{parameters}): Promise<{}> {{\n  return new Promise({executor} => {{\n    nts_pending_begin();\n    self.{}({});\n  }});\n}}\n",
             promise.function,
             promise.receiver,
             promise.value,
@@ -1799,6 +1804,7 @@ fn render_values(request: &Request, model: &Model) -> String {
     if !used.is_empty() {
         let _ = writeln!(out, "import {{ {} }} from \"{}\";", used.join(", "), request.module);
     }
+    out.push_str("import { nts_pending_begin, nts_pending_end } from \"c:pending\";\n");
     for (module, names) in &model.imports {
         let used: Vec<&str> = names.iter().copied().filter(|name| words.contains(name)).collect();
         if !used.is_empty() {
@@ -2114,13 +2120,19 @@ NS_ASSUME_NONNULL_END
         for expected in [
             "import { NSString, Shape } from \"objc:Fake\";",
             "import type { Int } from \"objc:types\";",
-            "export function nts_async_Shape_settle(self: Shape, labels: { with: Shape }): Promise<Int> {\n  return new Promise((resolve) => self.settle(labels, (value) => resolve(value)));\n}",
+            "import { nts_pending_begin, nts_pending_end } from \"c:pending\";",
+            // Outstanding from before the message until the handler's first
+            // statement, so a program with nothing else to do waits for it.
+            "export function nts_async_Shape_settle(self: Shape, labels: { with: Shape }): Promise<Int> {\n  \
+             return new Promise((resolve) => {\n    nts_pending_begin();\n    \
+             self.settle(labels, (value) => {\n      nts_pending_end();\n      resolve(value);\n    });\n  });\n}",
             // Swift's `async throws`: the error rejects, with its description,
             // and the value, not optional once there is no error, resolves.
             "export function nts_async_Shape_fetch(self: Shape, labels: { named: string }): Promise<Shape> {\n  \
-             return new Promise((resolve, reject) => self.fetch(labels, (value, error) => {\n      \
+             return new Promise((resolve, reject) => {\n    nts_pending_begin();\n    \
+             self.fetch(labels, (value, error) => {\n      nts_pending_end();\n      \
              if (error !== null) {\n        reject(new Error(error.localizedDescription));\n      \
-             } else {\n        resolve(value!);\n      }\n    }));\n}",
+             } else {\n        resolve(value!);\n      }\n    });\n  });\n}",
         ] {
             assert!(values.contains(expected), "no `{expected}` in:\n{values}");
         }

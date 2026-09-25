@@ -446,6 +446,13 @@ correctness does not depend on arm64 running by luck.
        from a background thread, on both backends. A handler's values cross
        as the objects they are, as a block's do, so a string is an
        `NSString` there.
+     - An awaited operation keeps the program alive, as node keeps it
+       alive for an fs request. The wrapper calls `nts_pending_begin()`
+       (`c:pending`) before the message, since Cocoa may call a handler at
+       once, inside it, and `nts_pending_end()` first thing in the handler.
+       `macos-blocks` runs a console program with no run loop that awaits a
+       completion arriving 100 ms later from another thread, on both
+       backends. The control drops the bracket, and that program ends first.
      - Not yet, skipped with its reason: a class method.
      - A handler the platform calls off the main thread is carried to it
        (below), so a completion on a background queue settles the promise

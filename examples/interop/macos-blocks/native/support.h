@@ -29,7 +29,11 @@ void complete_off_thread(bool fail, void *block);
 // Calls `block` once on a new thread with two objects and no error: a handler
 // Swift imports as `async throws -> (A, B)`.
 void complete_pair_off_thread(void *block);
+// Calls `block` with an object from a new thread, `ms` milliseconds from now.
+void complete_later(int ms, void *block);
 // Whether `BLOCKS_OFF_THREAD` is set.
 bool off_thread_arm(void);
+// `BLOCKS_CONSOLE`: 0 unset, 1 "held", 2 "unheld".
+int console_arm(void);
 
 #endif

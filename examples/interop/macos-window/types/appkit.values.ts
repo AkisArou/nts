@@ -4,12 +4,25 @@
 // function returning a promise the handler settles, which the binding's
 // `@ntsCall` overload names.
 import { NSWindow } from "objc:AppKit";
+import { nts_pending_begin, nts_pending_end } from "c:pending";
 import type { Int } from "objc:types";
 
 export function nts_async_NSWindow_beginSheet(self: NSWindow, sheetWindow: NSWindow): Promise<Int> {
-  return new Promise((resolve) => self.beginSheet(sheetWindow, (value) => resolve(value)));
+  return new Promise((resolve) => {
+    nts_pending_begin();
+    self.beginSheet(sheetWindow, (value) => {
+      nts_pending_end();
+      resolve(value);
+    });
+  });
 }
 
 export function nts_async_NSWindow_beginCriticalSheet(self: NSWindow, sheetWindow: NSWindow): Promise<Int> {
-  return new Promise((resolve) => self.beginCriticalSheet(sheetWindow, (value) => resolve(value)));
+  return new Promise((resolve) => {
+    nts_pending_begin();
+    self.beginCriticalSheet(sheetWindow, (value) => {
+      nts_pending_end();
+      resolve(value);
+    });
+  });
 }
