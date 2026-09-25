@@ -105,6 +105,18 @@ declare module "objc:runtime" {
   export function objc_allocateClassPair(superclass: ClassObject, name: string, extraBytes: c_size_t): ClassObject | null;
   export function objc_registerClassPair(cls: ClassObject): void;
   export function sel_registerName(name: string): Selector;
+  /**
+   * Swift's `#selector(Notes.add(_:))`: the selector a method of an
+   * Objective-C class answers, checked. `selector(Notes, "add")` names a
+   * method the class or an ancestor declares, and answers the selector the
+   * runtime knows it by: for a class the program writes, the one its method
+   * was registered under (`add:`, or `drawRect:` for an override of
+   * `draw(_:)`); for a class a binding declares, its `@ntsSelector`.
+   * @ntsAbi intrinsic
+   */
+  export function selector<C extends abstract new (...args: any) => object>(of: C, method: MethodOf<InstanceType<C>>): Selector;
+  /** The names of `T`'s methods. */
+  type MethodOf<T> = { [K in keyof T]-?: T[K] extends (...args: never) => unknown ? K : never }[keyof T] & string;
   export function objc_getProtocol(name: string): ProtocolObject | null;
   export function class_conformsToProtocol(cls: ClassObject, protocol: ProtocolObject): boolean;
   /** `types` is the method's type encoding: `v@:@` for `- (void)name:(id)sender`. */

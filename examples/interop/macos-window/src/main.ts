@@ -38,7 +38,7 @@ import {
   view_is_flipped,
   window_control,
 } from "c:support";
-import { sel_registerName } from "objc:runtime";
+import { selector } from "objc:runtime";
 import { local } from "c:memory";
 import type { ByValue, Ptr, c_double } from "c:types";
 
@@ -237,7 +237,9 @@ function main(): void {
   const controller = new Controller();
   button.target = controller;
   window.delegate = controller;
-  button.action = sel_registerName("pressed:");
+  // Swift's `#selector(Controller.pressed(_:))`: the selector the method was
+  // registered under, which the checker holds to a method of the class.
+  button.action = selector(Controller, "pressed");
   window.makeKeyAndOrderFront(null);
   const shown = window.frame;
   const pressable = button.frame;

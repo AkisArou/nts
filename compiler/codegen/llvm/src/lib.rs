@@ -2474,6 +2474,7 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform)
         }
         // The cached, required lookup a class send makes (`objc::module`).
         OpKind::ObjcClass { name, .. } => format!("{out} = call ptr @{}()", nts_codegen_common::objc::class_symbol(name)),
+        OpKind::ObjcSelector { name } => format!("{out} = call ptr @{}()", nts_codegen_common::objc::selector_symbol(name)),
         // The size is this target's, so it is resolved here and not in HIR,
         // and spelled as the constant it is.
         OpKind::NativeSizeOf(storage) => {

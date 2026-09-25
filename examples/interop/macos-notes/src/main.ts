@@ -31,7 +31,7 @@ import {
   type NSTableViewDataSource,
 } from "objc:AppKit";
 import { report } from "c:support";
-import { sel_registerName } from "objc:runtime";
+import { selector } from "objc:runtime";
 import type { Int } from "objc:types";
 
 const PATH = "/tmp/nts-macos-notes.txt";
@@ -135,7 +135,7 @@ function main(): void {
   const notes = new Notes(loaded, field, table);
   table.dataSource = notes;
   button.target = notes;
-  button.action = sel_registerName("add:");
+  button.action = selector(Notes, "add");
   window.makeKeyAndOrderFront(null);
 
   // Typed and pressed from a timer, as a person would, then saved and quit.

@@ -962,6 +962,19 @@ correctness does not depend on arm64 running by luck.
        drawing in C, on both backends. The colours are released (an
        Objective-C weak reference goes nil), and under NoGc that line alone
        differs.
+   - **Swift's `#selector` (2026-09-25).** `button.action =
+     selector(Notes, "add")`, from `objc:runtime`. It used to be
+     `sel_registerName("add:")`, which is where a missing colon hid.
+     - The checker holds the name to the class's methods (`MethodOf`), so a
+       property or a misspelling is a type error.
+     - The compiler answers the selector the method was registered under
+       (`program_method_selector`, which `lower_objc_method` now uses too): a
+       protocol's, an override's (`drawRect:`), or Swift's `@objc` rule. A
+       binding's class answers its `@ntsSelector`, found up the chain.
+     - The value is `ObjcSelector`, read through the cached lookup a send to
+       it uses, in both backends.
+     - `macos-window` and `macos-notes` set their buttons' actions this way.
+       A C codegen test covers the three rules and an imported class.
    - **A record written as its fields (2026-09-25).** Swift writes
      `NSRect(x: 200, y: 200, width: 320, height: 200)`. Here it is
      `contentRect: { origin: { x: 200, y: 200 }, size: { width: 320,

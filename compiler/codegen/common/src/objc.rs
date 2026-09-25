@@ -41,6 +41,9 @@ pub fn lookups(program: &Program) -> Lookups<'_> {
             if let OpKind::ObjcClass { name, .. } = &op.kind {
                 found.classes.push(name.as_str());
             }
+            if let OpKind::ObjcSelector { name } = &op.kind {
+                found.selectors.push(name.as_str());
+            }
         }
     }
     for list in [&mut found.selectors, &mut found.classes] {

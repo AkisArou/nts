@@ -249,7 +249,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
         | OpKind::ObjectNew { .. }
-        | OpKind::GlobalGet(_) | OpKind::NativeLocal { .. } | OpKind::NativeSizeOf(_) | OpKind::ObjcClass { .. }
+        | OpKind::GlobalGet(_) | OpKind::NativeLocal { .. } | OpKind::NativeSizeOf(_) | OpKind::ObjcClass { .. } | OpKind::ObjcSelector { .. }
         | OpKind::DelegateInvoke { .. } => {}
         OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => *value = of(*value),
         OpKind::StringUnitAt { string, index, .. } => {

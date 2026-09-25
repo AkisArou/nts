@@ -110,9 +110,11 @@ class Notes extends NSObject implements NSTableViewDataSource {
   a constructor are messages to the superclass.
 - `instanceof` asks `isKindOfClass:`, and narrows.
 
-A button's action is the method's selector for now:
-`button.action = sel_registerName("add:")`, with `import { sel_registerName }
-from "objc:runtime"`.
+A button's action is Swift's `#selector(Notes.add(_:))`:
+`button.action = selector(Notes, "add")`, with `import { selector } from
+"objc:runtime"`. The checker holds the name to a method of the class, and
+the compiler answers the selector the runtime registered it under (`add:`).
+A binding's class answers its method's own: `selector(NSWindow, "close")`.
 
 ## Drawing
 
@@ -166,8 +168,6 @@ Each target picks `x86_64` or `aarch64`, and the `c` or `llvm` backend.
 
 ## Not yet
 
-- **A typed selector.** Swift's `#selector(Notes.add(_:))` is a checked
-  name. Here it is a string.
 - **`Set<T>`.** Swift's `Set<IndexPath>` is skipped, with its reason.
 - **Out-parameters of objects.** `NSString **` and
   `AutoreleasingUnsafeMutablePointer` are skipped, with their reason.

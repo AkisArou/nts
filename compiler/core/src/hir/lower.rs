@@ -8636,6 +8636,9 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
                 program.objc = true;
                 program.native_frameworks.extend(frameworks.iter().cloned());
             }
+            // A selector is read through the lookups a send uses, which
+            // only a program that talks to the runtime declares.
+            program.objc |= matches!(op.kind, OpKind::ObjcSelector { .. });
             // A record enters a program through a type, not only through a
             // call: a program may hold a `Ptr<Rusage>` and call nothing from
             // the module that describes it. Every value is walked, parameters
@@ -14203,6 +14206,67 @@ impl<'a> FuncBuilder<'a> {
         None
     }
 
+    /// The selector a method of a class the program writes answers: the one
+    /// `@ntsSelector` gives it, else the one a protocol the class adopts
+    /// declares for a member of its name, else the one of the superclass's
+    /// method it overrides -- `draw(_:)` is `drawRect:` -- else Swift's
+    /// `@objc` rule for its name. What the runtime registers the method
+    /// under, and what `selector(Class, "name")` answers.
+    fn program_method_selector(&self, class: NodeId, member: NodeId, name: &str, arity: usize) -> String {
+        self.node(member)
+            .native
+            .as_ref()
+            .and_then(|native| native.selector.clone())
+            .or_else(|| self.protocol_selector(class, name))
+            .or_else(|| self.overridden_selector(class, name, arity))
+            .unwrap_or_else(|| objc_selector(name, arity))
+    }
+
+    /// `selector(Notes, "add")`: Swift's `#selector(Notes.add(_:))`, the
+    /// selector a method of an Objective-C class answers -- one the program
+    /// writes, as the runtime registered it, or one a binding declares, as
+    /// its `@ntsSelector` says. The method is looked for on the class and its
+    /// ancestors; the checker has already said the name is one of its
+    /// methods.
+    fn lower_selector(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let [class, method] = arguments else {
+            return Err(self.unsupported(id, "`selector` takes a class and the name of its method"));
+        };
+        let name = self
+            .literal_name(*method)
+            .ok_or_else(|| self.unsupported(*method, "a method name `selector` is not given as a string literal"))?;
+        // Through an import's alias to the class it names: `NSWindow` from
+        // `objc:AppKit` is an import specifier here.
+        let mut record = self.node(*class).symbol.and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize));
+        while let Some(aliased) = record.and_then(|r| r.aliased) {
+            record = self.snapshot.symbols.get(aliased.0 as usize);
+        }
+        let mut at = record.and_then(|record| record.declarations.iter().copied().find(|d| self.kind_of(*d) == Some(syntax::CLASS_DECLARATION)));
+        if at.is_none() {
+            return Err(self.unsupported(*class, "a `selector` whose first argument does not name a class"));
+        }
+        while let Some(declaration) = at {
+            let member = self.children(declaration).into_iter().find(|member| {
+                self.kind_of(*member) == Some(syntax::METHOD_DECLARATION) && self.member_name(*member).as_deref() == Some(name.as_str())
+            });
+            if let Some(member) = member {
+                let arity = super::generics::declared_signature(self.snapshot, member).map_or(0, |signature| signature.parameters.len());
+                let selector = if super::native::is_objc_class(self.snapshot, declaration) {
+                    self.node(member).native.as_ref().and_then(|native| native.selector.clone()).unwrap_or_else(|| objc_selector(&name, arity))
+                } else if super::native::extends_objc(self.snapshot, declaration) {
+                    self.program_method_selector(declaration, member, &name, arity)
+                } else {
+                    return Err(self.unsupported(*class, "a `selector` of a class that is not an Objective-C class"));
+                };
+                let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a selector"))?;
+                let origin = self.origin(id);
+                return Ok(self.push(OpKind::ObjcSelector { name: selector.trim_start_matches('+').to_owned() }, ty, origin));
+            }
+            at = super::native::superclass(self.snapshot, declaration);
+        }
+        Err(self.unsupported(*method, &format!("`{name}`, which no class in the chain declares as a method")))
+    }
+
     fn lower_objc_method(
         &mut self,
         class: NodeId,
@@ -14244,14 +14308,7 @@ impl<'a> FuncBuilder<'a> {
         let selector = match self.kind_of(member) {
             Some(syntax::GET_ACCESSOR) => self.property_selectors(member, &name).0,
             Some(syntax::SET_ACCESSOR) => self.property_selectors(member, &name).1.unwrap_or_else(|| default_setter(&name)),
-            _ => self
-                .node(member)
-                .native
-                .as_ref()
-                .and_then(|native| native.selector.clone())
-                .or_else(|| self.protocol_selector(class, &name))
-                .or_else(|| self.overridden_selector(class, &name, signature.parameters.len()))
-                .unwrap_or_else(|| objc_selector(&name, signature.parameters.len())),
+            _ => self.program_method_selector(class, member, &name, signature.parameters.len()),
         };
         self.objc_entry = Some(ObjcEntry { returns_record: matches!(*imp.result, super::native::Type::Record(_)) });
         let func = self.lower_method_of(class, member, instance)?;
@@ -22827,6 +22884,7 @@ impl<'a> FuncBuilder<'a> {
                 Some("unsafeDowncast") => return Some(self.native_downcast(id, arguments)),
                 Some("stringFrom") => return Some(self.native_string_from(id, arguments)),
                 Some("bytesFrom") => return Some(self.native_bytes_from(id, arguments)),
+                Some("selector") if self.in_objc_module(decl) => return Some(self.lower_selector(id, arguments)),
                 _ => {},
             }
         }

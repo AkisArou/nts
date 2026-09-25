@@ -4996,6 +4996,9 @@ fn emit_op(
         OpKind::ObjcClass { name: class, .. } => {
             format!("{name} = {}();", nts_codegen_common::objc::class_symbol(class))
         }
+        OpKind::ObjcSelector { name: selector } => {
+            format!("{name} = {}();", nts_codegen_common::objc::selector_symbol(selector))
+        }
         // The size is this target's, so it is resolved here and not in HIR.
         OpKind::NativeSizeOf(storage) => {
             let shape = nts_core::hir::layout::native_shape(storage, context.abi).ok_or_else(|| {

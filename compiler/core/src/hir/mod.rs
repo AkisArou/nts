@@ -779,6 +779,10 @@ pub enum OpKind {
     /// the declaring module's, so a program that only names a class still
     /// links what defines it.
     ObjcClass { name: String, frameworks: Vec<String> },
+    /// An Objective-C selector, by name: `selector(Notes, "add")`, Swift's
+    /// `#selector(Notes.add(_:))`. Each backend reads it through the same
+    /// cached lookup a send to it uses.
+    ObjcSelector { name: String },
     /// `sizeof<T>()`: the byte size of native storage, as a `number`.
     ///
     /// **An op and not a constant, because the size is the target's.** A

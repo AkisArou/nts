@@ -713,6 +713,52 @@ fn an_override_takes_the_selector_it_replaces_and_a_record_by_value() {
     }
 }
 
+/// Swift's `#selector`: `selector(Controller, "pressed")` is the selector the
+/// method was registered under -- Swift's `@objc` rule, `pressed:` with its
+/// one argument and `tick` with none -- and an inherited method of a class a
+/// binding declares is its `@ntsSelector`, named through the class that
+/// inherits it or through the import of the class itself. Each is the cached lookup a send
+/// to it uses, so a selector the program names and one it sends are one
+/// registration.
+#[test]
+fn a_selector_is_the_one_its_method_was_registered_under() {
+    let binding = r#"declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+    /** @ntsSelector isEqual: */
+    isEqual(object: NSObject | null): boolean;
+  }
+}
+"#;
+    let source = "import { NSObject } from \"objc:Foundation\";\n\
+                  import { selector, type Selector } from \"objc:runtime\";\n\
+                  class Controller extends NSObject {\n  pressed(sender: NSObject): void {}\n  tick(): void {}\n}\n\
+                  export function pick(n: number): Selector {\n  \
+                  return n === 0 ? selector(Controller, \"pressed\") : n === 1 ? selector(Controller, \"tick\") : n === 2 ? selector(Controller, \"isEqual\") : selector(NSObject, \"isEqual\");\n}\n";
+    let Some((_, prepared)) = prepare("objc-selector", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for expected in [
+        "if (!cached) cached = sel_registerName(\"pressed:\");",
+        "if (!cached) cached = sel_registerName(\"tick\");",
+        "if (!cached) cached = sel_registerName(\"isEqual:\");",
+        "= nts_objc_sel_pressed_c();",
+        "= nts_objc_sel_tick();",
+        "= nts_objc_sel_isEqual_c();",
+        // The one the runtime registers the method under is the same.
+        "{ \"pressed:\", ",
+    ] {
+        assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+    }
+}
+
 /// Swift's stored properties: fields of such a class live in an object its
 /// ivar holds (`Held#state`), made by the `init` the runtime adds -- whose
 /// maker the registration hands over -- and every read and write goes

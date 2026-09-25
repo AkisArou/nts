@@ -2507,6 +2507,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         // The storage and not a byte count: the count is the target's.
         OpKind::NativeSizeOf(storage) => format!("%{index} = native.sizeof {} : {ty}", storage.c_type()),
         OpKind::ObjcClass { name, .. } => format!("%{index} = objc.class {name} : {ty}"),
+        OpKind::ObjcSelector { name } => format!("%{index} = objc.selector {name} : {ty}"),
         OpKind::NativeMalloc { bytes } => format!("%{index} = native.malloc %{} : {ty}", bytes.0),
         OpKind::NativeFree { pointer } => format!("native.free %{}", pointer.0),
         OpKind::NativeCopy { destination, source } => {
