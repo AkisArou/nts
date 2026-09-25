@@ -220,6 +220,12 @@ struct Hierarchy {
     /// here, once, so every builder that reads a field names the same state
     /// type.
     objc_states: rustc_hash::FxHashMap<String, (usize, TypeId)>,
+    /// For each class in [`Self::objc_states`], by its instance type, the
+    /// classes whose fields its state holds, root first: the program's
+    /// classes it descends from, then itself. One object per instance, laid
+    /// out base-first as a class of the program's is, so a field of `Base`
+    /// is at one index whether the instance is a `Base` or a `Derived`.
+    objc_chains: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
 }
 
 /// Where a member's declaration was written, for the questions whose answer is
@@ -1138,11 +1144,14 @@ impl Carried {
 /// Number a class the program writes over an Objective-C class, if it
 /// declares fields: see [`Hierarchy::objc_states`].
 fn note_objc_state(snapshot: &SemanticSnapshot, probe: &FuncBuilder<'_>, class: NodeId, declared: TypeId, hierarchy: &mut Hierarchy) {
-    if probe.declares_instance_fields(class)
+    let chain = objc_state_chain(snapshot, class);
+    if chain.iter().any(|class| probe.declares_instance_fields(*class))
         && let Some(name) = foreign_class_name(snapshot, class)
     {
         let index = hierarchy.objc_states.len();
         hierarchy.objc_states.insert(name, (index, declared));
+        let types = chain.into_iter().filter_map(|class| instance_type_of(snapshot, class)).collect();
+        hierarchy.objc_chains.insert(declared, types);
     }
 }
 
@@ -1171,6 +1180,23 @@ fn foreign_class_name(snapshot: &SemanticSnapshot, class: NodeId) -> Option<Stri
         let node = snapshot.nodes.get(child.0 as usize)?;
         matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER)).then(|| node.text.clone()).flatten()
     })
+}
+
+/// A class the program writes over a foreign class, and -- over an
+/// Objective-C class -- the program's classes it descends from, root first:
+/// the classes whose fields one instance's state holds. The runtime's classes
+/// above them are not in it. A `GObject` class's state is its own fields.
+fn objc_state_chain(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<NodeId> {
+    let mut chain = vec![class];
+    if super::native::extends_objc(snapshot, class) {
+        let mut at = super::native::superclass(snapshot, class);
+        while let Some(base) = at.filter(|base| super::native::extends_objc(snapshot, *base)) {
+            chain.push(base);
+            at = super::native::superclass(snapshot, base);
+        }
+    }
+    chain.reverse();
+    chain
 }
 
 /// Read every class declaration's name, base and own methods.
@@ -14481,9 +14507,15 @@ impl<'a> FuncBuilder<'a> {
         Err(self.unsupported(id, "`super(...)` outside a class"))
     }
 
+    /// The classes whose fields the state of `class_ty` holds, root first.
+    fn objc_chain(&self, class_ty: TypeId) -> Vec<TypeId> {
+        self.hierarchy.objc_chains.get(&class_ty).cloned().unwrap_or_else(|| vec![class_ty])
+    }
+
     /// `{Class}#state`: a new object holding the fields of `class`, a class
-    /// the program writes over an Objective-C class, with its initialisers
-    /// run in declaration order. The runtime calls it from the `init` it adds
+    /// the program writes over an Objective-C class, and of the program's
+    /// classes it descends from, with their initialisers run base first and
+    /// in declaration order. The runtime calls it from the `init` it adds
     /// to the class, so the fields hold their initial values once `new`
     /// returns, as JavaScript's do. An initialiser has no `this` here -- the
     /// instance is still the superclass's `init`'s -- and one reading it is
@@ -14496,7 +14528,8 @@ impl<'a> FuncBuilder<'a> {
         self.this = None;
         self.returns = ty.clone();
         let state = self.push(OpKind::ObjectNew { frame: false }, ty.clone(), origin.clone());
-        self.initialize_declared_fields(class, state, &[class_ty], &layout)?;
+        let chain = self.objc_chain(class_ty);
+        self.initialize_declared_fields(class, state, &chain, &layout)?;
         self.terminate(Terminator::Return(Some(state)));
         Ok(self.finish(format!("{name}#state"), Vec::new(), ty, origin, false))
     }
@@ -14546,23 +14579,28 @@ impl<'a> FuncBuilder<'a> {
     fn is_program_objc_field(&self, pointee: &super::native::Pointee, name: &str) -> bool {
         let Some(handle) = opaque_handle(pointee) else { return false };
         let Some(&(_, class_ty)) = self.hierarchy.objc_states.get(&handle.tag) else { return false };
-        declares_stored(self.snapshot, class_ty, name)
+        self.objc_chain(class_ty).into_iter().any(|class| declares_stored(self.snapshot, class, name))
     }
 
     /// The layout of the object holding the fields of the `index`th
-    /// Objective-C class with fields: the fields the class declares itself,
-    /// typed as any class's are (`fields_of`), and nothing it inherits -- its
-    /// superclass's members are the runtime's, reached by message.
+    /// Objective-C class with fields: those each class of its chain declares
+    /// itself, root first, typed as any class's are (`fields_of`). So a
+    /// subclass's state begins with its base's fields, at the base's indices.
+    /// Nothing the runtime's classes declare is in it: their members are
+    /// reached by message.
     fn objc_state_layout(&mut self, id: NodeId, index: usize, class_ty: TypeId) -> Result<Layout, Diagnostic> {
         let ty = super::objc_state_type(index);
         if let Some(known) = self.layouts.iter().find(|layout| layout.types.contains(&ty)) {
             return Ok(known.clone());
         }
-        let Some(TypeKind::Object { properties }) = self.snapshot.types.get(class_ty.0 as usize).map(|record| &record.kind) else {
-            return Err(self.unsupported(id, "the fields of an Objective-C class the checker did not decompose"));
-        };
-        let own: Vec<_> = properties.iter().filter(|property| property.own).cloned().collect();
-        let fields = self.fields_of(id, class_ty, &own)?;
+        let mut fields = Vec::new();
+        for class in self.objc_chain(class_ty) {
+            let Some(TypeKind::Object { properties }) = self.snapshot.types.get(class.0 as usize).map(|record| &record.kind) else {
+                return Err(self.unsupported(id, "the fields of an Objective-C class the checker did not decompose"));
+            };
+            let own: Vec<_> = properties.iter().filter(|property| property.own).cloned().collect();
+            fields.extend(self.fields_of(id, class, &own)?);
+        }
         let name = self.hierarchy.name.get(&class_ty).map_or_else(|| format!("ObjcState{index}"), |name| format!("{name}_state"));
         let layout = Layout {
             types: vec![ty],
@@ -43094,7 +43132,13 @@ impl<'a> FuncBuilder<'a> {
         if arguments.len() != parameters.len() {
             return Err(self.unsupported(id, "a call to an Objective-C method of the program's with a default or rest parameter"));
         }
-        let mut args = vec![receiver];
+        // A subclass's instance, seen as the class that declares the method:
+        // `derived.bumpA()` passes a `Derived` where `Base#bumpA` takes a
+        // `Base`, which is one pointer, converted as a handle is.
+        let this = instance_type_of(self.snapshot, class)
+            .and_then(|ty| self.represent(ty))
+            .ok_or_else(|| self.unrepresentable(id, "a method's receiver"))?;
+        let mut args = vec![self.coerce(receiver, &this, id)?];
         for (argument, parameter) in arguments.iter().zip(&parameters) {
             // Labels, which the method takes as the runtime passes them: a
             // literal's properties, never built, or an object's fields.

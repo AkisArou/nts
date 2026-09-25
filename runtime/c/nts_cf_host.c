@@ -368,15 +368,37 @@ void *nts_nsdictionary_of_strings(const NtsMap *map) {
 /* A registered class with fields: where its ivar is, and what makes the
  * object that goes in it. Few enough that a scan beats anything cleverer; the
  * last one found is remembered, since a program reads one class's fields in a
- * row. */
+ * row.
+ *
+ * One state object per instance, holding the fields of every class of the
+ * program's in its chain, base first. So one ivar holds it: the `root`'s, the
+ * first of the program's classes with fields, which a subclass's instance
+ * shares. The `init` and `dealloc` added to the root are what every subclass
+ * inherits, and each sends to the root's superclass. Sending to the
+ * instance's own superclass sent a subclass's back to the same `init`, which
+ * recursed until the stack ran out. */
 typedef struct NtsObjcStateful {
   Class cls;
+  Class root;
   ptrdiff_t offset;
   void *(*make)(void);
 } NtsObjcStateful;
 static NtsObjcStateful *nts_objc_stateful;
 static uint32_t nts_objc_stateful_count;
 static const NtsObjcStateful *nts_objc_stateful_last;
+
+/* The registered class nearest `cls`: itself, or its nearest superclass
+ * that is one. NULL when none is. */
+static const NtsObjcStateful *nts_objc_stateful_above(Class cls) {
+  for (; cls; cls = class_getSuperclass(cls)) {
+    for (uint32_t at = 0; at < nts_objc_stateful_count; at++) {
+      if (nts_objc_stateful[at].cls == cls) {
+        return &nts_objc_stateful[at];
+      }
+    }
+  }
+  return NULL;
+}
 
 /* The registered class `self` is an instance of, or of a subclass of: the
  * platform may subclass it (KVO does, at run time). */
@@ -386,17 +408,14 @@ static const NtsObjcStateful *nts_objc_stateful_of(id self) {
   if (last && last->cls == cls) {
     return last;
   }
-  for (; cls; cls = class_getSuperclass(cls)) {
-    for (uint32_t at = 0; at < nts_objc_stateful_count; at++) {
-      if (nts_objc_stateful[at].cls == cls) {
-        nts_objc_stateful_last = &nts_objc_stateful[at];
-        return nts_objc_stateful_last;
-      }
-    }
+  const NtsObjcStateful *found = nts_objc_stateful_above(cls);
+  if (!found) {
+    fprintf(stderr, "nts: %s has no fields of a program's class to read\n",
+            class_getName(cls));
+    abort();
   }
-  fprintf(stderr, "nts: %s has no fields of a program's class to read\n",
-          class_getName(object_getClass(self)));
-  abort();
+  nts_objc_stateful_last = found;
+  return found;
 }
 
 static void **nts_objc_state_slot(id self, const NtsObjcStateful *class) {
@@ -416,7 +435,7 @@ void *nts_objc_state(void *self) {
  * hold their initial values by the time `new` returns, as JavaScript's do. */
 static id nts_objc_state_init(id self, SEL cmd) {
   const NtsObjcStateful *class = nts_objc_stateful_of(self);
-  struct objc_super super = {self, class_getSuperclass(class->cls)};
+  struct objc_super super = {self, class_getSuperclass(class->root)};
   self = ((id (*)(struct objc_super *, SEL))objc_msgSendSuper)(&super, cmd);
   if (self) {
     nts_objc_state(self);
@@ -431,7 +450,7 @@ static void nts_objc_state_dealloc(id self, SEL cmd) {
   void *state = *slot;
   *slot = NULL;
   nts_release(state);
-  struct objc_super super = {self, class_getSuperclass(class->cls)};
+  struct objc_super super = {self, class_getSuperclass(class->root)};
   ((void (*)(struct objc_super *, SEL))objc_msgSendSuper)(&super, cmd);
 }
 
@@ -458,13 +477,21 @@ void nts_objc_register_class(const char *name, const char *superclass,
     objc_registerClassPair(made);
     return;
   }
-  class_addIvar(made, "nts_state", sizeof(void *), sizeof(void *) == 8 ? 3 : 2,
-                "^v");
-  class_addMethod(made, sel_registerName("init"), (IMP)nts_objc_state_init,
-                  "@16@0:8");
-  class_addMethod(made, sel_registerName("dealloc"),
-                  (IMP)nts_objc_state_dealloc, "v16@0:8");
+  /* A subclass of a class with fields keeps them where its root does. */
+  const NtsObjcStateful *above = nts_objc_stateful_above(base);
+  if (!above) {
+    class_addIvar(made, "nts_state", sizeof(void *),
+                  sizeof(void *) == 8 ? 3 : 2, "^v");
+    class_addMethod(made, sel_registerName("init"), (IMP)nts_objc_state_init,
+                    "@16@0:8");
+    class_addMethod(made, sel_registerName("dealloc"),
+                    (IMP)nts_objc_state_dealloc, "v16@0:8");
+  }
   objc_registerClassPair(made);
+  Class root = above ? above->root : made;
+  ptrdiff_t offset =
+      above ? above->offset
+            : ivar_getOffset(class_getInstanceVariable(made, "nts_state"));
   NtsObjcStateful *grown =
       realloc(nts_objc_stateful, (nts_objc_stateful_count + 1) * sizeof *grown);
   if (!grown) {
@@ -473,9 +500,8 @@ void nts_objc_register_class(const char *name, const char *superclass,
   }
   nts_objc_stateful = grown;
   nts_objc_stateful_last = NULL;
-  nts_objc_stateful[nts_objc_stateful_count++] = (NtsObjcStateful){
-      made, ivar_getOffset(class_getInstanceVariable(made, "nts_state")),
-      make_state};
+  nts_objc_stateful[nts_objc_stateful_count++] =
+      (NtsObjcStateful){made, root, offset, make_state};
 }
 
 /* ARC's entry points, which no public header declares. */

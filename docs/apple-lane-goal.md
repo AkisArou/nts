@@ -696,6 +696,24 @@ correctness does not depend on arm64 running by luck.
      - A closure in a field that captures `this` is a cycle the collector
        cannot see through the foreign object, as it is in Swift. Nothing
        breaks it.
+     - **A subclass of a class with fields (2026-09-25).** `class Scored
+       extends Tally { bonus = 5 }` crashed at `new`. The host's `init`
+       sent to the instance's own superclass, which for a subclass was the
+       same `init` again, until the stack ran out. A field `Tally`
+       declares, read through a `Scored`, was also refused.
+       - Now one state object per instance holds the fields of every class
+         of the program's in its chain, base first, as a class of the
+         program's lays out its fields. A field is at one index whichever
+         class the instance is, so `Tally`'s methods read a `Scored`'s.
+       - The first of the chain's classes with fields owns the one ivar. A
+         subclass registered below it shares that ivar, and the `init` and
+         `dealloc` added to the root send to the root's superclass.
+       - A class with no fields of its own below one that has them
+         (`Plain`) makes its base's state.
+       - A method of the base called on a subclass's instance passes the
+         instance as the base's handle, which the verifier had rejected.
+       - `macos-classes` checks both, and the instance deallocated, against
+         the oracle on both backends. The old compiler refuses the arm.
    - **S6, constructors landed (2026-09-25).** `class Ledger extends
      NSObject { constructor(owner: string, opening: number) { super(); ... } }`
      is Swift's `init(owner:opening:)`.

@@ -52,6 +52,42 @@ static NSString *tallied(void) {
                                     [tally.names componentsJoinedByString:@","]];
 }
 
+/* Swift's `class Scored: Tally { var bonus = 5 }`, and `Plain`, which adds
+ * no fields. */
+@interface Scored : Tally
+@property NSInteger bonus;
+@end
+@implementation Scored
+- (instancetype)init {
+  if ((self = [super init])) {
+    _bonus = 5;
+  }
+  return self;
+}
+- (NSInteger)score {
+  [self bump];
+  return self.count + self.bonus;
+}
+@end
+@interface Plain : Tally
+@end
+@implementation Plain
+@end
+static __weak id scoredWatch;
+
+static NSString *scored(void) {
+  Scored *scored = [[Scored alloc] init];
+  scoredWatch = scored;
+  scored.step = 3;
+  NSInteger first = [scored score];
+  Tally *asTally = scored;
+  [asTally bump];
+  Plain *plain = [[Plain alloc] init];
+  [plain bump];
+  return [NSString stringWithFormat:@"%ld %ld %ld %ld %@", (long)first, (long)[scored total], (long)scored.bonus,
+                                    (long)plain.count, plain.label];
+}
+
 @interface Ledger : NSObject
 @property NSString *owner;
 @property NSInteger balance;
@@ -214,6 +250,10 @@ int main(void) {
       printf("fields %s\n", tallied().UTF8String);
     }
     printf("fields %s released\n", tallyWatch ? "alive" : "gone");
+    @autoreleasepool {
+      printf("inherited %s\n", scored().UTF8String);
+    }
+    printf("inherited %s\n", scoredWatch ? "alive" : "gone");
     @autoreleasepool {
       printf("constructed %s\n", ledgered().UTF8String);
     }

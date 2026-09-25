@@ -124,6 +124,35 @@ function tallied(): string {
   return `${tally.label} ${tally.total()} ${tally.count} ${tally.names.join(",")}`;
 }
 
+// Swift's `class Scored: Tally { var bonus = 5 }`: a subclass adds fields
+// to a class with fields. One instance holds both, the base's first, so a
+// `Tally` field is where `Tally`'s methods look for it whichever class the
+// instance is. `Plain` adds none, and its instances have `Tally`'s.
+class Scored extends Tally {
+  bonus = 5;
+
+  score(): number {
+    this.bump();
+    return this.count + this.bonus;
+  }
+}
+
+class Plain extends Tally {}
+
+let scoredWatch = 0 as c_int;
+
+function scored(): string {
+  const scored = new Scored();
+  scoredWatch = weak_watch(scored);
+  scored.step = 3;
+  const first = scored.score();
+  const asTally: Tally = scored;
+  asTally.bump();
+  const plain = new Plain();
+  plain.bump();
+  return `${first} ${scored.total()} ${scored.bonus} ${plain.count} ${plain.label}`;
+}
+
 // Swift's `init(owner:opening:)` on an `NSObject` subclass: a constructor
 // taking arguments, whose `super()` makes the instance and whose body then
 // sets its fields -- one a parameter property -- and sends the instance a
@@ -302,6 +331,8 @@ function main(): void {
   // Counted before the line reporting it is built, which is itself an object.
   const after = live_objects();
   report(`fields ${weak_alive(tallyWatch) ? "alive" : "gone"} ${after === before ? "released" : "held"}`);
+  report(`inherited ${scored()}`);
+  report(`inherited ${weak_alive(scoredWatch) ? "alive" : "gone"}`);
   report(`constructed ${ledgered()}`);
   report(`constructed ${weak_alive(ledgerWatch) ? "alive" : "gone"}`);
   report(`ledgers ${Ledger.described()}`);
