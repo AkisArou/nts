@@ -1759,8 +1759,8 @@ declare module "objc:UIKit" {
   export class UIApplication extends UIResponder {
     /** @ntsSelector sharedApplication */
     static get shared(): UIApplication;
-    get delegate(): NSObject | null;
-    set delegate(value: NSObject | null);
+    get delegate(): UIApplicationDelegate | null;
+    set delegate(value: UIApplicationDelegate | null);
     get isIgnoringInteractionEvents(): boolean;
     get isIdleTimerDisabled(): boolean;
     /** @ntsSet setIdleTimerDisabled: */
@@ -2190,10 +2190,10 @@ declare module "objc:UIKit" {
   /** @ntsClass UITableView */
   export class UITableView extends UIScrollView {
     get style(): CEnum<UITableView.Style, Int>;
-    get dataSource(): NSObject | null;
-    set dataSource(value: NSObject | null);
-    get delegate(): NSObject | null;
-    set delegate(value: NSObject | null);
+    get dataSource(): UITableViewDataSource | null;
+    set dataSource(value: UITableViewDataSource | null);
+    get delegate(): UITableViewDelegate | null;
+    set delegate(value: UITableViewDelegate | null);
     get prefetchDataSource(): NSObject | null;
     set prefetchDataSource(value: NSObject | null);
     get isPrefetchingEnabled(): boolean;
@@ -2448,7 +2448,7 @@ declare module "objc:UIKit" {
   }
 
   /** @ntsProtocol UIApplicationDelegate */
-  export interface UIApplicationDelegate {
+  export interface UIApplicationDelegate extends NSObject {
     /** @ntsSelector applicationDidFinishLaunching: */
     applicationDidFinishLaunching?(application: UIApplication): void;
     /** @ntsSelector application:willFinishLaunchingWithOptions: */
@@ -2549,7 +2549,7 @@ declare module "objc:UIKit" {
   }
 
   /** @ntsProtocol UITableViewDataSource */
-  export interface UITableViewDataSource {
+  export interface UITableViewDataSource extends NSObject {
     /** @ntsSelector tableView:numberOfRowsInSection: */
     tableViewNumberOfRowsInSection(tableView: UITableView, section: Int): Int;
     /** @ntsSelector tableView:cellForRowAtIndexPath: */
@@ -2575,7 +2575,7 @@ declare module "objc:UIKit" {
   }
 
   /** @ntsProtocol UITableViewDelegate */
-  export interface UITableViewDelegate {
+  export interface UITableViewDelegate extends NSObject {
     /** @ntsSelector tableView:willDisplayCell:forRowAtIndexPath: */
     tableViewWillDisplay?(tableView: UITableView, cell: UITableViewCell, indexPath: NSIndexPath): void;
     /** @ntsSelector tableView:willDisplayHeaderView:forSection: */

@@ -1492,8 +1492,8 @@ declare module "objc:UIKit" {
   export class UIApplication extends UIResponder {
     /** @ntsSelector sharedApplication */
     static get shared(): UIApplication;
-    get delegate(): NSObject | null;
-    set delegate(value: NSObject | null);
+    get delegate(): UIApplicationDelegate | null;
+    set delegate(value: UIApplicationDelegate | null);
     get isIgnoringInteractionEvents(): boolean;
     get isIdleTimerDisabled(): boolean;
     /** @ntsSet setIdleTimerDisabled: */
@@ -1861,7 +1861,7 @@ declare module "objc:UIKit" {
   }
 
   /** @ntsProtocol UIApplicationDelegate */
-  export interface UIApplicationDelegate {
+  export interface UIApplicationDelegate extends NSObject {
     /** @ntsSelector applicationDidFinishLaunching: */
     applicationDidFinishLaunching?(application: UIApplication): void;
     /** @ntsSelector application:willFinishLaunchingWithOptions: */

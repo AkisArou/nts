@@ -203,6 +203,28 @@ fn objc_class(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     Some(Pointee::Opaque(super::Handle { tag, ancestors, family: super::Family::Objc, interface: false }))
 }
 
+/// An Objective-C protocol a binding declares (`@ntsProtocol
+/// UITableViewDataSource` on an interface), as the type of a value: Swift's
+/// `any UITableViewDataSource`, an object whose class is known only to
+/// conform. Its handle is an interface over `NSObject`'s chain, so any
+/// Objective-C object may be passed as one -- whether its class conforms is
+/// the checker's to say, as `implements` is.
+fn objc_protocol(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
+    let record = snapshot.types.get(ty.0 as usize)?;
+    if !matches!(record.kind, TypeKind::Object { .. }) {
+        return None;
+    }
+    let mut symbol = snapshot.symbols.get(record.symbol?.0 as usize)?;
+    while let Some(aliased) = symbol.aliased {
+        symbol = snapshot.symbols.get(aliased.0 as usize)?;
+    }
+    let tag = symbol.declarations.iter().find_map(|declaration| {
+        let node = snapshot.nodes.get(declaration.0 as usize)?;
+        matches!(node.kind, NodeKind::Syntax(syntax::INTERFACE_DECLARATION)).then(|| node.native.as_ref()?.protocol.clone())?
+    })?;
+    Some(Pointee::Opaque(super::Handle { tag, ancestors: vec!["NSObject".to_owned()], family: super::Family::Objc, interface: true }))
+}
+
 /// Whether a class declaration has an Objective-C class among its ancestors
 /// while not being one itself: a subclass the program writes.
 pub(crate) fn extends_objc(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
@@ -457,6 +479,9 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     }
     if let Some(class) = objc_class(snapshot, ty) {
         return Some(class);
+    }
+    if let Some(protocol) = objc_protocol(snapshot, ty) {
+        return Some(protocol);
     }
     if let Some(handle) = handle(snapshot, ty) {
         // `Const<H>` -- the same handle, read-only through this view: C's

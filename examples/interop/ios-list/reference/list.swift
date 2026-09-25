@@ -9,7 +9,7 @@ func report(_ line: String) {
   fflush(stdout)
 }
 
-class Fruits: NSObject, UITableViewDataSource {
+class Fruits: NSObject, UITableViewDataSource, UITableViewDelegate {
   private var items: [String]
 
   init(items: [String]) {
@@ -29,6 +29,10 @@ class Fruits: NSObject, UITableViewDataSource {
       label.text = items[indexPath.row]
     }
     return cell
+  }
+
+  func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    report("tapped \(items[indexPath.row])")
   }
 
   func append(_ item: String) {
@@ -53,6 +57,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let table = UITableView(frame: list.view.bounds, style: .plain)
     let fruits = Fruits(items: ["apple", "banana", "cherry"])
     table.dataSource = fruits
+    table.delegate = fruits
     list.view.addSubview(table)
     let navigation = UINavigationController(rootViewController: list)
     window.rootViewController = navigation
@@ -70,6 +75,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let second = IndexPath(row: 1, section: 0)
     table.selectRow(at: second, animated: false, scrollPosition: .none)
     report("selected \(table.indexPathForSelectedRow?.row ?? -1)")
+    report("asked \(table.dataSource?.tableView(table, numberOfRowsInSection: 0) ?? -1)")
+    table.delegate?.tableView?(table, didSelectRowAt: second)
+    report("height \(Int(table.delegate?.tableView?(table, heightForRowAt: second) ?? -1))")
     Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { _ in
       report("done")
       exit(0)

@@ -37825,6 +37825,9 @@ impl<'a> FuncBuilder<'a> {
         let Some(&receiver_ty) = self.snapshot.node_types.get(&object) else {
             return Ok(None);
         };
+        if let Some(selector) = self.objc_optional_selector(member) {
+            return self.objc_optional_call(id, (object, member), &selector).map(Some);
+        }
         if !self.declares_an_optional_method(receiver_ty, &key) {
             return Ok(None);
         }
@@ -37844,6 +37847,50 @@ impl<'a> FuncBuilder<'a> {
             Branch::Absent,
         )
         .map(Some)
+    }
+
+    /// The selector of `member` where it names a method of an Objective-C
+    /// protocol a binding declares: what `delegate?.m?.()` asks the object
+    /// whether it answers.
+    fn objc_optional_selector(&self, member: NodeId) -> Option<String> {
+        let symbol = self.snapshot.symbols.get(self.node(member).symbol?.0 as usize)?;
+        symbol.declarations.iter().copied().find(|declaration| self.objc_protocol_member(*declaration)).and_then(|declaration| {
+            self.node(declaration).native.as_ref().and_then(|native| native.selector.clone())
+        })
+    }
+
+    /// `delegate?.tableViewDidSelectRowAt?.(table, path)`: Swift's
+    /// `delegate?.tableView?(table, didSelectRowAt: path)`. The object is asked
+    /// `respondsToSelector:` -- which the runtime answers `NO` for a nil
+    /// object, so one test covers an absent receiver too -- and sent the
+    /// message only where it answered `YES`. The class the program sees says
+    /// nothing here: the object is any class that conforms, and whether it
+    /// implements an optional requirement is its class's, at run time.
+    fn objc_optional_call(&mut self, id: NodeId, (object, member): (NodeId, NodeId), selector: &str) -> Result<ValueId, Diagnostic> {
+        let receiver = self.lower_expression(object)?;
+        let HirType::NativePointer(pointee) = self.values[receiver.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "an optional requirement of an Objective-C protocol on something that is not an object"));
+        };
+        let origin = self.origin(id);
+        let selector_pointee = super::native::Pointee::Opaque("objc_selector".into());
+        let selector_value = self.push(
+            OpKind::ObjcSelector { name: selector.to_owned() },
+            HirType::NativePointer(selector_pointee.clone()),
+            origin.clone(),
+        );
+        let responds = synthesized(
+            "respondsToSelector:",
+            vec![super::native::Type::Pointer(pointee), super::native::Type::Pointer(selector_pointee)],
+            super::native::Type::Bool,
+            Some(super::native::Send { selector: "respondsToSelector:".to_owned(), class: None, super_of: None }),
+            Vec::new(),
+        );
+        let present = self.push(
+            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(responds)), args: vec![receiver, selector_value], frame: None },
+            HirType::Bool,
+            origin,
+        );
+        self.lower_branching_value(id, present, Branch::MethodOn(receiver, object, member, None), Branch::Absent)
     }
 
     /// Whether `ty` declares `key` as a method *and* optionally.
@@ -43706,9 +43753,28 @@ impl<'a> FuncBuilder<'a> {
             .is_some_and(|n| n.symbol.is_some() || n.selector.is_some() || n.vtable.is_some() || n.query.is_some() || n.vfunc.is_some());
         // Or a method of an Objective-C class a binding declares, whose
         // receiver is the object it is called on, or the class when `static`.
-        let objc_member = self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
-            && self.objc_class_member(declaration).is_some();
+        let objc_member = (self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
+            && self.objc_class_member(declaration).is_some())
+            || self.objc_protocol_member(declaration);
         (tagged && (self.is_native_instance_method(declaration, signature) || objc_member)).then_some((declaration, target.signature))
+    }
+
+    /// Whether `declaration` is a method of an Objective-C protocol a binding
+    /// declares (`@ntsProtocol`), called on a value of the protocol's type:
+    /// Swift's `dataSource?.tableView(table, numberOfRowsInSection: 0)`, a
+    /// message to whatever object conforms.
+    fn objc_protocol_member(&self, declaration: NodeId) -> bool {
+        if self.kind_of(declaration) != Some(syntax::METHOD_SIGNATURE) {
+            return false;
+        }
+        let mut owner = self.node(declaration).parent;
+        while let Some(at) = owner.filter(|at| self.kind_of(*at).is_none()) {
+            owner = self.node(at).parent;
+        }
+        owner.is_some_and(|at| {
+            self.kind_of(at) == Some(syntax::INTERFACE_DECLARATION)
+                && self.node(at).native.as_ref().is_some_and(|native| native.protocol.is_some())
+        })
     }
 
     /// Whether a binding's method is called on an instance: an interface
@@ -44063,7 +44129,11 @@ impl<'a> FuncBuilder<'a> {
             // `this` in a method of a class the program writes over a
             // handle's is the class's polymorphic `this`: its members, and
             // its representation, are the class's.
-            .or_else(|| self.snapshot.node_types.get(&receiver_node).map(|ty| self.class_behind(*ty)))
+            // Present where the message is sent: `a?.b?.m()` sends `m` to
+            // `a.b` as a `B`.
+            .or_else(|| {
+                self.snapshot.node_types.get(&receiver_node).map(|ty| self.class_behind(self.present_part(*ty).unwrap_or(*ty)))
+            })
             .ok_or_else(|| self.unsupported(id, "a C method with no `this` type"))?;
         with_this.parameters.insert(
             0,

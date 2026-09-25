@@ -2406,8 +2406,8 @@ declare module "objc:AppKit" {
   export class NSApplication extends NSResponder {
     /** @ntsSelector sharedApplication */
     static get shared(): NSApplication;
-    get delegate(): NSObject | null;
-    set delegate(value: NSObject | null);
+    get delegate(): NSApplicationDelegate | null;
+    set delegate(value: NSApplicationDelegate | null);
     get mainWindow(): NSWindow | null;
     get keyWindow(): NSWindow | null;
     get isActive(): boolean;
@@ -3276,8 +3276,8 @@ declare module "objc:AppKit" {
 
   /** @ntsClass NSTableView */
   export class NSTableView extends NSControl {
-    get dataSource(): NSObject | null;
-    set dataSource(value: NSObject | null);
+    get dataSource(): NSTableViewDataSource | null;
+    set dataSource(value: NSTableViewDataSource | null);
     get delegate(): NSObject | null;
     set delegate(value: NSObject | null);
     get headerView(): NSTableHeaderView | null;
@@ -3661,7 +3661,7 @@ declare module "objc:AppKit" {
   }
 
   /** @ntsProtocol NSApplicationDelegate */
-  export interface NSApplicationDelegate {
+  export interface NSApplicationDelegate extends NSObject {
     /** @ntsSelector applicationShouldTerminate: */
     applicationShouldTerminate?(sender: NSApplication): CEnum<NSApplication.TerminateReply, UInt>;
     /** @ntsSelector application:openURLs: */
@@ -3755,7 +3755,7 @@ declare module "objc:AppKit" {
   }
 
   /** @ntsProtocol NSTableViewDataSource */
-  export interface NSTableViewDataSource {
+  export interface NSTableViewDataSource extends NSObject {
     /** @ntsSelector numberOfRowsInTableView: */
     numberOfRows?(tableView: NSTableView): Int;
     /** @ntsSelector tableView:objectValueForTableColumn:row: */

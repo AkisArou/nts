@@ -56,6 +56,8 @@ committed copy.
 | `window.contentView?.superview` (`NSView?`) | the same, `NSView \| null \| undefined`, one nil: test it with `== null` or `??` |
 | `let views: [NSView]` | `const views: NSView[]` |
 | `[String: NSObject]` | `Map<string, NSObject>` |
+| `table.dataSource` (`(any UITableViewDataSource)?`) | `table.dataSource`, `UITableViewDataSource \| null`, when the binding declares the protocol (`--protocol`) |
+| `delegate?.tableView?(t, didSelectRowAt: p)` | `delegate?.tableViewDidSelectRowAt?.(t, p)`, which asks `respondsToSelector:` first |
 | `Set<IndexPath>`, `Set<String>` | `Set<NSIndexPath>`, `Set<string>` (objects compared by `-isEqual:`) |
 | `NSRect(x: 0, y: 0, width: 320, height: 200)` | `{ origin: { x: 0, y: 0 }, size: { width: 320, height: 200 } }` |
 | `Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { t in ... }` | `Timer.scheduledTimer({ withTimeInterval: 1, repeats: true }, (t) => { ... })` |

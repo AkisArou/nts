@@ -682,6 +682,11 @@ struct Class {
 struct Protocol {
     objc: String,
     swift: String,
+    /// What the interface extends: `NSObject`, as every Objective-C protocol
+    /// Swift imports refines `NSObjectProtocol`, and every class adopting one
+    /// is an object -- so a property typed as the protocol is still one where
+    /// a base class's is typed `NSObject`.
+    base: String,
     members: Vec<String>,
     skipped: Vec<String>,
 }
@@ -745,6 +750,9 @@ struct Model<'a> {
     platform: &'static str,
     classes: Vec<Class>,
     protocols: Vec<Protocol>,
+    /// The protocols this binding declares, by Objective-C name: an `id<P>`
+    /// of one is spelled `P`, Swift's `any P`.
+    declared_protocols: BTreeSet<String>,
     /// Classes a signature names that are not bound, by Objective-C name,
     /// with their nearest bound ancestor's.
     mentioned: BTreeMap<String, Option<String>>,
@@ -848,6 +856,7 @@ impl<'a> Model<'a> {
             platform: "macOS",
             classes: Vec::new(),
             protocols: Vec::new(),
+            declared_protocols: bodies.protocols.keys().cloned().collect(),
             mentioned: BTreeMap::new(),
             records: BTreeSet::new(),
             enums: BTreeMap::new(),
@@ -969,7 +978,8 @@ impl<'a> Model<'a> {
                 requirement.result
             ));
         }
-        Protocol { objc: objc.to_owned(), swift, members, skipped }
+        let base = self.object("NSObject");
+        Protocol { objc: objc.to_owned(), swift, base, members, skipped }
     }
 
     /// A protocol method as the adopting class writes it: every argument
@@ -1433,6 +1443,12 @@ impl<'a> Model<'a> {
             return Ok(or_null("ClassObject".to_owned()));
         }
         if desugared == "id" || desugared.starts_with("id<") {
+            // `id<UITableViewDataSource>`: the protocol, where this binding
+            // declares it -- Swift's `(any UITableViewDataSource)?`. An object
+            // of a class conforming to more than one is an object.
+            if let Some(protocol) = self.declared_protocol(&desugared) {
+                return Ok(or_null(protocol));
+            }
             return Ok(or_null(self.object("NSObject")));
         }
         // Not a pointer: `NSUInteger *` is written starting `NSUInteger`, and
@@ -1635,6 +1651,16 @@ impl<'a> Model<'a> {
             }
         };
         Ok(format!("Map<string, {value}>"))
+    }
+
+    /// The Swift name of the one protocol `id<P>` names, where this binding
+    /// declares `P`.
+    fn declared_protocol(&self, desugared: &str) -> Option<String> {
+        let inner = desugared.strip_prefix("id<")?.split_once('>')?.0.trim();
+        if inner.contains(',') || !self.declared_protocols.contains(inner) {
+            return None;
+        }
+        Some(self.swift.get(&format!("c:objc(pl){inner}")).map_or_else(|| inner.to_owned(), |s| s.names.title.clone()))
     }
 
     fn array_element(&mut self, pointee: &str) -> Spelled {
@@ -2091,6 +2117,31 @@ fn nest(out: &mut String, path: &[String], text: &str) {
     }
 }
 
+/// A protocol as the interface a class the program writes implements, and
+/// the type a value of it has: nested where Swift nests it.
+fn render_protocol(out: &mut String, protocol: &Protocol) {
+    let path: Vec<String> = protocol.swift.split('.').map(str::to_owned).collect();
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "  /** @ntsProtocol {} */\n  export interface {} extends {} {{",
+        protocol.objc,
+        path.last().map_or("", String::as_str),
+        protocol.base
+    );
+    for line in &protocol.members {
+        let _ = writeln!(text, "{line}");
+    }
+    if !protocol.skipped.is_empty() {
+        let _ = writeln!(text, "    // Not bound, each for the reason given:");
+        for line in &protocol.skipped {
+            let _ = writeln!(text, "    //   {line}");
+        }
+    }
+    let _ = writeln!(text, "  }}");
+    nest(out, &path, &text);
+}
+
 fn render(request: &Request, model: &Model) -> String {
     let mut out = String::new();
     let _ = writeln!(
@@ -2169,20 +2220,7 @@ fn render(request: &Request, model: &Model) -> String {
         nest(&mut out, &path, &text);
     }
     for protocol in &model.protocols {
-        let path: Vec<String> = protocol.swift.split('.').map(str::to_owned).collect();
-        let mut text = String::new();
-        let _ = writeln!(text, "  /** @ntsProtocol {} */\n  export interface {} {{", protocol.objc, path.last().map_or("", String::as_str));
-        for line in &protocol.members {
-            let _ = writeln!(text, "{line}");
-        }
-        if !protocol.skipped.is_empty() {
-            let _ = writeln!(text, "    // Not bound, each for the reason given:");
-            for line in &protocol.skipped {
-                let _ = writeln!(text, "    //   {line}");
-            }
-        }
-        let _ = writeln!(text, "  }}");
-        nest(&mut out, &path, &text);
+        render_protocol(&mut out, protocol);
     }
     for class in &model.cf_classes {
         cf::render(&mut out, class);
@@ -2675,7 +2713,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             // says `optional`, every argument positional and an object as
             // itself. A shared base name takes its first label, and one that
             // still collides with a name Swift gave is named by its selector.
-            "  /** @ntsProtocol ShapeDelegate */\n  export interface ShapeWatching {\n\
+            "  /** @ntsProtocol ShapeDelegate */\n  export interface ShapeWatching extends NSObject {\n\
              \x20   /** @ntsSelector shapeDidMove: */\n    shapeDidMove(shape: Shape): void;\n\
              \x20   /** @ntsSelector shapeDidRename: */\n    shapeDidRename?(shape: Shape): void;\n\
              \x20   /** @ntsSelector shape:didRenameTo: */\n    shapeDidRenameTo?(shape: Shape, name: NSString): void;\n\

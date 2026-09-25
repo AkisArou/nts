@@ -1910,8 +1910,8 @@ declare module "objc:AppKit" {
     set isExcludedFromWindowsMenu(value: boolean);
     get contentView(): NSView | null;
     set contentView(value: NSView | null);
-    get delegate(): NSObject | null;
-    set delegate(value: NSObject | null);
+    get delegate(): NSWindowDelegate | null;
+    set delegate(value: NSWindowDelegate | null);
     get windowNumber(): Int;
     /** @ntsSelector windowNumberAtPoint:belowWindowWithWindowNumber: */
     static windowNumber(labels: { at: ByValue<CGPoint> | Fields<CGPoint>; belowWindowWithWindowNumber: Int }): Int;
@@ -3478,7 +3478,7 @@ declare module "objc:AppKit" {
   }
 
   /** @ntsProtocol NSWindowDelegate */
-  export interface NSWindowDelegate {
+  export interface NSWindowDelegate extends NSObject {
     /** @ntsSelector windowShouldClose: */
     windowShouldClose?(sender: NSWindow): boolean;
     /** @ntsSelector windowWillReturnFieldEditor:toObject: */
