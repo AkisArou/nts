@@ -2286,9 +2286,11 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     let (ty, nullable) = match kind_of(ty)? {
         TypeKind::Union(parts) => {
             let [a, b] = parts.as_slice() else { return None };
+            // `| null`, or `| undefined` -- an optional property's -- which a
+            // lent array has one absence for, the NULL C is passed.
             match (kind_of(*a)?, kind_of(*b)?) {
-                (TypeKind::Null, _) => (*b, true),
-                (_, TypeKind::Null) => (*a, true),
+                (TypeKind::Null | TypeKind::Undefined, _) => (*b, true),
+                (_, TypeKind::Null | TypeKind::Undefined) => (*a, true),
                 _ => return None,
             }
         }

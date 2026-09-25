@@ -11575,6 +11575,19 @@ fn iteration_method(name: &str) -> Option<Walked> {
     })
 }
 
+/// One property a construction sets: its value, where it was written, and --
+/// for one read from a props object passed through -- the test of whether it
+/// was given at all.
+struct SetProperty {
+    name: String,
+    value: ValueId,
+    node: NodeId,
+    present: Option<ValueId>,
+    /// What an erased value read from a props object is read back as where
+    /// it was given: its type without the `undefined` that optional adds.
+    unerase: Option<HirType>,
+}
+
 /// A `sort` comparator as the merge calls it: the function value, which body
 /// that reaches, and the parameters its arguments are coerced to.
 struct Comparator {
@@ -28466,35 +28479,98 @@ impl<'a> FuncBuilder<'a> {
         let written = self.constructed_properties(id)?;
         let mut arguments = names.map(|name| self.call_foreign_named(id, name, Vec::new())).collect::<Result<Vec<_>, _>>()?;
         for name in &from {
-            let (_, value, _) = written.iter().find(|(given, ..)| given == name).ok_or_else(|| {
+            let written = written.iter().find(|written| written.name == *name).ok_or_else(|| {
                 self.unsupported(id, &format!("a handle constructed without `{name}`, which its constructor takes"))
             })?;
-            arguments.push(*value);
+            arguments.push(written.value);
         }
         let handle = self.call_foreign_named(id, function, arguments)?;
         self.set_constructed(id, handle, ty, &written, &from)?;
         Ok(handle)
     }
 
-    /// The properties a handle's `new` is given, in the order the literal
-    /// writes them: `{ label }` names the local, and a computed name is
-    /// refused.
-    fn constructed_properties(&mut self, id: NodeId) -> Result<Vec<(String, ValueId, NodeId)>, Diagnostic> {
+    /// The properties a handle's `new` is given.
+    ///
+    /// A literal's, in the order it writes them -- `{ label }` names the
+    /// local, and a computed name is refused -- each set unconditionally,
+    /// with no object built. Or a props object passed through, GJS's
+    /// `super(props)`: each property its type declares, read from it and set
+    /// where it is not `undefined`, strictly -- `{ child: null }` sets `child`
+    /// to null. A construct-only property a constructor takes is read
+    /// whether or not it is there, as the type requires it to be.
+    fn constructed_properties(&mut self, id: NodeId) -> Result<Vec<SetProperty>, Diagnostic> {
         match self.arguments_of(id).as_slice() {
             [] => Ok(Vec::new()),
             [literal] if self.kind_of(*literal) == Some(syntax::OBJECT_LITERAL_EXPRESSION) => {
                 let mut written = Vec::new();
                 for property in self.children(*literal) {
                     let (name, value) = self.property_parts(property, None)?;
-                    written.push((name, value, property));
+                    written.push(SetProperty { name, value, node: property, present: None, unerase: None });
                 }
                 Ok(written)
             }
-            _ => Err(self.unsupported(
-                id,
-                "a handle constructed from properties that are not written as an object literal, which is what lets them be set without building an object",
-            )),
+            [props] => self.passed_properties(*props),
+            _ => Err(self.unsupported(id, "a handle constructed from more than one argument")),
         }
+    }
+
+    /// The properties of a props object passed to a construction, each with
+    /// the test of whether it was given.
+    fn passed_properties(&mut self, props: NodeId) -> Result<Vec<SetProperty>, Diagnostic> {
+        let ty = *self.snapshot.node_types.get(&props).ok_or_else(|| self.unsupported(props, "a props object with no type"))?;
+        let Some(TypeKind::Object { properties }) = self.snapshot.types.get(ty.0 as usize).map(|record| record.kind.clone()) else {
+            return Err(self.unsupported(props, "a props object whose type is not an object type"));
+        };
+        let object = self.lower_expression(props)?;
+        let HirType::Managed(ManagedType::Object(represented)) = self.values[object.0 as usize].ty else {
+            return Err(self.unsupported(props, "a props object that is not an object of the program's"));
+        };
+        let layout = self.layout_of(props, represented)?;
+        let origin = self.origin(props);
+        let mut written = Vec::new();
+        // The phantom members a binding marks its types with are not
+        // properties: `__c_props`, which the checker spells `___c_props`.
+        for property in properties.iter().filter(|property| !property.name.starts_with("___c_") && !property.name.starts_with("__c_")) {
+            let field = layout
+                .index_of(&property.name)
+                .ok_or_else(|| self.unsupported(props, &format!("a props object without a field for `{}`", property.name)))?;
+            let field_ty = layout.fields[field as usize].ty.clone();
+            let value = self.push(OpKind::FieldGet { object, field }, field_ty.clone(), origin.clone());
+            let present = match field_ty {
+                HirType::Erased => {
+                    let unsigned = HirType::Int { bits: 32, signed: false };
+                    let tag = self.push(OpKind::TagOf { value }, unsigned.clone(), origin.clone());
+                    let undefined = self.push(OpKind::ConstInt(i128::from(super::tags::UNDEFINED)), unsigned, origin.clone());
+                    Some(self.push(OpKind::Binary { op: BinOp::Ne, lhs: tag, rhs: undefined }, HirType::Bool, origin.clone()))
+                }
+                HirType::Managed(_) | HirType::NativePointer(_) if property.optional => {
+                    let null = self.push(OpKind::ConstNull, field_ty, origin.clone());
+                    Some(self.push(OpKind::Binary { op: BinOp::Ne, lhs: value, rhs: null }, HirType::Bool, origin.clone()))
+                }
+                _ => None,
+            };
+            // Read back where it was given, at the representation of what it is
+            // when it is not `undefined`: an erased `sensitive?: boolean` is
+            // the boolean the setter takes.
+            let given = match self.snapshot.types.get(property.ty.0 as usize).map(|record| &record.kind) {
+                Some(TypeKind::Union(parts)) => {
+                    let defined: Vec<TypeId> = parts
+                        .iter()
+                        .copied()
+                        .filter(|part| !matches!(self.snapshot.types.get(part.0 as usize).map(|record| &record.kind), Some(TypeKind::Undefined)))
+                        .collect();
+                    // Each member's representation, where they share one --
+                    // `boolean` is `true | false`, and an enum its members --
+                    // as `present_of` reads a payload back.
+                    let each: Option<Vec<HirType>> = defined.iter().map(|part| self.represent_passed(*part)).collect();
+                    each.filter(|each| each.windows(2).all(|pair| pair[0] == pair[1])).and_then(|each| each.first().cloned())
+                }
+                _ => None,
+            };
+            let unerase = given.filter(|given| self.values[value.0 as usize].ty == HirType::Erased && *given != HirType::Erased);
+            written.push(SetProperty { name: property.name.clone(), value, node: props, present, unerase });
+        }
+        Ok(written)
     }
 
     /// Each property a constructed handle was given and its constructor did
@@ -28504,18 +28580,36 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         handle: ValueId,
         ty: TypeId,
-        written: &[(String, ValueId, NodeId)],
+        written: &[SetProperty],
         except: &[&str],
     ) -> Result<(), Diagnostic> {
-        for (name, value, property) in written.iter().filter(|(name, ..)| !except.contains(&name.as_str())) {
+        for SetProperty { name, value, node, present, unerase } in written.iter().filter(|written| !except.contains(&written.name.as_str())) {
             let setter = super::native::schema::property(self.snapshot, ty, name)
                 .and_then(|record| record.declaration)
                 .and_then(|declaration| self.node(declaration).native.as_ref())
                 .and_then(|native| native.set.clone())
                 .ok_or_else(|| {
-                    self.unsupported(*property, &format!("a constructed property `{name}` no @ntsSet names a method for"))
+                    self.unsupported(*node, &format!("a constructed property `{name}` no @ntsSet names a method for"))
                 })?;
-            self.lower_accessor_on(id, handle, ty, &setter, Some(*value))?;
+            let Some(present) = present else {
+                self.lower_accessor_on(id, handle, ty, &setter, Some(*value))?;
+                continue;
+            };
+            let (set, after) = (self.new_block(), self.new_block());
+            self.terminate(Terminator::Branch { cond: *present, then_target: set, then_args: Vec::new(), else_target: after, else_args: Vec::new() });
+            self.switch_to(set);
+            let value = match unerase {
+                Some(want) => {
+                    let origin = self.origin(*node);
+                    self.push(OpKind::Unerase { value: *value }, want.clone(), origin)
+                }
+                None => *value,
+            };
+            self.lower_accessor_on(id, handle, ty, &setter, Some(value))?;
+            if !self.is_terminated() {
+                self.terminate(Terminator::Jump { target: after, args: Vec::new() });
+            }
+            self.switch_to(after);
         }
         Ok(())
     }
@@ -33795,7 +33889,10 @@ impl<'a> FuncBuilder<'a> {
             let held = if self.holds_only_absences(property.ty) {
                 HirType::Erased
             } else {
-                self.represent(property.ty).ok_or_else(|| {
+                // `represent_passed`, which the contextual type of a value
+                // written into this field asks too: a `CStrings` field is the
+                // `string[]` a construction lends.
+                self.represent_passed(property.ty).ok_or_else(|| {
                     self.unrepresentable_member(id, "a property", &property.name, property.ty)
                 })?
             };

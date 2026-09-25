@@ -16,6 +16,10 @@
 //                 it, the body set a field and connected a handler that reads
 //                 it through `this`
 //   greeter Nts_Greeter
+//   framed in false fr unset Nts_Framed  `Framed`'s constructor passes the
+//                 caller's props object through (`super(props)`): the child
+//                 label, a handle held erased in an optional field, `sensitive`
+//                 false and `name` are set; `label`, not given, is not
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
@@ -37,6 +41,7 @@ import {
   GtkButton,
   GtkLabel,
   GtkWidget,
+  type GtkButtonProps,
   gtk_init,
   gtk_widget_measure,
   Orientation,
@@ -77,6 +82,29 @@ class Greeter extends GtkButton {
       sub_log(this.greeting + " from " + (this.label ?? ""));
     });
   }
+}
+
+// GJS's other constructor: the caller's props object passed straight through,
+// `super(props)`. Each property the type declares is read from it and set only
+// where it was given.
+class Framed extends GtkButton {
+  constructor(props: GtkButtonProps) {
+    super(props);
+  }
+}
+
+function framed(): string {
+  const inner = new GtkLabel({ label: "in" });
+  const f = new Framed({ child: inner, sensitive: false, name: "fr" });
+  const child = f.child;
+  return [
+    "framed",
+    child instanceof GtkLabel ? (child.label ?? "") : "none",
+    String(f.sensitive),
+    f.name ?? "",
+    f.label ?? "unset",
+    g_type_name_from_instance(f),
+  ].join(" ");
 }
 
 class Square extends GtkWidget {
@@ -199,6 +227,7 @@ function main(): void {
   const greeter = new Greeter("ada");
   sub_emit(greeter, "clicked");
   sub_log("greeter " + g_type_name_from_instance(greeter));
+  sub_log(framed());
 
   const square = new Square({});
   const width = local<CNumber<"int">>();

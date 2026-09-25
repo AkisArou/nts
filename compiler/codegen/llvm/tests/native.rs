@@ -3003,13 +3003,18 @@ int thing_record(struct _Thing *t) { return t->record; }
             assert_eq!(output, expect("211073", provider), "{provider:?}");
         }
     }
+    // A props object passed through -- GJS's `super(props)` -- is read by its
+    // type rather than by how it was written: each property the type declares,
+    // in that order, set where it was given. label (1), then width (2, then its
+    // value 1), and no height: 121, where the literal above wrote 211.
     let bag = source.replace("new Thing({ width: next(), label, })", "new Thing(({ width: next(), label } as ThingProps))");
-    let Some((_, prepared)) = prepare("construct-bag", &bag) else { return; };
-    assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("not written as an object literal")),
-        "a props bag that is not a literal was accepted: {:?}",
-        prepared.diagnostics
-    );
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((_, outputs)) = run_on_both_backends("construct-bag", &bag, provider, library, &caller) else { return; };
+        for output in outputs {
+            assert_eq!(output, expect("121073", provider), "a props object passed through, {provider:?}");
+        }
+    }
 }
 
 /// C behind the `@ntsDefault` test: each answer spells what arrived.
