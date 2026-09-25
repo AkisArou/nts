@@ -179,21 +179,24 @@ NtsString *nts_string_of_nsstring(const void *object) {
   }
   CFStringRef string = (CFStringRef)object;
   CFIndex length = CFStringGetLength(string);
-  const char *bytes = CFStringGetCStringPtr(string, kCFStringEncodingASCII);
-  if (bytes) {
-    NtsString *out = nts_str_raw((uint32_t)length, 0);
-    memcpy(NTS_ELEMENTS(out, unsigned char), bytes, (size_t)length);
-    return out;
-  }
   /* A short string -- most of them, and every tagged-pointer one, which has
    * no storage to point at -- copied out as ASCII in one call, which fails
-   * for anything that is not. */
+   * for anything that is not. Tried before asking for the storage, which a
+   * tagged string never has: that call would be a message answered with
+   * NULL every time. */
   if (length < 64) {
     char ascii[64];
     if (CFStringGetCString(string, ascii, sizeof ascii,
                            kCFStringEncodingASCII)) {
       NtsString *out = nts_str_raw((uint32_t)length, 0);
       memcpy(NTS_ELEMENTS(out, unsigned char), ascii, (size_t)length);
+      return out;
+    }
+  } else {
+    const char *bytes = CFStringGetCStringPtr(string, kCFStringEncodingASCII);
+    if (bytes) {
+      NtsString *out = nts_str_raw((uint32_t)length, 0);
+      memcpy(NTS_ELEMENTS(out, unsigned char), bytes, (size_t)length);
       return out;
     }
   }
