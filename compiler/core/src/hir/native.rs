@@ -418,6 +418,12 @@ pub enum Role {
     /// (+1, so the program's count releases it after), each an object as it
     /// is or, for a `string[]`, an `NSString` made of each string.
     NSArray(Bridged),
+    /// A `Map<string, V>` where an Objective-C message takes an
+    /// `NSDictionary *`, as Swift's `[String: V]` crosses: a dictionary made
+    /// of the entries for the call (+1, released after), each key an
+    /// `NSString` and each value the object its box holds, or an `NSString`
+    /// made of a string.
+    NSDictionary(Bridged),
     /// Where C writes the call's declared result, returning a status instead
     /// (`@ntsHresult`): a slot of the compiler's, read after the call once the
     /// status says it succeeded, as `written` says. Hidden from TypeScript.
@@ -570,6 +576,7 @@ impl Function {
                 Role::Plain
                 | Role::NSString
                 | Role::NSArray(_)
+                | Role::NSDictionary(_)
                 | Role::String(_)
                 | Role::Closure { .. }
                 | Role::Block { .. }
@@ -2776,7 +2783,9 @@ fn c_parameter(
             .map(|(at, (key, ty))| {
                 // A property crosses as a positional parameter of its type
                 // would: an array Swift bridges, a string, or its C type.
-                let (ty, inner) = if let Some(element) = bridged_array(snapshot, *ty) {
+                let (ty, inner) = if let Some(value) = bridged_dictionary(snapshot, *ty) {
+                    (Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))), Role::NSDictionary(value))
+                } else if let Some(element) = bridged_array(snapshot, *ty) {
                     (Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))), Role::NSArray(element))
                 } else if let Some(encoding) = string_encoding(snapshot, *ty) {
                     (encoding.c_type(), Role::String(encoding))
@@ -2790,6 +2799,9 @@ fn c_parameter(
             })
             .collect::<Result<Vec<_>, String>>()
             .map(Some);
+    }
+    if let Some(value) = bridged_dictionary(snapshot, parameter.ty) {
+        return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))), Role::NSDictionary(value))]));
     }
     if let Some(element) = bridged_array(snapshot, parameter.ty) {
         return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))), Role::NSArray(element))]));
@@ -2812,6 +2824,37 @@ fn c_parameter(
     }
 }
 
+
+/// A dictionary Swift bridges as `[String: V]` (`Role::NSDictionary`): a
+/// `Map<string, V>` whose values are objects of a class a binding declares,
+/// or strings. `null` is a nil dictionary.
+fn bridged_dictionary(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let ty = match kind(ty)? {
+        TypeKind::Union(members) => match members.as_slice() {
+            [a, b] if matches!(kind(*a), Some(TypeKind::Null)) => *b,
+            [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
+            _ => return None,
+        },
+        _ => ty,
+    };
+    let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
+    if !matches!(snapshot.symbols.get(symbol.0 as usize)?.name.as_str(), "Map" | "ReadonlyMap") {
+        return None;
+    }
+    let arguments = snapshot.type_arguments.get(&ty)?;
+    let (key, value) = (*arguments.first()?, *arguments.get(1)?);
+    if !matches!(kind(key)?, TypeKind::String) {
+        return None;
+    }
+    if matches!(kind(value)?, TypeKind::String) {
+        return Some(Bridged::String);
+    }
+    match pointer(snapshot, value)? {
+        Pointee::Opaque(handle) if handle.family == Family::Objc => Some(Bridged::Object(Pointee::Opaque(handle))),
+        _ => None,
+    }
+}
 
 /// An array Swift bridges as `[T]` (`Role::NSArray`, `Function::returns_array`):
 /// a `T[]` of a class a binding declares, or a `string[]`. Only a message

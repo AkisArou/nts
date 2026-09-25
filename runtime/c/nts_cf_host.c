@@ -273,6 +273,56 @@ void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array) {
   }
 }
 
+/* The object a map holds in a box of its family -- a header, then the handle,
+ * `handle_box`'s layout -- or NULL for a value that is not one. */
+static const void *nts_boxed_handle(NtsValue value) {
+  const NtsHeader *box = nts_value_reference(value);
+  if (!box) {
+    return NULL;
+  }
+  const void *handle;
+  memcpy(&handle, (const unsigned char *)box + sizeof(NtsHeader), sizeof handle);
+  return handle;
+}
+
+static void *nts_nsdictionary_of(const NtsMap *map, bool strings) {
+  if (!map) {
+    return NULL;
+  }
+  CFMutableDictionaryRef made = CFDictionaryCreateMutable(
+      NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+  for (double at = nts_map_next(map, 0); at >= 0; at = nts_map_next(map, at + 1)) {
+    /* Both come back owned, and are given back once read. */
+    NtsValue key = nts_map_key_at(map, at);
+    NtsValue value = nts_map_value_at(map, at);
+    void *name = nts_nsstring_of((const NtsString *)nts_value_reference(key));
+    if (strings) {
+      void *text = nts_nsstring_of((const NtsString *)nts_value_reference(value));
+      if (text) {
+        CFDictionarySetValue(made, name, text);
+        CFRelease(text);
+      }
+    } else {
+      const void *object = nts_boxed_handle(value);
+      if (object) {
+        CFDictionarySetValue(made, name, object);
+      }
+    }
+    CFRelease(name);
+    nts_value_release(key);
+    nts_value_release(value);
+  }
+  return (void *)made;
+}
+
+void *nts_nsdictionary_of_objects(const NtsMap *map) {
+  return nts_nsdictionary_of(map, false);
+}
+
+void *nts_nsdictionary_of_strings(const NtsMap *map) {
+  return nts_nsdictionary_of(map, true);
+}
+
 /* A registered class with fields: where its ivar is, and what makes the
  * object that goes in it. Few enough that a scan beats anything cleverer; the
  * last one found is remembered, since a program reads one class's fields in a

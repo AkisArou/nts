@@ -1244,6 +1244,11 @@ impl<'a> Model<'a> {
                 // Swift's `[T]?` where the header says `_Nullable`.
                 return self.array_element(pointee).map(|element| or_null(format!("{element}[]")));
             }
+            // Swift's `[String: V]` a message takes: a map of string keys, which
+            // the call copies into an `NSDictionary`. Not yet one it answers.
+            if base == "NSDictionary" && position == Position::Parameter {
+                return self.dictionary(pointee).map(&or_null);
+            }
             if position != Position::Block
                 && matches!(base, "NSMutableArray" | "NSDictionary" | "NSMutableDictionary" | "NSSet" | "NSMutableSet" | "NSOrderedSet")
             {
@@ -1344,6 +1349,37 @@ impl<'a> Model<'a> {
     /// What an `NSArray<T *>` holds, as the element of a TypeScript array:
     /// a class's objects, strings for `NSString`, and `NSObject` where the
     /// header says only `id`.
+    /// `NSDictionary<NSString *, V> *` as `Map<string, V>`: keys that are
+    /// strings, through any typedef (`NSAttributedStringKey`), and a value
+    /// that is an object -- `id` is `NSObject` -- or a string.
+    fn dictionary(&mut self, pointee: &str) -> Spelled {
+        let arguments = pointee.split_once('<').map(|(_, rest)| rest.trim_end().trim_end_matches('>').trim());
+        let Some((key, value)) = arguments.and_then(|arguments| arguments.split_once(',')) else {
+            return Err("a dictionary whose key type the header does not name".to_owned());
+        };
+        let key = key.trim().trim_end_matches('*').trim();
+        let key_is_string = key == "NSString"
+            || self.headers.typedefs.get(key).is_some_and(|aliased| aliased.trim().trim_end_matches('*').trim() == "NSString");
+        if !key_is_string {
+            return Err(format!("a dictionary keyed by `{key}`, which a map of strings cannot be"));
+        }
+        let value = value.trim().trim_start_matches("__kindof ").trim();
+        let value = if value == "id" || value.starts_with("id<") {
+            self.object("NSObject")
+        } else {
+            let class = value.trim_end_matches('*').trim();
+            let class = class.split_once('<').map_or(class, |(class, _)| class.trim());
+            if class == "NSString" {
+                "string".to_owned()
+            } else if self.headers.supers.contains_key(class) {
+                self.object(class)
+            } else {
+                return Err(format!("a dictionary of `{value}`"));
+            }
+        };
+        Ok(format!("Map<string, {value}>"))
+    }
+
     fn array_element(&mut self, pointee: &str) -> Spelled {
         let argument = pointee.split_once('<').map_or("id", |(_, rest)| rest.trim_end_matches('>').trim());
         let argument = argument.trim_start_matches("__kindof ").trim();
@@ -1959,6 +1995,8 @@ struct Opaque;
 @end
 @interface NSError : Root
 @end
+@interface NSDictionary<KeyType, ObjectType> : Root
+@end
 typedef NSString *ShapeKind;
 @protocol ShapeDelegate;
 @interface Root (Continued)
@@ -1985,6 +2023,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)linkFrom:(Shape *)start to:(Shape *)middle to:(Shape *)end;
 - (void)countInto:(NSUInteger *)count;
 - (BOOL)holdsAt:(NSString *)name inside:(BOOL *)inside;
+- (void)placeShapes:(NSDictionary<ShapeKind, Shape *> *)shapes;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
@@ -2052,6 +2091,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)linkFrom:to:to:", "swift.method", "link(from:to:to:)", &["Shape", "link(from:to:to:)"], ""),
             symbol("c:objc(cs)Shape(im)countInto:", "swift.method", "count(into:)", &["Shape", "count(into:)"], ""),
             symbol("c:objc(cs)Shape(im)holdsAt:inside:", "swift.method", "holds(at:inside:)", &["Shape", "holds(at:inside:)"], ""),
+            symbol("c:objc(cs)Shape(im)placeShapes:", "swift.method", "place(_:)", &["Shape", "place(_:)"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2172,6 +2212,8 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector countInto: */\n    count(labels: { into: Ptr<UInt> }): void;",
             // And `BOOL *`, Swift's `UnsafeMutablePointer<ObjCBool>`.
             "    /** @ntsSelector holdsAt:inside: */\n    holds(labels: { at: string; inside: Ptr<ObjCBool> }): boolean;",
+            // Swift's `[ShapeKind: Shape]`: string keys through their typedef.
+            "    /** @ntsSelector placeShapes: */\n    place(shapes: Map<string, Shape>): void;",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",

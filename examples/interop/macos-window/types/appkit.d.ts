@@ -1094,7 +1094,7 @@ declare module "objc:AppKit" {
     //   -initWithBytesNoCopy:length:encoding:deallocator:: a `void *`
     //   -initWithContentsOfURL:usedEncoding:error:: a `NSStringEncoding *`
     //   -initWithContentsOfFile:usedEncoding:error:: a `NSStringEncoding *`
-    //   +stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:: a collection, `NSDictionary`, which crosses as an object when it is bound
+    //   +stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:: a `NSString * _Nullable *`
     //   -propertyListFromStringsFileFormat: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -getCharacters:: a `unichar *`
     //   -completePathIntoString:caseSensitive:matchesIntoArray:filterTypes:: a `NSString * _Nullable *`
@@ -1507,8 +1507,14 @@ declare module "objc:AppKit" {
     registerForDraggedTypes(newTypes: string[]): void;
     /** @ntsSelector unregisterDraggedTypes */
     unregisterDraggedTypes(): void;
+    /** @ntsSelector enterFullScreenMode:withOptions: */
+    enterFullScreenMode(screen: NSScreen, labels: { withOptions: Map<string, NSObject> | null }): boolean;
+    /** @ntsSelector exitFullScreenModeWithOptions: */
+    exitFullScreenMode(labels: { options: Map<string, NSObject> | null }): void;
     /** @ntsSelector showDefinitionForAttributedString:atPoint: */
     showDefinition(labels: { for: NSAttributedString | null; at: ByValue<CGPoint> }): void;
+    /** @ntsSelector showDefinitionForAttributedString:range:options:baselineOriginProvider: */
+    showDefinition(labels: { for: NSAttributedString | null; range: ByValue<NSRange>; options: Map<string, NSObject> | null }, originProvider: (arg0: ByValue<NSRange>) => ByValue<CGPoint>): void;
     /** @ntsSelector addGestureRecognizer: */
     addGestureRecognizer(gestureRecognizer: NSGestureRecognizer): void;
     /** @ntsSelector removeGestureRecognizer: */
@@ -1613,9 +1619,6 @@ declare module "objc:AppKit" {
     //   -scrollRect:by:: deprecated in macOS 10.14
     //   -addToolTipRect:owner:userData:: a `void *`
     //   -drawSheetBorderWithSize:: deprecated in macOS 10.14
-    //   -enterFullScreenMode:withOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
-    //   -exitFullScreenModeWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
-    //   -showDefinitionForAttributedString:range:options:baselineOriginProvider:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -addTrackingRect:owner:userData:assumeInside:: a `void *`
     //   -displayLinkWithTarget:selector:: introduced in macOS 14.0
     //   -dragFile:fromRect:slideBack:event:: deprecated in macOS 10.13
@@ -2255,6 +2258,8 @@ declare module "objc:AppKit" {
     registerServicesMenuSendTypes(sendTypes: string[], labels: { returnTypes: string[] }): void;
     /** @ntsSelector orderFrontStandardAboutPanel: */
     orderFrontStandardAboutPanel(sender: NSObject | null): void;
+    /** @ntsSelector orderFrontStandardAboutPanelWithOptions: */
+    orderFrontStandardAboutPanel(labels: { options: Map<string, NSObject> }): void;
     /** @ntsSelector disableRelaunchOnLogin */
     disableRelaunchOnLogin(): void;
     /** @ntsSelector enableRelaunchOnLogin */
@@ -2302,7 +2307,6 @@ declare module "objc:AppKit" {
     //   -beginModalSessionForWindow:: a `struct _NSModalSession *`
     //   -runModalSession:: a `struct _NSModalSession *`
     //   -endModalSession:: a `struct _NSModalSession *`
-    //   -orderFrontStandardAboutPanelWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -beginSheet:modalForWindow:modalDelegate:didEndSelector:contextInfo:: deprecated in macOS 10.10
     //   -endSheet:: deprecated in macOS 10.10
     //   -endSheet:returnCode:: deprecated in macOS 10.10

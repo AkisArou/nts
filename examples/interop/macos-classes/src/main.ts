@@ -257,6 +257,17 @@ function main(): void {
   const range = local<NSRange>();
   const font = attributed.attribute("NSFont", { at: 3, effectiveRange: range });
   report(`attributed ${font === null} ${range.location} ${range.length}`);
+  // Swift's `[NSAttributedString.Key: Any]`: a map, crossing as the
+  // `NSDictionary` the message takes.
+  const attributes = new Map<string, NSObject>();
+  attributes.set("nts.count", new NSNumber(7));
+  const styled = new NSAttributedString("hello", { attributes });
+  const count = styled.attribute("nts.count", { at: 1, effectiveRange: null });
+  const absent = styled.attribute("absent", { at: 1, effectiveRange: null });
+  report(`styled ${count !== null && count.isEqual(new NSNumber(7))} ${absent === null}`);
+  const named = new NSAttributedString("hello", { textAttributes: new Map([["nts.name", "ada"]]) });
+  const nameValue = named.attribute("nts.name", { at: 0, effectiveRange: null });
+  report(`named ${nameValue !== null && nameValue.isEqual(new NSString("ada"))}`);
   // Swift's `UnsafeMutablePointer<UInt>`, three of them: the numbers the
   // message writes, read back as `[0]`.
   const start = local<UInt>();

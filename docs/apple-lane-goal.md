@@ -699,7 +699,14 @@ correctness does not depend on arm64 running by luck.
        and the map's own death against an `NSMutableDictionary` under ARC, on
        both backends, and the NoGc control sees exactly the two lifetime
        lines differ.
-     - Next: `NSDictionary` crossing a message as this map.
+     - A message's `NSDictionary<NSString *, V>` parameter is this map:
+       bind-objc writes `Map<string, V>` (keys through their typedef, so
+       `NSAttributedStringKey` is `string`), and the call copies it into an
+       `NSDictionary` made by the CF host (`nts_nsdictionary_of_objects` /
+       `_of_strings`, +1). 46 AppKit members bind this way.
+       `NSAttributedString(string:attributes:)` reads back an `NSNumber` and
+       a string value, against clang, on both backends. A dictionary a
+       message returns is not yet a map.
    - **An application, end to end (2026-09-25).** `macos-notes` is a notes
      app as Swift writes one: a window with a text field, an Add button and
      an `NSTableView`, and a controller that is the button's target and the

@@ -42292,6 +42292,24 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.runtime_call(helper, vec![array], made.representation(), origin.clone()))
     }
 
+    /// A `Map<string, V>` as the `NSDictionary` an Objective-C message takes,
+    /// as Swift's `[String: V]` crosses: made for the call by the CF host from
+    /// the map's entries -- each key an `NSString`, each value the object its
+    /// box holds or an `NSString` made of a string -- and the caller's (+1),
+    /// so the program's count releases it after the send.
+    fn ns_dictionary_of(&mut self, id: NodeId, map: ValueId, value: &super::native::Bridged, origin: &Origin) -> Result<ValueId, Diagnostic> {
+        use super::native::{Bridged, Handle, Pointee, Type};
+        if !matches!(self.values[map.0 as usize].ty, HirType::Managed(ManagedType::Map(_, _))) {
+            return Err(self.unsupported(id, "an `NSDictionary` argument that is not a map"));
+        }
+        let helper = match value {
+            Bridged::Object(_) => "nts_nsdictionary_of_objects",
+            Bridged::String => "nts_nsdictionary_of_strings",
+        };
+        let made = Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary")));
+        Ok(self.runtime_call(helper, vec![map], made.representation(), origin.clone()))
+    }
+
     /// The `NSArray` a message returned, as the TypeScript array the program
     /// reads (Swift's `[T]`): an array of `count` elements, filled by the CF
     /// host in one pass -- the objects, each counted by the array, or a string
@@ -42357,6 +42375,7 @@ impl<'a> FuncBuilder<'a> {
         Ok(match inner {
             Role::NSString => self.ns_string_of(value, &origin),
             Role::NSArray(element) => self.ns_array_of(id, value, element, &origin)?,
+            Role::NSDictionary(value_kind) => self.ns_dictionary_of(id, value, value_kind, &origin)?,
             Role::Block { bridge, signature } => self
                 .lend_block(id, Some(value), (bridge.clone(), signature.clone()), slot.representation(), lent, &origin)?
                 .ok_or_else(|| self.unsupported(id, "a block label with no function"))?,
@@ -42947,6 +42966,10 @@ impl<'a> FuncBuilder<'a> {
                 Role::NSArray(element) => {
                     let Some(array) = argument else { continue };
                     c_args.push(self.ns_array_of(id, array, &element, &origin)?);
+                }
+                Role::NSDictionary(value) => {
+                    let Some(map) = argument else { continue };
+                    c_args.push(self.ns_dictionary_of(id, map, &value, &origin)?);
                 }
                 Role::Result { .. } | Role::Outer | Role::Inner => {
                     c_args.push(self.hresult_slot(&role, target.parameters[at].representation(), &mut lent, &origin));
@@ -43566,8 +43589,10 @@ impl<'a> FuncBuilder<'a> {
     fn refuse_unbridged(&self, call: NodeId, native: &super::native::Function) -> Result<(), Diagnostic> {
         let bridged = native.returns_array.is_some()
             || native.roles.iter().any(|role| match role {
-                super::native::Role::NSArray(_) => true,
-                super::native::Role::Label { inner, .. } => matches!(**inner, super::native::Role::NSArray(_)),
+                super::native::Role::NSArray(_) | super::native::Role::NSDictionary(_) => true,
+                super::native::Role::Label { inner, .. } => {
+                    matches!(**inner, super::native::Role::NSArray(_) | super::native::Role::NSDictionary(_))
+                }
                 _ => false,
             });
         if native.send.is_none() && bridged {
@@ -44028,6 +44053,7 @@ impl<'a> FuncBuilder<'a> {
                     | super::native::Role::Label { .. }
                     | super::native::Role::NSString
                     | super::native::Role::NSArray(_)
+                    | super::native::Role::NSDictionary(_)
                     | super::native::Role::ErrorSlot { .. }
             )
         }) {

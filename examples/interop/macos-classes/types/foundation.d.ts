@@ -120,6 +120,17 @@ declare module "objc:Foundation" {
     /** @ntsSelector initWithString: */
     constructor(string: string);
     /**
+     * Swift's `init(string:attributes:)`, whose `[NSAttributedString.Key:
+     * Any]?` is a map of string keys.
+     * @ntsSelector initWithString:attributes:
+     */
+    constructor(string: string, labels: { attributes: Map<string, NSObject> | null });
+    /**
+     * The same message, its values strings: each crosses as an `NSString`.
+     * @ntsSelector initWithString:attributes:
+     */
+    constructor(string: string, labels: { textAttributes: Map<string, string> });
+    /**
      * Swift's `attribute(_:at:effectiveRange:)`, whose range is an
      * `UnsafeMutablePointer<NSRange>` the method writes: the address a
      * program passes, `local<NSRange>()`.

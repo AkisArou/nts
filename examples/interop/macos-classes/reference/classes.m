@@ -188,6 +188,12 @@ int main(void) {
     printf("attributed %s %lu %lu\n", font == nil ? "true" : "false", (unsigned long)range.location, (unsigned long)range.length);
     NSUInteger start = 0, end = 0, contentsEnd = 0;
     [@"ab\ncde\nf" getLineStart:&start end:&end contentsEnd:&contentsEnd forRange:NSMakeRange(4, 0)];
+    NSAttributedString *styled = [[NSAttributedString alloc] initWithString:@"hello" attributes:@{@"nts.count" : @7}];
+    id count = [styled attribute:@"nts.count" atIndex:1 effectiveRange:NULL];
+    id absent = [styled attribute:@"absent" atIndex:1 effectiveRange:NULL];
+    printf("styled %s %s\n", [count isEqual:@7] ? "true" : "false", absent == nil ? "true" : "false");
+    NSAttributedString *named = [[NSAttributedString alloc] initWithString:@"hello" attributes:@{@"nts.name" : @"ada"}];
+    printf("named %s\n", [[named attribute:@"nts.name" atIndex:0 effectiveRange:NULL] isEqual:@"ada"] ? "true" : "false");
     printf("line %lu %lu %lu\n", (unsigned long)start, (unsigned long)end, (unsigned long)contentsEnd);
     BOOL directory = NO;
     BOOL exists = [NSFileManager.defaultManager fileExistsAtPath:@"/System" isDirectory:&directory];
