@@ -1,7 +1,16 @@
 // tasks/src/main.ts, line for line in GJS: the task list the benchmark runs on
 // both sides, whose time is the program's own filter. It prints the same log.
 imports.gi.versions.Gtk = '4.0';
-const { Gio, GLib, Gtk } = imports.gi;
+const { Gio, GLib, GObject, Gtk } = imports.gi;
+
+const Task = GObject.registerClass(class Task extends GObject.Object {
+    _init() {
+        super._init();
+        this.title = '';
+        this.priority = 0;
+        this.words = [];
+    }
+});
 
 const VERBS = ['buy', 'call', 'write', 'fix', 'read', 'plan', 'clean', 'send', 'book', 'review'];
 const NOUNS = ['milk', 'report', 'car', 'letter', 'garden', 'budget', 'tickets', 'slides', 'invoice', 'roof', 'notes', 'bike'];
@@ -43,19 +52,18 @@ function open(application) {
     const made = (GLib.get_monotonic_time() - start) / 1000;
     print(`tasks ${tasks.length}`);
     print(`first ${tasks[0].priority} ${tasks[0].title}`);
-    const byTitle = new Map();
-    const titles = new Gtk.StringList({ strings: null });
-    for (const task of tasks) {
-        byTitle.set(task.title, task);
-        titles.append(task.title);
+    const store = new Gio.ListStore({ item_type: Task.$gtype });
+    for (const made of tasks) {
+        const task = new Task();
+        task.title = made.title;
+        task.priority = made.priority;
+        task.words = made.words;
+        store.append(task);
     }
 
     let query = [];
-    const filter = Gtk.CustomFilter.new(item => {
-        const task = byTitle.get(item.string);
-        return task !== undefined && matches(task, query);
-    });
-    const shown = new Gtk.FilterListModel({ model: titles, filter });
+    const filter = Gtk.CustomFilter.new(item => item instanceof Task && matches(item, query));
+    const shown = new Gtk.FilterListModel({ model: store, filter });
 
     const factory = new Gtk.SignalListItemFactory({});
     let bound = 0;
@@ -63,8 +71,10 @@ function open(application) {
         item.child = new Gtk.Label({ xalign: 0 });
     });
     factory.connect('bind', (_factory, item) => {
-        item.child.label = item.item.string;
-        bound++;
+        if (item.item instanceof Task) {
+            item.child.label = item.item.title;
+            bound++;
+        }
     });
 
     const entry = new Gtk.Entry({ placeholder_text: 'Search' });

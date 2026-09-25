@@ -919,9 +919,17 @@ Writing it found five compiler defects, all fixed:
 - the program's own GObject classes could be neither `instanceof`-tested
   nor named by `$gtype`.
 
-**Next in M4:** the task list as GJS would write it now that nts can: a
-store of `Task` objects rather than titles and a `Map`. Then the table re-run
-on a quiet machine.
+The task list is now written as GJS writes one: each task a `Task extends
+GObject` in a `GListStore` made with `item_type: Task.$gtype`, and a filter
+that narrows with `instanceof Task` and reads the task's own fields, where
+it first held titles and looked each one up in a `Map`. The two nts builds
+were timed interleaved at a load average of 38, and their ranges overlap
+(118-282 ms against 186-337 for typing). No difference between them is
+shown, and no number from that run is one to quote.
+
+**Next in M4:** the table re-run on a quiet machine, and the reference
+counting cost in the filter's profile (`nts_retain` and the cycle collector)
+checked against a plain build there.
 
 ## Rules this lane keeps
 

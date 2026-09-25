@@ -1,8 +1,10 @@
 // A task list, written as GJS would write it, whose time is its own code: ten
-// thousand tasks made and sorted in the program, shown through a list view
-// over a `GtkStringList`, and a search entry whose every change re-runs a
-// `GtkCustomFilter` -- a TypeScript closure GTK calls once per task -- that
-// matches the query against each title. It types a sequence of queries as a
+// thousand tasks made and sorted in the program, each a `Task` -- a class the
+// program writes over `GObject`, holding its own fields -- in a `GListStore`
+// made with `item_type: Task.$gtype`, shown through a list view, and a search
+// entry whose every change re-runs a `GtkCustomFilter`: a TypeScript closure
+// GTK calls once per task, which narrows the item with `instanceof Task` and
+// matches the query against its words. It types a sequence of queries as a
 // person would, logs how many tasks each one leaves, and quits.
 //
 // The log:
@@ -25,13 +27,13 @@ import {
   GtkListView,
   GtkSignalListItemFactory,
   GtkSingleSelection,
-  GtkStringList,
   FilterChange,
   Orientation,
   gtk_custom_filter_new,
 } from "c:Gtk-4.0";
-import { asGtkLabel, asGtkListItem, asGtkStringObject } from "../types/gir/Gtk-4.0.values.ts";
-import { ApplicationFlags } from "c:Gio-2.0";
+import { asGtkLabel, asGtkListItem } from "../types/gir/Gtk-4.0.values.ts";
+import { ApplicationFlags, GListStore } from "c:Gio-2.0";
+import { GObject } from "c:GObject-2.0";
 import { g_timeout_add_full } from "c:GLib-2.0";
 import { tasks_log, tasks_now } from "c:tasks";
 
@@ -39,16 +41,22 @@ const VERBS = ["buy", "call", "write", "fix", "read", "plan", "clean", "send", "
 const NOUNS = ["milk", "report", "car", "letter", "garden", "budget", "tickets", "slides", "invoice", "roof", "notes", "bike"];
 const COUNT = 10000;
 
-interface Task {
+interface Made {
   title: string;
   priority: number;
   words: string[];
 }
 
+class Task extends GObject {
+  title = "";
+  priority = 0;
+  words: string[] = [];
+}
+
 // Deterministic, so both programs make the same tasks: a linear congruential
 // generator, as small as it can be and still spread.
-function makeTasks(): Task[] {
-  const tasks: Task[] = [];
+function makeTasks(): Made[] {
+  const tasks: Made[] = [];
   let seed = 7;
   for (let i = 0; i < COUNT; i++) {
     seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -84,21 +92,18 @@ function open(application: GtkApplication): void {
   const made = tasks_now() - start;
   tasks_log("tasks " + String(tasks.length));
   tasks_log("first " + String(tasks[0].priority) + " " + tasks[0].title);
-  const byTitle = new Map<string, Task>();
-  const titles = new GtkStringList({ strings: null });
-  for (const task of tasks) {
-    byTitle.set(task.title, task);
-    titles.append(task.title);
+  const store = new GListStore({ item_type: Task.$gtype });
+  for (const made of tasks) {
+    const task = new Task({});
+    task.title = made.title;
+    task.priority = made.priority;
+    task.words = made.words;
+    store.append(task);
   }
 
   let query: string[] = [];
-  const filter = gtk_custom_filter_new((item) => {
-    const row = asGtkStringObject(item);
-    if (row === null) return false;
-    const task = byTitle.get(row.string);
-    return task !== undefined && matches(task, query);
-  });
-  const shown = new GtkFilterListModel({ model: titles, filter });
+  const filter = gtk_custom_filter_new((item) => item instanceof Task && matches(item, query));
+  const shown = new GtkFilterListModel({ model: store, filter });
 
   const factory = new GtkSignalListItemFactory({});
   let bound = 0;
@@ -110,9 +115,9 @@ function open(application: GtkApplication): void {
     const item = asGtkListItem(object);
     if (item === null) return;
     const label = asGtkLabel(item.child);
-    const row = asGtkStringObject(item.item);
-    if (label !== null && row !== null) {
-      label.label = row.string;
+    const task = item.item;
+    if (label !== null && task instanceof Task) {
+      label.label = task.title;
       bound++;
     }
   });
