@@ -7086,8 +7086,9 @@ NtsView *nts_view_slice(const NtsView *view, double from, double to) {
 NtsView *nts_view_from_bytes(const void *bytes, double length) {
   size_t count = (size_t)nts_buffer_index(length);
   if (bytes == NULL && count != 0) {
-    fprintf(stderr, "nts: bytesFrom was given NULL and a length of %zu; "
-                    "a length with no bytes behind it is not an empty array\n",
+    fprintf(stderr,
+            "nts: bytesFrom was given NULL and a length of %zu; "
+            "a length with no bytes behind it is not an empty array\n",
             count);
     abort();
   }
@@ -7098,8 +7099,8 @@ NtsView *nts_view_from_bytes(const void *bytes, double length) {
   if (count) {
     memcpy(copy->bytes, bytes, count);
   }
-  NtsView *out = nts_view_new(copy, 0.0, (double)count, (double)NTS_ELEMENT_U8,
-                              false);
+  NtsView *out =
+      nts_view_new(copy, 0.0, (double)count, (double)NTS_ELEMENT_U8, false);
   /* `nts_view_new` retained it, and this function is the only other owner. */
   nts_release((NtsHeader *)copy);
   return out;
