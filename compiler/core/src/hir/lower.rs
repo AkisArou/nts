@@ -41607,12 +41607,23 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
-    fn label_value(&self, id: NodeId, placeholder: Option<ValueId>, key: &str) -> Result<ValueId, Diagnostic> {
-        placeholder
-            .and_then(|placeholder| self.labels_lowered.get(&placeholder))
-            .and_then(|values| values.iter().find(|(named, _)| named == key))
-            .map(|(_, value)| *value)
-            .ok_or_else(|| self.unsupported(id, &format!("a call missing its `{key}` label")))
+    /// The value a call gave the label `key`: the literal's property, or a
+    /// field of labels passed as an object -- `self.beginSheet(labels, ...)`,
+    /// which is how a wrapper passes on the labels it was given.
+    fn label_value(&mut self, id: NodeId, placeholder: Option<ValueId>, key: &str) -> Result<ValueId, Diagnostic> {
+        let missing = |this: &Self| this.unsupported(id, &format!("a call missing its `{key}` label"));
+        let Some(argument) = placeholder else { return Err(missing(self)) };
+        if let Some(values) = self.labels_lowered.get(&argument) {
+            return values.iter().find(|(named, _)| named == key).map(|(_, value)| *value).ok_or_else(|| missing(self));
+        }
+        let HirType::Managed(ManagedType::Object(type_id)) = self.values[argument.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "labels that are neither an object literal nor an object"));
+        };
+        let layout = self.layout_of(id, type_id)?;
+        let field = layout.index_of(key).ok_or_else(|| missing(self))?;
+        let ty = layout.fields[field as usize].ty.clone();
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::FieldGet { object: argument, field }, ty, origin))
     }
 
     /// A `string` as the `NSString` an Objective-C message takes, as Swift's
@@ -41983,26 +41994,25 @@ impl<'a> FuncBuilder<'a> {
             _ => None,
         };
         if let Callee::Native(target) = callee {
-            self.mark_labels(target, arguments, receiver.is_some())?;
+            self.mark_labels(target, arguments, receiver.is_some());
         }
         let args = self.lower_written_arguments(id, callee, arguments, receiver.is_some(), tail.as_ref())?;
         let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
         self.native_arguments(id, &target.clone(), args, arguments.len(), receiver)
     }
 
-    /// Mark each argument a native call passes as labels, which must be an
-    /// object literal: the call's own spelling of its labels, as Swift's are,
-    /// and the one form whose properties can be passed without building it.
-    fn mark_labels(&mut self, target: &super::native::Function, arguments: &[NodeId], method: bool) -> Result<(), Diagnostic> {
+    /// Mark each argument a native call passes as an object literal of
+    /// labels -- the call's own spelling of them, as Swift's are -- whose
+    /// properties are passed without building it. Labels passed any other way
+    /// are an object like any other, and each is read from its field.
+    fn mark_labels(&mut self, target: &super::native::Function, arguments: &[NodeId], method: bool) {
         for (_, role, fed) in target.slots() {
             let (super::native::Role::Label { last: true, .. }, Some(ts)) = (role, fed) else { continue };
             let Some(&argument) = ts.checked_sub(usize::from(method)).and_then(|at| arguments.get(at)) else { continue };
-            if self.kind_of(argument) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
-                return Err(self.unsupported(argument, "labels passed as anything but an object literal at the call, as in `{ display: true }`"));
+            if self.kind_of(argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+                self.labels_pending.insert(argument);
             }
-            self.labels_pending.insert(argument);
         }
-        Ok(())
     }
 
     /// A labels literal, a property at a time in the order it is written --

@@ -177,6 +177,11 @@ function main(): void {
   const always = new NSPredicate({ format: "TRUEPREDICATE", argumentArray: null });
   const three = new NSPredicate({ format: "SELF == %@", argumentArray: [new NSNumber(3)] });
   report(`predicates ${always.predicateFormat} ${three.predicateFormat}`);
+  // Labels held in a variable, as a wrapper passes on the ones it was given:
+  // each read from its field at the call.
+  const byDash = { separatedBy: "-" };
+  const split = (text: string, labels: { separatedBy: string }) => new NSString(text).components(labels);
+  report(`labelled ${split("x-y-z", byDash).length} ${new NSString("p-q").components(byDash).join("+")}`);
 
   report(`parsed ${parsed()}`);
   // `dealloc` gave the fields back: as many of the program's objects are

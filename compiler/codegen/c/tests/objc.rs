@@ -502,11 +502,15 @@ declare module "objc:Foundation" {
     assert!(send.contains(&format!(", {x}, {y})")), "x and y not in the selector's order:\n{body}");
 }
 
-/// Labels that are not an object literal at the call are refused by name: a
-/// literal is the one form whose properties can be passed without building it.
+/// Labels held in a variable -- as a wrapper passes on the ones it was
+/// given -- are an object like any other, and each label is its field, read
+/// at the call and passed in the selector's order.
 #[test]
-fn labels_that_are_not_a_literal_are_refused_by_name() {
-    let binding = r#"declare module "objc:Foundation" {
+fn labels_that_are_not_a_literal_are_read_from_their_fields() {
+    let binding = r#"/**
+ * @ntsFramework Foundation
+ */
+declare module "objc:Foundation" {
   import type { c_double } from "c:types";
   /** @ntsClass NSView */
   export class NSView {
@@ -517,16 +521,29 @@ fn labels_that_are_not_a_literal_are_refused_by_name() {
 "#;
     let source = "import { NSView } from \"objc:Foundation\";\n\
                   import type { c_double } from \"c:types\";\n\
-                  export function run(view: NSView): void {\n  const at = { x: 1 as c_double, y: 2 as c_double };\n  view.move(at);\n}\n";
+                  export function run(view: NSView, at: { y: c_double; x: c_double }): void {\n  view.move(at);\n}\n";
     let Some((_, prepared)) = prepare("labels-variable", binding, source) else {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("labels passed as anything but an object literal")),
-        "{:?}",
-        prepared.diagnostics
-    );
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    let body = text.split("void run(").nth(2).or_else(|| text.split("void run(").nth(1)).unwrap_or_default();
+    let send = body.lines().find(|line| line.contains("nts_objc_sel_setX_cy_c()")).unwrap_or_default();
+    assert!(!send.is_empty(), "no send:\n{body}");
+    // The two fields are read, and `x` -- declared second in the object's
+    // type -- is passed first, as the selector declares it.
+    let named = |field: &str| {
+        body.lines()
+            .find(|line| line.contains(&format!("->{field}")) || line.contains(&format!("->f_{field}")))
+            .and_then(|line| line.trim().split(' ').next())
+            .unwrap_or("?")
+            .to_owned()
+    };
+    let (x, y) = (named("x"), named("y"));
+    assert!(send.contains(&format!(", {x}, {y})")), "x and y not in the selector's order (x={x}, y={y}):\n{body}");
 }
 
 /// Swift's numbers: a binding says `Int`, `UInt` or `CGFloat`, a program

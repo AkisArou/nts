@@ -301,8 +301,10 @@ correctness does not depend on arm64 running by luck.
      property is its own C slot, in the order the type declares them. At the
      call the literal is never built: its properties are lowered in the order
      they are written, as JavaScript evaluates them, and passed in the
-     selector's order. Only a literal is accepted. It works for C functions
-     too.
+     selector's order. Labels passed any other way, such as a variable or a
+     wrapper's parameter, are an object, and each label is read from its
+     field at the call. That is how an `async` wrapper in a values module
+     passes on the labels it was given. It works for C functions too.
    - **S3a, numbers without casts, landed.** `objc:types` exports Swift's
      numbers (`Double`, `CGFloat`, `Int`, `UInt`, `Int32` and the rest,
      `TimeInterval`) as optional brands, `number & { readonly __c_double?:

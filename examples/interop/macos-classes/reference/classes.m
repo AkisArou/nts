@@ -118,6 +118,8 @@ int main(void) {
     printf("subpaths %s %s\n", missing == nil ? "true" : "false", [present containsObject:@"Versions"] ? "true" : "false");
     printf("predicates %s %s\n", [NSPredicate predicateWithFormat:@"TRUEPREDICATE" argumentArray:nil].predicateFormat.UTF8String,
            [NSPredicate predicateWithFormat:@"SELF == %@" argumentArray:@[ @3 ]].predicateFormat.UTF8String);
+    printf("labelled %lu %s\n", (unsigned long)[@"x-y-z" componentsSeparatedByString:@"-"].count,
+           [[@"p-q" componentsSeparatedByString:@"-"] componentsJoinedByString:@"+"].UTF8String);
     NSXMLParser *parser = [[NSXMLParser alloc] initWithData:[@"<a><b/><c><d/></c></a>" dataUsingEncoding:NSUTF8StringEncoding]];
     Elements *elements = [[Elements alloc] init];
     parser.delegate = elements;
