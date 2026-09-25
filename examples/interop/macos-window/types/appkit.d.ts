@@ -1095,7 +1095,7 @@ declare module "objc:AppKit" {
     //   -initWithContentsOfURL:usedEncoding:error:: a `NSStringEncoding *`
     //   -initWithContentsOfFile:usedEncoding:error:: a `NSStringEncoding *`
     //   +stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:: a `NSString * _Nullable *`
-    //   -propertyListFromStringsFileFormat: a collection, `NSDictionary`, which crosses as an object when it is bound
+    //   -propertyListFromStringsFileFormat: a dictionary whose key type the header does not name
     //   -getCharacters:: a `unichar *`
     //   -completePathIntoString:caseSensitive:matchesIntoArray:filterTypes:: a `NSString * _Nullable *`
     //   -stringByAddingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
@@ -1760,6 +1760,7 @@ declare module "objc:AppKit" {
     set minFullScreenContentSize(value: ByValue<CGSize>);
     get maxFullScreenContentSize(): ByValue<CGSize>;
     set maxFullScreenContentSize(value: ByValue<CGSize>);
+    get deviceDescription(): Map<string, NSObject>;
     get windowController(): NSWindowController | null;
     set windowController(value: NSWindowController | null);
     get sheets(): NSWindow[];
@@ -2093,7 +2094,6 @@ declare module "objc:AppKit" {
     self(): NSWindow;
     // Not bound, each for the reason given:
     //   @property cascadingReferenceFrame: introduced in macOS 15.0
-    //   @property deviceDescription: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   @property hasActiveWindowSharingSession: introduced in macOS 13.3
     //   @property flushWindowDisabled: deprecated in macOS 10.14
     //   @property autodisplay: deprecated in macOS 10.14
@@ -2336,6 +2336,8 @@ declare module "objc:AppKit" {
     get sharedSupportPath(): string | null;
     get builtInPlugInsPath(): string | null;
     get bundleIdentifier(): string | null;
+    get infoDictionary(): Map<string, NSObject> | null;
+    get localizedInfoDictionary(): Map<string, NSObject> | null;
     get principalClass(): ClassObject | null;
     get preferredLocalizations(): string[];
     get localizations(): string[];
@@ -2409,9 +2411,6 @@ declare module "objc:AppKit" {
     constructor();
     /** @ntsSelector self */
     self(): Bundle;
-    // Not bound, each for the reason given:
-    //   @property infoDictionary: a collection, `NSDictionary`, which crosses as an object when it is bound
-    //   @property localizedInfoDictionary: a collection, `NSDictionary`, which crosses as an object when it is bound
   }
 
   /** @ntsClass NSControl */

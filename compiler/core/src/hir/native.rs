@@ -59,6 +59,10 @@ pub struct Function {
     /// reads as a TypeScript array (Swift's `[T]`): the `result` is then the
     /// `NSArray`, which the call site copies into an array of its elements.
     pub returns_array: Option<Bridged>,
+    /// Set when an Objective-C message returns an `NSDictionary *` the
+    /// program reads as a `Map<string, V>`: the values' kind, and the call
+    /// site copies the entries into a map, as Swift's `[String: V]`.
+    pub returns_dictionary: Option<Bridged>,
     /// Set when the declaration is an Objective-C message (`@ntsSelector`)
     /// rather than a C symbol. `name` is then the TypeScript name, which no
     /// backend links against. The call is `objc_msgSend` cast to exactly this
@@ -1834,11 +1838,7 @@ impl Function {
         let result = records_checked(&name, &parameters, variadic.is_some(), returned.result)?;
         Ok(Self {
             name,
-            convention: if abi == Some("managed") {
-                Convention::Nts
-            } else {
-                Convention::C
-            },
+            convention: if abi == Some("managed") { Convention::Nts } else { Convention::C },
             retention: by_value_retention(retention_of(&roles), &parameters, &result),
             parameters,
             variadic,
@@ -1849,6 +1849,7 @@ impl Function {
             roles,
             returns_string: returned.string,
             returns_array: returned.array,
+            returns_dictionary: returned.dictionary,
             send: None,
             returns_owned: returned.owned,
             consumes,
@@ -2416,7 +2417,7 @@ fn hresult_result(
     shape: Hresult,
     (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>),
 ) -> Result<Returned, String> {
-    let status = Returned { result: Type::Scalar(Scalar::Int32), array: None, string: None, owned: false, program: None };
+    let status = Returned { result: Type::Scalar(Scalar::Int32), array: None, dictionary: None, string: None, owned: false, program: None };
     if shape == Hresult::Out {
         let fields = labels_of(snapshot, ty).ok_or_else(|| {
             format!("foreign function `{name}` is `@ntsHresult out` and its result is not an object type literal of required fields")
@@ -2503,6 +2504,8 @@ struct Returned {
     result: Type,
     /// An `NSArray` read back as a TypeScript array.
     array: Option<Bridged>,
+    /// An `NSDictionary` read back as a `Map<string, V>`.
+    dictionary: Option<Bridged>,
     /// A string, or a `NULL`-terminated array of them, copied at the call.
     string: Option<ReturnedString>,
     /// `Owned<T>`: the reference comes with the handle.
@@ -2526,10 +2529,23 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
     // NULL-terminated `char **` too, and is an `NSArray` only where the callee
     // turns out to be a message (`bridge_strings`).
     let bridged = if abi.is_none() { bridged_array(snapshot, ty).filter(|element| *element != Bridged::String) } else { None };
+    if abi.is_none()
+        && let Some(dictionary) = bridged_dictionary(snapshot, ty)
+    {
+        return Ok(Returned {
+            result: Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))),
+            array: None,
+            dictionary: Some(dictionary),
+            string: None,
+            owned: false,
+            program: None,
+        });
+    }
     if bridged.is_some() {
         return Ok(Returned {
             result: Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))),
             array: bridged,
+            dictionary: None,
             string: None,
             owned: false,
             program: None,
@@ -2544,6 +2560,7 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
     Ok(Returned {
         result,
         array: None,
+        dictionary: None,
         string: array.map(|nullable| ReturnedString { nullable, free: None, array: true }).or(string),
         owned: owned_result(snapshot, name, ty)?,
         // A `CBool`'s integer, read back as a boolean.

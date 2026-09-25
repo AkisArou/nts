@@ -194,6 +194,10 @@ int main(void) {
     printf("styled %s %s\n", [count isEqual:@7] ? "true" : "false", absent == nil ? "true" : "false");
     NSAttributedString *named = [[NSAttributedString alloc] initWithString:@"hello" attributes:@{@"nts.name" : @"ada"}];
     printf("named %s\n", [[named attribute:@"nts.name" atIndex:0 effectiveRange:NULL] isEqual:@"ada"] ? "true" : "false");
+    NSDictionary *read = [styled attributesAtIndex:1 effectiveRange:NULL];
+    printf("read %lu %s\n", (unsigned long)read.count, [read[@"nts.count"] isEqual:@7] ? "true" : "false");
+    NSDictionary<NSString *, NSString *> *environment = NSProcessInfo.processInfo.environment;
+    printf("environment %s %s\n", environment.count > 0 ? "true" : "false", environment[@"HOME"] ? "true" : "false");
     printf("line %lu %lu %lu\n", (unsigned long)start, (unsigned long)end, (unsigned long)contentsEnd);
     BOOL directory = NO;
     BOOL exists = [NSFileManager.defaultManager fileExistsAtPath:@"/System" isDirectory:&directory];

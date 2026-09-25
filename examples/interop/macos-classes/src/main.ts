@@ -268,6 +268,12 @@ function main(): void {
   const named = new NSAttributedString("hello", { textAttributes: new Map([["nts.name", "ada"]]) });
   const nameValue = named.attribute("nts.name", { at: 0, effectiveRange: null });
   report(`named ${nameValue !== null && nameValue.isEqual(new NSString("ada"))}`);
+  // And back: the `NSDictionary` a message answers, as a map.
+  const read = styled.attributes({ at: 1, effectiveRange: null });
+  const seven = read.get("nts.count");
+  report(`read ${read.size} ${seven !== undefined && seven.isEqual(new NSNumber(7))}`);
+  const environment = NSProcessInfo.processInfo.environment;
+  report(`environment ${environment.size > 0} ${environment.get("HOME") !== undefined}`);
   // Swift's `UnsafeMutablePointer<UInt>`, three of them: the numbers the
   // message writes, read back as `[0]`.
   const start = local<UInt>();

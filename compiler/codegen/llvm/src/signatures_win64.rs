@@ -165,6 +165,8 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_date_value", returns: "double", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_decode_uri", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_delay", returns: "double", params: &["double"], attributes: &[] },
+    Signature { name: "nts_dictionary_fill_from_nsdictionary", returns: "void", params: &["ptr", "ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_dictionary_fill_strings_from_nsdictionary", returns: "void", params: &["ptr", "ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_encode_uri", returns: "ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_enqueue_microtask", returns: "void", params: &["ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_enqueue_tick", returns: "void", params: &["ptr dead_on_return"], attributes: &[] },

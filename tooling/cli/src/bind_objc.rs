@@ -1244,9 +1244,9 @@ impl<'a> Model<'a> {
                 // Swift's `[T]?` where the header says `_Nullable`.
                 return self.array_element(pointee).map(|element| or_null(format!("{element}[]")));
             }
-            // Swift's `[String: V]` a message takes: a map of string keys, which
-            // the call copies into an `NSDictionary`. Not yet one it answers.
-            if base == "NSDictionary" && position == Position::Parameter {
+            // Swift's `[String: V]`: a map of string keys, copied into the
+            // `NSDictionary` a message takes and out of the one it answers.
+            if base == "NSDictionary" && position != Position::Block {
                 return self.dictionary(pointee).map(&or_null);
             }
             if position != Position::Block
@@ -2024,6 +2024,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)countInto:(NSUInteger *)count;
 - (BOOL)holdsAt:(NSString *)name inside:(BOOL *)inside;
 - (void)placeShapes:(NSDictionary<ShapeKind, Shape *> *)shapes;
+- (NSDictionary<NSString *, NSString *> *)labels;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
@@ -2092,6 +2093,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)countInto:", "swift.method", "count(into:)", &["Shape", "count(into:)"], ""),
             symbol("c:objc(cs)Shape(im)holdsAt:inside:", "swift.method", "holds(at:inside:)", &["Shape", "holds(at:inside:)"], ""),
             symbol("c:objc(cs)Shape(im)placeShapes:", "swift.method", "place(_:)", &["Shape", "place(_:)"], ""),
+            symbol("c:objc(cs)Shape(im)labels", "swift.method", "labels()", &["Shape", "labels()"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2214,6 +2216,7 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector holdsAt:inside: */\n    holds(labels: { at: string; inside: Ptr<ObjCBool> }): boolean;",
             // Swift's `[ShapeKind: Shape]`: string keys through their typedef.
             "    /** @ntsSelector placeShapes: */\n    place(shapes: Map<string, Shape>): void;",
+            "    /** @ntsSelector labels */\n    labels(): Map<string, string>;",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",

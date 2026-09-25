@@ -705,8 +705,14 @@ correctness does not depend on arm64 running by luck.
        `NSDictionary` made by the CF host (`nts_nsdictionary_of_objects` /
        `_of_strings`, +1). 46 AppKit members bind this way.
        `NSAttributedString(string:attributes:)` reads back an `NSNumber` and
-       a string value, against clang, on both backends. A dictionary a
-       message returns is not yet a map.
+       a string value, against clang, on both backends.
+     - A dictionary a message or a property answers is a map too. The CF
+       host fills a keys array and a values array in one pass
+       (`nts_dictionary_fill_from_nsdictionary`), and the lowering sets each
+       pair into a new map, boxing each object as any map does; nil is `null`.
+       `attributes(at:effectiveRange:)` and `ProcessInfo`'s `environment`
+       (`[String: String]`) read back against clang. Collection skips across
+       AppKit fall to 34, nearly all `NSSet`.
    - **An application, end to end (2026-09-25).** `macos-notes` is a notes
      app as Swift writes one: a window with a text field, an Add button and
      an `NSTableView`, and a controller that is the button's target and the

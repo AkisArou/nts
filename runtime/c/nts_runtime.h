@@ -1742,7 +1742,11 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length);
  * - `nts_nsdictionary_of_objects` / `_of_strings`: an `NSDictionary` of a
  *   string-keyed map's entries, each key an `NSString` and each value the
  *   object its box holds, or an `NSString` made of each string; the caller's
- *   (+1). NULL for NULL. */
+ *   (+1). NULL for NULL.
+ * - `nts_dictionary_fill_from_nsdictionary` / `_strings_`: `keys` and
+ *   `values`, each made `CFDictionaryGetCount` long by the caller, filled with
+ *   a string of each key and each value -- an object `values` counts, or a
+ *   string -- in the dictionary's order. */
 /* A class the program writes over an Objective-C class (`class Controller
  * extends NSObject`), registered when the program loads, as Swift registers
  * one: each method's selector, its entry point -- which the compiler builds
@@ -1794,6 +1798,8 @@ void nts_array_fill_from_nsarray(NtsArray *into, const void *array);
 void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array);
 void *nts_nsdictionary_of_objects(const NtsMap *map);
 void *nts_nsdictionary_of_strings(const NtsMap *map);
+void nts_dictionary_fill_from_nsdictionary(NtsArray *keys, NtsArray *values, const void *dictionary);
+void nts_dictionary_fill_strings_from_nsdictionary(NtsArray *keys, NtsArray *values, const void *dictionary);
 /* The other direction: a string as a C string, for a foreign parameter the
  * binding declares as `string`, which means `const char *`.
  *

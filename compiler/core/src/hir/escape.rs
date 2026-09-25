@@ -1492,6 +1492,7 @@ mod foreign_contracts {
             roles: vec![crate::hir::native::Role::Plain; 2],
             returns_string: None,
             returns_array: None,
+            returns_dictionary: None,
             send: None,
             returns_owned: false,
             consumes: Vec::new(),

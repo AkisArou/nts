@@ -131,6 +131,12 @@ declare module "objc:Foundation" {
      */
     constructor(string: string, labels: { textAttributes: Map<string, string> });
     /**
+     * Swift's `attributes(at:effectiveRange:) -> [NSAttributedString.Key: Any]`,
+     * a map read out of the `NSDictionary` the message answers.
+     * @ntsSelector attributesAtIndex:effectiveRange:
+     */
+    attributes(labels: { at: UInt; effectiveRange: Ptr<NSRange> | null }): Map<string, NSObject>;
+    /**
      * Swift's `attribute(_:at:effectiveRange:)`, whose range is an
      * `UnsafeMutablePointer<NSRange>` the method writes: the address a
      * program passes, `local<NSRange>()`.
@@ -176,5 +182,7 @@ declare module "objc:Foundation" {
   export class NSProcessInfo extends NSObject {
     static readonly processInfo: NSProcessInfo;
     readonly processorCount: UInt;
+    /** Swift's `environment: [String: String]`, a map of strings. */
+    readonly environment: Map<string, string>;
   }
 }

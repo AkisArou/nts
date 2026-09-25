@@ -1266,7 +1266,7 @@ declare module "objc:AppKit" {
     //   -initWithContentsOfURL:usedEncoding:error:: a `NSStringEncoding *`
     //   -initWithContentsOfFile:usedEncoding:error:: a `NSStringEncoding *`
     //   +stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:: a `NSString * _Nullable *`
-    //   -propertyListFromStringsFileFormat: a collection, `NSDictionary`, which crosses as an object when it is bound
+    //   -propertyListFromStringsFileFormat: a dictionary whose key type the header does not name
     //   -getCharacters:: a `unichar *`
     //   -completePathIntoString:caseSensitive:matchesIntoArray:filterTypes:: a `NSString * _Nullable *`
     //   -stringByAddingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
@@ -1975,6 +1975,7 @@ declare module "objc:AppKit" {
     set minFullScreenContentSize(value: ByValue<CGSize>);
     get maxFullScreenContentSize(): ByValue<CGSize>;
     set maxFullScreenContentSize(value: ByValue<CGSize>);
+    get deviceDescription(): Map<string, NSObject>;
     get windowController(): NSWindowController | null;
     set windowController(value: NSWindowController | null);
     get sheets(): NSWindow[];
@@ -2308,7 +2309,6 @@ declare module "objc:AppKit" {
     self(): NSWindow;
     // Not bound, each for the reason given:
     //   @property cascadingReferenceFrame: introduced in macOS 15.0
-    //   @property deviceDescription: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   @property hasActiveWindowSharingSession: introduced in macOS 13.3
     //   @property flushWindowDisabled: deprecated in macOS 10.14
     //   @property autodisplay: deprecated in macOS 10.14
@@ -3094,6 +3094,7 @@ declare module "objc:AppKit" {
     get rowActionsVisible(): boolean;
     set rowActionsVisible(value: boolean);
     get hiddenRowIndexes(): NSIndexSet;
+    get registeredNibsByIdentifier(): Map<string, NSNib> | null;
     get usesStaticContents(): boolean;
     set usesStaticContents(value: boolean);
     get userInterfaceLayoutDirection(): CEnum<NSUserInterfaceLayoutDirection, Int>;
@@ -3221,7 +3222,6 @@ declare module "objc:AppKit" {
     /** @ntsSelector self */
     self(): NSTableView;
     // Not bound, each for the reason given:
-    //   @property registeredNibsByIdentifier: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -preparedCellAtColumn:row:: deprecated in macOS 10.10
     //   -shouldFocusCell:atColumn:row:: deprecated in macOS 10.10
     //   -focusedColumn: deprecated in macOS 10.10

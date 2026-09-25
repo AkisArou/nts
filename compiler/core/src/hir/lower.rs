@@ -41693,6 +41693,13 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => (None, None),
         };
+        // And a bridged dictionary's, which becomes a map.
+        let (dictionary, sent) = match &callee {
+            Callee::Native(target) if target.returns_dictionary.is_some() => {
+                (target.returns_dictionary.clone(), Some(target.result.representation()))
+            }
+            _ => (None, sent),
+        };
         let result_as = match &callee {
             Callee::Native(target) => target.result_as.as_ref().map(super::native::Type::representation),
             _ => None,
@@ -41726,6 +41733,10 @@ impl<'a> FuncBuilder<'a> {
             self.throw_if_reported(id, slot, &converter, &lent)?;
         }
         let value = match (returned, result_as) {
+            _ if dictionary.is_some() => {
+                let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned dictionary"))?;
+                self.read_ns_dictionary(id, call, dictionary.as_ref().unwrap_or(&super::native::Bridged::String), ty)?
+            }
             _ if bridged.is_some() => {
                 let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned array"))?;
                 self.read_ns_array(id, call, bridged.as_ref().unwrap_or(&super::native::Bridged::String), ty)?
@@ -41979,6 +41990,7 @@ impl<'a> FuncBuilder<'a> {
             roles: vec![super::native::Role::Plain],
             returns_string: None,
             returns_array: None,
+            returns_dictionary: None,
             send: None,
             returns_owned: false,
             consumes: Vec::new(),
@@ -42351,6 +42363,62 @@ impl<'a> FuncBuilder<'a> {
         Ok(result)
     }
 
+    /// The `NSDictionary` a message returned, as the `Map<string, V>` the
+    /// program reads (Swift's `[String: V]`), or `null` for nil: its keys
+    /// and values filled into two arrays by the CF host in one pass -- each
+    /// key a string, each value an object the array counts or a string --
+    /// then set into a new map a pair at a time, each object boxed as any
+    /// map holds one.
+    fn read_ns_dictionary(&mut self, id: NodeId, returned: ValueId, value: &super::native::Bridged, ty: HirType) -> Result<ValueId, Diagnostic> {
+        use super::native::{Bridged, Handle, Pointee, Scalar, Type};
+        let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Map(key_ty, value_ty)) = ty.clone() else {
+            return Err(self.unsupported(id, "an `NSDictionary` result the program does not read as a map"));
+        };
+        let nil = self.push(OpKind::ConstNull, self.values[returned.0 as usize].ty.clone(), origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: returned, rhs: nil }, HirType::Bool, origin.clone());
+        let (none_block, some_block, merge) = (self.new_block(), self.new_block(), self.new_block());
+        let result = self.push_block_param(merge, ty.clone(), origin.clone());
+        self.terminate(Terminator::Branch { cond: absent, then_target: none_block, then_args: Vec::new(), else_target: some_block, else_args: Vec::new() });
+        self.switch_to(none_block);
+        let none = self.push(OpKind::ConstNull, ty.clone(), origin.clone());
+        self.terminate(Terminator::Jump { target: merge, args: vec![none] });
+        self.switch_to(some_block);
+        let dictionary = Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary")));
+        let count = self.send_bridge(bridge_send("count", None, vec![dictionary], Type::Scalar(Scalar::ULong)), vec![returned], &origin);
+        let length = self.coerce(count, &HirType::NUMBER, id)?;
+        let keys = self.push(OpKind::ArrayNew { length, zeroed: true }, HirType::Managed(ManagedType::Array(key_ty.clone())), origin.clone());
+        let values = self.push(OpKind::ArrayNew { length, zeroed: true }, HirType::Managed(ManagedType::Array(value_ty.clone())), origin.clone());
+        let fill = match value {
+            Bridged::Object(_) => "nts_dictionary_fill_from_nsdictionary",
+            Bridged::String => "nts_dictionary_fill_strings_from_nsdictionary",
+        };
+        self.runtime_call(fill, vec![keys, values, returned], HirType::Void, origin.clone());
+        let kind = self.push(OpKind::ConstFloat(f64::from(key_kind_of(&key_ty))), HirType::NUMBER, origin.clone());
+        let map = self.runtime_call("nts_map_new", vec![kind], ty.clone(), origin.clone());
+        // `for (let at = 0; at < length; at++) map.set(keys[at], values[at])`.
+        let (head, body, done) = (self.new_block(), self.new_block(), self.new_block());
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Jump { target: head, args: vec![zero] });
+        self.switch_to(head);
+        let at = self.push_block_param(head, HirType::NUMBER, origin.clone());
+        let more = self.push(OpKind::Binary { op: BinOp::Lt, lhs: at, rhs: length }, HirType::Bool, origin.clone());
+        self.terminate(Terminator::Branch { cond: more, then_target: body, then_args: Vec::new(), else_target: done, else_args: Vec::new() });
+        self.switch_to(body);
+        let key = self.push(OpKind::ArrayGet { array: keys, index: at, checked: false }, (*key_ty).clone(), origin.clone());
+        let entry = self.push(OpKind::ArrayGet { array: values, index: at, checked: false }, (*value_ty).clone(), origin.clone());
+        let key = self.erased_for_table(key, &origin);
+        let entry = self.erased_for_table(entry, &origin);
+        self.runtime_call("nts_map_set", vec![map, key, entry], ty, origin.clone());
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let next = self.push(OpKind::Binary { op: BinOp::Add, lhs: at, rhs: one }, HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Jump { target: head, args: vec![next] });
+        self.switch_to(done);
+        self.terminate(Terminator::Jump { target: merge, args: vec![map] });
+        self.switch_to(merge);
+        Ok(result)
+    }
+
     /// The string a native function returned: C's `const char *`, copied,
     /// then released with the declaration's `@ntsFree` if it names one.
     ///
@@ -42464,6 +42532,7 @@ impl<'a> FuncBuilder<'a> {
                 roles: vec![super::native::Role::Plain],
                 returns_string: None,
                 returns_array: None,
+            returns_dictionary: None,
                 send: None,
                 returns_owned: false,
                 consumes: Vec::new(),
@@ -43588,6 +43657,7 @@ impl<'a> FuncBuilder<'a> {
     /// a message can: the `NSArray` it crosses as is a Foundation object.
     fn refuse_unbridged(&self, call: NodeId, native: &super::native::Function) -> Result<(), Diagnostic> {
         let bridged = native.returns_array.is_some()
+            || native.returns_dictionary.is_some()
             || native.roles.iter().any(|role| match role {
                 super::native::Role::NSArray(_) | super::native::Role::NSDictionary(_) => true,
                 super::native::Role::Label { inner, .. } => {
@@ -51408,6 +51478,7 @@ fn synthesized(
         declared_at: None,
         returns_string: None,
         returns_array: None,
+            returns_dictionary: None,
         send,
         returns_owned: false,
         consumes: Vec::new(),

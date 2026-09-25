@@ -315,6 +315,38 @@ static void *nts_nsdictionary_of(const NtsMap *map, bool strings) {
   return (void *)made;
 }
 
+static void nts_dictionary_fill(NtsArray *keys, NtsArray *values, const void *dictionary, bool strings) {
+  CFIndex count = (CFIndex)keys->header.length;
+  const void *small[2][32];
+  const void **names = count <= 32 ? small[0] : malloc((size_t)count * sizeof(void *));
+  const void **objects = count <= 32 ? small[1] : malloc((size_t)count * sizeof(void *));
+  if (!names || !objects) {
+    abort();
+  }
+  CFDictionaryGetKeysAndValues((CFDictionaryRef)dictionary, names, objects);
+  for (CFIndex at = 0; at < count; at++) {
+    NTS_ITEMS(keys, NtsString *)[at] = nts_string_of_nsstring(names[at]);
+    if (strings) {
+      NTS_ITEMS(values, NtsString *)[at] = nts_string_of_nsstring(objects[at]);
+    } else {
+      CFRetain(objects[at]);
+      NTS_ITEMS(values, const void *)[at] = objects[at];
+    }
+  }
+  if (names != small[0]) {
+    free(names);
+    free(objects);
+  }
+}
+
+void nts_dictionary_fill_from_nsdictionary(NtsArray *keys, NtsArray *values, const void *dictionary) {
+  nts_dictionary_fill(keys, values, dictionary, false);
+}
+
+void nts_dictionary_fill_strings_from_nsdictionary(NtsArray *keys, NtsArray *values, const void *dictionary) {
+  nts_dictionary_fill(keys, values, dictionary, true);
+}
+
 void *nts_nsdictionary_of_objects(const NtsMap *map) {
   return nts_nsdictionary_of(map, false);
 }
