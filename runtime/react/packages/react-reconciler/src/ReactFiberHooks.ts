@@ -1790,7 +1790,7 @@ function mountStateImpl<S>(initialStateArg: (() => S) | S): Hook {
 export function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
   const hook = mountStateImpl(initialState);
   const queue = hook.queue as UpdateQueue;
-  const dispatch: Dispatch<BasicStateAction<S>> = (dispatchSetState<S, BasicStateAction<S>>).bind(
+  const dispatch: Dispatch<BasicStateAction<S>> = (dispatchSetState<BasicStateAction<S>>).bind(
     null,
     currentlyRenderingFiber,
     queue,
@@ -3156,18 +3156,21 @@ function dispatchReducerAction<A>(fiber: Fiber, queue: UpdateQueue, action: A, .
   markUpdateInDevTools(fiber, lane, action);
 }
 
-function dispatchSetState<S, A>(fiber: Fiber, queue: UpdateQueue, action: A, ...extraArgs: unknown[]): void {
+function dispatchSetState<A>(fiber: Fiber, queue: UpdateQueue, action: A, ...extraArgs: unknown[]): void {
   warnIfDispatchReceivedCallback(extraArgs);
 
   const lane = requestUpdateLane(fiber);
-  const didScheduleUpdate = dispatchSetStateInternal<S, A>(fiber, queue, action, lane);
+  const didScheduleUpdate = dispatchSetStateInternal<A>(fiber, queue, action, lane);
   if (didScheduleUpdate) {
     startUpdateTimerByLane(lane, "setState()", fiber);
   }
   markUpdateInDevTools(fiber, lane, action);
 }
 
-function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue, action: A, lane: Lane): boolean {
+// The queue's state is erased: nothing in the signature names its type, so
+// no call could pin one. The reducer and the eager comparison read it as the
+// queue holds it.
+function dispatchSetStateInternal<A>(fiber: Fiber, queue: UpdateQueue, action: A, lane: Lane): boolean {
   const update = createHookUpdate(lane, NoLane, action, false, null);
 
   if (isRenderPhaseUpdate(fiber)) {
@@ -3178,7 +3181,7 @@ function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue, action
       // The queue is currently empty, which means we can eagerly compute the
       // next state before entering the render phase. If the new state is the
       // same as the current state, we may be able to bail out entirely.
-      const lastRenderedReducer = queue.lastRenderedReducer as ((state: S, action: A) => S) | null;
+      const lastRenderedReducer = queue.lastRenderedReducer as ((state: unknown, action: A) => unknown) | null;
       if (lastRenderedReducer !== null) {
         let prevDispatcher: SavedDispatcher | null = null;
         if (isDevelopment) {
@@ -3186,7 +3189,7 @@ function dispatchSetStateInternal<S, A>(fiber: Fiber, queue: UpdateQueue, action
           installDispatcher(InvalidNestedUpdateInDEVKind);
         }
         try {
-          const currentState = queue.lastRenderedState as S;
+          const currentState = queue.lastRenderedState;
           const eagerState = lastRenderedReducer(currentState, action);
           // Stash the eagerly computed state, and the reducer used to compute
           // it, on the update object. If the reducer hasn't changed by the
