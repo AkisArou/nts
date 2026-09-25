@@ -5,6 +5,8 @@
 //
 // Port of upstream's ReactFiberCommitEffects.js (stable channel).
 
+import { defines } from "./ReactFiberClassComponentHost.ts";
+import { ComponentDidMount } from "shared/ReactClassComponentType.ts";
 import { hostInstanceOf, hostNodeOf } from "./ReactFiberStateNode.ts";
 import type { Props } from "shared/ReactTypes.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
@@ -415,7 +417,7 @@ export function commitClassLayoutLifecycles(finishedWork: Fiber, current: Fiber 
 export function commitClassDidMount(finishedWork: Fiber): void {
   // TODO: Check for LayoutStatic flag
   const instance = finishedWork.stateNode as CommitClassInstance;
-  if (typeof instance.componentDidMount === "function") {
+  if (defines(finishedWork.type, instance, ComponentDidMount)) {
     callComponentDidMount(finishedWork, instance);
   }
 }

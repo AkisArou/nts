@@ -1,6 +1,8 @@
 // Fibers: creating them from elements, and the double-buffered
 // work-in-progress copies the render phase writes to.
 
+import { ClassComponentType } from "shared/ReactClassComponentType.ts";
+import { isClassComponentType } from "./ReactFiberClassComponentHost.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import {
@@ -178,12 +180,10 @@ function createFiber(tag: WorkTag, pendingProps: unknown, key: ReactKey, mode: T
   return new FiberNode(tag, pendingProps, key, mode);
 }
 
-// Class components are recognised by `isReactComponent` on the prototype.
-// JS object model: reading a function's prototype is the only marker the
-// public contract gives us (create-react-class and old classes rely on it).
+// Class components are recognised by `isReactComponent` on the prototype,
+// or are the descriptor the React stage wrote (ReactFiberClassComponentHost).
 function shouldConstruct(Component: unknown): boolean {
-  const prototype = (Component as { prototype?: { isReactComponent?: unknown } }).prototype;
-  return !!(prototype && prototype.isReactComponent);
+  return isClassComponentType(Component);
 }
 
 export function isSimpleFunctionComponent(type: unknown): boolean {
@@ -415,7 +415,7 @@ export function createFiberFromTypeAndProps(
   if (isDevelopment) {
     resolvedType = resolveTypeForHotReloading(type);
   }
-  if (typeof resolvedType === "function") {
+  if (typeof resolvedType === "function" || resolvedType instanceof ClassComponentType) {
     if (shouldConstruct(resolvedType)) {
       fiberTag = ClassComponent;
     }

@@ -1,4 +1,6 @@
 import type { Props, ReactContextBase } from "shared/ReactTypes.ts";
+import { construct, defines } from "./ReactFiberClassComponentHost.ts";
+import { ComponentDidMount, ComponentDidUpdate, ComponentWillMount, ComponentWillReceiveProps, ComponentWillUpdate, GetSnapshotBeforeUpdate, ShouldComponentUpdate, UnsafeComponentWillMount, UnsafeComponentWillReceiveProps, UnsafeComponentWillUpdate } from "shared/ReactClassComponentType.ts";
 import { shallowEqual } from "shared/shallowEqual.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
@@ -36,8 +38,10 @@ import { markForceUpdateScheduled, markStateUpdateScheduled, setIsStrictModeForD
 import { startUpdateTimerByLane } from "./ReactProfilerTimer.ts";
 
 // A class component instance, as the reconciler uses it. User classes extend
-// `Component` from `react`; the lifecycles are optional methods, checked with
-// `typeof` before each call, as upstream does.
+// `Component` from `react`. A class need not define a lifecycle: whether it
+// does is `defines(ctor, instance, lifecycle)`'s answer
+// (ReactFiberClassComponentHost), asked before each call, and the native
+// `Component` gives every lifecycle a body so that a call always has a target.
 export interface ClassInstance {
   props: unknown;
   state: unknown;
@@ -45,18 +49,18 @@ export interface ClassInstance {
   refs: unknown;
   updater: unknown;
   render(): unknown;
-  shouldComponentUpdate?(nextProps: unknown, nextState: unknown, nextContext: unknown): unknown;
-  componentWillMount?(): void;
-  UNSAFE_componentWillMount?(): void;
-  componentWillReceiveProps?(nextProps: unknown, nextContext: unknown): void;
-  UNSAFE_componentWillReceiveProps?(nextProps: unknown, nextContext: unknown): void;
-  componentWillUpdate?(nextProps: unknown, nextState: unknown, nextContext: unknown): void;
-  UNSAFE_componentWillUpdate?(nextProps: unknown, nextState: unknown, nextContext: unknown): void;
-  componentDidMount?(): void;
-  componentDidUpdate?(prevProps: unknown, prevState: unknown, snapshot: unknown): void;
-  componentWillUnmount?(): void;
-  getSnapshotBeforeUpdate?(prevProps: unknown, prevState: unknown): unknown;
-  componentDidCatch?(error: unknown, errorInfo: { componentStack?: string | null }): void;
+  shouldComponentUpdate(nextProps: unknown, nextState: unknown, nextContext: unknown): unknown;
+  componentWillMount(): void;
+  UNSAFE_componentWillMount(): void;
+  componentWillReceiveProps(nextProps: unknown, nextContext: unknown): void;
+  UNSAFE_componentWillReceiveProps(nextProps: unknown, nextContext: unknown): void;
+  componentWillUpdate(nextProps: unknown, nextState: unknown, nextContext: unknown): void;
+  UNSAFE_componentWillUpdate(nextProps: unknown, nextState: unknown, nextContext: unknown): void;
+  componentDidMount(): void;
+  componentDidUpdate(prevProps: unknown, prevState: unknown, snapshot: unknown): void;
+  componentWillUnmount(): void;
+  getSnapshotBeforeUpdate(prevProps: unknown, prevState: unknown): unknown;
+  componentDidCatch(error: unknown, errorInfo: { componentStack?: string | null }): void;
   // Set by the reconciler: the fiber (see getInstance/setInstance), and in
   // development a frozen placeholder upstream keeps for old tooling.
   _reactInternals?: Fiber;
@@ -268,7 +272,7 @@ function checkShouldComponentUpdate(
   nextContext: unknown,
 ): boolean {
   const instance = workInProgress.stateNode as ClassInstance;
-  if (typeof instance.shouldComponentUpdate === "function") {
+  if (defines(ctor, instance, ShouldComponentUpdate)) {
     let shouldUpdate = instance.shouldComponentUpdate(newProps, newState, nextContext);
     if (isDevelopment) {
       if (workInProgress.mode & StrictLegacyMode) {
@@ -374,7 +378,7 @@ function checkClassInstance(workInProgress: Fiber, ctor: ClassComponentConstruct
         name,
       );
     }
-    if (ctor.prototype && ctor.prototype.isPureReactComponent && typeof instance.shouldComponentUpdate !== "undefined") {
+    if (ctor.prototype && ctor.prototype.isPureReactComponent && defines(ctor, instance, ShouldComponentUpdate)) {
       console.error(
         "%s has a method called shouldComponentUpdate(). " +
           "shouldComponentUpdate should not be used when extending React.PureComponent. " +
@@ -429,8 +433,8 @@ function checkClassInstance(workInProgress: Fiber, ctor: ClassComponentConstruct
     }
 
     if (
-      typeof instance.getSnapshotBeforeUpdate === "function" &&
-      typeof instance.componentDidUpdate !== "function" &&
+      defines(ctor, instance, GetSnapshotBeforeUpdate) &&
+      !defines(ctor, instance, ComponentDidUpdate) &&
       !didWarnAboutGetSnapshotBeforeUpdateWithoutDidUpdate.has(ctor)
     ) {
       didWarnAboutGetSnapshotBeforeUpdateWithoutDidUpdate.add(ctor);
@@ -517,13 +521,13 @@ function constructClassInstance(workInProgress: Fiber, ctor: ClassComponentConst
   }
   // disableLegacyContext: no masked legacy context to read otherwise.
 
-  let instance = new ctor(props, context);
+  let instance = construct(ctor, props, context);
   // Instantiate twice to help detect side-effects.
   if (isDevelopment) {
     if (workInProgress.mode & StrictLegacyMode) {
       setIsStrictModeForDevtools(true);
       try {
-        instance = new ctor(props, context);
+        instance = construct(ctor, props, context);
       } finally {
         setIsStrictModeForDevtools(false);
       }
@@ -559,23 +563,23 @@ function constructClassInstance(workInProgress: Fiber, ctor: ClassComponentConst
     // If new component APIs are defined, "unsafe" lifecycles won't be called.
     // Warn about these lifecycles if they are present.
     // Don't warn about react-lifecycles-compat polyfilled methods though.
-    if (typeof ctor.getDerivedStateFromProps === "function" || typeof instance.getSnapshotBeforeUpdate === "function") {
+    if (typeof ctor.getDerivedStateFromProps === "function" || defines(ctor, instance, GetSnapshotBeforeUpdate)) {
       let foundWillMountName: string | null = null;
       let foundWillReceivePropsName: string | null = null;
       let foundWillUpdateName: string | null = null;
-      if (typeof instance.componentWillMount === "function" && !isSuppressed(instance.componentWillMount)) {
+      if (defines(ctor, instance, ComponentWillMount) && !isSuppressed(instance.componentWillMount)) {
         foundWillMountName = "componentWillMount";
-      } else if (typeof instance.UNSAFE_componentWillMount === "function") {
+      } else if (defines(ctor, instance, UnsafeComponentWillMount)) {
         foundWillMountName = "UNSAFE_componentWillMount";
       }
-      if (typeof instance.componentWillReceiveProps === "function" && !isSuppressed(instance.componentWillReceiveProps)) {
+      if (defines(ctor, instance, ComponentWillReceiveProps) && !isSuppressed(instance.componentWillReceiveProps)) {
         foundWillReceivePropsName = "componentWillReceiveProps";
-      } else if (typeof instance.UNSAFE_componentWillReceiveProps === "function") {
+      } else if (defines(ctor, instance, UnsafeComponentWillReceiveProps)) {
         foundWillReceivePropsName = "UNSAFE_componentWillReceiveProps";
       }
-      if (typeof instance.componentWillUpdate === "function" && !isSuppressed(instance.componentWillUpdate)) {
+      if (defines(ctor, instance, ComponentWillUpdate) && !isSuppressed(instance.componentWillUpdate)) {
         foundWillUpdateName = "componentWillUpdate";
-      } else if (typeof instance.UNSAFE_componentWillUpdate === "function") {
+      } else if (defines(ctor, instance, UnsafeComponentWillUpdate)) {
         foundWillUpdateName = "UNSAFE_componentWillUpdate";
       }
       if (foundWillMountName !== null || foundWillReceivePropsName !== null || foundWillUpdateName !== null) {
@@ -618,10 +622,10 @@ function isSuppressed(method: object): boolean {
 function callComponentWillMount(workInProgress: Fiber, instance: ClassInstance): void {
   const oldState = instance.state;
 
-  if (typeof instance.componentWillMount === "function") {
+  if (defines(workInProgress.type, instance, ComponentWillMount)) {
     instance.componentWillMount();
   }
-  if (typeof instance.UNSAFE_componentWillMount === "function") {
+  if (defines(workInProgress.type, instance, UnsafeComponentWillMount)) {
     instance.UNSAFE_componentWillMount();
   }
 
@@ -645,10 +649,10 @@ function callComponentWillReceiveProps(
   nextContext: unknown,
 ): void {
   const oldState = instance.state;
-  if (typeof instance.componentWillReceiveProps === "function") {
+  if (defines(workInProgress.type, instance, ComponentWillReceiveProps)) {
     instance.componentWillReceiveProps(newProps, nextContext);
   }
-  if (typeof instance.UNSAFE_componentWillReceiveProps === "function") {
+  if (defines(workInProgress.type, instance, UnsafeComponentWillReceiveProps)) {
     instance.UNSAFE_componentWillReceiveProps(newProps, nextContext);
   }
 
@@ -726,8 +730,8 @@ function mountClassInstance(workInProgress: Fiber, ctor: ClassComponentConstruct
   // Unsafe lifecycles should not be invoked for components using the new APIs.
   if (
     typeof ctor.getDerivedStateFromProps !== "function" &&
-    typeof instance.getSnapshotBeforeUpdate !== "function" &&
-    (typeof instance.UNSAFE_componentWillMount === "function" || typeof instance.componentWillMount === "function")
+    !defines(ctor, instance, GetSnapshotBeforeUpdate) &&
+    (defines(ctor, instance, UnsafeComponentWillMount) || defines(ctor, instance, ComponentWillMount))
   ) {
     callComponentWillMount(workInProgress, instance);
     // If we had additional state updates during this life-cycle, let's
@@ -737,7 +741,7 @@ function mountClassInstance(workInProgress: Fiber, ctor: ClassComponentConstruct
     instance.state = workInProgress.memoizedState;
   }
 
-  if (typeof instance.componentDidMount === "function") {
+  if (defines(ctor, instance, ComponentDidMount)) {
     workInProgress.flags |= Update | LayoutStatic;
   }
   if (isDevelopment && (workInProgress.mode & StrictEffectsMode) !== NoMode) {
@@ -762,7 +766,7 @@ function resumeMountClassInstance(
 
   const getDerivedStateFromProps = ctor.getDerivedStateFromProps;
   const hasNewLifecycles =
-    typeof getDerivedStateFromProps === "function" || typeof instance.getSnapshotBeforeUpdate === "function";
+    typeof getDerivedStateFromProps === "function" || defines(ctor, instance, GetSnapshotBeforeUpdate);
 
   // When comparing whether props changed, we should compare using the
   // unresolved props object that is stored on the fiber, rather than the
@@ -779,8 +783,8 @@ function resumeMountClassInstance(
   // Unsafe lifecycles should not be invoked for components using the new APIs.
   if (
     !hasNewLifecycles &&
-    (typeof instance.UNSAFE_componentWillReceiveProps === "function" ||
-      typeof instance.componentWillReceiveProps === "function")
+    (defines(ctor, instance, UnsafeComponentWillReceiveProps) ||
+      defines(ctor, instance, ComponentWillReceiveProps))
   ) {
     if (didReceiveNewProps || oldContext !== nextContext) {
       callComponentWillReceiveProps(workInProgress, instance, newProps, nextContext);
@@ -797,7 +801,7 @@ function resumeMountClassInstance(
   if (!didReceiveNewProps && oldState === newState && !hasContextChanged() && !checkHasForceUpdateAfterProcessing()) {
     // If an update was already in progress, we should schedule an Update
     // effect even though we're bailing out, so that cWU/cDU are called.
-    if (typeof instance.componentDidMount === "function") {
+    if (defines(ctor, instance, ComponentDidMount)) {
       workInProgress.flags |= Update | LayoutStatic;
     }
     if (isDevelopment && (workInProgress.mode & StrictEffectsMode) !== NoMode) {
@@ -820,16 +824,16 @@ function resumeMountClassInstance(
     // Unsafe lifecycles should not be invoked for components using the new APIs.
     if (
       !hasNewLifecycles &&
-      (typeof instance.UNSAFE_componentWillMount === "function" || typeof instance.componentWillMount === "function")
+      (defines(ctor, instance, UnsafeComponentWillMount) || defines(ctor, instance, ComponentWillMount))
     ) {
-      if (typeof instance.componentWillMount === "function") {
+      if (defines(ctor, instance, ComponentWillMount)) {
         instance.componentWillMount();
       }
-      if (typeof instance.UNSAFE_componentWillMount === "function") {
+      if (defines(ctor, instance, UnsafeComponentWillMount)) {
         instance.UNSAFE_componentWillMount();
       }
     }
-    if (typeof instance.componentDidMount === "function") {
+    if (defines(ctor, instance, ComponentDidMount)) {
       workInProgress.flags |= Update | LayoutStatic;
     }
     if (isDevelopment && (workInProgress.mode & StrictEffectsMode) !== NoMode) {
@@ -838,7 +842,7 @@ function resumeMountClassInstance(
   } else {
     // If an update was already in progress, we should schedule an Update
     // effect even though we're bailing out, so that cWU/cDU are called.
-    if (typeof instance.componentDidMount === "function") {
+    if (defines(ctor, instance, ComponentDidMount)) {
       workInProgress.flags |= Update | LayoutStatic;
     }
     if (isDevelopment && (workInProgress.mode & StrictEffectsMode) !== NoMode) {
@@ -882,7 +886,7 @@ function updateClassInstance(
 
   const getDerivedStateFromProps = ctor.getDerivedStateFromProps;
   const hasNewLifecycles =
-    typeof getDerivedStateFromProps === "function" || typeof instance.getSnapshotBeforeUpdate === "function";
+    typeof getDerivedStateFromProps === "function" || defines(ctor, instance, GetSnapshotBeforeUpdate);
 
   // Note: During these life-cycles, instance.props/instance.state are what
   // ever the previously attempted to render - not the "current". However,
@@ -892,8 +896,8 @@ function updateClassInstance(
   // Unsafe lifecycles should not be invoked for components using the new APIs.
   if (
     !hasNewLifecycles &&
-    (typeof instance.UNSAFE_componentWillReceiveProps === "function" ||
-      typeof instance.componentWillReceiveProps === "function")
+    (defines(ctor, instance, UnsafeComponentWillReceiveProps) ||
+      defines(ctor, instance, ComponentWillReceiveProps))
   ) {
     if (unresolvedOldProps !== unresolvedNewProps || oldContext !== nextContext) {
       callComponentWillReceiveProps(workInProgress, instance, newProps, nextContext);
@@ -917,12 +921,12 @@ function updateClassInstance(
   ) {
     // If an update was already in progress, we should schedule an Update
     // effect even though we're bailing out, so that cWU/cDU are called.
-    if (typeof instance.componentDidUpdate === "function") {
+    if (defines(ctor, instance, ComponentDidUpdate)) {
       if (unresolvedOldProps !== current.memoizedProps || oldState !== current.memoizedState) {
         workInProgress.flags |= Update;
       }
     }
-    if (typeof instance.getSnapshotBeforeUpdate === "function") {
+    if (defines(ctor, instance, GetSnapshotBeforeUpdate)) {
       if (unresolvedOldProps !== current.memoizedProps || oldState !== current.memoizedState) {
         workInProgress.flags |= Snapshot;
       }
@@ -949,30 +953,30 @@ function updateClassInstance(
     // Unsafe lifecycles should not be invoked for components using the new APIs.
     if (
       !hasNewLifecycles &&
-      (typeof instance.UNSAFE_componentWillUpdate === "function" || typeof instance.componentWillUpdate === "function")
+      (defines(ctor, instance, UnsafeComponentWillUpdate) || defines(ctor, instance, ComponentWillUpdate))
     ) {
-      if (typeof instance.componentWillUpdate === "function") {
+      if (defines(ctor, instance, ComponentWillUpdate)) {
         instance.componentWillUpdate(newProps, newState, nextContext);
       }
-      if (typeof instance.UNSAFE_componentWillUpdate === "function") {
+      if (defines(ctor, instance, UnsafeComponentWillUpdate)) {
         instance.UNSAFE_componentWillUpdate(newProps, newState, nextContext);
       }
     }
-    if (typeof instance.componentDidUpdate === "function") {
+    if (defines(ctor, instance, ComponentDidUpdate)) {
       workInProgress.flags |= Update;
     }
-    if (typeof instance.getSnapshotBeforeUpdate === "function") {
+    if (defines(ctor, instance, GetSnapshotBeforeUpdate)) {
       workInProgress.flags |= Snapshot;
     }
   } else {
     // If an update was already in progress, we should schedule an Update
     // effect even though we're bailing out, so that cWU/cDU are called.
-    if (typeof instance.componentDidUpdate === "function") {
+    if (defines(ctor, instance, ComponentDidUpdate)) {
       if (unresolvedOldProps !== current.memoizedProps || oldState !== current.memoizedState) {
         workInProgress.flags |= Update;
       }
     }
-    if (typeof instance.getSnapshotBeforeUpdate === "function") {
+    if (defines(ctor, instance, GetSnapshotBeforeUpdate)) {
       if (unresolvedOldProps !== current.memoizedProps || oldState !== current.memoizedState) {
         workInProgress.flags |= Snapshot;
       }

@@ -2,6 +2,8 @@
 // collected during a render and flushed once per commit, deduplicated per
 // component type. In production every method does nothing.
 
+import { defines } from "./ReactFiberClassComponentHost.ts";
+import { ComponentWillMount, ComponentWillReceiveProps, ComponentWillUpdate, GetChildContext, UnsafeComponentWillMount, UnsafeComponentWillReceiveProps, UnsafeComponentWillUpdate } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
@@ -16,12 +18,12 @@ type Lifecycle = ((...args: never[]) => unknown) & { __suppressDeprecationWarnin
 
 // The class instance members these warnings inspect.
 interface LegacyLifecycles {
-  componentWillMount?: Lifecycle;
-  UNSAFE_componentWillMount?: Lifecycle;
-  componentWillReceiveProps?: Lifecycle;
-  UNSAFE_componentWillReceiveProps?: Lifecycle;
-  componentWillUpdate?: Lifecycle;
-  UNSAFE_componentWillUpdate?: Lifecycle;
+  componentWillMount: Lifecycle;
+  UNSAFE_componentWillMount: Lifecycle;
+  componentWillReceiveProps: Lifecycle;
+  UNSAFE_componentWillReceiveProps: Lifecycle;
+  componentWillUpdate: Lifecycle;
+  UNSAFE_componentWillUpdate: Lifecycle;
   getChildContext?: unknown;
 }
 
@@ -73,36 +75,36 @@ function recordUnsafeLifecycleWarnings(fiber: Fiber, instance: LegacyLifecycles)
   }
 
   if (
-    typeof instance.componentWillMount === "function" &&
+    defines(fiber.type, instance, ComponentWillMount) &&
     // Don't warn about react-lifecycles-compat polyfilled components.
     instance.componentWillMount.__suppressDeprecationWarning !== true
   ) {
     pendingComponentWillMountWarnings.push(fiber);
   }
 
-  if (fiber.mode & StrictLegacyMode && typeof instance.UNSAFE_componentWillMount === "function") {
+  if (fiber.mode & StrictLegacyMode && defines(fiber.type, instance, UnsafeComponentWillMount)) {
     pendingUNSAFE_ComponentWillMountWarnings.push(fiber);
   }
 
   if (
-    typeof instance.componentWillReceiveProps === "function" &&
+    defines(fiber.type, instance, ComponentWillReceiveProps) &&
     instance.componentWillReceiveProps.__suppressDeprecationWarning !== true
   ) {
     pendingComponentWillReceivePropsWarnings.push(fiber);
   }
 
-  if (fiber.mode & StrictLegacyMode && typeof instance.UNSAFE_componentWillReceiveProps === "function") {
+  if (fiber.mode & StrictLegacyMode && defines(fiber.type, instance, UnsafeComponentWillReceiveProps)) {
     pendingUNSAFE_ComponentWillReceivePropsWarnings.push(fiber);
   }
 
   if (
-    typeof instance.componentWillUpdate === "function" &&
+    defines(fiber.type, instance, ComponentWillUpdate) &&
     instance.componentWillUpdate.__suppressDeprecationWarning !== true
   ) {
     pendingComponentWillUpdateWarnings.push(fiber);
   }
 
-  if (fiber.mode & StrictLegacyMode && typeof instance.UNSAFE_componentWillUpdate === "function") {
+  if (fiber.mode & StrictLegacyMode && defines(fiber.type, instance, UnsafeComponentWillUpdate)) {
     pendingUNSAFE_ComponentWillUpdateWarnings.push(fiber);
   }
 }
@@ -261,7 +263,7 @@ function recordLegacyContextWarning(fiber: Fiber, instance: LegacyLifecycles | n
   if (
     type.contextTypes != null ||
     type.childContextTypes != null ||
-    (instance !== null && typeof instance.getChildContext === "function")
+    (instance !== null && defines(fiber.type, instance, GetChildContext))
   ) {
     if (warningsForRoot === undefined) {
       warningsForRoot = [];

@@ -14,6 +14,7 @@ import {
   REACT_SUSPENSE_TYPE,
   REACT_VIEW_TRANSITION_TYPE,
 } from "./ReactSymbols.ts";
+import { ClassComponentType } from "shared/ReactClassComponentType.ts";
 import type { LazyComponent } from "./ReactTypes.ts";
 
 // A named value: a function or one of React's exotic component objects
@@ -60,7 +61,8 @@ export function getComponentNameFromType(type: unknown): string | null {
   if (type == null) {
     return null;
   }
-  if (typeof type === "function") {
+  // A class component's descriptor is named as its class is.
+  if (typeof type === "function" || type instanceof ClassComponentType) {
     if ((type as Named).$$typeof === REACT_CLIENT_REFERENCE) {
       return null;
     }

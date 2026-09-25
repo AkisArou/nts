@@ -1,4 +1,5 @@
 import { isDevelopment } from "shared/Build.ts";
+import { ClassComponentType } from "shared/ReactClassComponentType.ts";
 import { disableLegacyMode, enableLegacyHidden, enableViewTransition } from "shared/ReactFeatureFlags.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import { REACT_STRICT_MODE_TYPE } from "shared/ReactSymbols.ts";
@@ -89,7 +90,7 @@ export function getComponentNameFromOwner(owner: Fiber | ReactComponentInfo): st
 // The name of a component the user wrote: a function's display name or
 // name, or a string type.
 function getUserTypeName(type: unknown): string | null {
-  if (typeof type === "function") {
+  if (typeof type === "function" || type instanceof ClassComponentType) {
     return nameOf(type) || null;
   }
   if (typeof type === "string") {

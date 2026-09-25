@@ -43,6 +43,7 @@ import { CacheContext, pushCacheProvider } from "./ReactFiberCacheComponent.ts";
 import type { ClassInstance as UserSpaceClassInstance } from "./ReactFiberCallUserSpace.ts";
 import { callComponentInDEV, callRenderInDEV } from "./ReactFiberCallUserSpace.ts";
 import type { ClassComponentConstructor, ClassInstance } from "./ReactFiberClassComponent.ts";
+import { construct } from "./ReactFiberClassComponentHost.ts";
 import {
   constructClassInstance,
   mountClassInstance,
@@ -1405,10 +1406,10 @@ function updateClassComponent(
         // so the instance must have been constructed in a previous
         // commit.
         const instance = workInProgress.stateNode as ResettableInstance;
-        const ctor = workInProgress.type as new (props: unknown, context: unknown) => { state: unknown };
+        const ctor = workInProgress.type as ClassComponentConstructor;
         // TODO This way of resetting the error boundary state is a hack.
         // Is there a better way to do this?
-        const tempInstance = new ctor(workInProgress.memoizedProps, instance.context);
+        const tempInstance = construct(ctor, workInProgress.memoizedProps, instance.context);
         const state = tempInstance.state;
         instance.updater.enqueueSetState(instance, state, null);
         break;

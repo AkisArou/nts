@@ -2,6 +2,8 @@
 // tree (the commit phase), and handles everything that can interrupt either
 // one: suspending, errors, yielding to the host, and nested updates.
 
+import { defines } from "./ReactFiberClassComponentHost.ts";
+import { ComponentDidCatch } from "shared/ReactClassComponentType.ts";
 import { hostInstanceOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { reportGlobalError } from "shared/reportGlobalError.ts";
@@ -4055,7 +4057,7 @@ export function captureCommitPhaseError(sourceFiber: Fiber, nearestMountedAncest
       const instance = fiber.stateNode as ErrorBoundaryInstance;
       if (
         typeof ctor.getDerivedStateFromError === "function" ||
-        (typeof instance.componentDidCatch === "function" && !isAlreadyFailedLegacyErrorBoundary(instance))
+        (defines(ctor, instance, ComponentDidCatch) && !isAlreadyFailedLegacyErrorBoundary(instance))
       ) {
         const errorInfo = createCapturedValueAtFiber(error, sourceFiber);
         if (enableProfilerTimer && enableComponentPerformanceTrack) {

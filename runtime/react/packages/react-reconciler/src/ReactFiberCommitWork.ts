@@ -13,6 +13,8 @@
 //
 // Port of upstream's ReactFiberCommitWork.js (stable channel).
 
+import { defines } from "./ReactFiberClassComponentHost.ts";
+import { ComponentWillUnmount } from "shared/ReactClassComponentType.ts";
 import { ownerDocumentOf } from "./ReactFiberStateNode.ts";
 import type {
   Container,
@@ -1159,7 +1161,7 @@ function commitDeletionEffectsOnFiber(
       if (!offscreenSubtreeWasHidden) {
         safelyDetachRef(deletedFiber, nearestMountedAncestor);
         const instance = deletedFiber.stateNode as CommitClassInstance;
-        if (typeof instance.componentWillUnmount === "function") {
+        if (defines(deletedFiber.type, instance, ComponentWillUnmount)) {
           safelyCallComponentWillUnmount(deletedFiber, nearestMountedAncestor, instance);
         }
       }
@@ -2441,7 +2443,7 @@ function disappearLayoutEffects(finishedWork: Fiber, layoutEffectTraversalFlags:
       safelyDetachRef(finishedWork, finishedWork.return);
 
       const instance = finishedWork.stateNode as CommitClassInstance;
-      if (typeof instance.componentWillUnmount === "function") {
+      if (defines(finishedWork.type, instance, ComponentWillUnmount)) {
         safelyCallComponentWillUnmount(finishedWork, finishedWork.return, instance);
       }
 
@@ -4301,7 +4303,7 @@ export function invokeLayoutEffectUnmountInDEV(fiber: Fiber): void {
       }
       case ClassComponent: {
         const instance = fiber.stateNode as CommitClassInstance;
-        if (typeof instance.componentWillUnmount === "function") {
+        if (defines(fiber.type, instance, ComponentWillUnmount)) {
           safelyCallComponentWillUnmount(fiber, fiber.return, instance);
         }
         break;
