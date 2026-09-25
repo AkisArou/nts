@@ -48,6 +48,14 @@ export type Integration =
   | "maven"
   | "npm";
 
+/** `react` in a config. */
+export interface React {
+  /** Components and hooks through the React Compiler. On unless `false`; off, only JSX is lowered. */
+  readonly compiler?: boolean;
+  /** Which functions the compiler considers; `infer` when absent. */
+  readonly compilationMode?: "infer" | "annotation" | "syntax" | "all";
+}
+
 export interface Config {
   /**
    * The program's source of truth.
@@ -89,6 +97,14 @@ export interface Config {
   readonly native?: readonly NativeSources[];
   readonly manifests?: readonly Manifest[];
   readonly dependencies?: Readonly<Record<string, Dependencies>>;
+
+  /**
+   * The React stage: TSX compiled by the React Compiler and its JSX lowered
+   * to React's automatic runtime, before nts reads the program. Absent, the
+   * files are read as written, and JSX -- which nts does not compile -- is
+   * refused.
+   */
+  readonly react?: React;
 
   /** Build-system hooks to emit for a brownfield consumer. */
   readonly integrate?: readonly Integration[];

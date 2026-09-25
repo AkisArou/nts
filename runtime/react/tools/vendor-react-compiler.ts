@@ -9,9 +9,16 @@
 // crates are 3 MB. `--check` fails if the committed copy differs from the
 // checkout, so the copy cannot drift from the revision UPSTREAM.md names.
 //
+// MANIFEST records every vendored file's hash beside the revision. `--check`
+// with no checkout -- the gate's form, since the gate has no react clone --
+// holds the copy to it: an edit to a vendored file, or a file added to or
+// removed from the copy, fails it.
+//
 // usage: node tools/vendor-react-compiler.ts <react-checkout> [--check]
+//        node tools/vendor-react-compiler.ts --check
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,21 +29,7 @@ const target = join(lane, "../../third_party/react-compiler");
 const args = process.argv.slice(2);
 const check = args.includes("--check");
 const checkout = args.find((arg) => !arg.startsWith("--"));
-if (!checkout) {
-  console.error("usage: node tools/vendor-react-compiler.ts <react-checkout> [--check]");
-  process.exit(2);
-}
-
-const git = (...argv: string[]) => execFileSync("git", ["-C", checkout, ...argv], { encoding: "utf8" }).trim();
-const rev = git("rev-parse", "HEAD");
-// One pin: the revision the lane's conformance tests run at.
-const pinned = JSON.parse(readFileSync(join(lane, "upstream-compile/upstream.lock.json"), "utf8")).commit;
-if (rev !== pinned) {
-  throw new Error(`${checkout} is at ${rev}, but upstream-compile/upstream.lock.json pins ${pinned}: move both together`);
-}
-if (git("status", "--porcelain", "--", "compiler/crates", "compiler/Cargo.toml", "LICENSE") !== "") {
-  throw new Error(`${checkout} has local changes under compiler/crates: vendor a clean revision`);
-}
+const pinned: string = JSON.parse(readFileSync(join(lane, "upstream-compile/upstream.lock.json"), "utf8")).commit;
 
 /** Every file under `dir`, as paths relative to `base`, sorted. */
 function walk(dir: string, base: string): string[] {
@@ -46,6 +39,43 @@ function walk(dir: string, base: string): string[] {
       const path = join(dir, name);
       return statSync(path).isDirectory() ? walk(path, base) : [relative(base, path)];
     });
+}
+
+const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
+const manifestOf = (rev: string, files: Map<string, string>) =>
+  `${rev}\n${[...files].map(([path, text]) => `${sha256(text)}  ${path}`).join("\n")}\n`;
+
+/** The copy's files, as the manifest counts them: all but the manifest and build output. */
+const copied = () => walk(target, target).filter((path) => path !== "MANIFEST" && path !== "Cargo.lock" && !path.startsWith("target/"));
+
+if (!checkout) {
+  if (!check) {
+    console.error("usage: node tools/vendor-react-compiler.ts <react-checkout> [--check]\n       node tools/vendor-react-compiler.ts --check");
+    process.exit(2);
+  }
+  const [rev, ...entries] = readFileSync(join(target, "MANIFEST"), "utf8").trimEnd().split("\n");
+  const listed = new Map(entries.map((line) => [line.slice(66), line.slice(0, 64)] as const));
+  const problems = [
+    ...(rev === pinned ? [] : [`MANIFEST is ${rev}, but upstream-compile/upstream.lock.json pins ${pinned}`]),
+    ...[...listed].filter(([path, hash]) => !existsSync(join(target, path)) || sha256(readFileSync(join(target, path), "utf8")) !== hash).map(([path]) => `changed or missing: ${path}`),
+    ...copied().filter((path) => !listed.has(path)).map((path) => `not in the manifest: ${path}`),
+  ];
+  if (problems.length > 0) {
+    console.error(`third_party/react-compiler is not the vendored ${rev}:\n  ${problems.slice(0, 20).join("\n  ")}`);
+    process.exit(1);
+  }
+  console.log(`third_party/react-compiler is ${rev}, ${listed.size} files as vendored`);
+  process.exit(0);
+}
+
+const git = (...argv: string[]) => execFileSync("git", ["-C", checkout, ...argv], { encoding: "utf8" }).trim();
+const rev = git("rev-parse", "HEAD");
+// One pin: the revision the lane's conformance tests run at.
+if (rev !== pinned) {
+  throw new Error(`${checkout} is at ${rev}, but upstream-compile/upstream.lock.json pins ${pinned}: move both together`);
+}
+if (git("status", "--porcelain", "--", "compiler/crates", "compiler/Cargo.toml", "LICENSE") !== "") {
+  throw new Error(`${checkout} has local changes under compiler/crates: vendor a clean revision`);
 }
 
 const upstream = join(checkout, "compiler");
@@ -101,16 +131,18 @@ To move the pin, check facebook/react out at the new revision and run, from
 
     node tools/vendor-react-compiler.ts <react-checkout>
 
-\`--check\` compares this copy with a checkout instead of writing it.
+\`--check\` compares this copy with a checkout instead of writing it; with
+no checkout, with MANIFEST, which is what the gate runs.
 `,
 );
 files.set(".gitignore", "/target\n/Cargo.lock\n");
+files.set("MANIFEST", manifestOf(rev, files));
 
 if (check) {
-  const present = existsSync(target) ? walk(target, target).filter((path) => !path.startsWith("target/")) : [];
+  const present = existsSync(target) ? copied() : [];
   const stale = [
     ...[...files.keys()].filter((path) => !existsSync(join(target, path)) || readFileSync(join(target, path), "utf8") !== files.get(path)),
-    ...present.filter((path) => !files.has(path) && path !== "Cargo.lock"),
+    ...present.filter((path) => !files.has(path)),
   ];
   if (stale.length > 0) {
     console.error(`third_party/react-compiler differs from ${rev}:\n  ${stale.slice(0, 20).join("\n  ")}`);

@@ -121,12 +121,6 @@ struct SessionTypes<'s> {
 
 impl nts_react::print::TypeOracle for SessionTypes<'_> {
     fn type_at(&mut self, node: u32) -> Option<String> {
-        match self.session.type_text(self.path, self.tree, nts_semantic_schema::NodeId(node)) {
-            Ok(text) => text,
-            Err(error) => {
-                eprintln!("nts-react: no type for node {node} of {}: {error:#}", self.path);
-                None
-            }
-        }
+        self.session.type_text(self.path, self.tree, nts_semantic_schema::NodeId(node))
     }
 }

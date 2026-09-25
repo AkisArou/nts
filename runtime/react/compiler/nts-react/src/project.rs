@@ -10,28 +10,9 @@ use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_diagnostics::SourceId;
 use nts_frontend_ts::tsgo::ast::{EncodedSourceFile, decode};
-use nts_frontend_ts::tsgo::proto::{NodeHandle, ProjectHandle, SnapshotHandle};
-use nts_frontend_ts::tsgo::types::{node_handle, tsgo_will_answer};
+use nts_frontend_ts::tsgo::proto::{ProjectHandle, SnapshotHandle};
 use nts_frontend_ts::tsgo::{self, Client};
-use nts_semantic_schema::{NodeId, NodeKind};
-use serde::Serialize;
-
-/// How a restored type is printed: in full (never `...`), structurally where
-/// an alias cannot be named, with unique symbols as themselves. Not
-/// `UseAliasDefinedOutsideCurrentScope`, which names aliases the printed
-/// place cannot see.
-const TYPE_FORMAT: i32 = 1 | (1 << 3) | (1 << 20);
-
-/// tsgo's `typeToString` parameters, which nts's frontend does not use.
-#[derive(Serialize)]
-struct TypeToStringParams<'a> {
-    snapshot: SnapshotHandle,
-    project: &'a ProjectHandle,
-    #[serde(rename = "type")]
-    type_id: u32,
-    location: NodeHandle,
-    flags: i32,
-}
+use nts_semantic_schema::NodeId;
 
 #[derive(Debug)]
 pub struct Session {
@@ -72,26 +53,10 @@ impl Session {
     }
 
     /// The checker's type at node `node` of `tree` (the file at `path`),
-    /// printed as TypeScript written at that node. `None` where tsgo has no
-    /// type for the node.
-    pub fn type_text(&mut self, path: &Utf8Path, tree: &EncodedSourceFile, node: NodeId) -> Result<Option<String>> {
-        let index = node.0 as usize;
-        let Some(NodeKind::Syntax(kind)) = tree.nodes.get(index).map(|n| n.kind) else {
-            return Ok(None);
-        };
-        // tsgo panics on some nodes rather than answering; the frontend's
-        // filter is the list of those.
-        if !tsgo_will_answer(&tree.nodes, index) {
-            return Ok(None);
-        }
-        let handle = NodeHandle(node_handle(node.0 + 1, kind, path.as_str()));
-        let types = self.client.types_at(self.snapshot, &self.project, vec![handle.clone()]).context("tsgo gave no type")?;
-        let Some(Some(response)) = types.into_iter().next() else {
-            return Ok(None);
-        };
-        let params = TypeToStringParams { snapshot: self.snapshot, project: &self.project, type_id: response.id, location: handle, flags: TYPE_FORMAT };
-        let text: String = self.client.request("typeToString", &params).context("tsgo could not print a type")?;
-        Ok(Some(text))
+    /// printed as TypeScript written at that node: what the frontend's
+    /// source transforms are answered, from this session.
+    pub fn type_text(&mut self, path: &Utf8Path, tree: &EncodedSourceFile, node: NodeId) -> Option<String> {
+        nts_frontend_ts::tsgo::transform::type_at(&mut self.client, self.snapshot, &self.project, path, tree, node)
     }
 
     /// One file's syntax tree. Its nodes are numbered from 0, the `SourceFile`,

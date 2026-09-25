@@ -1942,6 +1942,18 @@ step "example-refusals" example_refusals
 # Skips the build when there is no `node_modules/.bin/tsc`, which is what a
 # detached worktree looks like; the config half still runs. Seconds.
 step "config" node tooling/config/audit.mjs
+
+# The React lane's copies of other people's sources. `third_party/react-compiler`
+# is upstream's crates verbatim and deliberately outside the workspace, so no
+# clippy and no `cargo test` would notice an edit to it: this holds it to its
+# MANIFEST and to the pin in `runtime/react/upstream-compile/upstream.lock.json`.
+# And the JSX entity table the lowering decodes with, against the pinned tsgo it
+# was generated from. Under a second.
+react_sources() {
+  node runtime/react/tools/vendor-react-compiler.ts --check &&
+    node runtime/react/tools/gen-jsx-entities.ts --check
+}
+step "react-sources" react_sources
 step "interop" interop
 
 # The 152 fixtures in `tooling/conformance/blockers`, which nothing ran.

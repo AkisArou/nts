@@ -280,6 +280,29 @@ pub struct Resolved {
     /// the targets naming it rather than refusing the project.
     #[serde(default)]
     pub dependencies: BTreeMap<String, crate::dependencies::Dependencies>,
+    /// The React stage: the project's TSX compiled by the React Compiler and
+    /// its JSX lowered, before nts reads it. Absent, the files are read as
+    /// written -- and JSX, which nts does not compile, is refused.
+    #[serde(default)]
+    pub react: Option<ReactSettings>,
+}
+
+/// `react` in `nts.config.ts`.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactSettings {
+    /// Whether components and hooks go through the React Compiler. On unless
+    /// turned off; off, the stage only lowers JSX.
+    #[serde(default = "on")]
+    pub compiler: bool,
+    /// Which functions the compiler considers: its `compilationMode`
+    /// (`infer`, `annotation`, `syntax` or `all`), `infer` when absent.
+    #[serde(default)]
+    pub compilation_mode: Option<String>,
+}
+
+const fn on() -> bool {
+    true
 }
 
 /// The config above a file, if any -- the package that file belongs to.
@@ -462,6 +485,7 @@ mod tests {
             build: None,
             manifests: Vec::new(),
             targets: None,
+            react: None,
             products: names
                 .iter()
                 .map(|name| {

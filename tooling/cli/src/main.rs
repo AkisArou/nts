@@ -1198,6 +1198,26 @@ fn print_public_api(program: &hir::Program) {
 ///
 /// The bare name is kept as the last resort rather than removed, for a checkout
 /// that has not run the bootstrap and a `tsgo` the user installed themselves.
+/// The frontend for the project at `tsconfig`, as the project configures
+/// it: with the React stage installed when its `nts.config.ts` has a `react`
+/// section, so that every command reads the program nts builds.
+fn frontend_for(tsconfig: &Utf8Path, tsgo_binary: String) -> Result<TsgoApi> {
+    let source = TsgoApi::for_compilation(tsgo_binary);
+    let Some(config) = nts_build::config::beside(tsconfig) else {
+        return Ok(source);
+    };
+    let Some(react) = nts_build::config::resolve(&config)?.react else {
+        return Ok(source);
+    };
+    let mut options = nts_react::stage::default_options();
+    options["shouldCompile"] = react.compiler.into();
+    if let Some(mode) = react.compilation_mode {
+        options["compilationMode"] = mode.into();
+    }
+    let (stage, _report) = nts_react::transform::ReactTransform::new(options);
+    Ok(source.with_transform(Box::new(stage)))
+}
+
 fn frontend_binary() -> String {
     std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
         tsgo::locate().map_or_else(|| "tsgo".to_owned(), |path| path.to_string())
@@ -1206,7 +1226,7 @@ fn frontend_binary() -> String {
 
 fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
@@ -1332,7 +1352,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
 /// backticks and parentheses and a reader is usually a script.
 fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
@@ -1346,7 +1366,7 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
 
 fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
@@ -1554,7 +1574,7 @@ fn dump_receivers(args: &[String]) -> Result<()> {
     let tsconfig = project(args)?;
     let per_site = args.iter().any(|arg| arg == "--sites");
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(&tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, &tsconfig, "nts-build")?;
     let census = nts_core::receivers::classify(&snapshot);
 
@@ -1841,7 +1861,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
     use nts_core::erasure::{Checker, Declaration, Verdict};
 
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     let erasure = nts_core::erasure::classify(&snapshot);
     // The control. Judging each site by its own uses alone is what a
@@ -1945,7 +1965,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
 /// rather than taken from a table. This is the tool that reads them off.
 fn dump_modules(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
 
     let mut roots: Vec<(u32, usize)> = snapshot
@@ -2125,7 +2145,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
     // Call resolution is not optional here: without it a call site has no known
     // target and lowering refuses it.
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
 
     // Warnings are printed whether or not the program typechecks. A partial
@@ -2712,7 +2732,7 @@ const fn render_bin(op: BinOp) -> &'static str {
 /// Every type the frontend resolved, as the schema records it.
 fn print_types(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     for (index, record) in snapshot.types.iter().enumerate() {
         let named = record
@@ -2772,6 +2792,12 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
         return "<unknown>".to_owned();
     };
     let path = &source.display_path;
+    // The position is in text a source transform wrote, which no disk holds:
+    // a line counted in the file there would send the reader somewhere real
+    // and wrong.
+    if let Some(transform) = &source.rewritten_by {
+        return format!("{path} (as {transform} rewrote it; the position is in that text, not the file on disk)");
+    }
     let Ok(text) = std::fs::read_to_string(path) else {
         return path.to_string();
     };
@@ -3277,7 +3303,7 @@ fn imported_names(file: &Utf8Path, module: &str) -> Result<(Vec<String>, Vec<Str
 /// imports, which is a true sentence about the wrong question.
 fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8PathBuf>> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     // Errors are the point of this snapshot, so they are not reported here.
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
@@ -6762,7 +6788,7 @@ fn emit_options<'a>(
 
 fn emit_llvm(tsconfig: &Utf8Path, emission: Emission, platform: nts_codegen_llvm::Platform) -> Result<()> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
     let entry = selected_roots(emission.shape);
@@ -6822,7 +6848,7 @@ fn emit_jvm(
     emission: Emission,
 ) -> Result<bool> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
     let entry = selected_roots(emission.shape);
@@ -6996,7 +7022,7 @@ impl Wrote {
 
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Result<Wrote> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
 
@@ -7325,4 +7351,33 @@ fn deps(rest: &[String]) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod where_it_is_tests {
+    use super::where_it_is;
+    use nts_diagnostics::{Digest, Location, SourceFile, SourceId, Span};
+    use nts_semantic_schema::SemanticSnapshot;
+
+    fn snapshot(rewritten_by: Option<&str>) -> SemanticSnapshot {
+        SemanticSnapshot {
+            sources: vec![SourceFile {
+                uri: "nts-workspace:///src/App.tsx".to_owned(),
+                digest: Digest([0; 16]),
+                display_path: "src/App.tsx".into(),
+                rewritten_by: rewritten_by.map(str::to_owned),
+            }],
+            ..SemanticSnapshot::default()
+        }
+    }
+
+    #[test]
+    fn a_position_in_a_rewritten_file_is_not_read_off_the_disk() {
+        let at = Location { file: SourceId(0), span: Span::new(40, 41) };
+        let rendered = where_it_is(&snapshot(Some("react-compiler@1d34f91d")), &at);
+        assert_eq!(rendered, "src/App.tsx (as react-compiler@1d34f91d rewrote it; the position is in that text, not the file on disk)");
+        // The control: a file read as written is rendered as before, here
+        // with no file to count lines in.
+        assert_eq!(where_it_is(&snapshot(None), &at), "src/App.tsx");
+    }
 }

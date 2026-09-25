@@ -1,0 +1,10 @@
+{
+  "//": "The native probe's scenarios as TSX: nts.config.ts turns on the React stage, so its components go through the React Compiler and its JSX is lowered before nts reads it. The host is the probe's, re-exported.",
+  "extends": "../../tsconfig.native.json",
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src"
+  ]
+}

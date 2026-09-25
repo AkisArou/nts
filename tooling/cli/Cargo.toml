@@ -24,6 +24,7 @@ nts-differential.workspace = true
 nts-debug-lowering.workspace = true
 nts-diagnostics.workspace = true
 nts-frontend-ts.workspace = true
+nts-react.workspace = true
 nts-memory-lowering.workspace = true
 nts-semantic-schema.workspace = true
 

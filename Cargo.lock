@@ -178,6 +178,7 @@ dependencies = [
  "nts-frontend-ts",
  "nts-jvm-emitter",
  "nts-memory-lowering",
+ "nts-react",
  "nts-semantic-schema",
  "roxmltree",
  "rustc-hash",
@@ -356,6 +357,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "xxhash-rust",
 ]
 
 [[package]]

@@ -10,4 +10,5 @@ To move the pin, check facebook/react out at the new revision and run, from
 
     node tools/vendor-react-compiler.ts <react-checkout>
 
-`--check` compares this copy with a checkout instead of writing it.
+`--check` compares this copy with a checkout instead of writing it; with
+no checkout, with MANIFEST, which is what the gate runs.

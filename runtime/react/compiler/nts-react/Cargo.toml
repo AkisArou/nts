@@ -19,6 +19,7 @@ indexmap.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
+xxhash-rust.workspace = true
 nts-diagnostics.workspace = true
 nts-frontend-ts.workspace = true
 nts-semantic-schema.workspace = true
