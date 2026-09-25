@@ -10981,10 +10981,16 @@ fn union_representation(
     // A native pointer with `undefined` beside it -- the chain
     // `NSGraphicsContext.current?.cgContext` is `CGContext | undefined` --
     // has one absence for its null to stand for, as `H | null` has; the
-    // absence tests read it so (`absence_the_type_decides`). With `null`
-    // too there are two, and a pointer has one null.
+    // absence tests read it so (`absence_the_type_decides`).
+    //
+    // With `null` too -- `window.contentView?.superview`, a nullable
+    // property down an optional chain -- its null stands for both, which is
+    // Swift's one `nil`. Everything that asks *whether* it is absent (`==
+    // null`, `??`, `?.`, a condition) is exact; only a strict comparison could
+    // tell the two apart, and that is refused by name
+    // (`absence_the_type_decides`).
     if matches!(shared, HirType::NativePointer(_)) {
-        return (has_undefined && !has_null && !mixed).then_some(shared);
+        return (has_undefined && !mixed).then_some(shared);
     }
     // One representation, and at most one absence for the null pointer
     // to stand for. Two absences need two values and a pointer has one.
@@ -51866,6 +51872,14 @@ impl<'a> FuncBuilder<'a> {
             // has room for that one absence only, as null: the test is its
             // null.
             if let Some(ty @ HirType::NativePointer(_)) = self.type_of(value).or_else(|| self.bound_type(value)) {
+                // Both absences, one null: a strict comparison asks which it
+                // is, which the null does not say.
+                if strict_operator(operator) && carried.len() > 1 {
+                    return Some(Err(self.unsupported(
+                        id,
+                        "a strict comparison of a handle that may be `null` or `undefined` with one of them: both are its null here, as Swift's `nil` is -- compare with `== null`",
+                    )));
+                }
                 return Some(self.pointer_absence_test(id, operator, value, ty));
             }
             return None;

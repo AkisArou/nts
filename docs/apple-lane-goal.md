@@ -962,6 +962,17 @@ correctness does not depend on arm64 running by luck.
        drawing in C, on both backends. The colours are released (an
        Objective-C weak reference goes nil), and under NoGc that line alone
        differs.
+   - **Swift's one `nil` (2026-09-25).** `window.contentView?.superview`
+     is `NSView | null | undefined`: a nullable property down an optional
+     chain. It is now the pointer, its null standing for both absences, as
+     Swift's `NSView?` has one `nil`.
+     - `== null`, `??`, `?.` and a condition ask *whether* it is absent,
+       and are exact.
+     - Only a strict comparison with one absence could ask which, and it is
+       refused by name ("compare with `== null`").
+     - `macos-window` reads the window's frame view this way, on both
+       backends. A C test lowers the loose forms and is refused the strict
+       one.
    - **All of Foundation typechecks (2026-09-25).** 244 classes, bound
      whole, now typecheck and lower with no refusal. So does all of AppKit.
      Two rules made the difference:

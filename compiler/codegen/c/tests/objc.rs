@@ -713,6 +713,42 @@ fn an_override_takes_the_selector_it_replaces_and_a_record_by_value() {
     }
 }
 
+/// A nullable property down an optional chain, `o?.next`, is `NSObject |
+/// null | undefined`: one null for both absences, as Swift's one `nil` is.
+/// A loose test and `??` are exact; a strict comparison with one absence
+/// would ask which, and is refused by name.
+#[test]
+fn a_handle_with_both_absences_is_one_null() {
+    let binding = r#"declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+    /** @ntsSelector next */
+    get next(): NSObject | null;
+  }
+}
+"#;
+    let loose = "import { NSObject } from \"objc:Foundation\";\n\
+                 export function absent(o: NSObject | null): boolean { return o?.next == null; }\n\
+                 export function either(o: NSObject | null, fallback: NSObject): NSObject { return o?.next ?? fallback; }\n";
+    let Some((_, prepared)) = prepare("objc-both-absences", binding, loose) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let strict = "import { NSObject } from \"objc:Foundation\";\n\
+                  export function which(o: NSObject | null): boolean { return o?.next === null; }\n";
+    let Some((_, prepared)) = prepare("objc-both-absences-strict", binding, strict) else { return };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("a strict comparison of a handle that may be `null` or `undefined`")),
+        "{:?}",
+        prepared.diagnostics
+    );
+}
+
 /// A field holding a closure, on a class the program writes over an
 /// Objective-C class, called as `this.started()`: read from the object its
 /// ivar holds, and called through the closure's slot, as any closure is.

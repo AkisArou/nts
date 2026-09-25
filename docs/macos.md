@@ -53,6 +53,7 @@ committed copy.
 | `window.title = "Notes"` | `window.title = "Notes"` (a `string`, copied into an `NSString`) |
 | `NSApplication.shared` | `NSApplication.shared` |
 | `window.contentView?.addSubview(b)` | `window.contentView?.addSubview(b)` |
+| `window.contentView?.superview` (`NSView?`) | the same, `NSView \| null \| undefined`, one nil: test it with `== null` or `??` |
 | `let views: [NSView]` | `const views: NSView[]` |
 | `[String: NSObject]` | `Map<string, NSObject>` |
 | `Set<IndexPath>`, `Set<String>` | `Set<NSIndexPath>`, `Set<string>` (objects compared by `-isEqual:`) |
@@ -203,5 +204,3 @@ Each target picks `x86_64` or `aarch64`, and the `c` or `llvm` backend.
 - **Swift-only API.** Swift's overlay adds functions with no C or
   Objective-C symbol, such as `CGContext.move(to:)`. Those are not bound.
   `NSBezierPath` builds paths.
-- **Both absences on a handle.** A handle unioned with both `null` and
-  `undefined` is refused. Either one alone is fine.

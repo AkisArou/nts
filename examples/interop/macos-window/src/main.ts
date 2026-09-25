@@ -264,6 +264,11 @@ function main(): void {
   report(`drawn ${drawnWidth}x${drawnHeight}`);
   // And a plain view, which is not: the override is the canvas's alone.
   report(`flipped ${canvas.isFlipped} ${view_is_flipped(canvas)} ${content === null ? "none" : view_is_flipped(content)}`);
+  // Swift's `window.contentView?.superview`: a nullable property down an
+  // optional chain, `NSView | null | undefined`, whose one null is Swift's
+  // one `nil`. The window's frame view is there.
+  const frameView = window.contentView?.superview;
+  report(`superview ${frameView == null ? "none" : "some"} ${(window.contentView?.superview ?? canvas) === canvas}`);
   // Scanned to whole pixels, through `super` and through an ordinary send,
   // which the canvas does not override: the same NSView implementation.
   const plain = { origin: { x: 0.25, y: 0 }, size: { width: 40.6, height: 30 } };

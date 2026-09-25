@@ -126,6 +126,7 @@ bundle none
 hit 10 the canvas
 drawn 40x30
 flipped true true false
+superview some false
 scanned 41 41
 mouse 7 7
 records 64048 6030
