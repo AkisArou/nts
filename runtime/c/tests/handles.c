@@ -166,6 +166,50 @@ int main(void) {
       "and two handles are not",
       !nts_value_strict_eq(value, handle(NTS_TAG_HANDLE_GOBJECT, &object_b)));
 
+  /* Containers. Every copy the runtime makes of an erased slot owns a
+   * reference of its own, and every container gives back what it holds when
+   * it dies -- the box a handle used to travel in did both by being managed,
+   * and a handle is not. */
+  static const NtsDescriptor values = {NTS_KIND_ARRAY,
+                                       sizeof(NtsValue),
+                                       0,
+                                       0,
+                                       0,
+                                       0,
+                                       "NtsValue[]",
+                                       1,
+                                       0,
+                                       NTS_ARRAY_VALUE,
+                                       0u,
+                                       0};
+  retained = 0;
+  released = 0;
+  NtsValue held = handle(NTS_TAG_HANDLE_GOBJECT, &object_a);
+  NtsArray *xs = nts_array_new(&values, 0.0);
+  nts_value_retain(held);
+  nts_array_push_value(xs, held);
+  NtsArray *both = nts_array_concat_value(xs, xs);
+  expect("concat of erased elements counts each handle it copies",
+         retained == 3);
+  NtsValue read = nts_array_element(
+      nts_value_of_reference((NtsHeader *)both,
+                             nts_tag_of_reference((NtsHeader *)both)),
+      1.0);
+  expect("an element read from an erased array owns a reference",
+         read.as.native == &object_a && retained == 4);
+  nts_value_release(read);
+  NtsMap *map = nts_map_new(0.0);
+  NtsString *key = nts_string_from_utf8("k", 1);
+  nts_map_set(map, nts_value_of_reference((NtsHeader *)key, NTS_TAG_STRING),
+              held);
+  int before = released;
+  nts_release((NtsHeader *)both);
+  nts_release((NtsHeader *)xs);
+  nts_release((NtsHeader *)map);
+  nts_collect_cycles();
+  expect("a dying map and erased arrays give back each handle they hold",
+         released - before == 4 && released == retained);
+
   printf("%s\n", failures == 0 ? "all handle checks passed"
                                : "some handle checks failed");
   return failures == 0 ? 0 : 1;

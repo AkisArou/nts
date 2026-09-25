@@ -2040,11 +2040,10 @@ NtsValue nts_array_element(NtsValue array, double index) {
   uint32_t at = (uint32_t)index;
   switch (descriptor->element) {
   case NTS_ARRAY_VALUE: {
+    /* Handed out owned, a handle included: `nts_value_retain`, not a
+     * managed-only retain, or the caller's release is one too many. */
     NtsValue element = NTS_ITEMS(object, NtsValue)[at];
-    if (NTS_TAG_IS_MANAGED(nts_value_tag(element)) &&
-        nts_value_reference(element)) {
-      nts_retain(nts_value_reference(element));
-    }
+    nts_value_retain(element);
     return element;
   }
   case NTS_ARRAY_REFERENCE: {
@@ -4119,11 +4118,13 @@ NtsArray *nts_array_concat_value(const NtsArray *a, const NtsArray *b) {
   for (uint32_t at = 0; at < b->header.length; at++) {
     into[a->header.length + at] = second[at];
   }
+  /* Each copy owns what it holds, a handle included: the result's death
+   * gives each one back (`nts_release_foreign`). Only one lane finds this
+   * function's bugs: on 2026-09-26 lowering refused `xs.concat(ys)` on an
+   * `unknown[]` for the C product (NTS1001) while the LLVM product of the same
+   * program reached here. */
   for (uint32_t at = 0; at < total; at++) {
-    if (NTS_TAG_IS_MANAGED(nts_value_tag(into[at])) &&
-        nts_value_reference(into[at])) {
-      nts_retain(nts_value_reference(into[at]));
-    }
+    nts_value_retain(into[at]);
   }
   return out;
 }
@@ -8666,9 +8667,9 @@ uint32_t nts_tag_of_reference(const NtsHeader *object) {
  * know at compile time, and `nts_promise_fulfill_value` is the one that does
  * not know it and is told. */
 static void nts_promise_fulfill(NtsPromise *promise, NtsValue value) {
-  if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) && nts_value_reference(value)) {
-    nts_retain(nts_value_reference(value));
-  }
+  /* A handle included, which the promise's death gives back as any container
+   * does -- unreached while a promise boxes a handle. */
+  nts_value_retain(value);
   promise->value = value;
   nts_promise_settle(promise, NTS_PROMISE_FULFILLED);
 }

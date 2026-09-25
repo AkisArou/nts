@@ -67,7 +67,10 @@ const SABOTAGES: &[Sabotage] = &[
     Sabotage {
         suite: "erased",
         function: "nts_promise_fulfill",
-        pattern: "nts_retain(nts_value_reference(value));",
+        // `nts_value_retain`, which counts a handle too, since a container
+        // gives back the handles it holds when it dies; the property is the
+        // same one.
+        pattern: "nts_value_retain(value);",
         replacement: "(void)0;",
         guards: "that a settled reference is retained rather than aliased",
     },

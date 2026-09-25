@@ -32,6 +32,10 @@
 //                 button's last reference gives it back (`alive alive` without
 //                 counting). Before, a container's death visited only managed
 //                 references, and a tagged handle is not one
+//   copies c gone  an element read from an `unknown` proven an array owns a
+//                 reference of its own, and the button goes with the array
+//                 (`alive` without counting). The read retained managed
+//                 references only, so its release was one too many
 import { GtkButton, GtkLabel, gtk_init } from "c:Gtk-4.0";
 import { sub_gone, sub_log, sub_watch } from "c:sub";
 
@@ -124,6 +128,31 @@ function dropped(): string {
   return map + " " + (sub_gone() ? "gone" : "alive");
 }
 
+// An element read from an `unknown` proven an array: the runtime hands it out
+// with a reference of its own, and the button goes with the array.
+function filled(): unknown[] {
+  const xs: unknown[] = [];
+  xs.push(new GtkButton({ label: "c" }));
+  const first = xs[0];
+  if (first instanceof GtkButton) sub_watch(first);
+  return xs;
+}
+
+function copy(): string {
+  const u: unknown = filled();
+  let label = "?";
+  if (Array.isArray(u)) {
+    const first = u[0];
+    if (first instanceof GtkButton) label = first.label ?? "";
+  }
+  return label;
+}
+
+function copies(): string {
+  const made = copy();
+  return made + " " + (sub_gone() ? "gone" : "alive");
+}
+
 function main(): void {
   gtk_init();
   const b = new GtkButton({ label: "b" });
@@ -155,6 +184,7 @@ function main(): void {
   sub_log("watch " + released());
   sub_log("temporary " + temporary());
   sub_log("dropped " + dropped());
+  sub_log("copies " + copies());
 }
 
 main();
