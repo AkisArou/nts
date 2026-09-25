@@ -55,6 +55,8 @@ import { GuidHelper, MemoryBuffer } from "winrt:Windows.Foundation";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
 import { ThreadPool } from "winrt:Windows.System.Threading";
 import type { IAsyncAction } from "winrt:Windows.Foundation";
+import { StorageFolder } from "winrt:Windows.Storage";
+import type { IAsyncOperationOfStorageFolder, IStorageFolder } from "winrt:Windows.Storage";
 import { nts_pending_begin, nts_pending_end } from "c:pending";
 import type { DateTime } from "winrt:Windows.Foundation";
 import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
@@ -274,6 +276,29 @@ function awaitAction(action: IAsyncAction): Promise<number> {
   });
 }
 
+// An `IAsyncOperation<StorageFolder>` as a Promise of the folder -- the
+// class's default interface, which is what the operation answers: its
+// `put_Completed` takes a handler whose IID is computed for `StorageFolder`,
+// declared on the instantiation the binding specializes.
+function awaitFolder(operation: IAsyncOperationOfStorageFolder): Promise<IStorageFolder> {
+  return new Promise((resolve, reject) => {
+    nts_pending_begin();
+    try {
+      operation.put_Completed((info) => {
+        nts_pending_end();
+        try {
+          resolve(info.GetResults());
+        } catch (error) {
+          reject(error);
+        }
+      });
+    } catch (error) {
+      nts_pending_end();
+      reject(error);
+    }
+  });
+}
+
 // A work item handed to the thread pool runs here, carried, and so after
 // its action has completed -- WinRT counts it done when its `Invoke`
 // returns -- which is why nothing here reads what it did. The second
@@ -289,7 +314,8 @@ async function awaited(): Promise<string> {
   } catch (error) {
     refused = (error as Error).message.slice(0, 18);
   }
-  return "status=" + String(status) + " refused=" + refused + " pending=" + String(pending());
+  const folder = await awaitFolder(StorageFolder.GetFolderFromPathAsync("C:\\Windows"));
+  return "status=" + String(status) + " refused=" + refused + " folder=" + folder.as_IStorageItem().get_Name() + " pending=" + String(pending());
 }
 
 async function reportAwaited(): Promise<void> {

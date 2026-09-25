@@ -119,7 +119,7 @@ for provider in nogc rc; do
     case $status in
       77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
       0)
-        printf 'status=1 refused=HRESULT 0x80000018 pending=0\n' | diff -u - "$build/windows-$product-async.txt"
+        printf 'status=1 refused=HRESULT 0x80000018 folder=Windows pending=0\n' | diff -u - "$build/windows-$product-async.txt"
         echo "windows-x86_64 ($product, $provider): an IAsyncAction settles a Promise, run on Windows"
         ;;
       *) cat "$build/windows-$product-async.err" >&2; echo "windows-winrt: $product async ($provider) exited $status on Windows" >&2; exit 1 ;;
