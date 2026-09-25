@@ -26,6 +26,9 @@ struct NSError;
 // queue is: with an object and no error, or, when `fail`, with no object and
 // an `NSError` whose description is "the item was not there".
 void complete_off_thread(bool fail, void *block);
+// Calls `block` once on a new thread with two objects and no error: a handler
+// Swift imports as `async throws -> (A, B)`.
+void complete_pair_off_thread(void *block);
 // Whether `BLOCKS_OFF_THREAD` is set.
 bool off_thread_arm(void);
 

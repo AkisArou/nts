@@ -124,6 +124,7 @@ for product in blocks blocksLlvm; do
   printf '%s\n' "off thread: called and released" "off thread: called on the main thread true with 7 same" \
     "off thread: resolved an object on the main thread true" \
     'off thread: rejected with "the item was not there"' \
+    "off thread: a pair of two objects" \
     "off thread: closure gone" | diff -u - "$out/$product-off.lines"
 done
 echo "off thread: a handler called and released on another thread runs and is released on this one, on both backends"

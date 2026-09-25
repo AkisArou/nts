@@ -428,8 +428,12 @@ correctness does not depend on arm64 running by luck.
      - `macos-blocks` runs the throwing shape with the handler called on a
        background thread. It resolves with an object on the main thread, and
        rejects with a real `NSError`'s description, on both backends.
-     - Not yet, each skipped with its reason: a handler given more than one
-       value (Swift's tuple), and a class method.
+     - A handler given several values is Swift's tuple, `async -> (A, B)`,
+       so `Promise<[A, B]>`. `macos-blocks` settles one with two objects
+       from a background thread, on both backends. A handler's values cross
+       as the objects they are, as a block's do, so a string is an
+       `NSString` there.
+     - Not yet, skipped with its reason: a class method.
      - A handler the platform calls off the main thread is carried to it
        (below), so a completion on a background queue settles the promise
        on the owning thread, which is what Swift's `@MainActor` resumption

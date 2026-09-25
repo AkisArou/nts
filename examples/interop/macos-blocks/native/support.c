@@ -81,6 +81,20 @@ static void *complete(void *state) {
   return NULL;
 }
 
+static void *complete_pair(void *block) {
+  void (^handler)(struct NSObject *, struct NSObject *, struct NSError *) = block;
+  handler((struct NSObject *)CFSTR("left"), (struct NSObject *)CFSTR("right"), NULL);
+  _Block_release(block);
+  return NULL;
+}
+
+void complete_pair_off_thread(void *block) {
+  void *held = _Block_copy(block);
+  pthread_t thread;
+  pthread_create(&thread, NULL, complete_pair, held);
+  pthread_detach(thread);
+}
+
 void complete_off_thread(bool fail, void *block) {
   Completion *completion = malloc(sizeof *completion);
   if (!completion) abort();

@@ -17,5 +17,8 @@ declare module "c:support" {
   export function call_held_off_thread(value: NSObject, n: c_int): void;
   export function on_main_thread(): boolean;
   export function complete_off_thread(fail: boolean, block: Block<(value: NSObject | null, error: NSError | null) => void>): void;
+  export function complete_pair_off_thread(
+    block: Block<(first: NSObject | null, second: NSObject | null, error: NSError | null) => void>,
+  ): void;
   export function off_thread_arm(): boolean;
 }

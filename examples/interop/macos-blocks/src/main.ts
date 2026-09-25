@@ -19,6 +19,7 @@ import {
   loop_stop,
   call_held_off_thread,
   complete_off_thread,
+  complete_pair_off_thread,
   off_thread_arm,
   on_main_thread,
   report,
@@ -106,6 +107,19 @@ function completed(fail: boolean): Promise<NSObject> {
   );
 }
 
+// And Swift's tuple, `async throws -> (A, B)`: two objects in one promise.
+function pair(): Promise<[NSObject, NSObject]> {
+  return new Promise((resolve, reject) =>
+    complete_pair_off_thread((first, second, error) => {
+      if (error !== null) {
+        reject(new Error(error.localizedDescription));
+      } else {
+        resolve([first!, second!]);
+      }
+    }),
+  );
+}
+
 async function offThreadAll(): Promise<void> {
   offThread();
   const value = await completed(false);
@@ -116,6 +130,8 @@ async function offThreadAll(): Promise<void> {
   } catch (error) {
     report(`off thread: rejected with "${(error as Error).message}"`);
   }
+  const [first, second] = await pair();
+  report(`off thread: a pair of ${first === second ? "one object" : "two objects"}`);
   await new Promise<void>((resolve) => setTimeout(() => resolve(), 20));
   report("off thread: closure " + state(offWatch));
   loop_stop();

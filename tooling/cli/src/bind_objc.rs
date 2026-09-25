@@ -701,8 +701,11 @@ struct Promise {
     /// their names, as the call passes them on.
     parameters: String,
     names: Vec<String>,
-    /// What the promise resolves with: `void`, or the handler's one value.
+    /// What the promise resolves with: `void`, the handler's one value, or
+    /// the tuple of its several.
     value: String,
+    /// How many values the handler is given before any error.
+    arity: usize,
     /// Whether the handler is also given an `NSError`, which rejects the
     /// promise when it is set, as Swift's `async throws` throws it; and
     /// whether the value is spelled nullable, which it is not once the error
@@ -1052,20 +1055,31 @@ impl<'a> Model<'a> {
             return Err("a completion handler that returns a value".to_owned());
         }
         let is_error = |spelled: &String| spelled.starts_with("NSError");
-        let (value, throws) = match given.as_slice() {
-            [] => ("void".to_owned(), false),
-            [error] if is_error(error) => ("void".to_owned(), true),
-            [one] => (one.clone(), false),
-            [one, error] if is_error(error) && !is_error(one) => (one.clone(), true),
-            _ => return Err("a handler given more than one value, which Swift makes a tuple, not bound yet".to_owned()),
+        // The values the promise resolves with, and whether an `NSError`
+        // comes after them: Swift's `async throws`.
+        let (values, throws) = match given.split_last() {
+            Some((error, values)) if is_error(error) => (values.to_vec(), true),
+            _ => (given.clone(), false),
+        };
+        if values.iter().any(is_error) {
+            return Err("a handler given an `NSError` before its last argument".to_owned());
+        }
+        let arity = values.len();
+        // Swift returns what a throwing handler is given as not optional once
+        // there is no error.
+        let values: Vec<String> = values.iter().map(|v| if throws { v.trim_end_matches(" | null").to_owned() } else { v.clone() }).collect();
+        // Several values are Swift's tuple: `async -> (Data, URLResponse)`.
+        let value = match values.as_slice() {
+            [] => "void".to_owned(),
+            [one] => one.clone(),
+            many => format!("[{}]", many.join(", ")),
         };
         // Swift's `throws` rejects with the error's description, which is
         // read through the binding's `NSError`.
         if throws && !self.bound.contains("NSError") {
             return Err("a handler given an `NSError`, whose description the promise rejects with: bind `NSError` too (`--class NSError`)".to_owned());
         }
-        let nullable = value.ends_with(" | null");
-        let value = if throws { value.trim_end_matches(" | null").to_owned() } else { value };
+        let nullable = given.iter().take(arity).any(|v| v.ends_with(" | null"));
         let (arguments, names) = self.arguments(class, leading, &labels)?;
         let mut function = format!("nts_async_{}_{base}", class.objc);
         while self.promises.iter().any(|promise| promise.function == function) {
@@ -1079,6 +1093,7 @@ impl<'a> Model<'a> {
             parameters: arguments,
             names,
             value,
+            arity,
             throws,
             nullable,
         });
@@ -1693,23 +1708,30 @@ fn render_values(request: &Request, model: &Model) -> String {
     }
     let mut bodies = String::new();
     for promise in &model.promises {
-        let void = promise.value == "void";
         let mut arguments = promise.names.clone();
+        // The handler's values, named, and what resolves with them: nothing,
+        // the one, or the tuple of several -- each not optional once a
+        // throwing handler has no error.
+        let names: Vec<String> = match promise.arity {
+            1 => vec!["value".to_owned()],
+            n => (0..n).map(|at| format!("value{at}")).collect(),
+        };
+        let unwrap = if promise.throws && promise.nullable { "!" } else { "" };
+        let settled = match names.as_slice() {
+            [] => String::new(),
+            [one] => format!("{one}{unwrap}"),
+            many => format!("[{}]", many.iter().map(|n| format!("{n}{unwrap}")).collect::<Vec<_>>().join(", ")),
+        };
         let executor = if promise.throws {
-            // Swift's `async throws`: the error when there is one, else the
-            // value, which Swift then returns as not optional.
-            let given = if void { "(error)" } else { "(value, error)" };
-            let value = match (void, promise.nullable) {
-                (true, _) => "",
-                (false, true) => "value!",
-                (false, false) => "value",
-            };
+            let mut given = names.clone();
+            given.push("error".to_owned());
             arguments.push(format!(
-                "{given} => {{\n      if (error !== null) {{\n        reject(new Error(error.localizedDescription));\n      }} else {{\n        resolve({value});\n      }}\n    }}"
+                "({}) => {{\n      if (error !== null) {{\n        reject(new Error(error.localizedDescription));\n      }} else {{\n        resolve({settled});\n      }}\n    }}",
+                given.join(", ")
             ));
             "(resolve, reject)"
         } else {
-            arguments.push(if void { "() => resolve()".to_owned() } else { "(value) => resolve(value)".to_owned() });
+            arguments.push(format!("({}) => resolve({settled})", names.join(", ")));
             "(resolve)"
         };
         let parameters = if promise.parameters.is_empty() { String::new() } else { format!(", {}", promise.parameters) };
@@ -1854,6 +1876,7 @@ typedef NSInteger Response;
 @interface Shape (Async)
 - (void)settleWith:(Shape *)other completionHandler:(void (^)(Response))handler;
 - (void)fetchNamed:(NSString *)name completionHandler:(void (^)(Shape * _Nullable, NSError * _Nullable))handler;
+- (void)pairWithCompletionHandler:(void (^)(Shape * _Nullable, NSString * _Nullable, NSError * _Nullable))handler;
 @end
 @interface Circle : Shape
 @end
@@ -1923,6 +1946,8 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)fetchNamed:completionHandler:", "swift.method", "fetch(named:completionHandler:)", &["Shape", "fetch(named:completionHandler:)"], ""),
             throwing.to_owned(),
             symbol("c:objc(cs)NSError", "swift.class", "NSError", &["NSError"], ""),
+            symbol("c:objc(cs)Shape(im)pairWithCompletionHandler:", "swift.method", "pair(completionHandler:)", &["Shape", "pair(completionHandler:)"], ""),
+            r#"{"identifier":{"precise":"c:objc(cs)Shape(im)pairWithCompletionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"pair()"},"pathComponents":["Shape","pair()"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"func pair() async throws -> (Shape, String)"}]}"#.to_owned(),
         ];
         let optional = ["shapeDidRename:", "shape:didRenameTo:", "shape:shouldHide:"].map(|selector| {
             format!(r#"{{"kind":"optionalRequirementOf","source":"c:objc(pl)ShapeDelegate(im){selector}","target":"c:objc(pl)ShapeDelegate"}}"#)
@@ -2030,11 +2055,14 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector settleWith:completionHandler: */\n    settle(labels: { with: Shape }, handler: (arg0: Int) => void): void;",
             "    /** @ntsCall nts_async_Shape_settle */\n    settle(labels: { with: Shape }): Promise<Int>;",
             "    /** @ntsCall nts_async_Shape_fetch */\n    fetch(labels: { named: string }): Promise<Shape>;",
+            // Several values are Swift's tuple; a handler's values cross as
+            // the objects they are, as a block's do.
+            "    /** @ntsCall nts_async_Shape_pair */\n    pair(): Promise<[Shape, NSString]>;",
         ] {
             assert!(text.contains(expected), "no `{expected}` in:\n{text}");
         }
         for expected in [
-            "import { Shape } from \"objc:Fake\";",
+            "import { NSString, Shape } from \"objc:Fake\";",
             "import type { Int } from \"objc:types\";",
             "export function nts_async_Shape_settle(self: Shape, labels: { with: Shape }): Promise<Int> {\n  return new Promise((resolve) => self.settle(labels, (value) => resolve(value)));\n}",
             // Swift's `async throws`: the error rejects, with its description,
