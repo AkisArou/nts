@@ -155,6 +155,45 @@ function scored(): string {
   return `${first} ${scored.total()} ${scored.bonus} ${plain.count} ${plain.label}`;
 }
 
+// Swift's `override func`: a method a subclass overrides answers for the
+// subclass's instance whatever type the call sees it as -- `bump`, which the
+// runtime is told of, and `tagged(_:)`, which takes a `String` no message
+// could carry and which only the program calls.
+class Tagger extends NSObject {
+  bump(): number {
+    return 1;
+  }
+
+  tagged(name: string): string {
+    return `tagger ${name}`;
+  }
+}
+
+class Loud extends Tagger {
+  override bump(): number {
+    return 2;
+  }
+
+  override tagged(name: string): string {
+    return `loud ${name.toUpperCase()}`;
+  }
+}
+
+class Louder extends Loud {
+  override bump(): number {
+    return 3;
+  }
+}
+
+function overridden(): string {
+  const all: Tagger[] = [new Tagger(), new Loud(), new Louder()];
+  const parts: string[] = [];
+  for (const tagger of all) {
+    parts.push(`${tagger.bump()} ${tagger.tagged("x")}`);
+  }
+  return parts.join(", ");
+}
+
 // Swift's `init(owner:opening:)` on an `NSObject` subclass: a constructor
 // taking arguments, whose `super()` makes the instance and whose body then
 // sets its fields -- one a parameter property -- and sends the instance a
@@ -348,6 +387,7 @@ function main(): void {
   report(`constructed ${ledgered()}`);
   report(`constructed ${weak_alive(ledgerWatch) ? "alive" : "gone"}`);
   report(`ledgers ${Ledger.described()}`);
+  report(`overridden ${overridden()}`);
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.

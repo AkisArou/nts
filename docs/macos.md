@@ -111,6 +111,13 @@ class Notes extends NSObject implements NSTableViewDataSource {
 - `super.draw(dirtyRect)`, `super.alignmentRect(labels)` and `super(...)` in
   a constructor are messages to the superclass.
 - `instanceof` asks `isKindOfClass:`, and narrows.
+- A method whose arguments no Objective-C message could carry, such as
+  `append(item: string)`, is Swift's method without `@objc`. The runtime is
+  not told of it, and only the program calls it. A protocol's method, an
+  override of a binding's method, or one tagged `@ntsSelector` must cross.
+- A call the program writes reaches the compiled method directly. Where a
+  subclass the program writes overrides it, the call asks the receiver's
+  class which override is its own, deepest first.
 
 A button's action is Swift's `#selector(Notes.add(_:))`:
 `button.action = selector(Notes, "add")`, with `import { selector } from
@@ -205,8 +212,10 @@ with `nts bind-objc --sdk <iPhoneSimulator.sdk> --target
 x86_64-apple-ios17.0-simulator --framework UIKit ...`. An `application`
 product is an `.app` that `tooling/apple/run-ios.sh` installs and launches
 with `simctl`. UIKit starts it through `UIApplicationMain`, given the
-delegate class by name (see `examples/interop/ios-hello`). A device build
-needs signing, and is refused.
+delegate class by name (see `examples/interop/ios-hello`, and
+`examples/interop/ios-list` for a table view's data source). Each has a Swift
+twin in `reference/`, whose output is compared with the TypeScript program's.
+A device build needs signing, and is refused.
 
 ## Not yet
 

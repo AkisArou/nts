@@ -88,6 +88,34 @@ static NSString *scored(void) {
                                     (long)plain.count, plain.label];
 }
 
+/* Swift's `override func`, sent to each instance as a `Tagger`. */
+@interface Tagger : NSObject
+@end
+@implementation Tagger
+- (NSInteger)bump { return 1; }
+- (NSString *)tagged:(NSString *)name { return [NSString stringWithFormat:@"tagger %@", name]; }
+@end
+@interface Loud : Tagger
+@end
+@implementation Loud
+- (NSInteger)bump { return 2; }
+- (NSString *)tagged:(NSString *)name { return [NSString stringWithFormat:@"loud %@", name.uppercaseString]; }
+@end
+@interface Louder : Loud
+@end
+@implementation Louder
+- (NSInteger)bump { return 3; }
+@end
+
+static NSString *overridden(void) {
+  NSArray<Tagger *> *all = @[ [[Tagger alloc] init], [[Loud alloc] init], [[Louder alloc] init] ];
+  NSMutableArray<NSString *> *parts = [NSMutableArray array];
+  for (Tagger *tagger in all) {
+    [parts addObject:[NSString stringWithFormat:@"%ld %@", (long)[tagger bump], [tagger tagged:@"x"]]];
+  }
+  return [parts componentsJoinedByString:@", "];
+}
+
 @interface Ledger : NSObject
 @property NSString *owner;
 @property NSInteger balance;
@@ -266,6 +294,9 @@ int main(void) {
     }
     printf("constructed %s\n", ledgerWatch ? "alive" : "gone");
     printf("ledgers %s\n", [Ledger described].UTF8String);
+    @autoreleasepool {
+      printf("overridden %s\n", overridden().UTF8String);
+    }
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.
     [operation cancel];
