@@ -1937,7 +1937,29 @@ pub const HANDLE_BOX_COM: u32 = HANDLE_BOX_OBJC - 1;
 /// `free` and `data`, not its shape; the runtime makes every one
 /// (`nts_boxed_new`) with its own descriptor, and the C backend asserts this
 /// layout against `NtsBoxed`.
+///
+/// Not a particular number: the next id free below the COM box, as each box
+/// above is the next below its sibling. A new fixed id goes below this one and
+/// becomes [`FIXED_FROM_THE_TOP`].
 pub const BOXED_RECORD: u32 = HANDLE_BOX_COM - 1;
+
+/// The lowest of the ids fixed from the top of the cells' band, counting
+/// down: the Objective-C states' band, growing up, must stay below it.
+pub const FIXED_FROM_THE_TOP: u32 = BOXED_RECORD;
+
+// The fixed ids are distinct, count down one at a time from the top of the
+// band, and end at `FIXED_FROM_THE_TOP` -- a checked fact, so one inserted
+// between two of them without moving the rest fails to compile.
+const _: () = {
+    let fixed = [HANDLE_BOX_GOBJECT, HANDLE_BOX_OBJC, HANDLE_BOX_COM, BOXED_RECORD];
+    let mut at = 1;
+    while at < fixed.len() {
+        assert!(fixed[at] + 1 == fixed[at - 1]);
+        at += 1;
+    }
+    assert!(fixed[fixed.len() - 1] == FIXED_FROM_THE_TOP);
+    assert!(SYNTHETIC_OBJC_STATES < FIXED_FROM_THE_TOP);
+};
 
 /// The upper half of the cells' band, below [`HANDLE_BOX_GOBJECT`], for the
 /// object holding the **fields of a class the program writes over an
@@ -1956,7 +1978,7 @@ pub const SYNTHETIC_OBJC_STATES: u32 = SYNTHETIC_CELLS + (1 << 17);
 #[must_use]
 pub fn objc_state_type(index: usize) -> TypeId {
     let id = SYNTHETIC_OBJC_STATES + u32::try_from(index).unwrap_or(0);
-    debug_assert!(id < BOXED_RECORD, "more Objective-C classes with fields than the band holds");
+    debug_assert!(id < FIXED_FROM_THE_TOP, "more Objective-C classes with fields than the band holds");
     TypeId(id)
 }
 pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);
