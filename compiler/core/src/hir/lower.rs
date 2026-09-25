@@ -1431,9 +1431,41 @@ struct ClosureInfo {
     /// variant. The variant's body is lowered in the copy's context, so the
     /// calls in it name the copies the enclosing body's do.
     within: Option<String>,
+    /// And, where that copy is a *generic's* rather than a structural one, the
+    /// copy itself: what it binds, and which generic it is a copy of.
+    ///
+    /// Carried rather than looked up. `Shared::class_copies` used to be a
+    /// `suffix -> copy` map and two declarations whose copies spell one suffix
+    /// collided, so a variant could be made for one declaration and the
+    /// substitution found for another -- or, as it happened, for none. The copy
+    /// is unambiguous exactly where the variant is made.
+    within_copy: Option<ClassCopy>,
     /// The captured symbols a variant re-types, at the copy's types. Empty
     /// for the closure as written.
     retyped_captures: std::collections::BTreeMap<u32, HirType>,
+}
+
+impl ClosureInfo {
+    /// The closure as written: no copy of an enclosing generic, nothing
+    /// re-typed, nothing wrapped.
+    ///
+    /// **One spelling for what "as written" means.** Three sites made one of
+    /// these with all eight fields written out, so a field added to the struct
+    /// was a field added in four places -- which is exactly how `within_copy`
+    /// arrived, and the compiler only caught it because every field is required.
+    /// A field with a `Default` would have been silently wrong in three of them.
+    fn as_written(node: NodeId) -> Self {
+        Self {
+            node,
+            captures: Vec::new(),
+            refusal: None,
+            wraps: false,
+            binds_receiver: false,
+            within: None,
+            within_copy: None,
+            retyped_captures: std::collections::BTreeMap::new(),
+        }
+    }
 }
 
 /// File a method read as a value under the closure it will become.
@@ -2313,15 +2345,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         if !is_closure {
             continue;
         }
-        let mut info = ClosureInfo {
-            node: id,
-            captures: Vec::new(),
-            refusal: None,
-            wraps: false,
-            binds_receiver: false,
-            within: None,
-            retyped_captures: std::collections::BTreeMap::new(),
-        };
+        let mut info = ClosureInfo::as_written(id);
 
         let mut subtree = Vec::new();
         probe.subtree(id, &mut subtree);
@@ -2563,22 +2587,14 @@ fn collect_function_values(
     }
 
     closures.extend(wrapped.into_iter().map(|declaration| ClosureInfo {
-        node: declaration,
-        captures: Vec::new(),
-        refusal: None,
         wraps: true,
-        binds_receiver: false,
-        within: None,
-        retyped_captures: std::collections::BTreeMap::new(),
+        ..ClosureInfo::as_written(declaration)
     }));
     closures.extend(bound.into_iter().map(|declaration| ClosureInfo {
-        node: declaration,
-        captures: Vec::new(),
         refusal: refusal_for_a_method_value(probe, declaration),
         wraps: true,
         binds_receiver: true,
-        within: None,
-        retyped_captures: std::collections::BTreeMap::new(),
+        ..ClosureInfo::as_written(declaration)
     }));
 }
 
@@ -6277,27 +6293,47 @@ fn copies_of(
     )
 }
 
-/// Every copy of a generic class, by the suffix its closures are keyed under.
+/// Every copy of every generic, class and function alike.
 ///
 /// The suffix is the instantiation's, the same one `instantiation_suffix`
 /// gives a layout — so a closure variant, the copy that makes it and the
 /// builder that lowers it all name one string, and none of them has to derive
 /// it a second way.
+///
+/// **A list and not a map keyed by that suffix**, which is what it was until
+/// 2026-09-25 and which lost copies. A suffix names an *instantiation* and not a
+/// generic: `plain<S>(v: S)` and `united<S>(v: (() => S) | S)` both spell
+/// `<f64>`, so the second entry was dropped, `class_closure_variants` made
+/// variants only for the surviving declaration, and closures in the other's
+/// copies were lowered with an **empty** substitution -- their captures read at
+/// the declaration's types, refusing as `a captured variable of unrepresentable
+/// type (the type parameter S)`. Which of the two lost depended on node order, so
+/// swapping the declarations in the file swapped which one refused.
+///
+/// It lost a copy rather than assigning a wrong one, because
+/// `class_closure_variants` pairs a closure with a copy of *its own*
+/// declaration. That is the difference between a refusal and a type confusion,
+/// and it was luck rather than design.
 fn class_copies(
     snapshot: &SemanticSnapshot,
     generics: &super::generics::GenericFunctions,
-) -> rustc_hash::FxHashMap<String, ClassCopy> {
-    let mut found: rustc_hash::FxHashMap<String, ClassCopy> = rustc_hash::FxHashMap::default();
+) -> Vec<ClassCopy> {
+    let mut found: Vec<ClassCopy> = Vec::new();
+    let mut seen: rustc_hash::FxHashSet<(NodeId, String)> = rustc_hash::FxHashSet::default();
+    let mut record = |copy: ClassCopy| {
+        if seen.insert((copy.declaration, copy.suffix.clone())) {
+            found.push(copy);
+        }
+    };
     for (declaration, instances) in generic_classes(snapshot) {
         for instance in instances {
-            found
-                .entry(instantiation_suffix(snapshot, instance.ty))
-                .or_insert(ClassCopy {
-                    declaration,
-                    instance: Some(instance.ty),
-                    substitution: instance.substitution,
-                    sources: super::generics::Sources::default(),
-                });
+            record(ClassCopy {
+                declaration,
+                suffix: instantiation_suffix(snapshot, instance.ty),
+                instance: Some(instance.ty),
+                substitution: instance.substitution,
+                sources: super::generics::Sources::default(),
+            });
         }
     }
     // **And a generic function's copies, which have the same problem.** A
@@ -6308,15 +6344,15 @@ fn class_copies(
     // type has no representation` while the copy around it had `Arguments`
     // pinned to a tuple.
     //
-    // Sorted, so a suffix two copies somehow spell the same way resolves to
-    // one of them and to the same one on every run.
+    // Sorted, so one compiler on one input makes the variants in one order.
     let mut declarations: Vec<(&NodeId, &Vec<super::generics::FunctionInstance>)> =
         generics.copies.iter().collect();
     declarations.sort_by_key(|(declaration, _)| declaration.0);
     for (declaration, copies) in declarations {
         for copy in copies {
-            found.entry(copy.suffix.clone()).or_insert(ClassCopy {
+            record(ClassCopy {
                 declaration: *declaration,
+                suffix: copy.suffix.clone(),
                 instance: None,
                 substitution: copy.substitution.clone(),
                 sources: copy.sources.clone(),
@@ -6328,8 +6364,12 @@ fn class_copies(
 
 /// One copy of a generic class or function: where it is written, what it is,
 /// and what it binds.
+#[derive(Clone, Debug)]
 struct ClassCopy {
     declaration: NodeId,
+    /// What this copy's name carries, and what a closure variant of it is
+    /// keyed under. See [`ClosureInfo::within`].
+    suffix: String,
     /// The instantiation, for a class. A function's copy is named by its
     /// arguments and has no type of its own.
     instance: Option<TypeId>,
@@ -6361,13 +6401,13 @@ struct ClassCopy {
 fn class_closure_variants(
     probe: &FuncBuilder,
     closures: &[ClosureInfo],
-    copies: &rustc_hash::FxHashMap<String, ClassCopy>,
+    copies: &[ClassCopy],
 ) -> Vec<ClosureInfo> {
-    let mut suffixes: Vec<(&String, &ClassCopy)> = copies.iter().collect();
+    let mut copies: Vec<&ClassCopy> = copies.iter().collect();
     // Sorted, so one compiler on one input numbers the closures one way.
-    suffixes.sort_by(|a, b| a.0.cmp(b.0));
+    copies.sort_by(|a, b| (a.declaration.0, &a.suffix).cmp(&(b.declaration.0, &b.suffix)));
     let mut variants = Vec::new();
-    for (suffix, copy) in suffixes {
+    for copy in copies {
         for closure in closures {
             if closure.within.is_some() || !probe.is_within(closure.node, copy.declaration) {
                 continue;
@@ -6375,13 +6415,31 @@ fn class_closure_variants(
             // A closure the structural pass already varied keeps that
             // variant: its suffix is the structural copy's, and the two
             // mechanisms name different things.
+            //
+            // **The copy travels with the variant.** It was looked up again at
+            // lowering time, by suffix, in a map two declarations could collide
+            // in -- see `class_copies`. The right copy is in hand here, which is
+            // the only place it is not ambiguous.
             variants.push(ClosureInfo {
-                within: Some(suffix.clone()),
+                within: Some(copy.suffix.clone()),
+                within_copy: Some(copy.clone()),
                 ..closure.clone()
             });
         }
     }
     variants
+}
+
+impl ClassCopy {
+    /// The generic *function* copy this is, where it is one.
+    ///
+    /// A class's copy is identified by its instantiation, which is a `TypeId`; a
+    /// function's by its declaration and suffix, because a function
+    /// instantiation is not a type. `Copy` carries both fields for the same
+    /// reason. See `generics::GenericFunctions::at_call_in_copy`.
+    fn function(&self) -> Option<NodeId> {
+        self.instance.is_none().then_some(self.declaration)
+    }
 }
 
 /// What every function's lowering needs from the program around it.
@@ -6407,14 +6465,6 @@ struct Shared {
     /// map of substitutions -- two hash maps each -- into every one of them
     /// took `stream` from 15 to 66 seconds. Measured, then shared.
     class_instances: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Substitution>>,
-    /// What a copy of a generic *class* is, by the suffix its closures are
-    /// keyed under: the instantiation and what it binds.
-    ///
-    /// A closure written in a generic class body is lowered once, in a builder
-    /// of its own, and that builder has to be the copy's — or the field it
-    /// reads its capture from and the value the copy stored there are two
-    /// types. See `closure_variants`.
-    class_copies: rustc_hash::FxHashMap<String, ClassCopy>,
 }
 
 impl Shared {
@@ -6450,7 +6500,6 @@ impl Shared {
             generics,
             structural,
             class_instances,
-            class_copies,
         }
     }
 
@@ -8114,33 +8163,24 @@ fn lower_wanted_closures(
     let mut done: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
     while let Some(index) = wanted.iter().copied().find(|at| !done.contains(at)) {
         done.insert(index);
+        let within = closures[index].within_copy.as_ref();
         let mut builder = shared.builder(
             snapshot,
             foreign,
             Copy {
                 suffix: closures[index].within.clone().unwrap_or_default(),
                 // **Under the enclosing copy's substitution, where the
-                // closure is one of a generic class's.** Without it the body
-                // reads a capture at the declaration's type while the copy
-                // stored the instantiation's, which reaches C as an
-                // assignment between two structs.
-                substitution: closures[index]
-                    .within
-                    .as_ref()
-                    .and_then(|suffix| shared.class_copies.get(suffix))
-                    .map(|copy| copy.substitution.clone())
-                    .unwrap_or_default(),
-                instance: closures[index]
-                    .within
-                    .as_ref()
-                    .and_then(|suffix| shared.class_copies.get(suffix))
-                    .and_then(|copy| copy.instance),
-                sources: closures[index]
-                    .within
-                    .as_ref()
-                    .and_then(|suffix| shared.class_copies.get(suffix))
-                    .map(|copy| copy.sources.clone())
-                    .unwrap_or_default(),
+                // closure is one of a generic's.** Without it the body reads a
+                // capture at the declaration's type while the copy stored the
+                // instantiation's, which reaches C as an assignment between two
+                // structs.
+                substitution: within.map(|copy| copy.substitution.clone()).unwrap_or_default(),
+                instance: within.and_then(|copy| copy.instance),
+                sources: within.map(|copy| copy.sources.clone()).unwrap_or_default(),
+                // And the calls this closure makes name what the enclosing
+                // copy's do, which for a generic function is keyed by the
+                // declaration and this suffix together.
+                declaration: within.and_then(ClassCopy::function),
                 ..Copy::default()
             },
         );
@@ -19601,6 +19641,38 @@ impl<'a> FuncBuilder<'a> {
         element.or(Some(HirType::Erased))
     }
 
+    /// Refuse a parameter whose representation has no width.
+    ///
+    /// **A parameter with no width is not a parameter.** `undefined` and `void`
+    /// both represent as [`HirType::Void`], which is the right answer for a
+    /// *result* -- the function returns nothing -- and cannot be a parameter: C
+    /// spells it `void v2`, which is not C, and no backend has anything to pass.
+    ///
+    /// It arrives through a **substitution** rather than an annotation, which is
+    /// why it went unseen: `fs`'s async callback is `(...args: [unknown, T])` and
+    /// `T` is `void` for a request that answers nothing, so a copy of it takes a
+    /// position the declaration wrote as a type parameter. A written `x:
+    /// undefined` is refused earlier and elsewhere, at the call, as `an erased
+    /// value where a concrete representation is wanted`.
+    ///
+    /// Refused rather than widened to an erased `undefined`. A caller could pass
+    /// one and the body would ignore it, but the arity is also written into the
+    /// signature layout a closure's table is typed by, and two derivations of one
+    /// calling convention that disagree is the failure this area is most careful
+    /// about. The refusal is also what this shape *had*, until a closure inside a
+    /// generic function's copy could be lowered at all -- before that it never
+    /// reached a parameter list, and the first program to reach one emitted `void
+    /// v2` into `fs`'s addon, which is the `uncompilable C` category.
+    ///
+    /// One sentence for the two sites that can produce it: an ordinary parameter
+    /// and one position of a fixed-arity rest.
+    fn no_width_parameter(&self, at: NodeId) -> Diagnostic {
+        self.unsupported(
+            at,
+            "a parameter of no width, which is what `void` and `undefined` represent as -- a call has nothing to pass for it",
+        )
+    }
+
     /// A rest parameter of fixed arity, as one parameter per position.
     ///
     /// See the comment at the call in [`Self::lower_param`] for why the
@@ -19640,6 +19712,9 @@ impl<'a> FuncBuilder<'a> {
             let ty = self
                 .represent(*position)
                 .ok_or_else(|| self.unrepresentable(name_node, "a rest parameter position"))?;
+            if matches!(ty, HirType::Void) {
+                return Err(self.no_width_parameter(name_node));
+            }
             self.materialize(name_node, &ty)?;
             // Only where the declaration had nothing to say. Identical
             // positions keep their own type -- `[number, number]` stays an
@@ -19867,6 +19942,9 @@ impl<'a> FuncBuilder<'a> {
         // `Named`, which is the distinction the first attempt got wrong by
         // substituting the type. See [`Structural`].
         let ty = self.retyped.get(&index).cloned().unwrap_or(ty);
+        if matches!(ty, HirType::Void) {
+            return Err(self.no_width_parameter(name_node));
+        }
         if let Some(lent) = self.lent_hstring_param(name_node, index, &name, &ty) {
             return Ok(vec![lent]);
         }
