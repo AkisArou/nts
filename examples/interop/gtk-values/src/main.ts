@@ -18,8 +18,12 @@
 //                 key still held survives all of it, and so do both buttons
 //   walked ...    the map walked by `for...of`, its entries and its values: each
 //                 value read back as the button it is
+//   watch held gone  under `--rc`: a button a map's entry was the last to
+//                 hold is still there after its maker returned, and finalized
+//                 when the entry is deleted (`held alive` without counting,
+//                 where nothing is released)
 import { GtkButton, GtkLabel, gtk_init } from "c:Gtk-4.0";
-import { sub_log } from "c:sub";
+import { sub_gone, sub_log, sub_watch } from "c:sub";
 
 function describe(x: unknown): string {
   if (x instanceof GtkButton) return "button " + (x.label ?? "");
@@ -43,6 +47,25 @@ function churn(): string {
   for (let i = 0; i < 20; i++) bag.push(i % 3 === 0 ? a : c);
   bag.length = 3;
   return (kept === a ? "kept " : "lost ") + (a.label ?? "") + (c.label ?? "") + " " + String(bag.length);
+}
+
+// A button whose only holder is a map's entry: `stash` makes it, watches it and
+// stores it, and its own reference goes when `stash` returns -- a foreign
+// handle keeps its function's end. Deleting the entry then gives back the
+// last reference, so under reference counting the button is finalized there:
+// the entry owned one reference, no more and no fewer.
+function stash(m: Map<string, GtkButton>): void {
+  const watched = new GtkButton({ label: "w" });
+  sub_watch(watched);
+  m.set("k", watched);
+}
+
+function released(): string {
+  const m = new Map<string, GtkButton>();
+  stash(m);
+  const before = sub_gone() ? "early" : "held";
+  m.delete("k");
+  return before + " " + (sub_gone() ? "gone" : "alive");
 }
 
 function main(): void {
@@ -73,6 +96,7 @@ function main(): void {
   for (const [name, button] of byName) walked += name + "=" + (button.label ?? "") + " ";
   for (const button of byName.values()) walked += button === b ? "same " : "other ";
   sub_log("walked " + walked.trim());
+  sub_log("watch " + released());
 }
 
 main();
