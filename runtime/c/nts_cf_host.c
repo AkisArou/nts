@@ -281,7 +281,8 @@ static const void *nts_boxed_handle(NtsValue value) {
     return NULL;
   }
   const void *handle;
-  memcpy(&handle, (const unsigned char *)box + sizeof(NtsHeader), sizeof handle);
+  memcpy(&handle, (const unsigned char *)box + sizeof(NtsHeader),
+         sizeof handle);
   return handle;
 }
 
@@ -289,15 +290,18 @@ static void *nts_nsdictionary_of(const NtsMap *map, bool strings) {
   if (!map) {
     return NULL;
   }
-  CFMutableDictionaryRef made = CFDictionaryCreateMutable(
-      NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-  for (double at = nts_map_next(map, 0); at >= 0; at = nts_map_next(map, at + 1)) {
+  CFMutableDictionaryRef made =
+      CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                                &kCFTypeDictionaryValueCallBacks);
+  for (double at = nts_map_next(map, 0); at >= 0;
+       at = nts_map_next(map, at + 1)) {
     /* Both come back owned, and are given back once read. */
     NtsValue key = nts_map_key_at(map, at);
     NtsValue value = nts_map_value_at(map, at);
     void *name = nts_nsstring_of((const NtsString *)nts_value_reference(key));
     if (strings) {
-      void *text = nts_nsstring_of((const NtsString *)nts_value_reference(value));
+      void *text =
+          nts_nsstring_of((const NtsString *)nts_value_reference(value));
       if (text) {
         CFDictionarySetValue(made, name, text);
         CFRelease(text);
@@ -315,11 +319,14 @@ static void *nts_nsdictionary_of(const NtsMap *map, bool strings) {
   return (void *)made;
 }
 
-static void nts_dictionary_fill(NtsArray *keys, NtsArray *values, const void *dictionary, bool strings) {
+static void nts_dictionary_fill(NtsArray *keys, NtsArray *values,
+                                const void *dictionary, bool strings) {
   CFIndex count = (CFIndex)keys->header.length;
   const void *small[2][32];
-  const void **names = count <= 32 ? small[0] : malloc((size_t)count * sizeof(void *));
-  const void **objects = count <= 32 ? small[1] : malloc((size_t)count * sizeof(void *));
+  const void **names =
+      count <= 32 ? small[0] : malloc((size_t)count * sizeof(void *));
+  const void **objects =
+      count <= 32 ? small[1] : malloc((size_t)count * sizeof(void *));
   if (!names || !objects) {
     abort();
   }
@@ -339,11 +346,14 @@ static void nts_dictionary_fill(NtsArray *keys, NtsArray *values, const void *di
   }
 }
 
-void nts_dictionary_fill_from_nsdictionary(NtsArray *keys, NtsArray *values, const void *dictionary) {
+void nts_dictionary_fill_from_nsdictionary(NtsArray *keys, NtsArray *values,
+                                           const void *dictionary) {
   nts_dictionary_fill(keys, values, dictionary, false);
 }
 
-void nts_dictionary_fill_strings_from_nsdictionary(NtsArray *keys, NtsArray *values, const void *dictionary) {
+void nts_dictionary_fill_strings_from_nsdictionary(NtsArray *keys,
+                                                   NtsArray *values,
+                                                   const void *dictionary) {
   nts_dictionary_fill(keys, values, dictionary, true);
 }
 

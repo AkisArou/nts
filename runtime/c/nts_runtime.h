@@ -1798,8 +1798,11 @@ void nts_array_fill_from_nsarray(NtsArray *into, const void *array);
 void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array);
 void *nts_nsdictionary_of_objects(const NtsMap *map);
 void *nts_nsdictionary_of_strings(const NtsMap *map);
-void nts_dictionary_fill_from_nsdictionary(NtsArray *keys, NtsArray *values, const void *dictionary);
-void nts_dictionary_fill_strings_from_nsdictionary(NtsArray *keys, NtsArray *values, const void *dictionary);
+void nts_dictionary_fill_from_nsdictionary(NtsArray *keys, NtsArray *values,
+                                           const void *dictionary);
+void nts_dictionary_fill_strings_from_nsdictionary(NtsArray *keys,
+                                                   NtsArray *values,
+                                                   const void *dictionary);
 /* The other direction: a string as a C string, for a foreign parameter the
  * binding declares as `string`, which means `const char *`.
  *
