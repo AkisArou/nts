@@ -17,6 +17,7 @@ use react_compiler_ast::statements::{
     SwitchCase, SwitchStatement, ThrowStatement, TryStatement, UnknownStatement, VariableDeclaration,
     VariableDeclarationKind, VariableDeclarator, WhileStatement,
 };
+use serde_json::Value;
 
 use super::{Converted, Converter, k};
 
@@ -400,29 +401,39 @@ impl Converter<'_> {
             is_abstract: self.has_modifier(id, k::ABSTRACT_KEYWORD).then_some(true),
             declare: self.has_modifier(id, k::DECLARE_KEYWORD).then_some(true),
             implements: None,
-            super_type_parameters: None,
+            super_type_parameters: self.super_type_arguments(id),
             type_parameters: self.type_parameters(id),
             mixins: None,
         })
     }
 
+    /// The type after `extends` -- `Base<T>` -- if the class has one.
+    fn extends_type(&self, id: NodeId) -> Option<NodeId> {
+        // `small` is 0 for `extends`, 1 for `implements`.
+        self.list(id, "heritageClauses")
+            .into_iter()
+            .find(|clause| self.small(*clause) == 0)
+            .and_then(|clause| self.list(clause, "types").first().copied())
+    }
+
     /// The expression after `extends`, if the class has one.
     pub(super) fn super_class(&self, id: NodeId) -> Converted<Option<Box<Expression>>> {
-        for clause in self.list(id, "heritageClauses") {
-            // `small` is 0 for `extends`, 1 for `implements`.
-            if self.small(clause) == 0
-                && let Some(first) = self.list(clause, "types").first()
-            {
-                return Ok(Some(Box::new(self.expression(self.need(*first, "expression")?)?)));
-            }
-        }
-        Ok(None)
+        self.extends_type(id).map(|base| Ok(Box::new(self.expression(self.need(base, "expression")?)?))).transpose()
+    }
+
+    /// The type arguments after `extends` -- the `<T>` of `Base<T>`.
+    pub(super) fn super_type_arguments(&self, id: NodeId) -> Option<RawNode> {
+        self.extends_type(id).and_then(|base| self.type_arguments(base))
     }
 
     /// A class body. The compiler reads class members only as JSON, and only
     /// to find identifiers a method captures, which matters for a class inside
     /// a function it compiles. That is refused here rather than half-described;
     /// a class at module scope is never compiled.
+    ///
+    /// Each member carries, under `jsx`, the JSX elements and fragments in it
+    /// (the outermost ones), converted: the output printer copies a member as
+    /// its text, and lowers the JSX in it from these.
     pub(super) fn class_body(&self, id: NodeId) -> Converted<ClassBody> {
         let members = self.list(id, "members");
         // The body starts at its `{`: before the first member, or, with none,
@@ -434,7 +445,33 @@ impl Converter<'_> {
         }
         let mut base = self.base_span(id, start, self.end(id));
         base.node_id = None;
-        Ok(ClassBody { base, body: members.into_iter().map(|m| self.raw("ClassMember", m)).collect() })
+        let body = members
+            .into_iter()
+            .map(|member| {
+                let mut jsx = Vec::new();
+                self.outermost_jsx(member, &mut jsx)?;
+                let mut raw = self.raw("ClassMember", member).parse_value();
+                if !jsx.is_empty()
+                    && let Value::Object(map) = &mut raw
+                {
+                    map.insert("jsx".to_owned(), serde_json::to_value(jsx).unwrap_or(Value::Null));
+                }
+                Ok(RawNode::from_value(&raw))
+            })
+            .collect::<Converted<Vec<_>>>()?;
+        Ok(ClassBody { base, body })
+    }
+
+    /// The JSX elements and fragments under `id` that no other one contains.
+    fn outermost_jsx(&self, id: NodeId, into: &mut Vec<Expression>) -> Converted<()> {
+        for &child in &self.record(id).children {
+            if matches!(self.nodes.kind(child), Some(k::JSX_ELEMENT | k::JSX_SELF_CLOSING_ELEMENT | k::JSX_FRAGMENT)) {
+                into.push(self.expression(child)?);
+            } else {
+                self.outermost_jsx(child, into)?;
+            }
+        }
+        Ok(())
     }
 
     fn inside_function(&self, id: NodeId) -> bool {

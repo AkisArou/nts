@@ -9,6 +9,8 @@ use react_compiler_ast::jsx::{
 };
 use react_compiler_ast::literals::StringLiteral;
 
+use crate::jsx_text::decode_entities;
+
 use super::{Converted, Converter, k};
 
 impl Converter<'_> {
@@ -114,10 +116,11 @@ impl Converter<'_> {
                     .child(attribute, "initializer")
                     .map(|value| {
                         Converted::Ok(match self.kind(value) {
-                            // JSX strings take no escapes: the value is the text between the quotes.
+                            // JSX strings take no escapes but entities: the value is the text
+                            // between the quotes, decoded, as Babel reads it.
                             k::STRING_LITERAL => JSXAttributeValue::StringLiteral(StringLiteral {
                                 base: self.base(value),
-                                value: self.text.slice(self.start(value) + 1, self.end(value).saturating_sub(1)).into(),
+                                value: decode_entities(&self.text.slice(self.start(value) + 1, self.end(value).saturating_sub(1))).into(),
                             }),
                             k::JSX_EXPRESSION => JSXAttributeValue::JSXExpressionContainer(self.jsx_container(value)?),
                             k::JSX_ELEMENT | k::JSX_SELF_CLOSING_ELEMENT => JSXAttributeValue::JSXElement(Box::new(self.jsx_element(value)?)),
@@ -148,7 +151,9 @@ impl Converter<'_> {
             .into_iter()
             .map(|child| {
                 Ok(match self.kind(child) {
-                    k::JSX_TEXT => JSXChild::JSXText(JSXText { base: self.base(child), value: self.text_of(child) }),
+                    // Decoded, as Babel reads it: the compiler moves a text into a
+                    // JavaScript string, where nothing decodes it.
+                    k::JSX_TEXT => JSXChild::JSXText(JSXText { base: self.base(child), value: decode_entities(&self.text_of(child)) }),
                     k::JSX_ELEMENT | k::JSX_SELF_CLOSING_ELEMENT => JSXChild::JSXElement(Box::new(self.jsx_element(child)?)),
                     k::JSX_FRAGMENT => JSXChild::JSXFragment(self.jsx_fragment(child)?),
                     k::JSX_EXPRESSION if self.child(child, "dotDotDotToken").is_some() => JSXChild::JSXSpreadChild(JSXSpreadChild {

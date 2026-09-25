@@ -14,10 +14,12 @@ USAGE
       convert each of the project's own sources into the compiler's input
       format, writing <out-dir>/<file>.ast.json and <file>.scope.json, or
       <file>.unsupported.txt naming the construct that stopped it
-  nts-react compile <tsconfig.json> <options.json> <out-dir>
+  nts-react compile <tsconfig.json> <options.json> <out-dir> [--lower-jsx]
       convert and compile each of the project's own sources with the React
       Compiler, given the plugin's resolved options, writing the result as
-      <out-dir>/<file>.result.json and the program as <out-dir>/<file>";
+      <out-dir>/<file>.result.json and the program as <out-dir>/<file>;
+      with --lower-jsx, JSX is written as React's automatic-runtime calls,
+      as TypeScript's `--jsx react-jsx` writes it";
 
 fn main() -> ExitCode {
     // Deeply nested programs recurse deeply in the compiler; upstream's addon
@@ -46,7 +48,8 @@ fn run() -> Result<()> {
             Ok(())
         }
         [command, tsconfig, out] if command == "convert" => convert(tsconfig, out),
-        [command, tsconfig, options, out] if command == "compile" => compile(tsconfig, options, out),
+        [command, tsconfig, options, out] if command == "compile" => compile(tsconfig, options, out, false),
+        [command, tsconfig, options, out, flag] if command == "compile" && flag == "--lower-jsx" => compile(tsconfig, options, out, true),
         _ => bail!("{USAGE}"),
     }
 }
@@ -80,7 +83,7 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
     Ok(())
 }
 
-fn compile(tsconfig: &str, options: &str, out: &str) -> Result<()> {
+fn compile(tsconfig: &str, options: &str, out: &str, lower_jsx: bool) -> Result<()> {
     let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
     let options: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(options).with_context(|| format!("cannot read {options}"))?)?;
@@ -112,14 +115,16 @@ fn compile(tsconfig: &str, options: &str, out: &str) -> Result<()> {
         // The compiler's renames apply even when it compiled nothing, as the
         // Babel plugin applies them: a function that bailed out may still
         // have had a shadowing binding renamed while it was being lowered.
+        // Lowering JSX prints every file.
         let mut types = SessionTypes { session: &mut session, path: &path, tree: &tree };
         let printed = match &result {
             react_compiler::entrypoint::CompileResult::Success { ast: Some(compiled), renames, .. } => {
-                nts_react::print::print_file(&text, &original, compiled, renames, &mut types)
+                nts_react::print::print_file(&text, &original, compiled, renames, &mut types, lower_jsx)
             }
-            react_compiler::entrypoint::CompileResult::Success { ast: None, renames, .. } if !renames.is_empty() => {
-                nts_react::print::print_file(&text, &original, &original, renames, &mut types)
+            react_compiler::entrypoint::CompileResult::Success { ast: None, renames, .. } if lower_jsx || !renames.is_empty() => {
+                nts_react::print::print_file(&text, &original, &original, renames, &mut types, lower_jsx)
             }
+            _ if lower_jsx => nts_react::print::print_file(&text, &original, &original, &[], &mut types, lower_jsx),
             _ => code_for_output(&text),
         };
         std::fs::write(out.join(name), printed)?;

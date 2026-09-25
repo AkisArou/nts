@@ -30,7 +30,18 @@ function runs(code, file) {
     fileName: file,
     compilerOptions: { jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, verbatimModuleSyntax: false },
   }).outputText;
-  return generate(parse(js, { sourceType: "module", plugins: ["jsx"] }), { comments: false }).code;
+  const program = parse(js, { sourceType: "module", plugins: ["jsx"] });
+  forgetSpelling(program);
+  return generate(program, { comments: false }).code;
+}
+
+// A string literal is compared by value: `"\xA9"` and `"©"` are one string,
+// and a JSX attribute's `'a'` and `"a"` one value.
+function forgetSpelling(node) {
+  if (Array.isArray(node)) return node.forEach(forgetSpelling);
+  if (!node || typeof node !== "object") return;
+  if (node.type === "StringLiteral") delete node.extra;
+  for (const key in node) if (key !== "loc") forgetSpelling(node[key]);
 }
 
 let identical = 0, differing = 0, invalid = 0;

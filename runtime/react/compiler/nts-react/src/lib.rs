@@ -7,6 +7,7 @@
 
 pub mod babel;
 pub mod convert;
+pub mod jsx_text;
 pub mod print;
 pub mod project;
 pub mod scope;

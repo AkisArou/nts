@@ -254,7 +254,7 @@ impl Converter<'_> {
                 body: self.class_body(id)?,
                 decorators: None,
                 implements: None,
-                super_type_parameters: None,
+                super_type_parameters: self.super_type_arguments(id),
                 type_parameters: self.type_parameters(id),
             }),
             k::AS_EXPRESSION => Expression::TSAsExpression(TSAsExpression {

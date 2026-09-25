@@ -39,6 +39,8 @@ use serde_json::Value;
 
 use crate::convert::text::SourceText;
 
+mod jsx;
+
 /// The checker, for a compiler temporary's type: the type at the original
 /// node the temporary holds, printed as TypeScript written at that node.
 pub trait TypeOracle {
@@ -57,16 +59,26 @@ impl TypeOracle for NoTypes {
 
 /// Prints `compiled`, the compiler's output for `original`, whose text is
 /// `source`, applying the compiler's `renames` and restoring the types its
-/// code generation dropped (see [`Printer`]'s restoration rules).
+/// code generation dropped (see [`Printer`]'s restoration rules). With
+/// `lower_jsx`, JSX is printed as the calls it stands for ([`jsx`]).
 #[must_use]
-pub fn print_file(source: &SourceText, original: &File, compiled: &File, renames: &[BindingRenameInfo], types: &mut dyn TypeOracle) -> String {
+pub fn print_file(
+    source: &SourceText,
+    original: &File,
+    compiled: &File,
+    renames: &[BindingRenameInfo],
+    types: &mut dyn TypeOracle,
+    lower_jsx: bool,
+) -> String {
     let mut originals = FxHashMap::default();
     let mut by_span = FxHashMap::default();
     let mut definite = FxHashSet::default();
+    let mut jsx_spans = Vec::new();
     if let Ok(value) = serde_json::to_value(original) {
-        index_nodes(&value, &mut originals);
+        index_nodes(&value, &mut originals, &mut jsx_spans);
         index_spans(&value, &mut by_span, &mut definite);
     }
+    jsx_spans.sort_unstable();
     let (new_names, renamed_starts) = renamed_references(compiled, renames);
     let mut printer = Printer {
         source,
@@ -79,6 +91,9 @@ pub fn print_file(source: &SourceText, original: &File, compiled: &File, renames
         typed_locals: FxHashSet::default(),
         restoring: None,
         assigning: false,
+        lower_jsx,
+        jsx_spans: if lower_jsx { jsx_spans } else { Vec::new() },
+        jsx_imports: jsx::JsxImports::default(),
         out: String::new(),
         indent: 0,
     };
@@ -151,18 +166,26 @@ fn renamed_references(compiled: &File, renames: &[BindingRenameInfo]) -> (FxHash
 }
 
 /// Every node of the original program with an id, as JSON, to tell an
-/// unchanged node from a changed one.
-fn index_nodes(value: &Value, into: &mut FxHashMap<u64, Value>) {
+/// unchanged node from a changed one; and where each JSX element and
+/// fragment is, with its id. Where two nodes share an id -- a self-closing
+/// element and its opening element are one tsgo node -- the id names the
+/// outer one.
+fn index_nodes(value: &Value, into: &mut FxHashMap<u64, Value>, jsx: &mut Vec<(u32, u32, u64)>) {
     match value {
         Value::Object(map) => {
             if let Some(id) = map.get("_nodeId").and_then(Value::as_u64) {
-                into.insert(id, value.clone());
+                into.entry(id).or_insert_with(|| value.clone());
+                if matches!(map.get("type").and_then(Value::as_str), Some("JSXElement" | "JSXFragment"))
+                    && let Some((start, end)) = span_of(value)
+                {
+                    jsx.push((start, end, id));
+                }
             }
             for child in map.values() {
-                index_nodes(child, into);
+                index_nodes(child, into, jsx);
             }
         }
-        Value::Array(items) => items.iter().for_each(|item| index_nodes(item, into)),
+        Value::Array(items) => items.iter().for_each(|item| index_nodes(item, into, jsx)),
         _ => {}
     }
 }
@@ -188,6 +211,14 @@ struct Printer<'a> {
     renamed: FxHashMap<usize, String>,
     /// Where renamed identifiers sit: a copied node must not span one.
     renamed_starts: Vec<u32>,
+    /// Whether JSX is printed as calls.
+    lower_jsx: bool,
+    /// The original's JSX elements and fragments by span, sorted, with their
+    /// ids; empty unless lowering. A copied node spanning one is copied
+    /// around it, and the JSX printed lowered in its place.
+    jsx_spans: Vec<(u32, u32, u64)>,
+    /// The runtime functions the lowered JSX calls.
+    jsx_imports: jsx::JsxImports,
     out: String,
     indent: usize,
 }
@@ -219,7 +250,7 @@ impl Printer<'_> {
 
     /// The node's source text, if it is identical to the original node it
     /// came from.
-    fn unchanged<T: Serialize>(&self, node: &T, base: &BaseNode) -> Option<String> {
+    fn unchanged<T: Serialize>(&mut self, node: &T, base: &BaseNode) -> Option<String> {
         let (id, start, end) = (base.node_id?, base.start?, base.end?);
         let first_inside = self.renamed_starts.partition_point(|at| *at < start);
         if self.renamed_starts.get(first_inside).is_some_and(|at| *at < end) {
@@ -227,15 +258,42 @@ impl Printer<'_> {
         }
         let original = self.originals.get(&u64::from(id))?;
         let value = serde_json::to_value(node).ok()?;
-        (&value == original).then(|| self.source.slice(start, end))
+        (&value == original).then(|| self.copy(start, end))
     }
 
     /// An opaque node -- a type, a class member -- as its source text.
-    fn raw(&self, raw: &RawNode) -> Option<String> {
+    fn raw(&mut self, raw: &RawNode) -> Option<String> {
         let value = raw.parse_value();
         let start = u32::try_from(value.get("start")?.as_u64()?).ok()?;
         let end = u32::try_from(value.get("end")?.as_u64()?).ok()?;
-        Some(self.source.slice(start, end))
+        Some(self.copy(start, end))
+    }
+
+    /// The source between two offsets, with any JSX in it lowered when
+    /// lowering: the text around each outermost element is copied, and the
+    /// element printed as its call.
+    fn copy(&mut self, start: u32, end: u32) -> String {
+        let mut at = self.jsx_spans.partition_point(|(s, ..)| *s < start);
+        if self.jsx_spans.get(at).is_none_or(|(s, ..)| *s >= end) {
+            return self.source.slice(start, end);
+        }
+        let outer = std::mem::take(&mut self.out);
+        let mut cursor = start;
+        while let Some(&(jsx_start, jsx_end, id)) = self.jsx_spans.get(at).filter(|(s, ..)| *s < end) {
+            self.out.push_str(&self.source.slice(cursor, jsx_start));
+            match self.originals.get(&id).cloned().map(serde_json::from_value::<Expression>) {
+                Some(Ok(Expression::JSXElement(element))) => self.jsx_lower_element(&element),
+                Some(Ok(Expression::JSXFragment(fragment))) => self.jsx_lower_fragment(&fragment),
+                _ => self.out.push_str(&self.source.slice(jsx_start, jsx_end)),
+            }
+            cursor = jsx_end;
+            // What is inside was printed with it.
+            while self.jsx_spans.get(at).is_some_and(|(s, ..)| *s < jsx_end) {
+                at += 1;
+            }
+        }
+        self.out.push_str(&self.source.slice(cursor, end));
+        std::mem::replace(&mut self.out, outer)
     }
 
     /// An identifier's name as printed: its new name if the compiler renamed
@@ -270,6 +328,23 @@ impl Printer<'_> {
             .iter()
             .find_map(|node| node.get(key).and_then(span_of))
             .map(|(start, end)| self.source.slice(start, end))
+    }
+
+    /// How the user spelled a JSX text or attribute string whose value is
+    /// `value` (decoded), when the spelling matters: the source text of the
+    /// original node spanning `base`'s span, if it holds an entity and still
+    /// spells `value` -- the compiler keeps the span of a text it trims. An
+    /// attribute string's spelling is between its quotes.
+    fn jsx_spelling(&self, base: &BaseNode, value: &str) -> Option<String> {
+        let (start, end) = span_of_base(base, self.source)?;
+        let node = self.by_span.get(&(start, end))?.iter().find_map(|node| node.get("type").and_then(Value::as_str))?;
+        let (start, end) = match node {
+            "JSXText" => (start, end),
+            "StringLiteral" => (start + 1, end.saturating_sub(1)),
+            _ => return None,
+        };
+        let spelling = self.source.slice(start, end);
+        (spelling.contains('&') && crate::jsx_text::decode_entities(&spelling) == value).then_some(spelling)
     }
 
     /// Whether the original binding spanning `base`'s span was optional (`a?`).
@@ -362,6 +437,7 @@ impl Printer<'_> {
         for directive in &compiled.program.directives {
             let _ = writeln!(self.out, "\"{}\";", directive.value.value);
         }
+        let imports_at = self.out.len();
         for statement in &compiled.program.body {
             let base = statement_base(statement);
             let original_here = base.node_id.is_some() && base.start.is_some_and(|s| s >= cursor);
@@ -376,6 +452,7 @@ impl Printer<'_> {
             }
         }
         self.write(&self.source.slice(cursor, self.source.len()));
+        self.out.insert_str(imports_at, &self.jsx_imports.declarations());
     }
 
     fn statements(&mut self, statements: &[Statement]) {
@@ -640,7 +717,8 @@ impl Printer<'_> {
     /// A node, whatever it is, as its source text.
     fn span(&mut self, base: &BaseNode) {
         if let (Some(start), Some(end)) = (base.start, base.end) {
-            self.write(&self.source.slice(start, end));
+            let text = self.copy(start, end);
+            self.write(&text);
         }
     }
 
@@ -1458,6 +1536,10 @@ impl Printer<'_> {
     // ---- JSX -------------------------------------------------------------
 
     fn jsx_element(&mut self, element: &JSXElement) {
+        if self.lower_jsx {
+            self.jsx_lower_element(element);
+            return;
+        }
         if let Some(text) = self.unchanged(element, &element.base) {
             self.write(&text);
             return;
@@ -1482,12 +1564,22 @@ impl Printer<'_> {
                         self.write("=");
                         match value {
                             JSXAttributeValue::StringLiteral(s) => {
-                                if let Some(text) = self.unchanged(s, &s.base) {
-                                    self.write(&text);
+                                // The value is decoded: its entities are
+                                // spelled as the user spelled them, and an
+                                // `&` the compiler made goes in a JavaScript
+                                // string, where nothing could misread it.
+                                let value = s.value.to_string_lossy();
+                                let spelling = self.jsx_spelling(&s.base, &value);
+                                if spelling.is_none() && value.contains('&') {
+                                    self.write("{");
+                                    self.write(&quote(&s.value.code_units()));
+                                    self.write("}");
                                 } else {
-                                    let value = s.value.to_string_lossy();
-                                    let quote = if value.contains('"') { '\'' } else { '"' };
-                                    let _ = write!(self.out, "{quote}{value}{quote}");
+                                    // A JSX string has no escapes: the quote
+                                    // is whichever one it does not contain.
+                                    let text = spelling.unwrap_or(value);
+                                    let quote = if text.contains('"') { '\'' } else { '"' };
+                                    let _ = write!(self.out, "{quote}{text}{quote}");
                                 }
                             }
                             JSXAttributeValue::JSXExpressionContainer(c) => self.jsx_container(&c.expression),
@@ -1517,6 +1609,10 @@ impl Printer<'_> {
     }
 
     fn jsx_fragment(&mut self, fragment: &JSXFragment) {
+        if self.lower_jsx {
+            self.jsx_lower_fragment(fragment);
+            return;
+        }
         if let Some(text) = self.unchanged(fragment, &fragment.base) {
             self.write(&text);
             return;
@@ -1561,13 +1657,13 @@ impl Printer<'_> {
     fn jsx_children(&mut self, children: &[JSXChild]) {
         for child in children {
             match child {
-                JSXChild::JSXText(t) => {
-                    if let Some(text) = self.unchanged(t, &t.base) {
-                        self.write(&text);
-                    } else {
-                        self.write(&t.value);
-                    }
-                }
+                // The value is decoded: its entities are spelled as the user
+                // spelled them. Code generation puts a text holding `&<>{}`
+                // in a container, so the value is otherwise its own spelling.
+                JSXChild::JSXText(t) => match self.jsx_spelling(&t.base, &t.value) {
+                    Some(spelling) => self.write(&spelling),
+                    None => self.write(&t.value),
+                },
                 JSXChild::JSXElement(e) => self.jsx_element(e),
                 JSXChild::JSXFragment(f) => self.jsx_fragment(f),
                 JSXChild::JSXExpressionContainer(c) => self.jsx_container(&c.expression),
