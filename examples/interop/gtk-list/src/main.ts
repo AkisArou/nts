@@ -4,13 +4,23 @@
 // whose `setup` gives each row a label and whose `bind` fills it from the
 // row's item. `get_item` is `gpointer` to C; the program holds the object.
 //
+// Beside it, as GJS writes its own models: a store of `Task`, a class the
+// program writes over `GObject` with fields of its own, made with
+// `item_type: Task.$gtype`, and a second view whose `bind` asks `instanceof
+// Task` -- a `GType` check -- and reads the fields it narrowed to.
+//
 // The log:
+//   tasks 100 true task 0  the task store's count, that its item type is
+//                 `Task.$gtype`, and its first item read back through
+//                 `get_object` and `instanceof`
 //   items 1000    the store's `get_n_items`, through `GListModel`
 //   bound rows    `bind` ran for the rows GTK laid out, each label filled
 //                 from its `GtkStringObject` -- read through checked casts
+//   bound tasks   and for the task view's, from each `Task`'s own fields
 import {
   GtkApplication,
   GtkApplicationWindow,
+  GtkBox,
   GtkLabel,
   GtkListView,
   GtkSignalListItemFactory,
@@ -20,8 +30,45 @@ import {
 } from "c:Gtk-4.0";
 import { asGtkLabel, asGtkListItem, asGtkStringObject } from "../types/gir/Gtk-4.0.values.ts";
 import { ApplicationFlags, GListStore } from "c:Gio-2.0";
+import { GObject } from "c:GObject-2.0";
 import { g_timeout_add_full } from "c:GLib-2.0";
 import { notes_log } from "c:notes";
+
+class Task extends GObject {
+  title = "";
+  done = false;
+}
+
+// A view over a store of `Task`s, and how many rows it has bound -- done ones
+// among them -- by the time it is read.
+function taskView(): { view: GtkListView; bound: () => number } {
+  const store = new GListStore({ item_type: Task.$gtype });
+  for (let i = 0; i < 100; i++) {
+    const task = new Task({});
+    task.title = "task " + String(i);
+    task.done = i % 3 === 0;
+    store.append(task);
+  }
+  const first = store.get_object(0);
+  notes_log("tasks " + String(store.get_n_items()) + " " + String(store.get_item_type() === Task.$gtype) + " " + (first instanceof Task ? first.title : "?"));
+  const factory = new GtkSignalListItemFactory({});
+  let bound = 0;
+  factory.connect("setup", (_factory, object) => {
+    const item = asGtkListItem(object);
+    if (item !== null) item.child = new GtkLabel({ xalign: 0 });
+  });
+  factory.connect("bind", (_factory, object) => {
+    const item = asGtkListItem(object);
+    if (item === null) return;
+    const label = asGtkLabel(item.child);
+    const task = item.item;
+    if (label !== null && task instanceof Task) {
+      label.label = (task.done ? "[x] " : "[ ] ") + task.title;
+      if (task.done) bound++;
+    }
+  });
+  return { view: new GtkListView({ model: new GtkSingleSelection({ model: store }), factory, vexpand: true }), bound: () => bound };
+}
 
 function open(application: GtkApplication): void {
   const store = new GListStore({ item_type: gtk_string_object_get_type() });
@@ -43,14 +90,19 @@ function open(application: GtkApplication): void {
       bound++;
     }
   });
-  const view = new GtkListView({ model: new GtkSingleSelection({ model: store }), factory });
+  const view = new GtkListView({ model: new GtkSingleSelection({ model: store }), factory, vexpand: true });
+  const tasks = taskView();
+  const column = new GtkBox({});
+  column.append(view);
+  column.append(tasks.view);
   const window = new GtkApplicationWindow({ application, title: "List" });
   window.set_default_size(300, 400);
-  window.set_child(view);
+  window.set_child(column);
   window.present();
   notes_log("items " + String(store.get_n_items()));
   g_timeout_add_full(0, 300, () => {
     notes_log(bound > 0 ? "bound rows" : "bound nothing");
+    notes_log(tasks.bound() > 0 ? "bound tasks" : "bound no tasks");
     application.quit();
     return false;
   });

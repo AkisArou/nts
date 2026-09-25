@@ -299,6 +299,11 @@ fn construction(
     let _ = writeln!(out, "  export const {name}: {abstract_construct}{{");
     if let Some(gtype) = gtype {
         let _ = writeln!(out, "    /**\n     * @ntsGType {gtype}\n     */\n    readonly __c_gtype?: never;");
+        // GJS's name for the class's `GType`, which a class the program
+        // writes over this one inherits as a static: `Task.$gtype` for a
+        // `GListStore`'s `item_type`. The compiler answers it with the
+        // `GType` function of the class it is read from.
+        out.push_str("    readonly $gtype: c_size_t;\n");
     }
     out.push_str(construct.as_deref().unwrap_or_default());
     for function in statics {

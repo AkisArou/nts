@@ -26,5 +26,5 @@ mkdir -p "$out"
 log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
   timeout 30 "$root/examples/interop/with-display.sh" "$out/list/linux-gnu-x86_64/list" 2>/dev/null | tr '\n' ' ' || true)
 echo "log: $log"
-[ "$log" = "items 1000 bound rows " ] || { echo "FAILED gtk-list: expected items 1000 bound rows" >&2; exit 1; }
+[ "$log" = "tasks 100 true task 0 items 1000 bound rows bound tasks " ] || { echo "FAILED gtk-list: expected tasks 100 true task 0 items 1000 bound rows bound tasks" >&2; exit 1; }
 echo "a list view over a GListStore, its rows bound by a factory: OK"

@@ -37227,12 +37227,20 @@ impl<'a> FuncBuilder<'a> {
         Some((receiver, Callee::Direct(format!("{owner}#{key}"))))
     }
 
+    /// A read an object system answers rather than a field: an Objective-C
+    /// property, which is a message, and the one named read through a handle
+    /// that is not refused in [`Self::lower_property_access`]; and
+    /// `Task.$gtype`, a `GObject` class's `GType`.
+    fn foreign_property_read(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        let [object, member] = self.children(id)[..] else { return Ok(None) };
+        if let Some(value) = self.lower_objc_property_get(id, object, member)? {
+            return Ok(Some(value));
+        }
+        self.gtype_read(id, object, member).transpose()
+    }
+
     fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
-        // An Objective-C property is a message, and the one named read
-        // through a handle that is not refused below.
-        if let [object, member] = self.children(id)[..]
-            && let Some(value) = self.lower_objc_property_get(id, object, member)?
-        {
+        if let Some(value) = self.foreign_property_read(id)? {
             return Ok(value);
         }
         self.check_native_brand_read(id)?;
@@ -45601,16 +45609,7 @@ impl<'a> FuncBuilder<'a> {
         let no = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
         self.terminate(Terminator::Branch { cond: absent, then_target: answered, then_args: vec![no], else_target: asked, else_args: Vec::new() });
         self.switch_to(asked);
-        // The class's `GType`: a program class's own function, which its
-        // backend defines and registers it in, or the binding's `get_type`.
-        let class = if gtype.starts_with(super::native::PROGRAM_GTYPE) {
-            let size = super::native::Type::Scalar(super::native::Scalar::Size);
-            let ty = size.representation();
-            let function = synthesized(&gtype, Vec::new(), size, None, Vec::new());
-            self.push(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(function)), args: Vec::new(), frame: None }, ty, origin.clone())
-        } else {
-            self.call_foreign_named(id, &gtype, Vec::new())?
-        };
+        let class = self.call_gtype(id, &gtype)?;
         let is_a = self.call_foreign_named(id, "g_type_check_instance_is_a", vec![object, class])?;
         let is_a = if self.values[is_a.0 as usize].ty == HirType::Bool {
             is_a
@@ -45622,6 +45621,33 @@ impl<'a> FuncBuilder<'a> {
         self.terminate(Terminator::Jump { target: answered, args: vec![is_a] });
         self.switch_to(answered);
         Ok(Some(answer))
+    }
+
+    /// A class's `GType`, from the function `gtype_function` named: a program
+    /// class's own, which its backend defines and registers it in, or the
+    /// binding's `get_type`.
+    fn call_gtype(&mut self, id: NodeId, gtype: &str) -> Result<ValueId, Diagnostic> {
+        if !gtype.starts_with(super::native::PROGRAM_GTYPE) {
+            return self.call_foreign_named(id, gtype, Vec::new());
+        }
+        let size = super::native::Type::Scalar(super::native::Scalar::Size);
+        let ty = size.representation();
+        let function = synthesized(gtype, Vec::new(), size, None, Vec::new());
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(function)), args: Vec::new(), frame: None }, ty, origin))
+    }
+
+    /// `Task.$gtype`, GJS's name for a `GObject` class's `GType`: the one
+    /// `gtype_function` names for the class the member is read from -- so a
+    /// class the program wrote answers its own, not its parent's, whose
+    /// declaration it inherited. `None` for any other read.
+    fn gtype_read(&mut self, id: NodeId, object: NodeId, member: NodeId) -> Option<Result<ValueId, Diagnostic>> {
+        if self.literal_name(member).as_deref() != Some("$gtype") {
+            return None;
+        }
+        let symbol = self.denoted_symbol(self.node(object).symbol?);
+        let gtype = super::native::gtype_function(self.snapshot, symbol)?;
+        Some(self.call_gtype(id, &gtype))
     }
 
     /// Whether `declaration` sits inside `declare module "objc:..."`.
