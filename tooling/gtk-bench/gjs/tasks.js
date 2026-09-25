@@ -18,37 +18,8 @@ function makeTasks() {
         const title = `${verb} the ${noun} #${String(i)}`;
         tasks.push({ title, priority, words: title.split(' ') });
     }
-    return sortTasks(tasks);
-}
-
-function before(a, b) {
-    return a.priority !== b.priority ? a.priority < b.priority : a.title <= b.title;
-}
-
-function sortTasks(tasks) {
-    let from = tasks;
-    let to = tasks.slice();
-    for (let width = 1; width < from.length; width *= 2) {
-        for (let low = 0; low < from.length; low += 2 * width) {
-            const middle = Math.min(low + width, from.length);
-            const high = Math.min(low + 2 * width, from.length);
-            let left = low;
-            let right = middle;
-            for (let at = low; at < high; at++) {
-                if (left < middle && (right >= high || before(from[left], from[right]))) {
-                    to[at] = from[left];
-                    left++;
-                } else {
-                    to[at] = from[right];
-                    right++;
-                }
-            }
-        }
-        const swap = from;
-        from = to;
-        to = swap;
-    }
-    return from;
+    tasks.sort((a, b) => (a.priority !== b.priority ? a.priority - b.priority : a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
+    return tasks;
 }
 
 function matches(task, query) {

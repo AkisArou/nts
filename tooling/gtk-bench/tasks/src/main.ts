@@ -6,7 +6,7 @@
 // person would, logs how many tasks each one leaves, and quits.
 //
 // The log:
-//   tasks 10000        the tasks made and sorted
+//   tasks 10000        the tasks made and sorted (`sort`, with a comparator)
 //   first ...          the first after sorting: priority, then title
 //   q "<query>" N      each query typed, and the tasks it leaves
 //   bound rows         the list view laid out rows from the filtered model
@@ -58,40 +58,8 @@ function makeTasks(): Task[] {
     const title = verb + " the " + noun + " #" + String(i);
     tasks.push({ title, priority, words: title.split(" ") });
   }
-  return sortTasks(tasks);
-}
-
-function before(a: Task, b: Task): boolean {
-  return a.priority !== b.priority ? a.priority < b.priority : a.title <= b.title;
-}
-
-// A stable merge sort, by priority and then title. Written out rather than
-// `tasks.sort(compare)` -- which nts does not compile yet -- and written out
-// the same way in `../gjs/tasks.js`, so both sides do the same work.
-function sortTasks(tasks: Task[]): Task[] {
-  let from = tasks;
-  let to: Task[] = tasks.slice();
-  for (let width = 1; width < from.length; width *= 2) {
-    for (let low = 0; low < from.length; low += 2 * width) {
-      const middle = Math.min(low + width, from.length);
-      const high = Math.min(low + 2 * width, from.length);
-      let left = low;
-      let right = middle;
-      for (let at = low; at < high; at++) {
-        if (left < middle && (right >= high || before(from[left], from[right]))) {
-          to[at] = from[left];
-          left++;
-        } else {
-          to[at] = from[right];
-          right++;
-        }
-      }
-    }
-    const swap = from;
-    from = to;
-    to = swap;
-  }
-  return from;
+  tasks.sort((a, b) => (a.priority !== b.priority ? a.priority - b.priority : a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
+  return tasks;
 }
 
 // Every word of the query is the start of some word of the title, ignoring
