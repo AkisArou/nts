@@ -146,6 +146,18 @@ void *nts_com_addref(void *object) {
   return object;
 }
 
+/* A COM object erased into a value -- `unknown`, a table's value, an array
+ * of any -- holds one reference of the program's, counted as the program's
+ * other references to it are. */
+static void nts_com_value_retain(void *object) { nts_com_addref(object); }
+
+static void nts_com_value_release(void *object);
+
+__attribute__((constructor)) static void nts_com_register_family(void) {
+  nts_handle_family_register(NTS_TAG_HANDLE_COM, nts_com_value_retain,
+                             nts_com_value_release, "COM");
+}
+
 static uint32_t releases;
 
 /* `IUnknown::Release`, uncounted: the runtime's own references. */
@@ -161,6 +173,8 @@ void nts_com_release(void *object) {
     nts_unknown_release(object);
   }
 }
+
+static void nts_com_value_release(void *object) { nts_com_release(object); }
 
 /* How many references the program has given back: a test's view of whether
  * the counting provider releases what it took. */

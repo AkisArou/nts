@@ -31,8 +31,11 @@
 // - `global`: a handle held at module scope, read from a function (`held`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
-//   call that was handed it -- and 19 under `--rc`, those two and one for
-//   each object handed over: `value`, `list`, `made`, the `Parse("false")`
+//   call that was handed it -- and 35 under `--rc` (`expected-rc.txt`),
+//   those two and one for each object handed over, among them: the four
+//   references `erased` holds (`seven`, the map's entry, the array's element
+//   and the one `get` hands back; a run without the arm measured four fewer),
+//   `value`, `list`, `made`, the `Parse("false")`
 //   read once and dropped, the languages, the array, its `IVector` and the
 //   item read from it, `built`, the number put in it, `built` as its
 //   `IJsonValue`, the buffer, the reference, its `IClosable`, and the
@@ -147,6 +150,21 @@ function map(): string {
   return String(map.get_Size()) + ":" + map.Lookup("a") + ":" + String(replaced) + ":" + String(map.HasKey("c"));
 }
 
+// A COM handle where any value may go -- a `Map` and an `unknown[]` -- as the
+// handle tag block carries it: tagged `NTS_TAG_HANDLE_COM`, one reference
+// owned by the value and counted through the family `nts_winrt.c` registers.
+// Read back it is the same object (`===`), still callable, and `typeof` says
+// "object".
+function erased(): string {
+  const seven = JsonValue.CreateNumberValue(7);
+  const byName = new Map<string, JsonValue>();
+  byName.set("seven", seven);
+  const bag: unknown[] = [seven, 1];
+  const back = byName.get("seven");
+  return String(back === seven) + ":" + (back === undefined ? "none" : String(back.GetNumber())) + ":" +
+    typeof bag[0] + ":" + String(bag[0] === seven);
+}
+
 // `Guid`, which `winrt:types` declares and no metadata defines: a new one,
 // which is version 4 with RFC 4122's variant -- the variant read out of
 // `Data4`, the struct's array field -- the empty one, all zeros, and
@@ -238,7 +256,7 @@ function run(): string {
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
-    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " map=" + map() + " guids=" + guids() + " global=" + String(held.GetNumber());
+    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " map=" + map() + " erased=" + erased() + " guids=" + guids() + " global=" + String(held.GetNumber());
 }
 
 if (asked("throw")) {

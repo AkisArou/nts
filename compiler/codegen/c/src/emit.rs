@@ -248,7 +248,7 @@ impl Support<'_> {
 /// The helpers `nts_winrt.c` defines, any one of which a program calling it
 /// names in its C. A class over a composable class names `nts_com_register(`
 /// where it is registered, whether or not the program `new`s it.
-const WINRT_HELPERS: [&str; 12] = [
+const WINRT_HELPERS: [&str; 13] = [
     "nts_string_to_hstring(",
     "nts_hstring_release(",
     "nts_string_from_hstring(",
@@ -261,6 +261,9 @@ const WINRT_HELPERS: [&str; 12] = [
     "nts_com_register(",
     "nts_com_compose_named(",
     "nts_string_copy_hstring(",
+    // A COM object erased into a value, which the family this file
+    // registers counts.
+    "NTS_TAG_HANDLE_COM",
 ];
 
 /// Every file a program needs beside `program.c`, given whether it converts case.
