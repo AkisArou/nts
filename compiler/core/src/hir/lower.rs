@@ -8198,7 +8198,31 @@ fn lower_wanted_closures(
         );
         match builder.lower_closure(index, &closures[index]) {
             Ok(func) => lowered.program.funcs.push(func),
-            Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+            // **A refused closure had no line of its own.** `uncompiled` is keyed
+            // by a *declared* name and an arrow has none, so every cascade ending
+            // in "it calls `Closure1#call`, which was refused above" had nothing
+            // above: the diagnostic naming the cause is attributed to a source
+            // position, and `nts refusals` -- a name-per-line view of
+            // `uncompiled` -- drops it entirely.
+            //
+            // The React lane's reducer chain reads exactly that way, and so does
+            // every other chain that ends in a closure's `#call`. It is the same
+            // hole `f3df349a` closed one mechanism over: a cascade is only worth
+            // printing if its last link names something a reader can look up.
+            //
+            // Under `closure_names`' own answer rather than a second spelling of
+            // it, which is also the name the *caller's* cascade prints -- so the
+            // two sides agree by construction rather than by coincidence.
+            Err(diagnostic) => {
+                let name = closure_names(index).1;
+                if !lowered.program.uncompiled.iter().any(|(had, _)| *had == name) {
+                    lowered
+                        .program
+                        .uncompiled
+                        .push((name, diagnostic.message.clone()));
+                }
+                lowered.diagnostics.push(diagnostic);
+            }
         }
         wanted.extend(builder.used_closures.iter().copied());
         collect_layouts(&mut lowered.program, builder.layouts);
