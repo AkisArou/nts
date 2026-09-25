@@ -19,7 +19,10 @@ USAGE
       Compiler, given the plugin's resolved options, writing the result as
       <out-dir>/<file>.result.json and the program as <out-dir>/<file>;
       with --lower-jsx, JSX is written as React's automatic-runtime calls,
-      as TypeScript's `--jsx react-jsx` writes it";
+      as TypeScript's `--jsx react-jsx` writes it
+  nts-react stage <tsconfig.json> <out-dir>
+      what `react` in nts.config.ts has nts read: `compile` with the
+      stage's default options and JSX lowered";
 
 fn main() -> ExitCode {
     // Deeply nested programs recurse deeply in the compiler; upstream's addon
@@ -48,8 +51,9 @@ fn run() -> Result<()> {
             Ok(())
         }
         [command, tsconfig, out] if command == "convert" => convert(tsconfig, out),
-        [command, tsconfig, options, out] if command == "compile" => compile(tsconfig, options, out, false),
-        [command, tsconfig, options, out, flag] if command == "compile" && flag == "--lower-jsx" => compile(tsconfig, options, out, true),
+        [command, tsconfig, options, out] if command == "compile" => compile(tsconfig, &read_options(options)?, out, false),
+        [command, tsconfig, out] if command == "stage" => compile(tsconfig, &nts_react::stage::default_options(), out, true),
+        [command, tsconfig, options, out, flag] if command == "compile" && flag == "--lower-jsx" => compile(tsconfig, &read_options(options)?, out, true),
         _ => bail!("{USAGE}"),
     }
 }
@@ -83,10 +87,12 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
     Ok(())
 }
 
-fn compile(tsconfig: &str, options: &str, out: &str, lower_jsx: bool) -> Result<()> {
+fn read_options(path: &str) -> Result<serde_json::Value> {
+    Ok(serde_json::from_str(&std::fs::read_to_string(path).with_context(|| format!("cannot read {path}"))?)?)
+}
+
+fn compile(tsconfig: &str, options: &serde_json::Value, out: &str, lower_jsx: bool) -> Result<()> {
     let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
-    let options: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(options).with_context(|| format!("cannot read {options}"))?)?;
     let out = camino::Utf8PathBuf::from(out);
     std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
     let mut session = nts_react::project::Session::open(&tsconfig)?;
@@ -98,7 +104,7 @@ fn compile(tsconfig: &str, options: &str, out: &str, lower_jsx: bool) -> Result<
         let nodes = nts_react::tsgo::Nodes::new(&tree.nodes);
         let mut types = SessionTypes { session: &mut session, path: &path, tree: &tree };
         let print = nts_react::print::PrintOptions { lower_jsx, ..Default::default() };
-        match nts_react::stage::compile_file(&code, nodes, path.as_str(), &options, &mut types, &print) {
+        match nts_react::stage::compile_file(&code, nodes, path.as_str(), options, &mut types, &print) {
             Ok(outcome) => {
                 std::fs::write(out.join(format!("{name}.result.json")), serde_json::to_string(&outcome.result)?)?;
                 std::fs::write(out.join(name), outcome.text)?;
