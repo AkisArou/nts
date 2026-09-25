@@ -16,8 +16,8 @@ if ! pkg-config --exists gtk4; then
   echo "SKIP gtk-gir: no gtk4 pkg-config entry"
   exit 0
 fi
-if ! command -v xvfb-run >/dev/null 2>&1; then
-  echo "SKIP gtk-gir: no xvfb-run on PATH"
+if ! command -v Xvfb >/dev/null 2>&1; then
+  echo "SKIP gtk-gir: no Xvfb on PATH"
   exit 0
 fi
 # The GIR files are a separate package on some distributions.
@@ -29,7 +29,7 @@ fi
 mkdir -p "$out"
 "$nts" build "$source/tsconfig.json" --out "$out"
 log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
-  timeout 30 xvfb-run -a "$out/gir/linux-gnu-x86_64/gir" 2>/dev/null | tr '\n' ' ' || true)
+  timeout 30 "$root/examples/interop/with-display.sh" "$out/gir/linux-gnu-x86_64/gir" 2>/dev/null | tr '\n' ' ' || true)
 echo "log: $log"
 expected="ymd=2026-9 keyfile true 5 no-error error-set 0 thrown split=a|b|c sha256=ba7816bf made press false buffer ab true entry typed! 0 cast-ok cast-null clicked 1 order=ab idle label=tick 3 status=0 ticks=3 kind=2 made=true again=rejected removed=true contents=6 "
 if [ "$log" != "$expected" ]; then
@@ -43,7 +43,7 @@ fi
 # freed or NULL object into an abort. Same log.
 "$nts" build "$source/tsconfig.json" --out "$out/rc" --rc
 rc=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
-  timeout 30 xvfb-run -a "$out/rc/gir/linux-gnu-x86_64/gir" 2>/dev/null | tr '\n' ' ' || true)
+  timeout 30 "$root/examples/interop/with-display.sh" "$out/rc/gir/linux-gnu-x86_64/gir" 2>/dev/null | tr '\n' ' ' || true)
 echo "rc:  $rc"
 if [ "$rc" != "$expected" ]; then
   echo "FAILED gtk-gir: under --rc, expected $expected" >&2

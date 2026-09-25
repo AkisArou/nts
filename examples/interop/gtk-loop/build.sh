@@ -24,8 +24,8 @@ if ! pkg-config --exists gtk4; then
   echo "SKIP gtk-loop: no gtk4 pkg-config entry"
   exit 0
 fi
-if ! command -v xvfb-run >/dev/null 2>&1; then
-  echo "SKIP gtk-loop: no xvfb-run on PATH"
+if ! command -v Xvfb >/dev/null 2>&1; then
+  echo "SKIP gtk-loop: no Xvfb on PATH"
   exit 0
 fi
 
@@ -35,7 +35,7 @@ program="$out/loop/linux-gnu-x86_64/loop"
 
 run() {
   env GSK_RENDERER=cairo G_DEBUG=fatal-criticals "$@" \
-    timeout 30 xvfb-run -a "$program" 2>/dev/null | tr '\n' ' ' || true
+    timeout 30 "$root/examples/interop/with-display.sh" "$program" 2>/dev/null | tr '\n' ' ' || true
 }
 without_early() { printf '%s' "$1" | sed 's/early-timer //'; }
 # `done` is printed once `g_application_run` has returned, so a timer logged
@@ -66,7 +66,7 @@ if early_while_running "$detached"; then
   exit 1
 fi
 
-cpu=$(env GSK_RENDERER=cairo LOOP_LINGER=1500 timeout 30 xvfb-run -a \
+cpu=$(env GSK_RENDERER=cairo LOOP_LINGER=1500 timeout 30 "$root/examples/interop/with-display.sh" \
   /usr/bin/time -f "%U %S" "$program" 2>&1 >/dev/null | tail -1)
 echo "idle 1.5 s, cpu (user sys): $cpu"
 if ! printf '%s' "$cpu" | awk '{ exit !($1 + $2 < 0.5) }'; then

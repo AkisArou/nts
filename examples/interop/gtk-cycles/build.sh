@@ -19,8 +19,8 @@ if ! pkg-config --exists gtk4; then
   echo "SKIP gtk-cycles: no gtk4 pkg-config entry"
   exit 0
 fi
-if ! command -v xvfb-run >/dev/null 2>&1; then
-  echo "SKIP gtk-cycles: no xvfb-run on PATH"
+if ! command -v Xvfb >/dev/null 2>&1; then
+  echo "SKIP gtk-cycles: no Xvfb on PATH"
   exit 0
 fi
 if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
@@ -31,7 +31,7 @@ fi
 mkdir -p "$out"
 "$nts" build "$source/tsconfig.json" --out "$out" --rc
 log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
-  timeout 30 xvfb-run -a "$out/cycles/linux-gnu-x86_64/cycles" 2>/dev/null | tr '\n' ' ' || true)
+  timeout 30 "$root/examples/interop/with-display.sh" "$out/cycles/linux-gnu-x86_64/cycles" 2>/dev/null | tr '\n' ' ' || true)
 echo "log: $log"
 expected="plain 1 other 1 itself 1 parented 1 h1 e h2 e looked emitting 1 chained 2 listed 3 "
 if [ "$log" != "$expected" ]; then

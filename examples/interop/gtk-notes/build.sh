@@ -12,8 +12,8 @@ if ! pkg-config --exists gtk4; then
   echo "SKIP gtk-notes: no gtk4 pkg-config entry"
   exit 0
 fi
-if ! command -v xvfb-run >/dev/null 2>&1; then
-  echo "SKIP gtk-notes: no xvfb-run on PATH"
+if ! command -v Xvfb >/dev/null 2>&1; then
+  echo "SKIP gtk-notes: no Xvfb on PATH"
   exit 0
 fi
 if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
@@ -27,7 +27,7 @@ file=/tmp/nts-gtk-notes.txt
 rm -f "$file"
 run() {
   env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
-    timeout 30 xvfb-run -a "$out/notes/linux-gnu-x86_64/notes" 2>/dev/null | tr '\n' ' ' || true
+    timeout 30 "$root/examples/interop/with-display.sh" "$out/notes/linux-gnu-x86_64/notes" 2>/dev/null | tr '\n' ' ' || true
 }
 first=$(run)
 second=$(run)

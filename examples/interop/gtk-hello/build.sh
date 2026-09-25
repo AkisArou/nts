@@ -7,8 +7,9 @@
 # a handler that ran from a check that read a constant. With HELLO_UNCONNECTED
 # the clicks still happen and nothing counts them.
 #
-# No display is needed: `xvfb-run` supplies one, and the cairo renderer keeps
-# Mesa's DRI3 complaints about Xvfb out of the output. `fatal-criticals` turns
+# No display is needed: `with-display.sh` supplies one -- and waits for the
+# server to say it is listening, which `xvfb-run -a` does not -- and the cairo
+# renderer keeps Mesa's DRI3 complaints about Xvfb out of the output. `fatal-criticals` turns
 # any GTK critical -- a wrong cast, a NULL where a widget goes -- into an abort
 # rather than a line nobody reads.
 set -eu
@@ -21,8 +22,8 @@ if ! pkg-config --exists gtk4; then
   echo "SKIP gtk-hello: no gtk4 pkg-config entry"
   exit 0
 fi
-if ! command -v xvfb-run >/dev/null 2>&1; then
-  echo "SKIP gtk-hello: no xvfb-run on PATH"
+if ! command -v Xvfb >/dev/null 2>&1; then
+  echo "SKIP gtk-hello: no Xvfb on PATH"
   exit 0
 fi
 
@@ -31,7 +32,7 @@ mkdir -p "$out"
 program="$out/hello/linux-gnu-x86_64/hello"
 
 run() {
-  env GSK_RENDERER=cairo G_DEBUG=fatal-criticals "$@" xvfb-run -a "$program" 2>&1 |
+  env GSK_RENDERER=cairo G_DEBUG=fatal-criticals "$@" "$root/examples/interop/with-display.sh" "$program" 2>&1 |
     grep '^clicks=' || true
 }
 
