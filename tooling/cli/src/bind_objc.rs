@@ -774,6 +774,10 @@ struct Reading<'v> {
     overloads: BTreeMap<(bool, String), Vec<Origin<'v>>>,
     /// The names this class binds a method under itself.
     own: BTreeSet<(bool, String)>,
+    /// Each property bound, the ancestors' included, by `static` and name,
+    /// with the getter it is read by. An override is read by the same one;
+    /// another property Swift gives the same name is not.
+    getters: BTreeMap<(bool, String), String>,
 }
 
 impl<'a> Model<'a> {
@@ -823,13 +827,19 @@ impl<'a> Model<'a> {
                 decls.extend(bodies.root_protocol.iter().map(|decl| Origin { decl, container: "c:objc(pl)NSObject".to_owned() }));
             }
             decls.sort_by_key(|origin| origin.decl.get("kind").and_then(Value::as_str) != Some("ObjCPropertyDecl"));
-            let (inherited, names, overloads) = parent
+            let (inherited, names, overloads, getters) = parent
                 .as_ref()
                 .and_then(|p| read.get(p))
-                .map(|r| (r.repeated.clone(), r.names.clone(), r.overloads.clone()))
+                .map(|r| (r.repeated.clone(), r.names.clone(), r.overloads.clone(), r.getters.clone()))
                 .unwrap_or_default();
-            let mut reading =
-                Reading { seen: BTreeSet::new(), names, repeated: Vec::new(), overloads: overloads.clone(), own: BTreeSet::new() };
+            let mut reading = Reading {
+                seen: BTreeSet::new(),
+                names,
+                repeated: Vec::new(),
+                overloads: overloads.clone(),
+                own: BTreeSet::new(),
+                getters,
+            };
             let mut bound = Class {
                 swift: swift.class(&class),
                 parent: parent.as_ref().map(|p| swift.class(p)),
@@ -843,7 +853,7 @@ impl<'a> Model<'a> {
             }
             for name in reading.own.clone() {
                 for origin in overloads.get(&name).into_iter().flatten() {
-                    model.member(&mut bound, origin.clone(), &mut reading);
+                    model.repeat_overload(&mut bound, origin.clone(), &mut reading);
                 }
             }
             read.insert(class, reading);
@@ -943,6 +953,54 @@ impl<'a> Model<'a> {
     }
 
     /// Bind one member of `class`: a method, or a property.
+    /// An ancestor's overload of a name this class declares, repeated so the
+    /// class is its subtype. Where the class redeclares the same selector at
+    /// other types -- `DistributedNotificationCenter`'s
+    /// `addObserver:selector:name:object:` takes a `String?` object where
+    /// `NotificationCenter`'s takes an `NSObject?` -- the ancestor's is kept
+    /// beside it, since TypeScript holds a subclass's overloads to its
+    /// base's, and both send the one selector.
+    fn repeat_overload(&mut self, class: &mut Class, origin: Origin<'a>, reading: &mut Reading<'a>) {
+        let decl = origin.decl;
+        let Some(selector) = named(decl) else { return };
+        let instance = decl.get("instance").and_then(Value::as_bool).unwrap_or(true);
+        let key = format!("{}{selector}", if instance { "-" } else { "+" });
+        if !reading.seen.contains(&key) {
+            self.member(class, origin, reading);
+            return;
+        }
+        let usr = format!("{}({}){selector}", origin.container, if instance { "im" } else { "cm" });
+        let Some(mut symbol) = self.swift.get(&usr).cloned() else { return };
+        Self::fold_clashing(&mut symbol, reading);
+        // Still a property's name after folding: the property keeps it.
+        let (is_static, name, _) = Self::shape(&symbol);
+        if name.is_some_and(|name| reading.names.get(&(is_static, name)) == Some(&Named::Property)) {
+            return;
+        }
+        // The same overload up to its parameters' names -- `cView` in one
+        // header, `clipView` in the other -- is the one already there.
+        if let Ok(text) = self.available(&symbol).and_then(|()| self.method(class, decl, &symbol))
+            && !class.members.iter().any(|member| unnamed(member) == unnamed(&text))
+        {
+            class.members.push(text);
+        }
+    }
+
+    /// Swift has `var menu` and `func menu(for:)` on one class, and
+    /// TypeScript one member per name. Properties are read first and keep
+    /// theirs; the method takes its first label into its name, as the
+    /// selector does: `menuFor(event)`, `frameForAlignmentRect(rect)`.
+    fn fold_clashing(symbol: &mut Symbol, reading: &Reading<'_>) {
+        let (is_static, name, named_as) = Self::shape(symbol);
+        if let Some(name) = name
+            && named_as == Named::Method
+            && reading.names.get(&(is_static, name)) == Some(&Named::Property)
+            && let Some(renamed) = folded_label(&symbol.names.title)
+        {
+            symbol.names.title = renamed;
+        }
+    }
+
     fn member(&mut self, class: &mut Class, origin: Origin<'a>, reading: &mut Reading<'a>) {
         let decl = origin.decl;
         if decl.get("isImplicit").and_then(Value::as_bool) == Some(true) {
@@ -969,22 +1027,26 @@ impl<'a> Model<'a> {
         // Swift does not import it -- `alloc`, `new`, what it marks
         // unavailable -- so there is no such member to bind, and nothing to say.
         let Some(mut symbol) = self.swift.get(&usr).cloned() else { return };
-        // Swift has `var menu` and `func menu(for:)` on one class, and
-        // TypeScript one member per name. Properties are read first and keep
-        // theirs; the method takes its first label into its name, as the
-        // selector does: `menuFor(event)`, `frameForAlignmentRect(rect)`.
-        let (is_static, name, named_as) = Self::shape(&symbol);
-        if let Some(name) = name
-            && named_as == Named::Method
-            && reading.names.get(&(is_static, name)) == Some(&Named::Property)
-            && let Some(renamed) = folded_label(&symbol.names.title)
-        {
-            symbol.names.title = renamed;
-        }
+        Self::fold_clashing(&mut symbol, reading);
         let bound = self.available(&symbol).and_then(|()| {
             let text = if decl.get("kind").and_then(Value::as_str) == Some("ObjCMethodDecl") {
                 self.method(class, decl, &symbol)?
             } else {
+                // `NSScriptClassDescription`'s `superclass` is Swift's name for
+                // `superclassDescription`, and `NSObject`'s `superclass` is
+                // another property at another type: the ancestor's keeps it.
+                let (is_static, name, _) = Self::shape(&symbol);
+                let getter = decl.get("getter").and_then(named).or_else(|| named(decl)).unwrap_or_default();
+                if let Some(name) = name {
+                    match reading.getters.get(&(is_static, name.clone())) {
+                        Some(theirs) if *theirs != getter => {
+                            return Err(format!("Swift's `{name}` is an ancestor's property read with `{theirs}`, not this one"));
+                        }
+                        _ => {
+                            reading.getters.insert((is_static, name), getter);
+                        }
+                    }
+                }
                 self.property(class, decl, &symbol)?
             };
             // A clash the first label could not settle -- `menu(_:)` -- is
@@ -1807,6 +1869,49 @@ fn folded_label(title: &str) -> Option<String> {
     Some(format!("{base}{}({}:)", capitalized(&folded), labels.join(":")))
 }
 
+/// A method's declaration with its positional parameters' names taken out:
+/// `f(cView: NSClipView)` and `f(clipView: NSClipView)` are one overload. A
+/// label object's keys are not names, and stay.
+fn unnamed(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let (mut parens, mut nested) = (0usize, 0usize);
+    let mut at_parameter = false;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '(' => {
+                parens += 1;
+                at_parameter = parens == 1 && nested == 0;
+                out.push(c);
+                continue;
+            }
+            ')' => parens = parens.saturating_sub(1),
+            '{' | '<' | '[' => nested += 1,
+            '}' | '>' | ']' => nested = nested.saturating_sub(1),
+            ',' if parens == 1 && nested == 0 => {
+                out.push(c);
+                at_parameter = true;
+                continue;
+            }
+            _ => {}
+        }
+        if at_parameter && (c.is_alphanumeric() || c == '_' || c == '$') {
+            // The name, up to its colon.
+            while chars.peek().is_some_and(|next| next.is_alphanumeric() || *next == '_' || *next == '$') {
+                chars.next();
+            }
+            out.push(if chars.peek() == Some(&':') { '_' } else { c });
+            at_parameter = false;
+            continue;
+        }
+        if !c.is_whitespace() {
+            at_parameter = false;
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn swift_name(title: &str) -> (String, Vec<String>) {
     let Some((base, rest)) = title.split_once('(') else { return (title.to_owned(), Vec::new()) };
     let labels = rest.trim_end_matches(')').split(':').filter(|l| !l.is_empty()).map(str::to_owned).collect();
@@ -2253,6 +2358,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nullable, copy) void (^onChange)(Shape *shape);
 @end
 @interface Shape (Named)
+- (void)paint:(Shape *)other;
+@property (readonly) Shape *peer;
 - (void)renameTo:(Shape *)other count:(NSInteger)count;
 - (NSSet<Shape *> *)neighboursNamed:(NSSet<NSString *> *)names;
 @end
@@ -2264,6 +2371,8 @@ typedef NSInteger Response;
 + (void)runGroup:(void (^)(Shape *))changes completionHandler:(void (^)(void))handler;
 @end
 @interface Circle : Shape
+- (void)paint:(Circle *)other;
+@property (readonly) Circle *peerCircle;
 @end
 @protocol ShapeDelegate
 - (void)shapeDidMove:(Shape *)shape;
@@ -2298,6 +2407,12 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             symbol("c:objc(cs)Shape", "swift.class", "Shape", &["Shape"], ""),
             // Renamed, as `NSTimer` is `Timer`.
             symbol("c:objc(cs)Circle", "swift.class", "Round", &["Round"], ""),
+            // A subclass redeclaring its base's selector at a narrower type,
+            // and a property Swift names as an ancestor's other one.
+            symbol("c:objc(cs)Shape(im)paint:", "swift.method", "paint(_:)", &["Shape", "paint(_:)"], ""),
+            symbol("c:objc(cs)Circle(im)paint:", "swift.method", "paint(_:)", &["Round", "paint(_:)"], ""),
+            symbol("c:objc(cs)Shape(py)peer", "swift.property", "peer", &["Shape", "peer"], ""),
+            symbol("c:objc(cs)Circle(py)peerCircle", "swift.property", "peer", &["Round", "peer"], ""),
             symbol("c:objc(cs)Root(im)init", "swift.init", "init()", &["Root", "init()"], ""),
             symbol("c:objc(cs)Root(im)isEqual:", "swift.method", "isEqual(_:)", &["Root", "isEqual(_:)"], ""),
             symbol("c:objc(cs)Shape(im)initWithOrigin:mode:", "swift.init", "init(origin:mode:)", &["Shape", "init(origin:mode:)"], ""),
@@ -2510,6 +2625,17 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         assert!(!text.contains("alloc") && !text.contains("swifty"), "{text}");
         assert_async(&text, &values);
         assert_cf(&text);
+        // A subclass keeps its base's overload beside its own of the same
+        // selector, since TypeScript holds it to its base's; and a property
+        // named as an ancestor's other one is left to the ancestor.
+        let round = text.split("export class Round extends Shape {").nth(1).and_then(|rest| rest.split("\n  }").next()).unwrap_or_default();
+        for expected in [
+            "    /** @ntsSelector paint: */\n    paint(other: Round): void;",
+            "    /** @ntsSelector paint: */\n    paint(other: Shape): void;",
+            "    //   @property peerCircle: Swift's `peer` is an ancestor's property read with `peer`, not this one",
+        ] {
+            assert!(round.contains(expected), "no `{expected}` in Round:\n{round}");
+        }
     }
 
     /// A Core Foundation class, as Swift imports it: a handle the program
@@ -2573,6 +2699,15 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         ] {
             assert!(values.contains(expected), "no `{expected}` in:\n{values}");
         }
+    }
+
+    #[test]
+    fn an_overload_is_the_same_whatever_its_parameters_are_called() {
+        assert_eq!(unnamed("f(cView: NSClipView): void;"), unnamed("f(clipView: NSClipView): void;"));
+        assert_ne!(unnamed("f(a: Shape): void;"), unnamed("f(a: Round): void;"));
+        // A label object's keys are the call's, not names.
+        assert_ne!(unnamed("f(labels: { at: Int }): void;"), unnamed("f(labels: { to: Int }): void;"));
+        assert_eq!(unnamed("f(x: Int, labels: { at: Int }): void;"), unnamed("f(y: Int, labels: { at: Int }): void;"));
     }
 
     #[test]
