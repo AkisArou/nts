@@ -798,12 +798,22 @@ fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
     let defaulted = defaults(start, taken);
     let declared = declared_parameters(taken, &defaulted);
     let passed = taken.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>().join(", ");
+    // **A lent array lives until `finish`, not until `start` returns.** The
+    // call lends it for its own duration, which for an `_async` method is
+    // the time it takes to queue the work: GIO writes `contents` from a
+    // pool thread afterwards. Named in the callback, each is held by the
+    // closure, which GIO keeps until it has called it.
+    let kept = taken.iter().filter(|(_, mapped)| matches!(mapped.shape, Shape::Lent { .. })).fold(String::new(), |mut kept, (name, _)| {
+        let _ = writeln!(kept, "      void {name};");
+        kept
+    });
     let _ = writeln!(
         out,
         "\n/** `{start}` as a Promise, settled by `{finish}`. */\n\
          export function {start}_promise({declared}): Promise<{result}> {{\n\
          \x20 return new Promise((nts_resolve, nts_reject) => {{\n\
          \x20   {start}({passed}, (_source, nts_result) => {{\n\
+         {kept}\
          \x20     try {{\n\
          \x20       nts_resolve({finish}({instance}, nts_result));\n\
          \x20     }} catch (nts_error) {{\n\
@@ -816,4 +826,59 @@ fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
         finish = finish.symbol,
         result = finish.result.ts,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::map::{Function, Mapped, Shape};
+    use nts_core::hir::native::{Scalar, Type};
+
+    fn mapped(ts: &str, shape: Shape) -> Mapped {
+        Mapped { shape, ts: ts.to_owned(), c: Type::Scalar(Scalar::Size) }
+    }
+
+    fn function(symbol: &str, parameters: Vec<(&str, Mapped)>, result: &str) -> Function {
+        Function {
+            name: symbol.to_owned(),
+            symbol: symbol.to_owned(),
+            parameters: parameters.into_iter().map(|(name, mapped)| (name.to_owned(), mapped)).collect(),
+            result: mapped(result, Shape::Other),
+            c_parameters: Vec::new(),
+            deprecated: false,
+            free: None,
+            no_escape: Vec::new(),
+            returns: None,
+            method: None,
+            throws: None,
+            finish: None,
+            omissible: std::collections::BTreeMap::new(),
+            method_only: false,
+            statics: None,
+            vfunc: None,
+        }
+    }
+
+    /// An `_async` method's work outlives its call -- GIO writes `contents`
+    /// from a pool thread after `start` has returned -- so the Promise form's
+    /// callback names each array the call lends, and the closure holds it
+    /// until `finish`. Without it, `--rc` freed the bytes before the write
+    /// (valgrind: "Syscall param write(buf) points to unaddressable byte(s)").
+    #[test]
+    fn a_promise_form_keeps_what_its_call_lends_until_finish() {
+        let start = function(
+            "g_file_replace_contents_async",
+            vec![
+                ("file", mapped("GFile", Shape::Other)),
+                ("contents", mapped("CBytes", Shape::Lent { program: "Uint8Array".to_owned() })),
+                ("callback", mapped("GAsyncReadyCallback", Shape::Other)),
+            ],
+            "void",
+        );
+        let finish = function("g_file_replace_contents_finish", vec![("file", mapped("GFile", Shape::Other))], "boolean");
+        let mut out = String::new();
+        super::promise_wrapper(&mut out, &start, &finish);
+        let callback = out.split("(_source, nts_result) => {").nth(1).expect("a callback");
+        assert!(callback.contains("void contents;"), "{out}");
+        assert!(!callback.contains("void file;"), "{out}");
+    }
 }

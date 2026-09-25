@@ -230,9 +230,10 @@ async function directories(path: string): Promise<void> {
     again = (e as Error).message.length > 0 ? "rejected" : "rejected-empty";
   }
   const removed = await directory.delete_async();
-  // A file written and read back: `replace_contents_async` lends the bytes
-  // for the call, and `load_bytes_async`'s `_finish` leaves its optional
-  // `etag_out` out, as GJS does.
+  // A file written and read back: `replace_contents_async` is lent bytes
+  // that GIO writes from a pool thread after the call returns, and that its
+  // Promise form keeps until `_finish` runs. `load_bytes_async`'s `_finish`
+  // leaves out its optional `etag_out`, as GJS does.
   const file = g_file_new_for_path(path + ".txt");
   // "héllo" in UTF-8.
   await file.replace_contents_async(new Uint8Array([104, 195, 169, 108, 108, 111]), null, false);
