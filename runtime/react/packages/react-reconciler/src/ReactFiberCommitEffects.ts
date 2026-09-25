@@ -5,7 +5,7 @@
 //
 // Port of upstream's ReactFiberCommitEffects.js (stable channel).
 
-import { defines } from "./ReactFiberClassComponentHost.ts";
+import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentDidMount } from "shared/ReactClassComponentType.ts";
 import { hostInstanceOf, hostNodeOf } from "./ReactFiberStateNode.ts";
 import type { Props } from "shared/ReactTypes.ts";

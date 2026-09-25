@@ -1,5 +1,6 @@
 import type { Props, ReactContextBase } from "shared/ReactTypes.ts";
-import { construct, defines } from "./ReactFiberClassComponentHost.ts";
+import { construct, defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
+import type { ClassComponentType } from "shared/ReactClassComponentType.ts";
 import { ComponentDidMount, ComponentDidUpdate, ComponentWillMount, ComponentWillReceiveProps, ComponentWillUpdate, GetSnapshotBeforeUpdate, ShouldComponentUpdate, UnsafeComponentWillMount, UnsafeComponentWillReceiveProps, UnsafeComponentWillUpdate } from "shared/ReactClassComponentType.ts";
 import { shallowEqual } from "shared/shallowEqual.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
@@ -68,17 +69,7 @@ export interface ClassInstance {
 }
 
 // A class component's constructor and its static members.
-export interface ClassComponentConstructor {
-  new (props: unknown, context: unknown): ClassInstance;
-  readonly prototype: { isReactComponent?: unknown; isPureReactComponent?: unknown; render?: unknown } | undefined;
-  readonly contextType?: unknown;
-  readonly contextTypes?: unknown;
-  readonly childContextTypes?: unknown;
-  readonly getDerivedStateFromProps?: unknown;
-  readonly getDerivedStateFromError?: unknown;
-  readonly getSnapshotBeforeUpdate?: unknown;
-  readonly defaultProps?: unknown;
-}
+export type ClassComponentConstructor = ClassComponentType;
 
 type DerivedStateFromProps = (props: unknown, state: unknown) => unknown;
 

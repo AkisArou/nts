@@ -31,6 +31,8 @@ pub(super) struct JsxImports {
     runtime: BTreeSet<&'static str>,
     /// `createElement`, from `react`.
     create_element: bool,
+    /// A class component's descriptor was written ([`super::class`]).
+    pub(super) class_type: bool,
 }
 
 impl JsxImports {
@@ -38,8 +40,12 @@ impl JsxImports {
     /// them: the runtime's names, then `createElement` from `react`.
     pub(super) fn declarations(&self) -> String {
         let mut out = String::new();
-        if !self.runtime.is_empty() {
-            let names: Vec<&str> = self.runtime.iter().copied().collect();
+        let mut runtime = self.runtime.clone();
+        if self.class_type {
+            runtime.insert("ClassComponentType as _ClassComponentType");
+        }
+        if !runtime.is_empty() {
+            let names: Vec<&str> = runtime.iter().copied().collect();
             let _ = writeln!(out, "import {{ {} }} from \"react/jsx-runtime\";", names.join(", "));
         }
         if self.create_element {
@@ -142,12 +148,24 @@ impl Printer<'_> {
             JSXElementName::JSXIdentifier(i) => {
                 let name = self.name(&i.base, &i.name).to_owned();
                 self.write(&name);
+                self.jsx_class_type(i.base.node_id);
             }
-            JSXElementName::JSXMemberExpression(m) => self.jsx_member_tag(m),
+            JSXElementName::JSXMemberExpression(m) => {
+                self.jsx_member_tag(m);
+                self.jsx_class_type(m.base.node_id);
+            }
             JSXElementName::JSXNamespacedName(n) => {
                 let text = format!("{}:{}", n.namespace.name, n.name.name);
                 self.write(&quote(&text.encode_utf16().collect::<Vec<_>>()));
             }
+        }
+    }
+
+    /// A tag that is a class names its descriptor, the class's `$$type`
+    /// ([`super::class`]): the checker types a class value as `typeof C`.
+    fn jsx_class_type(&mut self, node: Option<u32>) {
+        if node.and_then(|node| self.types.type_at(node)).is_some_and(|ty| ty.starts_with("typeof ")) {
+            self.write(".$$type");
         }
     }
 

@@ -43,6 +43,9 @@ export const lifecycleNames: readonly string[] = [
 export class ClassComponentPrototype {
   readonly isReactComponent: object = {};
   readonly isPureReactComponent: boolean;
+  // The methods live on the class, not here: a development check that finds
+  // no `render` on an instance reads this to tell why.
+  readonly render: undefined = undefined;
 
   constructor(isPure: boolean) {
     this.isPureReactComponent = isPure;
@@ -74,6 +77,9 @@ export class ClassComponentType {
   readonly getDerivedStateFromProps: ((props: unknown, state: unknown) => unknown) | undefined;
   readonly getDerivedStateFromError: ((error: unknown) => unknown) | undefined;
   readonly defaultProps: Props | undefined;
+  // Legacy context, which React 19 removed: a descriptor never declares it.
+  readonly contextTypes: undefined = undefined;
+  readonly childContextTypes: undefined = undefined;
 
   constructor(
     name: string,

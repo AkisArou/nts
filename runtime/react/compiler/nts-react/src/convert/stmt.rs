@@ -433,7 +433,9 @@ impl Converter<'_> {
     ///
     /// Each member carries, under `jsx`, the JSX elements and fragments in it
     /// (the outermost ones), converted: the output printer copies a member as
-    /// its text, and lowers the JSX in it from these.
+    /// its text, and lowers the JSX in it from these. It also carries what
+    /// the printer needs to describe a class component (`print::class`):
+    /// its kind, name and staticness.
     pub(super) fn class_body(&self, id: NodeId) -> Converted<ClassBody> {
         let members = self.list(id, "members");
         // The body starts at its `{`: before the first member, or, with none,
@@ -451,15 +453,42 @@ impl Converter<'_> {
                 let mut jsx = Vec::new();
                 self.outermost_jsx(member, &mut jsx)?;
                 let mut raw = self.raw("ClassMember", member).parse_value();
-                if !jsx.is_empty()
-                    && let Value::Object(map) = &mut raw
-                {
-                    map.insert("jsx".to_owned(), serde_json::to_value(jsx).unwrap_or(Value::Null));
+                if let Value::Object(map) = &mut raw {
+                    self.describe_member(member, map);
+                    if !jsx.is_empty() {
+                        map.insert("jsx".to_owned(), serde_json::to_value(jsx).unwrap_or(Value::Null));
+                    }
                 }
                 Ok(RawNode::from_value(&raw))
             })
             .collect::<Converted<Vec<_>>>()?;
         Ok(ClassBody { base, body })
+    }
+
+    /// A class member's kind (`method`, `property`, `accessor`, `constructor`
+    /// or `other`), its name when it is written as an identifier or a
+    /// string, whether it is static, whether a property holds a function,
+    /// and how many parameters a constructor takes.
+    fn describe_member(&self, member: NodeId, into: &mut serde_json::Map<String, Value>) {
+        let kind = match self.kind(member) {
+            k::METHOD_DECLARATION => "method",
+            k::PROPERTY_DECLARATION => "property",
+            k::GET_ACCESSOR | k::SET_ACCESSOR => "accessor",
+            k::CONSTRUCTOR => "constructor",
+            _ => "other",
+        };
+        into.insert("memberKind".to_owned(), Value::from(kind));
+        if let Some(name) = self.child(member, "name").filter(|n| matches!(self.kind(*n), k::IDENTIFIER | k::STRING_LITERAL)) {
+            into.insert("name".to_owned(), Value::from(self.text_of(name)));
+        }
+        into.insert("static".to_owned(), Value::from(self.has_modifier(member, k::STATIC_KEYWORD)));
+        if kind == "property" {
+            let function = self.child(member, "initializer").is_some_and(|i| matches!(self.kind(i), k::ARROW_FUNCTION | k::FUNCTION_EXPRESSION));
+            into.insert("functionValued".to_owned(), Value::from(function));
+        }
+        if kind == "constructor" {
+            into.insert("parameters".to_owned(), Value::from(self.list(member, "parameters").len()));
+        }
     }
 
     /// The JSX elements and fragments under `id` that no other one contains.

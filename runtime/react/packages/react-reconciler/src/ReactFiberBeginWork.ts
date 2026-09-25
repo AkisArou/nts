@@ -43,7 +43,7 @@ import { CacheContext, pushCacheProvider } from "./ReactFiberCacheComponent.ts";
 import type { ClassInstance as UserSpaceClassInstance } from "./ReactFiberCallUserSpace.ts";
 import { callComponentInDEV, callRenderInDEV } from "./ReactFiberCallUserSpace.ts";
 import type { ClassComponentConstructor, ClassInstance } from "./ReactFiberClassComponent.ts";
-import { construct } from "./ReactFiberClassComponentHost.ts";
+import { construct, isClassComponentType } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import {
   constructClassInstance,
   mountClassInstance,
@@ -1830,9 +1830,9 @@ function mountLazyComponent(
   // Store the unwrapped component in the type.
   workInProgress.type = Component;
 
-  if (typeof Component === "function") {
+  if (typeof Component === "function" || isClassComponentType(Component)) {
     if (isFunctionClassComponent(Component)) {
-      const classComponent = Component as ClassComponentType;
+      const classComponent = Component as unknown as ClassComponentType;
       const resolvedProps = resolveClassComponentProps(classComponent, props);
       workInProgress.tag = ClassComponent;
       return updateClassComponent(null, workInProgress, classComponent, resolvedProps, renderLanes);

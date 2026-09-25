@@ -2,7 +2,7 @@
 // work-in-progress copies the render phase writes to.
 
 import { ClassComponentType } from "shared/ReactClassComponentType.ts";
-import { isClassComponentType } from "./ReactFiberClassComponentHost.ts";
+import { isClassComponentType } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import {

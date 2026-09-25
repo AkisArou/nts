@@ -29,7 +29,7 @@ use react_compiler_ast::literals::StringLiteral;
 use react_compiler_ast::operators::{AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator, UpdateOperator};
 use react_compiler_ast::patterns::{ObjectPatternProperty, PatternLike};
 use react_compiler_ast::statements::{
-    BlockStatement, ForInOfLeft, ForInit, Statement, VariableDeclaration, VariableDeclarationKind,
+    BlockStatement, ClassDeclaration, ForInOfLeft, ForInit, Statement, VariableDeclaration, VariableDeclarationKind,
 };
 use react_compiler::entrypoint::BindingRenameInfo;
 use react_compiler_ast::scope::BindingId;
@@ -40,6 +40,7 @@ use serde_json::Value;
 use crate::convert::text::SourceText;
 
 mod cache;
+mod class;
 mod jsx;
 
 /// The checker, for a compiler temporary's type: the type at the original
@@ -128,6 +129,7 @@ pub fn print_file(
         lower_jsx: options.lower_jsx,
         jsx_spans: if options.lower_jsx { jsx_spans } else { Vec::new() },
         jsx_imports: jsx::JsxImports::default(),
+        classes: if options.lower_jsx { class::ClassComponents::new(original) } else { class::ClassComponents::default() },
         as_written: &options.as_written,
         functions: Vec::new(),
         caches: Caches {
@@ -196,6 +198,22 @@ fn cache_callee(compiled: &File) -> Option<String> {
         }),
         _ => None,
     })
+}
+
+/// The class a top-level statement declares, exported or not.
+fn class_declaration(statement: &Statement) -> Option<&ClassDeclaration> {
+    match statement {
+        Statement::ClassDeclaration(class) => Some(class),
+        Statement::ExportNamedDeclaration(export) => match export.declaration.as_deref()? {
+            Declaration::ClassDeclaration(class) => Some(class),
+            _ => None,
+        },
+        Statement::ExportDefaultDeclaration(export) => match export.declaration.as_ref() {
+            ExportDefaultDecl::ClassDeclaration(class) => Some(class),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// The printed functions' output ranges, from byte offsets into `text` to
@@ -332,6 +350,8 @@ struct Printer<'a> {
     jsx_spans: Vec<(u32, u32, u64)>,
     /// The runtime functions the lowered JSX calls.
     jsx_imports: jsx::JsxImports,
+    /// The file's class components, described as they are printed ([`class`]).
+    classes: class::ClassComponents,
     /// Functions to print as the user wrote them; see [`PrintOptions`].
     as_written: &'a FxHashSet<(u32, u32)>,
     /// The functions printed from the compiler's output.
@@ -585,10 +605,18 @@ impl Printer<'_> {
         self.apply_edits();
     }
 
-    /// A top-level statement, with the cache shapes it hoists before it.
+    /// A top-level statement, with the cache shapes it hoists before it, and
+    /// a class component's descriptor as its last member.
     fn top_level(&mut self, statement: &Statement) {
         let at = self.out.len();
         self.statement(statement);
+        if let Some(class) = class_declaration(statement)
+            && let Some(member) = self.classes.describe(class, "_ClassComponentType")
+            && let Some(close) = self.out.rfind('}').filter(|close| *close >= at)
+        {
+            self.jsx_imports.class_type = true;
+            self.edits.push(Edit { at: close, remove: 0, insert: member });
+        }
         if !self.hoists.is_empty() {
             let insert = self.hoists.drain(..).map(|hoist| hoist + "\n\n").collect();
             self.edits.push(Edit { at, remove: 0, insert });

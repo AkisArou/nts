@@ -96,18 +96,30 @@ the plain probe, which passes classes.
 
 ## Order
 
-1. `ClassComponentType`, the seam, and its JavaScript side, with every
+1. **Done.** `ClassComponentType`, the seam, and its JavaScript side, with every
    upstream `new ctor` and presence check routed through the seam. Oracle:
-   the upstream suites unchanged (557/580 reconciler, 51/53 react).
-2. The stage's descriptor and JSX lowering. Oracle: probe-agree, with class
-   component scenarios added: state, lifecycles in order, an error boundary.
-3. The native twin and base class. Oracle: the native census, once the
-   probe emits again (two invalid-HIR defects, reported).
+   the upstream suites unchanged (557/580 reconciler, 51/53 react); with
+   `defines` answering false, 71 reconciler tests fail.
+2. **Done.** The stage's descriptor and JSX lowering, and the seam's native
+   twin. `tools/probe-agree.ts` runs three class scenarios (lifecycles in
+   order, an error boundary, a PureComponent skipping equal props). The
+   plain and written arms keep upstream's model, the class as the type,
+   by substituting the JavaScript seam and base classes. The staged arm
+   runs the native twin, so a class the stage did not describe fails there.
+   The JSX oracle (`study/jsx-diff.cjs`) sets the descriptor aside only for
+   names that are classes, and `fixtures/jsx-lowering/classes.tsx` holds a
+   class, a subclass, a pure class and a function side by side.
+3. The native base class, whose every lifecycle has a body. Oracle: the
+   native census, once the probe emits again (two invalid-HIR defects,
+   reported).
 
 ## Left out
 
 - `createElement(Counter, props)` written by hand, without JSX: the stage
-  does not rewrite a class used as a value. In a native build that
+  does not rewrite a class used as a value. Write `createElement(Counter.$$type, props)`.
+- A class extending a class component from another file is not recognised
+  (the stage sees one file at a time). Its tag names a class with no
+  `$$type`, which fails to typecheck. In a native build that
   element's `type` is the class, which has no representation, so it's
   refused at compile time, not wrong at run time.
 - Legacy context (`contextTypes`, `childContextTypes`) and string refs, which

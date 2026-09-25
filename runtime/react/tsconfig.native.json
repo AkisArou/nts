@@ -32,6 +32,9 @@
       "react/ReactBaseClasses.ts": [
         "./packages/react/src/ReactBaseClasses.native.ts"
       ],
+      "react-reconciler/ReactFiberClassComponentHost.ts": [
+        "./packages/react-reconciler/src/ReactFiberClassComponentHost.native.ts"
+      ],
       "react-reconciler/ReactFiberHooksDispatcher.ts": [
         "./packages/react-reconciler/src/ReactFiberHooksDispatcher.native.ts"
       ],

@@ -2,7 +2,7 @@
 // renders through our react, reconciler and production scheduler into the
 // typed test host and returns the serialised host tree after each step.
 
-import { createElement, useEffect, useRef, useState } from "react";
+import { Component, createElement, PureComponent, useEffect, useRef, useState } from "react";
 import type { ReactElement } from "shared/ReactTypes.ts";
 import { createContainer, updateContainer } from "react-reconciler/ReactFiberReconciler.ts";
 import { ConcurrentRoot } from "react-reconciler/ReactRootTags.ts";
@@ -95,3 +95,115 @@ export function changedHookOrder(start: number): string {
   return first + " | " + container.serialize() + " | " + reported;
 }
 
+
+// ---- class components ---------------------------------------------------------
+
+type Note = (line: string) => void;
+type TickerProps = { start: number; note: Note };
+type TickerState = { count: number };
+
+class Ticker extends Component<TickerProps, TickerState> {
+  state: TickerState = { count: this.props.start };
+
+  componentDidMount(): void {
+    this.props.note("mount " + this.state.count);
+    if (this.state.count === this.props.start) {
+      this.setState({ count: this.state.count + 1 });
+    }
+  }
+
+  componentDidUpdate(_prevProps: TickerProps, prevState: TickerState): void {
+    this.props.note("update " + prevState.count + ">" + this.state.count);
+  }
+
+  componentWillUnmount(): void {
+    this.props.note("unmount " + this.state.count);
+  }
+
+  render(): ReactElement {
+    return createElement("span", null, "count " + this.state.count);
+  }
+}
+
+// A class's lifecycles, in order: mount, a state update from mount, a props
+// update, unmount.
+export function classLifecycles(start: number): string {
+  const lines: string[] = [];
+  const note: Note = (line) => {
+    lines.push(line);
+  };
+  const container = new TestContainer();
+  const root = mount(container);
+  updateContainer(createElement(Ticker, { start, note }), root, null, null);
+  drainHost();
+  const mounted = container.serialize();
+  updateContainer(createElement(Ticker, { start: start + 10, note }), root, null, null);
+  drainHost();
+  updateContainer(null, root, null, null);
+  drainHost();
+  return mounted + " | " + lines.join(", ");
+}
+
+type BoundaryProps = { note: Note; children?: unknown };
+type BoundaryState = { error: string | null };
+
+class Boundary extends Component<BoundaryProps, BoundaryState> {
+  state: BoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: unknown): BoundaryState {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+
+  componentDidCatch(error: unknown): void {
+    this.props.note("caught " + (error instanceof Error ? error.message : String(error)));
+  }
+
+  render(): unknown {
+    return this.state.error !== null ? createElement("span", null, "fallback " + this.state.error) : this.props.children;
+  }
+}
+
+function Thrower(props: { n: number }): ReactElement {
+  if (props.n % 2 === 1) {
+    throw new Error("odd " + props.n);
+  }
+  return createElement("span", null, "ok " + props.n);
+}
+
+// An error boundary: an odd input throws in render, and the boundary shows
+// its fallback and hears of the error; an even one renders.
+export function errorBoundary(n: number): string {
+  const lines: string[] = [];
+  const note: Note = (line) => {
+    lines.push(line);
+  };
+  const container = new TestContainer();
+  const root = mount(container);
+  updateContainer(createElement(Boundary, { note }, createElement(Thrower, { n })), root, null, null);
+  drainHost();
+  return container.serialize() + " | " + (lines.length === 0 ? "none" : lines.join(", "));
+}
+
+class Pure extends PureComponent<{ label: string; note: Note }> {
+  render(): ReactElement {
+    this.props.note("render " + this.props.label);
+    return createElement("span", null, this.props.label);
+  }
+}
+
+// A PureComponent re-rendered with equal props does not render again; with
+// a changed label it does.
+export function pureSkip(changes: number): string {
+  const lines: string[] = [];
+  const note: Note = (line) => {
+    lines.push(line);
+  };
+  const container = new TestContainer();
+  const root = mount(container);
+  for (let i = 0; i <= 2; i++) {
+    const label = "v" + Math.min(i, changes);
+    updateContainer(createElement(Pure, { label, note }), root, null, null);
+    drainHost();
+  }
+  return container.serialize() + " | " + lines.join(", ");
+}

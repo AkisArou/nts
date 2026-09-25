@@ -2,7 +2,7 @@
 // collected during a render and flushed once per commit, deduplicated per
 // component type. In production every method does nothing.
 
-import { defines } from "./ReactFiberClassComponentHost.ts";
+import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentWillMount, ComponentWillReceiveProps, ComponentWillUpdate, GetChildContext, UnsafeComponentWillMount, UnsafeComponentWillReceiveProps, UnsafeComponentWillUpdate } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";

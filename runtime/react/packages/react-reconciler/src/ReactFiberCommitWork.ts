@@ -13,7 +13,7 @@
 //
 // Port of upstream's ReactFiberCommitWork.js (stable channel).
 
-import { defines } from "./ReactFiberClassComponentHost.ts";
+import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentWillUnmount } from "shared/ReactClassComponentType.ts";
 import { ownerDocumentOf } from "./ReactFiberStateNode.ts";
 import type {

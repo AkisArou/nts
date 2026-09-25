@@ -2,7 +2,7 @@
 // thenable suspends to the nearest Suspense (or Activity/Offscreen) boundary,
 // and an error is captured by the nearest error boundary or the root.
 
-import { defines } from "./ReactFiberClassComponentHost.ts";
+import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentDidCatch } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableUpdaterTracking } from "shared/ReactFeatureFlags.ts";

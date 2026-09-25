@@ -32,6 +32,9 @@ const scenarios: Record<string, unknown[][]> = {
   keyedReorder: [[1], [3], [5]],
   stateAfterEffect: [[0], [4]],
   changedHookOrder: [[0], [4]],
+  classLifecycles: [[0], [5]],
+  errorBoundary: [[1], [2]],
+  pureSkip: [[0], [1], [2]],
 };
 
 /** What a scenario's every answer must contain, where agreeing is not enough. */
@@ -89,10 +92,25 @@ try {
   if (!replace.has(join(compiledProbe, "src/main.tsx"))) throw new Error("the stage wrote no main.tsx: nothing would be compared");
   // The compiler's cache, as an array (`_c(n)`) or typed (`_cacheOf(shape)`).
   if (!/\b_c\(|\b_cacheOf\(/.test(replace.get(join(compiledProbe, "src/main.tsx"))!)) throw new Error("the staged main.tsx memoizes nothing: the compiler did not run");
+  // Its class components, as descriptors (CLASS-COMPONENTS.md).
+  if (!/static readonly \$\$type = /.test(replace.get(join(compiledProbe, "src/main.tsx"))!)) throw new Error("the staged main.tsx describes no class: the stage wrote no descriptor");
+
+  // The plain and written arms keep upstream's model of a class component:
+  // its type is the class, asked about with `typeof`. The staged arm keeps
+  // the native build's, where it is the descriptor alone, so it runs what an
+  // nts build runs.
+  const upstreamModel = new Map<string, string>();
+  const twins: [native: string, js: string][] = [
+    ["packages/react-reconciler/src/ReactFiberClassComponentHost.native.ts", "packages/react-reconciler/src/ReactFiberClassComponentHost.ts"],
+    ["packages/react/src/ReactBaseClasses.native.ts", "packages/react/src/ReactBaseClasses.ts"],
+  ];
+  for (const [native, js] of twins) {
+    upstreamModel.set(join(lane, native), readFileSync(join(lane, js), "utf8"));
+  }
 
   const answers = {
-    plain: run(await load(join(plainProbe, "src/main.ts"), join(plainProbe, "tsconfig.json"), work)),
-    written: run(await load(join(compiledProbe, "src/main.tsx"), join(compiledProbe, "tsconfig.json"), work)),
+    plain: run(await load(join(plainProbe, "src/main.ts"), join(plainProbe, "tsconfig.json"), work, upstreamModel)),
+    written: run(await load(join(compiledProbe, "src/main.tsx"), join(compiledProbe, "tsconfig.json"), work, upstreamModel)),
     staged: run(await load(join(compiledProbe, "src/main.tsx"), join(compiledProbe, "tsconfig.json"), work, replace)),
   };
 

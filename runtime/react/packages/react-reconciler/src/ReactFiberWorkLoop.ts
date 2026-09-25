@@ -2,7 +2,7 @@
 // tree (the commit phase), and handles everything that can interrupt either
 // one: suspending, errors, yielding to the host, and nested updates.
 
-import { defines } from "./ReactFiberClassComponentHost.ts";
+import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentDidCatch } from "shared/ReactClassComponentType.ts";
 import { hostInstanceOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
