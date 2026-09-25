@@ -389,6 +389,14 @@ correctness does not depend on arm64 running by luck.
          mid-block is released at the block's end, which in straight-line
          code is the function's. Reported to MainClaude as an `rc.rs`
          placement change.
+       - That change landed (2026-09-25): a managed value is released after
+         its last use. A **foreign** object deliberately keeps the block's
+         end, because the platform may hold it without a count. The XML
+         arm's delegate sits in an `assign` property, and releasing it at its
+         last use crashed `parse()`. So an element read out of an `NSArray`
+         still lives to its block's end. Swift's answer for this is a +0
+         borrow, and the next step is `own.rs` borrowing an element read
+         that never escapes, not a shorter lifetime.
    - **S5a, closures as Swift's, landed.** In a message, a plain function
      type is a block, as a Swift closure passed to one is. It is lent for the
      call and copied by a callee that keeps it. `Block<F>` is no longer needed

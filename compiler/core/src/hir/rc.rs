@@ -39,6 +39,36 @@
 //! so everything it still holds is released. The returned value was retained for
 //! the return, so what the caller receives survives it.
 //!
+//! # Inside a block, a release follows the last use
+//!
+//! A value that dies in a block -- defined or arriving there, and dead on
+//! every edge out -- is released right after the last operation that reads
+//! it, not at the block's end. In straight-line code the block is the whole
+//! function, and "the block's end" held every temporary to the `return`: each
+//! element an array read handed out, every string a loop body built.
+//!
+//! "Reads it" is wider than an operand. A borrowed load out of the value, an
+//! erased or converted view of it, a raw pointer into its storage: each holds
+//! no count, and each is only valid while the value is. So the last use is the
+//! last operation reading the value *or anything leaning on it*, followed
+//! through every value that holds no count of its own (`leans_on`). Where
+//! something leaning on it is still live when the block ends, or the
+//! terminator reads it, the release stays where it was.
+//!
+//! A counted *foreign* object is the exception, and keeps the block's end.
+//! A platform may hold one without a count -- a delegate is an `assign`
+//! property, a target is weak -- so its last use in the program is not its
+//! last use. `parser.delegate = delegate; parser.parse()` released the
+//! delegate before the parser sent to it. Objective-C's own locals behave
+//! this way in practice, and Swift's last-use lifetimes are the hazard
+//! `withExtendedLifetime` exists for.
+//!
+//! Two things that could run between a last use and the block's end cannot:
+//! a `throw` ends its block (a call and `Unreachable`, or a jump to the
+//! handler), and an `await` has already been split into blocks by
+//! `suspend::transform`, which runs before this pass, so a value crossing it
+//! is a frame field with a count of its own.
+//!
 //! # Parameters are borrowed
 //!
 //! A callee could retain each managed parameter on entry and release it on exit,
@@ -182,6 +212,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
         .collect();
     let mut live = liveness::analyze(func);
     let map = own::analyze(func, layouts, summaries, &mut live);
+    let arriving = arriving(func);
     let blocks = std::mem::take(&mut func.blocks);
     let mut rebuilt = Vec::with_capacity(blocks.len());
     // Blocks created to hold an edge's releases. Appended after the originals,
@@ -204,6 +235,14 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
             &mut report,
         );
 
+        let early = release_at_last_use(
+            func,
+            &Settled { map: &map, live: &live },
+            &Block { at, terminator: &block.terminator, moved: &moved, arriving: &arriving, layouts },
+            &mut ops,
+            &mut report,
+        );
+
         let edges = edges_of(&block.terminator);
         let mut terminator = block.terminator.clone();
 
@@ -214,6 +253,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
             let here = map.null_in(at);
             dying.retain(|value| {
                 !moved.contains(value)
+                    && !early.contains(value)
                     && !map.borrowed(*value)
                     && !matches!(map.of(*value), Ownership::Unowned)
                     // Nothing to give back. See `own::Map::null_in`.
@@ -239,6 +279,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
                     .filter(|value| {
                         !live.live_in(successor).contains(value)
                             && !moved.contains(value)
+                            && !early.contains(value)
                             && !map.borrowed(*value)
                             && !matches!(map.of(*value), Ownership::Unowned)
                             // Nothing to give back. See `nulls`.
@@ -313,6 +354,212 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
     rebuilt.extend(split_blocks);
     func.blocks = rebuilt;
     report
+}
+
+/// One block, as [`release_at_last_use`] reads it.
+struct Block<'a> {
+    at: BlockId,
+    terminator: &'a super::Terminator,
+    /// Values a store or a consuming call claimed the death of.
+    moved: &'a rustc_hash::FxHashSet<ValueId>,
+    /// What every edge hands each block parameter. See [`arriving`].
+    arriving: &'a rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    layouts: &'a [Layout],
+}
+
+/// Release each value that dies in this block right after its last use, and
+/// say which were, so the block's end and its edges do not release them
+/// again. See "Inside a block, a release follows the last use" above.
+///
+/// `ops` is the block as `count_ops` left it, retains and stores included: a
+/// retain reads its value, so a release never lands before one.
+fn release_at_last_use(
+    func: &mut Func,
+    settled: &Settled<'_>,
+    block: &Block<'_>,
+    ops: &mut Vec<ValueId>,
+    report: &mut Report,
+) -> rustc_hash::FxHashSet<ValueId> {
+    let Settled { map, live } = settled;
+    let at = block.at;
+    let proven_null = map.null_in(at);
+    let mut pending: rustc_hash::FxHashSet<ValueId> = ordered(func, block.layouts, live.available(at))
+        .into_iter()
+        .filter(|value| {
+            live.dies_in(at, *value)
+                // A foreign object keeps the block's end. The platform may
+                // hold it without a count -- `parser.delegate = delegate` is an
+                // `assign` property -- and nothing here can see that.
+                && func.values[value.0 as usize].ty.counting().is_none()
+                && !block.moved.contains(value)
+                && !map.borrowed(*value)
+                && !matches!(map.of(*value), Ownership::Unowned)
+                && !proven_null.is_some_and(|proven| proven.contains(value))
+        })
+        .collect();
+    if pending.is_empty() {
+        return pending;
+    }
+    // A store that claimed a value's death moved the local's reference into
+    // the container, and the local may still be read after it: `first` in
+    // `each_upto((n) => { first += n }); return first + second` is a cell
+    // moved into the closure and read after the call. From the move on, the
+    // value is the container's, so it leans on the container.
+    let mut moved_into: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    for op in ops.iter() {
+        if let OpKind::FieldSet { object: container, value, .. } | OpKind::ArraySet { array: container, value, .. } =
+            &func.values[op.0 as usize].kind
+            && block.moved.contains(value)
+        {
+            moved_into.entry(*value).or_default().push(*container);
+        }
+    }
+    let mut leaning = Leaning { func, map, arriving: block.arriving, moved_into, memo: rustc_hash::FxHashMap::default() };
+    // Still needed when the block ends: what the terminator reads and what
+    // leaves live, with everything either leans on.
+    let mut needed: Vec<ValueId> = super::operands_of_terminator(block.terminator);
+    needed.extend(live.live_out(at).iter().copied());
+    for value in needed {
+        for &held in leaning.of(value).iter() {
+            pending.remove(&held);
+        }
+    }
+    // Backward over the block: the first operation met that reads a pending
+    // value, or defines it, is its last use.
+    let mut after: rustc_hash::FxHashMap<usize, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    for index in (0..ops.len()).rev() {
+        if pending.is_empty() {
+            break;
+        }
+        let op = ops[index];
+        let mut read = vec![op];
+        let kind = &leaning.func.values[op.0 as usize].kind;
+        // Until its retain, a value loaded out of something is still that
+        // thing's: `x = o.f; release o; retain x` retains freed memory.
+        if let OpKind::Retain(retained) = kind {
+            read.extend(leaning.definition(*retained).iter().copied());
+        }
+        for operand in super::operands_of(kind) {
+            read.extend(leaning.of(operand).iter().copied());
+        }
+        for value in read {
+            if pending.remove(&value) {
+                after.entry(index).or_default().push(value);
+            }
+        }
+    }
+    // What is left arrived live and is read nowhere here: dead on entry.
+    let mut released: rustc_hash::FxHashSet<ValueId> = pending.iter().copied().collect();
+    let mut rebuilt = Vec::with_capacity(ops.len() + after.len());
+    let mut on_entry: Vec<ValueId> = pending.into_iter().collect();
+    on_entry.sort_unstable();
+    for value in on_entry {
+        release_value(func, block.layouts, map, at, &mut rebuilt, value, report);
+    }
+    for (index, op) in std::mem::take(ops).into_iter().enumerate() {
+        rebuilt.push(op);
+        if let Some(mut dying) = after.remove(&index) {
+            dying.sort_unstable();
+            for value in dying {
+                released.insert(value);
+                release_value(func, block.layouts, map, at, &mut rebuilt, value, report);
+            }
+        }
+    }
+    *ops = rebuilt;
+    released
+}
+
+/// What a value leans on: itself, and -- where it holds no count of its own
+/// and can point at memory -- everything its definition read, followed
+/// through. A borrowed field load leans on the object it was loaded from; an
+/// erased or converted view on what it views; a block parameter that holds no
+/// count on every argument an edge hands it.
+///
+/// A number or a boolean is a copy and leans on nothing, which also keeps
+/// arithmetic from dragging a whole computation's history along.
+struct Leaning<'a, 'f> {
+    func: &'f Func,
+    map: &'a own::Map,
+    arriving: &'a rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    /// Values a store in this block moved into a container, with the
+    /// containers.
+    moved_into: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    memo: rustc_hash::FxHashMap<ValueId, std::rc::Rc<[ValueId]>>,
+}
+
+impl Leaning<'_, '_> {
+    fn of(&mut self, value: ValueId) -> std::rc::Rc<[ValueId]> {
+        if let Some(known) = self.memo.get(&value) {
+            return known.clone();
+        }
+        let found = self.walk(vec![value]);
+        self.memo.insert(value, found.clone());
+        found
+    }
+
+    /// What a value's definition leans on, whatever the value holds: what
+    /// it read, and what those lean on.
+    fn definition(&mut self, value: ValueId) -> std::rc::Rc<[ValueId]> {
+        self.walk(self.sources(value))
+    }
+
+    fn walk(&self, mut stack: Vec<ValueId>) -> std::rc::Rc<[ValueId]> {
+        let mut seen = rustc_hash::FxHashSet::default();
+        while let Some(next) = stack.pop() {
+            if !seen.insert(next) {
+                continue;
+            }
+            if let Some(containers) = self.moved_into.get(&next) {
+                stack.extend(containers.iter().copied());
+            }
+            if self.holds_nothing(next) {
+                stack.extend(self.sources(next));
+            }
+        }
+        let mut found: Vec<ValueId> = seen.into_iter().collect();
+        found.sort_unstable();
+        found.into()
+    }
+
+    /// What a value was made from: its operation's operands, or what every
+    /// edge hands it where it is a block parameter.
+    fn sources(&self, value: ValueId) -> Vec<ValueId> {
+        let op = &self.func.values[value.0 as usize];
+        if matches!(op.kind, OpKind::Param(_)) {
+            return Vec::new();
+        }
+        match self.arriving.get(&value) {
+            Some(arguments) => arguments.clone(),
+            None => super::operands_of(&op.kind),
+        }
+    }
+
+    /// Whether a value is only valid while something else is: it holds no
+    /// count, and is not a scalar copy.
+    fn holds_nothing(&self, value: ValueId) -> bool {
+        let scalar = matches!(
+            self.func.values[value.0 as usize].ty,
+            HirType::Void | HirType::Never | HirType::Bool | HirType::Int { .. } | HirType::Float { .. }
+        );
+        !scalar
+            && (self.map.borrowed(value)
+                || matches!(self.map.of(value), Ownership::Unowned | Ownership::Borrowed))
+    }
+}
+
+/// Every block parameter, with the arguments each edge into it carries.
+fn arriving(func: &Func) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
+    let mut arriving: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    for block in &func.blocks {
+        for (target, args) in edges_of(&block.terminator) {
+            let Some(params) = func.blocks.get(target.0 as usize).map(|b| &b.params) else { continue };
+            for (param, argument) in params.iter().zip(args) {
+                arriving.entry(*param).or_default().push(argument);
+            }
+        }
+    }
+    arriving
 }
 
 /// The edges leaving a block, each with the arguments it carries.
@@ -864,4 +1111,171 @@ fn release(func: &mut Func, ops: &mut Vec<ValueId>, value: ValueId, report: &mut
     });
     ops.push(id);
     report.releases += 1;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hir::{Absent, Block, Callee, Terminator};
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::Origin;
+
+    fn origin() -> Origin {
+        Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) })
+    }
+
+    fn op(kind: OpKind, ty: HirType) -> Op {
+        Op { kind, ty, origin: origin() }
+    }
+
+    fn call(name: &str, args: Vec<ValueId>, ty: HirType) -> Op {
+        op(OpKind::Call { callee: Callee::External(name.to_owned()), args, frame: None }, ty)
+    }
+
+    fn number() -> HirType {
+        HirType::Float { bits: 64 }
+    }
+
+    fn string() -> HirType {
+        HirType::Managed(ManagedType::String)
+    }
+
+    /// `f(n) { %1 = make(n); %2 = <reads %1>; %3 = later(); return %3 }`, with
+    /// `reads` building %2 from %1 as the caller says.
+    fn straight(reads: Op, later: Vec<ValueId>) -> Program {
+        let values = vec![
+            op(OpKind::Param(0), number()),                      // %0
+            call("nts_number_to_string", vec![ValueId(0)], string()), // %1  owned
+            reads,                                               // %2
+            call("later", later, number()),                      // %3
+        ];
+        let func = Func {
+            name: "f".to_owned(),
+            params: vec![crate::hir::Param {
+                name: "n".to_owned(),
+                ty: number(),
+                origin: origin(),
+                known: crate::hir::facts::Facts::TOP,
+                shape: crate::hir::ParamShape::Ordinary,
+            }],
+            return_type: number(),
+            values,
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                terminator: Terminator::Return(Some(ValueId(3))),
+            }],
+            origin: origin(),
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+        };
+        Program { funcs: vec![func], ..Program::default() }
+    }
+
+    /// Where each release landed, as the index among the block's operations
+    /// of the original value it follows.
+    fn released_after(program: &Program) -> Vec<(ValueId, Option<ValueId>)> {
+        let func = &program.funcs[0];
+        let mut last = None;
+        let mut found = Vec::new();
+        for value in &func.blocks[0].ops {
+            match func.values[value.0 as usize].kind {
+                OpKind::Release(released) => found.push((released, last)),
+                OpKind::Retain(_) => {}
+                _ => last = Some(*value),
+            }
+        }
+        found
+    }
+
+    /// A temporary is given back after the operation that last reads it, not
+    /// when the function returns: `later` runs without it.
+    #[test]
+    fn a_temporary_is_released_after_its_last_use() {
+        let mut program = straight(call("use", vec![ValueId(1)], number()), Vec::new());
+        insert(&mut program);
+        assert_eq!(released_after(&program), vec![(ValueId(1), Some(ValueId(2)))]);
+    }
+
+    /// A pointer into it holds no count -- `char *` of a string handed to C
+    /// -- so the string lives as long as the pointer is read: past `later`,
+    /// which reads the pointer.
+    #[test]
+    fn a_pointer_into_a_value_keeps_it() {
+        let pointer = HirType::NativePointer(crate::hir::native::Pointee::Scalar(crate::hir::native::Scalar::Char));
+        let mut program = straight(op(OpKind::Convert(ValueId(1)), pointer), vec![ValueId(2)]);
+        insert(&mut program);
+        assert_eq!(released_after(&program), vec![(ValueId(1), Some(ValueId(3)))]);
+    }
+
+    /// The raw address a view lends C -- `nts_view_bytes`, a pointer into the
+    /// view's own storage -- holds no count and is read by `later`, so the
+    /// view is released after `later` and not after the lend. Released after
+    /// the lend, `later` reads freed memory: a use-after-free, and the one
+    /// failure in this placement that is not a wrong number.
+    #[test]
+    fn a_raw_address_into_a_managed_value_keeps_it() {
+        let bytes = HirType::NativePointer(crate::hir::native::Pointee::Scalar(crate::hir::native::Scalar::UInt8));
+        let mut program = straight(call("nts_view_bytes", vec![ValueId(1)], bytes), vec![ValueId(2)]);
+        insert(&mut program);
+        assert_eq!(released_after(&program), vec![(ValueId(1), Some(ValueId(3)))]);
+    }
+
+    /// A counted foreign object keeps its block's end, past its last use:
+    /// `parser.delegate = delegate; parser.parse()` hands the delegate to an
+    /// `assign` property, which holds no count, and releasing the delegate at
+    /// its last use deallocated it before `parse()` sent to it (macos-classes,
+    /// 2026-09-25). Nothing here can see which properties are `assign`, so
+    /// the exclusion is the protection, not a conservatism to remove.
+    #[test]
+    fn a_delegate_handed_to_an_assign_property_outlives_its_last_use() {
+        let delegate = HirType::NativePointer(crate::hir::native::Pointee::Opaque(crate::hir::native::Handle {
+            tag: "Elements".to_owned(),
+            ancestors: vec!["NSObject".to_owned()],
+            family: crate::hir::native::Family::Objc,
+            interface: false,
+        }));
+        let values = vec![
+            op(OpKind::Param(0), number()),                                    // %0
+            call("objc_make_delegate", vec![ValueId(0)], delegate),            // %1  owned
+            call("set_delegate", vec![ValueId(1)], HirType::Void),             // %2  its last use
+            call("parse", Vec::new(), number()),                               // %3  sends to it
+        ];
+        let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
+        program.funcs[0].values = values;
+        insert(&mut program);
+        let func = &program.funcs[0];
+        let releases: Vec<usize> = func.blocks[0]
+            .ops
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1))))
+            .map(|(at, _)| at)
+            .collect();
+        let parse = func.blocks[0].ops.iter().position(|v| *v == ValueId(3));
+        assert!(
+            releases.len() == 1 && parse.is_some_and(|parse| releases[0] > parse),
+            "the delegate is released before `parse` sends to it: {:?}",
+            func.blocks[0].ops.iter().map(|v| &func.values[v.0 as usize].kind).collect::<Vec<_>>()
+        );
+    }
+
+    /// An erased copy that takes a count of its own frees the original to go
+    /// after the copy: the retain comes first, and each is released after its
+    /// own last use.
+    #[test]
+    fn a_counted_copy_does_not_hold_the_original() {
+        let erased = op(OpKind::Erase { value: ValueId(1), absent: Absent::Impossible }, HirType::Erased);
+        let mut program = straight(erased, vec![ValueId(2)]);
+        insert(&mut program);
+        assert_eq!(released_after(&program), vec![(ValueId(1), Some(ValueId(2))), (ValueId(2), Some(ValueId(3)))]);
+        let func = &program.funcs[0];
+        let kinds: Vec<&OpKind> = func.blocks[0].ops.iter().map(|v| &func.values[v.0 as usize].kind).collect();
+        let retained = kinds.iter().position(|k| matches!(k, OpKind::Retain(ValueId(2))));
+        let released = kinds.iter().position(|k| matches!(k, OpKind::Release(ValueId(1))));
+        assert!(retained < released, "{kinds:?}");
+    }
 }
