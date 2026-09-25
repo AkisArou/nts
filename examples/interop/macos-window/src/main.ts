@@ -162,13 +162,16 @@ function makeSheet(): NSWindow {
 
 // Swift's `await NSAnimationContext.runAnimationGroup { context in ... }`: a
 // class method taking a completion handler is a static returning a promise.
-async function animated(): Promise<void> {
+// What follows it runs once AppKit has called the handler, from the run
+// loop, so the presses start from there and not on a clock racing it.
+async function animated(then: () => void): Promise<void> {
   let duration = -1;
   await NSAnimationContext.runAnimationGroup((context) => {
     context.duration = 0;
     duration = context.duration;
   });
   report(`animated ${duration}`);
+  then();
 }
 
 // Swift's `await window.beginSheet(sheet)`: the method taking a completion
@@ -291,8 +294,9 @@ function main(): void {
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
   // the closure a block the timer keeps, and calls from the run loop.
-  void animated();
-  Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, tick);
+  void animated(() => {
+    Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, tick);
+  });
   app.run();
   report("done");
 }
