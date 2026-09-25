@@ -583,6 +583,69 @@ backends against real libgobject
 an instance the library let go of is never collected, and with the family not
 registered no cycle is.
 
+### Subclassing a GObject: design (for review, not built)
+
+```ts
+class Counter extends GtkButton {
+  count = 0;                                  // instance state
+  static signals = { bumped: [c_int] };       // declared by the subclass
+  constructor(props: GtkButtonProps) { super(props); }
+  vfunc_clicked(): void {                     // overrides GtkButtonClass.clicked
+    this.count++;
+    this.emit("bumped", this.count);
+  }
+}
+const button = new Counter({ label: "0" });   // a real GType, `COUNTER` in the inspector
+```
+
+GJS's spelling, where it has one: `vfunc_` names an override, and a class
+is registered when it is declared. Everything below builds on the record the
+Apple and Windows lanes share (`Program::foreign_classes`, 702cfa56), as a
+third family beside `Objc` and `Com`.
+
+**What the record carries for `Family::GObject`:**
+
+- `name` (the GType name: the class name, as GJS does unless `GTypeName`
+  says otherwise) and `superclass` (the parent's C type, from the binding).
+- For each method, a dispatch key: a new arm, `GObjectVfunc { class_struct,
+  field }`, beside `Selector` and the COM slot. `field` is the member of the
+  parent's class struct (`GtkButtonClass.clicked`); `class_struct` is the
+  class struct that declares it, which can be an ancestor's
+  (`GtkWidgetClass.snapshot`). The binder already reads GIR's
+  `<virtual-method>`s, so it emits which `vfunc_` names exist and their C
+  signatures, and an unknown `vfunc_x` is a typecheck error, not a silent
+  method.
+- `state`: the maker of the instance's managed state, as ObjC has it
+  (`nts_objc_state`, `{Class}#state`). For GObject it is made in
+  `instance_init` and released in `finalize`, which chains up. The state
+  object is a holder node for the cycle collector, so a closure a subclass
+  keeps in a field is traced the way a connected handler already is.
+- An extension for what only GObject declares in `class_init`: signals
+  (`g_signal_new`, typed from a static `signals` table) and properties
+  (`g_object_class_install_property`), later.
+
+**What each backend emits for one class:**
+
+- `{name}_get_type()`: `g_type_register_static_simple` once, with the
+  class and instance sizes taken from the parent's `GTypeQuery` at run time
+  (C knows the struct; nothing in TypeScript has to), plus room for the state
+  pointer.
+- `class_init`: each vfunc entry point written into its field, cast through
+  the class struct's C type, which the C backend spells from the header; for
+  LLVM the binder records the field's offset, checked by the witness
+  compiling `offsetof`.
+- The entry points themselves reuse `ObjcEntry`'s shape: C arguments in,
+  `this` recovered from the instance, and a record result through an out
+  pointer where the vfunc returns one.
+- `new Counter(props)` constructs through the class's own GType, via the
+  same `@ntsConstruct` path a bound class uses, with `{name}_get_type()` in
+  place of the bound `get_type`.
+
+**Order:** registration and `vfunc_` overrides with no state (C, then
+LLVM); then instance state; then declared signals; then properties. Each
+step gets a fixture whose control is a GTK behaviour visible only if the
+override ran, like a `snapshot` that draws or a `clicked` that counts.
+
 ## M4: against GJS, and a real application
 
 `tooling/gtk-bench/run.sh`: the same program in TypeScript (nts, `--rc`) and
