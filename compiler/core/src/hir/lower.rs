@@ -15548,19 +15548,72 @@ impl<'a> FuncBuilder<'a> {
         if let Some(absent) = to
             .fields
             .iter()
-            .find(|want| !from.fields.iter().any(|have| same_slot(want, have)))
+            .find(|want| !from.fields.iter().any(|have| self.one_slot(want, have)))
         {
             return Some(NotAPrefix::Missing {
                 name: absent.name.clone(),
             });
         }
         to.fields.iter().zip(from.fields.iter()).enumerate().find_map(|(at, (want, have))| {
-            (!same_slot(want, have)).then(|| NotAPrefix::Disagrees {
+            (!self.one_slot(want, have)).then(|| NotAPrefix::Disagrees {
                 at,
                 wanted: want.name.clone(),
                 held: have.name.clone(),
             })
         })
+    }
+
+    /// [`same_slot`], with two object-typed fields counted the same when the
+    /// layouts the types name are **one shape**.
+    ///
+    /// # Why the type ids are not enough here
+    ///
+    /// The checker gives one written type several ids. `[number, () => number]`
+    /// written once produces a tuple for the annotation and another for the
+    /// literal, and each holds `_1` as `Managed(Object(_))` naming a *different*
+    /// id for the same signature -- so the two tuples describe one shape and
+    /// `same_slot` says no, because `Object(1) != Object(7)`.
+    ///
+    /// The cost is not a missed merge. A store of either tuple into the other is
+    /// then a pointer cast between structs that disagree, and `[state, setState]`
+    /// -- the shape `useState`, `useReducer`, `useTransition` and
+    /// `useActionState` return -- refused with "holds `_1` and has no field of
+    /// that name and type". It also stopped *instantiation*: the React lane
+    /// measured `useState<f64>` and `updateState<bool>` appearing the moment the
+    /// tuple was replaced by a record.
+    ///
+    /// **By the layouts' names, and they are structural.** A signature's layout
+    /// is named after its shape (`is_signature_name`, and `may_merge`'s own
+    /// comment says so: "The names are structural, so this still merges two ids
+    /// for one written signature and separates two signatures"), so one name is
+    /// one shape and two signatures keep two names. That is the same equivalence
+    /// `collect_layouts` applies after lowering; this is it asked early enough
+    /// for a coercion to use.
+    ///
+    /// **Looked up, never created.** `layout_of` *creates* a layout when it does
+    /// not find one, and record 0199 is what creating one mid-lowering costs --
+    /// it changes the order `collect_layouts` merges in. A field whose layout
+    /// does not exist yet falls back to the type-id comparison, which refuses as
+    /// before: conservative in the direction that cannot produce a wrong cast.
+    fn one_slot(&self, want: &Field, have: &Field) -> bool {
+        if same_slot(want, have) {
+            return true;
+        }
+        if !want.names_the_same_member(have) {
+            return false;
+        }
+        let named = |ty: &HirType| match ty {
+            HirType::Managed(ManagedType::Object(id)) => self
+                .layouts
+                .iter()
+                .find(|layout| layout.types.contains(id))
+                .map(|layout| layout.name.as_str()),
+            _ => None,
+        };
+        match (named(&want.ty), named(&have.ty)) {
+            (Some(one), Some(other)) => one == other,
+            _ => false,
+        }
     }
 
     fn coerce_to_parameter(
