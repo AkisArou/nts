@@ -159,6 +159,9 @@ int main(void) {
     NSRange range = {0, 0};
     id font = [attributed attribute:@"NSFont" atIndex:3 effectiveRange:&range];
     printf("attributed %s %lu %lu\n", font == nil ? "true" : "false", (unsigned long)range.location, (unsigned long)range.length);
+    NSUInteger start = 0, end = 0, contentsEnd = 0;
+    [@"ab\ncde\nf" getLineStart:&start end:&end contentsEnd:&contentsEnd forRange:NSMakeRange(4, 0)];
+    printf("line %lu %lu %lu\n", (unsigned long)start, (unsigned long)end, (unsigned long)contentsEnd);
     printf("labelled %lu %s\n", (unsigned long)[@"x-y-z" componentsSeparatedByString:@"-"].count,
            [[@"p-q" componentsSeparatedByString:@"-"] componentsJoinedByString:@"+"].UTF8String);
     NSXMLParser *parser = [[NSXMLParser alloc] initWithData:[@"<a><b/><c><d/></c></a>" dataUsingEncoding:NSUTF8StringEncoding]];

@@ -1256,6 +1256,20 @@ impl<'a> Model<'a> {
                 self.import("objc:types", "CString");
                 return Ok("CString".to_owned());
             }
+            // Swift's `UnsafeMutablePointer<CGFloat>`, an out parameter like
+            // `getRed(_:green:blue:alpha:)`'s: the address of the number, which
+            // a program passes as `local<CGFloat>()` and reads as `[0]`.
+            if position == Position::Parameter
+                && !pointee.contains('*')
+                && let Some(number) = swift_number(
+                    written.split('*').next().unwrap_or_default().trim().trim_start_matches("const ").trim(),
+                    pointee.trim_start_matches("const "),
+                )
+            {
+                self.import("objc:types", number);
+                self.import("c:types", "Ptr");
+                return Ok(or_null(format!("Ptr<{number}>")));
+            }
             // Swift's `UnsafeMutablePointer<NSRange>` -- an out parameter, or
             // a record read in place -- as the address a program passes:
             // `local<NSRange>()`.
@@ -2143,9 +2157,9 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector measure: */\n    measure(span: Ptr<Span>): void;",
             // A label Swift repeats: the repeat keyed by its parameter's name.
             "    /** @ntsSelector linkFrom:to:to: */\n    link(labels: { from: Shape; to: Shape; end: Shape }): void;",
-            // A pointer to a number is not the number: `NSUInteger *` is
-            // skipped, not spelled `UInt`.
-            "-countInto:: a `NSUInteger *`",
+            // A pointer to a number is not the number: `NSUInteger *` is the
+            // number's address, Swift's `UnsafeMutablePointer<UInt>`.
+            "    /** @ntsSelector countInto: */\n    count(labels: { into: Ptr<UInt> }): void;",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",

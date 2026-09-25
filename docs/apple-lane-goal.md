@@ -395,6 +395,10 @@ correctness does not depend on arm64 running by luck.
          (`NSRange`, `struct _NSRange`). 39 more AppKit members bind this
          way. `macos-classes` reads the range `attribute(_:at:effectiveRange:)`
          writes, against clang, on both backends.
+       - A number parameter by address, `UnsafeMutablePointer<CGFloat>` in
+         Swift, is `Ptr<CGFloat>`, read as `[0]`. It was spelled as the
+         number itself until f998014f. 26 more members bind.
+         `macos-classes` reads the three numbers `getLineStart` writes.
        - An element through a typedef of `NSString *`, such as
          `[NSPasteboard.PasteboardType]`, is a `string`. A class qualified by a
          protocol, such as `NSView<NSCollectionViewElement>`, is the class.

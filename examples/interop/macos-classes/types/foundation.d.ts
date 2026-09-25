@@ -5,7 +5,7 @@
  */
 declare module "objc:Foundation" {
   import type { CString, Int, Int32, UInt } from "objc:types";
-  import type { Ptr, Struct } from "c:types";
+  import type { ByValue, Ptr, Struct } from "c:types";
 
   // Swift's `NSRange`, C's `struct _NSRange`.
   export type NSRange = Struct<{ location: UInt; length: UInt }, "_NSRange">;
@@ -23,6 +23,12 @@ declare module "objc:Foundation" {
     /** @ntsSelector initWithUTF8String: */
     constructor(text: CString);
     readonly length: UInt;
+    /**
+     * Swift's `getLineStart(_:end:contentsEnd:for:)`: three numbers written
+     * through the addresses passed, each an `UnsafeMutablePointer<Int>`.
+     * @ntsSelector getLineStart:end:contentsEnd:forRange:
+     */
+    getLineStart(start: Ptr<UInt> | null, labels: { end: Ptr<UInt> | null; contentsEnd: Ptr<UInt> | null; for: ByValue<NSRange> }): void;
     /** Swift's `String`, both ways: a `string` crosses as an `NSString`. */
     readonly uppercaseString: string;
     /** @ntsSelector stringByAppendingString: */

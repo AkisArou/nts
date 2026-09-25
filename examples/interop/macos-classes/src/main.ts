@@ -19,6 +19,7 @@ import {
 import { live_objects, report, weak_alive, weak_watch } from "c:support";
 import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
 import type { c_int } from "c:types";
+import type { UInt } from "objc:types";
 import { local } from "c:memory";
 
 let watch = 0 as c_int;
@@ -225,6 +226,16 @@ function main(): void {
   const range = local<NSRange>();
   const font = attributed.attribute("NSFont", { at: 3, effectiveRange: range });
   report(`attributed ${font === null} ${range.location} ${range.length}`);
+  // Swift's `UnsafeMutablePointer<UInt>`, three of them: the numbers the
+  // message writes, read back as `[0]`.
+  const start = local<UInt>();
+  const end = local<UInt>();
+  const contentsEnd = local<UInt>();
+  const at = local<NSRange>();
+  at.location = 4;
+  at.length = 0;
+  new NSString("ab\ncde\nf").getLineStart(start, { end, contentsEnd, for: at });
+  report(`line ${start[0]} ${end[0]} ${contentsEnd[0]}`);
   // Labels held in a variable, as a wrapper passes on the ones it was given:
   // each read from its field at the call.
   const byDash = { separatedBy: "-" };

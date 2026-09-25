@@ -43341,17 +43341,18 @@ impl<'a> FuncBuilder<'a> {
         if send.class.is_none() && super::native::Send::consumes_receiver(&send.selector) {
             native.consumes = vec![0];
         }
-        // A record's address -- Swift's `UnsafeMutablePointer<NSRange>`, its
-        // `&range` -- is the message's to read or write during the send and
-        // no longer, which is what Swift's own conversion promises: a
-        // `local<NSRange>()` may be passed.
+        // A record's or a number's address -- Swift's
+        // `UnsafeMutablePointer<NSRange>` or `<CGFloat>`, its `&range` -- is
+        // the message's to read or write during the send and no longer, which
+        // is what Swift's own conversion promises: a `local<NSRange>()` may be
+        // passed.
         // Grown only: a record result's destination is one entry past the
         // parameters, and is not retained either.
         if native.retention.len() < native.parameters.len() {
             native.retention.resize(native.parameters.len(), super::native::Retention::Unknown);
         }
         for (at, ty) in native.parameters.iter().enumerate() {
-            if matches!(ty, super::native::Type::Pointer(super::native::Pointee::Record(_))) {
+            if matches!(ty, super::native::Type::Pointer(super::native::Pointee::Record(_) | super::native::Pointee::Scalar(_))) {
                 native.retention[at] = super::native::Retention::NotRetained;
             }
         }
