@@ -109,9 +109,23 @@ the plain probe, which passes classes.
    The JSX oracle (`study/jsx-diff.cjs`) sets the descriptor aside only for
    names that are classes, and `fixtures/jsx-lowering/classes.tsx` holds a
    class, a subclass, a pure class and a function side by side.
-3. The native base class, whose every lifecycle has a body. Oracle: the
-   native census, once the probe emits again (two invalid-HIR defects,
-   reported).
+3. **In progress.** The native base class gives every lifecycle a body
+   (react/ReactBaseClasses.native.ts), which probe-agree's staged arm runs.
+   Control: a native `defines` that ignores the mask breaks `pureSkip`.
+   What remains is how the reconciler reaches those bodies. It holds an
+   instance through six interface views (`ClassInstance`,
+   `CommitClassInstance`, ...), and nts dispatches an interface call only to
+   classes that declare it. `Component<P, S>` is monomorphised per `P, S`, so
+   no single class is the one the reconciler names. The shape that fits is
+   the one contexts use: a non-generic base the reconciler holds, whose
+   lifecycles take erased parameters, which user classes override with
+   typed ones. nts compiles that override and crashes when it reads the
+   parameter (reported with a two-arm reduction), so this step waits on
+   that fix.
+   Measured with the three invalid-HIR defects worked around locally, the
+   probe emits, with 215 root refusals. Those on this path: the lifecycle
+   calls above, the state merge (`Object.assign` onto a record, still ours
+   to design), and `ctor.prototype && ...` (an object's truthiness).
 
 ## Left out
 

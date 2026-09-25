@@ -14,6 +14,11 @@ export class Component<P = Props, S = unknown> {
   refs: { [name: string]: unknown };
   updater: Updater;
   declare state: S;
+  // Written by the reconciler: the instance's fiber, and the snapshot
+  // getSnapshotBeforeUpdate returned, held until componentDidUpdate
+  // receives it. Upstream adds both to the user's object.
+  _reactInternals: unknown = undefined;
+  __reactInternalSnapshotBeforeUpdate: unknown = undefined;
 
   constructor(props: P, context?: unknown, updater?: Updater) {
     this.props = props;
@@ -42,6 +47,30 @@ export class Component<P = Props, S = unknown> {
   forceUpdate(callback?: () => void): void {
     this.updater.enqueueForceUpdate(this, callback, "forceUpdate");
   }
+
+  // Every lifecycle, with a body, so that a call always has a target: the
+  // reconciler calls one only when the class's descriptor lists it (see
+  // CLASS-COMPONENTS.md), and a class that does not define it dispatches
+  // here. Each body is what upstream does when the method is absent.
+  render(): unknown {
+    return null;
+  }
+  componentDidMount(): void {}
+  componentDidUpdate(_prevProps: P, _prevState: S, _snapshot?: unknown): void {}
+  componentWillUnmount(): void {}
+  shouldComponentUpdate(_nextProps: P, _nextState: S, _nextContext: unknown): boolean {
+    return true;
+  }
+  getSnapshotBeforeUpdate(_prevProps: P, _prevState: S): unknown {
+    return null;
+  }
+  componentDidCatch(_error: unknown, _errorInfo: { componentStack?: string | null }): void {}
+  componentWillMount(): void {}
+  UNSAFE_componentWillMount(): void {}
+  componentWillReceiveProps(_nextProps: P, _nextContext: unknown): void {}
+  UNSAFE_componentWillReceiveProps(_nextProps: P, _nextContext: unknown): void {}
+  componentWillUpdate(_nextProps: P, _nextState: S, _nextContext: unknown): void {}
+  UNSAFE_componentWillUpdate(_nextProps: P, _nextState: S, _nextContext: unknown): void {}
 }
 
 export class PureComponent<P = Props, S = unknown> extends Component<P, S> {
