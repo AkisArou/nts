@@ -1779,6 +1779,63 @@ test262() {
   node tooling/census/audit.mjs --under test/language || return 1
 }
 
+# Test262 `test/language` cases that ran, re-run and held to what they did.
+#
+# **The `test262` step above measures the harness, not the compiler.** It
+# parses every file's metadata and classifies feature *names*; nothing is
+# compiled and nothing is run, so "34 features supported" was a claim about
+# tokens. This step is the measured half: `tooling/census/conformance262.mjs`
+# over the cases recorded in `tooling/census/test262-language.outcomes.tsv` --
+# every case that compiled, linked and ran on the last full run, with what it
+# did. A pass must still pass; a wrong answer must still be *that* wrong answer,
+# so a fail recorded as `uncaught Test262Error: #1` fails here if it starts
+# passing (re-record: it is news) or starts failing differently.
+#
+# **The floor is the pass count, and it may not go down.** A change that clears
+# refusals turns up as passes only on a full run, which is too slow for every
+# gate (a quarter hour at twelve workers, and killed twice mid-run on this box):
+#
+#   node tooling/census/conformance262.mjs --resume --rows ~/.cache/nts/t262.rows \
+#     --record tooling/census/test262-language.outcomes.tsv
+#
+# then raise TEST262_LANGUAGE_PASS_FLOOR to the new pass-count. Lower it only
+# with the REGRESSED lines in the commit message.
+#
+# **Not measured is a failure.** The runner exits 2 when a self-check fails
+# (a control that does not pass, a sabotage that does not throw, a refusal that
+# is not seen) and 1 when the outcomes do not reconcile or a recorded case
+# changed; a missing `pass-count:` line is a run that said nothing, and fails
+# rather than reading as zero.
+TEST262_LANGUAGE_PASS_FLOOR=1798
+test262_cases() {
+  if [ ! -d third_party/test262/.git ]; then
+    echo "  no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
+    return 0
+  fi
+  # Eight at most whatever `jobs` says: memory, not cores, is what a test262
+  # run exhausts -- one unicode-identifier case takes the frontend to the
+  # per-case 6 GB cap, and twelve workers once took this machine into the OOM
+  # killer. `tooling/census/attempt262.mjs`'s `capped` has the numbers.
+  cap=$(( ${jobs:-8} > 8 ? 8 : ${jobs:-8} ))
+  out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.mjs \
+    --recorded tooling/census/test262-language.outcomes.tsv --jobs "$cap" 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|pass-count|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/'
+  [ "$status" -eq 0 ] || return 1
+  passed=$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')
+  if [ -z "$passed" ]; then
+    echo "  no pass-count line: the run measured nothing, which is not zero"
+    return 1
+  fi
+  if [ "$passed" -lt "$TEST262_LANGUAGE_PASS_FLOOR" ]; then
+    echo "  $passed pass, below the floor of $TEST262_LANGUAGE_PASS_FLOOR -- see REGRESSED above"
+    return 1
+  fi
+  if [ "$passed" -gt "$TEST262_LANGUAGE_PASS_FLOOR" ]; then
+    echo "  $passed pass, above the floor of $TEST262_LANGUAGE_PASS_FLOOR: raise TEST262_LANGUAGE_PASS_FLOOR in tooling/gate/all.sh"
+  fi
+}
+
 step "build"   cargo build --release
 step "clippy"  lint
 # Every interop project, built the way its README says and then run.
@@ -1907,6 +1964,7 @@ step "format"  format
 step "reformat" reformatted
 step "records" records
 step "test262" test262
+step "test262-cases" test262_cases
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly
