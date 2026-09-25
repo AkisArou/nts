@@ -1409,7 +1409,7 @@ impl Writer<'_> {
     /// interface and slot. `xaml` marks `Microsoft.UI.Xaml.Application`, whose
     /// subclass answers `WinUI`'s metadata provider. `None` for any other class.
     fn subclassing(&mut self, def: TypeDef, class_name: &str) -> Option<String> {
-        let (factory, slot, public) = def
+        let (factory, slot, create, public) = def
             .attributes()
             .filter(|attribute| attribute.ctor().parent().name() == "ComposableAttribute")
             .find_map(|attribute| {
@@ -1419,8 +1419,8 @@ impl Writer<'_> {
                 let factory = self.index.get(&interface.namespace, &interface.name).next()?;
                 let iid = iid(factory)?;
                 // The parameterless one: the outer object and the inner, nothing else.
-                let slot = factory.methods().position(|method| method.signature(&[]).types.len() == 2)?;
-                Some((iid, 6 + slot, public))
+                let (slot, create) = factory.methods().enumerate().find(|(_, method)| method.signature(&[]).types.len() == 2)?;
+                Some((iid, 6 + slot, method_name(create), public))
             })?;
         let mut overrides = String::new();
         let mut at = Some(def);
@@ -1446,6 +1446,12 @@ impl Writer<'_> {
         let _ = writeln!(text, "   * @ntsComposable {class_name} {factory} {slot}{xaml}");
         let _ = writeln!(text, "   */");
         let _ = writeln!(text, "  export class {} {{", def.name());
+        // `new Window()`: the factory's parameterless `CreateInstance`, as the
+        // static of that name is, with no outer object.
+        let _ = writeln!(
+            text,
+            "    /**\n     * @ntsVtable {slot} {create}\n     * @ntsHresult composable\n     * @ntsFactory {class_name} {factory}\n     */"
+        );
         let _ = writeln!(text, "    {}constructor();", if public { "" } else { "protected " });
         text.push_str(&overrides);
         let _ = writeln!(text, "  }}");

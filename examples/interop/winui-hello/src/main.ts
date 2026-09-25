@@ -124,7 +124,7 @@ class App extends Application {
     super.onLaunched(args);
     this.launched += 1;
     this.resources.mergedDictionaries.Append(XamlControlsResources.create().as_IResourceDictionary());
-    const window = Window.createInstance();
+    const window = new Window();
     window.title = "nts";
     const button = new PressButton("Press");
     button.as_IButtonBase().add_Click(() => {

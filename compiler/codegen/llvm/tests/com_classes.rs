@@ -31,6 +31,11 @@ const BINDING: &str = r#"declare module "winrt:Test.Xaml" {
    * @ntsComposable Test.Xaml.Application 9FD96657-5294-5A65-A1DB-4FEA143597DA 6 xaml
    */
   export class Application {
+    /**
+     * @ntsVtable 6 CreateInstance
+     * @ntsHresult composable
+     * @ntsFactory Test.Xaml.Application 9FD96657-5294-5A65-A1DB-4FEA143597DA
+     */
     constructor();
     /**
      * @ntsOverride A33E81EF-C665-503B-8827-D27EF1720A06 6 OnLaunched
@@ -558,6 +563,28 @@ fn a_surface_name_other_than_the_slots_is_refused() {
         "{:?}",
         prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
     );
+}
+
+/// `new Application()` of the binding's own class, as JavaScript writes
+/// `new Window()`: its factory's `CreateInstance`, called on the factory as
+/// the static of that name is, with no outer object -- not the runtime's
+/// composition, which is a class of the program's over it.
+#[test]
+fn a_bindings_composable_class_is_made_by_its_factory() {
+    let source = "import { Application } from \"winrt:Test.Xaml\";\nexport function start(): void {\n  new Application();\n}\n";
+    let Some((dir, prepared)) = prepare("new-binding-class", source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("nts_winrt_factory(") && text.contains("[6])("), "not the factory's slot 6:\n{text}");
+    assert!(!text.contains("nts_com_compose_named("), "composed as a class of the program's:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 }
 
 /// `super.OnLaunched(args)` in an override is the base's own implementation

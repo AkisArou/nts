@@ -45318,8 +45318,13 @@ impl<'a> FuncBuilder<'a> {
         // The idiomatic surface names a slot's method in camelCase
         // (`getFolderFromPathAsync` for `GetFolderFromPathAsync`), by the one
         // rule `bind-winmd` writes it by; any other name is a disagreement.
+        // A constructor has no name to disagree with: it is the class's
+        // factory method, whichever the metadata calls it.
         let declared = self.declared_name(decl);
-        if declared.as_deref() != Some(*method) && declared.as_deref() != Some(super::native::js_name(method).as_str()) {
+        if self.kind_of(decl) != Some(syntax::CONSTRUCTOR)
+            && declared.as_deref() != Some(*method)
+            && declared.as_deref() != Some(super::native::js_name(method).as_str())
+        {
             return Err(self.unsupported(
                 call,
                 &format!("@ntsVtable {slot} {method} on a declaration of another name: the slot's method and the declaration disagree"),
@@ -45842,6 +45847,9 @@ impl<'a> FuncBuilder<'a> {
     /// parameterless one.
     fn lower_com_new(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
         let Some(class) = self.constructed_class(id) else { return Ok(None) };
+        if super::native::is_com_class(self.snapshot, class) {
+            return self.lower_com_construct(id);
+        }
         if !super::native::extends_com(self.snapshot, class) {
             return Ok(None);
         }
@@ -45863,6 +45871,33 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a class written over a composable Windows Runtime class whose instances are not its base's handle"));
         };
         Ok(Some(self.compose_named(&name, ty, &self.origin(id))))
+    }
+
+    /// `new Window()`: a composable Windows Runtime class a binding declares,
+    /// made as itself -- its constructor is its factory's `CreateInstance`,
+    /// tagged as the static is (`@ntsVtable`, `@ntsHresult composable`,
+    /// `@ntsFactory`), and called as the static is, with no outer object.
+    /// `None` for a constructor with no slot, which nothing lowers.
+    fn lower_com_construct(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(target) = self.snapshot.call_targets.get(&id).copied() else { return Ok(None) };
+        let Some(declaration) = target.callee else { return Ok(None) };
+        let Some(method) = self.node(declaration).native.as_ref().and_then(|n| n.vtable.as_deref()).and_then(|v| v.split_whitespace().nth(1)).map(str::to_owned) else {
+            return Ok(None);
+        };
+        // The constructor is the factory's method, answering the instance:
+        // a call, not a construct signature, to the function it lowers to.
+        let mut signature = self.snapshot.signatures[target.signature.0 as usize].clone();
+        signature.is_construct = false;
+        let callee = self.native_callee(id, Some(declaration), method, &signature)?;
+        // Called on the class's factory, as the static is.
+        let factory = match &callee {
+            Callee::Native(target) => target.vtable.as_ref().and_then(|vtable| vtable.factory.clone()),
+            _ => None,
+        };
+        let receiver = factory.map(|factory| self.factory_receiver(&factory, id));
+        let arguments = self.arguments_of(id);
+        let (args, lent) = self.lower_call_arguments(id, &callee, &arguments, receiver)?;
+        self.finish_call(id, callee, args, lent, Some(declaration)).map(Some)
     }
 
     /// The class declaration a `new` constructs, through its expression's
