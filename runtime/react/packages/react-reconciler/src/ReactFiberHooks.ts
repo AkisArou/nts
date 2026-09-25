@@ -19,7 +19,7 @@ import type { Flags } from "./ReactFiberFlags.ts";
 import type { TransitionStatus } from "react-reconciler/ReactFiberConfig.ts";
 import type { ThenableState } from "./ReactFiberThenable.ts";
 
-import { isDevelopment } from "shared/Build.ts";
+import { checksHookKinds, isDevelopment } from "shared/Build.ts";
 import {
   HostTransitionContext,
   NotPendingTransition as NoPendingHostTransition,
@@ -186,17 +186,51 @@ function createHookUpdate(
   return new Update(lane, revertLane, action, hasEagerState, eagerState);
 }
 
+// What a hook's `memoizedState` and `queue` hold. Hooks that store the same
+// thing share a kind -- `useState`, `useReducer`, `useOptimistic` and the
+// state hooks inside `useActionState` and `useTransition` all hold a state
+// and an update queue, and one implementation reads them -- because the kind
+// exists to say what a read may assume.
+export const ReducerHook = 0;
+export const StoreHook = 1;
+export const ActionQueueHook = 2;
+export const RefHook = 3;
+export const EffectHook = 4;
+export const EventHook = 5;
+export const MemoHook = 6;
+export const DeferredHook = 7;
+export const TransitionHook = 8;
+export const IdHook = 9;
+export const RefreshHook = 10;
+export type HookKind =
+  | typeof ReducerHook
+  | typeof StoreHook
+  | typeof ActionQueueHook
+  | typeof RefHook
+  | typeof EffectHook
+  | typeof EventHook
+  | typeof MemoHook
+  | typeof DeferredHook
+  | typeof TransitionHook
+  | typeof IdHook
+  | typeof RefreshHook;
+
 // One hook's state in a function component's list. What `memoizedState`,
 // `baseState` and `queue` hold depends on the kind of hook; each hook
 // implementation below projects them to its own types (see
 // runtime/react/spikes/hook-storage/README.md for why the node itself is not
-// generic).
+// generic), after updateWorkInProgressHook has checked the kind.
 export class Hook {
+  readonly kind: HookKind;
   memoizedState: unknown = null;
   baseState: unknown = null;
   baseQueue: Update | null = null;
   queue: unknown = null;
   next: Hook | null = null;
+
+  constructor(kind: HookKind) {
+    this.kind = kind;
+  }
 }
 
 // The effect "instance" is a shared object that remains the same for the entire
@@ -929,8 +963,8 @@ export function resetHooksOnUnwind(workInProgress: Fiber): void {
   thenableState = null;
 }
 
-function mountWorkInProgressHook(): Hook {
-  const hook = new Hook();
+function mountWorkInProgressHook(kind: HookKind): Hook {
+  const hook = new Hook(kind);
 
   if (workInProgressHook === null) {
     // This is the first hook in the list
@@ -942,7 +976,7 @@ function mountWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
-function updateWorkInProgressHook(): Hook {
+function updateWorkInProgressHook(kind: HookKind): Hook {
   // This function is used both for updates and for re-renders triggered by a
   // render phase update. It assumes there is either a current hook we can
   // clone, or a work-in-progress hook from a previous render pass that we can
@@ -990,7 +1024,7 @@ function updateWorkInProgressHook(): Hook {
 
     currentHook = nextCurrentHook;
 
-    const newHook = new Hook();
+    const newHook = new Hook(currentHook.kind);
     newHook.memoizedState = currentHook.memoizedState;
     newHook.baseState = currentHook.baseState;
     newHook.baseQueue = currentHook.baseQueue;
@@ -1003,6 +1037,15 @@ function updateWorkInProgressHook(): Hook {
       // Append to the end of the list.
       workInProgressHook = workInProgressHook.next = newHook;
     }
+  }
+  if (checksHookKinds && workInProgressHook.kind !== kind) {
+    // A different hook sits where this one was last render: the component
+    // changed the order of its hooks. Reading its state as this hook's would
+    // be type confusion in a build whose erased reads are unchecked.
+    throw new Error(
+      "Rendered a different hook than during the previous render. Hooks must be called in the same order on every render: " +
+        "https://react.dev/link/rules-of-hooks",
+    );
   }
   return workInProgressHook;
 }
@@ -1231,7 +1274,7 @@ export function mountReducer<S, I, A>(
   initialArg: I,
   init?: (initialArg: I) => S,
 ): [S, Dispatch<A>] {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(ReducerHook);
   let initialState: S;
   if (init !== undefined) {
     initialState = init(initialArg);
@@ -1259,7 +1302,7 @@ export function updateReducer<S, I, A>(
   _initialArg: I,
   _init?: (initialArg: I) => S,
 ): [S, Dispatch<A>] {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(ReducerHook);
   return updateReducerImpl(hook, currentHookForUpdate(), reducer);
 }
 
@@ -1494,7 +1537,7 @@ export function rerenderReducer<S, I, A>(
   _initialArg: I,
   _init?: (initialArg: I) => S,
 ): [S, Dispatch<A>] {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(ReducerHook);
   const queue = hook.queue as UpdateQueue | null;
 
   if (queue === null) {
@@ -1552,7 +1595,7 @@ export function mountSyncExternalStore<T>(
   getServerSnapshot?: () => T,
 ): T {
   const fiber = currentlyRenderingFiber;
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(StoreHook);
 
   let nextSnapshot: T;
   const isHydrating = getIsHydrating();
@@ -1637,7 +1680,7 @@ export function updateSyncExternalStore<T>(
   getServerSnapshot?: () => T,
 ): T {
   const fiber = currentlyRenderingFiber;
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(StoreHook);
   // Read the current snapshot from the store on every render. This breaks the
   // normal rules of React, and only works because store updates are
   // always synchronous.
@@ -1796,7 +1839,7 @@ function forceStoreRerender(fiber: Fiber): void {
 }
 
 function mountStateImpl<S>(initialStateArg: (() => S) | S): Hook {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(ReducerHook);
   let initialState: S;
   if (typeof initialStateArg === "function") {
     const initialStateInitializer = initialStateArg as () => S;
@@ -1839,7 +1882,7 @@ export function rerenderState<S>(initialState: (() => S) | S): [S, Dispatch<Basi
 }
 
 export function mountOptimistic<S, A>(passthrough: S, _reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(ReducerHook);
   hook.memoizedState = hook.baseState = passthrough;
   const queue = new UpdateQueue(null, null);
   hook.queue = queue;
@@ -1850,7 +1893,7 @@ export function mountOptimistic<S, A>(passthrough: S, _reducer?: ((state: S, act
 }
 
 export function updateOptimistic<S, A>(passthrough: S, reducer?: ((state: S, action: A) => S) | null): [S, (action: A) => void] {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(ReducerHook);
   return updateOptimisticImpl(hook, currentHookForUpdate(), passthrough, reducer);
 }
 
@@ -1883,7 +1926,7 @@ export function rerenderOptimistic<S, A>(passthrough: S, reducer?: ((state: S, a
   // So instead of a forked re-render implementation that knows how to handle
   // render phase udpates, we can use the same implementation as during a
   // regular mount or update.
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(ReducerHook);
 
   if (currentHook !== null) {
     // This is an update. Process the update queue.
@@ -2235,7 +2278,7 @@ export function mountActionState<S, P>(
 
   // State hook. The state is stored in a thenable which is then unwrapped by
   // the `use` algorithm during render.
-  const stateHook = mountWorkInProgressHook();
+  const stateHook = mountWorkInProgressHook(ReducerHook);
   stateHook.memoizedState = stateHook.baseState = initialState;
   const stateQueue = new UpdateQueue(actionStateReducer, initialState);
   stateHook.queue = stateQueue;
@@ -2256,7 +2299,7 @@ export function mountActionState<S, P>(
   // shared between all instances of the hook. Similar to a regular state queue,
   // but different because the actions are run sequentially, and they run in
   // an event instead of during render.
-  const actionQueueHook = mountWorkInProgressHook();
+  const actionQueueHook = mountWorkInProgressHook(ActionQueueHook);
   const actionQueue = {
     state: initialState,
     dispatch: null, // circular
@@ -2286,7 +2329,7 @@ export function updateActionState<S, P>(
   initialState: Awaited<S>,
   permalink?: string,
 ): [Awaited<S>, (payload: P) => void, boolean] {
-  const stateHook = updateWorkInProgressHook();
+  const stateHook = updateWorkInProgressHook(ReducerHook);
   const currentStateHook = currentHookForUpdate();
   return updateActionStateImpl(stateHook, currentStateHook, action, initialState, permalink);
 }
@@ -2324,7 +2367,7 @@ function updateActionStateImpl<S, P>(
     state = actionResult as Awaited<S>;
   }
 
-  const actionQueueHook = updateWorkInProgressHook();
+  const actionQueueHook = updateWorkInProgressHook(ActionQueueHook);
   const actionQueue = actionQueueHook.queue as ActionStateQueue<S, P>;
   const dispatch = actionQueue.dispatch;
 
@@ -2362,7 +2405,7 @@ export function rerenderActionState<S, P>(
   // So instead of a forked re-render implementation that knows how to handle
   // render phase udpates, we can use the same implementation as during a
   // regular mount or update.
-  const stateHook = updateWorkInProgressHook();
+  const stateHook = updateWorkInProgressHook(ReducerHook);
   const currentStateHook = currentHook;
 
   if (currentStateHook !== null) {
@@ -2370,12 +2413,12 @@ export function rerenderActionState<S, P>(
     return updateActionStateImpl(stateHook, currentStateHook, action, initialState, permalink);
   }
 
-  updateWorkInProgressHook(); // State
+  updateWorkInProgressHook(ReducerHook); // State
 
   // This is a mount. No updates to process.
   const state = stateHook.memoizedState as Awaited<S>;
 
-  const actionQueueHook = updateWorkInProgressHook();
+  const actionQueueHook = updateWorkInProgressHook(ActionQueueHook);
   const actionQueue = actionQueueHook.queue as ActionStateQueue<S, P>;
   const dispatch = actionQueue.dispatch;
 
@@ -2421,26 +2464,26 @@ function createEffectInstance(): EffectInstance {
 }
 
 export function mountRef<T>(initialValue: T): RefObject<T> {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(RefHook);
   const ref = { current: initialValue };
   hook.memoizedState = ref;
   return ref;
 }
 
 export function updateRef<T>(_initialValue: T): RefObject<T> {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(RefHook);
   return hook.memoizedState as RefObject<T>;
 }
 
 function mountEffectImpl(fiberFlags: Flags, hookFlags: HookFlags, create: EffectCreate, deps: HookDependencies): void {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(EffectHook);
   const nextDeps = deps === undefined ? null : deps;
   currentlyRenderingFiber.flags |= fiberFlags;
   hook.memoizedState = pushSimpleEffect(HookHasEffect | hookFlags, createEffectInstance(), create, nextDeps);
 }
 
 function updateEffectImpl(fiberFlags: Flags, hookFlags: HookFlags, create: EffectCreate, deps: HookDependencies): void {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(EffectHook);
   const nextDeps = deps === undefined ? null : deps;
   const effect = hook.memoizedState as Effect;
   const inst = effect.inst;
@@ -2504,14 +2547,14 @@ function createEventFunction(ref: { impl: EventImpl }): EventImpl {
 }
 
 export function mountEvent<F extends (...args: never[]) => unknown>(callback: F): F {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(EventHook);
   const ref = { impl: callback as unknown as EventImpl };
   hook.memoizedState = ref;
   return createEventFunction(ref) as unknown as F;
 }
 
 export function updateEvent<F extends (...args: never[]) => unknown>(callback: F): F {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(EventHook);
   const ref = hook.memoizedState as { impl: EventImpl };
   useEffectEventImpl({ ref, nextImpl: callback as unknown as EventImpl });
   return createEventFunction(ref) as unknown as F;
@@ -2617,14 +2660,14 @@ export function updateDebugValue<T>(value: T, formatterFn?: ((value: T) => unkno
 }
 
 export function mountCallback<T>(callback: T, deps: HookDependencies): T {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(MemoHook);
   const nextDeps = deps === undefined ? null : deps;
   hook.memoizedState = [callback, nextDeps];
   return callback;
 }
 
 export function updateCallback<T>(callback: T, deps: HookDependencies): T {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(MemoHook);
   const nextDeps = deps === undefined ? null : deps;
   const prevState = hook.memoizedState as [T, readonly unknown[] | null];
   if (nextDeps !== null) {
@@ -2638,7 +2681,7 @@ export function updateCallback<T>(callback: T, deps: HookDependencies): T {
 }
 
 export function mountMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(MemoHook);
   const nextDeps = deps === undefined ? null : deps;
   const nextValue = nextCreate();
   if (shouldDoubleInvokeUserFnsInHooksDEV) {
@@ -2654,7 +2697,7 @@ export function mountMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
 }
 
 export function updateMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(MemoHook);
   const nextDeps = deps === undefined ? null : deps;
   const prevState = hook.memoizedState as [T, readonly unknown[] | null];
   // Assume these are defined. If they're not, areHookInputsEqual will warn.
@@ -2678,19 +2721,19 @@ export function updateMemo<T>(nextCreate: () => T, deps: HookDependencies): T {
 }
 
 export function mountDeferredValue<T>(value: T, initialValue?: T): T {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(DeferredHook);
   return mountDeferredValueImpl(hook, value, initialValue);
 }
 
 export function updateDeferredValue<T>(value: T, initialValue?: T): T {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(DeferredHook);
   const resolvedCurrentHook = currentHookForUpdate();
   const prevValue = resolvedCurrentHook.memoizedState as T;
   return updateDeferredValueImpl(hook, prevValue, value, initialValue);
 }
 
 export function rerenderDeferredValue<T>(value: T, initialValue?: T): T {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(DeferredHook);
   if (currentHook === null) {
     // This is a rerender during a mount.
     return mountDeferredValueImpl(hook, value, initialValue);
@@ -2926,7 +2969,7 @@ function ensureFormComponentIsStateful(formFiber: Fiber): Hook {
     lastRenderedState: NoPendingHostTransition,
   };
 
-  const stateHook = new Hook();
+  const stateHook = new Hook(ReducerHook);
   stateHook.memoizedState = NoPendingHostTransition;
   stateHook.baseState = NoPendingHostTransition;
   stateHook.queue = newQueue;
@@ -2945,7 +2988,7 @@ function ensureFormComponentIsStateful(formFiber: Fiber): Hook {
     lastRenderedReducer: basicStateReducer,
     lastRenderedState: initialResetState,
   };
-  const resetStateHook = new Hook();
+  const resetStateHook = new Hook(ReducerHook);
   resetStateHook.memoizedState = initialResetState;
   resetStateHook.baseState = initialResetState;
   resetStateHook.queue = newResetStateQueue;
@@ -3012,14 +3055,14 @@ export function mountTransition(): [boolean, StartTransitionFunction] {
     true,
     false,
   );
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(TransitionHook);
   hook.memoizedState = start;
   return [false, start];
 }
 
 export function updateTransition(): [boolean, StartTransitionFunction] {
   const [booleanOrThenable] = updateState<Thenable<boolean> | boolean>(false);
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(TransitionHook);
   const start = hook.memoizedState as StartTransitionFunction;
   const isPending =
     typeof booleanOrThenable === "boolean"
@@ -3031,7 +3074,7 @@ export function updateTransition(): [boolean, StartTransitionFunction] {
 
 export function rerenderTransition(): [boolean, StartTransitionFunction] {
   const [booleanOrThenable] = rerenderState<Thenable<boolean> | boolean>(false);
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(TransitionHook);
   const start = hook.memoizedState as StartTransitionFunction;
   const isPending =
     typeof booleanOrThenable === "boolean"
@@ -3046,7 +3089,7 @@ export function useHostTransitionStatus(): TransitionStatus {
 }
 
 export function mountId(): string {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(IdHook);
 
   const root = getWorkInProgressRoot() as FiberRoot;
   // TODO: In Fizz, id generation is specific to each server config. Maybe we
@@ -3083,7 +3126,7 @@ export function mountId(): string {
 }
 
 export function updateId(): string {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(IdHook);
   const id = hook.memoizedState as string;
   return id;
 }
@@ -3091,7 +3134,7 @@ export function updateId(): string {
 export type RefreshFunction = <T>(createSeed?: () => T, seedValue?: T) => void;
 
 export function mountRefresh(): RefreshFunction {
-  const hook = mountWorkInProgressHook();
+  const hook = mountWorkInProgressHook(RefreshHook);
   const fiber = currentlyRenderingFiber;
   const refresh: RefreshFunction = (seedKey, seedValue) => refreshCache(fiber, seedKey, seedValue);
   hook.memoizedState = refresh;
@@ -3099,7 +3142,7 @@ export function mountRefresh(): RefreshFunction {
 }
 
 export function updateRefresh(): RefreshFunction {
-  const hook = updateWorkInProgressHook();
+  const hook = updateWorkInProgressHook(RefreshHook);
   return hook.memoizedState as RefreshFunction;
 }
 

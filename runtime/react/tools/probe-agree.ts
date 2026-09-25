@@ -31,6 +31,14 @@ const ntsReact = process.env.NTS_REACT ?? join(process.env.HOME ?? "", ".cache/n
 const scenarios: Record<string, unknown[][]> = {
   keyedReorder: [[1], [3], [5]],
   stateAfterEffect: [[0], [4]],
+  changedHookOrder: [[0], [4]],
+};
+
+/** What a scenario's every answer must contain, where agreeing is not enough. */
+const expected: Record<string, string> = {
+  // The native build's hook-kind check, which three variants without it
+  // would agree on missing.
+  changedHookOrder: "Rendered a different hook than during the previous render",
 };
 
 type Module = Record<string, (...args: unknown[]) => unknown>;
@@ -96,6 +104,11 @@ try {
       if (!agree) failures++;
       console.log(`${agree ? "ok  " : "DIFF"} ${name}(${args.join(", ")})${agree ? `  ${staged[at]}` : `\n  plain   ${plain[at]}\n  written ${written[at]}\n  staged  ${staged[at]}`}`);
     });
+    const want = expected[name];
+    if (want !== undefined && !staged.every((answer) => answer.includes(want))) {
+      failures++;
+      console.log(`EXPECTED ${name} to say ${JSON.stringify(want)}`);
+    }
     // The control: a scenario whose answer does not depend on its input
     // agrees with anything.
     if (new Set(staged).size < 2) {

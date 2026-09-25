@@ -3,7 +3,7 @@
 // exported function renders into the typed test host and returns the
 // serialised host tree after each step, as the probe's do.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createContainer, updateContainer } from "react-reconciler/ReactFiberReconciler.ts";
 import { ConcurrentRoot } from "react-reconciler/ReactRootTags.ts";
 import { TestContainer } from "./ReactFiberConfig.ts";
@@ -65,3 +65,32 @@ export function stateAfterEffect(start: number): string {
   drainHost();
   return container.serialize();
 }
+
+function Swapping({ flipped, start }: { flipped: boolean; start: number }) {
+  if (flipped) {
+    useRef(start);
+    const [n] = useState(start);
+    return <span>n {n}</span>;
+  }
+  const [n] = useState(start);
+  useRef(start);
+  return <span>n {n}</span>;
+}
+
+// A component that changes the order of its hooks between renders. Upstream
+// React reads one hook's state as another's; this runtime's native build
+// checks each hook's kind and throws, which the root reports.
+export function changedHookOrder(start: number): string {
+  let reported = "none";
+  const container = new TestContainer();
+  const root = createContainer(container, ConcurrentRoot, null, false, false, "", (error: unknown) => {
+    reported = String(error);
+  }, ignoreError, ignoreError, () => {}, null);
+  updateContainer(<Swapping flipped={false} start={start} />, root, null, null);
+  drainHost();
+  const first = container.serialize();
+  updateContainer(<Swapping flipped={true} start={start} />, root, null, null);
+  drainHost();
+  return first + " | " + container.serialize() + " | " + reported;
+}
+
