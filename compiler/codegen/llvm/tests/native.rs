@@ -385,6 +385,29 @@ fn aggregate_arguments_respect_register_exhaustion() {
     }
 }
 
+/// A program whose every function lowering refused still has its globals,
+/// and the backend emits what is left rather than panicking over the absent
+/// first function it took a global's refusal context from. A native local at
+/// module scope is one: the global holding it is where its address escapes.
+#[test]
+fn a_program_with_every_function_refused_still_emits() {
+    let Some((_, prepared)) = prepare("all-refused", r#"
+        import { local } from "c:memory";
+        import type { c_int } from "c:types";
+        const slot = local<c_int>();
+    "#) else { return };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("native local address escapes")),
+        "{:?}",
+        prepared.diagnostics
+    );
+    assert!(prepared.program.funcs.is_empty(), "a function survived: the arm no longer reaches the case");
+    // The C backend never indexed a function for a global; it too returns.
+    let _ = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+    assert!(llvm.text.contains("@nts_closure_call_slot"), "{}", llvm.text);
+}
+
 #[test]
 fn intrinsic_annotations_do_not_authorize_arbitrary_foreign_symbols() {
     let Some((_, prepared)) = prepare("unknown-intrinsic", r"

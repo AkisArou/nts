@@ -173,8 +173,12 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     // Module-scope storage. `internal` unless the program exports it, for the
     // same reason the C backend makes it `static`: a name outside the program
     // is a name something outside can collide with.
+    // `ty_of` takes a function only to word a refusal, which a global drops;
+    // a program whose every function lowering refused has none to give it,
+    // and nothing left to read its globals either.
+    let context = program.funcs.first();
     for (at, global) in program.globals.iter().enumerate() {
-        let Ok(ty) = ty_of(&global.ty, &program.funcs[0]) else {
+        let Some(ty) = context.and_then(|func| ty_of(&global.ty, func).ok()) else {
             continue;
         };
         let linkage = if global.exported { "" } else { "internal " };
