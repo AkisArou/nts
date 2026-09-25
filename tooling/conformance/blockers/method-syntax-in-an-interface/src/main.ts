@@ -284,6 +284,79 @@
 // that is what stands in front of them, not what they would gain, and `Socket`
 // has more roots outside its constructor.
 //
+//      # The mechanism, settled 2026-09-25, and the JVM decided it
+//
+//      The census asked "is a sound over-approximation reachable". It is, and
+//      the design step it enabled came out somewhere the numbers did not point.
+//
+//      **On the JVM the broad rule's 4,174 accesses are not a cost, they are a
+//      refusal.** `hierarchy::is_interface` will not emit as a JVM interface any
+//      interface that *declares a property* -- a JVM interface has no instance
+//      fields -- so such an interface is emitted as a **class**, and
+//      `assignable_types` then refuses every store of another class into that
+//      slot, declared or structural. Adding `implements` does not help:
+//      `hierarchy::implements` requires the target to be emitted as an
+//      interface, which it is not. So **every interface with a readable field is
+//      a class on the JVM, no class can inhabit it, and the whole family is
+//      refused there today.** Measured by writing the program and reading the
+//      decline, not inferred.
+//
+//      Two consequences, and they reverse the risk this file has been weighing:
+//
+//      - the "every field read pays" cost is **C and LLVM only**, where the
+//        pointer cast works today. On the JVM indirection is pure coverage gain;
+//      - the slot must **erase**, and the chain must test the *inhabitants* and
+//        never cast to the interface. `hierarchy::declared`'s own doc says what
+//        the cast costs -- "a value erased from `A` and unerased to `C` is a
+//        `checkcast nts/gen/C` that throws" -- which is record 0289's history.
+//
+//      So the operation is `SharedFieldGet` with **per-arm indices**, which
+//      landed as `OpKind::OpenFieldGet`/`OpenFieldSet`: no new slot type, no
+//      interface-ness in the IR, and nothing that has to ask whether a `TypeId`
+//      is an interface. A union whose members disagree about where a field is
+//      reads through it already (`examples/a-union-whose-members-disagree-about-where`).
+//
+//      # Two numbers the design step needs and the census now prints
+//
+//      **The arm distribution**, weighted by accesses over exactly the 883:
+//
+//          arms  accesses
+//             2       456   51.6%
+//             3       228   25.8%
+//             4        53    6.0%
+//          5-19       43    4.9%
+//         24-53       99   11.2%
+//       136-137       19    2.2%
+//
+//      737 of 883 -- **83.5% -- are four arms or fewer**, and the tail is real:
+//      two interfaces carry 19 accesses at 136 and 137 arms. A chain is right for
+//      the bulk and wrong for the tail, which a cap plus a named refusal answers
+//      and a descriptor offset table would answer instead.
+//
+//      **And the arm count needs both proxies, not the name one.** The census's
+//      `1` row found that: three accesses read as one arm -- no chain needed --
+//      through an interface that was in `implemented`. A class saying `implements
+//      I` inhabits it whether or not a comparison of required member *names*
+//      agrees, and an interface whose members are all optional has no required
+//      names to compare. A chain missing an arm aborts a correct program, so the
+//      arm count takes the **union** while `through_satisfied` keeps the name
+//      proxy alone -- the bracket's published sentence is about structural
+//      satisfaction, and widening it silently would move a number by changing
+//      what it claims rather than what it found.
+//
+//      # The benchmark row cannot be written yet, and that is a finding
+//
+//      The census said no existing row can see this cost. A row that can needs a
+//      class in an interface-typed slot -- which the JVM refuses outright, and
+//      `bench-agree` has no per-lane allowance. So **the before number exists on
+//      C and LLVM only**, and the row lands with the change that makes the shape
+//      expressible. Written and withdrawn for that reason; `nts receivers` on it
+//      as its own program printed `2 arms, 3 accesses, 100%`, which is the shape
+//      to restore. Measure an arm count against a **per-case** config: read
+//      through `benches/tsconfig.json`, which compiles every case as one program,
+//      the same receiver has five arms because three `json-stringify-*` cases
+//      declare a class with a `weight` member.
+//
 // # A call cascades, so the refusal is on the declaration
 //
 //     interface Sink { read(n: number): void }
