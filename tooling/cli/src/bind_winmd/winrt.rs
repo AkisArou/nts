@@ -429,6 +429,33 @@ impl Writer<'_> {
 
     /// `JsonValue`: its default interface, and its statics in a namespace of
     /// the same name.
+    /// A class's other interfaces, each reached by `QueryInterface`, and
+    /// every interface of each class it derives from: a `Button` is its
+    /// `ButtonBase`'s `IButtonBase`, its `UIElement`'s `IUIElement`. Not the
+    /// protected and overridable ones, which are a subclass's contract with
+    /// its base rather than what the object answers to anyone.
+    fn answered_interfaces(&self, def: TypeDef) -> Vec<Type> {
+        let public = |implemented: &windows_metadata::reader::InterfaceImpl| {
+            !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute")
+        };
+        let mut others: Vec<Type> = def
+            .interface_impls()
+            .filter(|implemented| !implemented.has_attribute("DefaultAttribute") && public(implemented))
+            .map(|implemented| implemented.interface(&[]))
+            .collect();
+        let mut base = def.extends();
+        let mut depth = 0;
+        while let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) {
+            if parent.category() != TypeCategory::Class || depth > 16 {
+                break;
+            }
+            others.extend(parent.interface_impls().filter(public).map(|implemented| implemented.interface(&[])));
+            base = parent.extends();
+            depth += 1;
+        }
+        others
+    }
+
     fn class(&mut self, def: TypeDef, body: &mut String) -> bool {
         let name = def.name();
         let default = def.interface_impls().find(|implemented| implemented.has_attribute("DefaultAttribute"));
@@ -502,36 +529,27 @@ impl Writer<'_> {
                 }
             }
         }
-        // The class's other interfaces, each reached by `QueryInterface`, and
-        // every interface of each class it derives from: a `Button` is its
-        // `ButtonBase`'s `IButtonBase`, its `UIElement`'s `IUIElement`. Not
-        // the protected and overridable ones, which are a subclass's contract
-        // with its base rather than what the object answers to anyone.
-        let public = |implemented: &windows_metadata::reader::InterfaceImpl| {
-            !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute")
-        };
-        let mut others: Vec<Type> = def
-            .interface_impls()
-            .filter(|implemented| !implemented.has_attribute("DefaultAttribute") && public(implemented))
-            .map(|implemented| implemented.interface(&[]))
-            .collect();
-        let mut base = def.extends();
-        let mut depth = 0;
-        while let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) {
-            if parent.category() != TypeCategory::Class || depth > 16 {
-                break;
-            }
-            others.extend(parent.interface_impls().filter(public).map(|implemented| implemented.interface(&[])));
-            base = parent.extends();
-            depth += 1;
-        }
+        let others = self.answered_interfaces(def);
         let queries = self.queries(name, name, &others);
         if !queries.is_empty() {
             let _ = writeln!(body, "  export interface {name}Interfaces {{");
             body.push_str(&queries);
             let _ = writeln!(body, "  }}");
         }
-        if !spelled.is_empty() {
+        // A class a program may write a class over (`class App extends
+        // Application`): a TypeScript class, so `extends` names a value, with
+        // the members a subclass may override, merged with the interface its
+        // instances are.
+        if !spelled.is_empty()
+            && let Some(subclassing) = self.subclassing(def, &class_name)
+        {
+            body.push_str(&subclassing);
+            if queries.is_empty() {
+                let _ = writeln!(body, "  export interface {name} extends {spelled} {{}}");
+            } else {
+                let _ = writeln!(body, "  export interface {name} extends {spelled}, {name}Interfaces {{}}");
+            }
+        } else if !spelled.is_empty() {
             if queries.is_empty() {
                 let _ = writeln!(body, "  export type {name} = {spelled};");
             } else {
@@ -687,25 +705,7 @@ impl Writer<'_> {
         let signature = method.signature(&parameters);
         let named = method.params_by_sequence(signature.types.len()).map_err(|_| "a method whose parameters the metadata numbers wrongly".to_owned())?;
         let out = |at: usize| named.params().get(at).copied().flatten().is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out));
-        let count = signature.types.len();
-        let composed = count >= 2
-            && matches!(signature.types[count - 2], Type::Object)
-            && matches!(&signature.types[count - 1], Type::Object | Type::RefMut(_) if match &signature.types[count - 1] { Type::RefMut(inner) => matches!(**inner, Type::Object), _ => true })
-            && !out(count - 2)
-            && out(count - 1);
-        let declared = if matches!(receiver, Receiver::Composable { .. }) {
-            if !composed {
-                return Err("a composable factory method not ending in the outer and inner objects".to_owned());
-            }
-            count - 2
-        } else if composed && matches!(receiver, Receiver::Instance(_)) {
-            // A factory interface's own method, which the class it makes
-            // calls as its constructor (`Receiver::Composable`): as an
-            // interface method it would hand the program an inner object.
-            return Err("a composable factory method, called as its class's constructor".to_owned());
-        } else {
-            count
-        };
+        let declared = declared_parameters(&signature.types, out, &receiver)?;
         let mut parameters: Vec<String> = Vec::new();
         if let Receiver::Instance(this) = receiver {
             parameters.push(format!("this: {this}"));
@@ -783,6 +783,12 @@ impl Writer<'_> {
         };
         let mut text = String::new();
         let _ = writeln!(text, "    /**");
+        if let Receiver::Override { iid } = receiver {
+            let _ = writeln!(text, "     * @ntsOverride {iid} {slot} {}", method_name(method));
+            let _ = writeln!(text, "     */");
+            let _ = writeln!(text, "    {}({}): {result};", method_name(method), parameters.join(", "));
+            return Ok(text);
+        }
         let _ = writeln!(text, "     * @ntsVtable {slot} {}", method_name(method));
         for name in &lent {
             let _ = writeln!(text, "     * @ntsNoEscape {name}");
@@ -802,6 +808,7 @@ impl Writer<'_> {
             Receiver::Instance(_) => {
                 let _ = writeln!(text, "     * @ntsHresult");
             }
+            Receiver::Override { .. } => {}
         }
         let _ = writeln!(text, "     */");
         let keyword = if matches!(receiver, Receiver::Instance(_)) { "" } else { "function " };
@@ -1158,6 +1165,60 @@ impl Writer<'_> {
     }
 }
 
+impl Writer<'_> {
+    /// The class declaration a subclass extends, for a composable class with a
+    /// constructor a subclass can call -- its factory's `CreateInstance(outer,
+    /// out inner)`, public or protected (a protected one exists for
+    /// subclasses alone) -- tagged with that factory, and declaring each
+    /// method of an interface it or a class it derives from lets a subclass
+    /// override (`IApplicationOverrides.OnLaunched`), tagged with the
+    /// interface and slot. `xaml` marks `Microsoft.UI.Xaml.Application`, whose
+    /// subclass answers `WinUI`'s metadata provider. `None` for any other class.
+    fn subclassing(&mut self, def: TypeDef, class_name: &str) -> Option<String> {
+        let (factory, slot, public) = def
+            .attributes()
+            .filter(|attribute| attribute.ctor().parent().name() == "ComposableAttribute")
+            .find_map(|attribute| {
+                let values: Vec<Value> = attribute.value().into_iter().map(|(_, value)| value).collect();
+                let Some(Value::TypeName(interface)) = values.first() else { return None };
+                let public = matches!(values.get(1), Some(Value::EnumValue(_, kind)) if **kind == Value::I32(2));
+                let factory = self.index.get(&interface.namespace, &interface.name).next()?;
+                let iid = iid(factory)?;
+                // The parameterless one: the outer object and the inner, nothing else.
+                let slot = factory.methods().position(|method| method.signature(&[]).types.len() == 2)?;
+                Some((iid, 6 + slot, public))
+            })?;
+        let mut overrides = String::new();
+        let mut at = Some(def);
+        let mut depth = 0;
+        while let Some(class) = at.filter(|class| class.category() == TypeCategory::Class && depth < 16) {
+            for implemented in class.interface_impls().filter(|implemented| implemented.has_attribute("OverridableAttribute")) {
+                let Type::ClassName(named) = implemented.interface(&[]) else { continue };
+                let Some(interface) = self.index.get(&named.namespace, &named.name).next() else { continue };
+                let Some(interface_iid) = iid(interface) else { continue };
+                for (index, method) in interface.methods().enumerate() {
+                    match self.method(method, 6 + index, Receiver::Override { iid: &interface_iid }) {
+                        Ok(text) => overrides.push_str(&text),
+                        Err(why) => self.refuse(&format!("{} override {}", def.name(), method_name(method)), &why),
+                    }
+                }
+            }
+            at = class.extends().and_then(|parent| self.index.get(parent.namespace(), parent.name()).next());
+            depth += 1;
+        }
+        let xaml = if class_name == "Microsoft.UI.Xaml.Application" { " xaml" } else { "" };
+        let mut text = String::new();
+        let _ = writeln!(text, "  /**");
+        let _ = writeln!(text, "   * @ntsComposable {class_name} {factory} {slot}{xaml}");
+        let _ = writeln!(text, "   */");
+        let _ = writeln!(text, "  export class {} {{", def.name());
+        let _ = writeln!(text, "    {}constructor();", if public { "" } else { "protected " });
+        text.push_str(&overrides);
+        let _ = writeln!(text, "  }}");
+        Some(text)
+    }
+}
+
 /// A type as a word in a specialization's name, as the metadata names it:
 /// `IAsyncOperation<IVectorView<StorageFile>>` is
 /// `IAsyncOperationOfIVectorViewStorageFile`.
@@ -1208,6 +1269,11 @@ fn generic_base(name: &str) -> &str {
 enum Receiver<'a> {
     Instance(&'a str),
     Factory { class: &'a str, iid: &'a str },
+    /// A method of an interface a composable class lets a subclass override
+    /// (`IApplicationOverrides.OnLaunched`), declared on the class for a
+    /// subclass to write: no `this` parameter, and the interface and slot the
+    /// subclass's table answers it at.
+    Override { iid: &'a str },
     /// A composable class's factory: the method's last two parameters are the
     /// outer object and the inner one it answers, which the compiler supplies
     /// (`@ntsHresult composable`) -- a class constructed as itself has no
@@ -1217,6 +1283,31 @@ enum Receiver<'a> {
 
 /// The name the metadata gives a method's slot: its `OverloadAttribute` where
 /// it has one, which is unique within the interface, and otherwise its name.
+/// How many of a method's parameters the program passes: all of them, or for
+/// a composable factory's `CreateInstance(..., outer, out inner)` all but the
+/// two objects the runtime composes with.
+fn declared_parameters(types: &[Type], out: impl Fn(usize) -> bool, receiver: &Receiver<'_>) -> Result<usize, String> {
+    let count = types.len();
+    let composed = count >= 2
+        && matches!(types[count - 2], Type::Object)
+        && matches!(&types[count - 1], Type::Object | Type::RefMut(_) if match &types[count - 1] { Type::RefMut(inner) => matches!(**inner, Type::Object), _ => true })
+        && !out(count - 2)
+        && out(count - 1);
+    if matches!(receiver, Receiver::Composable { .. }) {
+        if !composed {
+            return Err("a composable factory method not ending in the outer and inner objects".to_owned());
+        }
+        Ok(count - 2)
+    } else if composed && matches!(receiver, Receiver::Instance(_)) {
+        // A factory interface's own method, which the class it makes calls as
+        // its constructor (`Receiver::Composable`): as an interface method it
+        // would hand the program an inner object.
+        Err("a composable factory method, called as its class's constructor".to_owned())
+    } else {
+        Ok(count)
+    }
+}
+
 fn method_name(method: windows_metadata::reader::MethodDef) -> String {
     method
         .find_attribute("OverloadAttribute")

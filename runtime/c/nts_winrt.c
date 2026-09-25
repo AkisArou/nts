@@ -531,6 +531,248 @@ void *nts_winrt_activate(const NtsString *class_name, uint64_t iid_low,
   return answer;
 }
 
+/* The outer object a class the program writes over a composable class is
+ * (`nts_com_compose`): a face per interface it answers itself -- its
+ * identity, WinUI's metadata provider where asked for, and one per
+ * interface it overrides -- each a table and the way back to the object,
+ * its count, and the base class's object it aggregates (`inner`, the
+ * non-delegating `IInspectable`). Everything it does not answer is the
+ * inner's. `instance` is the base's default interface on the aggregate: what
+ * the program holds and `this` is, not held here, since its count is this
+ * object's. Measured first as a C oracle on the VM
+ * (~/.cache/nts/windows/oracles/winui-aggregation.c). */
+typedef struct NtsComOuter NtsComOuter;
+typedef struct {
+  const void *const *table;
+  NtsComOuter *outer;
+} NtsComFace;
+struct NtsComOuter {
+  volatile LONG count;
+  void *inner;
+  void *instance;
+  void *provider;
+  NtsComClass *cls;
+  NtsComFace identity;
+  NtsComFace metadata;
+  NtsComFace faces[];
+};
+
+static NtsComOuter *nts_com_outer_of(void *face) {
+  return ((NtsComFace *)face)->outer;
+}
+
+void *nts_com_outer_instance(void *face) {
+  return nts_com_outer_of(face)->instance;
+}
+
+/* {AF86E2E0-B12D-4C6A-9C5A-D7AA65101E90} and IXamlMetadataProvider's
+ * {A96251F0-2214-5D53-8746-CE99A2593CD7}. */
+static const IID nts_iid_inspectable = {
+    0xAF86E2E0,
+    0xB12D,
+    0x4C6A,
+    {0x9C, 0x5A, 0xD7, 0xAA, 0x65, 0x10, 0x1E, 0x90}};
+static const IID nts_iid_xaml_metadata = {
+    0xA96251F0,
+    0x2214,
+    0x5D53,
+    {0x87, 0x46, 0xCE, 0x99, 0xA2, 0x59, 0x3C, 0xD7}};
+
+int32_t nts_com_outer_query(void *face, const void *iid, void **out) {
+  NtsComOuter *outer = nts_com_outer_of(face);
+  const IID *wanted = iid;
+  NtsComFace *answer = 0;
+  if (IsEqualGUID(wanted, &nts_iid_unknown) ||
+      IsEqualGUID(wanted, &nts_iid_inspectable)) {
+    answer = &outer->identity;
+  } else if (outer->provider != 0 &&
+             IsEqualGUID(wanted, &nts_iid_xaml_metadata)) {
+    answer = &outer->metadata;
+  } else {
+    for (uint32_t at = 0; at < outer->cls->count; at++) {
+      IID own = nts_iid(outer->cls->interfaces[at].iid_low,
+                        outer->cls->interfaces[at].iid_high);
+      if (IsEqualGUID(wanted, &own)) {
+        answer = &outer->faces[at];
+        break;
+      }
+    }
+  }
+  if (answer != 0) {
+    InterlockedIncrement(&outer->count);
+    *out = answer;
+    return S_OK;
+  }
+  return (*(const NtsUnknownTable **)outer->inner)
+      ->query_interface(outer->inner, wanted, out);
+}
+
+uint32_t nts_com_outer_addref(void *face) {
+  return (uint32_t)InterlockedIncrement(&nts_com_outer_of(face)->count);
+}
+
+uint32_t nts_com_outer_release(void *face) {
+  NtsComOuter *outer = nts_com_outer_of(face);
+  LONG left = InterlockedDecrement(&outer->count);
+  if (left == 0) {
+    /* Held against a re-entrant release while the base tears down. */
+    outer->count = 1;
+    if (outer->provider != 0) {
+      nts_unknown_release(outer->provider);
+    }
+    nts_unknown_release(outer->inner);
+    free(outer);
+  }
+  return (uint32_t)left;
+}
+
+int32_t nts_com_outer_iids(void *face, uint32_t *count, void **iids) {
+  (void)face;
+  *count = 0;
+  *iids = 0;
+  return S_OK;
+}
+
+int32_t nts_com_outer_name(void *face, void **name) {
+  const char *text = nts_com_outer_of(face)->cls->name;
+  wchar_t wide[256];
+  int length = MultiByteToWideChar(CP_UTF8, 0, text, -1, wide, 256);
+  return WindowsCreateString(wide, length > 0 ? (UINT32)length - 1 : 0,
+                             (HSTRING *)name);
+}
+
+int32_t nts_com_outer_trust(void *face, int32_t *level) {
+  (void)face;
+  *level = 0; /* BaseTrust */
+  return S_OK;
+}
+
+/* IXamlMetadataProvider's three methods, forwarded to WinUI's own
+ * (`XamlControlsXamlMetaDataProvider`), which is what a XAML project
+ * generates for an application with no types of its own. `GetXamlType`
+ * takes a `TypeName` -- an HSTRING and an int, sixteen bytes, which Win64
+ * passes by pointer -- and it is passed on as it came. */
+static HRESULT STDMETHODCALLTYPE nts_com_metadata_type(void *face, void *type,
+                                                       void **out) {
+  void *provider = nts_com_outer_of(face)->provider;
+  return ((HRESULT(STDMETHODCALLTYPE *)(void *, void *, void **))(
+      *(void ***)provider)[6])(provider, type, out);
+}
+static HRESULT STDMETHODCALLTYPE nts_com_metadata_full(void *face, HSTRING name,
+                                                       void **out) {
+  void *provider = nts_com_outer_of(face)->provider;
+  return ((HRESULT(STDMETHODCALLTYPE *)(void *, HSTRING, void **))(
+      *(void ***)provider)[7])(provider, name, out);
+}
+static HRESULT STDMETHODCALLTYPE nts_com_metadata_xmlns(void *face,
+                                                        UINT32 *count,
+                                                        void **out) {
+  void *provider = nts_com_outer_of(face)->provider;
+  return ((HRESULT(STDMETHODCALLTYPE *)(void *, UINT32 *, void **))(
+      *(void ***)provider)[8])(provider, count, out);
+}
+
+static const void *const nts_com_identity_table[] = {
+    (const void *)nts_com_outer_query,   (const void *)nts_com_outer_addref,
+    (const void *)nts_com_outer_release, (const void *)nts_com_outer_iids,
+    (const void *)nts_com_outer_name,    (const void *)nts_com_outer_trust};
+static const void *const nts_com_metadata_table[] = {
+    (const void *)nts_com_outer_query,   (const void *)nts_com_outer_addref,
+    (const void *)nts_com_outer_release, (const void *)nts_com_outer_iids,
+    (const void *)nts_com_outer_name,    (const void *)nts_com_outer_trust,
+    (const void *)nts_com_metadata_type, (const void *)nts_com_metadata_full,
+    (const void *)nts_com_metadata_xmlns};
+
+/* A runtime class activated by name as `iid`, for the runtime's own use:
+ * WinUI's metadata provider. NULL where it cannot be. */
+static void *nts_com_activate_named(const wchar_t *name, const IID *iid) {
+  HSTRING_HEADER header;
+  HSTRING reference = 0;
+  void *made = 0;
+  if (FAILED(WindowsCreateStringReference(name, (UINT32)wcslen(name), &header,
+                                          &reference)) ||
+      FAILED(RoActivateInstance(reference, (IInspectable **)&made)) ||
+      made == 0) {
+    return 0;
+  }
+  void *answer = 0;
+  HRESULT hr =
+      (*(const NtsUnknownTable **)made)->query_interface(made, iid, &answer);
+  nts_unknown_release(made);
+  return SUCCEEDED(hr) ? answer : 0;
+}
+
+void *nts_com_compose(NtsComClass *cls) {
+  if (cls->factory == 0) {
+    NtsString *base = nts_string_from_cstring(cls->base);
+    IID wanted = nts_iid(cls->factory_low, cls->factory_high);
+    cls->factory = nts_factory(base, &wanted);
+    nts_release((NtsHeader *)base);
+  }
+  NtsComOuter *outer =
+      calloc(1, sizeof *outer + (size_t)cls->count * sizeof(NtsComFace));
+  if (outer == 0) {
+    fprintf(stderr, "nts: out of memory composing %s\n", cls->name);
+    abort();
+  }
+  outer->count = 1;
+  outer->cls = cls;
+  outer->identity = (NtsComFace){nts_com_identity_table, outer};
+  outer->metadata = (NtsComFace){nts_com_metadata_table, outer};
+  for (uint32_t at = 0; at < cls->count; at++) {
+    outer->faces[at] = (NtsComFace){cls->interfaces[at].table, outer};
+  }
+  if (cls->xaml_metadata) {
+    outer->provider = nts_com_activate_named(
+        L"Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider",
+        &nts_iid_xaml_metadata);
+  }
+  typedef HRESULT(STDMETHODCALLTYPE * Create)(void *, void *, void **, void **);
+  HRESULT hr = ((Create)(*(void ***)cls->factory)[cls->create_slot])(
+      cls->factory, &outer->identity, &outer->inner, &outer->instance);
+  if (FAILED(hr) || outer->inner == 0 || outer->instance == 0) {
+    fprintf(stderr, "nts: %s could not be composed over %s (0x%08lx)\n",
+            cls->name, cls->base, (unsigned long)hr);
+    abort();
+  }
+  /* The instance's reference is this object's count, taken by the factory;
+   * the creation reference is given back, leaving the program's. */
+  InterlockedDecrement(&outer->count);
+  return outer->instance;
+}
+
+/* The classes the program registered when it loaded, by name. A handful,
+ * each composed where its `new` is written, so a list is the whole of it. */
+typedef struct NtsComRegistered {
+  NtsComClass *cls;
+  struct NtsComRegistered *next;
+} NtsComRegistered;
+static NtsComRegistered *nts_com_registered;
+
+void nts_com_register(NtsComClass *cls) {
+  NtsComRegistered *entry = malloc(sizeof *entry);
+  if (entry == 0) {
+    abort();
+  }
+  entry->cls = cls;
+  entry->next = nts_com_registered;
+  nts_com_registered = entry;
+}
+
+void *nts_com_compose_named(const NtsString *name) {
+  for (NtsComRegistered *at = nts_com_registered; at != 0; at = at->next) {
+    const char *registered = at->cls->name;
+    size_t length = strlen(registered);
+    if (length == name->length && !(name->flags & NTS_TWO_BYTE) &&
+        memcmp(NTS_ELEMENTS(name, unsigned char), registered, length) == 0) {
+      return nts_com_compose(at->cls);
+    }
+  }
+  fprintf(stderr, "nts: no class the program wrote over a Windows Runtime "
+                  "class is registered under that name\n");
+  abort();
+}
+
 /* The message an `Error` thrown for a failed HRESULT carries: the code, and
  * the system's text for it where it has one. `malloc`'d; the caller frees. */
 char *nts_hresult_message(int32_t hr) {

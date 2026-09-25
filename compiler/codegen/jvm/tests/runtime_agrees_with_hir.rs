@@ -243,4 +243,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 100 for `nts_com_carry`, a delegate's `Invoke` called off its thread and
 /// carried to it, which only a Windows Runtime delegate's adapter calls.
-const REFUSED_FLOOR: usize = 100;
+///
+/// 101 for `nts_com_compose_named`, `new App()` of a class written over a
+/// composable Windows Runtime class, which only a Windows runtime composes.
+const REFUSED_FLOOR: usize = 101;

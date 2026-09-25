@@ -1,7 +1,7 @@
 //! A COM method call: a cast of the receiver's table slot, which is how C
 //! calls through a vtable and what a `lpVtbl->Method(...)` macro expands to.
 
-use super::{CodeWriter, Origin, Program};
+use super::{c_identifier, c_type_of, CodeWriter, Diagnostic, Origin, Program};
 use nts_codegen_common::com::{delegate_hop_symbol, delegate_invoke_symbol, delegate_signatures};
 use nts_codegen_common::objc::{Carried, hop_arguments};
 use nts_core::hir::native::{FnPointer, Function, Type, Vtable};
@@ -116,4 +116,94 @@ fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried:
         packed.join(", "),
         objects.len()
     )
+}
+
+/// The classes the program writes over composable Windows Runtime classes:
+/// for each override, the adapter its interface's table calls -- the
+/// interface pointer, then the arguments -- which finds the instance and
+/// calls the compiled method with it; a table per interface, slots 0 to 5
+/// the outer object's; the class's descriptor; and one constructor
+/// registering them all before `main`, as Objective-C classes are.
+pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
+    use nts_codegen_common::com::{adapter_symbol, class_symbol, interfaces, interfaces_symbol, table_symbol, OUTER_SLOTS};
+    let classes = nts_codegen_common::com::classes(program);
+    if classes.is_empty() {
+        return Ok(());
+    }
+    let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
+    writer.line(origin, "/* Classes written over composable Windows Runtime classes: see `emit/com.rs`. */");
+    for class in &classes {
+        for (at, method) in class.methods.iter().enumerate() {
+            let compiled = program
+                .funcs
+                .iter()
+                .find(|func| func.name == method.function)
+                .ok_or_else(|| refuse("an override whose compiled function this program does not define"))?;
+            // An override may take fewer parameters than its slot is called
+            // with, as TypeScript lets it: the rest are not passed on.
+            if compiled.params.len() > method.signature.parameters.len() {
+                return Err(refuse("an override taking more parameters than its slot is called with"));
+            }
+            let mut parameters = Vec::new();
+            let mut arguments = Vec::new();
+            for (slot, ty) in method.signature.parameters.iter().enumerate() {
+                // An interface pointer as `void *`: a struct the compiled
+                // method never names would be declared by nothing, and each
+                // argument passed on is cast to what the method takes.
+                let spelled = if matches!(ty, nts_core::hir::native::Type::Pointer(_)) { std::borrow::Cow::Borrowed("void *") } else { ty.c_type() };
+                parameters.push(format!("{spelled} a{slot}"));
+                let Some(want) = compiled.params.get(slot) else { continue };
+                let value = if slot == 0 { "nts_com_outer_instance(a0)".to_owned() } else { format!("a{slot}") };
+                arguments.push(format!("({}){value}", c_type_of(program, &want.ty, &want.origin)?));
+            }
+            writer.line(
+                origin,
+                format!(
+                    "static int32_t {}({}) {{ nts_callback_enter(); {}({}); nts_callback_leave(); return 0; }}",
+                    adapter_symbol(&class.name, at),
+                    parameters.join(", "),
+                    c_identifier(&compiled.name),
+                    arguments.join(", ")
+                ),
+            );
+        }
+        let answered = interfaces(class);
+        let mut rows = Vec::new();
+        for (index, interface) in answered.iter().enumerate() {
+            let mut slots: Vec<String> = OUTER_SLOTS.iter().map(|slot| format!("(const void *){slot}")).collect();
+            for (slot, at) in &interface.overrides {
+                if *slot as usize != slots.len() {
+                    return Err(refuse("an override table with a gap, which lowering refuses"));
+                }
+                slots.push(format!("(const void *){}", adapter_symbol(&class.name, *at)));
+            }
+            let table = table_symbol(&class.name, index);
+            writer.line(origin, format!("static const void *const {table}[] = {{ {} }};", slots.join(", ")));
+            rows.push(format!("{{ {}ull, {}ull, {table} }}", interface.low, interface.high));
+        }
+        let Some(composition) = &class.composition else {
+            return Err(refuse("a class written over a composable class with no factory"));
+        };
+        let (low, high) = nts_core::hir::native::iid_words(&composition.factory).unwrap_or_default();
+        let interfaces_array = interfaces_symbol(&class.name);
+        writer.line(origin, format!("static const NtsComInterface {interfaces_array}[] = {{ {} }};", rows.join(", ")));
+        writer.line(
+            origin,
+            format!(
+                "static NtsComClass {} = {{ \"{}\", \"{}\", {low}ull, {high}ull, {}u, {interfaces_array}, {}u, {}, 0 }};",
+                class_symbol(&class.name),
+                class.name,
+                composition.class,
+                composition.slot,
+                answered.len(),
+                composition.xaml
+            ),
+        );
+    }
+    writer.line(origin, "__attribute__((constructor)) static void nts_com_register_classes(void) {");
+    for class in &classes {
+        writer.line(origin, format!("    nts_com_register(&{});", class_symbol(&class.name)));
+    }
+    writer.line(origin, "}");
+    Ok(())
 }

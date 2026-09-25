@@ -156,7 +156,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             writer.line(origin, format!("static {result} {symbol}({}) {{ {body} }}", parameters.join(", ")));
             rows.push(format!(
                 "{{ \"{}\", (void (*)(void)){symbol}, \"{}\" }}",
-                method.selector,
+                method.selector(),
                 nts_codegen_common::objc::method_encoding(&method.signature)
             ));
         }

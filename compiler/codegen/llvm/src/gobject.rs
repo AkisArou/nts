@@ -58,7 +58,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
                 };
             };
             let offset = method
-                .selector
+                .selector()
                 .split_whitespace()
                 .nth(2)
                 .ok_or_else(|| refuse(compiled, "a GObject virtual function whose slot has no offset"))?;

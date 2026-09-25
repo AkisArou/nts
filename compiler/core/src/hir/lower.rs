@@ -1167,7 +1167,9 @@ fn collect_hierarchy(
         // one of its overrides (`NSView`'s `rotate` over `NSResponder`'s)
         // would widen every table in the program -- a closure's included,
         // whose call then sat in slot 8 of 9.
-        if super::native::is_objc_class(snapshot, id) {
+        // A composable Windows Runtime class a binding declares is the same:
+        // its members are vtable calls and the overrides a subclass writes.
+        if super::native::is_objc_class(snapshot, id) || super::native::is_com_class(snapshot, id) {
             continue;
         }
         let Some(declared) = instance_type_of(snapshot, id) else {
@@ -5613,23 +5615,24 @@ fn members_of(
     // An Objective-C class a binding declares is the framework's: every
     // member is a message, sent where it is called, and none is a function
     // of this program -- as a bound Java member is not, below.
-    if super::native::is_objc_class(snapshot, id) {
+    // And a composable Windows Runtime class a binding declares: its members
+    // are vtable calls, and the overrides it declares are a subclass's to
+    // write.
+    if super::native::is_objc_class(snapshot, id) || super::native::is_com_class(snapshot, id) {
         return Vec::new();
     }
     let probe = FuncBuilder::probe(snapshot);
+    // A field of a class written over a composable one has nowhere to live --
+    // the runtime makes its object -- so it comes through to be refused by
+    // name, where any other class's is its constructor's to initialize.
+    let composed = super::native::extends_com(snapshot, id);
     probe
         .children(id)
         .into_iter()
-        .filter(|child| {
-            matches!(
-                probe.kind_of(*child),
-                Some(
-                    syntax::METHOD_DECLARATION
-                        | syntax::CONSTRUCTOR
-                        | syntax::GET_ACCESSOR
-                        | syntax::SET_ACCESSOR
-                )
-            )
+        .filter(|child| match probe.kind_of(*child) {
+            Some(syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => true,
+            Some(syntax::PROPERTY_DECLARATION) => composed && !is_static_member(snapshot, *child),
+            _ => false,
         })
         // **A bound foreign member contributes no function.** Its body is in a
         // jar; there is nothing of ours to emit, and `callee_for` turns a call
@@ -5860,6 +5863,7 @@ fn register_objc_class(
         methods,
         protocols,
         state,
+        composition: None,
     });
 }
 
@@ -5876,27 +5880,10 @@ fn lower_class(
     let mut objc_methods = Vec::new();
     let mut gobject_methods = Vec::new();
     let gobject = super::native::gobject_parent(snapshot, class);
-    // **A class over a C handle that nothing registers is refused whole.**
-    // Its instances are the handle -- the parent's representation, inherited
-    // with its brands -- so without a registration `new` made a parent and
-    // every override was silently never called: `class Counter extends
-    // GtkButton` ran as a plain button before subclasses were registered. What
-    // is registered is a GObject class's subclass and an Objective-C class's;
-    // anything else extending a handle, a subclass of such a subclass among
-    // them, is refused by name rather than lowered as its parent.
-    if gobject.is_none() && !super::native::extends_objc(snapshot, class) && !super::native::is_objc_class(snapshot, class) {
-        let probe = FuncBuilder::probe(snapshot);
-        let handle = instance_type_of(snapshot, class).and_then(|ty| probe.represent(ty));
-        if let Some(HirType::NativePointer(_)) = handle {
-            let diagnostic = probe.unsupported(
-                class,
-                "a class extending a C handle's class that nothing registers -- only a GObject class a binding declares, or an Objective-C class, can be extended",
-            );
-            note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
-            lowered.diagnostics.push(diagnostic);
-            return;
-        }
+    if refuses_an_unregistered_handle(snapshot, class, lowered) {
+        return;
     }
+    let mut com_methods = Vec::new();
     for (copy, (instance, substitution)) in copies_of(generic, class).into_iter().enumerate() {
         for &member in &members {
             // One function for a `static` member, however many copies the class
@@ -5933,16 +5920,20 @@ fn lower_class(
             // `vfunc_` method its class struct's slot. Its instances are the
             // parent's handle, so every method takes one as `this`.
             if gobject.is_some() && !is_static_member(snapshot, member) {
-                match builder.lower_gobject_member(class, member, instance) {
-                    Ok((func, method)) => {
-                        lowered.program.funcs.push(func);
-                        gobject_methods.extend(method);
-                    }
-                    Err(diagnostic) => {
-                        note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
-                        lowered.diagnostics.push(diagnostic);
-                    }
-                }
+                let lowered_member = builder.lower_gobject_member(class, member, instance);
+                keep_foreign_member(snapshot, member, lowered_member, &mut gobject_methods, lowered);
+                wanted.extend(builder.used_closures.iter().copied());
+                collect_layouts(&mut lowered.program, builder.layouts);
+                continue;
+            }
+            // A class the program writes over a composable Windows Runtime
+            // class is composed by the runtime (`class App extends
+            // Application`): each method an override the runtime's table for
+            // its interface answers, and nothing else yet -- no constructor
+            // of its own, which `new` does not run, and no field.
+            if super::native::extends_com(snapshot, class) && !is_static_member(snapshot, member) {
+                let lowered_member = builder.lower_com_member(class, member, instance).map(|(func, method)| (func, Some(method)));
+                keep_foreign_member(snapshot, member, lowered_member, &mut com_methods, lowered);
                 wanted.extend(builder.used_closures.iter().copied());
                 collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
@@ -6017,6 +6008,9 @@ fn lower_class(
     if let Some(parent) = gobject {
         register_gobject_class(snapshot, class, parent, gobject_methods, lowered);
     }
+    if let Some(composition) = super::native::composable_base(snapshot, class) {
+        register_com_class(snapshot, class, composition, com_methods, lowered);
+    }
 }
 
 /// A class the program writes over a `GObject` class, recorded as the backend
@@ -6053,6 +6047,96 @@ fn register_gobject_class(
         methods,
         protocols: Vec::new(),
         state: None,
+        composition: None,
+    });
+}
+
+/// A member of a class over a foreign one, lowered by its family's own
+/// method: its function joins the program and its record the family's list,
+/// or its refusal is noted and reported.
+fn keep_foreign_member(
+    snapshot: &SemanticSnapshot,
+    member: NodeId,
+    lowered_member: Result<(Func, Option<super::ForeignMethod>), Diagnostic>,
+    methods: &mut Vec<super::ForeignMethod>,
+    lowered: &mut Lowered,
+) {
+    match lowered_member {
+        Ok((func, method)) => {
+            lowered.program.funcs.push(func);
+            methods.extend(method);
+        }
+        Err(diagnostic) => {
+            note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+            lowered.diagnostics.push(diagnostic);
+        }
+    }
+}
+
+/// **A class over a C handle that nothing registers is refused whole.** Its
+/// instances are the handle -- the parent's representation, inherited with
+/// its brands -- so without a registration `new` made a parent and every
+/// override was silently never called: `class Counter extends GtkButton` ran
+/// as a plain button before subclasses were registered. What a runtime
+/// registers is [`super::native::registered_by_a_runtime`]'s; anything else
+/// extending a handle, a subclass of such a subclass among them, is refused
+/// by name rather than lowered as its parent. Whether it refused.
+fn refuses_an_unregistered_handle(snapshot: &SemanticSnapshot, class: NodeId, lowered: &mut Lowered) -> bool {
+    if super::native::registered_by_a_runtime(snapshot, class) {
+        return false;
+    }
+    let probe = FuncBuilder::probe(snapshot);
+    let handle = instance_type_of(snapshot, class).and_then(|ty| probe.represent(ty));
+    if !matches!(handle, Some(HirType::NativePointer(_))) {
+        return false;
+    }
+    let diagnostic = probe.unsupported(
+        class,
+        "a class extending a C handle's class that nothing registers -- only a GObject class a binding declares, an Objective-C class, or a composable Windows Runtime class can be extended",
+    );
+    note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+    lowered.diagnostics.push(diagnostic);
+    true
+}
+
+/// A class the program writes over a composable Windows Runtime class,
+/// recorded as the runtime will compose it (`Program::foreign_classes`): its
+/// overrides, by interface and slot, and the factory of the class it extends.
+fn register_com_class(
+    snapshot: &SemanticSnapshot,
+    class: NodeId,
+    composition: super::native::Composable,
+    methods: Vec<super::ForeignMethod>,
+    lowered: &mut Lowered,
+) {
+    let probe = FuncBuilder::probe(snapshot);
+    // An interface answered by the class's own table answers all of its
+    // methods there: one it does not override would need forwarding to the
+    // base, which is not built. Refused by name, not left a gap.
+    if let Some(missing) = probe.unoverridden(class, &methods) {
+        let diagnostic = probe.unsupported(
+            class,
+            &format!("a class written over a composable Windows Runtime class that overrides some of an interface's methods and not `{missing}`, which would be forwarded to its base"),
+        );
+        note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+        lowered.diagnostics.push(diagnostic);
+        return;
+    }
+    let Some(name) = probe
+        .children(class)
+        .into_iter()
+        .find_map(|child| (probe.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| probe.node(child).text.clone()).flatten())
+    else {
+        return;
+    };
+    lowered.program.foreign_classes.push(super::ForeignClass {
+        family: super::native::Family::Com,
+        name,
+        superclass: composition.class.clone(),
+        methods,
+        protocols: Vec::new(),
+        state: None,
+        composition: Some(composition),
     });
 }
 
@@ -12802,6 +12886,21 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// Whether `function` is declared in a namespace `id` names, when `id` names
+    /// something else as well: `Application` is a class and, merged with it,
+    /// a namespace of its statics (`Application.Start`), and the class
+    /// declares no static of that name -- so the call is to the namespace's
+    /// function, as it is when the namespace stands alone.
+    fn declared_in_namespace_of(&self, id: NodeId, function: NodeId) -> bool {
+        let Some(namespace) = self.ancestor(function, syntax::MODULE_DECLARATION) else { return false };
+        let Some(symbol) = self.node(id).symbol else { return false };
+        let symbol = self.denoted_symbol(symbol);
+        self.snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .is_some_and(|record| record.flags.contains(SymbolFlags::MODULE) && record.declarations.contains(&namespace))
+    }
+
     /// What kind of name the lowering ran out of places to look for.
     ///
     /// This used to be one message — `a name declared outside this function` —
@@ -13835,7 +13934,7 @@ impl<'a> FuncBuilder<'a> {
         let entry = super::native::vfunc_signature(self.snapshot, this, &signature, &defaults)
             .map_err(|why| self.unsupported(member, &format!("a virtual function's {why}")))?;
         let func = self.lower_method_of(class, member, instance)?;
-        let method = super::ForeignMethod { selector: slot, function: func.name.clone(), signature: std::sync::Arc::new(entry) };
+        let method = super::ForeignMethod { dispatch: super::Dispatch::Selector(slot), function: func.name.clone(), signature: std::sync::Arc::new(entry) };
         Ok((func, Some(method)))
     }
 
@@ -13873,6 +13972,99 @@ impl<'a> FuncBuilder<'a> {
     /// `@ntsSelector` names or Swift's `@objc` rule makes of its name
     /// (`pressed(sender)` is `pressed:`), and the C signature it is called
     /// with.
+    /// One member of a class the program writes over a composable Windows
+    /// Runtime class: a method overriding one its base declares for
+    /// overriding (`@ntsOverride`), compiled as the program's function taking
+    /// the instance and the arguments, and recorded with the adapter
+    /// signature its interface's table calls it by. Anything else is refused
+    /// by name: the runtime makes the object, so it has no constructor of the
+    /// program's, and no room for a field.
+    fn lower_com_member(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+    ) -> Result<(Func, super::ForeignMethod), Diagnostic> {
+        match self.kind_of(member) {
+            Some(syntax::METHOD_DECLARATION) => {}
+            Some(syntax::CONSTRUCTOR) => {
+                return Err(self.unsupported(member, "a constructor of a class written over a composable Windows Runtime class, which the runtime composes"));
+            }
+            Some(syntax::PROPERTY_DECLARATION) => {
+                return Err(self.unsupported(member, "a field of a class written over a composable Windows Runtime class, whose object the runtime makes"));
+            }
+            _ => return Err(self.unsupported(member, "a member of a class written over a composable Windows Runtime class that is not a method")),
+        }
+        let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
+        let (iid, slot, overridden) = self.overridden_slot(class, &name).ok_or_else(|| {
+            self.unsupported(member, "a method of a class written over a composable Windows Runtime class that overrides nothing its base declares")
+        })?;
+        // The table's slot is called as the binding declares it -- an
+        // `int32` is an `int32` however the override spells its parameter --
+        // and the adapter converts to what the compiled method takes.
+        let signature = super::generics::declared_signature(self.snapshot, overridden)
+            .cloned()
+            .ok_or_else(|| self.unsupported(member, "an override whose binding declares no signature"))?;
+        let adapter = super::native::override_signature(self.snapshot, &signature).map_err(|why| self.unsupported(member, &format!("an override's {why}")))?;
+        let func = self.lower_method_of(class, member, instance)?;
+        let method = super::ForeignMethod {
+            dispatch: super::Dispatch::Slot { iid, slot },
+            function: func.name.clone(),
+            signature: std::sync::Arc::new(adapter),
+        };
+        Ok((func, method))
+    }
+
+    /// A method of an interface the class overrides some of and not this one:
+    /// the base declares it overridable at the same IID, and no method of the
+    /// class answers its slot.
+    fn unoverridden(&self, class: NodeId, methods: &[super::ForeignMethod]) -> Option<String> {
+        let answered: Vec<(&str, u32)> = methods
+            .iter()
+            .filter_map(|method| match &method.dispatch {
+                super::Dispatch::Slot { iid, slot } => Some((iid.as_str(), *slot)),
+                super::Dispatch::Selector(_) => None,
+            })
+            .collect();
+        let mut at = super::native::superclass(self.snapshot, class);
+        while let Some(base) = at {
+            for member in self.children(base) {
+                let Some(tag) = self.node(member).native.as_ref().and_then(|native| native.overridable.clone()) else { continue };
+                let words: Vec<&str> = tag.split_whitespace().collect();
+                let [iid, slot, name, ..] = words.as_slice() else { continue };
+                let Ok(slot) = slot.parse::<u32>() else { continue };
+                let interface_used = answered.iter().any(|(used, _)| used == iid);
+                if interface_used && !answered.contains(&(*iid, slot)) {
+                    return Some((*name).to_owned());
+                }
+            }
+            at = super::native::superclass(self.snapshot, base);
+        }
+        None
+    }
+
+    /// The interface and slot a base the program's class extends declares a
+    /// method of this name overridable at (`@ntsOverride <IID> <slot> <name>`),
+    /// nearest base first, and the binding's declaration of it.
+    fn overridden_slot(&self, class: NodeId, name: &str) -> Option<(String, u32, NodeId)> {
+        let mut at = super::native::superclass(self.snapshot, class);
+        while let Some(base) = at {
+            for member in self.children(base) {
+                let tagged = self.node(member).native.as_ref().and_then(|native| native.overridable.clone());
+                if let Some(tag) = tagged
+                    && self.member_name(member).as_deref() == Some(name)
+                {
+                    let words: Vec<&str> = tag.split_whitespace().collect();
+                    if let [iid, slot, ..] = words.as_slice() {
+                        return Some(((*iid).to_owned(), slot.parse().ok()?, member));
+                    }
+                }
+            }
+            at = super::native::superclass(self.snapshot, base);
+        }
+        None
+    }
+
     fn lower_objc_method(
         &mut self,
         class: NodeId,
@@ -13925,7 +14117,11 @@ impl<'a> FuncBuilder<'a> {
         };
         self.objc_entry = Some(ObjcEntry { returns_record: matches!(*imp.result, super::native::Type::Record(_)) });
         let func = self.lower_method_of(class, member, instance)?;
-        let method = super::ForeignMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
+        let method = super::ForeignMethod {
+            dispatch: super::Dispatch::Selector(selector),
+            function: func.name.clone(),
+            signature: std::sync::Arc::new(imp),
+        };
         Ok((func, method))
     }
 
@@ -27466,7 +27662,7 @@ impl<'a> FuncBuilder<'a> {
             // A class of the program's over a handle that nothing registers
             // (`lower_class` refuses it): its `new` would resolve to the
             // parent's construct signature and make a parent.
-            let registered = super::native::extends_objc(self.snapshot, class) || super::native::is_objc_class(self.snapshot, class);
+            let registered = super::native::registered_by_a_runtime(self.snapshot, class);
             let handle = instance_type_of(self.snapshot, class).and_then(|ty| self.represent(ty));
             return (!registered && matches!(handle, Some(HirType::NativePointer(_))))
                 .then(|| Err(self.unsupported(id, "`new` of a class extending a C handle's class that nothing registers")));
@@ -30065,9 +30261,12 @@ impl<'a> FuncBuilder<'a> {
             // which is built by messages: neither is a layout of ours.
             Some(syntax::NEW_EXPRESSION) => match self.native_construct(id) {
                 Some(constructed) => constructed,
-                None => match self.lower_objc_new(id)? {
+                None => match self.lower_com_new(id)? {
                     Some(object) => Ok(object),
-                    None => self.lower_new(id),
+                    None => match self.lower_objc_new(id)? {
+                        Some(object) => Ok(object),
+                        None => self.lower_new(id),
+                    },
                 },
             },
             Some(syntax::ARROW_FUNCTION) => self.lower_arrow(id),
@@ -41855,7 +42054,9 @@ impl<'a> FuncBuilder<'a> {
         // so this is a call to the function, as `Parse(x)` would be.
         let in_namespace = target.callee.is_some_and(|callee| self.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION))
             && self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
-            && self.children(callee_node).first().is_some_and(|object| self.names_a_namespace(*object));
+            && self.children(callee_node).first().is_some_and(|object| {
+                self.names_a_namespace(*object) || target.callee.is_some_and(|callee| self.declared_in_namespace_of(*object, callee))
+            });
 
         // `c.advance()` — a method call. The receiver becomes the first
         // argument, which is what a method is once it is explicit.
@@ -43038,7 +43239,7 @@ impl<'a> FuncBuilder<'a> {
     /// two constants. Text that is no IID -- refused where the tag is read,
     /// so not reached -- gives zero words, which no interface answers to.
     fn iid_arguments(&mut self, iid: &str, origin: &Origin) -> [ValueId; 2] {
-        let (low, high) = iid_words(iid).unwrap_or_default();
+        let (low, high) = super::native::iid_words(iid).unwrap_or_default();
         let word = HirType::Int { bits: 64, signed: false };
         [
             self.push(OpKind::ConstInt(i128::from(low)), word.clone(), origin.clone()),
@@ -43060,7 +43261,7 @@ impl<'a> FuncBuilder<'a> {
         lent: &mut Vec<Lent>,
         origin: &Origin,
     ) -> Result<ValueId, Diagnostic> {
-        if !is_interface_id(iid) {
+        if !super::native::is_interface_id(iid) {
             return Err(self.unsupported(id, "a `Delegate` whose interface ID is not 8-4-4-4-12 hexadecimal digits"));
         }
         let pointer = HirType::NativePointer(super::native::Pointee::Void);
@@ -43774,7 +43975,7 @@ impl<'a> FuncBuilder<'a> {
                 let [class, iid] = words.as_slice() else {
                     return Err(self.unsupported(call, "@ntsFactory names the runtime class and the interface ID, as in `@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C`"));
                 };
-                if !is_interface_id(iid) {
+                if !super::native::is_interface_id(iid) {
                     return Err(self.unsupported(call, "@ntsFactory with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
                 }
                 Some(super::native::Factory { class: (*class).to_owned(), iid: iid.trim_matches(['{', '}']).to_owned() })
@@ -43812,7 +44013,7 @@ impl<'a> FuncBuilder<'a> {
         if !arguments.is_empty() {
             return Err(self.unsupported(id, "@ntsQuery on a method that takes arguments beside `this`"));
         }
-        if !is_interface_id(iid) {
+        if !super::native::is_interface_id(iid) {
             return Err(self.unsupported(id, "@ntsQuery with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
         }
         let ty = self.represent(result).ok_or_else(|| self.unrepresentable(id, "the interface @ntsQuery answers"))?;
@@ -43851,7 +44052,7 @@ impl<'a> FuncBuilder<'a> {
         if !arguments.is_empty() {
             return Err(self.unsupported(id, "@ntsActivate on a function that takes arguments; a constructor that does is a factory method"));
         }
-        if !is_interface_id(iid) {
+        if !super::native::is_interface_id(iid) {
             return Err(self.unsupported(id, "@ntsActivate with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
         }
         let ty = self.represent(result).ok_or_else(|| self.unrepresentable(id, "the object @ntsActivate makes"))?;
@@ -44258,6 +44459,49 @@ impl<'a> FuncBuilder<'a> {
     /// hands over one. A constructor whose selector is a class method
     /// (`@ntsSelector +buttonWithTitle:target:action:`, which Swift imports as
     /// an `init`) is that one message instead.
+    /// `new App()` for a class the program writes over a composable Windows
+    /// Runtime class: the runtime composes it (`nts_com_compose_named`, by the
+    /// name the class is registered under) and answers the base's default
+    /// interface on the aggregate, +1. It takes no arguments: the class has
+    /// no constructor of its own, and the base's is its factory's
+    /// parameterless one.
+    fn lower_com_new(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(class) = self.constructed_class(id) else { return Ok(None) };
+        if !super::native::extends_com(self.snapshot, class) {
+            return Ok(None);
+        }
+        if !self.arguments_of(id).is_empty() {
+            return Err(self.unsupported(id, "a `new` with arguments of a class written over a composable Windows Runtime class"));
+        }
+        let Some(name) = self
+            .children(class)
+            .into_iter()
+            .find_map(|child| (self.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| self.node(child).text.clone()).flatten())
+        else {
+            return Err(self.unsupported(id, "a `new` of an anonymous class written over a composable Windows Runtime class"));
+        };
+        let Some(ty @ HirType::NativePointer(_)) = self.type_of(id) else {
+            return Err(self.unsupported(id, "a class written over a composable Windows Runtime class whose instances are not its base's handle"));
+        };
+        let origin = self.origin(id);
+        let name = self.push(OpKind::ConstString(name), HirType::Managed(ManagedType::String), origin.clone());
+        Ok(Some(self.runtime_call("nts_com_compose_named", vec![name], ty, origin)))
+    }
+
+    /// The class declaration a `new` constructs, through its expression's
+    /// symbol: `App` in `new App()`.
+    fn constructed_class(&self, id: NodeId) -> Option<NodeId> {
+        let expression = *self.children(id).first()?;
+        let symbol = self.denoted_symbol(self.node(expression).symbol?);
+        self.snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|declaration| self.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION))
+    }
+
     fn lower_objc_new(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
         let Some(HirType::NativePointer(super::native::Pointee::Opaque(handle))) = self.type_of(id) else {
             return Ok(None);
@@ -51978,49 +52222,3 @@ fn symbol_tagged(lowerer: &FuncBuilder<'_>, decl: NodeId) -> bool {
     lowerer.node(decl).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.selector.is_some())
 }
 
-/// `5F6B544A-2F53-48E1-91A3-F78B50A6345C`, with or without braces.
-/// An IID as the two words of its sixteen bytes, low then high, in the order
-/// a GUID lies in memory (`Data1` to `Data3` little-endian, then `Data4` as
-/// written): what the runtime's COM helpers take, so an IID crosses as two
-/// integers the compiler already knows rather than text parsed on every call
-/// -- measured on Windows at 440 ns of parse against 12.5 ns for the
-/// `QueryInterface` it served. `None` for text that is not one.
-fn iid_words(text: &str) -> Option<(u64, u64)> {
-    if !is_interface_id(text) {
-        return None;
-    }
-    let hex: String = text.chars().filter(char::is_ascii_hexdigit).collect();
-    let byte = |at: usize| u8::from_str_radix(&hex[at * 2..at * 2 + 2], 16).ok();
-    // The three leading fields are big-endian in the text and little-endian
-    // in memory; `Data4` is bytes in both.
-    let order = [3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15];
-    let mut bytes = [0u8; 16];
-    for (at, from) in order.into_iter().enumerate() {
-        bytes[at] = byte(from)?;
-    }
-    let (low, high) = bytes.split_at(8);
-    Some((u64::from_le_bytes(low.try_into().ok()?), u64::from_le_bytes(high.try_into().ok()?)))
-}
-
-fn is_interface_id(text: &str) -> bool {
-    let bare = text.strip_prefix('{').and_then(|t| t.strip_suffix('}')).unwrap_or(text);
-    let groups: Vec<&str> = bare.split('-').collect();
-    groups.len() == 5
-        && groups.iter().zip([8, 4, 4, 4, 12]).all(|(group, length)| group.len() == length && group.chars().all(|c| c.is_ascii_hexdigit()))
-}
-
-#[cfg(test)]
-mod iid_tests {
-    /// The words are the GUID's bytes as they lie in memory: `IUnknown` is
-    /// all zero but `C0` first and `46` last in `Data4`, and `IInspectable`'s
-    /// three leading fields reverse byte by byte while `Data4` does not.
-    #[test]
-    fn an_iid_crosses_as_its_memory_words() {
-        assert_eq!(super::iid_words("00000000-0000-0000-C000-000000000046"), Some((0, 0x4600_0000_0000_00C0)));
-        assert_eq!(
-            super::iid_words("{AF86E2E0-B12D-4C6A-9C5A-D7AA65101E90}"),
-            Some((0x4C6A_B12D_AF86_E2E0, 0x901E_1065_AAD7_5A9C))
-        );
-        assert_eq!(super::iid_words("AF86E2E0"), None);
-    }
-}

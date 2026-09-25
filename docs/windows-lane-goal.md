@@ -225,79 +225,59 @@ the same vtable calls on the VM measured the behaviour first.
 ## W3, WinUI 3: where it stands
 
 `examples/interop/winui-hello` runs on Windows, in the signed-in session, on
-both backends and both providers:
-- an unpackaged program bootstraps the Windows App SDK 1.8;
-- `Application.Start` runs a TypeScript callback;
-- a `Window` holds a `Button` whose TypeScript `Click` handler UI Automation
-  presses;
-- a `setTimeout` fires from inside XAML's loop, and `Exit` returns from
-  `Start`.
+both backends and both providers, written as C# writes it:
 
+```ts
+class App extends Application {
+  OnLaunched(_args: ILaunchActivatedEventArgs | null): void { ... this.Exit(); }
+}
+Application.Start(() => { new App(); });
+```
+
+- **The object** is COM aggregation, as C#'s projection composes it. The
+  runtime (`nts_winrt.c`, `nts_com_compose`) makes an outer object per
+  instance:
+  - one table per interface the class overrides (`IApplicationOverrides`);
+  - `IXamlMetadataProvider` for `Microsoft.UI.Xaml.Application`, forwarded
+    to WinUI's `XamlControlsXamlMetaDataProvider`;
+  - its count, and the inner object from the base's composable factory.
+  Every other interface is the inner's. `this` is the base's default
+  interface on the aggregate, so `this.Exit()` is an ordinary vtable call.
+- **What TypeScript sees:** bind-winmd declares each composable class as a
+  class, with a constructor as visible as its factory (`protected` for
+  `Control`), and one `@ntsOverride <IID> <slot>` method per slot of each
+  overridable interface along its base chain.
+- **Lowering** turns each method of the class into an override
+  (`ForeignClass` with `Family::Com`, `Dispatch::Slot`), and `new App()` into
+  `nts_com_compose_named`. The adapter is called as the binding declares
+  the slot and converts to what the override takes: an `int32` reaches a
+  `number` parameter, and an override may take fewer parameters than its
+  slot. Both backends emit the adapters, the tables and an `NtsComClass`,
+  registered by one constructor before `main`.
+- **Measured on the VM:** the button is templated (`styled=true`). The
+  control with the metadata provider off ends with `the runtime class could
+  not be constructed (0x80004005)`. The compiler before this change
+  rejects the program (`TS2507`).
+- **Refused by name, for now:**
+  - an interface overridden in part; the other slots would need forwarders to
+    the inner object's implementation, which is the next step here;
+  - a constructor of the class's own, and fields. Captured state works
+    (a closure, a module variable);
+  - a `new` with arguments; and an override returning a value.
 - **The SDK** is fetched by `tooling/windows/fetch-winappsdk.sh`, pinned in
   `winrt.rs`. The bootstrapper is built beside the program and loaded on its
   first `Microsoft.*` activation.
 - **The session:** XAML fails fast (0xC000027B) in ssh's session 0, so
   `run.sh --interactive` runs a GUI program as a scheduled task in the
   user's session.
-- **Next:**
-  - `class App extends Application`, meaning COM aggregation with an outer
-    object of the program's. Apple's `extends NSObject` has the
-    registration shape to share.
-  - XAML controls' default styles, which need the application to be an
-    object of the program's: measured with a C oracle on the VM. A plain
-    `Application` answers `get_Resources` with E_UNEXPECTED, and a `Button`
-    without WinUI's resources has no template (`ActualWidth` 0). An outer
-    object aggregating `Application` changes both. It implements
-    `IApplicationOverrides.OnLaunched` and `IXamlMetadataProvider`, delegating
-    the provider to `XamlControlsXamlMetaDataProvider`. `Resources` works, and
-    merging `XamlControlsResources` in `OnLaunched` templates the button
-    (`ActualWidth` 24). `XamlControlsResources` asks the application for
-    its metadata provider while it activates. No `resources.pri` is involved.
-    So the milestone is `class App extends Application`, with the metadata
-    provider supplied for the program.
-
-### `class App extends Application`: the design, for a decision
-
-Measured, not guessed: the oracle above is the whole mechanism, in C.
-
-- **The object.** The runtime makes an outer object per instance:
-  - one table per interface the class overrides (`IApplicationOverrides`);
-  - `IXamlMetadataProvider`, supplied for every `Application` subclass by
-    delegating to WinUI's `XamlControlsXamlMetaDataProvider`, which is what a
-    XAML project generates;
-  - its count;
-  - the inner object, and the composed instance the base's factory answers
-    (`CreateInstance(outer, &inner, &instance)`).
-  Every other interface is the inner's, by `QueryInterface`.
-- **`this` is the composed instance:** the base's default interface
-  (`IApplication`) on the aggregated object, as `this` in an Objective-C
-  subclass is the `id`. So `this.Exit()` is an ordinary vtable call, and a
-  `QueryInterface` on it reaches the outer object. A method the class
-  overrides is reached through a per-signature adapter, the delegate's shape:
-  the table's slot finds the outer object from the interface pointer and calls
-  the compiled method with the instance.
-- **Fields are refused at first**, as the Objective-C lane refuses them: the
-  runtime makes the object without room for a TypeScript object's state.
-  Captured state (a closure, a module variable) works.
-- **What TypeScript sees is the decision.** `extends` needs a constructor
-  value, and bind-winmd declares a runtime class as a type and a namespace.
-  - (a) bind-winmd declares each composable class as a `declare class` with
-    its overridable methods: `class App extends Application { OnLaunched(args)
-    { ... } }`, which is what C# and C++/WinRT write.
-  - (b) A builder: `Application.subclass({ OnLaunched(args) { ... } })`,
-    which needs no class machinery in the compiler, but is not what anyone
-    writes for WinUI.
-  (a) is the recommendation. It reuses the `extends`-a-foreign-class path the
-  Apple lane built for `NSObject`, and the record on `Program` can be one for
-  both families.
-  - The idiomatic layer (W4).
 
 ## Next
 
 1. **W1 is closed.** One named gap: under LLVM on Win64, an exported
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
-2. **W2's rest** as listed above, then **W3's** subclassing.
+2. **W2's rest** as listed above: awaitable operations once `await` honours
+   thenables. **W3:** partial overrides, then fields on a composed class.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT.
 

@@ -157,6 +157,20 @@ pub(crate) fn extends_objc(snapshot: &SemanticSnapshot, declaration: NodeId) -> 
     false
 }
 
+/// Whether a runtime registers the class a program writes, so that its
+/// instances are its own and not merely its parent's handle: a `GObject`
+/// class's subclass (a `GType` of its own), an Objective-C class or one over
+/// it, a composable Windows Runtime class or one over it (composed). The one
+/// answer both `lower_class` and `new` ask -- two derivations of it disagreed
+/// once, and `new App()` was refused as a class nothing registers.
+pub(crate) fn registered_by_a_runtime(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
+    gobject_parent(snapshot, declaration).is_some()
+        || extends_objc(snapshot, declaration)
+        || is_objc_class(snapshot, declaration)
+        || extends_com(snapshot, declaration)
+        || is_com_class(snapshot, declaration)
+}
+
 /// For a class the program writes over a `GObject` class a binding declares
 /// -- `class Counter extends GtkButton` -- the function answering that
 /// class's `GType`, which the subclass registers under: the `@ntsGType` on
@@ -217,6 +231,49 @@ pub(crate) fn superclass(snapshot: &SemanticSnapshot, declaration: NodeId) -> Op
 }
 
 /// The `@ntsClass` a class declaration carries.
+/// A composable Windows Runtime class a binding declares (`@ntsComposable`):
+/// the framework's, every member a vtable call or an override a subclass
+/// writes, none a function of this program.
+pub(crate) fn is_com_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
+    composable_tag(snapshot, declaration).is_some()
+}
+
+/// Whether a class the program writes extends a composable Windows Runtime
+/// class: `class App extends Application`.
+pub(crate) fn extends_com(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
+    composable_base(snapshot, declaration).is_some()
+}
+
+/// The composable class a class the program writes extends, nearest first,
+/// as its binding's `@ntsComposable` says. `None` for a binding's own class,
+/// and for a class written over nothing composable.
+pub(crate) fn composable_base(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<super::Composable> {
+    if is_com_class(snapshot, declaration) {
+        return None;
+    }
+    let mut at = base_class(snapshot, declaration);
+    while let Some(base) = at {
+        if let Some(tag) = composable_tag(snapshot, base) {
+            let words: Vec<&str> = tag.split_whitespace().collect();
+            return match words.as_slice() {
+                [class, factory, slot, rest @ ..] => Some(super::Composable {
+                    class: (*class).to_owned(),
+                    factory: (*factory).to_owned(),
+                    slot: slot.parse().ok()?,
+                    xaml: rest == ["xaml"],
+                }),
+                _ => None,
+            };
+        }
+        at = base_class(snapshot, base);
+    }
+    None
+}
+
+fn composable_tag(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<&str> {
+    snapshot.nodes.get(declaration.0 as usize)?.native.as_ref()?.composable.as_deref()
+}
+
 fn objc_tag(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<&str> {
     snapshot.nodes.get(declaration.0 as usize)?.native.as_ref()?.class.as_deref()
 }

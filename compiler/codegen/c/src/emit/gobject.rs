@@ -58,7 +58,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 return Err(refuse("a GObject virtual function taking or returning a record by value"));
             }
             let offset = method
-                .selector
+                .selector()
                 .split_whitespace()
                 .nth(2)
                 .ok_or_else(|| refuse("a GObject virtual function whose slot has no offset"))?;

@@ -1279,16 +1279,33 @@ fn entry_points(program: &Program, platform: Platform, diagnostics: &mut Vec<Dia
         }
     };
     let mut declared = bridged;
-    match objc_classes(program, platform, bridged) {
-        Ok(classes) => {
-            declared |= classes.contains("declare void @nts_callback_enter()");
-            text.push_str(&classes);
+    // Each family that registers its classes before `main` does so from one
+    // constructor, and a module has one `llvm.global_ctors` to list them in.
+    // The contract: a family returns its text and the name of a `void ()`
+    // registrar, or `None` when the program has no class of it. Every
+    // registrar runs before `main` at the same priority, **in an order LLVM
+    // leaves undefined** -- so no registrar may depend on another family's
+    // having run. A family that comes to need an order gets its own priority,
+    // not a place in this list.
+    let mut constructors = Vec::new();
+    for family in [objc_classes, com::classes] {
+        match family(program, platform, &mut declared) {
+            Ok((classes, constructor)) => {
+                text.push_str(&classes);
+                constructors.extend(constructor);
+            }
+            Err(diagnostic) => diagnostics.push(diagnostic),
         }
-        Err(diagnostic) => diagnostics.push(diagnostic),
     }
+    // A GObject class registers itself the first time one is made, as its
+    // `get_type` does, so it lists no constructor.
     match gobject::classes(program, platform, declared) {
         Ok(classes) => text.push_str(&classes),
         Err(diagnostic) => diagnostics.push(diagnostic),
+    }
+    if !constructors.is_empty() {
+        let entries: Vec<String> = constructors.iter().map(|name| format!("{{ i32, ptr, ptr }} {{ i32 65535, ptr @{name}, ptr null }}")).collect();
+        let _ = writeln!(text, "@llvm.global_ctors = appending global [{} x {{ i32, ptr, ptr }}] [{}]", entries.len(), entries.join(", "));
     }
     text
 }
@@ -1297,16 +1314,15 @@ fn entry_points(program: &Program, platform: Platform, diagnostics: &mut Vec<Dia
 /// backend's `emit/objc.rs` writes them: an entry point per method -- `self`
 /// and `_cmd`, then the arguments converted to what the compiled method takes
 /// -- a table per class, and one constructor in `llvm.global_ctors`
-/// registering them all, base class first, before `main`.
-fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
+/// registering them all, base class first, before `main`. Returns the text
+/// and that constructor's name.
+fn objc_classes(program: &Program, platform: Platform, callbacks_declared: &mut bool) -> Result<(String, Option<&'static str>), Diagnostic> {
     let classes = nts_codegen_common::objc::classes_in_order(program);
     let mut out = String::new();
     if classes.is_empty() {
-        return Ok(out);
+        return Ok((out, None));
     }
-    if !callbacks_declared {
-        out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
-    }
+    declare_callbacks(&mut out, callbacks_declared);
     out.push_str("declare void @nts_objc_register_class(ptr, ptr, ptr, i32, ptr)\n");
     if classes.iter().any(|class| !class.protocols.is_empty()) {
         out.push_str("declare void @nts_objc_adopt(ptr, ptr)\n");
@@ -1322,7 +1338,7 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
                 // to name the refusal by.
                 return match program.funcs.first() {
                     Some(func) => Err(refuse(func, missing)),
-                    None => Ok(String::new()),
+                    None => Ok((String::new(), None)),
                 };
             };
             rows.push(imp(&mut out, platform, &class.name, at, method, compiled)?);
@@ -1334,7 +1350,7 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
             Ok(Some(maker)) => format!("ptr @{maker}"),
             Ok(None) => "ptr null".to_owned(),
             Err(Some(refused)) => return Err(refused),
-            Err(None) => return Ok(String::new()),
+            Err(None) => return Ok((String::new(), None)),
         };
         registrations.push(format!(
             "  call void @nts_objc_register_class(ptr @{table}.name, ptr @{table}.super, ptr @{table}, i32 {}, {state})",
@@ -1346,8 +1362,15 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
         }
     }
     let _ = writeln!(out, "define internal void @nts_objc_register_classes() {{\n{}\n  ret void\n}}", registrations.join("\n"));
-    out.push_str("@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @nts_objc_register_classes, ptr null }]\n");
-    Ok(out)
+    Ok((out, Some("nts_objc_register_classes")))
+}
+
+/// The two runtime calls around a callback, declared once per module.
+fn declare_callbacks(out: &mut String, declared: &mut bool) {
+    if !*declared {
+        out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
+        *declared = true;
+    }
 }
 
 /// A private NUL-terminated string constant, `@name`.
@@ -1432,7 +1455,7 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
             let _ = writeln!(out, "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()", symbol(&compiled.name), call_args("%slot"));
             let _ = writeln!(out, "  %r = load {spelled}, ptr %slot, align {}\n  ret {spelled} %r\n}}", align.min(8));
         }
-        text_constant(out, &format!("{imp}.sel"), &method.selector);
+        text_constant(out, &format!("{imp}.sel"), method.selector());
         text_constant(out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
         return Ok(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"));
     }
@@ -1455,7 +1478,7 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
             let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}", ty_of(&have, compiled)?);
         }
     }
-    text_constant(out, &format!("{imp}.sel"), &method.selector);
+    text_constant(out, &format!("{imp}.sel"), method.selector());
     text_constant(out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
     Ok(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"))
 }

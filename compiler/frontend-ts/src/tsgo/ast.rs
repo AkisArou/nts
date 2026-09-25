@@ -472,6 +472,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let activate = leading_tag(source, "@ntsActivate");
     let vfunc = leading_tag(source, "@ntsVfunc");
     let gtype = leading_tag(source, "@ntsGType");
+    let composable = leading_tag(source, "@ntsComposable");
+    let overridable = leading_tag(source, "@ntsOverride");
     if abi.is_none()
         && no_escape.is_none()
         && headers.is_none()
@@ -496,6 +498,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && activate.is_none()
         && vfunc.is_none()
         && gtype.is_none()
+        && composable.is_none()
+        && overridable.is_none()
     {
         return None;
     }
@@ -524,6 +528,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         activate,
         vfunc,
         gtype,
+        composable,
+        overridable,
     }))
 }
 

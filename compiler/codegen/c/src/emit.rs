@@ -941,6 +941,10 @@ fn emit_bridges(
     if let Err(diagnostic) = gobject::classes(writer, origin, program) {
         diagnostics.push(diagnostic);
     }
+    // And one a COM interface's table calls, of the same kind again.
+    if let Err(diagnostic) = com::classes(writer, origin, program) {
+        diagnostics.push(diagnostic);
+    }
 }
 
 /// The claims this program makes about foreign declarations, as a file.

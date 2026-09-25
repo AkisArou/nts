@@ -2153,16 +2153,41 @@ pub struct ForeignClass {
     /// For a class that declares fields, the function making the object that
     /// holds them (`Controller#state`), which registration hands the runtime.
     pub state: Option<String>,
+    /// For a class written over a composable Windows Runtime class, the
+    /// factory composing one (`@ntsComposable`). `None` for Objective-C.
+    pub composition: Option<native::Composable>,
 }
 
-/// One method of a [`ForeignClass`]: the selector the runtime dispatches on,
-/// the compiled function that is its body, and the C signature the runtime
-/// calls it with -- `self`, `_cmd`, then the arguments.
+/// One method of a [`ForeignClass`]: how the runtime dispatches to it, the
+/// compiled function that is its body, and the C signature the runtime calls
+/// it with -- for Objective-C `self`, `_cmd`, then the arguments; for COM the
+/// interface pointer, then the arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignMethod {
-    pub selector: String,
+    pub dispatch: Dispatch,
     pub function: String,
     pub signature: std::sync::Arc<native::FnPointer>,
+}
+
+/// How a foreign runtime reaches a method of a class the program writes: an
+/// Objective-C selector, or a slot of a COM interface's table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Dispatch {
+    Selector(String),
+    Slot { iid: String, slot: u32 },
+}
+
+impl ForeignMethod {
+    /// The Objective-C selector. A COM method has none and answers the empty
+    /// string, which no Objective-C emitter sees: they walk
+    /// `classes_in_order`, which is that family's classes alone.
+    #[must_use]
+    pub fn selector(&self) -> &str {
+        match &self.dispatch {
+            Dispatch::Selector(selector) => selector,
+            Dispatch::Slot { .. } => "",
+        }
+    }
 }
 
 /// A lowered program.

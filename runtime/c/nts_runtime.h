@@ -1894,6 +1894,53 @@ void *nts_com_delegate(void *invoke, void *bridge, void *context,
  * `arguments` is copied and need not outlive the call; `objects` is kept as
  * it is, so it must outlive the carried call -- the emitter passes a
  * `static const` table. */
+/* A class the program writes over a composable Windows Runtime class
+ * (`class App extends Application`), as the compiler describes it: one
+ * table per interface whose methods the class overrides -- slots 0 to 5 the
+ * `nts_com_outer_*` functions below, the rest the compiled overrides'
+ * adapters -- and the base class's composable factory. */
+typedef struct NtsComInterface {
+  uint64_t iid_low;
+  uint64_t iid_high;
+  const void *const *table;
+} NtsComInterface;
+typedef struct NtsComClass {
+  /* The program's name for it, which `GetRuntimeClassName` answers. */
+  const char *name;
+  /* The base class, activated for its composable factory. */
+  const char *base;
+  uint64_t factory_low;
+  uint64_t factory_high;
+  /* The factory's parameterless `CreateInstance(outer, &inner, &instance)`. */
+  uint32_t create_slot;
+  const NtsComInterface *interfaces;
+  uint32_t count;
+  /* Answer `IXamlMetadataProvider` with WinUI's own: a `Microsoft.UI.Xaml`
+   * application, whose controls ask it for their styles. */
+  bool xaml_metadata;
+  /* The factory, found on the first composition and kept. */
+  void *factory;
+} NtsComClass;
+/* A new instance of `cls`: an outer object of the runtime's aggregating the
+ * base class, answered as the base's default interface on the aggregate
+ * (+1), which is what `this` is in the class's methods. */
+void *nts_com_compose(NtsComClass *cls);
+/* Record `cls` under its name, which the program does when it loads, as the
+ * Objective-C runtime is told of a program's classes. */
+void nts_com_register(NtsComClass *cls);
+/* `new App()`: the class registered under `name`, composed. */
+void *nts_com_compose_named(const NtsString *name);
+/* The instance an override's adapter calls the compiled method with, from
+ * the interface pointer the adapter was called through. Borrowed. */
+void *nts_com_outer_instance(void *face);
+/* Slots 0 to 5 of every table an `NtsComClass` names: `IUnknown`'s and
+ * `IInspectable`'s, answered by the outer object. */
+int32_t nts_com_outer_query(void *face, const void *iid, void **out);
+uint32_t nts_com_outer_addref(void *face);
+uint32_t nts_com_outer_release(void *face);
+int32_t nts_com_outer_iids(void *face, uint32_t *count, void **iids);
+int32_t nts_com_outer_name(void *face, void **name);
+int32_t nts_com_outer_trust(void *face, int32_t *level);
 void nts_com_carry(void *delegate, const void *arguments, size_t size,
                    const uint32_t *objects, uint32_t count,
                    void (*run)(void *delegate, void *arguments));

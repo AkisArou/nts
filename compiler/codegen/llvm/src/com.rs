@@ -3,12 +3,16 @@
 
 use std::fmt::Write as _;
 
-use nts_codegen_common::com::{delegate_hop_symbol, delegate_invoke_symbol, delegate_signatures};
+use nts_codegen_common::com::{
+    adapter_symbol, class_symbol, delegate_hop_symbol, delegate_invoke_symbol, delegate_signatures, interfaces, interfaces_symbol, table_symbol, OUTER_SLOTS,
+};
 use nts_codegen_common::objc::{Carried, hop_arguments};
-use nts_core::hir::Program;
 use nts_core::hir::native::{FnPointer, Type};
+use nts_core::hir::{ForeignMethod, Func, HirType, Program};
+use nts_diagnostics::Diagnostic;
 
-use super::objc::{abi, bare};
+use super::objc::{abi_parameter, bare};
+use super::{Platform, conversion, is_not_zero, refuse, symbol, text_constant, ty_of};
 
 /// One `Invoke` adapter per delegate signature: `i32 (ptr %self, A...)`, the
 /// bridge and the context out of the object (`NtsComDelegate`: the table, the
@@ -22,7 +26,7 @@ pub(super) fn delegates(program: &Program) -> String {
         let mut types = Vec::new();
         let mut arguments = Vec::new();
         for (at, ty) in signature.parameters.iter().enumerate() {
-            let spelled = abi(ty);
+            let spelled = abi_parameter(ty);
             parameters.push(format!("{spelled} %a{at}"));
             types.push(bare(&ty.representation()).to_owned());
             arguments.push(format!("{spelled} %a{at}"));
@@ -94,4 +98,117 @@ fn hop(text: &mut String, signature: &FnPointer, carried: &[Carried], types: &[S
     let _ = writeln!(text, "  %context = load ptr, ptr %context.slot");
     let _ = writeln!(text, "  call void ({}) %bridge({})", types.join(", "), arguments.join(", "));
     let _ = writeln!(text, "  ret void\n}}");
+}
+
+/// The classes the program writes over composable Windows Runtime classes,
+/// as the C backend's `emit/com.rs` writes them: an adapter per override --
+/// the interface pointer the table was called through turned back into the
+/// instance, then the arguments converted to what the compiled method takes
+/// -- a table per interface, the runtime's `NtsComClass` for each class, and
+/// one constructor registering them all before `main`. Returns the text and
+/// that constructor's name.
+pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared: &mut bool) -> Result<(String, Option<&'static str>), Diagnostic> {
+    let classes = nts_codegen_common::com::classes(program);
+    let mut out = String::new();
+    // Every class is the program's, so it has a function to name a refusal by.
+    let Some(first) = program.funcs.first() else { return Ok((out, None)) };
+    if classes.is_empty() {
+        return Ok((out, None));
+    }
+    super::declare_callbacks(&mut out, callbacks_declared);
+    out.push_str("declare void @nts_com_register(ptr)\ndeclare ptr @nts_com_outer_instance(ptr)\n");
+    for slot in OUTER_SLOTS {
+        let _ = writeln!(out, "declare void @{slot}()");
+    }
+    let mut registrations = Vec::new();
+    for class in &classes {
+        for (at, method) in class.methods.iter().enumerate() {
+            let compiled = program
+                .funcs
+                .iter()
+                .find(|func| func.name == method.function)
+                .ok_or_else(|| refuse(first, "an override whose compiled function this program does not define"))?;
+            adapter(&mut out, platform, &adapter_symbol(&class.name, at), method, compiled)?;
+        }
+        let answered = interfaces(class);
+        let mut rows = Vec::new();
+        for (index, interface) in answered.iter().enumerate() {
+            let mut slots: Vec<String> = OUTER_SLOTS.iter().map(|slot| format!("ptr @{slot}")).collect();
+            for (slot, at) in &interface.overrides {
+                if *slot as usize != slots.len() {
+                    return Err(refuse(first, "an override table with a gap, which lowering refuses"));
+                }
+                slots.push(format!("ptr @{}", adapter_symbol(&class.name, *at)));
+            }
+            let table = table_symbol(&class.name, index);
+            let _ = writeln!(out, "@{table} = internal constant [{} x ptr] [{}]", slots.len(), slots.join(", "));
+            // An IID word's bits, which IR writes as a signed literal.
+            rows.push(format!("{{ i64, i64, ptr }} {{ i64 {}, i64 {}, ptr @{table} }}", interface.low.cast_signed(), interface.high.cast_signed()));
+        }
+        let Some(composition) = &class.composition else {
+            return Err(refuse(first, "a class written over a composable class with no factory"));
+        };
+        let (low, high) = nts_core::hir::native::iid_words(&composition.factory).unwrap_or_default();
+        let descriptor = class_symbol(&class.name);
+        let array = interfaces_symbol(&class.name);
+        let _ = writeln!(out, "@{array} = internal constant [{} x {{ i64, i64, ptr }}] [{}]", rows.len(), rows.join(", "));
+        text_constant(&mut out, &format!("{descriptor}.name"), &class.name);
+        text_constant(&mut out, &format!("{descriptor}.base"), &composition.class);
+        // `NtsComClass`: natural alignment places it as C does. The last
+        // field is the factory the runtime keeps, so it is not a constant.
+        let _ = writeln!(
+            out,
+            "@{descriptor} = internal global {{ ptr, ptr, i64, i64, i32, ptr, i32, i8, ptr }} {{ ptr @{descriptor}.name, ptr @{descriptor}.base, i64 {}, i64 {}, i32 {}, ptr @{array}, i32 {}, i8 {}, ptr null }}",
+            low.cast_signed(),
+            high.cast_signed(),
+            composition.slot,
+            answered.len(),
+            u8::from(composition.xaml)
+        );
+        registrations.push(format!("  call void @nts_com_register(ptr @{descriptor})"));
+    }
+    let _ = writeln!(out, "define internal void @nts_com_register_classes() {{\n{}\n  ret void\n}}", registrations.join("\n"));
+    Ok((out, Some("nts_com_register_classes")))
+}
+
+/// One override's adapter, `i32 (ptr face, A...)`: the compiled method
+/// called with the instance and its arguments, and `S_OK`.
+fn adapter(out: &mut String, platform: Platform, name: &str, method: &ForeignMethod, compiled: &Func) -> Result<(), Diagnostic> {
+    // An override may take fewer parameters than its slot is called with, as
+    // TypeScript lets it: the rest are not passed on.
+    if compiled.params.len() > method.signature.parameters.len() {
+        return Err(refuse(compiled, "an override taking more parameters than its slot is called with"));
+    }
+    let mut parameters = Vec::new();
+    let mut arguments = Vec::new();
+    let mut body = String::from("  call void @nts_callback_enter()\n");
+    for (slot, foreign) in method.signature.parameters.iter().enumerate() {
+        if matches!(foreign, Type::Record(_)) {
+            return Err(refuse(compiled, "an override taking a record by value, which only the C backend's adapter receives"));
+        }
+        let from = foreign.abi(platform.abi);
+        let from_ty = ty_of(&from, compiled)?;
+        parameters.push(format!("{} %a{slot}", abi_parameter(foreign)));
+        let Some(to) = compiled.params.get(slot).map(|param| param.ty.clone()) else { continue };
+        let to_ty = ty_of(&to, compiled)?;
+        if slot == 0 {
+            let _ = writeln!(body, "  %p0 = call ptr @nts_com_outer_instance(ptr %a0)");
+            arguments.push(format!("{to_ty} %p0"));
+        } else if from == to {
+            arguments.push(format!("{to_ty} %a{slot}"));
+        } else if to == HirType::Bool {
+            let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));
+            arguments.push(format!("{to_ty} %p{slot}"));
+        } else {
+            let instruction = conversion(&from, &to, compiled)?;
+            let _ = writeln!(body, "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}");
+            arguments.push(format!("{to_ty} %p{slot}"));
+        }
+    }
+    let _ = writeln!(out, "define internal i32 @{name}({}) nounwind {{", parameters.join(", "));
+    out.push_str(&body);
+    let result = ty_of(&compiled.return_type, compiled)?;
+    let _ = writeln!(out, "  call {result} {}({})", symbol(&compiled.name), arguments.join(", "));
+    let _ = writeln!(out, "  call void @nts_callback_leave()\n  ret i32 0\n}}");
+    Ok(())
 }

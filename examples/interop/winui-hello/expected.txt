@@ -1,2 +1,2 @@
-title=nts launched=1 clicks=1
+title=nts launched=1 clicks=1 styled=true
 after

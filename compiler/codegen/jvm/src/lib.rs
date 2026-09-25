@@ -146,7 +146,13 @@ fn foreign_classes_refused(program: &Program) -> Vec<Diagnostic> {
                 .or_else(|| program.funcs.first())?;
             Some(Diagnostic::error(
                 "NTS4002",
-                format!("an Objective-C class the program declares (`{}`), which only an Apple program's runtime registers", class.name),
+                match class.family {
+                    nts_core::hir::native::Family::Com => format!(
+                        "a class the program writes over a composable Windows Runtime class (`{}`), which only a Windows program's runtime composes",
+                        class.name
+                    ),
+                    _ => format!("an Objective-C class the program declares (`{}`), which only an Apple program's runtime registers", class.name),
+                },
                 at.origin.location,
             ))
         })

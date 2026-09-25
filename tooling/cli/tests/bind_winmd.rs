@@ -406,6 +406,25 @@ fn composable_classes_are_constructed_as_themselves() {
     // `Control`'s factory is protected: a control is only ever a subclass.
     let control = &module[module.find("export namespace Control {").expect("no Control namespace")..];
     assert!(!control.split("\n  }").next().unwrap_or("").contains("CreateInstance"), "a protected factory was bound");
+    // A composable class is also a class to extend, as C# extends it: its
+    // factory and `CreateInstance`'s slot, a constructor as visible as the
+    // factory, and an overridable method per slot of each overridable
+    // interface -- its own, and those of the classes it derives from.
+    let class = |name: &str| {
+        let at = module.find(&format!("   * @ntsComposable Windows.UI.Xaml.Controls.{name} ")).unwrap_or_else(|| panic!("no @ntsComposable {name}"));
+        let form = &module[at..];
+        form[..form.find("\n  }").unwrap()].to_owned()
+    };
+    let button = class("Button");
+    assert!(button.contains("Button 80A13C19-843A-451C-8CF5-44C701B0E216 6\n   */\n  export class Button {\n    constructor();"), "{button}");
+    assert!(
+        button.contains("@ntsOverride 5F4C0B10-E38E-4B5D-BE1A-5ED04246A635 6 OnContentChanged\n     */\n    OnContentChanged(oldContent: IInspectable | null, newContent: IInspectable | null): void;"),
+        "{button}"
+    );
+    let control = class("Control");
+    assert!(control.contains("export class Control {\n    protected constructor();"), "{control}");
+    assert!(control.contains("@ntsOverride A09691DF-9824-41FE-B530-B0D8990E64C1 6 OnPointerEntered"), "{control}");
+    assert!(module.contains("export interface Button extends IButton, ButtonInterfaces {}"), "the class form does not carry its instances' methods");
     let _ = std::fs::remove_dir_all(&out);
 }
 

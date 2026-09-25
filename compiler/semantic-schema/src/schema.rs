@@ -39,8 +39,10 @@ use crate::origin::Origin;
 /// binaries has only this number. W2's `vtable`, `hresult` and `factory`
 /// landed at 26 without one, and two lanes' bumps met on a rebase as the
 /// same line and merged into none: whoever lands second takes the next
-/// number, and checks that it did.
-pub const SCHEMA_VERSION: u32 = 29;
+/// number, and checks that it did. 30: `composable` and `overridable`, for a
+/// class written over a composable Windows Runtime class; and GTK's `vfunc`
+/// and `gtype`, which landed at 29 without one.
+pub const SCHEMA_VERSION: u32 = 30;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -815,6 +817,16 @@ pub struct NativeAttributes {
     /// the member's declaration is still in the tree.
     #[serde(default)]
     pub gtype: Option<String>,
+    /// `@ntsComposable Microsoft.UI.Xaml.Application <factory IID> <slot>
+    /// [xaml]`: a composable Windows Runtime class a program may write a class
+    /// over, with the factory whose `CreateInstance(outer, out inner)` at
+    /// `slot` composes one.
+    #[serde(default)]
+    pub composable: Option<String>,
+    /// `@ntsOverride <IID> <slot> <name>`: a method a subclass of a composable
+    /// class may override, answered at `slot` of the interface `IID` names.
+    #[serde(default)]
+    pub overridable: Option<String>,
 }
 
 /// Why a snapshot was rejected.

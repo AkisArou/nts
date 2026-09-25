@@ -299,10 +299,18 @@ fn blocks(program: &Program) -> String {
     text
 }
 
-/// A native ABI type as an LLVM parameter type, with the extension C gives it.
+/// A native ABI type as an LLVM result type, with the extension C gives it:
+/// `zeroext i1`, the attribute before the type, as a result is written.
 pub(super) fn abi(ty: &Type) -> String {
     let representation = ty.representation();
     format!("{}{}", extension(&representation), bare(&representation))
+}
+
+/// The same as a parameter or an argument: `i1 zeroext`, the attribute after
+/// the type. The result's order there is not IR.
+pub(super) fn abi_parameter(ty: &Type) -> String {
+    let representation = ty.representation();
+    format!("{} {}", bare(&representation), extension(&representation)).trim_end().to_owned()
 }
 
 pub(super) fn bare(ty: &HirType) -> &'static str {
@@ -332,7 +340,7 @@ fn adapter(text: &mut String, signature: &FnPointer, counted: bool) {
     let mut types = Vec::new();
     let mut arguments = Vec::new();
     for (at, ty) in signature.parameters.iter().enumerate() {
-        let spelled = abi(ty);
+        let spelled = abi_parameter(ty);
         parameters.push(format!("{spelled} %a{at}"));
         types.push(bare(&ty.representation()).to_owned());
         arguments.push(format!("{spelled} %a{at}"));
