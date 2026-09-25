@@ -7,7 +7,8 @@
 //   aggregates XAML's `Application` inside it. `new App()` in the
 //   initialization callback `Application.Start` calls is that composition;
 //   `this` in `OnLaunched` is the application, so `this.Exit()` and
-//   `this.get_Resources()` are its own methods.
+//   `this.get_Resources()` are its own methods, and `super.OnLaunched(args)`
+//   is `Application`'s own, past the override.
 // - The metadata provider is WinUI's own, forwarded to: with it, and
 //   `XamlControlsResources` merged into the application's resources, a
 //   `Button` gets its template, so its laid-out width is not zero.
@@ -45,7 +46,8 @@ class PressButton extends Button {
 }
 
 class App extends Application {
-  OnLaunched(_args: ILaunchActivatedEventArgs | null): void {
+  OnLaunched(args: ILaunchActivatedEventArgs | null): void {
+    super.OnLaunched(args);
     launched += 1;
     this.get_Resources().get_MergedDictionaries().Append(XamlControlsResources.create().as_IResourceDictionary());
     const window = Window.CreateInstance();

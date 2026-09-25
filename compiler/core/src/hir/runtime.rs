@@ -105,6 +105,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_closure_notify", &[], None),
     ("nts_closure_unlend", &[None], None),
     ("nts_closure_unlend_once", &[None], None),
+    ("nts_com_base", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_com_carry", &[None, None, Some(HirType::Int { bits: 64, signed: false }), None, Some(HirType::Int { bits: 32, signed: false }), None], None),
     ("nts_com_compose_named", &[None], None),
     ("nts_com_delegate", &[None, None, None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),

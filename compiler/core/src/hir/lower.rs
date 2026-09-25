@@ -11741,6 +11741,11 @@ struct FuncBuilder<'a> {
     /// program's class it is written in: the message it builds goes to the
     /// superclass's implementation (`native::Send::super_of`).
     super_send: Option<String>,
+    /// While a `super.m()` in a class over a composable Windows Runtime class
+    /// is lowered, the slot and name of `m` in its overridable interface: the
+    /// call goes through that slot of the base's implementation, which is the
+    /// receiver.
+    super_slot: Option<(u32, String)>,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -11958,6 +11963,7 @@ impl<'a> FuncBuilder<'a> {
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
             super_send: None,
+            super_slot: None,
         }
     }
 
@@ -43214,6 +43220,11 @@ impl<'a> FuncBuilder<'a> {
     /// What a declaration's `@ntsHresult` says, if it has one: plain,
     /// `composable`, or `out`.
     fn hresult_shape(&self, call: NodeId, declaration: Option<NodeId>) -> Result<Option<super::native::Hresult>, Diagnostic> {
+        // An overridable method answers an HRESULT as every slot does, and
+        // its binding says so only by being `@ntsOverride`.
+        if self.super_slot.is_some() {
+            return Ok(Some(super::native::Hresult::Plain));
+        }
         let Some(shape) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.hresult.as_deref()) else {
             return Ok(None);
         };
@@ -43869,7 +43880,10 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decl) = declaration {
             native.frameworks = self.declared_names(call, decl, LinkTag::FRAMEWORK)?;
             native.libraries = self.declared_names(call, decl, LinkTag::LIBRARY)?;
-            native.vtable = self.vtable_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?;
+            native.vtable = match &self.super_slot {
+                Some((slot, method)) => Some(super::native::Vtable { slot: *slot, method: method.clone(), factory: None }),
+                None => self.vtable_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?,
+            };
         }
         if let Some(decl) = declaration
             && let Some(selector) = selector
@@ -48865,6 +48879,13 @@ impl<'a> FuncBuilder<'a> {
             .this
             .ok_or_else(|| self.unsupported(id, "`super` outside a method"))?;
 
+        // A composable Windows Runtime class's overridable method:
+        // `super.OnGotFocus(e)`, through its slot of the base's own
+        // implementation of the interface, past this class's override.
+        if let Some((method, tag)) = self.overridable_target(id, member) {
+            return self.lower_com_super(id, receiver, method, &tag, arguments);
+        }
+
         // A superclass a binding declares, an Objective-C class: `[super m]`,
         // the message sent past this class's own implementation.
         if member != "constructor"
@@ -49064,6 +49085,53 @@ impl<'a> FuncBuilder<'a> {
         let sent = self.lower_native_method_call(id, (receiver, object), method, member, arguments);
         self.super_send = None;
         sent
+    }
+
+    /// The method a `super.m(...)` calls and its `@ntsOverride` tag, where
+    /// the base is a composable Windows Runtime class declaring `m`
+    /// overridable.
+    fn overridable_target(&self, id: NodeId, member: &str) -> Option<((NodeId, nts_semantic_schema::SignatureId), String)> {
+        if member == "constructor" {
+            return None;
+        }
+        let target = self.snapshot.call_targets.get(&id).copied()?;
+        let declaration = target.callee?;
+        let tag = self.node(declaration).native.as_ref()?.overridable.clone()?;
+        Some(((declaration, target.signature), tag))
+    }
+
+    /// `super.m(...)` in a class over a composable Windows Runtime class,
+    /// where the base declares `m` overridable (`@ntsOverride <IID> <slot>
+    /// <name>`): the base's own implementation of the interface, from the
+    /// runtime (`nts_com_base`), called through the slot as any Windows
+    /// Runtime method is.
+    fn lower_com_super(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        method: (NodeId, nts_semantic_schema::SignatureId),
+        tag: &str,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let [object, member] = self.children(self.children(id).first().copied().unwrap_or(id))[..] else {
+            return Err(self.unsupported(id, "a `super` call of unexpected shape"));
+        };
+        let words: Vec<&str> = tag.split_whitespace().collect();
+        let [iid, slot, name, ..] = words.as_slice() else {
+            return Err(self.unsupported(id, "@ntsOverride names the interface ID, the slot and the method, as in `@ntsOverride A33E81EF-C665-503B-8827-D27EF1720A06 6 OnLaunched`"));
+        };
+        let slot: u32 = slot.parse().map_err(|_| self.unsupported(id, "@ntsOverride naming a slot that is not a number"))?;
+        if !super::native::is_interface_id(iid) {
+            return Err(self.unsupported(id, "@ntsOverride with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
+        }
+        let origin = self.origin(id);
+        let [low, high] = self.iid_arguments(iid, &origin);
+        let ty = self.values[receiver.0 as usize].ty.clone();
+        let base = self.runtime_call("nts_com_base", vec![receiver, low, high], ty, origin);
+        self.super_slot = Some((slot, (*name).to_owned()));
+        let called = self.lower_native_method_call(id, (base, object), method, member, arguments);
+        self.super_slot = None;
+        called
     }
 
     /// The name of the class a class extends.

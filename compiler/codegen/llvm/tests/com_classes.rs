@@ -187,6 +187,41 @@ fn a_delegate_taking_a_boolean_is_ir() {
     assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
 }
 
+/// `super.OnLaunched(args)` in an override is the base's own implementation
+/// of the interface, from the runtime (`nts_com_base`, which answers the
+/// program's reference), called through the override's slot with its
+/// HRESULT checked -- not a call of the program's own method, which would
+/// recurse.
+#[test]
+fn super_in_an_override_calls_the_base_through_its_slot() {
+    let source = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\nclass App extends Application {\n  OnLaunched(args: IInspectable | null): void {\n    super.OnLaunched(args);\n  }\n}\nexport function start(): void {\n  new App();\n}\n";
+    let Some((dir, prepared)) = prepare("super", source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    let start = text.lines().position(|line| line.contains(" App__OnLaunched(") && line.ends_with('{')).unwrap_or_else(|| panic!("no definition:\n{text}"));
+    let body = text.lines().skip(start + 1).take_while(|line| *line != "}").collect::<Vec<_>>().join("\n");
+    assert!(body.contains("nts_com_base("), "the base's implementation is not asked for:\n{body}");
+    assert!(body.contains("[6])("), "no call through slot 6:\n{body}");
+    assert!(body.contains("nts_hresult_message("), "the HRESULT is not checked:\n{body}");
+    assert!(!body.contains("App__OnLaunched("), "the override calls itself:\n{body}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("call ptr @nts_com_base("), "{}", llvm.text);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
 /// The C with mingw's headers, checked by clang: `-fsyntax-only` is ignored
 /// by `zig cc`, so clang itself.
 fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {

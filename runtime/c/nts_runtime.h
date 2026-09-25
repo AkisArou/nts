@@ -1936,6 +1936,9 @@ void *nts_com_outer_instance(void *face);
 /* The base class's own implementation of the interface `face` answers, which
  * a slot the class does not override calls. Borrowed. */
 void *nts_com_outer_base(void *face);
+/* `super.OnGotFocus(e)`: the base class's own implementation of the
+ * interface the IID names, on the object `instance` is. The caller's (+1). */
+void *nts_com_base(void *instance, uint64_t iid_low, uint64_t iid_high);
 /* Slots 0 to 5 of every table an `NtsComClass` names: `IUnknown`'s and
  * `IInspectable`'s, answered by the outer object. */
 int32_t nts_com_outer_query(void *face, const void *iid, void **out);

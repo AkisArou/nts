@@ -594,6 +594,31 @@ void *nts_com_outer_base(void *face) {
   return at->base;
 }
 
+void *nts_com_base(void *instance, uint64_t iid_low, uint64_t iid_high) {
+  IID iid = nts_iid(iid_low, iid_high);
+  void *answer = 0;
+  typedef HRESULT(STDMETHODCALLTYPE * Query)(void *, const IID *, void **);
+  typedef ULONG(STDMETHODCALLTYPE * Count)(void *);
+  HRESULT hr = ((Query)(*(void ***)instance)[0])(instance, &iid, &answer);
+  if (FAILED(hr) || answer == 0) {
+    fprintf(stderr,
+            "nts: `super` names an interface the object does not implement "
+            "(0x%08lx)\n",
+            (unsigned long)hr);
+    abort();
+  }
+  /* A class overriding the interface answers its own face, with the base's
+   * implementation behind it; one overriding none of it, the inner's own,
+   * which is the base's. Either reference counts on the outer object. */
+  if ((*(void ***)answer)[0] != (void *)nts_com_outer_query) {
+    return answer;
+  }
+  void *base = nts_com_outer_base(answer);
+  ((Count)(*(void ***)base)[1])(base);
+  ((Count)(*(void ***)answer)[2])(answer);
+  return base;
+}
+
 /* {AF86E2E0-B12D-4C6A-9C5A-D7AA65101E90} and IXamlMetadataProvider's
  * {A96251F0-2214-5D53-8746-CE99A2593CD7}. */
 static const IID nts_iid_inspectable = {

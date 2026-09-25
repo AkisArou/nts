@@ -246,4 +246,6 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 101 for `nts_com_compose_named`, `new App()` of a class written over a
 /// composable Windows Runtime class, which only a Windows runtime composes.
-const REFUSED_FLOOR: usize = 101;
+///
+/// 102 for `nts_com_base`, `super.OnGotFocus(e)` in such a class.
+const REFUSED_FLOOR: usize = 102;
