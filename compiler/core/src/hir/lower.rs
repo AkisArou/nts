@@ -10419,8 +10419,19 @@ fn representation_within(
 /// it has to be a value, and `Void` is not one. `var g;` read before anything
 /// writes it refused for want of a zero.
 ///
-/// A result and a parameter stay excluded, and that is still the right line:
-/// nothing reads them back.
+/// **A result stays excluded and a parameter does not, and the reason is not a
+/// read.** "Nothing reads them back" is true of both, and irrelevant to a
+/// parameter: the caller passes it *positionally*, so it must have a width
+/// whether or not the body looks at it. C spells a zero-width one `void v2`,
+/// which is not C -- and that is how it was found, in `fs`'s addon, once a
+/// closure inside a generic function's copy could be lowered at all and met
+/// `(...args: [unknown, T])` with `T` bound to `void`. A result genuinely can be
+/// absent from a signature; a parameter cannot.
+///
+/// So the slot positions are five, and the fifth is asked **twice** -- at
+/// `lower_param` and at `Lowering::parameter_representation`, which is the call
+/// site's answer to the same question. Both, or neither: one side alone makes an
+/// erased value meet a `Void` and refuse.
 fn in_a_slot(representation: HirType) -> HirType {
     if matches!(representation, HirType::Void) {
         HirType::Erased
@@ -16739,7 +16750,14 @@ impl<'a> FuncBuilder<'a> {
         {
             return Some(pointer);
         }
-        self.represent(ty)
+        // **`in_a_slot`, for the same reason the declaration applies it**: a
+        // parameter has to have a width because the caller passes it
+        // positionally, and the two sides of a call are one calling convention.
+        // Without it here, `run(1, value)` inside `request<void>` coerced an
+        // erased value to the `Void` the signature's type id still said, and
+        // refused as `an erased value where a concrete representation is
+        // wanted` -- one derivation of a convention disagreeing with the other.
+        self.represent(ty).map(in_a_slot)
     }
 
     /// `delete o.x`, which TypeScript permits only where `x` is optional.
@@ -19833,38 +19851,6 @@ impl<'a> FuncBuilder<'a> {
         element.or(Some(HirType::Erased))
     }
 
-    /// Refuse a parameter whose representation has no width.
-    ///
-    /// **A parameter with no width is not a parameter.** `undefined` and `void`
-    /// both represent as [`HirType::Void`], which is the right answer for a
-    /// *result* -- the function returns nothing -- and cannot be a parameter: C
-    /// spells it `void v2`, which is not C, and no backend has anything to pass.
-    ///
-    /// It arrives through a **substitution** rather than an annotation, which is
-    /// why it went unseen: `fs`'s async callback is `(...args: [unknown, T])` and
-    /// `T` is `void` for a request that answers nothing, so a copy of it takes a
-    /// position the declaration wrote as a type parameter. A written `x:
-    /// undefined` is refused earlier and elsewhere, at the call, as `an erased
-    /// value where a concrete representation is wanted`.
-    ///
-    /// Refused rather than widened to an erased `undefined`. A caller could pass
-    /// one and the body would ignore it, but the arity is also written into the
-    /// signature layout a closure's table is typed by, and two derivations of one
-    /// calling convention that disagree is the failure this area is most careful
-    /// about. The refusal is also what this shape *had*, until a closure inside a
-    /// generic function's copy could be lowered at all -- before that it never
-    /// reached a parameter list, and the first program to reach one emitted `void
-    /// v2` into `fs`'s addon, which is the `uncompilable C` category.
-    ///
-    /// One sentence for the two sites that can produce it: an ordinary parameter
-    /// and one position of a fixed-arity rest.
-    fn no_width_parameter(&self, at: NodeId) -> Diagnostic {
-        self.unsupported(
-            at,
-            "a parameter of no width, which is what `void` and `undefined` represent as -- a call has nothing to pass for it",
-        )
-    }
-
     /// A rest parameter of fixed arity, as one parameter per position.
     ///
     /// See the comment at the call in [`Self::lower_param`] for why the
@@ -19904,9 +19890,7 @@ impl<'a> FuncBuilder<'a> {
             let ty = self
                 .represent(*position)
                 .ok_or_else(|| self.unrepresentable(name_node, "a rest parameter position"))?;
-            if matches!(ty, HirType::Void) {
-                return Err(self.no_width_parameter(name_node));
-            }
+            let ty = in_a_slot(ty);
             self.materialize(name_node, &ty)?;
             // Only where the declaration had nothing to say. Identical
             // positions keep their own type -- `[number, number]` stays an
@@ -20134,9 +20118,9 @@ impl<'a> FuncBuilder<'a> {
         // `Named`, which is the distinction the first attempt got wrong by
         // substituting the type. See [`Structural`].
         let ty = self.retyped.get(&index).cloned().unwrap_or(ty);
-        if matches!(ty, HirType::Void) {
-            return Err(self.no_width_parameter(name_node));
-        }
+        // **A parameter is a slot after all**, and the reason is the calling
+        // convention rather than a read. See [`in_a_slot`].
+        let ty = in_a_slot(ty);
         if let Some(lent) = self.lent_hstring_param(name_node, index, &name, &ty) {
             return Ok(vec![lent]);
         }
