@@ -373,8 +373,12 @@ correctness does not depend on arm64 running by luck.
        a label now carries the role its type has (`Role::Label { inner }`).
        - `bind-objc` writes `NSView[]`, `string[]`, and `NSObject[]` for an
          untyped `NSArray`. Collection skips dropped from 46 to 10.
-       - A nullable array *result* is still skipped, because Swift reads it
-         as `[T]?`.
+       - Swift's `[T]?` is `T[] | null`, both ways. A nil `NSArray` result
+         is `null` and is neither counted nor filled. A `null` argument is sent
+         as nil. `macos-classes` reads `subpaths(atPath:)` of a missing path
+         as `null`, and sends `NSPredicate(format:argumentArray:)` both a
+         `null` and an array. The AppKit binding gains `childWindows` and
+         five more members, and the witness has all six.
        - `macos-classes` checks all four directions against ARC, and
          `macos-window` reads `window.contentView?.subviews.length` in the
          running window.

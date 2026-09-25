@@ -41540,6 +41540,23 @@ impl<'a> FuncBuilder<'a> {
         if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
             return Err(self.unsupported(id, "an `NSArray` result the program does not read as an array"));
         }
+        // Swift's `[T]?`: a nil `NSArray` is `null`, and only one that is
+        // there is counted and filled.
+        let nil = self.push(OpKind::ConstNull, self.values[returned.0 as usize].ty.clone(), origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: returned, rhs: nil }, HirType::Bool, origin.clone());
+        let (none_block, some_block, merge) = (self.new_block(), self.new_block(), self.new_block());
+        let result = self.push_block_param(merge, ty.clone(), origin.clone());
+        self.terminate(Terminator::Branch {
+            cond: absent,
+            then_target: none_block,
+            then_args: Vec::new(),
+            else_target: some_block,
+            else_args: Vec::new(),
+        });
+        self.switch_to(none_block);
+        let none = self.push(OpKind::ConstNull, ty.clone(), origin.clone());
+        self.terminate(Terminator::Jump { target: merge, args: vec![none] });
+        self.switch_to(some_block);
         let array = Type::Pointer(Pointee::Opaque(Handle::objc("NSArray")));
         let count = self.send_bridge(bridge_send("count", None, vec![array], Type::Scalar(Scalar::ULong)), vec![returned], &origin);
         let length = self.coerce(count, &HirType::NUMBER, id)?;
@@ -41549,7 +41566,9 @@ impl<'a> FuncBuilder<'a> {
             Bridged::String => "nts_array_fill_strings_from_nsarray",
         };
         self.runtime_call(fill, vec![out, returned], HirType::Void, origin);
-        Ok(out)
+        self.terminate(Terminator::Jump { target: merge, args: vec![out] });
+        self.switch_to(merge);
+        Ok(result)
     }
 
     /// The string a native function returned: C's `const char *`, copied,

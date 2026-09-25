@@ -1751,6 +1751,7 @@ declare module "objc:AppKit" {
     get attachedSheet(): NSWindow | null;
     get isSheet(): boolean;
     get sheetParent(): NSWindow | null;
+    get childWindows(): NSWindow[] | null;
     /** @ntsSelector parentWindow */
     get parent(): NSWindow | null;
     /** @ntsSet setParentWindow: */
@@ -1782,7 +1783,7 @@ declare module "objc:AppKit" {
     set tabbingMode(value: CEnum<NSWindow.TabbingMode, Int>);
     get tabbingIdentifier(): string;
     set tabbingIdentifier(value: string);
-    get tabbedWindows(): NSWindow[];
+    get tabbedWindows(): NSWindow[] | null;
     get tab(): NSWindowTab;
     get tabGroup(): NSWindowTabGroup | null;
     get windowTitlebarLayoutDirection(): CEnum<NSUserInterfaceLayoutDirection, Int>;
@@ -1975,6 +1976,8 @@ declare module "objc:AppKit" {
     removeChildWindow(childWin: NSWindow): void;
     /** @ntsSelector canRepresentDisplayGamut: */
     canRepresent(displayGamut: CEnum<NSDisplayGamut, Int>): boolean;
+    /** @ntsSelector windowNumbersWithOptions: */
+    static windowNumbers(labels: { options: CEnum<NSWindow.NumberListOptions | 0, UInt> }): NSNumber[] | null;
     /** @ntsSelector windowNumberAtPoint:belowWindowWithWindowNumber: */
     static windowNumber(labels: { at: ByValue<CGPoint>; belowWindowWithWindowNumber: Int }): Int;
     /** @ntsSelector +windowWithContentViewController: */
@@ -2048,7 +2051,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector setAnchorAttribute:forOrientation: */
     setAnchorAttribute(attr: CEnum<NSLayoutConstraint.Attribute, Int>, labels: { for: CEnum<NSLayoutConstraint.Orientation, Int> }): void;
     /** @ntsSelector visualizeConstraints: */
-    visualizeConstraints(constraints: NSLayoutConstraint[]): void;
+    visualizeConstraints(constraints: NSLayoutConstraint[] | null): void;
     /** @ntsSelector setIsMiniaturized: */
     setIsMiniaturized(flag: boolean): void;
     /** @ntsSelector setIsVisible: */
@@ -2072,7 +2075,6 @@ declare module "objc:AppKit" {
     // Not bound, each for the reason given:
     //   @property cascadingReferenceFrame: introduced in macOS 15.0
     //   @property deviceDescription: a collection, `NSDictionary`, which crosses as an object when it is bound
-    //   @property childWindows: a nullable array, which Swift reads as `[T]?`
     //   @property hasActiveWindowSharingSession: introduced in macOS 13.3
     //   @property flushWindowDisabled: deprecated in macOS 10.14
     //   @property autodisplay: deprecated in macOS 10.14
@@ -2082,7 +2084,6 @@ declare module "objc:AppKit" {
     //   @property backingLocation: deprecated in macOS 10.14
     //   @property windowRef: a `void *`
     //   @property drawers: deprecated in macOS 10.13
-    //   +windowNumbersWithOptions:: a nullable array, which Swift reads as `[T]?`
     //   -transferWindowSharingToWindow:completionHandler:: introduced in macOS 13.3
     //   -requestSharingOfWindow:completionHandler:: introduced in macOS 15.0
     //   -requestSharingOfWindowUsingPreview:title:completionHandler:: introduced in macOS 15.0
@@ -2318,6 +2319,7 @@ declare module "objc:AppKit" {
     get preferredLocalizations(): string[];
     get localizations(): string[];
     get developmentLocalization(): string | null;
+    get executableArchitectures(): NSNumber[] | null;
     /** @ntsSelector initWithPath: */
     constructor(labels: { path: string });
     /** @ntsSelector initWithURL: */
@@ -2346,12 +2348,18 @@ declare module "objc:AppKit" {
     path(labels: { forAuxiliaryExecutable: string }): string | null;
     /** @ntsSelector URLForResource:withExtension:subdirectory:inBundleWithURL: */
     static url(labels: { forResource: string | null; withExtension: string | null; subdirectory: string | null; in: NSURL }): NSURL | null;
+    /** @ntsSelector URLsForResourcesWithExtension:subdirectory:inBundleWithURL: */
+    static urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null; in: NSURL }): NSURL[] | null;
     /** @ntsSelector URLForResource:withExtension: */
     url(labels: { forResource: string | null; withExtension: string | null }): NSURL | null;
     /** @ntsSelector URLForResource:withExtension:subdirectory: */
     url(labels: { forResource: string | null; withExtension: string | null; subdirectory: string | null }): NSURL | null;
     /** @ntsSelector URLForResource:withExtension:subdirectory:localization: */
     url(labels: { forResource: string | null; withExtension: string | null; subdirectory: string | null; localization: string | null }): NSURL | null;
+    /** @ntsSelector URLsForResourcesWithExtension:subdirectory: */
+    urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null }): NSURL[] | null;
+    /** @ntsSelector URLsForResourcesWithExtension:subdirectory:localization: */
+    urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null; localization: string | null }): NSURL[] | null;
     /** @ntsSelector pathForResource:ofType:inDirectory: */
     static path(labels: { forResource: string | null; ofType: string | null; inDirectory: string }): string | null;
     /** @ntsSelector pathsForResourcesOfType:inDirectory: */
@@ -2375,7 +2383,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector preferredLocalizationsFromArray: */
     static preferredLocalizations(labels: { from: string[] }): string[];
     /** @ntsSelector preferredLocalizationsFromArray:forPreferences: */
-    static preferredLocalizations(labels: { from: string[]; forPreferences: string[] }): string[];
+    static preferredLocalizations(labels: { from: string[]; forPreferences: string[] | null }): string[];
     /** @ntsSelector init */
     constructor();
     /** @ntsSelector self */
@@ -2383,10 +2391,6 @@ declare module "objc:AppKit" {
     // Not bound, each for the reason given:
     //   @property infoDictionary: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   @property localizedInfoDictionary: a collection, `NSDictionary`, which crosses as an object when it is bound
-    //   @property executableArchitectures: a nullable array, which Swift reads as `[T]?`
-    //   +URLsForResourcesWithExtension:subdirectory:inBundleWithURL:: a nullable array, which Swift reads as `[T]?`
-    //   -URLsForResourcesWithExtension:subdirectory:: a nullable array, which Swift reads as `[T]?`
-    //   -URLsForResourcesWithExtension:subdirectory:localization:: a nullable array, which Swift reads as `[T]?`
   }
 
   /** @ntsClass NSControl */
@@ -2978,6 +2982,10 @@ declare module "objc:AppKit" {
   /** Named by a signature here, and not bound: its ancestors' members only.
    * @ntsClass NSNotification */
   export class NSNotification extends NSObject {}
+
+  /** Named by a signature here, and not bound: its ancestors' members only.
+   * @ntsClass NSNumber */
+  export class NSNumber extends NSObject {}
 
   /** Named by a signature here, and not bound: its ancestors' members only.
    * @ntsClass NSOperationQueue */

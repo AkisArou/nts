@@ -91,6 +91,22 @@ declare module "objc:Foundation" {
      * @ntsThrows error nts_nserror_message
      */
     contentsOfDirectory(labels: { atPath: string }): string[];
+    /**
+     * Swift's `subpaths(atPath:) -> [String]?`: nil, so `null`, for a path
+     * that is not there.
+     * @ntsSelector subpathsAtPath:
+     */
+    subpaths(labels: { atPath: string }): string[] | null;
+  }
+
+  /** @ntsClass NSPredicate */
+  export class NSPredicate extends NSObject {
+    /**
+     * Swift's `init(format:argumentArray:)`, whose `[Any]?` takes nil.
+     * @ntsSelector +predicateWithFormat:argumentArray:
+     */
+    constructor(labels: { format: string; argumentArray: NSObject[] | null });
+    readonly predicateFormat: string;
   }
 
   /** @ntsClass NSData */

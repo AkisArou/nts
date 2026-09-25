@@ -1221,10 +1221,8 @@ impl<'a> Model<'a> {
             // out of one, its elements objects or strings. Not a mutable one,
             // which Swift keeps as the object it is.
             if base == "NSArray" && position != Position::Block {
-                if position == Position::Result && written.contains("_Nullable") {
-                    return Err("a nullable array, which Swift reads as `[T]?`".to_owned());
-                }
-                return self.array_element(pointee).map(|element| format!("{element}[]"));
+                // Swift's `[T]?` where the header says `_Nullable`.
+                return self.array_element(pointee).map(|element| or_null(format!("{element}[]")));
             }
             if position != Position::Block
                 && matches!(base, "NSMutableArray" | "NSDictionary" | "NSMutableDictionary" | "NSSet" | "NSMutableSet" | "NSOrderedSet")
@@ -1387,7 +1385,7 @@ impl<'a> Model<'a> {
 fn optional_as_swift(spelled: String, optional: bool) -> String {
     let object = !matches!(spelled.as_str(), "boolean" | "void") && !spelled.starts_with("CEnum<") && !spelled.starts_with("ByValue<");
     let numeric = spelled.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && spelled.len() <= 7 && !spelled.contains('<');
-    if object && !numeric && !spelled.ends_with(" | null") && !spelled.ends_with("[]") && optional {
+    if object && !numeric && !spelled.ends_with(" | null") && optional {
         format!("{spelled} | null")
     } else {
         spelled
@@ -2020,7 +2018,8 @@ NS_ASSUME_NONNULL_END
             // Swift's `[T]`: an `NSArray` of strings or of a class's objects.
             "    /** @ntsSelector names */\n    names(): string[];",
             "    /** @ntsSelector adopt: */\n    adopt(shapes: Shape[]): void;",
-            "-maybe: a nullable array, which Swift reads as `[T]?`",
+            // Swift's `[T]?`: the array, or `null` for a nil one.
+            "    /** @ntsSelector maybe */\n    maybe(): NSObject[] | null;",
             // A struct passed by value is declared, in Swift's numbers.
             "export type CGPoint = Struct<{ x: Double; y: Double }, \"CGPoint\">;",
             // And what is not bound is said, with why.

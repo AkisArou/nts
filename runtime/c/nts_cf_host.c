@@ -206,7 +206,12 @@ NtsString *nts_string_of_nsstring(const void *object) {
   return out;
 }
 
+/* Each takes `null` too, Swift's nil for an `[T]?` argument, and makes no
+ * array of it. */
 void *nts_nsarray_of_objects(const NtsArray *array) {
+  if (!array) {
+    return NULL;
+  }
   /* The array's own element block is the C array of objects CFArrayCreate
    * takes, and its callbacks retain each for the NSArray. */
   return (void *)CFArrayCreate(NULL, (const void **)NTS_ITEMS(array, void *),
@@ -215,6 +220,9 @@ void *nts_nsarray_of_objects(const NtsArray *array) {
 }
 
 void *nts_nsarray_of_strings(const NtsArray *array) {
+  if (!array) {
+    return NULL;
+  }
   uint32_t count = array->header.length;
   void *small[64];
   void **strings = count <= 64 ? small : malloc((size_t)count * sizeof(void *));

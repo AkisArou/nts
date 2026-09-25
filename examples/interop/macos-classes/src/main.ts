@@ -8,6 +8,7 @@ import {
   NSNumber,
   NSObject,
   NSOperation,
+  NSPredicate,
   NSProcessInfo,
   NSString,
   XMLParser,
@@ -167,6 +168,15 @@ function main(): void {
   } catch (error) {
     report(`thrown ${(error as Error).message}`);
   }
+  // Swift's `[String]?`: a nil `NSArray` is `null`, and one that is there is
+  // read as an array.
+  const missing = FileManager.default.subpaths({ atPath: "/nts-no-such-directory" });
+  const present = FileManager.default.subpaths({ atPath: "/System/Library/Frameworks/AppKit.framework" });
+  report(`subpaths ${missing === null} ${present !== null && present.includes("Versions")}`);
+  // And `[Any]?` at a message: `null` is sent as nil.
+  const always = new NSPredicate({ format: "TRUEPREDICATE", argumentArray: null });
+  const three = new NSPredicate({ format: "SELF == %@", argumentArray: [new NSNumber(3)] });
+  report(`predicates ${always.predicateFormat} ${three.predicateFormat}`);
 
   report(`parsed ${parsed()}`);
   // `dealloc` gave the fields back: as many of the program's objects are

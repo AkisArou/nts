@@ -2714,8 +2714,19 @@ fn c_parameter(
 /// a `T[]` of a class a binding declares, or a `string[]`. Only a message
 /// takes or returns one; a C function given one is refused where its callee is
 /// built. An element that may be null is not one: an `NSArray` holds no nil.
+/// The array itself may be: `T[] | null` is Swift's `[T]?`, whose `null` is a
+/// nil `NSArray` both ways.
 fn bridged_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
-    let TypeKind::Array(element) = snapshot.types.get(ty.0 as usize)?.kind else { return None };
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let ty = match kind(ty)? {
+        TypeKind::Union(members) => match members.as_slice() {
+            [a, b] if matches!(kind(*a), Some(TypeKind::Null)) => *b,
+            [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
+            _ => return None,
+        },
+        _ => ty,
+    };
+    let TypeKind::Array(element) = *kind(ty)? else { return None };
     if matches!(snapshot.types.get(element.0 as usize)?.kind, TypeKind::String) {
         return Some(Bridged::String);
     }
