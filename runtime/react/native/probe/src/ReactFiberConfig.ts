@@ -13,8 +13,7 @@ export * from "react-reconciler/ReactFiberConfigWithNoSingletons.ts";
 export * from "react-reconciler/ReactFiberConfigWithNoTestSelectors.ts";
 export * from "react-reconciler/ReactFiberConfigWithNoViewTransition.ts";
 
-import { createContext } from "react";
-import type { ReactContext } from "shared/ReactTypes.ts";
+import { ReactContext } from "shared/ReactContext.ts";
 
 export type Type = string;
 export type Props = { [key: string]: unknown };
@@ -103,7 +102,9 @@ export const supportsMutation = true;
 export const noTimeout: NoTimeout = -1;
 export const NotPendingTransition: TransitionStatus = null;
 // The context `useFormStatus`-style hooks read the host transition from.
-export const HostTransitionContext: ReactContext<TransitionStatus> = createContext<TransitionStatus>(NotPendingTransition);
+// Made directly rather than by `createContext`: a host config sits below the
+// `react` package, and evaluates before it.
+export const HostTransitionContext = new ReactContext<TransitionStatus>(NotPendingTransition);
 
 // Update priorities, as the host tracks them for events.
 const NoEventPriority = 0;
