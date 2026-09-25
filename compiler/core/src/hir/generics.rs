@@ -465,6 +465,91 @@ pub(super) fn declared_signature(
 /// stands opposite it, and an array matches an array. Anything else contributes
 /// nothing, which leaves the type parameter unbound and the call refused —
 /// wrong only in being conservative.
+/// [`unify`]'s union arm, extracted to keep that function under the line
+/// limit. Every word of the argument is in the comments below.
+fn unify_through_a_union(
+    snapshot: &SemanticSnapshot,
+    members: &[TypeId],
+    actual_id: TypeId,
+    into: &mut Substitution,
+    sources: &mut Sources,
+    deferred: &mut Sources,
+    depth: u32,
+) {
+    {
+        // **A union against a union is *paired*, not absorbed**, and this is what
+        // the arm below gets wrong on its own.
+        //
+        // The checker resolves `outer(start)` with `start: number` to a parameter
+        // type `(() => number) | number` -- a union too. Unifying each generic
+        // member against the *whole* actual union then binds the bare `S` member
+        // to that union, whose representation is `Erased`: one member binds,
+        // nothing disagrees, and `S = erased`. So `outer<erased>` was made where
+        // `outer<f64>` was meant, and React's `useState<erased>` is the same
+        // answer in the same place.
+        //
+        // The rule is TypeScript's: **subtract, then pair.** Drop the members both
+        // sides hold identically (`null` against `null`); pair the members whose
+        // *kind* is unique on each side, so `() => S` meets `() => number` and the
+        // signature arm binds `S = number`; and unify what is left one-to-one.
+        //
+        // **Never by position.** Union member order comes from the checker, so a
+        // positional pairing would bind `S` to whichever member came first -- a
+        // wrong copy rather than a missing one, which is the trade this function
+        // refuses everywhere else.
+        if let Some(TypeKind::Union(theirs)) =
+            snapshot.types.get(actual_id.0 as usize).map(|record| &record.kind)
+        {
+            let (ours, theirs) = (members.to_vec(), theirs.clone());
+            let mut left: Vec<TypeId> = ours.iter().copied().filter(|m| !theirs.contains(m)).collect();
+            let mut right: Vec<TypeId> = theirs.iter().copied().filter(|m| !ours.contains(m)).collect();
+            // A member whose kind only one member on each side has: the function
+            // case, which is the one React's hooks need.
+            let is_function = |ty: &TypeId| {
+                matches!(
+                    snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+                    Some(TypeKind::Function(_))
+                )
+            };
+            if left.iter().filter(|m| is_function(m)).count() == 1
+                && right.iter().filter(|m| is_function(m)).count() == 1
+                && let Some(ours) = left.iter().copied().find(is_function)
+                && let Some(theirs) = right.iter().copied().find(is_function)
+            {
+                unify(snapshot, ours, theirs, into, sources, deferred, depth + 1);
+                left.retain(|m| !is_function(m));
+                right.retain(|m| !is_function(m));
+            }
+            if let ([ours], [theirs]) = (left.as_slice(), right.as_slice()) {
+                unify(snapshot, *ours, *theirs, into, sources, deferred, depth + 1);
+            }
+            return;
+        }
+        let mut agreed: Option<(Substitution, Sources, Sources)> = None;
+        let mut disagreed = false;
+        for member in members {
+            let (mut mine, mut source, mut later) =
+                (Substitution::default(), Sources::default(), Sources::default());
+            unify(snapshot, *member, actual_id, &mut mine, &mut source, &mut later, depth + 1);
+            if mine.is_empty() && source.is_empty() && later.is_empty() {
+                continue;
+            }
+            match &agreed {
+                Some((seen, _, _)) if *seen != mine => disagreed = true,
+                Some(_) => {},
+                None => agreed = Some((mine, source, later)),
+            }
+        }
+        if let Some((mine, source, later)) = agreed
+            && !disagreed
+        {
+            into.absorb(mine);
+            sources.extend(source);
+            deferred.extend(later);
+        }
+        }
+}
+
 fn unify(
     snapshot: &SemanticSnapshot,
     generic: TypeId,
@@ -594,28 +679,8 @@ fn unify(
     // answer if that ever stops holding, and it is a guard nobody reaches until
     // then.
     if let TypeKind::Union(members) = &generic.kind {
-        let mut agreed: Option<(Substitution, Sources, Sources)> = None;
-        let mut disagreed = false;
-        for member in members {
-            let (mut mine, mut source, mut later) =
-                (Substitution::default(), Sources::default(), Sources::default());
-            unify(snapshot, *member, actual_id, &mut mine, &mut source, &mut later, depth + 1);
-            if mine.is_empty() && source.is_empty() && later.is_empty() {
-                continue;
-            }
-            match &agreed {
-                Some((seen, _, _)) if *seen != mine => disagreed = true,
-                Some(_) => {},
-                None => agreed = Some((mine, source, later)),
-            }
-        }
-        if let Some((mine, source, later)) = agreed
-            && !disagreed
-        {
-            into.absorb(mine);
-            sources.extend(source);
-            deferred.extend(later);
-        }
+        let members = members.clone();
+        unify_through_a_union(snapshot, &members, actual_id, into, sources, deferred, depth);
         return;
     }
     // **Through a tuple's positions**, which is where the rest of React's hook
