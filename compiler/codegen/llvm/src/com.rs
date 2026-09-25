@@ -135,7 +135,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             return Err(refuse(first, "a class written over a composable class with no factory"));
         };
         for (at, forward) in composition.forwarded.iter().enumerate() {
-            forwarder(&mut out, &forward_symbol(&class.name, at), forward);
+            forwarder(&mut out, platform, &forward_symbol(&class.name, at), forward).map_err(|why| refuse(first, &why))?;
         }
         let answered = interfaces(class);
         let mut rows = Vec::new();
@@ -224,8 +224,30 @@ fn adapter(out: &mut String, platform: Platform, name: &str, method: &ForeignMet
 /// A slot the class leaves to its base: the same slot of the base's own
 /// implementation, called with the same arguments and answering its HRESULT.
 /// No TypeScript runs, so there is no callback to enter.
-fn forwarder(out: &mut String, name: &str, forward: &nts_core::hir::native::Forwarded) {
-    let spelled: Vec<String> = forward.signature.parameters.iter().map(abi_parameter).collect();
+///
+/// A record by value is passed on as Win64 passes it, whatever its fields: in
+/// an integer register when it is 1, 2, 4 or 8 bytes, and otherwise as the
+/// address of the caller's copy. The register's *class* is the whole of it:
+/// a forwarder passes the bits through, so `ptr` would serve for 8 bytes as
+/// `i64` does, and a `Size` spelled by its `float` fields would read XMM
+/// registers the caller never wrote.
+fn forwarder(out: &mut String, platform: Platform, name: &str, forward: &nts_core::hir::native::Forwarded) -> Result<(), String> {
+    let mut spelled = Vec::new();
+    for ty in &forward.signature.parameters {
+        spelled.push(match ty {
+            Type::Record(record) => {
+                if platform.abi != nts_core::hir::native::NativeAbi::Win64 {
+                    return Err("a forwarded record by value off Win64, where the Windows Runtime is not".to_owned());
+                }
+                match super::aggregate::extent_of(record, platform) {
+                    Some((size @ (1 | 2 | 4 | 8), _)) => format!("i{}", size * 8),
+                    Some(_) => "ptr".to_owned(),
+                    None => return Err(format!("a forwarded record, `{}`, whose layout this backend cannot place", record.name)),
+                }
+            }
+            other => abi_parameter(other),
+        });
+    }
     let parameters: Vec<String> = spelled.iter().enumerate().map(|(at, ty)| format!("{ty} %a{at}")).collect();
     let arguments: Vec<String> = std::iter::once("ptr %base".to_owned())
         .chain(spelled.iter().enumerate().skip(1).map(|(at, ty)| format!("{ty} %a{at}")))
@@ -237,4 +259,5 @@ fn forwarder(out: &mut String, name: &str, forward: &nts_core::hir::native::Forw
     let _ = writeln!(out, "  %base.fn = load ptr, ptr %slot");
     let _ = writeln!(out, "  %r = call i32 %base.fn({})", arguments.join(", "));
     let _ = writeln!(out, "  ret i32 %r\n}}");
+    Ok(())
 }

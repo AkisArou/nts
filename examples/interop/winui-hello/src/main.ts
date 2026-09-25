@@ -23,6 +23,12 @@
 //   other 24 slots call `Button`'s own implementation, so when the timer
 //   focuses the button, XAML's `OnGotFocus` reaches `Button`'s through one of
 //   them, and `focused=true` says the focus moved.
+// - It overrides `OnApplyTemplate` too, calling `super.OnApplyTemplate()`
+//   first as C# does: `templated=1` says XAML applied the template through
+//   the override. The other slots of `IFrameworkElementOverrides` are
+//   `Button`'s, among them `MeasureOverride` and `ArrangeOverride`, which
+//   take and answer a `Size` by value on every layout pass that gives the
+//   button its width.
 // - The button's `Click` handler is a TypeScript function counting into a
 //   captured `let`. The timer presses it the way an accessibility client does
 //   -- its automation peer's `IInvokeProvider.Invoke` -- so no person is
@@ -39,9 +45,15 @@ import { Button, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls"
 let launched = 0;
 let entered = 0;
 
+let templated = 0;
+
 class PressButton extends Button {
   OnPointerEntered(_e: IPointerRoutedEventArgs | null): void {
     entered += 1;
+  }
+  OnApplyTemplate(): void {
+    super.OnApplyTemplate();
+    templated += 1;
   }
 }
 
@@ -64,7 +76,7 @@ class App extends Application {
       const focused = button.as_IUIElement().Focus(FocusState.Programmatic);
       ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
       const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
-      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(entered));
+      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(entered) + " templated=" + String(templated));
       this.Exit();
     }, 1500);
   }

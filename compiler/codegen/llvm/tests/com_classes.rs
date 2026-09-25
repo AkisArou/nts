@@ -187,6 +187,73 @@ fn a_delegate_taking_a_boolean_is_ir() {
     assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
 }
 
+/// A record by value in a forwarded slot is passed on as Win64 passes it:
+/// C spells the record, whose definition the program carries though no value
+/// of its holds one, and LLVM an 8-byte `Size` as an `i64` and a 16-byte
+/// `Rect` as the address of the caller's copy -- integer registers, which is
+/// what matters: on Windows a `Size` read from a float register made layout
+/// give the button no width. Overriding `OnApplyTemplate` alone is
+/// `IFrameworkElementOverrides` as C# overrides it.
+#[test]
+fn a_forwarded_record_is_passed_as_win64_passes_it() {
+    const LAYOUT: &str = r#"declare module "winrt:Test.Layout" {
+  import type { ByValue, Struct, c_float } from "c:types";
+  import type { ComClass, HString } from "winrt:types";
+  export type Size = Struct<{ Width: c_float; Height: c_float }, "Test_Size">;
+  export type Rect = Struct<{ X: c_float; Y: c_float; Width: c_float; Height: c_float }, "Test_Rect">;
+  /**
+   * @ntsComposable Test.Layout.Element 9FD96657-5294-5A65-A1DB-4FEA143597DA 6
+   */
+  export class Element {
+    constructor();
+    /**
+     * @ntsOverride FFC6FD98-F38C-5904-9CE4-97A3427CF4BA 6 MeasureOverride
+     */
+    MeasureOverride(availableSize: ByValue<Size>): ByValue<Size>;
+    /**
+     * @ntsOverride FFC6FD98-F38C-5904-9CE4-97A3427CF4BA 7 ArrangeOverride
+     */
+    ArrangeOverride(finalRect: ByValue<Rect>): void;
+    /**
+     * @ntsOverride FFC6FD98-F38C-5904-9CE4-97A3427CF4BA 8 OnApplyTemplate
+     */
+    OnApplyTemplate(): void;
+    /**
+     * @ntsOverride FFC6FD98-F38C-5904-9CE4-97A3427CF4BA 9 GoToElementStateCore
+     */
+    GoToElementStateCore(stateName: HString, useTransitions: boolean): boolean;
+  }
+  export type IElement = ComClass<"IElement">;
+  export interface Element extends IElement {}
+}
+"#;
+    let source = "import { Element } from \"winrt:Test.Layout\";\nlet applied = 0;\nclass Panel extends Element {\n  OnApplyTemplate(): void {\n    applied += 1;\n  }\n}\nexport function start(): number {\n  new Panel();\n  return applied;\n}\n";
+    let Some((dir, prepared)) = prepare_with("forward-record", LAYOUT, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("static int32_t nts_com_forward_Panel_0(void * a0, struct Test_Size a1, void * a2)"), "{text}");
+    assert!(text.contains("static int32_t nts_com_forward_Panel_1(void * a0, struct Test_Rect a1)"), "{text}");
+    // A string is its `HSTRING` handle, and the `boolean` result its pointer.
+    assert!(text.contains("static int32_t nts_com_forward_Panel_2(void * a0, void * a1, bool a2, void * a3)"), "{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("@nts_com_forward_Panel_0(ptr %a0, i64 %a1, ptr %a2)"), "{}", llvm.text);
+    assert!(llvm.text.contains("@nts_com_forward_Panel_1(ptr %a0, ptr %a1)"), "{}", llvm.text);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
 /// `super.OnLaunched(args)` in an override is the base's own implementation
 /// of the interface, from the runtime (`nts_com_base`, which answers the
 /// program's reference), called through the override's slot with its

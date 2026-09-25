@@ -264,14 +264,20 @@ Application.Start(() => { new App(); });
   `PressButton` overrides one of `IControlOverrides`' 25 methods, and
   focusing it reaches `Button`'s `OnGotFocus` through a forwarder. The control
   (`nts_com_outer_base` made to abort) ends the program there.
+- **Records and strings in forwarded slots.** `PressButton` overrides
+  `OnApplyTemplate` alone (`templated=1`). `MeasureOverride(Size)` and
+  `ArrangeOverride(Size)` are forwarded on every layout pass, a `Size` passed
+  as Win64 passes it: in an integer register. The control reading it from a
+  float register gives the button no width (`styled=false`).
 - **`super.OnLaunched(args)`** calls the base's own implementation through
   its slot (`nts_com_base`), as C#'s `base.OnLaunched(args)` does. The
   control (the runtime answering the program's own face instead) recurses
   until the stack overflows.
 - **Refused by name, for now:**
-  - a slot that can't be forwarded yet: a record by value
-    (`MeasureOverride(Size)`), or a result the binding spells as `out`
-    fields. So `IFrameworkElementOverrides` can't be overridden in part;
+  - a slot that can't be forwarded yet: a result the binding spells as
+    `out` fields;
+  - overriding a slot that answers a value (`MeasureOverride`), since
+    an override's result is not yet written through its pointer;
   - a constructor of the class's own, and fields. Captured state works
     (a closure, a module variable);
   - a `new` with arguments; and an override returning a value.
@@ -288,8 +294,8 @@ Application.Start(() => { new App(); });
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
 2. **W2's rest** as listed above: awaitable operations once `await` honours
-   thenables. **W3:** records through forwarders, then fields on a composed
-   class.
+   thenables. **W3:** overrides answering a value (`MeasureOverride`), then
+   fields on a composed class.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT.
 

@@ -102,5 +102,11 @@ pub fn layouts(program: &Program) -> Result<Layouts, String> {
         .chain(program.globals.iter().map(|g| &g.ty)) {
         if let HirType::NativePointer(pointee) = ty { found.visit(pointee)?; }
     }
+    // A record a composed class's forwarder passes through by value, which no
+    // value of the program need hold: the forwarder's C still spells it.
+    let forwarded = program.foreign_classes.iter().filter_map(|class| class.composition.as_ref()).flat_map(|composition| &composition.forwarded);
+    for ty in forwarded.flat_map(|forward| &forward.signature.parameters) {
+        if let nts_core::hir::native::Type::Record(record) = ty { found.visit(&Pointee::Record(record.clone()))?; }
+    }
     Ok(found)
 }

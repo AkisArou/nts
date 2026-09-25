@@ -3535,16 +3535,24 @@ pub(crate) fn override_signature(snapshot: &SemanticSnapshot, signature: &nts_se
 /// The C signature a forwarded slot is called with, and calls its base's
 /// with: the interface pointer, each argument, and a result's pointer last,
 /// answering an HRESULT. Nothing is converted, so a result of any type is one
-/// pointer; what is refused is what the binding does not spell as one
-/// argument (an `out` parameter's fields, a record by value).
+/// pointer, and a record by value crosses as the platform passes it; what is
+/// refused is a result the binding spells as `out` parameters' fields.
 pub(crate) fn forward_signature(snapshot: &SemanticSnapshot, signature: &nts_semantic_schema::SignatureRecord) -> Result<FnPointer, String> {
     let mut parameters = vec![Type::Pointer(Pointee::Void)];
     for parameter in &signature.parameters {
+        // A string is an `HSTRING` handle at the slot, passed on untouched.
+        if string_encoding(snapshot, parameter.ty) == Some(Encoding::HString) {
+            parameters.push(Type::Pointer(Pointee::Void));
+            continue;
+        }
         match abi_type(snapshot, parameter.ty) {
-            Some(Type::Record(_)) => return Err(format!("parameter `{}`, a record by value", parameter.name)),
             Some(ty) if ty != Type::Void => parameters.push(ty),
             _ => return Err(format!("parameter `{}`, whose type has no C type", parameter.name)),
         }
+    }
+    if string_encoding(snapshot, signature.return_type) == Some(Encoding::HString) {
+        parameters.push(Type::Pointer(Pointee::Void));
+        return Ok(FnPointer::spell(parameters, Type::Scalar(Scalar::Int32)));
     }
     match abi_type(snapshot, signature.return_type) {
         Some(Type::Void) => {}
