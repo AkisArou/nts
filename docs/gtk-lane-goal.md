@@ -674,8 +674,22 @@ Still refused, each by name: `super(props)` passing a props object through,
 which needs a presence-checked setter per property rather than a literal's;
 a constructor parameter that declares a field; an override of
 `vfunc_finalize` (the registration's gives the fields back); a direct call
-of a `vfunc_` method, which is chaining up (`super.vfunc_clicked()`); a slot
-taking a record by value; and extending a subclass the program wrote. A
+of a `vfunc_` method outside chaining up; a slot taking a record by value;
+and extending a subclass the program wrote.
+
+**Chaining up**: `super.vfunc_show()` in an override calls the parent class's
+implementation, read from its class struct at the slot's offset when the
+call is made (`nts_gobject_parent_slot`), through a thunk each backend
+defines per slot used (`nts_gobject_chain_{Class}_{offset}`), typed as the
+overridden declaration is. It does nothing where the parent leaves the slot
+empty, which is GObject's convention. The fixture's control: `Shy`
+counts in `vfunc_show` and chains up to GTK's, which is what makes a widget
+visible (`shy 1 true`); without the call it reads `shy 1 false`.
+
+A GTK caveat the fixture ran into: a widget with a layout manager is measured
+by it, so overriding `vfunc_measure` on a `GtkButton` subclass changes
+nothing. That is GTK's rule, and GJS's too. `Square`, over the bare
+`GtkWidget`, has no layout manager. A
 field initialiser that calls or reads anything is refused as Apple's is,
 since it runs inside `instance_init`.
 

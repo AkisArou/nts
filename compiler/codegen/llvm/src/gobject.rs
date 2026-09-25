@@ -35,10 +35,18 @@ fn called(program: &Program, name: &str) -> bool {
     })
 }
 
+/// Whether `name` is a chain-up thunk this section defines.
+pub(super) fn is_chain(name: &str) -> bool {
+    name.starts_with("nts_gobject_chain_")
+}
+
 pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
+    // A parent's `get_type`, declared once however many classes extend it
+    // and chain up to it: LLVM, unlike C, refuses a second declaration.
+    let mut parents = std::collections::BTreeSet::new();
+    let mut out = chains(program, platform, &mut parents)?;
     let classes: Vec<&ForeignClass> =
         program.foreign_classes.iter().filter(|class| class.family == Family::GObject && made(program, class)).collect();
-    let mut out = String::new();
     if classes.is_empty() {
         return Ok(out);
     }
@@ -46,9 +54,6 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
     out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
-    // A parent's `get_type`, declared once however many classes extend it:
-    // LLVM, unlike C, refuses a second declaration.
-    let mut parents = std::collections::BTreeSet::new();
     for class in classes {
         let name = &class.name;
         let mut slots = Vec::new();
@@ -97,7 +102,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             None => "null".to_owned(),
         };
         let parent = &class.superclass;
-        if !called(program, parent) && parents.insert(parent.as_str()) {
+        if !called(program, parent) && parents.insert(parent.clone()) {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
         let _ = writeln!(
@@ -121,6 +126,51 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     Ok(out)
 }
 
+/// Each chain-up thunk the program calls (`super.vfunc_clicked()`): the
+/// parent's slot at the offset its name carries, called if it is there.
+fn chains(program: &Program, platform: Platform, parents: &mut std::collections::BTreeSet<String>) -> Result<String, Diagnostic> {
+    let mut out = String::new();
+    let mut done = std::collections::BTreeSet::new();
+    for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if is_chain(&target.name) => Some((func, target)),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        if done.len() == 1 {
+            out.push_str("declare ptr @nts_gobject_parent_slot(i64, i64)\n");
+        }
+        let Some((class, offset)) = target.name.trim_start_matches("nts_gobject_chain_").rsplit_once('_') else {
+            return Err(refuse(func, "a chain-up whose name does not say its class and slot"));
+        };
+        let Some(parent) = program.foreign_classes.iter().find(|foreign| foreign.family == Family::GObject && foreign.name == class).map(|foreign| foreign.superclass.clone()) else {
+            return Err(refuse(func, "a chain-up in a class this program does not register"));
+        };
+        if !called(program, &parent) && parents.insert(parent.clone()) {
+            let _ = writeln!(out, "declare i64 @{parent}()");
+        }
+        let types = target.parameters.iter().map(|ty| ty_of(&ty.abi(platform.abi), func).map(str::to_owned)).collect::<Result<Vec<_>, _>>()?;
+        let parameters: Vec<String> = types.iter().enumerate().map(|(at, ty)| format!("{ty} %a{at}")).collect();
+        let result = target.result.abi(platform.abi);
+        let returns = if result == HirType::Void { "void".to_owned() } else { ty_of(&result, func)?.to_owned() };
+        let _ = writeln!(
+            out,
+            "define {returns} @{}({}) nounwind {{\nentry:\n  %parent = call i64 @{parent}()\n  %slot = call ptr @nts_gobject_parent_slot(i64 %parent, i64 {offset})\n  %none = icmp eq ptr %slot, null\n  br i1 %none, label %skip, label %call\ncall:",
+            target.name,
+            parameters.join(", ")
+        );
+        let arguments = parameters.join(", ");
+        if returns == "void" {
+            let _ = writeln!(out, "  call void %slot({arguments})\n  ret void\nskip:\n  ret void\n}}");
+        } else {
+            let zero = if returns == "ptr" { "null".to_owned() } else if returns.starts_with('i') { "0".to_owned() } else { "0.0".to_owned() };
+            let _ = writeln!(out, "  %r = call {returns} %slot({arguments})\n  ret {returns} %r\nskip:\n  ret {returns} {zero}\n}}");
+        }
+    }
+    Ok(out)
+}
+
 /// One override's entry point, `nts_gobject_<Class>_<at>`: the slot's C
 /// arguments converted to the compiled method's, and its result back.
 fn entry_point(out: &mut String, platform: Platform, entry: &str, method: &ForeignMethod, compiled: &Func) -> Result<(), Diagnostic> {
@@ -138,7 +188,12 @@ fn entry_point(out: &mut String, platform: Platform, entry: &str, method: &Forei
         let from_ty = ty_of(&from, compiled)?;
         parameters.push(format!("{from_ty} %a{slot}"));
         let to_ty = ty_of(&want.ty, compiled)?;
-        if from == want.ty {
+        // One handle as another -- the slot's `GtkWidget *` as the method's
+        // `GtkButton *` `this`, which is what the instance is, since GTK
+        // calls this class's slot with this class's instances -- is the same
+        // pointer.
+        let handles = matches!((&from, &want.ty), (HirType::NativePointer(_), HirType::NativePointer(_)));
+        if from == want.ty || handles {
             arguments.push(format!("{to_ty} %a{slot}"));
         } else if want.ty == HirType::Bool {
             let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));

@@ -121,6 +121,62 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         );
         writer.line(origin, format!("{result} {make}(void) {{ return ({result})nts_gobject_new(nts_gobject_type_{name}()); }}"));
     }
+    chains(writer, origin, program, wrote)?;
+    Ok(())
+}
+
+/// Each `nts_gobject_chain_{Class}_{offset}` the program calls -- a chain-up,
+/// `super.vfunc_clicked()` -- defined as its prototype declares it: the
+/// parent's slot at `offset`, called if it is there and skipped if not.
+fn chains(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> Result<(), Diagnostic> {
+    let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
+    let mut done = std::collections::BTreeSet::new();
+    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_chain_") => Some(target),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let (class, offset) = target
+            .name
+            .trim_start_matches("nts_gobject_chain_")
+            .rsplit_once('_')
+            .ok_or_else(|| refuse("a chain-up whose name does not say its class and slot"))?;
+        let parent = program
+            .foreign_classes
+            .iter()
+            .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
+            .map(|foreign| foreign.superclass.clone())
+            .ok_or_else(|| refuse("a chain-up in a class this program does not register"))?;
+        if target.parameters.iter().chain(std::iter::once(&target.result)).any(|ty| matches!(ty, Type::Record(_))) {
+            return Err(refuse("a chain-up to a virtual function taking or returning a record by value"));
+        }
+        if !wrote {
+            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            wrote = true;
+        }
+        writer.line(origin, "void *nts_gobject_parent_slot(size_t parent, size_t offset);");
+        writer.line(origin, format!("size_t {parent}(void);"));
+        let parameters: Vec<String> = target.parameters.iter().enumerate().map(|(at, ty)| format!("{} a{at}", ty.c_type())).collect();
+        let types: Vec<String> = target.parameters.iter().map(|ty| ty.c_type().into_owned()).collect();
+        let arguments: Vec<String> = (0..target.parameters.len()).map(|at| format!("a{at}")).collect();
+        let returns = target.result.c_type();
+        let call = format!("(({returns} (*)({}))slot)({})", types.join(", "), arguments.join(", "));
+        let body = if matches!(target.result, Type::Void) {
+            format!("if (slot) {call};")
+        } else {
+            format!("return slot ? {call} : ({returns})0;")
+        };
+        writer.line(
+            origin,
+            format!(
+                "{returns} {}({}) {{ void *slot = nts_gobject_parent_slot({parent}(), {offset}u); {body} }}",
+                target.name,
+                parameters.join(", ")
+            ),
+        );
+    }
     if wrote {
         writer.blank(origin);
     }

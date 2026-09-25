@@ -91,7 +91,9 @@ pub(super) fn declarations(program: &Program, platform: Platform) -> Result<Vec<
             }
             // `new` of a GObject class the program writes, which `gobject`
             // defines rather than declares.
-            if program.foreign_classes.iter().any(|class| class.family == nts_core::hir::native::Family::GObject && super::gobject::maker(class) == target.name) {
+            if super::gobject::is_chain(&target.name)
+                || program.foreign_classes.iter().any(|class| class.family == nts_core::hir::native::Family::GObject && super::gobject::maker(class) == target.name)
+            {
                 continue;
             }
             let symbol = target.name.as_str();

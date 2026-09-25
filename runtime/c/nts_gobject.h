@@ -41,6 +41,11 @@ gulong nts_gobject_connect(gpointer instance, const gchar *detailed_signal,
 size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
                             size_t count, void *(*make_state)(void));
 
+/* The parent class's implementation of a virtual function, for chaining up
+ * (`super.vfunc_clicked()`): the function pointer at `offset` in the class
+ * struct of `parent`, or NULL where the parent leaves the slot empty. */
+void *nts_gobject_parent_slot(size_t parent, size_t offset);
+
 /* One instance of `type`, and one reference to it the caller owns: a floating
  * reference -- a widget's -- is sunk here, so the program counts the same
  * kind of reference whatever the class descends from. */

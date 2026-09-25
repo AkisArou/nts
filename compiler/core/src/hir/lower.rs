@@ -11712,6 +11712,10 @@ struct FuncBuilder<'a> {
     /// The name of the class over a `GObject` class whose constructor is
     /// being lowered: its `super(...)` makes the instance (`gobject_super`).
     gobject_construct: Option<String>,
+    /// The chain-up (`super.vfunc_clicked()`) whose callee is being built
+    /// from the overridden declaration, which is a virtual function a direct
+    /// call of is otherwise refused.
+    chaining_up: Option<NodeId>,
     /// Lowering a method the runtime calls through an entry point of its own:
     /// see [`ObjcEntry`].
     objc_entry: Option<ObjcEntry>,
@@ -11981,6 +11985,7 @@ impl<'a> FuncBuilder<'a> {
             in_constructor: false,
             objc_construct: None,
             gobject_construct: None,
+            chaining_up: None,
             objc_entry: None,
             record_out: None,
             com_entry: None,
@@ -14197,6 +14202,66 @@ impl<'a> FuncBuilder<'a> {
             signature: std::sync::Arc::new(imp),
         };
         Ok((func, method))
+    }
+
+    /// `super(...)` and `super.vfunc_x()` in a class the program writes over
+    /// a `GObject` class: its constructor's instance, or the parent's
+    /// implementation of a virtual function it overrides. `None` for any
+    /// other `super`.
+    fn gobject_super_call(&mut self, id: NodeId, member: &str, arguments: &[NodeId]) -> Option<Result<ValueId, Diagnostic>> {
+        if member == "constructor" {
+            let name = self.gobject_construct.clone()?;
+            return Some(self.gobject_super(id, &name));
+        }
+        let target = self.snapshot.call_targets.get(&id).copied()?;
+        let declaration = target.callee?;
+        let slot = self.node(declaration).native.as_ref().and_then(|n| n.vfunc.clone())?;
+        Some(self.lower_gobject_chain_up(id, (declaration, target.signature), &slot, arguments))
+    }
+
+    /// `super.vfunc_clicked()` in a method of a class the program writes over
+    /// a `GObject` class: the parent class's implementation, read from its
+    /// class struct at the slot's offset when the call is made
+    /// (`nts_gobject_chain_{Class}_{offset}`, which each backend defines
+    /// beside the registration), and nothing where the parent leaves the
+    /// slot empty -- `GObject`'s own convention for chaining up. The call is
+    /// typed as the overridden declaration is, with `this` first.
+    fn lower_gobject_chain_up(
+        &mut self,
+        id: NodeId,
+        (declaration, signature): (NodeId, nts_semantic_schema::SignatureId),
+        slot: &str,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let receiver = self.this.ok_or_else(|| self.unsupported(id, "`super` outside a method"))?;
+        let class = std::iter::successors(self.node(id).parent, |at| self.node(*at).parent)
+            .find(|at| self.kind_of(*at) == Some(syntax::CLASS_DECLARATION))
+            .ok_or_else(|| self.unsupported(id, "`super` outside a class"))?;
+        let name = foreign_class_name(self.snapshot, class)
+            .filter(|_| super::native::gobject_parent(self.snapshot, class).is_some())
+            .ok_or_else(|| self.unsupported(id, "chaining up to a virtual function outside a class over a GObject class"))?;
+        let offset = slot.split_whitespace().nth(2).ok_or_else(|| self.unsupported(id, "a virtual function whose slot has no offset"))?;
+        let mut with_this = self.snapshot.signatures[signature.0 as usize].clone();
+        let this = with_this.this_type.ok_or_else(|| self.unsupported(id, "a virtual function with no `this` type"))?;
+        with_this.parameters.insert(
+            0,
+            nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false },
+        );
+        self.chaining_up = Some(id);
+        let built = self.native_callee(id, Some(declaration), name.clone(), &with_this);
+        self.chaining_up = None;
+        let Callee::Native(mut target) = built? else {
+            return Err(self.unsupported(id, "a virtual function that is not foreign"));
+        };
+        // The thunk, not the declaration's name (which the callee takes from
+        // it); defined beside the registration and declared by no header, so
+        // the witness has nothing to compare it with.
+        let thunk = std::sync::Arc::make_mut(&mut target);
+        thunk.name = format!("nts_gobject_chain_{name}_{offset}");
+        thunk.declared_at = None;
+        let callee = Callee::Native(target);
+        let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
+        self.finish_call(id, callee, args, lent, Some(declaration))
     }
 
     /// Whether a constructor body opens with its `super(...)`: `this` is one
@@ -44035,7 +44100,9 @@ impl<'a> FuncBuilder<'a> {
         // A virtual function is a class struct's slot, overridden by a
         // subclass and reached through the class; it has no symbol, so a
         // direct call would link one that does not exist.
-        if let Some(slot) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.vfunc.as_deref()) {
+        if self.chaining_up.is_none()
+            && let Some(slot) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.vfunc.as_deref())
+        {
             return Err(self.unsupported(
                 call,
                 &format!("a direct call of a GObject virtual function (`{slot}`), which a subclass overrides and nothing calls by name"),
@@ -49019,10 +49086,8 @@ impl<'a> FuncBuilder<'a> {
         if member == "constructor" && self.objc_construct.is_some() {
             return self.lower_objc_super_init(id, arguments);
         }
-        if member == "constructor"
-            && let Some(name) = self.gobject_construct.clone()
-        {
-            return self.gobject_super(id, &name);
+        if let Some(call) = self.gobject_super_call(id, member, arguments) {
+            return call;
         }
         let base = self
             .base

@@ -20,6 +20,9 @@
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
 //   square Nts_Square
+//   shy 1 true  `Shy`'s `vfunc_show` counts and chains up
+//                 (`super.vfunc_show()`) to GTK's, which is what makes the
+//                 widget visible: an override that skipped it reads `shy 1 false`
 import {
   GtkButton,
   GtkWidget,
@@ -83,6 +86,17 @@ class Square extends GtkWidget {
   }
 }
 
+class Shy extends GtkButton {
+  shown = 0;
+
+  // Chaining up: GTK's own `show` is what marks the widget visible, so an
+  // override that did not reach it would leave it hidden.
+  vfunc_show(): void {
+    this.shown++;
+    super.vfunc_show();
+  }
+}
+
 function main(): void {
   gtk_init();
   const counter = new Counter({ label: "0" });
@@ -105,6 +119,11 @@ function main(): void {
   gtk_widget_measure(square, Orientation.VERTICAL, -1, height);
   sub_log("measure " + String(width[0]) + " " + String(height[0]));
   sub_log("square " + g_type_name_from_instance(square));
+
+  const shy = new Shy({ label: "s" });
+  shy.set_visible(false);
+  shy.set_visible(true);
+  sub_log("shy " + String(shy.shown) + " " + String(shy.get_visible()));
 }
 
 main();

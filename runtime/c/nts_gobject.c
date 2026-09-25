@@ -318,6 +318,16 @@ void *nts_gobject_state(void *instance) {
   return *nts_gobject_state_slot(instance, class);
 }
 
+void *nts_gobject_parent_slot(size_t parent, size_t offset) {
+  gpointer klass = g_type_class_peek((GType)parent);
+  if (klass == NULL) {
+    return NULL;
+  }
+  void *slot;
+  memcpy(&slot, (char *)klass + offset, sizeof slot);
+  return slot;
+}
+
 void *nts_gobject_new(size_t type) {
   GObject *made = g_object_new((GType)type, NULL);
   if (g_object_is_floating(made)) {
