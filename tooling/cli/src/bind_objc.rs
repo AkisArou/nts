@@ -1256,6 +1256,14 @@ impl<'a> Model<'a> {
                 self.import("objc:types", "CString");
                 return Ok("CString".to_owned());
             }
+            // Swift's `UnsafeMutablePointer<ObjCBool>`: a `BOOL *`, like
+            // `fileExists(atPath:isDirectory:)`'s, whose byte is read as `[0]`
+            // -- or a block's `stop`, which the closure writes.
+            if matches!(position, Position::Parameter | Position::Block) && written.trim_start_matches("const ").starts_with("BOOL") {
+                self.import("objc:types", "ObjCBool");
+                self.import("c:types", "Ptr");
+                return Ok(or_null("Ptr<ObjCBool>".to_owned()));
+            }
             // Swift's `UnsafeMutablePointer<CGFloat>`, an out parameter like
             // `getRed(_:green:blue:alpha:)`'s: the address of the number, which
             // a program passes as `local<CGFloat>()` and reads as `[0]`.
@@ -1976,6 +1984,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)measure:(Span *)span;
 - (void)linkFrom:(Shape *)start to:(Shape *)middle to:(Shape *)end;
 - (void)countInto:(NSUInteger *)count;
+- (BOOL)holdsAt:(NSString *)name inside:(BOOL *)inside;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
@@ -2042,6 +2051,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)measure:", "swift.method", "measure(_:)", &["Shape", "measure(_:)"], ""),
             symbol("c:objc(cs)Shape(im)linkFrom:to:to:", "swift.method", "link(from:to:to:)", &["Shape", "link(from:to:to:)"], ""),
             symbol("c:objc(cs)Shape(im)countInto:", "swift.method", "count(into:)", &["Shape", "count(into:)"], ""),
+            symbol("c:objc(cs)Shape(im)holdsAt:inside:", "swift.method", "holds(at:inside:)", &["Shape", "holds(at:inside:)"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2160,6 +2170,8 @@ NS_ASSUME_NONNULL_END
             // A pointer to a number is not the number: `NSUInteger *` is the
             // number's address, Swift's `UnsafeMutablePointer<UInt>`.
             "    /** @ntsSelector countInto: */\n    count(labels: { into: Ptr<UInt> }): void;",
+            // And `BOOL *`, Swift's `UnsafeMutablePointer<ObjCBool>`.
+            "    /** @ntsSelector holdsAt:inside: */\n    holds(labels: { at: string; inside: Ptr<ObjCBool> }): boolean;",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",

@@ -30,6 +30,15 @@ static void enumerate(void) {
     indices += index;
   }];
   report([NSString stringWithFormat:@"enumerated %d %lu", seen, indices]);
+  __block int visited = 0;
+  [array enumerateObjectsUsingBlock:^(id object, NSUInteger index, BOOL *stop) {
+    (void)object;
+    visited++;
+    if (index == 1) {
+      *stop = YES;
+    }
+  }];
+  report([NSString stringWithFormat:@"stopped after %d", visited]);
 }
 
 static void cancelled(void) {

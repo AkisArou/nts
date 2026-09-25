@@ -19,7 +19,7 @@ import {
 import { live_objects, report, weak_alive, weak_watch } from "c:support";
 import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
 import type { c_int } from "c:types";
-import type { UInt } from "objc:types";
+import type { ObjCBool, UInt } from "objc:types";
 import { local } from "c:memory";
 
 let watch = 0 as c_int;
@@ -236,6 +236,10 @@ function main(): void {
   at.length = 0;
   new NSString("ab\ncde\nf").getLineStart(start, { end, contentsEnd, for: at });
   report(`line ${start[0]} ${end[0]} ${contentsEnd[0]}`);
+  // And `UnsafeMutablePointer<ObjCBool>`: a `BOOL` the message writes.
+  const directory = local<ObjCBool>();
+  const exists = FileManager.default.fileExists({ atPath: "/System", isDirectory: directory });
+  report(`exists ${exists} ${directory[0] !== 0}`);
   // Labels held in a variable, as a wrapper passes on the ones it was given:
   // each read from its field at the call.
   const byDash = { separatedBy: "-" };

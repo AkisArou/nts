@@ -399,6 +399,10 @@ correctness does not depend on arm64 running by luck.
          Swift, is `Ptr<CGFloat>`, read as `[0]`. It was spelled as the
          number itself until f998014f. 26 more members bind.
          `macos-classes` reads the three numbers `getLineStart` writes.
+       - `BOOL *` is `Ptr<ObjCBool>`, Swift's `UnsafeMutablePointer<ObjCBool>`,
+         as a parameter (`fileExists(atPath:isDirectory:)`) and as a block's
+         `stop`, which the closure writes. `macos-blocks` ends an enumeration
+         after its second element, as clang's does.
        - An element through a typedef of `NSString *`, such as
          `[NSPasteboard.PasteboardType]`, is a `string`. A class qualified by a
          protocol, such as `NSView<NSCollectionViewElement>`, is the class.

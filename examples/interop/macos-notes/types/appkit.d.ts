@@ -8,7 +8,7 @@
 declare module "objc:AppKit" {
   import type { ByValue, CEnum, Ptr, Struct } from "c:types";
   import type { ClassObject, Selector } from "objc:runtime";
-  import type { CGFloat, CString, Double, Float, Int, Int16, Int32, Int64, TimeInterval, UInt, UInt16, UInt64 } from "objc:types";
+  import type { CGFloat, CString, Double, Float, Int, Int16, Int32, Int64, ObjCBool, TimeInterval, UInt, UInt16, UInt64 } from "objc:types";
 
   export type CGPoint = Struct<{ x: Double; y: Double }, "CGPoint">;
 
@@ -1134,6 +1134,10 @@ declare module "objc:AppKit" {
     getParagraphStart(startPtr: Ptr<UInt> | null, labels: { end: Ptr<UInt> | null; contentsEnd: Ptr<UInt> | null; for: ByValue<NSRange> }): void;
     /** @ntsSelector paragraphRangeForRange: */
     paragraphRange(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
+    /** @ntsSelector enumerateSubstringsInRange:options:usingBlock: */
+    enumerateSubstrings(labels: { in: ByValue<NSRange>; options: CEnum<NSString.EnumerationOptions | 0, UInt> }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
+    /** @ntsSelector enumerateLinesUsingBlock: */
+    enumerateLines(block: (arg0: NSString, arg1: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector dataUsingEncoding:allowLossyConversion: */
     data(labels: { using: UInt; allowLossyConversion: boolean }): NSData | null;
     /** @ntsSelector dataUsingEncoding: */
@@ -1210,6 +1214,8 @@ declare module "objc:AppKit" {
     getFileSystemRepresentation(cname: CString, labels: { maxLength: UInt }): boolean;
     /** @ntsSelector stringByAddingPercentEncodingWithAllowedCharacters: */
     addingPercentEncoding(labels: { withAllowedCharacters: NSCharacterSet }): string | null;
+    /** @ntsSelector enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock: */
+    enumerateLinguisticTags(labels: { in: ByValue<NSRange>; scheme: string; options: CEnum<NSLinguisticTagger.Options | 0, UInt>; orthography: NSOrthography | null }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector self */
     self(): NSString;
     /** @ntsSelector isEqual: */
@@ -1219,8 +1225,6 @@ declare module "objc:AppKit" {
     //   @property availableStringEncodings: a `const NSStringEncoding *`
     //   @property fileSystemRepresentation: a `const char *`
     //   -getCharacters:range:: a `unichar *`
-    //   -enumerateSubstringsInRange:options:usingBlock:: a `BOOL *`
-    //   -enumerateLinesUsingBlock:: a `BOOL *`
     //   -cStringUsingEncoding:: a `const char *`
     //   -getBytes:maxLength:usedLength:encoding:options:range:remainingRange:: a `void *`
     //   -initWithCharactersNoCopy:length:freeWhenDone:: a `unichar *`
@@ -1240,7 +1244,6 @@ declare module "objc:AppKit" {
     //   -stringByAddingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
     //   -stringByReplacingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
     //   -linguisticTagsInRange:scheme:options:orthography:tokenRanges:: an array of `NSValue *> * _Nullable`
-    //   -enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock:: a `BOOL *`
   }
 
   /** @ntsClass NSTableColumn */
@@ -2212,6 +2215,8 @@ declare module "objc:AppKit" {
     toggleTabOverview(sender: NSObject | null): void;
     /** @ntsSelector addTabbedWindow:ordered: */
     addTabbedWindow(window: NSWindow, labels: { ordered: CEnum<NSWindow.OrderingMode, Int> }): void;
+    /** @ntsSelector trackEventsMatchingMask:timeout:mode:handler: */
+    trackEvents(labels: { matching: CEnum<NSEvent.EventTypeMask | 0, UInt64>; timeout: TimeInterval; mode: string }, trackingHandler: (arg0: NSEvent | null, arg1: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector nextEventMatchingMask: */
     nextEvent(labels: { matching: CEnum<NSEvent.EventTypeMask | 0, UInt64> }): NSEvent | null;
     /** @ntsSelector nextEventMatchingMask:untilDate:inMode:dequeue: */
@@ -2285,7 +2290,6 @@ declare module "objc:AppKit" {
     //   -transferWindowSharingToWindow:completionHandler:: introduced in macOS 13.3
     //   -requestSharingOfWindow:completionHandler:: introduced in macOS 15.0
     //   -requestSharingOfWindowUsingPreview:title:completionHandler:: introduced in macOS 15.0
-    //   -trackEventsMatchingMask:timeout:mode:handler:: a `BOOL *`
     //   -beginDraggingSessionWithItems:event:source:: introduced in macOS 15.0
     //   -displayLinkWithTarget:selector:: introduced in macOS 14.0
     //   -cacheImageInRect:: deprecated in macOS 10.13
@@ -2382,6 +2386,8 @@ declare module "objc:AppKit" {
     requestUserAttention(requestType: CEnum<NSApplication.RequestUserAttentionType, UInt>): Int;
     /** @ntsSelector cancelUserAttentionRequest: */
     cancelUserAttentionRequest(request: Int): void;
+    /** @ntsSelector enumerateWindowsWithOptions:usingBlock: */
+    enumerateWindows(labels: { options: CEnum<NSApplication.WindowListOptions | 0, Int> }, block: (arg0: NSWindow, arg1: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector preventWindowOrdering */
     preventWindowOrdering(): void;
     /** @ntsSelector setWindowsNeedUpdate: */
@@ -2483,7 +2489,6 @@ declare module "objc:AppKit" {
     //   -beginModalSessionForWindow:: a `struct _NSModalSession *`
     //   -runModalSession:: a `struct _NSModalSession *`
     //   -endModalSession:: a `struct _NSModalSession *`
-    //   -enumerateWindowsWithOptions:usingBlock:: a `BOOL *`
     //   -orderFrontStandardAboutPanelWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -beginSheet:modalForWindow:modalDelegate:didEndSelector:contextInfo:: deprecated in macOS 10.10
     //   -endSheet:: deprecated in macOS 10.10
@@ -2685,6 +2690,8 @@ declare module "objc:AppKit" {
     charactersByApplyingModifiers(modifiers: CEnum<NSEvent.ModifierFlags | 0, UInt>): string | null;
     /** @ntsSelector coalescedTouchesForTouch: */
     coalescedTouches(labels: { for: NSTouch }): NSTouch[];
+    /** @ntsSelector trackSwipeEventWithOptions:dampenAmountThresholdMin:max:usingHandler: */
+    trackSwipeEvent(labels: { options: CEnum<NSEvent.SwipeTrackingOptions | 0, UInt>; dampenAmountThresholdMin: CGFloat; max: CGFloat }, trackingHandler: (arg0: CGFloat, arg1: CEnum<NSEvent.Phase | 0, UInt>, arg2: boolean, arg3: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector startPeriodicEventsAfterDelay:withPeriod: */
     static startPeriodicEvents(labels: { afterDelay: TimeInterval; withPeriod: TimeInterval }): void;
     /** @ntsSelector stopPeriodicEvents */
@@ -2715,7 +2722,6 @@ declare module "objc:AppKit" {
     //   -touchesMatchingPhase:inView:: a collection, `NSSet`, which crosses as an object when it is bound
     //   -allTouches: a collection, `NSSet`, which crosses as an object when it is bound
     //   -touchesForView:: a collection, `NSSet`, which crosses as an object when it is bound
-    //   -trackSwipeEventWithOptions:dampenAmountThresholdMin:max:usingHandler:: a `BOOL *`
     //   +enterExitEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:trackingNumber:userData:: a `void *`
   }
 

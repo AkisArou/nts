@@ -30,7 +30,7 @@ import {
 } from "c:support";
 import { nts_pending_begin, nts_pending_end } from "c:pending";
 import { arrayWithCapacity, newObject, scheduledTimer, type NSObject } from "objc:Foundation";
-import type { c_double, c_int, c_ulong } from "c:types";
+import type { c_double, c_int, c_int8, c_ulong } from "c:types";
 
 function state(watch: c_int): string {
   return weak_alive(watch) ? "alive" : "gone";
@@ -48,6 +48,15 @@ function enumerate(): void {
     indices += index as bigint;
   });
   report("enumerated " + String(seen) + " " + String(indices));
+  // The block's `BOOL *stop`, written: the enumeration ends after the second.
+  let visited = 0;
+  array.enumerateObjectsUsingBlock((object, index, stop) => {
+    visited++;
+    if (index === 1n) {
+      stop[0] = 1 as c_int8;
+    }
+  });
+  report("stopped after " + String(visited));
 }
 
 function cancelled(): c_int {

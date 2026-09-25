@@ -4,7 +4,7 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { CString, Int, Int32, UInt } from "objc:types";
+  import type { CString, Int, Int32, ObjCBool, UInt } from "objc:types";
   import type { ByValue, Ptr, Struct } from "c:types";
 
   // Swift's `NSRange`, C's `struct _NSRange`.
@@ -107,6 +107,12 @@ declare module "objc:Foundation" {
      * @ntsSelector subpathsAtPath:
      */
     subpaths(labels: { atPath: string }): string[] | null;
+    /**
+     * Swift's `fileExists(atPath:isDirectory:)`, whose second is an
+     * `UnsafeMutablePointer<ObjCBool>` the method writes.
+     * @ntsSelector fileExistsAtPath:isDirectory:
+     */
+    fileExists(labels: { atPath: string; isDirectory: Ptr<ObjCBool> | null }): boolean;
   }
 
   /** @ntsClass NSAttributedString */

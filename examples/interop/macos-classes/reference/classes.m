@@ -162,6 +162,9 @@ int main(void) {
     NSUInteger start = 0, end = 0, contentsEnd = 0;
     [@"ab\ncde\nf" getLineStart:&start end:&end contentsEnd:&contentsEnd forRange:NSMakeRange(4, 0)];
     printf("line %lu %lu %lu\n", (unsigned long)start, (unsigned long)end, (unsigned long)contentsEnd);
+    BOOL directory = NO;
+    BOOL exists = [NSFileManager.defaultManager fileExistsAtPath:@"/System" isDirectory:&directory];
+    printf("exists %s %s\n", exists ? "true" : "false", directory ? "true" : "false");
     printf("labelled %lu %s\n", (unsigned long)[@"x-y-z" componentsSeparatedByString:@"-"].count,
            [[@"p-q" componentsSeparatedByString:@"-"] componentsJoinedByString:@"+"].UTF8String);
     NSXMLParser *parser = [[NSXMLParser alloc] initWithData:[@"<a><b/><c><d/></c></a>" dataUsingEncoding:NSUTF8StringEncoding]];

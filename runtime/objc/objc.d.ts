@@ -61,6 +61,9 @@ declare module "objc:types" {
   /** `NSUInteger`, 64 bits. */
   export type UInt = CNumber<"ulong">;
   export type Int8 = CNumber<"int8">;
+  /** Swift's `ObjCBool`: a `BOOL` in memory, written through a `BOOL *`,
+   * one byte that is `0` for `NO`. */
+  export type ObjCBool = Int8;
   export type UInt8 = CNumber<"uint8">;
   export type Int16 = CNumber<"int16">;
   export type UInt16 = CNumber<"uint16">;
