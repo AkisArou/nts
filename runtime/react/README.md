@@ -61,14 +61,15 @@ build:
 In the `react` suite, upstream's own build fails the same 2 tests.
 
 **Native build.** native/probe compiles the runtime whole with nts. The
-census went from 1286 to 643 refusal lines. Creating a root compiles, and
-the render path runs from `updateContainer` to the commit, where it stops at
-exceptions thrown across calls. The remaining work on our side is in the census. The compiler
-capabilities React needs have been reported to the language lane:
-- exceptions across closures and methods, which Suspense and error
-  boundaries rely on;
-- a base-class `instanceof` downcast;
-- weak collections.
+census went from 1286 to 582 refusal lines. Creating a root compiles, and
+the render path runs from `updateContainer` to the commit. What stops it now
+is the compiler's, and has been reported to the language lane:
+- exceptions thrown across a call to a function value (effects, refs,
+  function components), which Suspense and error boundaries rely on;
+- a tuple holding a function (`useState`'s `[state, setState]`).
+
+Ours to design: class component state merge and lifecycles, and a generic
+`ReactContext<T>` held in erased dependency lists.
 
 The rules nts imposes on this code are the ones ported code must follow;
 they are listed in PORTING.md and in the native config's comments.
