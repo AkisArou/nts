@@ -144,19 +144,23 @@ the same vtable calls on the VM measured the behaviour first.
     lacks the interface), and a program that could have handled it aborts
     instead. A fallible form (`as_X()` answering `null`) is the fix when
     someone needs it.
-- **Priced, and owed:** an `as_X()` parses its IID from a string on every call.
-  Measured on the VM, the runtime's own `nts_parse_iid` costs 435-444 ns per
-  call, and the `QueryInterface` plus `Release` it precedes costs 12.4-12.8 ns.
-  That is 97% of the call for a constant the compiler knows, and a floor,
-  since the UTF-16 conversion before it is extra. The fix is a 16-byte IID
-  constant emitted by the compiler and taken as `const IID *` by
-  `nts_com_query`, `nts_com_delegate` and `nts_winrt_activate`, with this
-  bench as its before and after.
+- **`[out]` parameters are fields of the result**, as the Windows Runtime's
+  JavaScript projection returned them: `JsonValue.TryParse(text)` answers
+  `{ result: JsonValue | null; returnValue: boolean }` (`@ntsHresult out`).
+  There is no `returnValue` without an `[out, retval]`, and an object written
+  there may be null. A failed call throws with nothing allocated: the object
+  is made on the success edge. A struct `[out]` is refused.
+- **Priced, and paid:** an `as_X()` parsed its IID from a string on every
+  call: 435-444 ns on the VM, against 12.4-12.8 ns for the `QueryInterface`
+  plus `Release` it preceded. An IID now crosses as two 64-bit constants
+  the compiler emits (`iid_words`). `as_IVector().get_Size()` in a loop, the
+  query, the call and the release, is 18 ns an iteration (three runs, 18
+  each), from about 450.
 - **Not yet:**
   - `IAsyncOperation` as a Promise, which needs a decision about whether a
     console program's loop pumps messages (the user's to make).
-  - `out` parameters other than the result.
-  - Arrays.
+  - Arrays: `GetMany`'s caller-filled buffer, `ReplaceAll`, and the
+    `Get*Array` methods.
   - Generic delegates whose IID depends on the interface's own parameters
     (`IObservableMap<K, V>.MapChanged`).
 
