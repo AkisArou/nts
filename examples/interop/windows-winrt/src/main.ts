@@ -10,8 +10,9 @@
 // - `bools`: a `boolean` both ways -- passed to `CreateBooleanValue` (which
 //   `Stringify` then shows) and read back from `GetBoolean`, one byte each.
 // - `languages`: a generic interface, `IVectorView<HString>` from
-//   `Windows.Globalization` -- `get_Size` and `GetAt` through the table of the
-//   instantiation the static handed back, whatever `T` it was made for. What
+//   `Windows.Globalization` -- `size` and `getAt`, its own surface
+//   (`IVectorViewMembers<T>`), through the table of the instantiation the
+//   static handed back, whatever `T` it was made for. What
 //   the machine's languages are is its own, so the line says only that there
 //   is one and that the first is a BCP-47 tag.
 // - `vector`: a class's other interface, by `QueryInterface` with the IID the
@@ -143,14 +144,15 @@ function bytes(): string {
 // A runtime class whose default interface is an instantiation: `StringMap`
 // is `IMap<HString, HString>`, made by its default constructor, which asks
 // the object for that interface by the IID computed for the instantiation (a
-// wrong one ends the process naming it). Two keys, one replaced -- `Insert`
-// answers whether it replaced -- and one that is not there.
+// wrong one ends the process naming it). Two keys, one replaced -- `insert`
+// answers whether it replaced -- and one that is not there. Through the
+// instantiation's own surface (`IMapMembers<K, V>`): `size`, `lookup`.
 function map(): string {
   const map = StringMap.create();
-  map.Insert("a", "1");
-  map.Insert("b", "2");
-  const replaced = map.Insert("a", "3");
-  return String(map.get_Size()) + ":" + map.Lookup("a") + ":" + String(replaced) + ":" + String(map.HasKey("c"));
+  map.insert("a", "1");
+  map.insert("b", "2");
+  const replaced = map.insert("a", "3");
+  return String(map.size) + ":" + map.lookup("a") + ":" + String(replaced) + ":" + String(map.hasKey("c"));
 }
 
 // A COM handle where any value may go -- a `Map` and an `unknown[]` -- as the
@@ -244,10 +246,10 @@ function run(): string {
   const made = JsonValue.CreateBooleanValue(true);
   const bools = made.Stringify() + "," + String(made.GetBoolean()) + "," + String(JsonValue.Parse("false").GetBoolean());
   const languages = ApplicationLanguages.get_Languages();
-  const first = languages.GetAt(0);
-  const tags = (languages.get_Size() >= 1 ? "some" : "none") + "," + (first.includes("-") ? "tagged" : first);
+  const first = languages.getAt(0);
+  const tags = (languages.size >= 1 ? "some" : "none") + "," + (first.includes("-") ? "tagged" : first);
   const vector = JsonArray.Parse("[1, 2.5, true]").as_IVector();
-  const items = String(vector.get_Size()) + ":" + String(vector.GetAt(1).GetNumber());
+  const items = String(vector.size) + ":" + String(vector.getAt(1).GetNumber());
   const built = JsonObject.create();
   built.SetNamedValue("x", JsonValue.CreateNumberValue(3));
   const shown = built.as_IJsonValue().Stringify();

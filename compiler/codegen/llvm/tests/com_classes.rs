@@ -838,3 +838,49 @@ fn a_listener_naming_no_event_is_refused() {
         prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
     );
 }
+
+/// A generic interface as `bind-winmd` writes it, with its own surface.
+const GENERIC: &str = r#"declare module "winrt:Test.Generic" {
+  import type { CNumber } from "c:types";
+  import type { ComClass, IInspectable } from "winrt:types";
+  export interface IVectorMethods<T> {
+    /**
+     * @ntsVtable 7 get_Size
+     * @ntsHresult
+     */
+    get_Size(this: IVector<T>): CNumber<"uint32">;
+  }
+  export interface IVectorMembers<T> {
+    /**
+     * @ntsVtable 6 GetAt
+     * @ntsHresult
+     */
+    getAt(this: IVector<T>, index: CNumber<"uint32">): T;
+    /**
+     * @ntsGet 7 get_Size
+     */
+    readonly size: CNumber<"uint32">;
+  }
+  export type IVector<T> = ComClass<"Test_IVector"> & IVectorMethods<T> & IVectorMembers<T>;
+  export type Things = IVector<IInspectable>;
+}
+"#;
+
+/// An instantiation's own surface: `list.size` through the getter's slot and
+/// `list.getAt(i)` through its own, on the instantiation's table -- whether
+/// the receiver is spelled as the instantiation or by an alias of it.
+#[test]
+fn a_generic_interfaces_surface_is_called_on_its_own_table() {
+    let source = "import type { IInspectable } from \"winrt:types\";\nimport type { IVector, Things } from \"winrt:Test.Generic\";\nexport function count(v: IVector<IInspectable>): number {\n  return v.size;\n}\nexport function first(v: Things): IInspectable {\n  return v.getAt(0);\n}\n";
+    let Some((dir, prepared)) = prepare_with("generic", GENERIC, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("[7])(") && text.contains("[6])("), "not the slots:\n{text}");
+    assert!(!text.contains("nts_com_query("), "an instantiation is asked for itself:\n{text}");
+    windows_syntax(&dir, &c);
+}

@@ -413,6 +413,17 @@ impl Writer<'_> {
         let _ = writeln!(body, "  export interface {name}Methods{parameters} {{");
         body.push_str(&methods);
         let _ = writeln!(body, "  }}");
+        // A generic interface's idiomatic surface is its own: no class's
+        // surface declares it, and an `IVector<T>` -- a panel's children, a
+        // list's items -- is its instantiation's table, which no query asks.
+        let surface = if self.generics.is_empty() {
+            String::new()
+        } else {
+            let _ = writeln!(body, "  export interface {name}Members{parameters} {{");
+            body.push_str(&self.generic_members(def, &this));
+            let _ = writeln!(body, "  }}");
+            format!(" & {name}Members{parameters}")
+        };
         // The tag is the C struct a handle points at, so a C identifier: the
         // namespace kept, since two namespaces may name an interface alike.
         let tag = format!("{}_{name}", self.namespace.replace('.', "_"));
@@ -425,11 +436,40 @@ impl Writer<'_> {
                 let _ = writeln!(body, ";");
             }
             None => {
-                let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\"> & {name}Methods{parameters};");
+                let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\"> & {name}Methods{parameters}{surface};");
             }
         }
         self.generics.clear();
         true
+    }
+
+    /// A generic interface's members as a class's surface declares its own
+    /// ([`Self::interface_members`]): a property from each `get_X` and its
+    /// `put_X`, each other method under its camelCase name -- on the
+    /// interface itself, whose value is the instantiation's table, so none
+    /// is asked for. Events are left to its `add_`/`remove_`: their
+    /// listener's delegate is itself an instantiation.
+    fn generic_members(&mut self, def: TypeDef, this: &str) -> String {
+        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def.methods().enumerate().map(|(index, method)| (6 + index, method)).collect();
+        let slot_of = |wanted: &str| methods.iter().find(|(_, method)| method_name(*method) == wanted).map(|(slot, method)| (*slot, *method));
+        let mut out = String::new();
+        for &(slot, method) in &methods {
+            let abi = method_name(method);
+            if abi.starts_with("add_") || abi.starts_with("remove_") || abi.starts_with("put_") {
+                continue;
+            }
+            if let Some(property) = abi.strip_prefix("get_") {
+                if let Some(text) = self.property(method, slot, slot_of(&format!("put_{property}")), None) {
+                    out.push_str(&text);
+                }
+                continue;
+            }
+            let js = nts_core::hir::native::js_name(&abi);
+            if let Ok(text) = self.method_named(method, slot, Receiver::Instance(this), Some(&js), None) {
+                out.push_str(&text);
+            }
+        }
+        out
     }
 
     /// `as_X()` for each of `interfaces` that `this` answers by
@@ -735,14 +775,15 @@ impl Writer<'_> {
         setter: Option<(usize, windows_metadata::reader::MethodDef)>,
         via: Option<&str>,
     ) -> Option<String> {
-        let read = getter.signature(&[]);
+        let arguments = self.signature_arguments();
+        let read = getter.signature(&arguments);
         if !read.types.is_empty() {
             return None;
         }
         let answered = self.spell(&read.return_type, false).ok()?;
         let taken = match setter {
             Some((_, put)) => {
-                let written = put.signature(&[]);
+                let written = put.signature(&arguments);
                 let [ty] = written.types.as_slice() else { return None };
                 Some(self.spell(ty, true).ok()?)
             }
@@ -1037,6 +1078,19 @@ impl Writer<'_> {
         self.method_named(method, slot, receiver, None, None)
     }
 
+    /// The arguments a signature is read with: an instantiation's, or a
+    /// generic interface's own parameters, which stand for themselves -- the
+    /// signature reads `T` by its index, and is spelled back by name.
+    fn signature_arguments(&self) -> Vec<Type> {
+        self.arguments.clone().unwrap_or_else(|| {
+            self.generics
+                .iter()
+                .enumerate()
+                .map(|(at, name)| Type::Generic(name.clone(), u16::try_from(at).unwrap_or(u16::MAX)))
+                .collect()
+        })
+    }
+
     /// [`Self::method`], declared under `display` where the idiomatic surface
     /// names it (`getFolderFromPathAsync`), and called through the interface
     /// `via` names where a class declares it from one of its others.
@@ -1048,16 +1102,7 @@ impl Writer<'_> {
         display: Option<&str>,
         via: Option<&str>,
     ) -> Result<String, String> {
-        // A generic interface's own parameters stand for themselves: the
-        // signature reads `T` by its index, and is spelled back by name.
-        let parameters: Vec<Type> = self.arguments.clone().unwrap_or_else(|| {
-            self.generics
-                .iter()
-                .enumerate()
-                .map(|(at, name)| Type::Generic(name.clone(), u16::try_from(at).unwrap_or(u16::MAX)))
-                .collect()
-        });
-        let signature = method.signature(&parameters);
+        let signature = method.signature(&self.signature_arguments());
         let named = method.params_by_sequence(signature.types.len()).map_err(|_| "a method whose parameters the metadata numbers wrongly".to_owned())?;
         let out = |at: usize| named.params().get(at).copied().flatten().is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out));
         let declared = declared_parameters(&signature.types, out, &receiver)?;

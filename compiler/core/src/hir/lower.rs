@@ -28732,15 +28732,51 @@ impl<'a> FuncBuilder<'a> {
     /// with an `@ntsGet` or `@ntsSet`: a property of a handle, reached through
     /// methods rather than stored.
     fn accessor_declarations(&self, member: NodeId) -> Vec<&nts_semantic_schema::NativeAttributes> {
-        let Some(symbol) = self.node(member).symbol else { return Vec::new() };
-        let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else { return Vec::new() };
-        record
-            .declarations
-            .iter()
-            .filter(|decl| matches!(self.kind_of(**decl), Some(syntax::PROPERTY_SIGNATURE | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)))
-            .filter_map(|decl| self.node(*decl).native.as_deref())
+        self.accessor_nodes(member)
+            .into_iter()
+            .filter_map(|decl| self.node(decl).native.as_deref())
             .filter(|native| native.get.is_some() || native.set.is_some())
             .collect()
+    }
+
+    /// The property declarations a member names: its symbol's, or -- for a
+    /// member of an instantiation (`list.size` on an `IVector<IInspectable>`),
+    /// whose symbol the checker made for the instantiation and records no
+    /// declaration of -- the declaration the receiver's type records for the
+    /// property of that name, through each part of an intersection.
+    fn accessor_nodes(&self, member: NodeId) -> Vec<NodeId> {
+        let accessor = |decl: &NodeId| matches!(self.kind_of(*decl), Some(syntax::PROPERTY_SIGNATURE | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR));
+        let declared: Vec<NodeId> = self
+            .node(member)
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .map(|record| record.declarations.iter().copied().filter(accessor).collect())
+            .unwrap_or_default();
+        if !declared.is_empty() {
+            return declared;
+        }
+        let Some(name) = self.literal_name(member) else { return Vec::new() };
+        let Some(receiver) = self
+            .node(member)
+            .parent
+            .filter(|access| self.kind_of(*access) == Some(syntax::PROPERTY_ACCESS_EXPRESSION))
+            .and_then(|access| self.children(access).first().copied())
+            .and_then(|object| self.snapshot.node_types.get(&object).copied())
+        else {
+            return Vec::new();
+        };
+        let mut found = Vec::new();
+        let mut pending = vec![receiver];
+        while let Some(ty) = pending.pop() {
+            match self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+                Some(TypeKind::Intersection(parts)) => pending.extend(parts.iter().copied()),
+                Some(TypeKind::Object { properties }) => {
+                    found.extend(properties.iter().filter(|p| p.name == name).filter_map(|p| p.declaration).filter(accessor));
+                }
+                _ => {}
+            }
+        }
+        found
     }
 
     /// A read of a binding's property: `None` for any other member.
@@ -28802,15 +28838,9 @@ impl<'a> FuncBuilder<'a> {
         // signature for both, or a `get`/`set` pair, each its own.
         let write = value.is_some();
         let declaration = self
-            .node(member)
-            .symbol
-            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-            .and_then(|record| {
-                record.declarations.iter().copied().find(|decl| {
-                    let tagged = self.node(*decl).native.as_deref().is_some_and(|n| if write { n.set.is_some() } else { n.get.is_some() });
-                    tagged && matches!(self.kind_of(*decl), Some(syntax::PROPERTY_SIGNATURE | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR))
-                })
-            })
+            .accessor_nodes(member)
+            .into_iter()
+            .find(|decl| self.node(*decl).native.as_deref().is_some_and(|n| if write { n.set.is_some() } else { n.get.is_some() }))
             .ok_or_else(|| self.unsupported(id, "a Windows Runtime property with no declaration"))?;
         // Its value's type: the property's, the getter's result, or the
         // setter's parameter.

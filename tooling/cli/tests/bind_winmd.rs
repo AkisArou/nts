@@ -194,6 +194,18 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         ),
         "TryParse's `[out]` parameter is not the field of its result:\n{module}"
     );
+    // A generic interface's idiomatic surface is its own, on its own table:
+    // `list.size`, `list.getAt(0)`, `list.append(v)`, for any `T`.
+    let collections = std::fs::read_to_string(out.join("Windows.Foundation.Collections.d.ts")).unwrap();
+    assert!(
+        collections.contains("export type IVector<T> = ComClass<\"Windows_Foundation_Collections_IVector\"> & IVectorMethods<T> & IVectorMembers<T>;"),
+        "IVector<T> does not carry its surface"
+    );
+    assert!(collections.contains("     * @ntsGet 7 get_Size\n     */\n    readonly size: CNumber<\"uint32\">;"), "IVector<T> has no `size`");
+    assert!(
+        collections.contains("     * @ntsVtable 13 Append\n     * @ntsHresult\n     */\n    append(this: IVector<T>, value: T): void;"),
+        "IVector<T> has no `append`"
+    );
     assert!(refused.is_empty(), "Windows.Data.Json refused something:\n{refused}");
 }
 
