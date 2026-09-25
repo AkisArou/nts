@@ -8,7 +8,7 @@
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::{Family, Type};
+use nts_core::hir::native::{Family, PROGRAM_GTYPE, Type};
 use nts_core::hir::{Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program};
 use nts_diagnostics::Diagnostic;
 
@@ -19,13 +19,36 @@ pub(super) fn maker(class: &ForeignClass) -> String {
     format!("nts_gobject_new_{}", class.name)
 }
 
-/// Whether the program makes one of `class`: nothing is registered for a
-/// class it never constructs.
+/// Whether the program makes one of `class`, and so defines its `new`.
 fn made(program: &Program, class: &ForeignClass) -> bool {
-    let make = maker(class);
-    program.funcs.iter().flat_map(|func| &func.values).any(|op| {
-        matches!(&op.kind, OpKind::Call { callee: Callee::Native(target), .. } if target.name == make)
-    })
+    called(program, &maker(class))
+}
+
+/// The classes the program writes whose `GType` it needs, parents first: each
+/// it makes, each a chain-up reaches the parent of, and each one of those's
+/// ancestors that the program wrote too -- as the C backend's `registered`.
+fn registered(program: &Program) -> Vec<&ForeignClass> {
+    let gobject = |name: &str| program.foreign_classes.iter().find(|class| class.family == Family::GObject && class.name == name);
+    let mut wanted: Vec<&str> = Vec::new();
+    for op in program.funcs.iter().flat_map(|func| &func.values) {
+        let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
+        if let Some(made) = target.name.strip_prefix("nts_gobject_new_") {
+            wanted.push(made);
+        } else if let Some((class, _)) = target.name.strip_prefix("nts_gobject_chain_").and_then(|rest| rest.rsplit_once('_')) {
+            wanted.extend(gobject(class).and_then(|class| class.superclass.strip_prefix(PROGRAM_GTYPE)));
+        }
+    }
+    let mut order: Vec<&ForeignClass> = Vec::new();
+    for name in wanted {
+        let mut chain = Vec::new();
+        let mut at = gobject(name);
+        while let Some(class) = at.filter(|class| !order.iter().chain(&chain).any(|seen| seen.name == class.name)) {
+            chain.push(class);
+            at = class.superclass.strip_prefix(PROGRAM_GTYPE).and_then(gobject);
+        }
+        order.extend(chain.into_iter().rev());
+    }
+    order
 }
 
 /// Whether the program calls `name` as a foreign function, and so declares it.
@@ -45,8 +68,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     // and chain up to it: LLVM, unlike C, refuses a second declaration.
     let mut parents = std::collections::BTreeSet::new();
     let mut out = chains(program, platform, &mut parents)?;
-    let classes: Vec<&ForeignClass> =
-        program.foreign_classes.iter().filter(|class| class.family == Family::GObject && made(program, class)).collect();
+    let classes = registered(program);
     if classes.is_empty() {
         return Ok(out);
     }
@@ -101,8 +123,9 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             }
             None => "null".to_owned(),
         };
+        // A parent the program wrote is defined here, not declared.
         let parent = &class.superclass;
-        if !called(program, parent) && parents.insert(parent.clone()) {
+        if !parent.starts_with(PROGRAM_GTYPE) && !called(program, parent) && parents.insert(parent.clone()) {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
         let _ = writeln!(
@@ -117,11 +140,13 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
              done:\n  %type = phi i64 [ %cached, %entry ], [ %made, %register ]\n  ret i64 %type\n}}",
             slots.len()
         );
-        let _ = writeln!(
-            out,
-            "define ptr @{}() nounwind {{\n  %type = call i64 @nts_gobject_type_{name}()\n  %made = call ptr @nts_gobject_new(i64 %type)\n  ret ptr %made\n}}",
-            maker(class)
-        );
+        if made(program, class) {
+            let _ = writeln!(
+                out,
+                "define ptr @{}() nounwind {{\n  %type = call i64 @nts_gobject_type_{name}()\n  %made = call ptr @nts_gobject_new(i64 %type)\n  ret ptr %made\n}}",
+                maker(class)
+            );
+        }
     }
     Ok(out)
 }
@@ -147,7 +172,7 @@ fn chains(program: &Program, platform: Platform, parents: &mut std::collections:
         let Some(parent) = program.foreign_classes.iter().find(|foreign| foreign.family == Family::GObject && foreign.name == class).map(|foreign| foreign.superclass.clone()) else {
             return Err(refuse(func, "a chain-up in a class this program does not register"));
         };
-        if !called(program, &parent) && parents.insert(parent.clone()) {
+        if !parent.starts_with(PROGRAM_GTYPE) && !called(program, &parent) && parents.insert(parent.clone()) {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
         let types = target.parameters.iter().map(|ty| ty_of(&ty.abi(platform.abi), func).map(str::to_owned)).collect::<Result<Vec<_>, _>>()?;

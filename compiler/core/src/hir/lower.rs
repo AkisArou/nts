@@ -1188,9 +1188,16 @@ fn foreign_class_name(snapshot: &SemanticSnapshot, class: NodeId) -> Option<Stri
 /// above them are not in it. A `GObject` class's state is its own fields.
 fn objc_state_chain(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<NodeId> {
     let mut chain = vec![class];
-    if super::native::extends_objc(snapshot, class) {
+    // A `GObject` class's chain is its ancestors the program wrote, which
+    // `gobject_parent` answers for as it does for the class itself.
+    let within: fn(&SemanticSnapshot, NodeId) -> bool = if super::native::extends_objc(snapshot, class) {
+        super::native::extends_objc
+    } else {
+        |snapshot, base| super::native::gobject_parent(snapshot, base).is_some()
+    };
+    if within(snapshot, class) {
         let mut at = super::native::superclass(snapshot, class);
-        while let Some(base) = at.filter(|base| super::native::extends_objc(snapshot, *base)) {
+        while let Some(base) = at.filter(|base| within(snapshot, *base)) {
             chain.push(base);
             at = super::native::superclass(snapshot, base);
         }
@@ -14763,6 +14770,13 @@ impl<'a> FuncBuilder<'a> {
     fn is_program_objc_field(&self, pointee: &super::native::Pointee, name: &str) -> bool {
         let Some(handle) = opaque_handle(pointee) else { return false };
         let Some(&(_, class_ty)) = self.hierarchy.objc_states.get(&handle.tag) else { return false };
+        self.chain_stores(class_ty, name)
+    }
+
+    /// Whether `name` is a field some class of `class_ty`'s chain declares and
+    /// stores: its own, or one it inherits from a class the program wrote --
+    /// every one of them in the state object (`objc_state_layout`).
+    fn chain_stores(&self, class_ty: TypeId, name: &str) -> bool {
         self.objc_chain(class_ty).into_iter().any(|class| declares_stored(self.snapshot, class, name))
     }
 
@@ -14777,23 +14791,39 @@ impl<'a> FuncBuilder<'a> {
         if let Some(known) = self.layouts.iter().find(|layout| layout.types.contains(&ty)) {
             return Ok(known.clone());
         }
+        let chain = self.objc_chain(class_ty);
         let mut fields = Vec::new();
-        for class in self.objc_chain(class_ty) {
+        for class in &chain {
             let Some(TypeKind::Object { properties }) = self.snapshot.types.get(class.0 as usize).map(|record| &record.kind) else {
                 return Err(self.unsupported(id, "the fields of an Objective-C class the checker did not decompose"));
             };
             let own: Vec<_> = properties.iter().filter(|property| property.own).cloned().collect();
-            fields.extend(self.fields_of(id, class, &own)?);
+            fields.extend(self.fields_of(id, *class, &own)?);
         }
+        // **The parent's state is this one's prefix, and `verify` checks it.**
+        // One object holds a chain's fields, and a parent's method reads its
+        // own through the parent's layout: that is sound only while the
+        // parent's fields lead this one's, in its order. The loop above
+        // arranges that, and `base` is what makes it a checked fact
+        // (`BrokenBase`) that `put_bases_first` keeps, not an ordering a field
+        // added to one class could silently break.
+        let parent = chain.len().checked_sub(2).and_then(|at| chain.get(at).copied());
+        let base = match parent.and_then(|parent| self.hierarchy.objc_states.values().find(|(_, declared)| *declared == parent).copied()) {
+            Some((parent_index, parent_ty)) => {
+                self.objc_state_layout(id, parent_index, parent_ty)?;
+                Some(super::objc_state_type(parent_index))
+            }
+            None => None,
+        };
         let name = self.hierarchy.name.get(&class_ty).map_or_else(|| format!("ObjcState{index}"), |name| format!("{name}_state"));
         let layout = Layout {
             types: vec![ty],
             name,
             interfaces: Vec::new(),
             fields,
-            methods: vec![None; self.hierarchy.table_size()],
             // Not a class of this program's: nothing dispatches on it.
-            base: None,
+            methods: vec![None; self.hierarchy.table_size()],
+            base,
         };
         self.layouts.push(layout.clone());
         Ok(layout)
@@ -36956,7 +36986,7 @@ impl<'a> FuncBuilder<'a> {
             let field = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
                 && children.last().and_then(|member| self.literal_name(*member)).is_some_and(|name| {
                     self.is_program_objc_field(&pointee, &name)
-                        || self.state_by_type(id).is_some_and(|(_, class_ty, _)| declares_stored(self.snapshot, class_ty, &name))
+                        || self.state_by_type(id).is_some_and(|(_, class_ty, _)| self.chain_stores(class_ty, &name))
                 });
             if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field || accessor || field) {
                 return Err(self.unsupported(id, "a property read through a native pointer"));

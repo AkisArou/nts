@@ -23,6 +23,13 @@
 //   shy 1 true  `Shy`'s `vfunc_show` counts and chains up
 //                 (`super.vfunc_show()`) to GTK's, which is what makes the
 //                 widget visible: an override that skipped it reads `shy 1 false`
+//   A 2 B 11 2 C 101 11 2 ... Nts_C 3 12 102  three classes the program
+//                 wrote, each over the last: every `vfunc_clicked` chains up
+//                 to its parent's, each reads its own fields and its parents'
+//                 (`A`'s through `A`'s own method), and all three are read
+//                 from outside -- one state object, `A`'s fields first
+//   Q 6           the parent has the fields and the child none
+//   R S 8         the parent has none and the child has them
 import {
   GtkButton,
   GtkWidget,
@@ -97,6 +104,75 @@ class Shy extends GtkButton {
   }
 }
 
+// Classes over classes the program wrote. One object holds each chain's
+// fields, in the slot of its first class that has any, and each class's state
+// begins with its parent's (`verify` checks that prefix).
+class A extends GtkButton {
+  a = 1;
+  bumpA(): number {
+    this.a++;
+    return this.a;
+  }
+  vfunc_clicked(): void {
+    sub_log("A " + String(this.bumpA()));
+  }
+}
+
+class B extends A {
+  b = 10;
+  vfunc_clicked(): void {
+    this.b++;
+    super.vfunc_clicked();
+    sub_log("B " + String(this.b) + " " + String(this.a));
+  }
+}
+
+class C extends B {
+  c = 100;
+  vfunc_clicked(): void {
+    this.c++;
+    super.vfunc_clicked();
+    sub_log("C " + String(this.c) + " " + String(this.b) + " " + String(this.a));
+  }
+}
+
+class P extends GtkButton {
+  p = 5;
+}
+
+class Q extends P {
+  vfunc_clicked(): void {
+    this.p++;
+    sub_log("Q " + String(this.p));
+  }
+}
+
+class R extends GtkButton {
+  vfunc_clicked(): void {
+    sub_log("R");
+  }
+}
+
+class S extends R {
+  s = 7;
+  vfunc_clicked(): void {
+    this.s++;
+    super.vfunc_clicked();
+    sub_log("S " + String(this.s));
+  }
+}
+
+function chains(): void {
+  const c = new C({ label: "c" });
+  sub_emit(c, "clicked");
+  sub_emit(c, "clicked");
+  sub_log(g_type_name_from_instance(c) + " " + String(c.a) + " " + String(c.b) + " " + String(c.c));
+  const q = new Q({ label: "q" });
+  sub_emit(q, "clicked");
+  const s = new S({ label: "s" });
+  sub_emit(s, "clicked");
+}
+
 function main(): void {
   gtk_init();
   const counter = new Counter({ label: "0" });
@@ -124,6 +200,7 @@ function main(): void {
   shy.set_visible(false);
   shy.set_visible(true);
   sub_log("shy " + String(shy.shown) + " " + String(shy.get_visible()));
+  chains();
 }
 
 main();

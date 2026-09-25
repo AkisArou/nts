@@ -233,11 +233,15 @@ pub(crate) fn registered_by_a_runtime(snapshot: &SemanticSnapshot, declaration: 
         || is_com_class(snapshot, declaration)
 }
 
-/// For a class the program writes over a `GObject` class a binding declares
-/// -- `class Counter extends GtkButton` -- the function answering that
-/// class's `GType`, which the subclass registers under: the `@ntsGType` on
-/// the `__c_gtype` member of the value it extends. `None` for any other
-/// class.
+/// The prefix of the `GType` function a backend defines for each `GObject`
+/// class the program writes: `nts_gobject_type_Counter`.
+pub const PROGRAM_GTYPE: &str = "nts_gobject_type_";
+
+/// For a class the program writes over a `GObject` class -- `class Counter
+/// extends GtkButton` -- the function answering that class's `GType`, which
+/// the subclass registers under: the `@ntsGType` on the `__c_gtype` member of
+/// the value it extends, or, over a class the program wrote itself, that
+/// class's own ([`PROGRAM_GTYPE`]). `None` for any other class.
 ///
 /// Read from the value's declaration, not its type: the snapshot keeps a
 /// value with a construct signature as that signature, and its members are
@@ -253,6 +257,17 @@ pub(crate) fn gobject_parent(snapshot: &SemanticSnapshot, declaration: NodeId) -
     let mut record = snapshot.symbols.get(node(base)?.symbol?.0 as usize)?;
     while let Some(aliased) = record.aliased {
         record = snapshot.symbols.get(aliased.0 as usize)?;
+    }
+    // A class the program wrote over one, `class Derived extends Base`: the
+    // `GType` function the backends define for it, which registers `Base`
+    // before `Derived` asks for it as its parent.
+    if let Some(class) = record.declarations.iter().copied().find(|d| is(*d, syntax::CLASS_DECLARATION)) {
+        gobject_parent(snapshot, class)?;
+        let name = syntax_children(snapshot, class).into_iter().find_map(|child| {
+            let node = node(child)?;
+            matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER)).then(|| node.text.clone()).flatten()
+        })?;
+        return Some(format!("{PROGRAM_GTYPE}{name}"));
     }
     let value = record.declarations.iter().copied().find(|d| is(*d, syntax::VARIABLE_DECLARATION))?;
     // The tag is on a member of the value's type literal, a few levels down.

@@ -720,8 +720,34 @@ Still refused, each by name: `super(props)` passing a props object through,
 which needs a presence-checked setter per property rather than a literal's;
 a constructor parameter that declares a field; an override of
 `vfunc_finalize` (the registration's gives the fields back); a direct call
-of a `vfunc_` method outside chaining up; a slot taking a record by value;
-and extending a subclass the program wrote.
+of a `vfunc_` method outside chaining up; and a slot taking a record by
+value.
+
+**A class over a class the program wrote**: `class C extends B`, `class B
+extends A`, `class A extends GtkButton`.
+- **Registration.** `gobject_parent` answers `nts_gobject_type_B` for `C`, so
+  `B` is registered before `C` asks for it as a parent, including when the
+  program only ever makes a `C`. Each backend registers such an ancestor
+  (`registered`).
+- **One state object per instance, in one slot.** The slot belongs to the
+  first class of the chain that has fields (its `owner`). Only the owner
+  installs `instance_init` and `finalize`, and both go through the owner.
+  GObject calls every class's `instance_init` with the instance's class and
+  inherits `finalize`, so a slot per class made the state twice. It also
+  looped forever: a parent's `finalize` looked the class up from the object
+  and found the child again. That loop is the control, and it still times
+  out.
+- **Prefix layout.** Each class's state is its parent's followed by its own
+  fields. The state layout names the parent's as its `base`, so `verify`
+  checks the prefix (`BrokenBase`) and `put_bases_first` keeps it. A parent's
+  method reads its fields through its own layout. Controls: with the chain's
+  fields built in reverse, the fixture still passes, because
+  `put_bases_first` restores the order. With the reversal and no `base`,
+  `A`'s method reads `C`'s field.
+
+The fixture has three levels, each chaining up to the last, plus both
+mirrors: a parent with fields under a child with none, and a parent with none
+under a child with fields.
 
 **Chaining up**: `super.vfunc_show()` in an override calls the parent class's
 implementation, read from its class struct at the slot's offset when the
