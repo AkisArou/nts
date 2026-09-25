@@ -3,8 +3,8 @@ import { getStackByFiberInDevAndProd } from "react-reconciler/ReactFiberComponen
 import type { Fiber } from "react-reconciler/ReactInternalTypes.ts";
 
 // A thrown value with the fiber it came from and that fiber's component stack.
-export interface CapturedValue<T> {
-  readonly value: T;
+export interface CapturedValue {
+  readonly value: unknown;
   source: Fiber | null;
   stack: string | null;
 }
@@ -13,18 +13,18 @@ export interface CapturedValue<T> {
 // Native builds: NTS has no weak collections, so the table is a Map. It keeps
 // each thrown object alive for the life of the program; errors are rare,
 // and this is the known cost until weak references exist.
-const CapturedStacks: Map<object, CapturedValue<unknown>> = new Map<object, CapturedValue<unknown>>();
+const CapturedStacks: Map<object, CapturedValue> = new Map<object, CapturedValue>();
 
-export function createCapturedValueAtFiber<T>(value: T, source: Fiber): CapturedValue<T> {
+export function createCapturedValueAtFiber(value: unknown, source: Fiber): CapturedValue {
   // If the value is an error, call this function immediately after it is thrown
   // so the stack is accurate.
   if (typeof value === "object" && value !== null) {
     const existing = CapturedStacks.get(value);
     if (existing !== undefined) {
       // It was captured with this same value.
-      return existing as CapturedValue<T>;
+      return existing;
     }
-    const captured: CapturedValue<T> = {
+    const captured: CapturedValue = {
       value,
       source,
       stack: getStackByFiberInDevAndProd(source),
@@ -39,8 +39,8 @@ export function createCapturedValueAtFiber<T>(value: T, source: Fiber): Captured
   };
 }
 
-export function createCapturedValueFromError(value: Error, stack: string | null): CapturedValue<Error> {
-  const captured: CapturedValue<Error> = {
+export function createCapturedValueFromError(value: Error, stack: string | null): CapturedValue {
+  const captured: CapturedValue = {
     value,
     source: null,
     stack: stack,

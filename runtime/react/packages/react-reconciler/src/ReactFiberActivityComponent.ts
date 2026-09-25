@@ -12,7 +12,7 @@ export interface ActivityState {
   // NoLane is the default for normal boundaries, which turns into "normal" pri.
   retryLane: Lane;
   // Stashed Errors that happened while attempting to hydrate this boundary.
-  hydrationErrors: CapturedValue<unknown>[] | null;
+  hydrationErrors: CapturedValue[] | null;
 }
 
 export interface ActivityProps {

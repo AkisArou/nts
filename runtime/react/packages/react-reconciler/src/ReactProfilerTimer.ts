@@ -43,13 +43,13 @@ export const PINGED_UPDATE: UpdateType = 2;
 export let renderStartTime: number = -0;
 export let commitStartTime: number = -0;
 export let commitEndTime: number = -0;
-export let commitErrors: CapturedValue<unknown>[] | null = null;
+export let commitErrors: CapturedValue[] | null = null;
 export let profilerStartTime: number = -1.1;
 export let profilerEffectDuration: number = -0;
 export let componentEffectDuration: number = -0;
 export let componentEffectStartTime: number = -1.1;
 export let componentEffectEndTime: number = -1.1;
-export let componentEffectErrors: CapturedValue<unknown>[] | null = null;
+export let componentEffectErrors: CapturedValue[] | null = null;
 export let componentEffectSpawnedUpdate: boolean = false;
 
 export let blockingClampTime: number = -0;
@@ -467,7 +467,7 @@ export function popComponentEffectDuration(prevEffectDuration: number): void {
   }
 }
 
-export function pushComponentEffectErrors(): CapturedValue<unknown>[] | null {
+export function pushComponentEffectErrors(): CapturedValue[] | null {
   if (!enableProfilerTimer || !enableProfilerCommitHooks) {
     return null;
   }
@@ -477,7 +477,7 @@ export function pushComponentEffectErrors(): CapturedValue<unknown>[] | null {
 }
 
 export function popComponentEffectErrors(
-  prevErrors: CapturedValue<unknown>[] | null,
+  prevErrors: CapturedValue[] | null,
 ): void {
   if (!enableProfilerTimer || !enableProfilerCommitHooks) {
     return;
@@ -637,7 +637,7 @@ export function recordEffectDuration(_fiber: Fiber): void {
   }
 }
 
-export function recordEffectError(errorInfo: CapturedValue<unknown>): void {
+export function recordEffectError(errorInfo: CapturedValue): void {
   if (!enableProfilerTimer || !enableProfilerCommitHooks) {
     return;
   }

@@ -79,7 +79,7 @@ let didSuspendOrErrorDEV = false;
 let hydrationDiffRootDEV: HydrationDiffNode | null = null;
 
 // Hydration errors that were thrown inside this boundary
-let hydrationErrors: CapturedValue<unknown>[] | null = null;
+let hydrationErrors: CapturedValue[] | null = null;
 
 let rootOrSingletonContext = false;
 
@@ -730,7 +730,7 @@ function popHydrationStateOnInterruptedWork(fiber: Fiber): void {
   }
 }
 
-export function upgradeHydrationErrorsToRecoverable(): CapturedValue<unknown>[] | null {
+export function upgradeHydrationErrorsToRecoverable(): CapturedValue[] | null {
   const queuedErrors = hydrationErrors;
   if (queuedErrors !== null) {
     // Successfully completed a forced client render. The errors that occurred
@@ -746,7 +746,7 @@ function getIsHydrating(): boolean {
   return isHydrating;
 }
 
-export function queueHydrationError(error: CapturedValue<unknown>): void {
+export function queueHydrationError(error: CapturedValue): void {
   if (hydrationErrors === null) {
     hydrationErrors = [error];
   } else {

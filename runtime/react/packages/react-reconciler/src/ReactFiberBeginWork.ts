@@ -1630,7 +1630,7 @@ function updateHostRoot(current: Fiber | null, workInProgress: Fiber, renderLane
       // forced a client render. We should have a recoverable error already scheduled.
       return mountHostRootWithoutHydrating(current, workInProgress, nextChildren, renderLanes);
     } else if (nextChildren !== prevChildren) {
-      const recoverableError = createCapturedValueAtFiber<unknown>(
+      const recoverableError = createCapturedValueAtFiber(
         new Error(
           "This root received an early update, before anything was able " +
             "hydrate. Switched the entire root to client rendering.",

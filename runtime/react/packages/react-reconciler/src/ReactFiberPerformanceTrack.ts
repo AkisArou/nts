@@ -299,7 +299,7 @@ export function logComponentErrored(
   fiber: Fiber,
   startTime: number,
   endTime: number,
-  errors: CapturedValue<unknown>[],
+  errors: CapturedValue[],
 ): void {
   if (!supportsUserTiming) {
     return;
@@ -355,7 +355,7 @@ function logComponentEffectErrored(
   fiber: Fiber,
   startTime: number,
   endTime: number,
-  errors: CapturedValue<unknown>[],
+  errors: CapturedValue[],
 ): void {
   if (!supportsUserTiming) {
     return;
@@ -399,7 +399,7 @@ export function logComponentEffect(
   startTime: number,
   endTime: number,
   selfTime: number,
-  errors: CapturedValue<unknown>[] | null,
+  errors: CapturedValue[] | null,
 ): void {
   if (errors !== null) {
     logComponentEffectErrored(fiber, startTime, endTime, errors);
@@ -752,7 +752,7 @@ export function logRecoveredRenderPhase(
   startTime: number,
   endTime: number,
   _lanes: Lanes,
-  recoverableErrors: CapturedValue<unknown>[],
+  recoverableErrors: CapturedValue[],
   hydrationFailed: boolean,
   debugTask: unknown,
 ): void {
@@ -811,7 +811,7 @@ export function logSuspendedViewTransitionPhase(
 export function logCommitErrored(
   startTime: number,
   endTime: number,
-  errors: CapturedValue<unknown>[],
+  errors: CapturedValue[],
   passive: boolean,
   debugTask: unknown,
 ): void {
@@ -848,7 +848,7 @@ export function logCommitErrored(
 export function logCommitPhase(
   startTime: number,
   endTime: number,
-  errors: CapturedValue<unknown>[] | null,
+  errors: CapturedValue[] | null,
   abortedViewTransition: boolean,
   debugTask: unknown,
 ): void {
@@ -923,7 +923,7 @@ export function logAnimatingPhase(startTime: number, endTime: number, debugTask:
 export function logPassiveCommitPhase(
   startTime: number,
   endTime: number,
-  errors: CapturedValue<unknown>[] | null,
+  errors: CapturedValue[] | null,
   debugTask: unknown,
 ): void {
   if (errors !== null) {

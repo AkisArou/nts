@@ -421,10 +421,10 @@ let workInProgressDeferredLane: Lane = NoLane;
 // been pinged since, implying that they are still suspended.
 let workInProgressSuspendedRetryLanes: Lanes = NoLanes;
 // Errors that are thrown during the render phase.
-let workInProgressRootConcurrentErrors: CapturedValue<unknown>[] | null = null;
+let workInProgressRootConcurrentErrors: CapturedValue[] | null = null;
 // These are errors that we recovered from without surfacing them to the UI.
 // We will log them once the tree commits.
-let workInProgressRootRecoverableErrors: CapturedValue<unknown>[] | null = null;
+let workInProgressRootRecoverableErrors: CapturedValue[] | null = null;
 
 // Tracks when an update occurs during the render phase.
 let workInProgressRootDidIncludeRecursiveRenderUpdate = false;
@@ -596,7 +596,7 @@ let pendingEffectsLanes: Lanes = NoLanes;
 let pendingEffectsRemainingLanes: Lanes = NoLanes;
 let pendingEffectsRenderEndTime = -0; // Profiling-only
 let pendingPassiveTransitions: Transition[] | null = null;
-let pendingRecoverableErrors: CapturedValue<unknown>[] | null = null;
+let pendingRecoverableErrors: CapturedValue[] | null = null;
 let pendingViewTransition: RunningViewTransition | null = null;
 let pendingViewTransitionEvents: ((types: string[]) => void | (() => void))[] | null = null;
 let pendingTransitionTypes: TransitionTypes | null = null;
@@ -1159,7 +1159,7 @@ function recoverFromConcurrentError(
   return exitStatus;
 }
 
-export function queueRecoverableErrors(errors: CapturedValue<unknown>[]): void {
+export function queueRecoverableErrors(errors: CapturedValue[]): void {
   if (workInProgressRootRecoverableErrors === null) {
     workInProgressRootRecoverableErrors = errors;
   } else {
@@ -1322,7 +1322,7 @@ function suspendWithoutCommitting(root: FiberRoot, lanes: Lanes, renderEndTime: 
 function completeRootWhenReady(
   root: FiberRoot,
   finishedWork: Fiber,
-  recoverableErrors: CapturedValue<unknown>[] | null,
+  recoverableErrors: CapturedValue[] | null,
   transitions: Transition[] | null,
   didIncludeRenderPhaseUpdate: boolean,
   lanes: Lanes,
@@ -2172,7 +2172,7 @@ export function renderDidError(): void {
   }
 }
 
-export function queueConcurrentError(error: CapturedValue<unknown>): void {
+export function queueConcurrentError(error: CapturedValue): void {
   if (workInProgressRootConcurrentErrors === null) {
     workInProgressRootConcurrentErrors = [error];
   } else {
@@ -2990,7 +2990,7 @@ function completeRoot(
   root: FiberRoot,
   finishedWork: Fiber | null,
   lanes: Lanes,
-  recoverableErrors: CapturedValue<unknown>[] | null,
+  recoverableErrors: CapturedValue[] | null,
   transitions: Transition[] | null,
   didIncludeRenderPhaseUpdate: boolean,
   spawnedLane: Lane,

@@ -98,7 +98,7 @@ export function defaultOnRecoverableError(error: unknown, _errorInfo: ErrorInfo)
   reportGlobalError(error);
 }
 
-export function logUncaughtError(root: FiberRoot, errorInfo: CapturedValue<unknown>): void {
+export function logUncaughtError(root: FiberRoot, errorInfo: CapturedValue): void {
   try {
     if (isDevelopment) {
       componentName = errorInfo.source ? getComponentNameFromFiber(errorInfo.source) : null;
@@ -126,7 +126,7 @@ export function logUncaughtError(root: FiberRoot, errorInfo: CapturedValue<unkno
   }
 }
 
-export function logCaughtError(root: FiberRoot, boundary: Fiber, errorInfo: CapturedValue<unknown>): void {
+export function logCaughtError(root: FiberRoot, boundary: Fiber, errorInfo: CapturedValue): void {
   try {
     if (isDevelopment) {
       componentName = errorInfo.source ? getComponentNameFromFiber(errorInfo.source) : null;

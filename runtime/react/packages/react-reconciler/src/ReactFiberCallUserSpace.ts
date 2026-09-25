@@ -100,7 +100,7 @@ export const callComponentDidUpdateInDEV: (
 ) => void = callComponentDidUpdate.react_stack_bottom_frame.bind(callComponentDidUpdate);
 
 const callComponentDidCatch = {
-  react_stack_bottom_frame: function (instance: ClassInstance<unknown>, errorInfo: CapturedValue<unknown>): void {
+  react_stack_bottom_frame: function (instance: ClassInstance<unknown>, errorInfo: CapturedValue): void {
     const error = errorInfo.value;
     const stack = errorInfo.stack;
     instance.componentDidCatch(error, {
@@ -109,7 +109,7 @@ const callComponentDidCatch = {
   },
 };
 
-export const callComponentDidCatchInDEV: (instance: ClassInstance<unknown>, errorInfo: CapturedValue<unknown>) => void =
+export const callComponentDidCatchInDEV: (instance: ClassInstance<unknown>, errorInfo: CapturedValue) => void =
   callComponentDidCatch.react_stack_bottom_frame.bind(callComponentDidCatch);
 
 const callComponentWillUnmount = {
