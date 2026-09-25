@@ -5855,6 +5855,18 @@ fn lower_class(
             // with its methods as the runtime's -- not an object of ours with
             // an Objective-C base inside it, which would put two
             // representations on one chain.
+            if super::native::extends_objc(snapshot, class) && builder.kind_of(member) == Some(syntax::CONSTRUCTOR) {
+                match builder.lower_objc_constructor(class, member, instance) {
+                    Ok(func) => lowered.program.funcs.push(func),
+                    Err(diagnostic) => {
+                        note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                        lowered.diagnostics.push(diagnostic);
+                    }
+                }
+                wanted.extend(builder.used_closures.iter().copied());
+                collect_layouts(&mut lowered.program, builder.layouts);
+                continue;
+            }
             if super::native::extends_objc(snapshot, class) {
                 match builder.lower_objc_method(class, member, instance) {
                     Ok((func, method)) => {
@@ -11420,6 +11432,10 @@ struct FuncBuilder<'a> {
     /// and this compiler was refusing it, which is a refusal of valid code
     /// rather than a construct it does not understand.
     in_constructor: bool,
+    /// In the constructor of a class the program writes over an Objective-C
+    /// class: the class, which its `super(...)` makes an instance of, and
+    /// whether it has fields to make with it.
+    objc_construct: Option<(super::native::Handle, bool)>,
     /// What the module declares outside any function.
     module: ModuleScope,
     /// What every class in the program declares, and what it extends.
@@ -11668,6 +11684,7 @@ impl<'a> FuncBuilder<'a> {
             retyped: Retyped::new(),
             retyped_symbols: std::collections::BTreeMap::new(),
             in_constructor: false,
+            objc_construct: None,
             hierarchy: Hierarchy::default(),
             base: None,
             module: ModuleScope::default(),
@@ -13620,12 +13637,6 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         instance: Option<TypeId>,
     ) -> Result<(Func, super::ObjcMethod), Diagnostic> {
-        if self.kind_of(member) == Some(syntax::CONSTRUCTOR) {
-            return Err(self.unsupported(
-                member,
-                "a constructor of a class extending an Objective-C class, which inherits its superclass's initializers",
-            ));
-        }
         if is_static_member(self.snapshot, member) {
             return Err(self.unsupported(member, "a static member of a class extending an Objective-C class"));
         }
@@ -13676,6 +13687,129 @@ impl<'a> FuncBuilder<'a> {
         let func = self.lower_method_of(class, member, instance)?;
         let method = super::ObjcMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
         Ok((func, method))
+    }
+
+    /// A constructor of a class the program writes over an Objective-C class,
+    /// as the function `new` calls: `{Class}#new`, taking the constructor's
+    /// parameters and answering the instance (+1). Its `super(...)` is where
+    /// the instance is made -- `+alloc` sent to this class, then the
+    /// superclass constructor's `init...` -- so `this` is that object from
+    /// there on, with its fields made at once, whichever `init` it was. Only
+    /// a constructor opening with its `super(...)`: `this` is one object for
+    /// the whole body, and one made in a branch is not. Not a method the
+    /// runtime knows: an instance Objective-C makes itself (`[Counter new]`,
+    /// a nib) runs its superclass's `init` and none of this.
+    fn lower_objc_constructor(&mut self, class: NodeId, member: NodeId, instance: Option<TypeId>) -> Result<Func, Diagnostic> {
+        let instance = instance
+            .or_else(|| instance_type_of(self.snapshot, class))
+            .ok_or_else(|| self.unsupported(member, "a constructor of an Objective-C class with no instance type"))?;
+        let Some(HirType::NativePointer(super::native::Pointee::Opaque(handle))) = self.represent(instance) else {
+            return Err(self.unsupported(member, "a constructor of an Objective-C class that is not a handle"));
+        };
+        let body = self.method_body(member, false)?.ok_or_else(|| self.unsupported(member, "an Objective-C constructor with no body"))?;
+        let opens_with_super = self.children(body).first().is_some_and(|first| {
+            self.kind_of(*first) == Some(syntax::EXPRESSION_STATEMENT)
+                && self.children(*first).first().is_some_and(|call| {
+                    self.kind_of(*call) == Some(syntax::CALL_EXPRESSION)
+                        && self.children(*call).first().is_some_and(|callee| self.kind_of(*callee) == Some(syntax::SUPER_KEYWORD))
+                })
+        });
+        if !opens_with_super {
+            return Err(self.unsupported(member, "a constructor of a class extending an Objective-C class that does not open with its `super(...)`"));
+        }
+        let fields = self.children(class).into_iter().any(|m| {
+            self.kind_of(m) == Some(syntax::PROPERTY_DECLARATION) && !is_static_member(self.snapshot, m)
+        });
+        let origin = self.origin(member);
+        self.this = None;
+        self.base = self.base_class(class);
+        self.in_constructor = true;
+        self.objc_construct = Some((handle.clone(), fields));
+        let mut params = Vec::new();
+        for child in self.children(member) {
+            if self.kind_of(child) != Some(syntax::PARAMETER) {
+                continue;
+            }
+            if self.declares_a_field(child) {
+                return Err(self.unsupported(child, "a parameter property of a class extending an Objective-C class"));
+            }
+            let index = u32::try_from(params.len()).unwrap_or(0);
+            params.extend(self.lower_param(child, index)?);
+        }
+        let ty = HirType::NativePointer(super::native::Pointee::Opaque(handle.clone()));
+        self.returns = ty.clone();
+        self.lower_block(body)?;
+        if !self.is_terminated() {
+            let made = self.this.ok_or_else(|| self.unsupported(member, "an Objective-C constructor that made no instance"))?;
+            self.terminate(Terminator::Return(Some(made)));
+        }
+        Ok(self.finish(format!("{}#new", handle.tag), params, ty, origin, false))
+    }
+
+    /// `super(...)` in such a constructor: `+alloc` sent to the program's
+    /// class and the superclass constructor's `init...` to what it answered,
+    /// ARC's pair as `new` sends it, and the answer `this`. A factory the
+    /// binding imports as a constructor makes the superclass's own instance,
+    /// not this class's, and is refused.
+    fn lower_objc_super_init(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let Some((handle, fields)) = self.objc_construct.clone() else {
+            return Err(self.unsupported(id, "`super(...)` outside a constructor"));
+        };
+        if self.this.is_some() {
+            return Err(self.unsupported(id, "a second `super(...)`"));
+        }
+        let target = self.snapshot.call_targets.get(&id).copied().ok_or_else(|| self.unresolved_call(id))?;
+        let Some(constructor) = target.callee.filter(|c| self.objc_class_member(*c).is_some()) else {
+            return Err(self.unsupported(id, "a `super(...)` into a constructor the binding does not declare"));
+        };
+        let Some(selector) = self.node(constructor).native.as_ref().and_then(|n| n.selector.clone()) else {
+            return Err(self.unsupported(id, "an Objective-C constructor with no `@ntsSelector`"));
+        };
+        if selector.starts_with('+') {
+            return Err(self.unsupported(id, "a `super(...)` into a class method Swift imports as an initializer, which makes the superclass's instance"));
+        }
+        let instance = self.this_instance_type(id)?;
+        let alloc = nts_semantic_schema::SignatureRecord {
+            parameters: Vec::new(),
+            return_type: instance,
+            type_parameters: Vec::new(),
+            is_construct: false,
+            type_predicate: None,
+            this_type: None,
+        };
+        // Typed as the instance, not as the `super(...)` expression, which
+        // the checker has as `void`.
+        let made_ty = HirType::NativePointer(super::native::Pointee::Opaque(handle.clone()));
+        let callee = self.native_callee_with(id, Some(constructor), "alloc".to_owned(), &alloc, Some("alloc".to_owned()), Some(handle.tag.clone()))?;
+        let allocated = self.finish_call_typed(id, callee, Vec::new(), Vec::new(), Some(constructor), Some(made_ty.clone()))?;
+        let mut init = self.snapshot.signatures[target.signature.0 as usize].clone();
+        init.is_construct = false;
+        init.return_type = instance;
+        init.parameters.insert(0, nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: instance, optional: false, rest: false });
+        let callee = self.native_callee_with(id, Some(constructor), selector.clone(), &init, Some(selector), None)?;
+        let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(allocated))?;
+        let made = self.finish_call_typed(id, callee, args, lent, Some(constructor), Some(made_ty))?;
+        self.this = Some(made);
+        // Its fields, made now: only `init` itself makes them on the way in.
+        if fields && let Some(&(index, _)) = self.hierarchy.objc_states.get(&handle.tag) {
+            let origin = self.origin(id);
+            let state = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
+            let _ = self.runtime_call("nts_objc_state", vec![made], state, origin);
+        }
+        Ok(made)
+    }
+
+    /// The program class's instance type, as the checker has `this` in the
+    /// constructor being lowered.
+    fn this_instance_type(&self, id: NodeId) -> Result<TypeId, Diagnostic> {
+        let mut node = self.node(id).parent;
+        while let Some(at) = node {
+            if matches!(self.kind_of(at), Some(syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION)) {
+                return instance_type_of(self.snapshot, at).ok_or_else(|| self.unsupported(id, "a class with no instance type"));
+            }
+            node = self.node(at).parent;
+        }
+        Err(self.unsupported(id, "`super(...)` outside a class"))
     }
 
     /// `{Class}#state`: a new object holding the fields of `class`, a class
@@ -43240,6 +43374,32 @@ impl<'a> FuncBuilder<'a> {
         let Some(target) = self.snapshot.call_targets.get(&id).copied() else {
             return Err(self.unsupported(id, "a `new` of an Objective-C class the checker resolved to no constructor"));
         };
+        // The program's own constructor: `{Class}#new`, which makes the
+        // instance. Only its own class's -- one inherited from a program
+        // class would make that class's instance.
+        if let Some(constructor) =
+            target.callee.filter(|c| self.kind_of(*c) == Some(syntax::CONSTRUCTOR) && self.objc_class_member(*c).is_none())
+        {
+            let declaring = self.node(constructor).parent.and_then(|mut at| {
+                while self.kind_of(at).is_none() {
+                    at = self.node(at).parent?;
+                }
+                Some(at)
+            });
+            let own = declaring.and_then(|class| super::native::objc_name(self.snapshot, class)).is_some_and(|name| name == handle.tag);
+            if !own {
+                return Err(self.unsupported(id, "a `new` of a class that inherits a constructor from a program's Objective-C class"));
+            }
+            let arguments = self.arguments_of(id);
+            let args = self.lower_arguments(id, &arguments)?;
+            let ty = HirType::NativePointer(super::native::Pointee::Opaque(handle.clone()));
+            let origin = self.origin(id);
+            return Ok(Some(self.push(
+                OpKind::Call { callee: Callee::Direct(format!("{}#new", handle.tag)), args, frame: None },
+                ty,
+                origin,
+            )));
+        }
         let Some(constructor) = target.callee.filter(|c| self.objc_class_member(*c).is_some()) else {
             return Err(self.unsupported(id, "a `new` of an Objective-C class whose constructor the binding does not declare"));
         };
@@ -47503,6 +47663,11 @@ impl<'a> FuncBuilder<'a> {
         member: &str,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        // The constructor of a class over an Objective-C class, whose
+        // `super(...)` makes the instance.
+        if member == "constructor" && self.objc_construct.is_some() {
+            return self.lower_objc_super_init(id, arguments);
+        }
         let base = self
             .base
             .clone()

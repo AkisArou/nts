@@ -620,6 +620,22 @@ correctness does not depend on arm64 running by luck.
      - A closure in a field that captures `this` is a cycle the collector
        cannot see through the foreign object, as it is in Swift. Nothing
        breaks it.
+   - **S6, constructors landed (2026-09-25).** `class Ledger extends
+     NSObject { constructor(owner: string, opening: number) { super(); ... } }`
+     is Swift's `init(owner:opening:)`.
+     - The constructor lowers to `{Class}#new`, which `new` calls. Its
+       `super(...)` is where the instance is made: `+alloc` sent to the
+       program's class, then the `init...` of the superclass constructor the
+       checker resolved. `this` is that object from there on.
+     - Its fields are made at once, whichever `init` it was.
+     - `macos-classes` sets a field from an argument and sends the new
+       instance its own message, against the same class in Objective-C, on
+       both backends. The instance is released at its last use.
+     - Refused by name: a constructor that does not open with its
+       `super(...)`, a parameter property, a `super(...)` into a factory, and
+       a `new` of a class that inherits a program class's constructor.
+     - An instance Objective-C makes itself (`[Ledger new]`, a nib) runs its
+       superclass's `init` and not the constructor.
    - **S6, protocols landed (2026-09-25).** `class Elements extends NSObject
      implements XMLParserDelegate` is Swift's `class Elements: NSObject,
      XMLParserDelegate`.

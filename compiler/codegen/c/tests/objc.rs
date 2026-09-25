@@ -752,10 +752,10 @@ fn the_fields_of_an_objective_c_subclass_live_in_its_state() {
     }
 }
 
-/// What such a class cannot yet hold is refused by name: a constructor, where
-/// the superclass's initializers are inherited, and a field initialiser that
-/// could run code -- a call, or `this` -- inside `init`, before the instance
-/// holds its fields.
+/// What such a class cannot yet hold is refused by name: a constructor that
+/// does not open with its `super(...)`, whose `this` would be made part way
+/// through; a parameter property; and a field initialiser that could run code
+/// -- a call, or `this` -- inside `init`, before the instance holds its fields.
 #[test]
 fn a_constructor_or_a_reaching_initializer_on_an_objective_c_subclass_is_refused_by_name() {
     let binding = r#"declare module "objc:Foundation" {
@@ -768,8 +768,9 @@ fn a_constructor_or_a_reaching_initializer_on_an_objective_c_subclass_is_refused
 "#;
     let source = "import { NSObject } from \"objc:Foundation\";\n\
                   function start(): number { return 3; }\n\
-                  export class Held extends NSObject {\n  count = start();\n  constructor() { super(); }\n  tick(): void {}\n}\n\
-                  export class Selfish extends NSObject {\n  me = this;\n}\n";
+                  export class Held extends NSObject {\n  count = start();\n  constructor() { const n = start(); super(); void n; }\n  tick(): void {}\n}\n\
+                  export class Selfish extends NSObject {\n  me = this;\n}\n\
+                  export class Kept extends NSObject {\n  constructor(private kept: number) { super(); }\n}\n";
     let Some((_, prepared)) = prepare("objc-subclass-refused", binding, source) else {
         eprintln!("skipped: no tsgo");
         return;
@@ -777,5 +778,6 @@ fn a_constructor_or_a_reaching_initializer_on_an_objective_c_subclass_is_refused
     let messages: Vec<&str> = prepared.diagnostics.iter().map(|d| d.message.as_str()).collect();
     let reaching = "a field initialiser of a class extending an Objective-C class that calls, reads a member or reads `this`";
     assert_eq!(messages.iter().filter(|m| m.contains(reaching)).count(), 2, "{messages:?}");
-    assert!(messages.iter().any(|m| m.contains("a constructor of a class extending an Objective-C class")), "{messages:?}");
+    assert!(messages.iter().any(|m| m.contains("does not open with its `super(...)`")), "{messages:?}");
+    assert!(messages.iter().any(|m| m.contains("a parameter property of a class extending an Objective-C class")), "{messages:?}");
 }

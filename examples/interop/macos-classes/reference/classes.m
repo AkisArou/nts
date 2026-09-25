@@ -52,6 +52,37 @@ static NSString *tallied(void) {
                                     [tally.names componentsJoinedByString:@","]];
 }
 
+@interface Ledger : NSObject
+@property NSString *owner;
+@property NSInteger balance;
+@property NSInteger entries;
+- (instancetype)initWithOwner:(NSString *)owner opening:(NSInteger)opening;
+- (void)record:(NSInteger)amount;
+@end
+@implementation Ledger
+- (instancetype)initWithOwner:(NSString *)owner opening:(NSInteger)opening {
+  if ((self = [super init])) {
+    _owner = owner;
+    _balance = 0;
+    _entries = 0;
+    [self record:opening];
+  }
+  return self;
+}
+- (void)record:(NSInteger)amount {
+  self.balance += amount;
+  self.entries++;
+}
+@end
+static __weak id ledgerWatch;
+
+static NSString *ledgered(void) {
+  Ledger *ledger = [[Ledger alloc] initWithOwner:@"ada" opening:10];
+  ledgerWatch = ledger;
+  [ledger record:5];
+  return [NSString stringWithFormat:@"%@ %ld %ld", ledger.owner, (long)ledger.balance, (long)ledger.entries];
+}
+
 static __weak id replaced;
 static __weak id held;
 
@@ -130,6 +161,10 @@ int main(void) {
       printf("fields %s\n", tallied().UTF8String);
     }
     printf("fields %s released\n", tallyWatch ? "alive" : "gone");
+    @autoreleasepool {
+      printf("constructed %s\n", ledgered().UTF8String);
+    }
+    printf("constructed %s\n", ledgerWatch ? "alive" : "gone");
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.
     [operation cancel];

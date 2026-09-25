@@ -85,8 +85,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 26 ] ||
-  { echo "macos-classes: the oracle printed $(wc -l <"$out/expected.txt") lines, not 26" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 28 ] ||
+  { echo "macos-classes: the oracle printed $(wc -l <"$out/expected.txt") lines, not 28" >&2; exit 1; }
 
 run_quietly "$out/classes/macos-13-x86_64/classes" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"
@@ -107,8 +107,8 @@ nogc="$out/nogc"
 build "$nogc"
 run_quietly "$nogc/classes/macos-13-x86_64/classes" "$out/nogc-actual"
 differs=$(diff "$out/expected.txt" "$out/nogc-actual.txt" | grep '^>' | tr '\n' '|')
-if [ "$differs" != "> fields alive held|> replaced alive|> array alive|> object alive|" ]; then
-  echo "macos-classes: under NoGc the difference from the oracle was [$differs], not the four lifetime lines" >&2
+if [ "$differs" != "> fields alive held|> constructed alive|> replaced alive|> array alive|> object alive|" ]; then
+  echo "macos-classes: under NoGc the difference from the oracle was [$differs], not the five lifetime lines" >&2
   exit 1
 fi
 echo "control: under NoGc the objects outlive their last use, and nothing else differs"

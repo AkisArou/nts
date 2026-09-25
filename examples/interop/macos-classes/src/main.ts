@@ -89,6 +89,35 @@ function tallied(): string {
   return `${tally.label} ${tally.total()} ${tally.count} ${tally.names.join(",")}`;
 }
 
+// Swift's `init(owner:opening:)` on an `NSObject` subclass: a constructor
+// taking arguments, whose `super()` makes the instance and whose body then
+// sets a field and sends the instance a message of its own.
+class Ledger extends NSObject {
+  owner: string;
+  balance = 0;
+  entries = 0;
+
+  constructor(owner: string, opening: number) {
+    super();
+    this.owner = owner;
+    this.record(opening);
+  }
+
+  record(amount: number): void {
+    this.balance += amount;
+    this.entries++;
+  }
+}
+
+let ledgerWatch = 0 as c_int;
+
+function ledgered(): string {
+  const ledger = new Ledger("ada", 10);
+  ledgerWatch = weak_watch(ledger);
+  ledger.record(5);
+  return `${ledger.owner} ${ledger.balance} ${ledger.entries}`;
+}
+
 let elements = "";
 
 // Swift's `class Elements: NSObject, XMLParserDelegate`: the parser sends the
@@ -191,6 +220,8 @@ function main(): void {
   // Counted before the line reporting it is built, which is itself an object.
   const after = live_objects();
   report(`fields ${weak_alive(tallyWatch) ? "alive" : "gone"} ${after === before ? "released" : "held"}`);
+  report(`constructed ${ledgered()}`);
+  report(`constructed ${weak_alive(ledgerWatch) ? "alive" : "gone"}`);
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.
