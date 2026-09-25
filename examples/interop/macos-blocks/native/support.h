@@ -21,6 +21,11 @@ void hold_block(void *block);
 void call_held_off_thread(struct NSObject *value, int n);
 // Whether this is the main thread.
 bool on_main_thread(void);
+struct NSError;
+// Calls `block` once on a new thread, as a completion handler on a background
+// queue is: with an object and no error, or, when `fail`, with no object and
+// an `NSError` whose description is "the item was not there".
+void complete_off_thread(bool fail, void *block);
 // Whether `BLOCKS_OFF_THREAD` is set.
 bool off_thread_arm(void);
 

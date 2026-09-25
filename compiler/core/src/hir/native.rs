@@ -966,6 +966,23 @@ impl Family {
     }
 }
 
+/// The box a promise holds a counted handle of `family` in: its type, the
+/// root every handle of the family upcasts to, which the box holds it as, and
+/// the box's name. One box serves a family, and its release is the family's.
+/// `None` for a family with no box.
+#[must_use]
+pub fn handle_box(family: Family) -> Option<(super::TypeId, Pointee, &'static str)> {
+    match family {
+        Family::GObject => Some((super::TypeId(super::HANDLE_BOX_GOBJECT), gobject_root(), "HandleBoxGObject")),
+        Family::Objc => Some((
+            super::TypeId(super::HANDLE_BOX_OBJC),
+            Pointee::Opaque(Handle { tag: "NSObject".to_owned(), ancestors: Vec::new(), family: Family::Objc, interface: false }),
+            "HandleBoxObjc",
+        )),
+        _ => None,
+    }
+}
+
 /// The root every counted `GObject` handle upcasts to: what a promise's box
 /// holds one as (`HANDLE_BOX_GOBJECT`), since one box serves the family and
 /// its release is the family's.

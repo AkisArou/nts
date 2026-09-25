@@ -1920,6 +1920,10 @@ pub const SYNTHETIC_CELLS: u32 = SYNTHETIC_TYPE_FLOOR;
 /// is dropped by the box's descriptor like any counted field.
 pub const HANDLE_BOX_GOBJECT: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18) - 1;
 
+/// The same box for an Objective-C object, the family's next: a promise holds
+/// an `NSObject` handle in one, released with `objc_release` when it dies.
+pub const HANDLE_BOX_OBJC: u32 = HANDLE_BOX_GOBJECT - 1;
+
 /// The upper half of the cells' band, below [`HANDLE_BOX_GOBJECT`], for the
 /// object holding the **fields of a class the program writes over an
 /// Objective-C class** (`class Controller extends NSObject { presses = 0 }`).
@@ -1937,7 +1941,7 @@ pub const SYNTHETIC_OBJC_STATES: u32 = SYNTHETIC_CELLS + (1 << 17);
 #[must_use]
 pub fn objc_state_type(index: usize) -> TypeId {
     let id = SYNTHETIC_OBJC_STATES + u32::try_from(index).unwrap_or(0);
-    debug_assert!(id < HANDLE_BOX_GOBJECT, "more Objective-C classes with fields than the band holds");
+    debug_assert!(id < HANDLE_BOX_OBJC, "more Objective-C classes with fields than the band holds");
     TypeId(id)
 }
 pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);

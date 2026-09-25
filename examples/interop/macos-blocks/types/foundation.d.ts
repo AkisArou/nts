@@ -57,4 +57,10 @@ declare module "objc:Foundation" {
     repeats: boolean,
     block: Block<(timer: NSTimer) => void>,
   ): NSTimer;
+
+  /** A class, as `nts bind-objc` declares one: what a promise rejects with.
+   * @ntsClass NSError */
+  export class NSError {
+    readonly localizedDescription: string;
+  }
 }

@@ -18,13 +18,14 @@ import {
   loop_run,
   loop_stop,
   call_held_off_thread,
+  complete_off_thread,
   off_thread_arm,
   on_main_thread,
   report,
   weak_alive,
   weak_watch,
 } from "c:support";
-import { arrayWithCapacity, newObject, scheduledTimer } from "objc:Foundation";
+import { arrayWithCapacity, newObject, scheduledTimer, type NSObject } from "objc:Foundation";
 import type { c_double, c_int, c_ulong } from "c:types";
 
 function state(watch: c_int): string {
@@ -90,15 +91,41 @@ function offThread(): void {
   report("off thread: called and released");
 }
 
+// Swift's `async throws`, as `nts bind-objc --values` writes it: a promise a
+// completion handler settles, with the object, or rejected with the error's
+// description -- the handler called on a background thread.
+function completed(fail: boolean): Promise<NSObject> {
+  return new Promise((resolve, reject) =>
+    complete_off_thread(fail, (value, error) => {
+      if (error !== null) {
+        reject(new Error(error.localizedDescription));
+      } else {
+        resolve(value!);
+      }
+    }),
+  );
+}
+
+async function offThreadAll(): Promise<void> {
+  offThread();
+  const value = await completed(false);
+  report(`off thread: resolved ${value === null ? "nothing" : "an object"} on the main thread ${on_main_thread()}`);
+  try {
+    await completed(true);
+    report("off thread: resolved a failure");
+  } catch (error) {
+    report(`off thread: rejected with "${(error as Error).message}"`);
+  }
+  await new Promise<void>((resolve) => setTimeout(() => resolve(), 20));
+  report("off thread: closure " + state(offWatch));
+  loop_stop();
+}
+
 function finish(): void {
   report("cancelled " + state(cancelledWatch));
   report("ticking " + state(tickingWatch));
   if (off_thread_arm()) {
-    offThread();
-    setTimeout(() => {
-      report("off thread: closure " + state(offWatch));
-      loop_stop();
-    }, 20);
+    void offThreadAll();
     return;
   }
   loop_stop();

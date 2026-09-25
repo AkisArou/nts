@@ -1622,8 +1622,9 @@ fn read_settled(
     // converted back to what was awaited.
     if let HirType::NativePointer(pointee) = payload
         && pointee.counting().is_some()
+        && let Some((boxed, root, _)) = pointee.family().and_then(super::native::handle_box)
     {
-        let boxed_ty = HirType::Managed(ManagedType::Object(TypeId(super::HANDLE_BOX_GOBJECT)));
+        let boxed_ty = HirType::Managed(ManagedType::Object(boxed));
         let lent = build.push(
             OpKind::Call {
                 callee: super::Callee::External("nts_promise_reference".to_owned()),
@@ -1637,7 +1638,7 @@ fn read_settled(
         // result is counted as the caller's own, so the conversion is what
         // takes the reference the call's release gives back.
         let boxed = build.push(OpKind::Convert(lent), boxed_ty);
-        let root = build.push(OpKind::FieldGet { object: boxed, field: 0 }, HirType::NativePointer(super::native::gobject_root()));
+        let root = build.push(OpKind::FieldGet { object: boxed, field: 0 }, HirType::NativePointer(root));
         build.values[awaited.0 as usize].kind = OpKind::Convert(root);
         build.ops.push(awaited);
         if let Some(slot) = slot_of.get(&awaited).copied() {

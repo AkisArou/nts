@@ -416,9 +416,20 @@ correctness does not depend on arm64 running by luck.
      - `macos-window` begins a sheet and ends it with return code 1001 in
        the last tick. The awaited 1001 prints at that callback's checkpoint,
        after `closing` and before `done`, on both backends.
+     - **`async throws` too.** A handler given an `NSError` rejects the
+       promise with the error's `localizedDescription` when it is set, and
+       otherwise resolves with the value, no longer optional, as Swift
+       returns it. This needs `NSError` bound (`--class NSError`); without
+       it the form is skipped, saying so.
+     - A promise of an Objective-C object holds it in a box of its family,
+       `HANDLE_BOX_OBJC`, beside GObject's, through `native::handle_box`.
+       Before, a promise refused any counted handle that was not a
+       GObject's.
+     - `macos-blocks` runs the throwing shape with the handler called on a
+       background thread. It resolves with an object on the main thread, and
+       rejects with a real `NSError`'s description, on both backends.
      - Not yet, each skipped with its reason: a handler given more than one
-       value (Swift's tuple), a handler given an `NSError` (Swift's `async
-       throws`), and a class method.
+       value (Swift's tuple), and a class method.
      - A handler the platform calls off the main thread is carried to it
        (below), so a completion on a background queue settles the promise
        on the owning thread, which is what Swift's `@MainActor` resumption

@@ -6,7 +6,7 @@
  */
 declare module "c:support" {
   import type { c_int } from "c:types";
-  import type { NSObject } from "objc:Foundation";
+  import type { NSError, NSObject } from "objc:Foundation";
   import type { Block } from "objc:types";
   export function report(line: string): void;
   export function loop_run(): void;
@@ -16,5 +16,6 @@ declare module "c:support" {
   export function hold_block(block: Block<(value: NSObject, n: c_int) => void>): void;
   export function call_held_off_thread(value: NSObject, n: c_int): void;
   export function on_main_thread(): boolean;
+  export function complete_off_thread(fail: boolean, block: Block<(value: NSObject | null, error: NSError | null) => void>): void;
   export function off_thread_arm(): boolean;
 }

@@ -16586,19 +16586,18 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A counted handle in the box a promise holds it in
-    /// ([`super::HANDLE_BOX_GOBJECT`]): stored as the family's root, whose
+    /// ([`super::native::handle_box`]): stored as the family's root, whose
     /// release the box's descriptor calls when the box dies.
-    fn box_handle(&mut self, id: NodeId, value: ValueId, pointee: &super::native::Pointee) -> Result<ValueId, Diagnostic> {
-        if pointee.family() != Some(super::native::Family::GObject) {
-            return Err(self.unsupported(id, "a promise settling with a counted handle that is not a GObject"));
-        }
+    fn box_handle(&mut self, id: NodeId, value: ValueId, pointee: &super::native::Pointee) -> Result<(ValueId, TypeId), Diagnostic> {
+        let Some((ty, root, name)) = pointee.family().and_then(super::native::handle_box) else {
+            return Err(self.unsupported(id, "a promise settling with a counted handle of a family with no box"));
+        };
         let origin = self.origin(id);
-        let root = HirType::NativePointer(super::native::gobject_root());
+        let root = HirType::NativePointer(root);
         let handle = self.push(OpKind::Convert(value), root.clone(), origin.clone());
-        let ty = TypeId(super::HANDLE_BOX_GOBJECT);
         self.layouts.push(Layout {
             types: vec![ty],
-            name: "HandleBoxGObject".to_owned(),
+            name: name.to_owned(),
             interfaces: Vec::new(),
             fields: vec![Field { name: "handle".to_owned(), ty: root, readonly: true, declared_by: None }],
             methods: vec![None; self.hierarchy.table_size()],
@@ -16606,7 +16605,7 @@ impl<'a> FuncBuilder<'a> {
         });
         let boxed = self.push(OpKind::ObjectNew { frame: false }, HirType::Managed(ManagedType::Object(ty)), origin.clone());
         self.field_set(boxed, 0, handle, &origin);
-        Ok(boxed)
+        Ok((boxed, ty))
     }
 
     /// The one-field object a captured-and-written variable lives in.
@@ -21720,8 +21719,8 @@ impl<'a> FuncBuilder<'a> {
             // collector reads.
             // A counted one boxed, so the promise holds a reference to it.
             (HirType::NativePointer(pointee), Some(value)) if pointee.counting().is_some() => {
-                let boxed = self.box_handle(id, value, pointee)?;
-                let tag = super::tags::of_reference(&ManagedType::Object(TypeId(super::HANDLE_BOX_GOBJECT)));
+                let (boxed, boxed_ty) = self.box_handle(id, value, pointee)?;
+                let tag = super::tags::of_reference(&ManagedType::Object(boxed_ty));
                 let tag = self.push(OpKind::ConstInt(i128::from(tag)), HirType::Int { bits: 32, signed: false }, self.origin(id));
                 ("nts_promise_fulfill_tagged", vec![result.promise, boxed, tag])
             }

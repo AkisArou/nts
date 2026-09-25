@@ -58,6 +58,39 @@ void call_held_off_thread(struct NSObject *value, int n) {
 
 bool on_main_thread(void) { return pthread_main_np() != 0; }
 
+typedef struct Completion {
+  void *block;
+  bool fail;
+} Completion;
+
+static void *complete(void *state) {
+  Completion *completion = state;
+  void (^handler)(struct NSObject *, struct NSError *) = completion->block;
+  if (completion->fail) {
+    const void *keys[] = {kCFErrorLocalizedDescriptionKey};
+    const void *values[] = {CFSTR("the item was not there")};
+    CFErrorRef error = CFErrorCreateWithUserInfoKeysAndValues(
+        NULL, CFSTR("nts"), 7, keys, values, 1);
+    handler(NULL, (struct NSError *)error);
+    CFRelease(error);
+  } else {
+    handler((struct NSObject *)CFSTR("the item"), NULL);
+  }
+  _Block_release(completion->block);
+  free(completion);
+  return NULL;
+}
+
+void complete_off_thread(bool fail, void *block) {
+  Completion *completion = malloc(sizeof *completion);
+  if (!completion) abort();
+  completion->block = _Block_copy(block);
+  completion->fail = fail;
+  pthread_t thread;
+  pthread_create(&thread, NULL, complete, completion);
+  pthread_detach(thread);
+}
+
 bool weak_alive(int watch) {
   id object = objc_loadWeakRetained(&watches[watch]);
   if (object) objc_release(object);

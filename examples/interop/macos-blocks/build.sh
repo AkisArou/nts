@@ -122,6 +122,8 @@ for product in blocks blocksLlvm; do
   [ -s "$out/$product-off.err" ] && { cat "$out/$product-off.err" >&2; exit 1; }
   grep '^off thread' "$out/$product-off.txt" >"$out/$product-off.lines"
   printf '%s\n' "off thread: called and released" "off thread: called on the main thread true with 7 same" \
+    "off thread: resolved an object on the main thread true" \
+    'off thread: rejected with "the item was not there"' \
     "off thread: closure gone" | diff -u - "$out/$product-off.lines"
 done
 echo "off thread: a handler called and released on another thread runs and is released on this one, on both backends"
