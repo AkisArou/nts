@@ -118,8 +118,10 @@ class Notes extends NSObject implements NSTableViewDataSource {
   not told of it, and only the program calls it. A protocol's method, an
   override of a binding's method, or one tagged `@ntsSelector` must cross.
 - A call the program writes reaches the compiled method directly. Where a
-  subclass the program writes overrides it, the call asks the receiver's
-  class which override is its own, deepest first.
+  subclass the program writes overrides it, the receiver's class is
+  compared with each of the program's classes and the matching method is
+  called, as a vtable would. A class the runtime made, such as key-value
+  observing's, is asked `isKindOfClass:`.
 
 A button's action is Swift's `#selector(Notes.add(_:))`:
 `button.action = selector(Notes, "add")`, with `import { selector } from

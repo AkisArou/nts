@@ -874,10 +874,20 @@ correctness does not depend on arm64 running by luck.
      | objects-in (`addObjects(from:)`, 4 objects) | 120 ns | 329 ns | 0.36 |
      | field (`this.count++` on an `NSObject` subclass) | 1.5 ns | 3.0 ns | 0.50 |
      | plain-field (the same on a plain class) | 0.4 ns | 2.8 ns | 0.14 |
+     | override (`shape.sides()`, a `Square` seen as a `Shape`) | 0.8 ns | 0.9 ns | 0.89 |
 
      - The two field rows (2026-09-25) keep Swift's `bump` out of line
        (`@inline(never)`); `swiftc -O` otherwise folds the loop to nothing.
        Ours is a direct call, which clang inlines.
+     - The override row (2026-09-25) is a call to a method that a subclass
+       the program writes overrides. Swift's is a vtable call through an
+       object from an `@inline(never)` function. Ours compares
+       `object_getClass` with each class the program writes below the
+       method's, then calls the matching implementation directly. Only a
+       class the runtime made asks `isKindOfClass:`: key-value observing's
+       `NSKVONotifying_` subclass is one, and macos-classes' `observed` line
+       checks it. The first version asked `isKindOfClass:` every time, at
+       3.6 ns, 4x Swift.
      - What the Objective-C field costs is the difference between our two
        rows, **about 1.1 ns an access**. That is one `nts_objc_state` call
        (the class looked up from `self`, the last one remembered) where a

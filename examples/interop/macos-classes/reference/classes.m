@@ -116,6 +116,17 @@ static NSString *overridden(void) {
   return [parts componentsJoinedByString:@", "];
 }
 
+static NSString *observed(void) {
+  Tagger *loud = [[Loud alloc] init];
+  NSObject *observer = [[NSObject alloc] init];
+  Class before = object_getClass(loud);
+  [loud addObserver:observer forKeyPath:@"tag" options:0 context:NULL];
+  BOOL replaced = object_getClass(loud) != before;
+  NSString *line = [NSString stringWithFormat:@"%s %ld %@", replaced ? "true" : "false", (long)[loud bump], [loud tagged:@"y"]];
+  [loud removeObserver:observer forKeyPath:@"tag"];
+  return line;
+}
+
 @interface Ledger : NSObject
 @property NSString *owner;
 @property NSInteger balance;
@@ -296,6 +307,7 @@ int main(void) {
     printf("ledgers %s\n", [Ledger described].UTF8String);
     @autoreleasepool {
       printf("overridden %s\n", overridden().UTF8String);
+      printf("observed %s\n", observed().UTF8String);
     }
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.

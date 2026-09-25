@@ -43931,6 +43931,42 @@ impl<'a> FuncBuilder<'a> {
         found.into_iter().map(|(_, class, method)| (class, method)).collect()
     }
 
+    /// Each class the program writes from `class` down, with the compiled
+    /// method named `member` that class answers with: its own, or the
+    /// nearest ancestor's up to `class`, whose is `method`.
+    fn objc_implementations(&mut self, class: NodeId, method: NodeId, member: &str) -> Result<Vec<(NodeId, String, NodeId)>, Diagnostic> {
+        let below = |candidate: NodeId| {
+            std::iter::successors(Some(candidate), |at| super::native::superclass(self.snapshot, *at)).take(64).any(|at| at == class)
+        };
+        let own = |candidate: NodeId| {
+            self.children(candidate).into_iter().find(|child| {
+                self.kind_of(*child) == Some(syntax::METHOD_DECLARATION)
+                    && !is_static_member(self.snapshot, *child)
+                    && self.member_name(*child).as_deref() == Some(member)
+                    && self.children(*child).into_iter().any(|part| self.kind_of(part) == Some(syntax::BLOCK))
+            })
+        };
+        let mut owners = Vec::new();
+        for candidate in self.hierarchy.objc_classes.iter().copied().filter(|c| below(*c)) {
+            let mut at = candidate;
+            let declaration = loop {
+                if at == class {
+                    break method;
+                }
+                if let Some(declaration) = own(at) {
+                    break declaration;
+                }
+                at = super::native::superclass(self.snapshot, at).ok_or_else(|| self.unsupported(method, "a class outside its base's chain"))?;
+            };
+            owners.push((candidate, at, declaration));
+        }
+        let mut found = Vec::new();
+        for (candidate, owner, declaration) in owners {
+            found.push((candidate, format!("{}#{member}", self.class_name_for(owner, None, false)?), declaration));
+        }
+        Ok(found)
+    }
+
     /// A call to a method some of the program's subclasses override: asked of
     /// the receiver's class, overrider by overrider, as the runtime's own
     /// lookup would answer -- `isKindOfClass:` against each, deepest first,
@@ -43953,11 +43989,13 @@ impl<'a> FuncBuilder<'a> {
         let class_pointee = super::native::Pointee::Opaque("objc_class".into());
         let is_kind = std::sync::Arc::new(synthesized(
             "isKindOfClass:",
-            vec![super::native::Type::Pointer(pointee), super::native::Type::Pointer(class_pointee.clone())],
+            vec![super::native::Type::Pointer(pointee.clone()), super::native::Type::Pointer(class_pointee.clone())],
             super::native::Type::Bool,
             Some(super::native::Send { selector: "isKindOfClass:".to_owned(), class: None, super_of: None }),
             Vec::new(),
         ));
+        let class = self.enclosing_class(method).ok_or_else(|| self.unsupported(id, "a method outside a class"))?;
+        let exact = self.objc_implementations(class, method, member)?;
         let joined = self.new_block();
         let mut result: Option<ValueId> = None;
         let mut arm = |this: &mut Self, callee: String, declaration: NodeId, args: Vec<ValueId>| -> Result<(), Diagnostic> {
@@ -43974,6 +44012,46 @@ impl<'a> FuncBuilder<'a> {
             this.terminate(Terminator::Jump { target: joined, args: passed });
             Ok(())
         };
+        // First the object's own class, compared with each class the program
+        // writes below the method's: one load and a compare each, and a
+        // direct call of the method that class has -- its own or the nearest
+        // ancestor's -- which is what a vtable answers.
+        let get_class = std::sync::Arc::new(synthesized(
+            "object_getClass",
+            vec![super::native::Type::Pointer(pointee.clone())],
+            super::native::Type::Pointer(class_pointee.clone()),
+            None,
+            Vec::new(),
+        ));
+        let isa = self.push(
+            OpKind::Call { callee: Callee::Native(get_class), args: vec![receiver], frame: None },
+            HirType::NativePointer(class_pointee.clone()),
+            origin.clone(),
+        );
+        for (class, callee, declaration) in exact {
+            let runtime_name = super::native::objc_name(self.snapshot, class)
+                .ok_or_else(|| self.unsupported(id, "a class the runtime knows by no name"))?;
+            let class_object = self.push(
+                OpKind::ObjcClass { name: runtime_name, frameworks: Vec::new() },
+                HirType::NativePointer(class_pointee.clone()),
+                origin.clone(),
+            );
+            let same = self.push(OpKind::Binary { op: BinOp::Eq, lhs: isa, rhs: class_object }, HirType::Bool, origin.clone());
+            let (taken, next) = (self.new_block(), self.new_block());
+            self.terminate(Terminator::Branch { cond: same, then_target: taken, then_args: Vec::new(), else_target: next, else_args: Vec::new() });
+            self.switch_to(taken);
+            let owner = self.enclosing_class(declaration).ok_or_else(|| self.unsupported(id, "a method outside a class"))?;
+            let this_ty = instance_type_of(self.snapshot, owner)
+                .and_then(|ty| self.represent(ty))
+                .ok_or_else(|| self.unrepresentable(id, "an overriding method's receiver"))?;
+            let mut exact_args = args.clone();
+            exact_args[0] = self.push(OpKind::Convert(receiver), this_ty, origin.clone());
+            arm(self, callee, declaration, exact_args)?;
+            self.switch_to(next);
+        }
+        // Then a class the program did not write -- one the runtime made
+        // below one of the program's, as key-value observing does -- asked
+        // `isKindOfClass:` of each overrider, deepest first.
         for (class, overriding) in overriders {
             let runtime_name = super::native::objc_name(self.snapshot, *class)
                 .ok_or_else(|| self.unsupported(id, "an overriding class the runtime knows by no name"))?;

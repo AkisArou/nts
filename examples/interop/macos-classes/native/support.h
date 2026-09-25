@@ -13,5 +13,9 @@ int weak_watch(struct NSObject *object);
 bool weak_alive(int watch);
 /* How many objects of the program's own are alive, after a collection. */
 int live_objects(void);
+/* Observe `object` by key-value observing, answering whether that replaced
+ * its class; and stop. */
+bool kvo_observe(struct NSObject *object);
+void kvo_forget(struct NSObject *object);
 
 #endif

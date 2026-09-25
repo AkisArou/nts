@@ -29,6 +29,20 @@ class Plain {
   }
 }
 
+// A method a subclass overrides, called through the base's type: which
+// method answers is the object's class's, at run time.
+class Shape extends NSObject {
+  sides(): number {
+    return 0;
+  }
+}
+
+class Square extends Shape {
+  override sides(): number {
+    return 4;
+  }
+}
+
 function time(label: string, count: number, body: () => number): void {
   body();
   const start = now();
@@ -75,6 +89,12 @@ function main(): void {
   time("plain-field", 10_000_000, () => {
     for (let i = 0; i < 10_000_000; i++) plain.bump();
     return plain.count;
+  });
+  const shape: Shape = new Square();
+  time("override", 10_000_000, () => {
+    let total = 0;
+    for (let i = 0; i < 10_000_000; i++) total += shape.sides();
+    return total;
   });
   const list = new NSMutableArray();
   time("objects-in", 100_000, () => {

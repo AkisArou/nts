@@ -18,7 +18,7 @@ import {
   XMLParser,
   type NSXMLParserDelegate,
 } from "objc:Foundation";
-import { live_objects, report, weak_alive, weak_watch } from "c:support";
+import { kvo_forget, kvo_observe, live_objects, report, weak_alive, weak_watch } from "c:support";
 import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
 import type { c_int } from "c:types";
 import type { ObjCBool, UInt } from "objc:types";
@@ -192,6 +192,16 @@ function overridden(): string {
     parts.push(`${tagger.bump()} ${tagger.tagged("x")}`);
   }
   return parts.join(", ");
+}
+
+// The same call on an object key-value observing has given a class of the
+// runtime's making, below `Loud`: still `Loud`'s methods.
+function observed(): string {
+  const loud: Tagger = new Loud();
+  const replaced = kvo_observe(loud);
+  const line = `${replaced} ${loud.bump()} ${loud.tagged("y")}`;
+  kvo_forget(loud);
+  return line;
 }
 
 // Swift's `init(owner:opening:)` on an `NSObject` subclass: a constructor
@@ -388,6 +398,7 @@ function main(): void {
   report(`constructed ${weak_alive(ledgerWatch) ? "alive" : "gone"}`);
   report(`ledgers ${Ledger.described()}`);
   report(`overridden ${overridden()}`);
+  report(`observed ${observed()}`);
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.

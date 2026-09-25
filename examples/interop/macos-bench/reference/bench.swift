@@ -56,6 +56,22 @@ time("plain-field", 10_000_000) {
   for _ in 0..<10_000_000 { plain.bump() }
   return plain.count
 }
+// A method a subclass overrides, called through the base's type. The object
+// comes from a function the optimiser cannot see into, so the call is the
+// class's vtable, not a devirtualized one.
+class Shape: NSObject {
+  func sides() -> Int { 0 }
+}
+class Square: Shape {
+  override func sides() -> Int { 4 }
+}
+@inline(never) func made() -> Shape { Square() }
+let shape = made()
+time("override", 10_000_000) {
+  var total = 0
+  for _ in 0..<10_000_000 { total += shape.sides() }
+  return total
+}
 let list = NSMutableArray()
 time("objects-in", 100_000) {
   let numbers = [NSNumber(value: 1), NSNumber(value: 2), NSNumber(value: 3), NSNumber(value: 4)]
