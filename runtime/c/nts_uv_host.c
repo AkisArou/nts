@@ -435,8 +435,37 @@ int nts_uv_host_run(void) {
   return alive;
 }
 
+/* One non-blocking turn that polls even when nothing else is alive.
+ *
+ * The cross-thread handle is unreferenced, so a program with nothing left to
+ * do exits, and `uv_run` with nothing alive returns without polling. Two
+ * things are then left undone that a foreign loop watching the backend
+ * descriptor depends on. A handle's descriptor is registered with the backend
+ * on a poll, not when the handle starts, so until one has polled a post from
+ * another thread wakes nothing the foreign loop can see. And the wakeup a post
+ * leaves is consumed by a poll: until it is, the handle stays marked sent and
+ * no later post writes another, so an edge-triggered watcher (CoreFoundation's
+ * `CFFileDescriptor`) never hears of a post again and the run loop sleeps with
+ * the task queued, while a level-triggered one (GLib's) spins. Held for the
+ * turn, the handle makes the loop alive, and the turn polls. Afterwards it is
+ * held only if an awaited operation holds it. */
+static void nts_uv_turn(void) {
+  uv_ref((uv_handle_t *)&nts_uv_async);
+  (void)uv_run(nts_uv_loop, UV_RUN_NOWAIT);
+  if (nts_uv_pending == 0) {
+    uv_unref((uv_handle_t *)&nts_uv_async);
+  }
+}
+
 int nts_uv_host_backend_fd(void) {
   nts_uv_require_owner("backend_fd");
+  /* Asked by a foreign loop about to watch it: registered now, so a post
+   * made before that loop's first pump is one it sees. */
+  if (!nts_uv_running) {
+    nts_uv_running = true;
+    nts_uv_turn();
+    nts_uv_running = false;
+  }
   return uv_backend_fd(nts_uv_loop);
 }
 
@@ -475,7 +504,7 @@ void nts_uv_host_pump(void) {
   }
   nts_uv_running = true;
   (void)nts_uv_run_foreign();
-  (void)uv_run(nts_uv_loop, UV_RUN_NOWAIT);
+  nts_uv_turn();
   nts_uv_running = false;
 }
 

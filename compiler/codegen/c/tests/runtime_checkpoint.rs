@@ -130,6 +130,17 @@ fn an_outstanding_operation_holds_the_libuv_loop() {
     assert!(checks(&report) >= 4, "{report}");
 }
 
+/// A foreign loop's pump consumes the wakeup a post from another thread left
+/// in libuv's backend, with nothing else alive, and registers the handle's
+/// descriptor before the first pump: a CoreFoundation run loop watching the
+/// descriptor for an edge otherwise slept with a completion queued. The
+/// suite's own controls are the posts: each must make the descriptor readable.
+#[test]
+fn a_pump_consumes_a_cross_thread_wakeup() {
+    let report = run_suite_with("pump_uv", &["-DNTS_PROVIDER_RC"], &["nts_uv_host.c"], &["-luv"]);
+    assert!(checks(&report) >= 9, "{report}");
+}
+
 /// An erased needle against an array of strings answers, rather than aborting.
 ///
 /// `validateOneOf(value: unknown, name: string, oneOf: Choices)` is one of

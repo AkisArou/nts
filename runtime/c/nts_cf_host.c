@@ -83,13 +83,22 @@ static void nts_cf_fired(CFRunLoopTimerRef timer, void *info) {
 }
 
 /* Before the loop sleeps: something outside libuv (an event handler, a
- * block) may have posted a task or a timer since the last pump. */
+ * block) may have posted a task or a timer since the last pump.
+ *
+ * The descriptor's callback is re-enabled here every time, not only when it
+ * was parked. CoreFoundation turns it off when the kqueue becomes readable and
+ * on only when asked, and a pump the timer drove can take the event before
+ * the callback is delivered -- which then never is. With nothing left to turn
+ * it on, the run loop slept through every later post from another thread:
+ * one run in twenty of `macos-blocks`' off-thread arm, with the completion
+ * queued. Enabling an enabled callback costs nothing, and one whose kqueue is
+ * readable fires. */
 static void nts_cf_before_waiting(CFRunLoopObserverRef observer,
                                   CFRunLoopActivity activity, void *info) {
   (void)observer;
   (void)activity;
   (void)info;
-  if (nts_cf_parked && !nts_in_callback()) {
+  if (!nts_in_callback()) {
     nts_cf_parked = false;
     CFFileDescriptorEnableCallBacks(nts_cf_descriptor,
                                     kCFFileDescriptorReadCallBack);
