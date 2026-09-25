@@ -3180,10 +3180,18 @@ fn unresolved_foreign(
 ) -> Vec<(String, Utf8PathBuf)> {
     let mut wanted = Vec::new();
     for diagnostic in &snapshot.diagnostics {
-        if diagnostic.code != "TS2307" {
-            continue;
-        }
-        let Some(module) = diagnostic.message.split('\'').nth(1) else { continue };
+        // A module not bound yet, or -- for the Windows Runtime -- one bound
+        // only in part, because another namespace named some of its types,
+        // that lacks a name the program imports from it. `import {
+        // MemoryBuffer } from "winrt:Windows.Foundation"` beside a
+        // `Windows.Foundation` bound for its `IClosable` resolved the module,
+        // answered TS2305, and was never bound whole.
+        let module = match diagnostic.code.as_str() {
+            "TS2307" => diagnostic.message.split('\'').nth(1),
+            "TS2305" => diagnostic.message.split('"').nth(1).filter(|module| module.starts_with("winrt:")),
+            _ => None,
+        };
+        let Some(module) = module else { continue };
         if !module.starts_with("c:") && !module.starts_with("winrt:") {
             continue;
         }
