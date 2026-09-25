@@ -723,6 +723,26 @@ a constructor parameter that declares a field; an override of
 of a `vfunc_` method outside chaining up; and a slot taking a record by
 value.
 
+**`instanceof` and `$gtype`: a model of the program's own objects.** GJS
+writes a list model as `new Gio.ListStore({ item_type: Task.$gtype })` over a
+`class Task extends GObject.Object`, and narrows what a factory binds.
+
+- **`x instanceof C`** for a GObject class `C` is `x !== null &&
+  g_type_check_instance_is_a(x, C's GType)` (`lower_gobject_instanceof`).
+  This works for a binding's class and for one the program wrote, so a
+  subclass answers as it does in GJS. Before this, `new Task({}) instanceof
+  Task` was `false` with no diagnostic, a managed-class check on a C handle,
+  and `instanceof GtkLabel` was refused.
+- **The narrowing** it gives the checker is honoured: `x` becomes `C`'s handle
+  after the test. An `as` stays refused, because it is unchecked.
+- **`C.$gtype`** is `C`'s `GType`. The binder declares it on every class
+  value, and a program class inherits it as a static but answers its own
+  `nts_gobject_type_C`.
+
+gtk-list's second view is a `GListStore` of `Task` read back through
+`instanceof`, and gtk-subclass asks `instanceof` of three levels, a binding's
+class and `null`.
+
 **A class over a class the program wrote**: `class C extends B`, `class B
 extends A`, `class A extends GtkButton`.
 - **Registration.** `gobject_parent` answers `nts_gobject_type_B` for `C`, so
@@ -847,6 +867,8 @@ GTK 4.22; ns per operation, best of three in-process runs after one untimed.
 | startup peak RSS (MB) | | 88-101 | 105-120 | 1.2x |
 | notes app, 1000 notes, open to quit (ms) | | 102-123 | 116-186 | 1.1-1.5x |
 | notes app peak RSS (MB) | | 101 | 118-119 | 1.2x |
+| task list: make and sort 10000 (ms) | | 5.7 | 7.8-8.1 | 1.4x |
+| task list: 15 queries typed (ms) | | 113-133 | 301-316 | 2.4-2.7x |
 
 Ranges are separate runs on a machine other sessions share, which is also
 why a row's C can read above its nts: both are GTK's own work at the same
@@ -876,9 +898,30 @@ and so would a larger app with real logic per row. The binary binds lazily,
 where gjs is linked `BIND_NOW`, so the loader's share is GTK's dependency
 closure and not symbol resolution the program asked for.
 
-**Next in M4:** the application larger -- a `GtkListView` over a
-`GListStore`, a file chooser -- and a profile of where its time goes beside
-GJS's.
+**The task list** (`tooling/gtk-bench/tasks`, and `gjs/tasks.js` line for
+line) is the first row whose time is the program's own. Ten thousand tasks
+are made and sorted with `tasks.sort(compare)`. Fifteen queries are then
+typed into a search whose `GtkCustomFilter` is a TypeScript closure, called
+once per task per query. `run.sh` checks the two logs are equal before
+timing. Its rows were measured while other sessions loaded the machine, so
+they are ratios more than times. GJS's sort is SpiderMonkey's own, while
+nts's is the merge sort the lowering writes. In the nts profile the program
+is 23% of cycles: `nts_map_get` is 7%, hashing each filter call's freshly
+converted title; the cycle collector is about 4%; the rest is GTK re-laying
+out the list.
+
+Writing it found five compiler defects, all fixed:
+- `sort(compare)` was refused;
+- `xs.slice()` answered an empty array;
+- a parallel copy's scratch was always `double`, so two arrays swapped in a
+  `while` loop did not compile, and failed JVM verification;
+- `null` had no type for a lent array;
+- the program's own GObject classes could be neither `instanceof`-tested
+  nor named by `$gtype`.
+
+**Next in M4:** the task list as GJS would write it now that nts can: a
+store of `Task` objects rather than titles and a `Map`. Then the table re-run
+on a quiet machine.
 
 ## Rules this lane keeps
 
