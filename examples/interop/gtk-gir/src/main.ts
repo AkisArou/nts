@@ -18,6 +18,8 @@
 //   rgba true rgb(255,128,0)  a `GdkRGBA` the program made, filled by `parse`
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
+//   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
+//                 `gtk_string_list_new` directly and through `{ strings }`
 //   keyfile true 5 no-error
 //                 a key file loaded -- its `gboolean` answer a boolean -- and
 //                 read, and the `GError **` slot beside each call left null
@@ -74,6 +76,8 @@ import {
   GtkEntry,
   GtkEntryBuffer,
   GtkLabel,
+  GtkStringList,
+  gtk_string_list_new,
   type GtkWidget,
 } from "c:Gtk-4.0";
 import {
@@ -253,9 +257,19 @@ async function learnKind(): Promise<void> {
   kind = await fileKind("/");
 }
 
+// `null` for a lent array that admits it -- `CStrings | null` -- which C is
+// passed as NULL, called directly and through a construct property.
+function absentArrays(): void {
+  const direct = gtk_string_list_new(null);
+  const constructed = new GtkStringList({ strings: null });
+  const given = new GtkStringList({ strings: ["a", "b"] });
+  gir_log("lists " + String(direct.get_n_items()) + " " + String(constructed.get_n_items()) + " " + String(given.get_n_items()));
+}
+
 function main(): void {
   outParameters();
   boxedRecords();
+  absentArrays();
   void learnKind();
   void directories("/tmp/nts-gtk-gir-directory");
   const application = gtk_application_new("dev.nts.GtkGir", ApplicationFlags.NON_UNIQUE);

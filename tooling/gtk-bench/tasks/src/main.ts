@@ -85,7 +85,7 @@ function open(application: GtkApplication): void {
   tasks_log("tasks " + String(tasks.length));
   tasks_log("first " + String(tasks[0].priority) + " " + tasks[0].title);
   const byTitle = new Map<string, Task>();
-  const titles = new GtkStringList({ strings: [] });
+  const titles = new GtkStringList({ strings: null });
   for (const task of tasks) {
     byTitle.set(task.title, task);
     titles.append(task.title);

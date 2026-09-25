@@ -44,7 +44,7 @@ function open(application) {
     print(`tasks ${tasks.length}`);
     print(`first ${tasks[0].priority} ${tasks[0].title}`);
     const byTitle = new Map();
-    const titles = new Gtk.StringList({ strings: [] });
+    const titles = new Gtk.StringList({ strings: null });
     for (const task of tasks) {
         byTitle.set(task.title, task);
         titles.append(task.title);

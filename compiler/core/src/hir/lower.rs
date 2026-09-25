@@ -50813,10 +50813,20 @@ impl<'a> FuncBuilder<'a> {
         if self.holds_only_absences(declared.ty) {
             return Some(HirType::Erased);
         }
-        match self.represent(declared.ty)? {
+        match self.represent_passed(declared.ty)? {
             HirType::Void | HirType::Never => Some(HirType::Erased),
             held => Some(held),
         }
+    }
+
+    /// What a value written where `ty` is expected is lowered as: `ty`'s own
+    /// representation, or -- for a `CStrings` or `CBytes` a C function is lent,
+    /// which has none of its own, only the `string[]` or `Uint8Array` the
+    /// program holds -- that array's. So `gtk_string_list_new(null)` and
+    /// `new GtkStringList({ strings: null })` have a `null` of the array's
+    /// type to pass, which a C call lends as NULL.
+    fn represent_passed(&self, ty: TypeId) -> Option<HirType> {
+        self.represent(ty).or_else(|| super::native::native_array_argument(self.snapshot, ty))
     }
 
     /// What an operator that *picks a side* is heading for.
@@ -51033,7 +51043,7 @@ impl<'a> FuncBuilder<'a> {
                     })?;
                 let signature = self.snapshot.signatures.get(signature.0 as usize)?;
                 let parameter = signature.parameters.get(argument)?;
-                self.represent(parameter.ty)
+                self.represent_passed(parameter.ty)
             }
             // The receiver of `x.m()`, for the same reason.
             // `{ signals: {} }` -- an object literal's property value, whose
