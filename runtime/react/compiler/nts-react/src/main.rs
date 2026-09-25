@@ -13,7 +13,11 @@ USAGE
   nts-react convert <tsconfig.json> <out-dir>
       convert each of the project's own sources into the compiler's input
       format, writing <out-dir>/<file>.ast.json and <file>.scope.json, or
-      <file>.unsupported.txt naming the construct that stopped it";
+      <file>.unsupported.txt naming the construct that stopped it
+  nts-react compile <tsconfig.json> <options.json> <out-dir>
+      convert and compile each of the project's own sources with the React
+      Compiler, given the plugin's resolved options, writing the result as
+      <out-dir>/<file>.result.json";
 
 fn main() -> ExitCode {
     // Deeply nested programs recurse deeply in the compiler; upstream's addon
@@ -42,6 +46,7 @@ fn run() -> Result<()> {
             Ok(())
         }
         [command, tsconfig, out] if command == "convert" => convert(tsconfig, out),
+        [command, tsconfig, options, out] if command == "compile" => compile(tsconfig, options, out),
         _ => bail!("{USAGE}"),
     }
 }
@@ -72,5 +77,37 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
         }
     }
     eprintln!("converted {converted}, unsupported {unsupported}");
+    Ok(())
+}
+
+fn compile(tsconfig: &str, options: &str, out: &str) -> Result<()> {
+    let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
+    let project = tsconfig.parent().context("a tsconfig path has a directory")?.to_owned();
+    let options: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(options).with_context(|| format!("cannot read {options}"))?)?;
+    let out = camino::Utf8PathBuf::from(out);
+    std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
+    let snapshot = nts_react::project::snapshot(&tsconfig)?;
+    let nodes = nts_react::tsgo::Nodes::new(&snapshot);
+    let (mut compiled, mut unsupported) = (0, 0);
+    for source in nts_react::project::own_sources(&snapshot, &project) {
+        let code = std::fs::read_to_string(&source.path).with_context(|| format!("cannot read {}", source.path))?;
+        let text = nts_react::convert::text::SourceText::new(&code);
+        let name = source.path.file_name().unwrap_or("source");
+        let Ok(file) = nts_react::convert::convert_file(nodes, source.root, &text) else {
+            unsupported += 1;
+            continue;
+        };
+        let scope = nts_react::scope::build(&file);
+        // The plugin's bridge hands the compiler the file's text beside its
+        // options; so does this.
+        let mut options = options.clone();
+        options["__sourceCode"] = serde_json::Value::String(code);
+        let options: react_compiler::entrypoint::PluginOptions = serde_json::from_value(options).context("the options are not `PluginOptions`")?;
+        let result = react_compiler::entrypoint::compile_program(file, scope, options);
+        std::fs::write(out.join(format!("{name}.result.json")), serde_json::to_string(&result)?)?;
+        compiled += 1;
+    }
+    eprintln!("compiled {compiled}, unsupported {unsupported}");
     Ok(())
 }
