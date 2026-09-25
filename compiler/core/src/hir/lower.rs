@@ -19558,6 +19558,18 @@ impl<'a> FuncBuilder<'a> {
             }
             ("Object", "is", [left, right]) => Some(self.decide_object_is(id, *left, *right)),
             ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
+            // `Object.assign(target, source)` between two dictionaries. React's
+            // `cloneElement`, its class state merge and its props resolution are
+            // all this shape, and it was 6 root refusals in that runtime.
+            //
+            // Two arguments only. `Object.assign(a, b, c)` is a fold, and a fold
+            // over a variable number of tables is a loop the caller can write --
+            // so it is refused by name rather than unrolled, which keeps the
+            // number of sources a thing the program says rather than a thing this
+            // arm guesses.
+            ("Object", "assign", [target, source]) => {
+                Some(self.decide_object_assign(id, *target, *source))
+            },
             // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
             // 64-bit quantity back out of an unsigned one. A width and a value,
             // both already machine types here.
@@ -20800,6 +20812,51 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// `Object.hasOwn(o, "k")`, which a layout answers with a constant.
+    /// `Object.assign(target, source)`, where both are dictionaries.
+    ///
+    /// A table's entries are not known at compile time, so this is the runtime's
+    /// loop rather than a sequence of stores -- unlike `Object.keys`, whose
+    /// answer for a *struct* is a static list of names. `nts_map_extend` is that
+    /// loop, and it is `nts_map_copy`'s against a table that already exists,
+    /// which is the whole difference between a spread and an assign.
+    ///
+    /// **The target, answered back**, because that is what the expression
+    /// evaluates to: `const merged = Object.assign(target, source)` and the
+    /// statement form are the same call.
+    ///
+    /// A **struct** on either side is refused by name. The source's fields would
+    /// be a static list and the target's slots fixed, so that case is a sequence
+    /// of `FieldSet`s and not this loop -- a different piece of work, and one
+    /// whose refusal should not be borrowed by this one.
+    fn decide_object_assign(
+        &mut self,
+        id: NodeId,
+        target: NodeId,
+        source: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let target = self.lower_expression(target)?;
+        let source = self.lower_expression(source)?;
+        let ty = self.values[target.0 as usize].ty.clone();
+        if !matches!(ty, HirType::Managed(ManagedType::Table(_, _))) {
+            return Err(self.unsupported(
+                id,
+                "`Object.assign` onto something other than a dictionary, whose fields would be a \
+                 static list of stores rather than a walk",
+            ));
+        }
+        if !matches!(
+            self.values[source.0 as usize].ty,
+            HirType::Managed(ManagedType::Table(_, _))
+        ) {
+            return Err(self.unsupported(
+                id,
+                "`Object.assign` from something other than a dictionary",
+            ));
+        }
+        let origin = self.origin(id);
+        Ok(self.call_runtime("nts_map_extend", vec![target, source], ty, &origin))
+    }
+
     fn decide_has_own(
         &mut self,
         id: NodeId,

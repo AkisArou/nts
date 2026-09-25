@@ -194,6 +194,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_map_clear", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_map_copy", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_map_delete", returns: "zeroext i1", params: &["ptr", "[2 x i64]"], attributes: &[] },
+    Signature { name: "nts_map_extend", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_map_get", returns: "[2 x i64]", params: &["ptr", "[2 x i64]"], attributes: &[] },
     Signature { name: "nts_map_has", returns: "zeroext i1", params: &["ptr", "[2 x i64]"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_map_key_at", returns: "[2 x i64]", params: &["ptr", "double"], attributes: &[] },

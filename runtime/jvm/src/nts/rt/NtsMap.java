@@ -55,6 +55,33 @@ public final class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> 
         return out;
     }
 
+    /**
+     * `Object.assign(target, source)` between two dictionaries: every entry of
+     * `source` written into `target`, in insertion order, and `target` answered
+     * back because that is what the expression evaluates to.
+     *
+     * <p>The same walk `copy` does, against a table that already exists rather
+     * than a new one -- which is the whole difference between a spread and an
+     * assign. A later entry wins, because that is the order `Object.assign`
+     * specifies and the order this loop writes in.
+     *
+     * <p>`used` is read once: `insert` into `target` cannot grow `source`, so the
+     * bound cannot move under the walk. The C side re-reads its table every step
+     * through `nts_map_next`, which it has to because an entry appended during a
+     * walk is visible to node -- here the two tables are distinct, so neither
+     * reading is observable.
+     */
+    public static NtsMap extend(NtsMap target, NtsMap source) {
+        for (int slot = source.head; slot < source.used; slot++) {
+            NtsValue key = source.keys[slot];
+            if (key == null) {
+                continue;
+            }
+            insert(target, key, source.values[slot]);
+        }
+        return target;
+    }
+
     @Override public int size() { return count; }
     @Override public boolean isEmpty() { return count == 0; }
     @Override public boolean containsKey(Object key) { return has(this, fromJava(key)); }

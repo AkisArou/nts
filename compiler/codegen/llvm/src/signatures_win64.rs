@@ -203,6 +203,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_map_clear", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_map_copy", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_map_delete", returns: "zeroext i1", params: &["ptr", "ptr dead_on_return"], attributes: &[] },
+    Signature { name: "nts_map_extend", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_map_get", returns: "void", params: &["ptr dead_on_unwind writable sret({ i32, i64 }) align 8", "ptr", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_map_has", returns: "zeroext i1", params: &["ptr readonly", "ptr dead_on_return"], attributes: &["nounwind", "willreturn", "memory(read, argmem: readwrite)"] },
     Signature { name: "nts_map_key_at", returns: "void", params: &["ptr dead_on_unwind writable sret({ i32, i64 }) align 8", "ptr", "double"], attributes: &[] },

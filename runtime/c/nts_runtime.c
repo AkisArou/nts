@@ -7696,6 +7696,14 @@ NtsMap *nts_map_copy(const NtsMap *map) {
   return out;
 }
 
+NtsMap *nts_map_extend(NtsMap *target, const NtsMap *source) {
+  for (double at = nts_map_next(source, 0); at >= 0;
+       at = nts_map_next(source, at + 1)) {
+    nts_map_set(target, nts_map_key_at(source, at), nts_map_value_at(source, at));
+  }
+  return target;
+}
+
 /* `Object.keys(table)`, as the array of keys in insertion order.
  *
  * Strings only, which is what the caller has: a table reaches here from an

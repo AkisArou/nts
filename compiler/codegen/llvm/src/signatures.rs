@@ -219,6 +219,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_map_clear", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_map_copy", returns: "noalias nonnull ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_map_delete", returns: "zeroext i1", params: &["ptr", "i32", "i64"], attributes: &[] },
+    Signature { name: "nts_map_extend", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_map_get", returns: "{ i32, i64 }", params: &["ptr", "i32", "i64"], attributes: &[] },
     Signature { name: "nts_map_has", returns: "zeroext i1", params: &["ptr", "i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_map_key_at", returns: "{ i32, i64 }", params: &["ptr", "double"], attributes: &[] },

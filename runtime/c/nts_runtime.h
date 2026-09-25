@@ -1500,6 +1500,18 @@ NtsValue nts_map_value_at(const NtsMap *map, double at);
 /* A copy of a string-keyed table, in insertion order and with the source's
  * hash. `{ ...table }` and the object-literal spread. */
 NTS_ALLOCATES NtsMap *nts_map_copy(const NtsMap *map);
+/* `Object.assign(target, source)` between two tables: every entry of `source`
+ * written into `target`, in insertion order, and `target` answered back because
+ * that is what the expression evaluates to.
+ *
+ * The same loop `nts_map_copy` runs, against a table that already exists rather
+ * than a new one -- which is the whole difference between a spread and an
+ * assign. `nts_map_set` retains what it stores and the source keeps its own
+ * count, exactly as in the copy beside it.
+ *
+ * Later entries win, because that is the order `Object.assign` specifies and
+ * the order this loop writes in. */
+NtsMap *nts_map_extend(NtsMap *target, const NtsMap *source);
 /* `Object.keys` of one, as an array of the keys it holds. */
 NTS_ALLOCATES NtsArray *nts_map_keys_str(const NtsMap *map);
 

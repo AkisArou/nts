@@ -782,6 +782,14 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_map_clear" => (types::TABLE, "clear", "(Lnts/rt/NtsTable;)V"),
         "nts_map_size" => (types::TABLE, "size", "(Lnts/rt/NtsTable;)D"),
         "nts_map_copy" => (types::MAP, "copy", "(Lnts/rt/NtsMap;)Lnts/rt/NtsMap;"),
+        // `Object.assign` between two dictionaries. Map-only for the same reason
+        // `nts_map_copy` above is: a table reaches it from an index signature,
+        // and a `Set` has no entries to assign.
+        "nts_map_extend" => (
+            types::MAP,
+            "extend",
+            "(Lnts/rt/NtsMap;Lnts/rt/NtsMap;)Lnts/rt/NtsMap;",
+        ),
         "nts_map_keys_str" => {
             (types::TABLE, "keysStr", "(Lnts/rt/NtsTable;)[Ljava/lang/Object;")
         }
