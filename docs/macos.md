@@ -1,0 +1,178 @@
+# Writing a Mac app in TypeScript
+
+nts compiles TypeScript to a native macOS executable or `.app`. The surface is
+the one Swift gives an AppKit programmer. Apple's own importer supplies every
+name, so the Swift documentation for a class is its documentation here too.
+Everything below is exercised by an `examples/interop/macos-*` fixture, run on
+a Mac against an Objective-C, C or Swift oracle, through both the C and the
+LLVM backend. [`apple-lane-goal.md`](apple-lane-goal.md) is the lab notebook:
+how each piece was built and measured, and what is refused.
+
+## Setup
+
+- **An SDK.** `tooling/apple/sync-sdk.sh` copies the macOS SDK from the Mac
+  to `~/.cache/nts/apple/MacOSX.sdk`. The compiler never runs on the Mac, and
+  builds on Linux against this copy.
+- **Swift's names.** `tooling/apple/symbolgraph.sh AppKit Foundation
+  CoreGraphics` runs `swift-symbolgraph-extract` on the Mac once per SDK. The
+  binding generator reads those graphs.
+- **A Mac to run on.** `tooling/apple/run.sh <artifact>` copies an executable
+  or an `.app` there and runs it. `tooling/apple/vm.md` sets up the VM.
+
+## Binding a framework
+
+```sh
+nts bind-objc --module objc:AppKit --framework AppKit --framework Foundation \
+  --class NSWindow --class NSButton --class NSTableView \
+  --protocol NSTableViewDataSource \
+  --out types/appkit.d.ts --values types/appkit.values.ts
+```
+
+- Each `--class` is bound with its ancestors, and every member Swift imports.
+  Whatever cannot be bound yet is listed in the class, with its reason.
+- `--protocol` declares an interface that a class you write implements.
+- `--values` writes the functions behind Swift's `async` forms.
+- A Core Foundation class (`--class CGContext`) is bound as Swift imports it:
+  its methods and properties are the C functions that take it.
+- `--function` binds a free C function, such as
+  `CGColorSpaceCreateDeviceRGB`.
+- `--witness out.c` writes a C program that asks the runtime on the Mac
+  whether it implements every message the binding sends.
+
+Commit the generated files, and regenerate them when the SDK changes. Each
+fixture's `build.sh` regenerates its binding and diffs it against the
+committed copy.
+
+## The surface, from Swift
+
+| Swift | TypeScript |
+|---|---|
+| `NSWindow(contentRect: r, styleMask: .titled, backing: .buffered, defer: false)` | `new NSWindow({ contentRect: r, styleMask: NSWindow.StyleMask.titled, backing: NSWindow.BackingStoreType.buffered, defer: false })` |
+| `window.setFrame(r, display: true)` | `window.setFrame(r, { display: true })` |
+| `view.addSubview(button)` | `view.addSubview(button)` |
+| `window.title = "Notes"` | `window.title = "Notes"` (a `string`, copied into an `NSString`) |
+| `NSApplication.shared` | `NSApplication.shared` |
+| `window.contentView?.addSubview(b)` | `window.contentView?.addSubview(b)` |
+| `let views: [NSView]` | `const views: NSView[]` |
+| `[String: NSObject]` | `Map<string, NSObject>` |
+| `NSRect(x: 0, y: 0, width: 320, height: 200)` | `{ origin: { x: 0, y: 0 }, size: { width: 320, height: 200 } }` |
+| `Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { t in ... }` | `Timer.scheduledTimer({ withTimeInterval: 1, repeats: true }, (t) => { ... })` |
+| `try NSString(contentsOfFile: p, encoding: e)` | `new NSString({ contentsOfFile: p, encoding: e })`, which throws an `Error` |
+| `let r = await window.beginSheet(sheet)` | `const r = await window.beginSheet(sheet)` |
+| `NSWindow.StyleMask.titled \| ...` | `NSWindow.StyleMask.titled \| ...` (a `const enum`) |
+| `CGColor(red: 1, green: 0, blue: 0, alpha: 1)` | `CGColor({ red: 1, green: 0, blue: 0, alpha: 1 })` |
+| `context.fill(rect)` | `context.fill(rect)` |
+
+The shape of an argument list follows one rule, Swift's own:
+
+- **Unlabelled arguments** (`_`) are positional.
+- **Labelled arguments** go in one trailing object. The compiler passes it
+  field by field and never allocates it.
+- **A closure last** is passed after that object, as Swift's trailing
+  closure is.
+
+A C record Swift passes by value (`NSRect`, `CGPoint`) is written as its
+fields: a literal in the call, or an object held in a variable. Either way it
+becomes storage in the caller's frame, as a C compound literal does. A record a
+message returns is read as `rect.size.width`.
+
+A number is a `number`: `CGFloat`, `Int`, `UInt` and the rest are brands that
+accept any number and are converted at the call.
+
+## Classes of your own
+
+```ts
+class Notes extends NSObject implements NSTableViewDataSource {
+  items: string[] = [];
+
+  constructor(private readonly path: string) {
+    super();
+  }
+
+  numberOfRows(tableView: NSTableView): Int {
+    return this.items.length;
+  }
+
+  add(sender: NSObject): void {
+    this.items.push(`note ${this.items.length + 1}`);
+  }
+}
+```
+
+- The class is a real Objective-C class, registered when the program starts.
+  Each method is an entry the runtime calls. Its selector comes from the
+  protocol, or from the superclass method it overrides (`draw(_:)` is
+  `drawRect:`), or from Swift's `@objc` rule (`add(sender)` is `add:`).
+- Fields live in an object the instance holds. A subclass's fields follow its
+  base's. Initializers run at `init`, and the fields are released at
+  `dealloc`.
+- `super.draw(dirtyRect)`, `super.alignmentRect(labels)` and `super(...)` in
+  a constructor are messages to the superclass.
+- `instanceof` asks `isKindOfClass:`, and narrows.
+
+A button's action is the method's selector for now:
+`button.action = sel_registerName("add:")`, with `import { sel_registerName }
+from "objc:runtime"`.
+
+## Drawing
+
+Bind the Core Graphics classes beside AppKit (`--framework CoreGraphics
+--class CGContext --class CGColor`), and draw in an override:
+
+```ts
+draw(dirtyRect: ByValue<CGRect>): void {
+  const context = NSGraphicsContext.current?.cgContext;
+  if (context !== undefined) {
+    context.setFillColor({ red: 1, green: 0, blue: 0, alpha: 1 });
+    context.fill({ size: { width: 10, height: 10 } });
+  }
+}
+```
+
+A Core Foundation object is counted like any other: a function Swift imports
+as an initializer hands over a reference, which the program releases once
+nothing holds it. `examples/interop/macos-draw` draws into a bitmap and
+compares every pixel with the same drawing in C.
+
+## Memory
+
+Build with reference counting (`nts build --rc`). An Objective-C object is
+counted as ARC counts it: the program owns what `alloc`, `new`, `copy` and a
+Core Foundation `Create` hand it, and retains what it keeps. A closure passed
+as a block is carried to the thread that owns it when Cocoa calls it from
+another. An awaited operation keeps the program alive until its completion
+handler runs.
+
+## Building an app
+
+```ts
+import { app, defineConfig, target } from "@nts/config";
+
+export default defineConfig({
+  products: {
+    notes: app({
+      kind: "application",
+      id: "dev.example.notes",
+      entry: "./src/main.ts",
+      targets: [target.macos({ minimumVersion: "13.0", arch: "aarch64", backend: "llvm" })],
+    }),
+  },
+});
+```
+
+`nts build` writes `notes.app`, whose `Info.plist` comes from the product's
+`id` and `minimumVersion`. A `kind: "executable"` product is a bare binary.
+Each target picks `x86_64` or `aarch64`, and the `c` or `llvm` backend.
+
+## Not yet
+
+- **A typed selector.** Swift's `#selector(Notes.add(_:))` is a checked
+  name. Here it is a string.
+- **`Set<T>`.** Swift's `Set<IndexPath>` is skipped, with its reason.
+- **Out-parameters of objects.** `NSString **` and
+  `AutoreleasingUnsafeMutablePointer` are skipped, with their reason.
+- **Swift-only API.** Swift's overlay adds functions with no C or
+  Objective-C symbol, such as `CGContext.move(to:)`. Those are not bound.
+  `NSBezierPath` builds paths.
+- **Both absences on a handle.** A handle unioned with both `null` and
+  `undefined` is refused. Either one alone is fine.
