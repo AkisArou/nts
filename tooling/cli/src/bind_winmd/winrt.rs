@@ -21,7 +21,7 @@
 //! (`IVector<T>`, whose IID is computed rather than read), structs, arrays,
 //! `out` parameters, and events.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use anyhow::{Context, Result};
@@ -429,6 +429,219 @@ impl Writer<'_> {
 
     /// `JsonValue`: its default interface, and its statics in a namespace of
     /// the same name.
+    /// A static of a class, and its idiomatic name beside it:
+    /// `StorageFolder.GetFolderFromPathAsync` and
+    /// `StorageFolder.getFolderFromPathAsync`, one slot.
+    fn static_member(&mut self, class: &str, method: windows_metadata::reader::MethodDef, slot: usize, receiver: Receiver<'_>, statics: &mut String) {
+        match self.method(method, slot, receiver) {
+            Ok(text) => {
+                statics.push_str(&text);
+                self.methods += 1;
+                let js = nts_core::hir::native::js_name(&method_name(method));
+                if js != method_name(method)
+                    && let Ok(alias) = self.method_named(method, slot, receiver, Some(&js), None)
+                {
+                    statics.push_str(&alias);
+                }
+            }
+            Err(why) => self.refuse(&format!("{class}.{}", method_name(method)), &why),
+        }
+    }
+
+    /// The idiomatic surface of a class, as the Windows Runtime's JavaScript
+    /// projection wrote it: `{Class}Members`, extending its base class's, with
+    /// every member of the interfaces the class itself declares in camelCase
+    /// -- a `get_X`/`put_X` pair as the property `x` (`button.content`),
+    /// read-only without a setter, each other method under its camelCase name.
+    /// Declared once, on the class that implements the interface, and
+    /// inherited, as C#'s projection inherits them: every class repeating
+    /// every base's members made winui-hello's bindings 2.6 times the size and
+    /// its build 17 s longer.
+    ///
+    /// Each is called through its interface (`@ntsVia`), since a subclass's
+    /// instance is not that interface; a member of the class's default
+    /// interface names that interface's handle tag too (`@ntsVia <IID>
+    /// Microsoft_UI_Xaml_Controls_IButton`), so a receiver whose handle is
+    /// that interface -- the class's own instance, or one of a class the
+    /// program writes over it -- is not asked again. The ABI's own names stay on each interface, reached by
+    /// `as_I…()`.
+    ///
+    /// Not yet: events (`add_Click`), which want their own shape, and
+    /// generic interfaces (`IVector<T>`). A name two interfaces give is left
+    /// out and reported, not given to whichever came first.
+    fn members(&mut self, class: &str, def: TypeDef, default: Option<&Type>) -> String {
+        let mut declared: BTreeMap<String, usize> = BTreeMap::new();
+        let mut texts: Vec<(String, String)> = Vec::new();
+        let own = def
+            .interface_impls()
+            .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"))
+            .filter(|implemented| !implemented.has_attribute("DefaultAttribute"))
+            .map(|implemented| implemented.interface(&[]));
+        for (interface, is_default) in default.cloned().map(|ty| (ty, true)).into_iter().chain(own.map(|ty| (ty, false))) {
+            let Type::ClassName(named) = &interface else { continue };
+            if !named.generics.is_empty() {
+                continue;
+            }
+            let Some(interface_def) = self.index.get(&named.namespace, &named.name).next() else { continue };
+            let Some(iid) = iid(interface_def) else { continue };
+            // The default interface's handle tag, which an instance of the
+            // class -- or of a class the program writes over it -- carries.
+            let via = if is_default { format!("{iid} {}_{}", named.namespace.replace('.', "_"), named.name) } else { iid };
+            for (name, text) in self.interface_members(interface_def, &via) {
+                *declared.entry(name.clone()).or_default() += 1;
+                texts.push((name, text));
+            }
+        }
+        let base = def
+            .extends()
+            .filter(|base| self.index.get(base.namespace(), base.name()).next().is_some_and(|parent| parent.category() == TypeCategory::Class))
+            .map(|base| {
+                // The class itself too, so that a namespace bound only for the
+                // names it is asked for declares the base -- and its surface --
+                // this one extends.
+                self.named(base.namespace(), base.name());
+                self.named(base.namespace(), &format!("{}Members", base.name()))
+            });
+        // A name a base's surface gives already: C# hides the base's member
+        // behind the class's (`new`), and TypeScript's `extends` refuses the
+        // two when their types differ, so the base's stands and the class's
+        // is reached through its interface.
+        let inherited = self.inherited_member_names(def);
+        for name in declared.keys() {
+            if inherited.contains(name) {
+                self.refuse(&format!("{class}.{name}"), "an idiomatic name a base class's surface declares already; reached through its interface");
+            }
+        }
+        declared.retain(|name, _| !inherited.contains(name));
+        let mut out = String::new();
+        let extends = base.map(|base| format!(" extends {base}")).unwrap_or_default();
+        let _ = writeln!(out, "  export interface {class}Members{extends} {{");
+        for (name, text) in texts {
+            if declared.get(&name) == Some(&1) {
+                out.push_str(&text);
+            }
+        }
+        let _ = writeln!(out, "  }}");
+        for (name, count) in declared {
+            if count > 1 {
+                self.refuse(&format!("{class}.{name}"), "an idiomatic name two of the class's interfaces give; each is reached through its interface");
+            }
+        }
+        out
+    }
+
+    /// Every idiomatic name the surfaces of `def`'s base classes declare,
+    /// from the interfaces' method names alone -- nothing spelled, so nothing
+    /// is imported for it.
+    fn inherited_member_names(&self, def: TypeDef) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
+        let mut base = def.extends();
+        for _ in 0..32 {
+            let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) else { break };
+            if parent.category() != TypeCategory::Class {
+                break;
+            }
+            let public = parent
+                .interface_impls()
+                .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"));
+            for implemented in public {
+                let Type::ClassName(declared) = implemented.interface(&[]) else { continue };
+                let Some(interface) = self.index.get(&declared.namespace, &declared.name).next() else { continue };
+                for method in interface.methods() {
+                    let abi = method_name(method);
+                    if abi.starts_with("add_") || abi.starts_with("remove_") {
+                        continue;
+                    }
+                    let member = abi.strip_prefix("get_").or_else(|| abi.strip_prefix("put_")).unwrap_or(&abi);
+                    names.insert(nts_core::hir::native::js_name(member));
+                }
+            }
+            base = parent.extends();
+        }
+        names
+    }
+
+    /// One interface's members as [`Self::members`] declares them: `(name,
+    /// text)` for each property and method it can declare.
+    fn interface_members(&mut self, def: TypeDef, via: &str) -> Vec<(String, String)> {
+        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def.methods().enumerate().map(|(index, method)| (6 + index, method)).collect();
+        let slot_of = |wanted: &str| methods.iter().find(|(_, method)| method_name(*method) == wanted).map(|(slot, method)| (*slot, *method));
+        let mut members = Vec::new();
+        for &(slot, method) in &methods {
+            let abi = method_name(method);
+            if abi.starts_with("add_") || abi.starts_with("remove_") || abi.starts_with("put_") {
+                continue;
+            }
+            if let Some(property) = abi.strip_prefix("get_") {
+                let setter = slot_of(&format!("put_{property}"));
+                if let Some(text) = self.property(method, slot, setter, Some(via)) {
+                    members.push((nts_core::hir::native::js_name(property), text));
+                }
+                continue;
+            }
+            let js = nts_core::hir::native::js_name(&abi);
+            if let Ok(text) = self.method_named(method, slot, Receiver::Member, Some(&js), Some(via)) {
+                members.push((js, text));
+            }
+        }
+        members
+    }
+
+    /// A property from its getter, and its setter where it has one. One
+    /// declaration where both spell one type (`width: number`), and a `get`/
+    /// `set` pair where they differ -- the getter answering the class it
+    /// returns (`get resources(): ResourceDictionary`, with its members), the
+    /// setter taking what the ABI passes, which may be `null` (`set
+    /// resources(value: IResourceDictionary | null)`). `None` for one whose
+    /// type this cannot spell, which the interface's own methods report.
+    fn property(
+        &mut self,
+        getter: windows_metadata::reader::MethodDef,
+        get_slot: usize,
+        setter: Option<(usize, windows_metadata::reader::MethodDef)>,
+        via: Option<&str>,
+    ) -> Option<String> {
+        let read = getter.signature(&[]);
+        if !read.types.is_empty() {
+            return None;
+        }
+        let answered = self.spell(&read.return_type, false).ok()?;
+        let taken = match setter {
+            Some((_, put)) => {
+                let written = put.signature(&[]);
+                let [ty] = written.types.as_slice() else { return None };
+                Some(self.spell(ty, true).ok()?)
+            }
+            None => None,
+        };
+        let property = method_name(getter);
+        let property = property.strip_prefix("get_")?.to_owned();
+        let name = nts_core::hir::native::js_name(&property);
+        let tags = |lines: &[String]| {
+            let mut text = String::from("    /**\n");
+            for line in lines {
+                let _ = writeln!(text, "     * {line}");
+            }
+            if let Some(iid) = via {
+                let _ = writeln!(text, "     * @ntsVia {iid}");
+            }
+            text.push_str("     */\n");
+            text
+        };
+        let get_tag = format!("@ntsGet {get_slot} get_{property}");
+        Some(match (setter, taken) {
+            (Some((set_slot, _)), Some(taken)) if taken == answered => {
+                format!("{}    {name}: {answered};\n", tags(&[get_tag, format!("@ntsSet {set_slot} put_{property}")]))
+            }
+            (Some((set_slot, _)), Some(taken)) => format!(
+                "{}    get {name}(): {answered};\n{}    set {name}(value: {taken});\n",
+                tags(&[get_tag]),
+                tags(&[format!("@ntsSet {set_slot} put_{property}")])
+            ),
+            _ => format!("{}    readonly {name}: {answered};\n", tags(&[get_tag])),
+        })
+    }
+
     /// A class's other interfaces, each reached by `QueryInterface`, and
     /// every interface of each class it derives from: a `Button` is its
     /// `ButtonBase`'s `IButtonBase`, its `UIElement`'s `IUIElement`. Not the
@@ -459,6 +672,11 @@ impl Writer<'_> {
     fn class(&mut self, def: TypeDef, body: &mut String) -> bool {
         let name = def.name();
         let default = def.interface_impls().find(|implemented| implemented.has_attribute("DefaultAttribute"));
+        // Before anything that can refuse the class: a subclass's surface
+        // extends this one whether or not the class itself is declared.
+        let default_interface = default.map(|implemented| implemented.interface(&[]));
+        let members = self.members(name, def, default_interface.as_ref());
+        body.push_str(&members);
         // An instantiation as any other type is (`UIElementCollection` is
         // `IVector<UIElement>`), its imports with it.
         let spelled = match default.map(|implemented| implemented.interface(&[])) {
@@ -520,17 +738,12 @@ impl Writer<'_> {
                 } else {
                     Receiver::Factory { class: &class_name, iid: &iid }
                 };
-                match self.method(method, 6 + index, receiver) {
-                    Ok(text) => {
-                        statics.push_str(&text);
-                        self.methods += 1;
-                    }
-                    Err(why) => self.refuse(&format!("{name}.{}", method_name(method)), &why),
-                }
+                self.static_member(name, method, 6 + index, receiver, &mut statics);
             }
         }
         let others = self.answered_interfaces(def);
         let queries = self.queries(name, name, &others);
+
         if !queries.is_empty() {
             let _ = writeln!(body, "  export interface {name}Interfaces {{");
             body.push_str(&queries);
@@ -544,17 +757,11 @@ impl Writer<'_> {
             && let Some(subclassing) = self.subclassing(def, &class_name)
         {
             body.push_str(&subclassing);
-            if queries.is_empty() {
-                let _ = writeln!(body, "  export interface {name} extends {spelled} {{}}");
-            } else {
-                let _ = writeln!(body, "  export interface {name} extends {spelled}, {name}Interfaces {{}}");
-            }
+            let interfaces = if queries.is_empty() { String::new() } else { format!(", {name}Interfaces") };
+            let _ = writeln!(body, "  export interface {name} extends {spelled}{interfaces}, {name}Members {{}}");
         } else if !spelled.is_empty() {
-            if queries.is_empty() {
-                let _ = writeln!(body, "  export type {name} = {spelled};");
-            } else {
-                let _ = writeln!(body, "  export type {name} = {spelled} & {name}Interfaces;");
-            }
+            let interfaces = if queries.is_empty() { String::new() } else { format!(" & {name}Interfaces") };
+            let _ = writeln!(body, "  export type {name} = {spelled}{interfaces} & {name}Members;");
         }
         if !statics.is_empty() {
             let _ = writeln!(body, "  export namespace {name} {{");
@@ -693,6 +900,20 @@ impl Writer<'_> {
         slot: usize,
         receiver: Receiver<'_>,
     ) -> Result<String, String> {
+        self.method_named(method, slot, receiver, None, None)
+    }
+
+    /// [`Self::method`], declared under `display` where the idiomatic surface
+    /// names it (`getFolderFromPathAsync`), and called through the interface
+    /// `via` names where a class declares it from one of its others.
+    fn method_named(
+        &mut self,
+        method: windows_metadata::reader::MethodDef,
+        slot: usize,
+        receiver: Receiver<'_>,
+        display: Option<&str>,
+        via: Option<&str>,
+    ) -> Result<String, String> {
         // A generic interface's own parameters stand for themselves: the
         // signature reads `T` by its index, and is spelled back by name.
         let parameters: Vec<Type> = self.arguments.clone().unwrap_or_else(|| {
@@ -786,33 +1007,23 @@ impl Writer<'_> {
         if let Receiver::Override { iid } = receiver {
             let _ = writeln!(text, "     * @ntsOverride {iid} {slot} {}", method_name(method));
             let _ = writeln!(text, "     */");
-            let _ = writeln!(text, "    {}({}): {result};", method_name(method), parameters.join(", "));
+            // Written in camelCase as every member of the surface is
+            // (`onLaunched`); the tag keeps the slot's own name.
+            let _ = writeln!(text, "    {}({}): {result};", nts_core::hir::native::js_name(&method_name(method)), parameters.join(", "));
             return Ok(text);
         }
         let _ = writeln!(text, "     * @ntsVtable {slot} {}", method_name(method));
         for name in &lent {
             let _ = writeln!(text, "     * @ntsNoEscape {name}");
         }
-        match receiver {
-            Receiver::Composable { class, iid } => {
-                let _ = writeln!(text, "     * @ntsHresult composable");
-                let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
-            }
-            Receiver::Factory { class, iid } => {
-                let _ = writeln!(text, "     * @ntsHresult{}", if outs.is_empty() { "" } else { " out" });
-                let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
-            }
-            Receiver::Instance(_) if !outs.is_empty() => {
-                let _ = writeln!(text, "     * @ntsHresult out");
-            }
-            Receiver::Instance(_) => {
-                let _ = writeln!(text, "     * @ntsHresult");
-            }
-            Receiver::Override { .. } => {}
+        receiver_tags(&mut text, receiver, !outs.is_empty());
+        if let Some(iid) = via {
+            let _ = writeln!(text, "     * @ntsVia {iid}");
         }
         let _ = writeln!(text, "     */");
-        let keyword = if matches!(receiver, Receiver::Instance(_)) { "" } else { "function " };
-        let _ = writeln!(text, "    {keyword}{}({}): {result};", method_name(method), parameters.join(", "));
+        let keyword = if matches!(receiver, Receiver::Instance(_) | Receiver::Member) { "" } else { "function " };
+        let name = display.map_or_else(|| method_name(method), str::to_owned);
+        let _ = writeln!(text, "    {keyword}{name}({}): {result};", parameters.join(", "));
         Ok(text)
     }
 
@@ -1291,6 +1502,11 @@ fn generic_base(name: &str) -> &str {
 #[derive(Clone, Copy)]
 enum Receiver<'a> {
     Instance(&'a str),
+    /// A member of a class's idiomatic surface (`{Class}Members`): an
+    /// instance method with no `this` parameter, called on whichever class's
+    /// instance it is inherited by, through the interface its `@ntsVia`
+    /// names.
+    Member,
     Factory { class: &'a str, iid: &'a str },
     /// A method of an interface a composable class lets a subclass override
     /// (`IApplicationOverrides.OnLaunched`), declared on the class for a
@@ -1306,6 +1522,28 @@ enum Receiver<'a> {
 
 /// The name the metadata gives a method's slot: its `OverloadAttribute` where
 /// it has one, which is unique within the interface, and otherwise its name.
+/// The tags a method's receiver adds: how its HRESULT is read, and the
+/// factory a static is called on.
+fn receiver_tags(text: &mut String, receiver: Receiver<'_>, outs: bool) {
+    match receiver {
+        Receiver::Composable { class, iid } => {
+            let _ = writeln!(text, "     * @ntsHresult composable");
+            let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
+        }
+        Receiver::Factory { class, iid } => {
+            let _ = writeln!(text, "     * @ntsHresult{}", if outs { " out" } else { "" });
+            let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
+        }
+        Receiver::Instance(_) | Receiver::Member if outs => {
+            let _ = writeln!(text, "     * @ntsHresult out");
+        }
+        Receiver::Instance(_) | Receiver::Member => {
+            let _ = writeln!(text, "     * @ntsHresult");
+        }
+        Receiver::Override { .. } => {}
+    }
+}
+
 /// How many of a method's parameters the program passes: all of them, or for
 /// a composable factory's `CreateInstance(..., outer, out inner)` all but the
 /// two objects the runtime composes with.
@@ -1321,7 +1559,7 @@ fn declared_parameters(types: &[Type], out: impl Fn(usize) -> bool, receiver: &R
             return Err("a composable factory method not ending in the outer and inner objects".to_owned());
         }
         Ok(count - 2)
-    } else if composed && matches!(receiver, Receiver::Instance(_)) {
+    } else if composed && matches!(receiver, Receiver::Instance(_) | Receiver::Member) {
         // A factory interface's own method, which the class it makes calls as
         // its constructor (`Receiver::Composable`): as an interface method it
         // would hand the program an inner object.

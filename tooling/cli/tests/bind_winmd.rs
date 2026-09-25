@@ -171,8 +171,9 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         module.contains("@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C"),
         "JsonValue's statics are not on its factory as IJsonValueStatics:\n{module}"
     );
-    // A class is its default interface, and its others by `as_` queries.
-    assert!(module.contains("export type JsonValue = IJsonValue & JsonValueInterfaces;"), "{module}");
+    // A class is its default interface, its others by `as_` queries, and its
+    // idiomatic surface.
+    assert!(module.contains("export type JsonValue = IJsonValue & JsonValueInterfaces & JsonValueMembers;"), "{module}");
     assert!(module.contains("export namespace JsonValue {"), "{module}");
     assert!(module.contains("ComClass<\"Windows_Data_Json_IJsonValue\">"), "{module}");
     // A class's other interface, by the IID the Windows Runtime computes for
@@ -182,7 +183,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         module.contains("@ntsQuery D44662BC-DCE3-59A8-9272-4B210F33908B\n     */\n    as_IVector(this: JsonArray): IVector<IJsonValue>;"),
         "JsonArray is not queried for IVector<IJsonValue> by its computed IID:\n{module}"
     );
-    assert!(module.contains("export type JsonArray = IJsonArray & JsonArrayInterfaces;"), "{module}");
+    assert!(module.contains("export type JsonArray = IJsonArray & JsonArrayInterfaces & JsonArrayMembers;"), "{module}");
     declared_in("export interface IJsonValueMethods", 10, "GetBoolean", "GetBoolean(this: IJsonValue): boolean;");
     // `[out]` parameters are the result's fields beside `returnValue`, as
     // the Windows Runtime's JavaScript projection returned them; an object
@@ -277,7 +278,7 @@ fn winrt_structs_cross_by_value() {
     assert!(globalization.contains("SetDateTime(this: ICalendar, value: ByValue<DateTime> | Fields<DateTime>): void;"), "{globalization}");
     // A class whose default interface is an instantiation is bound as it,
     // and named where a method answers it.
-    assert!(imaging.contains("export type BitmapPropertySet = IMap<HString, IBitmapTypedValue> & BitmapPropertySetInterfaces;"), "{imaging}");
+    assert!(imaging.contains("export type BitmapPropertySet = IMap<HString, IBitmapTypedValue> & BitmapPropertySetInterfaces & BitmapPropertySetMembers;"), "{imaging}");
     assert!(imaging.contains("): IAsyncOperationOfBitmapPropertySet;"), "{imaging}");
     assert!(!refused.contains("BitmapPropertySet"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
@@ -386,7 +387,7 @@ fn composable_classes_are_constructed_as_themselves() {
     // A class whose default interface is an instantiation is that
     // instantiation: a panel's children are an `IVector<IUIElement>`.
     assert!(
-        module.contains("export type UIElementCollection = IVector<IUIElement> & UIElementCollectionInterfaces;"),
+        module.contains("export type UIElementCollection = IVector<IUIElement> & UIElementCollectionInterfaces & UIElementCollectionMembers;"),
         "UIElementCollection is not its IVector<IUIElement>:\n{}",
         module.lines().filter(|line| line.contains("UIElementCollection")).collect::<Vec<_>>().join("\n")
     );
@@ -418,19 +419,43 @@ fn composable_classes_are_constructed_as_themselves() {
     let button = class("Button");
     assert!(button.contains("Button 80A13C19-843A-451C-8CF5-44C701B0E216 6\n   */\n  export class Button {\n    constructor();"), "{button}");
     assert!(
-        button.contains("@ntsOverride 5F4C0B10-E38E-4B5D-BE1A-5ED04246A635 6 OnContentChanged\n     */\n    OnContentChanged(oldContent: IInspectable | null, newContent: IInspectable | null): void;"),
+        button.contains("@ntsOverride 5F4C0B10-E38E-4B5D-BE1A-5ED04246A635 6 OnContentChanged\n     */\n    onContentChanged(oldContent: IInspectable | null, newContent: IInspectable | null): void;"),
         "{button}"
     );
     let control = class("Control");
     assert!(control.contains("export class Control {\n    protected constructor();"), "{control}");
     assert!(control.contains("@ntsOverride A09691DF-9824-41FE-B530-B0D8990E64C1 6 OnPointerEntered"), "{control}");
-    assert!(module.contains("export interface Button extends IButton, ButtonInterfaces {}"), "the class form does not carry its instances' methods");
+    assert!(module.contains("export interface Button extends IButton, ButtonInterfaces, ButtonMembers {}"), "the class form does not carry its instances' methods");
     // A record a call takes by value may be written as its fields; an
     // override's stays the record, since its adapter reads the ABI type from
     // the declaration.
     let xaml = std::fs::read_to_string(out.join("Windows.UI.Xaml.d.ts")).unwrap();
     assert!(xaml.contains("    Measure(this: IUIElement, availableSize: ByValue<Size> | Fields<Size>): void;"), "Measure does not take its fields");
-    assert!(module.contains("    MeasureOverride(availableSize: ByValue<Size>): ByValue<Size>;"), "an override's record is spelled with its fields");
+    assert!(module.contains("    measureOverride(availableSize: ByValue<Size>): ByValue<Size>;"), "an override's record is spelled with its fields");
+    // The idiomatic surface: declared once, on the class implementing the
+    // interface, and inherited along the class chain; a property as its
+    // getter and setter, a `get`/`set` pair where they spell differently;
+    // each member called through its interface, and the default interface's
+    // naming its class, whose own handle needs no asking.
+    let surface = |name: &str| {
+        let at = module.find(&format!("  export interface {name}Members")).unwrap_or_else(|| panic!("no {name}Members"));
+        let form = &module[at..];
+        form[..form.find("\n  }").unwrap()].to_owned()
+    };
+    let content_control = surface("ContentControl");
+    assert!(content_control.starts_with("  export interface ContentControlMembers extends ControlMembers {"), "{content_control}");
+    assert!(
+        content_control.contains("     * @ntsGet 6 get_Content\n     * @ntsVia A26DD1DC-CD44-435C-BE94-01D6241C231C Windows_UI_Xaml_Controls_IContentControl\n     */\n    get content(): IInspectable;")
+            && content_control.contains("     * @ntsSet 7 put_Content\n     * @ntsVia A26DD1DC-CD44-435C-BE94-01D6241C231C Windows_UI_Xaml_Controls_IContentControl\n     */\n    set content(value: IInspectable | null);"),
+        "{content_control}"
+    );
+    let button_surface = surface("Button");
+    assert!(button_surface.starts_with("  export interface ButtonMembers extends ButtonBaseMembers {"), "{button_surface}");
+    assert!(button_surface.contains("     * @ntsVia 09108F87-DF6C-4180-9B3A-E60845825811\n     */\n    get flyout(): FlyoutBase;"), "{button_surface}");
+    assert!(!button_surface.contains("content"), "a base's member is repeated on the class:\n{button_surface}");
+    assert!(module.contains("export interface Button extends IButton, ButtonInterfaces, ButtonMembers {}"), "the class does not carry its surface");
+    // A static beside its ABI name, one slot.
+    assert!(module.contains("     * @ntsFactory Windows.UI.Xaml.Controls.Button 80A13C19-843A-451C-8CF5-44C701B0E216\n     */\n    function createInstance(): Button;"), "no camelCase static");
     let _ = std::fs::remove_dir_all(&out);
 }
 

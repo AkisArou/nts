@@ -330,7 +330,29 @@ Application.Start(() => { new App(); });
 2. **W2's rest** as listed above: awaitable operations once `await` honours
    thenables. **W3** is complete for the fixture's needs; next is **W4**.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
-   C#/CsWinRT and C++/WinRT. Started: a record a call takes by value may be
+   C#/CsWinRT and C++/WinRT. The surface is JavaScript-style, as the Windows
+   Runtime's own JavaScript projection was: types in PascalCase, members in
+   camelCase (`js_name`, one rule the binder writes by and lowering checks).
+   Landed first:
+   - **Properties:** `window.title = "nts"`, `button.actualWidth`, from each
+     `get_X`/`put_X` pair; a `get`/`set` pair where the getter answers a
+     class (`get resources(): ResourceDictionary`) and the setter takes what
+     the ABI passes (`set resources(value: IResourceDictionary | null)`).
+   - **Methods, statics and overrides in camelCase:** `button.focus(...)`,
+     `Application.start(...)`, `onLaunched(args)`.
+   - **Inherited, not repeated:** `{Class}Members` extends its base's, and
+     each member is called through its interface (`@ntsVia`, a query for the
+     call). A member of the class's default interface names that interface's
+     handle tag, so its own instances aren't asked again. Repeating every
+     base's members on every class made winui-hello's bindings 2.6 times
+     larger and the build 17 s longer. Inherited, the bindings grow 4.6 → 6.2
+     MB, and a warm build goes 4.0 → 4.7 s.
+   - The ABI names stay on each interface (`as_IContentControl().put_Content`).
+   - Not yet: events (`add_Click`), generic interfaces (`IVector`), static
+     properties, struct fields (`size.Width`), `new Window()`, strings boxed
+     where a slot takes `IInspectable`, and a subclass passed where its base's
+     interface is taken (`window.content = button`, which needs a query at the
+     conversion). Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
    record stays `ByValue<T>`.

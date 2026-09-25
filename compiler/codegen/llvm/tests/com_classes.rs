@@ -477,6 +477,89 @@ fn a_composed_class_has_methods_of_its_own() {
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 }
 
+/// A class's idiomatic surface, as `bind-winmd` writes it: `WidgetMembers`
+/// on the class implementing the interfaces, `GadgetMembers` inheriting it.
+const SURFACE: &str = r#"declare module "winrt:Test.Surface" {
+  import type { CNumber } from "c:types";
+  import type { ComClass } from "winrt:types";
+  export type IWidget = ComClass<"IWidget">;
+  export type IGadget = ComClass<"IGadget">;
+  export interface WidgetMembers {
+    /**
+     * @ntsGet 6 get_Size
+     * @ntsSet 7 put_Size
+     * @ntsVia 11111111-2222-3333-4444-555555555555 IWidget
+     */
+    size: CNumber<"int32">;
+    /**
+     * @ntsVtable 6 Refresh
+     * @ntsHresult
+     * @ntsVia 66666666-7777-8888-9999-AAAAAAAAAAAA
+     */
+    refresh(): void;
+  }
+  export interface GadgetMembers extends WidgetMembers {}
+  export type Widget = IWidget & WidgetMembers;
+  export type Gadget = IGadget & GadgetMembers;
+}
+"#;
+
+/// Properties and camelCase methods of a class's surface, each called
+/// through its interface: a receiver of exactly the class a default
+/// interface's member names is that interface already and is not asked
+/// again; a member of another interface, or one a subclass inherits, is
+/// asked for (`nts_com_query`) and given back after the call.
+#[test]
+fn a_surface_member_is_called_through_its_interface() {
+    let source = "import type { Gadget, Widget } from \"winrt:Test.Surface\";\nexport function own(w: Widget): number {\n  w.size = 3;\n  return w.size;\n}\nexport function other(w: Widget): void {\n  w.refresh();\n}\nexport function inherited(g: Gadget): number {\n  return g.size;\n}\n";
+    let Some((dir, prepared)) = prepare_with("surface", SURFACE, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    let body = |name: &str| {
+        let start = text.lines().position(|line| line.contains(&format!(" {name}(")) && line.ends_with('{')).unwrap_or_else(|| panic!("no {name}:\n{text}"));
+        text.lines().skip(start + 1).take_while(|line| *line != "}").collect::<Vec<_>>().join("\n")
+    };
+    let own = body("own");
+    assert!(!own.contains("nts_com_query("), "the class's own handle is asked for its default interface:\n{own}");
+    assert!(own.contains("[7])(") && own.contains("[6])("), "the setter and getter slots are not called:\n{own}");
+    let other = body("other");
+    assert!(other.contains("nts_com_query(") && other.contains("nts_com_release("), "another interface's member is not asked for and given back:\n{other}");
+    let inherited = body("inherited");
+    assert!(inherited.contains("nts_com_query("), "a subclass's instance is not asked for the base's interface:\n{inherited}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
+/// The camelCase name is the one other a slot's method may be declared
+/// under: any other name disagrees with the slot and is refused.
+#[test]
+fn a_surface_name_other_than_the_slots_is_refused() {
+    let binding = SURFACE.replace("    refresh(): void;", "    reload(): void;");
+    let source = "import type { Widget } from \"winrt:Test.Surface\";\nexport function other(w: Widget): void {\n  w.reload();\n}\n";
+    let Some((_, prepared)) = prepare_with("surface-name", &binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("@ntsVtable 6 Refresh on a declaration of another name")),
+        "{:?}",
+        prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}
+
 /// `super.OnLaunched(args)` in an override is the base's own implementation
 /// of the interface, from the runtime (`nts_com_base`, which answers the
 /// program's reference), called through the override's slot with its

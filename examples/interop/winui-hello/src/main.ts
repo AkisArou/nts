@@ -76,7 +76,7 @@ class PressPeer extends AutomationPeer {
   constructor() {
     super();
   }
-  GetClassNameCore(): string {
+  getClassNameCore(): string {
     return "PressPeer";
   }
 }
@@ -92,27 +92,27 @@ class PressButton extends Button {
   constructor(label: string) {
     super();
     this.label = label;
-    this.as_IContentControl().put_Content(PropertyValue.CreateString(label));
+    this.content = PropertyValue.createString(label);
   }
 
-  OnPointerEntered(_e: IPointerRoutedEventArgs | null): void {
+  onPointerEntered(_e: IPointerRoutedEventArgs | null): void {
     this.entered += 1;
   }
-  OnApplyTemplate(): void {
-    super.OnApplyTemplate();
+  onApplyTemplate(): void {
+    super.onApplyTemplate();
     this.templated += 1;
   }
-  GoToElementStateCore(stateName: string, _useTransitions: boolean): boolean {
+  goToElementStateCore(stateName: string, _useTransitions: boolean): boolean {
     this.states += stateName;
     return false;
   }
-  OnCreateAutomationPeer(): AutomationPeer {
+  onCreateAutomationPeer(): AutomationPeer {
     this.peers += 1;
     return new PressPeer();
   }
-  MeasureOverride(available: ByValue<Size>): ByValue<Size> {
+  measureOverride(available: ByValue<Size>): ByValue<Size> {
     this.measured += 1;
-    return super.MeasureOverride(available);
+    return super.measureOverride(available);
   }
 }
 
@@ -120,18 +120,18 @@ class App extends Application {
   launched = 0;
   clicks = 0;
 
-  OnLaunched(args: ILaunchActivatedEventArgs | null): void {
-    super.OnLaunched(args);
+  onLaunched(args: ILaunchActivatedEventArgs | null): void {
+    super.onLaunched(args);
     this.launched += 1;
-    this.get_Resources().get_MergedDictionaries().Append(XamlControlsResources.create().as_IResourceDictionary());
-    const window = Window.CreateInstance();
-    window.put_Title("nts");
+    this.resources.mergedDictionaries.Append(XamlControlsResources.create().as_IResourceDictionary());
+    const window = Window.createInstance();
+    window.title = "nts";
     const button = new PressButton("Press");
     button.as_IButtonBase().add_Click(() => {
       this.clicks += 1;
     });
-    window.put_Content(button.as_IUIElement());
-    window.Activate();
+    window.content = button.as_IUIElement();
+    window.activate();
     setTimeout(() => this.whenLaidOut(window, button), 200);
   }
 
@@ -142,32 +142,32 @@ class App extends Application {
   polls = 0;
   whenLaidOut(window: Window, button: PressButton): void {
     this.polls += 1;
-    const laidOut = button.templated > 0 && button.measured > 0 && button.as_IFrameworkElement().get_ActualWidth() > 0;
+    const laidOut = button.templated > 0 && button.measured > 0 && button.actualWidth > 0;
     if (!laidOut && this.polls < 75) {
       setTimeout(() => this.whenLaidOut(window, button), 200);
       return;
     }
     // Focus goes to the active window: made so again, since another
     // program may have taken the desktop's focus meanwhile.
-    window.Activate();
-    const focused = button.as_IUIElement().Focus(FocusState.Programmatic);
+    window.activate();
+    const focused = button.focus(FocusState.Programmatic);
     button.as_IFrameworkElementOverrides().GoToElementStateCore("Custom", false);
-    ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
-    const peer = FrameworkElementAutomationPeer.CreatePeerForElement(button.as_IUIElement()).GetClassName();
-    const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
+    ButtonAutomationPeer.createInstanceWithOwner(button).as_IInvokeProvider().Invoke();
+    const peer = FrameworkElementAutomationPeer.createPeerForElement(button.as_IUIElement()).getClassName();
+    const styled = button.actualWidth > 0;
     // A record written as its fields, where the call takes one by value.
-    button.as_IUIElement().Measure({ Width: 1000, Height: 1000 });
-    const desired = button.as_IUIElement().get_DesiredSize().Width > 0;
+    button.measure({ Width: 1000, Height: 1000 });
+    const desired = button.desiredSize.Width > 0;
     report(
-      "title=" + window.get_Title() + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
+      "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
         " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired),
     );
-    this.Exit();
+    this.exit();
   }
 }
 
-Application.Start(() => {
+Application.start(() => {
   new App();
 });
 report("after");

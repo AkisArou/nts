@@ -3645,6 +3645,49 @@ pub(crate) fn forward_signature(snapshot: &SemanticSnapshot, signature: &nts_sem
     Ok(FnPointer::spell(parameters, Type::Scalar(Scalar::Int32)))
 }
 
+/// The name a Windows Runtime member has in the idiomatic surface: its ABI
+/// name in camelCase, as the Windows Runtime's JavaScript projection spelled
+/// it -- `GetFolderFromPathAsync` is `getFolderFromPathAsync`, and a leading
+/// acronym is lowered whole, `UIElement` as `uiElement` and `IOStream` as
+/// `ioStream`. One derivation, which `bind-winmd` writes the names by and
+/// lowering checks a slot's name against.
+#[must_use]
+pub fn js_name(abi: &str) -> String {
+    let chars: Vec<char> = abi.chars().collect();
+    let upper = chars.iter().take_while(|c| c.is_ascii_uppercase()).count();
+    let lowered = match upper {
+        0 => 0,
+        // All capitals, `ID`, or one capital before the rest: every one.
+        n if n == chars.len() || n == 1 => n,
+        // An acronym and then a word, `UIElement`: all but the word's first.
+        n if chars.get(n).is_some_and(char::is_ascii_lowercase) => n - 1,
+        // An acronym and then a digit or an underscore, `X509`: all of it.
+        n => n,
+    };
+    chars.iter().enumerate().map(|(at, c)| if at < lowered { c.to_ascii_lowercase() } else { *c }).collect()
+}
+
+#[cfg(test)]
+mod js_name_tests {
+    use super::js_name;
+
+    #[test]
+    fn a_name_is_camel_cased_as_the_javascript_projection_did() {
+        for (abi, js) in [
+            ("GetFolderFromPathAsync", "getFolderFromPathAsync"),
+            ("Content", "content"),
+            ("UIElement", "uiElement"),
+            ("IOStream", "ioStream"),
+            ("ID", "id"),
+            ("X509Certificate", "x509Certificate"),
+            ("Activate", "activate"),
+            ("already", "already"),
+        ] {
+            assert_eq!(js_name(abi), js, "{abi}");
+        }
+    }
+}
+
 /// Whether a declared parameter is TypeScript's `object`, or `object | null`.
 ///
 /// `TypeFlags.NonPrimitive`, which the schema carries as a structured type.

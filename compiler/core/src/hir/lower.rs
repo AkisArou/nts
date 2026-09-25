@@ -6178,6 +6178,20 @@ fn refuses_an_unregistered_handle(snapshot: &SemanticSnapshot, class: NodeId, lo
     true
 }
 
+/// A call whose receiver [`FuncBuilder::via_receiver`] queried: its instance
+/// parameter is the interface pointer the query answered, `void *` and
+/// uncounted, rather than the receiver's own type. Any other call is itself.
+fn via_callee(callee: Callee, queried: bool) -> Callee {
+    match callee {
+        Callee::Native(target) if queried && !target.parameters.is_empty() => {
+            let mut target = (*target).clone();
+            target.parameters[0] = super::native::Type::Pointer(super::native::Pointee::Void);
+            Callee::Native(std::sync::Arc::new(target))
+        }
+        other => other,
+    }
+}
+
 /// A class the program writes over a composable Windows Runtime class,
 /// recorded as the runtime will compose it (`Program::foreign_classes`): its
 /// overrides, by interface and slot, and the factory of the class it extends.
@@ -11995,11 +12009,12 @@ struct FuncBuilder<'a> {
     /// program's class it is written in: the message it builds goes to the
     /// superclass's implementation (`native::Send::super_of`).
     super_send: Option<String>,
-    /// While a `super.m()` in a class over a composable Windows Runtime class
-    /// is lowered, the slot and name of `m` in its overridable interface: the
-    /// call goes through that slot of the base's implementation, which is the
-    /// receiver.
-    super_slot: Option<(u32, String)>,
+    /// While a call through a Windows Runtime slot no `@ntsVtable` names is
+    /// lowered, that slot and its method's name: `super.m()` in a class over a
+    /// composable class (`m` in its overridable interface, on the base's
+    /// implementation), or a property's getter or setter (`@ntsGet 6
+    /// get_Content`).
+    forced_slot: Option<(u32, String)>,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -12226,7 +12241,7 @@ impl<'a> FuncBuilder<'a> {
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
             super_send: None,
-            super_slot: None,
+            forced_slot: None,
         }
     }
 
@@ -28311,7 +28326,7 @@ impl<'a> FuncBuilder<'a> {
                 self.unsupported(id, "an assignment to a native property no @ntsSet names a method for")
             })?;
             let value = self.lower_expression(source)?;
-            self.lower_accessor(id, *object, &method, Some(value))?;
+            self.lower_accessor(id, *object, *member, &method, Some(value))?;
             return Ok(value);
         }
         let place = self.place_of(target)?;
@@ -28558,7 +28573,7 @@ impl<'a> FuncBuilder<'a> {
         record
             .declarations
             .iter()
-            .filter(|decl| self.kind_of(**decl) == Some(syntax::PROPERTY_SIGNATURE))
+            .filter(|decl| matches!(self.kind_of(**decl), Some(syntax::PROPERTY_SIGNATURE | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)))
             .filter_map(|decl| self.node(*decl).native.as_deref())
             .filter(|native| native.get.is_some() || native.set.is_some())
             .collect()
@@ -28570,7 +28585,7 @@ impl<'a> FuncBuilder<'a> {
             return None;
         }
         Some(match self.accessor(member, false) {
-            Some(method) => self.lower_accessor(id, object, &method, None),
+            Some(method) => self.lower_accessor(id, object, member, &method, None),
             None => Err(self.unsupported(id, "a read of a native property no @ntsGet names a method for")),
         })
     }
@@ -28589,12 +28604,104 @@ impl<'a> FuncBuilder<'a> {
     /// `handle.name`, or `handle.name = value`: a call to `method`, a method
     /// the handle's type declares, with the handle as its instance -- the
     /// same call `handle.method(value)` is, through the same roles.
-    fn lower_accessor(&mut self, id: NodeId, object: NodeId, method: &str, value: Option<ValueId>) -> Result<ValueId, Diagnostic> {
+    ///
+    /// A tag of two words names a slot instead, `@ntsGet 6 get_Content`: a
+    /// Windows Runtime property, called through the slot without a method
+    /// declared for it (`lower_slot_accessor`).
+    fn lower_accessor(&mut self, id: NodeId, object: NodeId, member: NodeId, method: &str, value: Option<ValueId>) -> Result<ValueId, Diagnostic> {
         let ty = self.snapshot.node_types.get(&object).copied().ok_or_else(|| {
             self.unsupported(id, &format!("a native property whose accessor `{method}` has no receiver type"))
         })?;
         let receiver = self.lower_expression(object)?;
+        if let [slot, name] = method.split_whitespace().collect::<Vec<_>>()[..] {
+            let slot: u32 = slot.parse().map_err(|_| self.unsupported(id, "@ntsGet or @ntsSet naming a slot that is not a number"))?;
+            return self.lower_slot_accessor(id, member, receiver, ty, (slot, name), value);
+        }
         self.lower_accessor_on(id, receiver, ty, method, value)
+    }
+
+    /// `button.content` and `button.content = value` for a Windows Runtime
+    /// property: its getter or setter slot called on the receiver -- asked for
+    /// the property's interface first where it is `@ntsVia` another -- with
+    /// the signature the property's type gives it, `(): T` or `(value: T):
+    /// void`, and its HRESULT checked, as a method call through a slot is.
+    fn lower_slot_accessor(
+        &mut self,
+        id: NodeId,
+        member: NodeId,
+        receiver: ValueId,
+        this: TypeId,
+        (slot, name): (u32, &str),
+        value: Option<ValueId>,
+    ) -> Result<ValueId, Diagnostic> {
+        // The declaration carrying this direction's tag: one property
+        // signature for both, or a `get`/`set` pair, each its own.
+        let write = value.is_some();
+        let declaration = self
+            .node(member)
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .and_then(|record| {
+                record.declarations.iter().copied().find(|decl| {
+                    let tagged = self.node(*decl).native.as_deref().is_some_and(|n| if write { n.set.is_some() } else { n.get.is_some() });
+                    tagged && matches!(self.kind_of(*decl), Some(syntax::PROPERTY_SIGNATURE | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR))
+                })
+            })
+            .ok_or_else(|| self.unsupported(id, "a Windows Runtime property with no declaration"))?;
+        // Its value's type: the property's, the getter's result, or the
+        // setter's parameter.
+        let ty = match self.kind_of(declaration) {
+            Some(syntax::PROPERTY_SIGNATURE) => self.snapshot.node_types.get(&declaration).copied(),
+            // A setter's value is its parameter's declared type.
+            Some(syntax::SET_ACCESSOR) => self
+                .children(declaration)
+                .into_iter()
+                .find(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+                .and_then(|parameter| self.name_node(parameter))
+                .and_then(|name| self.snapshot.node_types.get(&name).copied()),
+            // A getter's is what the read is typed, which is its result.
+            _ => self.snapshot.node_types.get(&id).copied(),
+        }
+        .ok_or_else(|| self.unsupported(id, "a Windows Runtime property with no type"))?;
+        let (parameters, return_type) = match value {
+            Some(_) => (vec![nts_semantic_schema::ParameterRecord { name: "value".to_owned(), ty, optional: false, rest: false }], self.void_type()?),
+            None => (Vec::new(), ty),
+        };
+        let this = self.class_behind(this);
+        let mut with_this = nts_semantic_schema::SignatureRecord {
+            parameters,
+            return_type,
+            type_parameters: Vec::new(),
+            is_construct: false,
+            type_predicate: None,
+            this_type: Some(this),
+        };
+        with_this.parameters.insert(0, nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false });
+        self.forced_slot = Some((slot, name.to_owned()));
+        let callee = self.native_callee(id, Some(declaration), name.to_owned(), &with_this);
+        self.forced_slot = None;
+        let callee = callee?;
+        let Callee::Native(target) = &callee else {
+            return Err(self.unsupported(id, "a Windows Runtime property whose slot is not a native call"));
+        };
+        let args: Vec<ValueId> = match value {
+            Some(value) => {
+                let value = match target.roles.get(1) {
+                    Some(super::native::Role::Plain) => self.coerce(value, &target.parameters[1].representation(), id)?,
+                    _ => value,
+                };
+                vec![value]
+            }
+            None => Vec::new(),
+        };
+        let written = args.len();
+        let (receiver, queried) = self.via_receiver(id, declaration, receiver)?;
+        let callee = via_callee(callee, queried.is_some());
+        let Callee::Native(target) = &callee else { unreachable!("a native callee stays native") };
+        let (args, lent) = self.native_arguments(id, &target.clone(), args, written, Some(receiver))?;
+        let answer = self.finish_call(id, callee, args, lent, Some(declaration))?;
+        self.release_via(id, queried);
+        Ok(answer)
     }
 
     /// [`Self::lower_accessor`] on a receiver already lowered: the handle
@@ -43496,10 +43603,18 @@ impl<'a> FuncBuilder<'a> {
         // receiver is the object it is called on, or the class when `static`.
         let objc_member = self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
             && self.objc_class_member(declaration).is_some();
-        (tagged
-            && ((self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE) && signature.this_type.is_some())
-                || objc_member))
-        .then_some((declaration, target.signature))
+        (tagged && (self.is_native_instance_method(declaration, signature) || objc_member)).then_some((declaration, target.signature))
+    }
+
+    /// Whether a binding's method is called on an instance: an interface
+    /// method declaring `this: T`, or a member of a Windows Runtime class's
+    /// idiomatic surface, which declares no `this` -- it is inherited by every
+    /// subclass and called on whichever instance the call names, through the
+    /// interface its `@ntsVia` asks for. The one answer `native_method` and
+    /// `vtable_of` both ask.
+    fn is_native_instance_method(&self, declaration: NodeId, signature: &nts_semantic_schema::SignatureRecord) -> bool {
+        let via = self.node(declaration).native.as_ref().is_some_and(|n| n.via.is_some());
+        self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE) && (signature.this_type.is_some() || via)
     }
 
     /// The function an `@ntsCall` method names, when the call at `id`
@@ -43718,15 +43833,68 @@ impl<'a> FuncBuilder<'a> {
         // object the method is called on, at the type the program has it.
         let this = with_this
             .this_type
-            .or_else(|| self.snapshot.node_types.get(&receiver_node).copied())
+            // `this` in a method of a class the program writes over a
+            // handle's is the class's polymorphic `this`: its members, and
+            // its representation, are the class's.
+            .or_else(|| self.snapshot.node_types.get(&receiver_node).map(|ty| self.class_behind(*ty)))
             .ok_or_else(|| self.unsupported(id, "a C method with no `this` type"))?;
         with_this.parameters.insert(
             0,
             nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false },
         );
         let callee = self.native_callee(id, Some(declaration), name, &with_this)?;
+        let (receiver, queried) = self.via_receiver(id, declaration, receiver)?;
+        let callee = via_callee(callee, queried.is_some());
         let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
-        self.finish_call_typed(id, callee, args, lent, Some(declaration), typed)
+        let answer = self.finish_call_typed(id, callee, args, lent, Some(declaration), typed)?;
+        self.release_via(id, queried);
+        Ok(answer)
+    }
+
+    /// The receiver a member tagged `@ntsVia <IID>` is called on: the object
+    /// asked for that interface (`nts_com_query`), as the Windows Runtime's
+    /// projections call a class's member from one of its other interfaces --
+    /// and the queried pointer, which [`Self::release_via`] gives back once
+    /// the call has returned. Typed `void *`, so the ownership pass does not
+    /// count it: it lives for the call alone, whatever the provider. Any other
+    /// member is called on the receiver as it is.
+    ///
+    /// `@ntsVia <IID> <tag>` names the handle tag of the interface the IID is,
+    /// where it is its class's default: a receiver whose handle carries that
+    /// tag is that interface already -- a class's instance is its default
+    /// interface -- and is not asked again.
+    fn via_receiver(
+        &mut self,
+        id: NodeId,
+        declaration: NodeId,
+        receiver: ValueId,
+    ) -> Result<(ValueId, Option<ValueId>), Diagnostic> {
+        let Some(tag) = self.node(declaration).native.as_ref().and_then(|native| native.via.clone()) else {
+            return Ok((receiver, None));
+        };
+        let mut words = tag.split_whitespace();
+        let iid = words.next().unwrap_or_default().to_owned();
+        if let Some(owner) = words.next()
+            && let HirType::NativePointer(pointee) = &self.values[receiver.0 as usize].ty
+            && opaque_handle(pointee).is_some_and(|handle| handle.tag == owner)
+        {
+            return Ok((receiver, None));
+        }
+        if !super::native::is_interface_id(&iid) {
+            return Err(self.unsupported(id, "@ntsVia with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
+        }
+        let origin = self.origin(id);
+        let [low, high] = self.iid_arguments(&iid, &origin);
+        let queried = self.runtime_call("nts_com_query", vec![receiver, low, high], HirType::NativePointer(super::native::Pointee::Void), origin);
+        Ok((queried, Some(queried)))
+    }
+
+    /// The interface [`Self::via_receiver`] asked for, given back.
+    fn release_via(&mut self, id: NodeId, queried: Option<ValueId>) {
+        if let Some(queried) = queried {
+            let origin = self.origin(id);
+            self.runtime_call("nts_com_release", vec![queried], HirType::Void, origin);
+        }
     }
 
     /// A message the lowering sends itself, as a value of `result`'s type.
@@ -44195,7 +44363,7 @@ impl<'a> FuncBuilder<'a> {
     fn hresult_shape(&self, call: NodeId, declaration: Option<NodeId>) -> Result<Option<super::native::Hresult>, Diagnostic> {
         // An overridable method answers an HRESULT as every slot does, and
         // its binding says so only by being `@ntsOverride`.
-        if self.super_slot.is_some() {
+        if self.forced_slot.is_some() {
             return Ok(Some(super::native::Hresult::Plain));
         }
         let Some(shape) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.hresult.as_deref()) else {
@@ -44852,7 +45020,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decl) = declaration {
             native.frameworks = self.declared_names(call, decl, LinkTag::FRAMEWORK)?;
             native.libraries = self.declared_names(call, decl, LinkTag::LIBRARY)?;
-            native.vtable = match &self.super_slot {
+            native.vtable = match &self.forced_slot {
                 Some((slot, method)) => Some(super::native::Vtable { slot: *slot, method: method.clone(), factory: None }),
                 None => self.vtable_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?,
             };
@@ -44957,7 +45125,11 @@ impl<'a> FuncBuilder<'a> {
         if otherwise_bound {
             return Err(self.unsupported(call, "@ntsVtable beside @ntsSymbol or @ntsSelector, which name another way to call it"));
         }
-        if self.declared_name(decl).as_deref() != Some(*method) {
+        // The idiomatic surface names a slot's method in camelCase
+        // (`getFolderFromPathAsync` for `GetFolderFromPathAsync`), by the one
+        // rule `bind-winmd` writes it by; any other name is a disagreement.
+        let declared = self.declared_name(decl);
+        if declared.as_deref() != Some(*method) && declared.as_deref() != Some(super::native::js_name(method).as_str()) {
             return Err(self.unsupported(
                 call,
                 &format!("@ntsVtable {slot} {method} on a declaration of another name: the slot's method and the declaration disagree"),
@@ -44979,7 +45151,7 @@ impl<'a> FuncBuilder<'a> {
                 Some(super::native::Factory { class: (*class).to_owned(), iid: iid.trim_matches(['{', '}']).to_owned() })
             }
         };
-        let method_of_instance = self.kind_of(decl) == Some(syntax::METHOD_SIGNATURE) && signature.this_type.is_some();
+        let method_of_instance = self.is_native_instance_method(decl, signature);
         match (&factory, method_of_instance) {
             (None, false) => {
                 return Err(self.unsupported(call, "@ntsVtable on a function with neither an instance (`this`) nor an @ntsFactory to call it on"));
@@ -50461,9 +50633,9 @@ impl<'a> FuncBuilder<'a> {
         let [low, high] = self.iid_arguments(iid, &origin);
         let ty = self.values[receiver.0 as usize].ty.clone();
         let base = self.runtime_call("nts_com_base", vec![receiver, low, high], ty, origin);
-        self.super_slot = Some((slot, (*name).to_owned()));
+        self.forced_slot = Some((slot, (*name).to_owned()));
         let called = self.lower_native_method_call(id, (base, object), method, member, arguments);
-        self.super_slot = None;
+        self.forced_slot = None;
         called
     }
 

@@ -470,6 +470,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let factory = leading_tag(source, "@ntsFactory");
     let query = leading_tag(source, "@ntsQuery");
     let activate = leading_tag(source, "@ntsActivate");
+    let via = leading_tag(source, "@ntsVia");
     let vfunc = leading_tag(source, "@ntsVfunc");
     let gtype = leading_tag(source, "@ntsGType");
     let composable = leading_tag(source, "@ntsComposable");
@@ -496,6 +497,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && factory.is_none()
         && query.is_none()
         && activate.is_none()
+        && via.is_none()
         && vfunc.is_none()
         && gtype.is_none()
         && composable.is_none()
@@ -526,6 +528,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         factory,
         query,
         activate,
+        via,
         vfunc,
         gtype,
         composable,

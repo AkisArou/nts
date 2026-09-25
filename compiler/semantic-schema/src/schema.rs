@@ -42,8 +42,9 @@ use crate::origin::Origin;
 /// number, and checks that it did. 30: `composable` and `overridable`, for a
 /// class written over a composable Windows Runtime class; and GTK's `vfunc`
 /// and `gtype`, which landed at 29 without one. 31: `SourceFile::rewritten_by`,
-/// a file a source transform rewrote before it was read.
-pub const SCHEMA_VERSION: u32 = 31;
+/// a file a source transform rewrote before it was read. 32: `via`, the
+/// interface a Windows Runtime class's member is called through.
+pub const SCHEMA_VERSION: u32 = 32;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -804,6 +805,11 @@ pub struct NativeAttributes {
     /// runtime class's default constructor, answering its default interface.
     #[serde(default)]
     pub activate: Option<String>,
+    /// `@ntsVia <IID>`, on a member a Windows Runtime class declares from
+    /// one of its other interfaces (`button.content`, `IContentControl`'s):
+    /// the receiver is asked for that interface, and the member called on it.
+    #[serde(default)]
+    pub via: Option<String>,
     /// `@ntsVfunc GtkButtonClass clicked`: a `GObject` virtual function -- the
     /// member `clicked` of the class struct `GtkButtonClass` -- declared as
     /// `vfunc_clicked(this: GtkButton)`, which a subclass the program writes
