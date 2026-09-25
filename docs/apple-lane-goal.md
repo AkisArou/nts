@@ -351,6 +351,12 @@ correctness does not depend on arm64 running by luck.
        `splitView(_:canCollapseSubview:)` is
        `splitViewCanCollapseSubview(splitView, subview)`. One of AppKit's
        former 45 has no label at all and is still skipped.
+     - Overloads Swift tells apart by a number's type, such as `set(_:
+       Int, forKey:)` and `set(_: Double, forKey:)`, are ordered double
+       first, then float, then integer. TypeScript takes the first overload a
+       call fits, and a JavaScript number is a double, so `set(1.5, ...)`
+       reaches `setDouble:forKey:` and does not truncate through
+       `setInteger:`.
      - Skipped, with reasons: blocks (S5), collections (S3c), and members
        Swift throws or awaits (S5).
      - A label Swift repeats, which one object cannot hold twice, takes its

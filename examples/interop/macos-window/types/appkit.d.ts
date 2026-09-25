@@ -663,9 +663,17 @@ declare module "objc:AppKit" {
   /** @ntsClass NSObject */
   export class NSObject {
     get hash(): UInt;
+    /** @ntsSelector hash */
+    static hash(): UInt;
     get superclass(): ClassObject | null;
+    /** @ntsSelector superclass */
+    static superclass(): ClassObject | null;
     get description(): string;
+    /** @ntsSelector description */
+    static description(): string;
     get debugDescription(): string;
+    /** @ntsSelector debugDescription */
+    static debugDescription(): string;
     /** @ntsSelector load */
     static load(): void;
     /** @ntsSelector initialize */
@@ -680,6 +688,8 @@ declare module "objc:AppKit" {
     static instancesRespond(labels: { to: Selector }): boolean;
     /** @ntsSelector conformsToProtocol: */
     static conforms(labels: { to: Protocol }): boolean;
+    /** @ntsSelector conformsToProtocol: */
+    conforms(labels: { to: Protocol }): boolean;
     /** @ntsSelector doesNotRecognizeSelector: */
     doesNotRecognizeSelector(aSelector: Selector): void;
     /** @ntsSelector forwardingTargetForSelector: */
@@ -690,14 +700,6 @@ declare module "objc:AppKit" {
     static resolveClassMethod(sel: Selector): boolean;
     /** @ntsSelector resolveInstanceMethod: */
     static resolveInstanceMethod(sel: Selector): boolean;
-    /** @ntsSelector hash */
-    static hash(): UInt;
-    /** @ntsSelector superclass */
-    static superclass(): ClassObject | null;
-    /** @ntsSelector description */
-    static description(): string;
-    /** @ntsSelector debugDescription */
-    static debugDescription(): string;
     /** @ntsSelector isEqual: */
     isEqual(object: NSObject): boolean;
     /** @ntsSelector self */
@@ -714,8 +716,6 @@ declare module "objc:AppKit" {
     isKind(labels: { of: ClassObject }): boolean;
     /** @ntsSelector isMemberOfClass: */
     isMember(labels: { of: ClassObject }): boolean;
-    /** @ntsSelector conformsToProtocol: */
-    conforms(labels: { to: Protocol }): boolean;
     /** @ntsSelector respondsToSelector: */
     responds(labels: { to: Selector }): boolean;
     // Not bound, each for the reason given:
@@ -919,12 +919,30 @@ declare module "objc:AppKit" {
     constructor();
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
+    /** @ntsSelector initWithUTF8String: */
+    constructor(labels: { utf8String: CString });
+    /** @ntsSelector initWithString: */
+    constructor(labels: { string: string });
+    /** @ntsSelector initWithData:encoding: */
+    constructor(labels: { data: NSData; encoding: UInt });
+    /** @ntsSelector initWithCString:encoding: */
+    constructor(labels: { cString: CString; encoding: UInt });
+    /**
+     * @ntsSelector initWithContentsOfURL:encoding:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    constructor(labels: { contentsOf: NSURL; encoding: UInt });
+    /**
+     * @ntsSelector initWithContentsOfFile:encoding:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    constructor(labels: { contentsOfFile: string; encoding: UInt });
+    /** @ntsSelector substringWithRange: */
+    substring(labels: { with: ByValue<NSRange> }): string;
     /** @ntsSelector substringFromIndex: */
     substring(labels: { from: UInt }): string;
     /** @ntsSelector substringToIndex: */
     substring(labels: { to: UInt }): string;
-    /** @ntsSelector substringWithRange: */
-    substring(labels: { with: ByValue<NSRange> }): string;
     /** @ntsSelector compare: */
     compare(string: string): CEnum<ComparisonResult, Int>;
     /** @ntsSelector compare:options: */
@@ -943,6 +961,8 @@ declare module "objc:AppKit" {
     localizedStandardCompare(string: string): CEnum<ComparisonResult, Int>;
     /** @ntsSelector isEqualToString: */
     isEqual(labels: { to: string }): boolean;
+    /** @ntsSelector isEqual: */
+    isEqual(object: NSObject): boolean;
     /** @ntsSelector hasPrefix: */
     hasPrefix(str: string): boolean;
     /** @ntsSelector hasSuffix: */
@@ -1037,24 +1057,6 @@ declare module "objc:AppKit" {
      * @ntsThrows error nts_nserror_message
      */
     write(labels: { toFile: string; atomically: boolean; encoding: UInt }): void;
-    /** @ntsSelector initWithUTF8String: */
-    constructor(labels: { utf8String: CString });
-    /** @ntsSelector initWithString: */
-    constructor(labels: { string: string });
-    /** @ntsSelector initWithData:encoding: */
-    constructor(labels: { data: NSData; encoding: UInt });
-    /** @ntsSelector initWithCString:encoding: */
-    constructor(labels: { cString: CString; encoding: UInt });
-    /**
-     * @ntsSelector initWithContentsOfURL:encoding:error:
-     * @ntsThrows error nts_nserror_message
-     */
-    constructor(labels: { contentsOf: NSURL; encoding: UInt });
-    /**
-     * @ntsSelector initWithContentsOfFile:encoding:error:
-     * @ntsThrows error nts_nserror_message
-     */
-    constructor(labels: { contentsOfFile: string; encoding: UInt });
     /** @ntsSelector propertyList */
     propertyList(): NSObject;
     /** @ntsSelector variantFittingPresentationWidth: */
@@ -1075,8 +1077,6 @@ declare module "objc:AppKit" {
     enumerateLinguisticTags(labels: { in: ByValue<NSRange>; scheme: string; options: CEnum<NSLinguisticTagger.Options | 0, UInt>; orthography: NSOrthography | null }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector self */
     self(): NSString;
-    /** @ntsSelector isEqual: */
-    isEqual(object: NSObject): boolean;
     // Not bound, each for the reason given:
     //   @property UTF8String: a `const char *`
     //   @property availableStringEncodings: a `const NSStringEncoding *`
@@ -1114,26 +1114,26 @@ declare module "objc:AppKit" {
     get userInfo(): NSObject | null;
     /** @ntsSelector +timerWithTimeInterval:invocation:repeats: */
     constructor(labels: { timeInterval: TimeInterval; invocation: NSInvocation; repeats: boolean });
-    /** @ntsSelector scheduledTimerWithTimeInterval:invocation:repeats: */
-    static scheduledTimer(labels: { timeInterval: TimeInterval; invocation: NSInvocation; repeats: boolean }): Timer;
     /** @ntsSelector +timerWithTimeInterval:target:selector:userInfo:repeats: */
     constructor(labels: { timeInterval: TimeInterval; target: NSObject; selector: Selector; userInfo: NSObject | null; repeats: boolean });
-    /** @ntsSelector scheduledTimerWithTimeInterval:target:selector:userInfo:repeats: */
-    static scheduledTimer(labels: { timeInterval: TimeInterval; target: NSObject; selector: Selector; userInfo: NSObject | null; repeats: boolean }): Timer;
     /** @ntsSelector +timerWithTimeInterval:repeats:block: */
     constructor(labels: { timeInterval: TimeInterval; repeats: boolean }, block: (arg0: Timer) => void);
-    /** @ntsSelector scheduledTimerWithTimeInterval:repeats:block: */
-    static scheduledTimer(labels: { withTimeInterval: TimeInterval; repeats: boolean }, block: (arg0: Timer) => void): Timer;
     /** @ntsSelector initWithFireDate:interval:repeats:block: */
     constructor(labels: { fire: NSDate; interval: TimeInterval; repeats: boolean }, block: (arg0: Timer) => void);
     /** @ntsSelector initWithFireDate:interval:target:selector:userInfo:repeats: */
     constructor(labels: { fireAt: NSDate; interval: TimeInterval; target: NSObject; selector: Selector; userInfo: NSObject | null; repeats: boolean });
+    /** @ntsSelector init */
+    constructor();
+    /** @ntsSelector scheduledTimerWithTimeInterval:invocation:repeats: */
+    static scheduledTimer(labels: { timeInterval: TimeInterval; invocation: NSInvocation; repeats: boolean }): Timer;
+    /** @ntsSelector scheduledTimerWithTimeInterval:target:selector:userInfo:repeats: */
+    static scheduledTimer(labels: { timeInterval: TimeInterval; target: NSObject; selector: Selector; userInfo: NSObject | null; repeats: boolean }): Timer;
+    /** @ntsSelector scheduledTimerWithTimeInterval:repeats:block: */
+    static scheduledTimer(labels: { withTimeInterval: TimeInterval; repeats: boolean }, block: (arg0: Timer) => void): Timer;
     /** @ntsSelector fire */
     fire(): void;
     /** @ntsSelector invalidate */
     invalidate(): void;
-    /** @ntsSelector init */
-    constructor();
     /** @ntsSelector self */
     self(): Timer;
   }
@@ -1293,6 +1293,8 @@ declare module "objc:AppKit" {
     constructor(labels: { frame: ByValue<CGRect> });
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
+    /** @ntsSelector init */
+    constructor();
     /** @ntsSelector isDescendantOf: */
     isDescendant(labels: { of: NSView }): boolean;
     /** @ntsSelector ancestorSharedWithView: */
@@ -1309,10 +1311,10 @@ declare module "objc:AppKit" {
     addSubview(view: NSView, labels: { positioned: CEnum<NSWindow.OrderingMode, Int>; relativeTo: NSView | null }): void;
     /** @ntsSelector viewWillMoveToWindow: */
     viewWillMove(labels: { toWindow: NSWindow | null }): void;
-    /** @ntsSelector viewDidMoveToWindow */
-    viewDidMoveToWindow(): void;
     /** @ntsSelector viewWillMoveToSuperview: */
     viewWillMove(labels: { toSuperview: NSView | null }): void;
+    /** @ntsSelector viewDidMoveToWindow */
+    viewDidMoveToWindow(): void;
     /** @ntsSelector viewDidMoveToSuperview */
     viewDidMoveToSuperview(): void;
     /** @ntsSelector didAddSubview: */
@@ -1345,6 +1347,8 @@ declare module "objc:AppKit" {
     scaleUnitSquare(labels: { to: ByValue<CGSize> }): void;
     /** @ntsSelector rotateByAngle: */
     rotate(labels: { byDegrees: CGFloat }): void;
+    /** @ntsSelector rotateWithEvent: */
+    rotate(labels: { with: NSEvent }): void;
     /** @ntsSelector convertPoint:fromView: */
     convert(point: ByValue<CGPoint>, labels: { from: NSView | null }): ByValue<CGPoint>;
     /** @ntsSelector convertPoint:toView: */
@@ -1363,48 +1367,48 @@ declare module "objc:AppKit" {
     centerScanRect(rect: ByValue<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertPointToBacking: */
     convertToBacking(point: ByValue<CGPoint>): ByValue<CGPoint>;
-    /** @ntsSelector convertPointFromBacking: */
-    convertFromBacking(point: ByValue<CGPoint>): ByValue<CGPoint>;
     /** @ntsSelector convertSizeToBacking: */
     convertToBacking(size: ByValue<CGSize>): ByValue<CGSize>;
-    /** @ntsSelector convertSizeFromBacking: */
-    convertFromBacking(size: ByValue<CGSize>): ByValue<CGSize>;
     /** @ntsSelector convertRectToBacking: */
     convertToBacking(rect: ByValue<CGRect>): ByValue<CGRect>;
+    /** @ntsSelector convertPointFromBacking: */
+    convertFromBacking(point: ByValue<CGPoint>): ByValue<CGPoint>;
+    /** @ntsSelector convertSizeFromBacking: */
+    convertFromBacking(size: ByValue<CGSize>): ByValue<CGSize>;
     /** @ntsSelector convertRectFromBacking: */
     convertFromBacking(rect: ByValue<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertPointToLayer: */
     convertToLayer(point: ByValue<CGPoint>): ByValue<CGPoint>;
-    /** @ntsSelector convertPointFromLayer: */
-    convertFromLayer(point: ByValue<CGPoint>): ByValue<CGPoint>;
     /** @ntsSelector convertSizeToLayer: */
     convertToLayer(size: ByValue<CGSize>): ByValue<CGSize>;
-    /** @ntsSelector convertSizeFromLayer: */
-    convertFromLayer(size: ByValue<CGSize>): ByValue<CGSize>;
     /** @ntsSelector convertRectToLayer: */
     convertToLayer(rect: ByValue<CGRect>): ByValue<CGRect>;
+    /** @ntsSelector convertPointFromLayer: */
+    convertFromLayer(point: ByValue<CGPoint>): ByValue<CGPoint>;
+    /** @ntsSelector convertSizeFromLayer: */
+    convertFromLayer(size: ByValue<CGSize>): ByValue<CGSize>;
     /** @ntsSelector convertRectFromLayer: */
     convertFromLayer(rect: ByValue<CGRect>): ByValue<CGRect>;
     /** @ntsSelector setNeedsDisplayInRect: */
     setNeedsDisplay(invalidRect: ByValue<CGRect>): void;
     /** @ntsSelector display */
     display(): void;
-    /** @ntsSelector displayIfNeeded */
-    displayIfNeeded(): void;
-    /** @ntsSelector displayIfNeededIgnoringOpacity */
-    displayIfNeededIgnoringOpacity(): void;
     /** @ntsSelector displayRect: */
     display(rect: ByValue<CGRect>): void;
+    /** @ntsSelector displayIfNeeded */
+    displayIfNeeded(): void;
     /** @ntsSelector displayIfNeededInRect: */
     displayIfNeeded(rect: ByValue<CGRect>): void;
-    /** @ntsSelector displayRectIgnoringOpacity: */
-    displayIgnoringOpacity(rect: ByValue<CGRect>): void;
+    /** @ntsSelector displayIfNeededIgnoringOpacity */
+    displayIfNeededIgnoringOpacity(): void;
     /** @ntsSelector displayIfNeededInRectIgnoringOpacity: */
     displayIfNeededIgnoringOpacity(rect: ByValue<CGRect>): void;
-    /** @ntsSelector drawRect: */
-    draw(dirtyRect: ByValue<CGRect>): void;
+    /** @ntsSelector displayRectIgnoringOpacity: */
+    displayIgnoringOpacity(rect: ByValue<CGRect>): void;
     /** @ntsSelector displayRectIgnoringOpacity:inContext: */
     displayIgnoringOpacity(rect: ByValue<CGRect>, labels: { in: NSGraphicsContext }): void;
+    /** @ntsSelector drawRect: */
+    draw(dirtyRect: ByValue<CGRect>): void;
     /** @ntsSelector bitmapImageRepForCachingDisplayInRect: */
     bitmapImageRepForCachingDisplay(labels: { in: ByValue<CGRect> }): NSBitmapImageRep | null;
     /** @ntsSelector cacheDisplayInRect:toBitmapImageRep: */
@@ -1413,6 +1417,8 @@ declare module "objc:AppKit" {
     viewWillDraw(): void;
     /** @ntsSelector scrollPoint: */
     scroll(point: ByValue<CGPoint>): void;
+    /** @ntsSelector scrollClipView:toPoint: */
+    scroll(clipView: NSClipView, labels: { to: ByValue<CGPoint> }): void;
     /** @ntsSelector scrollRectToVisible: */
     scrollToVisible(rect: ByValue<CGRect>): boolean;
     /** @ntsSelector autoscroll: */
@@ -1537,8 +1543,6 @@ declare module "objc:AppKit" {
     removeTrackingRect(tag: Int): void;
     /** @ntsSelector reflectScrolledClipView: */
     reflectScrolledClipView(clipView: NSClipView): void;
-    /** @ntsSelector scrollClipView:toPoint: */
-    scroll(clipView: NSClipView, labels: { to: ByValue<CGPoint> }): void;
     /** @ntsSelector addConstraint: */
     addConstraint(constraint: NSLayoutConstraint): void;
     /** @ntsSelector addConstraints: */
@@ -1597,12 +1601,8 @@ declare module "objc:AppKit" {
     rulerView(ruler: NSRulerView, labels: { locationFor: ByValue<CGPoint> }): CGFloat;
     /** @ntsSelector rulerView:pointForLocation: */
     rulerView(ruler: NSRulerView, labels: { pointForLocation: CGFloat }): ByValue<CGPoint>;
-    /** @ntsSelector init */
-    constructor();
     /** @ntsSelector self */
     self(): NSView;
-    /** @ntsSelector rotateWithEvent: */
-    rotate(labels: { with: NSEvent }): void;
     // Not bound, each for the reason given:
     //   @property canDraw: deprecated in macOS 10.14
     //   @property acceptsTouchEvents: deprecated in macOS 10.12
@@ -1660,6 +1660,8 @@ declare module "objc:AppKit" {
     get delegate(): NSObject | null;
     set delegate(value: NSObject | null);
     get windowNumber(): Int;
+    /** @ntsSelector windowNumberAtPoint:belowWindowWithWindowNumber: */
+    static windowNumber(labels: { at: ByValue<CGPoint>; belowWindowWithWindowNumber: Int }): Int;
     get styleMask(): CEnum<NSWindow.StyleMask | 0, UInt>;
     set styleMask(value: CEnum<NSWindow.StyleMask | 0, UInt>);
     get frame(): ByValue<CGRect>;
@@ -1828,18 +1830,22 @@ declare module "objc:AppKit" {
     set restorationClass(value: ClassObject | null);
     /** @ntsSelector frameRectForContentRect:styleMask: */
     static frameRect(labels: { forContentRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): ByValue<CGRect>;
-    /** @ntsSelector contentRectForFrameRect:styleMask: */
-    static contentRect(labels: { forFrameRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): ByValue<CGRect>;
-    /** @ntsSelector minFrameWidthWithTitle:styleMask: */
-    static minFrameWidth(labels: { withTitle: string; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): CGFloat;
     /** @ntsSelector frameRectForContentRect: */
     frameRect(labels: { forContentRect: ByValue<CGRect> }): ByValue<CGRect>;
+    /** @ntsSelector contentRectForFrameRect:styleMask: */
+    static contentRect(labels: { forFrameRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): ByValue<CGRect>;
     /** @ntsSelector contentRectForFrameRect: */
     contentRect(labels: { forFrameRect: ByValue<CGRect> }): ByValue<CGRect>;
+    /** @ntsSelector minFrameWidthWithTitle:styleMask: */
+    static minFrameWidth(labels: { withTitle: string; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): CGFloat;
     /** @ntsSelector initWithContentRect:styleMask:backing:defer: */
     constructor(labels: { contentRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt>; backing: CEnum<NSWindow.BackingStoreType, UInt>; defer: boolean });
     /** @ntsSelector initWithContentRect:styleMask:backing:defer:screen: */
     constructor(labels: { contentRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt>; backing: CEnum<NSWindow.BackingStoreType, UInt>; defer: boolean; screen: NSScreen | null });
+    /** @ntsSelector +windowWithContentViewController: */
+    constructor(labels: { contentViewController: NSViewController });
+    /** @ntsSelector init */
+    constructor();
     /** @ntsSelector addTitlebarAccessoryViewController: */
     addTitlebarAccessoryViewController(childViewController: NSTitlebarAccessoryViewController): void;
     /** @ntsSelector insertTitlebarAccessoryViewController:atIndex: */
@@ -1856,6 +1862,10 @@ declare module "objc:AppKit" {
     constrainFrameRect(frameRect: ByValue<CGRect>, labels: { to: NSScreen | null }): ByValue<CGRect>;
     /** @ntsSelector setFrame:display: */
     setFrame(frameRect: ByValue<CGRect>, labels: { display: boolean }): void;
+    /** @ntsSelector setFrame:display:animate: */
+    setFrame(frameRect: ByValue<CGRect>, labels: { display: boolean; animate: boolean }): void;
+    /** @ntsSelector setFrameFromString: */
+    setFrame(labels: { from: string }): void;
     /** @ntsSelector setContentSize: */
     setContentSize(size: ByValue<CGSize>): void;
     /** @ntsSelector setFrameOrigin: */
@@ -1866,8 +1876,6 @@ declare module "objc:AppKit" {
     cascadeTopLeft(labels: { from: ByValue<CGPoint> }): ByValue<CGPoint>;
     /** @ntsSelector animationResizeTime: */
     animationResizeTime(newFrame: ByValue<CGRect>): TimeInterval;
-    /** @ntsSelector setFrame:display:animate: */
-    setFrame(frameRect: ByValue<CGRect>, labels: { display: boolean; animate: boolean }): void;
     /** @ntsSelector displayIfNeeded */
     displayIfNeeded(): void;
     /** @ntsSelector display */
@@ -1958,8 +1966,6 @@ declare module "objc:AppKit" {
     invalidateShadow(): void;
     /** @ntsSelector toggleFullScreen: */
     toggleFullScreen(sender: NSObject | null): void;
-    /** @ntsSelector setFrameFromString: */
-    setFrame(labels: { from: string }): void;
     /** @ntsSelector saveFrameUsingName: */
     saveFrame(labels: { usingName: string }): void;
     /** @ntsSelector setFrameUsingName:force: */
@@ -1970,14 +1976,14 @@ declare module "objc:AppKit" {
     setFrameAutosaveName(name: string): boolean;
     /** @ntsSelector removeFrameUsingName: */
     static removeFrame(labels: { usingName: string }): void;
-    /** @ntsSelector beginSheet:completionHandler: */
-    beginSheet(sheetWindow: NSWindow, handler: (arg0: Int) => void): void;
     /** @ntsCall nts_async_NSWindow_beginSheet */
     beginSheet(sheetWindow: NSWindow): Promise<Int>;
-    /** @ntsSelector beginCriticalSheet:completionHandler: */
-    beginCriticalSheet(sheetWindow: NSWindow, handler: (arg0: Int) => void): void;
+    /** @ntsSelector beginSheet:completionHandler: */
+    beginSheet(sheetWindow: NSWindow, handler: (arg0: Int) => void): void;
     /** @ntsCall nts_async_NSWindow_beginCriticalSheet */
     beginCriticalSheet(sheetWindow: NSWindow): Promise<Int>;
+    /** @ntsSelector beginCriticalSheet:completionHandler: */
+    beginCriticalSheet(sheetWindow: NSWindow, handler: (arg0: Int) => void): void;
     /** @ntsSelector endSheet: */
     endSheet(sheetWindow: NSWindow): void;
     /** @ntsSelector endSheet:returnCode: */
@@ -1994,10 +2000,6 @@ declare module "objc:AppKit" {
     canRepresent(displayGamut: CEnum<NSDisplayGamut, Int>): boolean;
     /** @ntsSelector windowNumbersWithOptions: */
     static windowNumbers(labels: { options: CEnum<NSWindow.NumberListOptions | 0, UInt> }): NSNumber[] | null;
-    /** @ntsSelector windowNumberAtPoint:belowWindowWithWindowNumber: */
-    static windowNumber(labels: { at: ByValue<CGPoint>; belowWindowWithWindowNumber: Int }): Int;
-    /** @ntsSelector +windowWithContentViewController: */
-    constructor(labels: { contentViewController: NSViewController });
     /** @ntsSelector performWindowDragWithEvent: */
     performDrag(labels: { with: NSEvent }): void;
     /** @ntsSelector selectNextKeyView: */
@@ -2088,8 +2090,6 @@ declare module "objc:AppKit" {
     disableSnapshotRestoration(): void;
     /** @ntsSelector enableSnapshotRestoration */
     enableSnapshotRestoration(): void;
-    /** @ntsSelector init */
-    constructor();
     /** @ntsSelector self */
     self(): NSWindow;
     // Not bound, each for the reason given:
@@ -2266,10 +2266,10 @@ declare module "objc:AppKit" {
     enableRelaunchOnLogin(): void;
     /** @ntsSelector registerForRemoteNotifications */
     registerForRemoteNotifications(): void;
-    /** @ntsSelector unregisterForRemoteNotifications */
-    unregisterForRemoteNotifications(): void;
     /** @ntsSelector registerForRemoteNotificationTypes: */
     registerForRemoteNotifications(labels: { matching: CEnum<NSApplication.RemoteNotificationType | 0, UInt> }): void;
+    /** @ntsSelector unregisterForRemoteNotifications */
+    unregisterForRemoteNotifications(): void;
     /** @ntsSelector activateContextHelpMode: */
     activateContextHelpMode(sender: NSObject | null): void;
     /** @ntsSelector showHelp: */
@@ -2340,6 +2340,10 @@ declare module "objc:AppKit" {
     get localizedInfoDictionary(): Map<string, NSObject> | null;
     get principalClass(): ClassObject | null;
     get preferredLocalizations(): string[];
+    /** @ntsSelector preferredLocalizationsFromArray: */
+    static preferredLocalizations(labels: { from: string[] }): string[];
+    /** @ntsSelector preferredLocalizationsFromArray:forPreferences: */
+    static preferredLocalizations(labels: { from: string[]; forPreferences: string[] | null }): string[];
     get localizations(): string[];
     get developmentLocalization(): string | null;
     get executableArchitectures(): NSNumber[] | null;
@@ -2351,6 +2355,8 @@ declare module "objc:AppKit" {
     constructor(labels: { for: ClassObject });
     /** @ntsSelector +bundleWithIdentifier: */
     constructor(labels: { identifier: string });
+    /** @ntsSelector init */
+    constructor();
     /** @ntsSelector load */
     load(): boolean;
     /** @ntsSelector unload */
@@ -2367,32 +2373,32 @@ declare module "objc:AppKit" {
     loadAndReturnError(): void;
     /** @ntsSelector URLForAuxiliaryExecutable: */
     url(labels: { forAuxiliaryExecutable: string }): NSURL | null;
-    /** @ntsSelector pathForAuxiliaryExecutable: */
-    path(labels: { forAuxiliaryExecutable: string }): string | null;
     /** @ntsSelector URLForResource:withExtension:subdirectory:inBundleWithURL: */
     static url(labels: { forResource: string | null; withExtension: string | null; subdirectory: string | null; in: NSURL }): NSURL | null;
-    /** @ntsSelector URLsForResourcesWithExtension:subdirectory:inBundleWithURL: */
-    static urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null; in: NSURL }): NSURL[] | null;
     /** @ntsSelector URLForResource:withExtension: */
     url(labels: { forResource: string | null; withExtension: string | null }): NSURL | null;
     /** @ntsSelector URLForResource:withExtension:subdirectory: */
     url(labels: { forResource: string | null; withExtension: string | null; subdirectory: string | null }): NSURL | null;
     /** @ntsSelector URLForResource:withExtension:subdirectory:localization: */
     url(labels: { forResource: string | null; withExtension: string | null; subdirectory: string | null; localization: string | null }): NSURL | null;
-    /** @ntsSelector URLsForResourcesWithExtension:subdirectory: */
-    urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null }): NSURL[] | null;
-    /** @ntsSelector URLsForResourcesWithExtension:subdirectory:localization: */
-    urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null; localization: string | null }): NSURL[] | null;
+    /** @ntsSelector pathForAuxiliaryExecutable: */
+    path(labels: { forAuxiliaryExecutable: string }): string | null;
     /** @ntsSelector pathForResource:ofType:inDirectory: */
     static path(labels: { forResource: string | null; ofType: string | null; inDirectory: string }): string | null;
-    /** @ntsSelector pathsForResourcesOfType:inDirectory: */
-    static paths(labels: { forResourcesOfType: string | null; inDirectory: string }): string[];
     /** @ntsSelector pathForResource:ofType: */
     path(labels: { forResource: string | null; ofType: string | null }): string | null;
     /** @ntsSelector pathForResource:ofType:inDirectory: */
     path(labels: { forResource: string | null; ofType: string | null; inDirectory: string | null }): string | null;
     /** @ntsSelector pathForResource:ofType:inDirectory:forLocalization: */
     path(labels: { forResource: string | null; ofType: string | null; inDirectory: string | null; forLocalization: string | null }): string | null;
+    /** @ntsSelector URLsForResourcesWithExtension:subdirectory:inBundleWithURL: */
+    static urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null; in: NSURL }): NSURL[] | null;
+    /** @ntsSelector URLsForResourcesWithExtension:subdirectory: */
+    urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null }): NSURL[] | null;
+    /** @ntsSelector URLsForResourcesWithExtension:subdirectory:localization: */
+    urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null; localization: string | null }): NSURL[] | null;
+    /** @ntsSelector pathsForResourcesOfType:inDirectory: */
+    static paths(labels: { forResourcesOfType: string | null; inDirectory: string }): string[];
     /** @ntsSelector pathsForResourcesOfType:inDirectory: */
     paths(labels: { forResourcesOfType: string | null; inDirectory: string | null }): string[];
     /** @ntsSelector pathsForResourcesOfType:inDirectory:forLocalization: */
@@ -2403,12 +2409,6 @@ declare module "objc:AppKit" {
     object(labels: { forInfoDictionaryKey: string }): NSObject | null;
     /** @ntsSelector classNamed: */
     classNamed(className: string): ClassObject | null;
-    /** @ntsSelector preferredLocalizationsFromArray: */
-    static preferredLocalizations(labels: { from: string[] }): string[];
-    /** @ntsSelector preferredLocalizationsFromArray:forPreferences: */
-    static preferredLocalizations(labels: { from: string[]; forPreferences: string[] | null }): string[];
-    /** @ntsSelector init */
-    constructor();
     /** @ntsSelector self */
     self(): Bundle;
   }
@@ -2472,6 +2472,8 @@ declare module "objc:AppKit" {
     constructor(labels: { frame: ByValue<CGRect> });
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
+    /** @ntsSelector init */
+    constructor();
     /** @ntsSelector sizeThatFits: */
     sizeThatFits(size: ByValue<CGSize>): ByValue<CGSize>;
     /** @ntsSelector sizeToFit */
@@ -2498,6 +2500,8 @@ declare module "objc:AppKit" {
     expansionFrame(labels: { withFrame: ByValue<CGRect> }): ByValue<CGRect>;
     /** @ntsSelector drawWithExpansionFrame:inView: */
     draw(labels: { withExpansionFrame: ByValue<CGRect>; in: NSView }): void;
+    /** @ntsSelector drawRect: */
+    draw(dirtyRect: ByValue<CGRect>): void;
     /** @ntsSelector currentEditor */
     currentEditor(): NSText | null;
     /** @ntsSelector abortEditing */
@@ -2526,14 +2530,10 @@ declare module "objc:AppKit" {
     selectCell(cell: NSCell): void;
     /** @ntsSelector invalidateIntrinsicContentSizeForCell: */
     invalidateIntrinsicContentSize(labels: { for: NSCell }): void;
-    /** @ntsSelector init */
-    constructor();
-    /** @ntsSelector self */
-    self(): NSControl;
-    /** @ntsSelector drawRect: */
-    draw(dirtyRect: ByValue<CGRect>): void;
     /** @ntsSelector invalidateIntrinsicContentSize */
     invalidateIntrinsicContentSize(): void;
+    /** @ntsSelector self */
+    self(): NSControl;
     // Not bound, each for the reason given:
     //   -setNeedsDisplay: deprecated in macOS 10.14
     //   -calcSize: deprecated in macOS 10.14
@@ -2543,6 +2543,7 @@ declare module "objc:AppKit" {
   export class NSEvent extends NSObject {
     get type(): CEnum<NSEvent.EventType, UInt>;
     get modifierFlags(): CEnum<NSEvent.ModifierFlags | 0, UInt>;
+    static get modifierFlags(): CEnum<NSEvent.ModifierFlags | 0, UInt>;
     get timestamp(): TimeInterval;
     get window(): NSWindow | null;
     get windowNumber(): Int;
@@ -2598,7 +2599,6 @@ declare module "objc:AppKit" {
     get pressureBehavior(): CEnum<NSEvent.PressureBehavior, Int>;
     static get isSwipeTrackingFromScrollEventsEnabled(): boolean;
     static get mouseLocation(): ByValue<CGPoint>;
-    static get modifierFlags(): CEnum<NSEvent.ModifierFlags | 0, UInt>;
     static get pressedMouseButtons(): UInt;
     static get doubleClickInterval(): TimeInterval;
     static get keyRepeatDelay(): TimeInterval;
@@ -2706,6 +2706,12 @@ declare module "objc:AppKit" {
     constructor(labels: { checkboxWithTitle: string; target: NSObject | null; action: Selector });
     /** @ntsSelector +radioButtonWithTitle:target:action: */
     constructor(labels: { radioButtonWithTitle: string; target: NSObject | null; action: Selector });
+    /** @ntsSelector initWithFrame: */
+    constructor(labels: { frame: ByValue<CGRect> });
+    /** @ntsSelector initWithCoder: */
+    constructor(labels: { coder: NSCoder });
+    /** @ntsSelector init */
+    constructor();
     /** @ntsSelector setButtonType: */
     setButtonType(type: CEnum<NSButton.ButtonType, UInt>): void;
     /** @ntsSelector setPeriodicDelay:interval: */
@@ -2722,12 +2728,6 @@ declare module "objc:AppKit" {
     compress(labels: { withPrioritizedCompressionOptions: NSUserInterfaceCompressionOptions[] }): void;
     /** @ntsSelector minimumSizeWithPrioritizedCompressionOptions: */
     minimumSize(labels: { withPrioritizedCompressionOptions: NSUserInterfaceCompressionOptions[] }): ByValue<CGSize>;
-    /** @ntsSelector initWithFrame: */
-    constructor(labels: { frame: ByValue<CGRect> });
-    /** @ntsSelector initWithCoder: */
-    constructor(labels: { coder: NSCoder });
-    /** @ntsSelector init */
-    constructor();
     /** @ntsSelector self */
     self(): NSButton;
     // Not bound, each for the reason given:

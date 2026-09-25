@@ -800,6 +800,7 @@ impl<'a> Model<'a> {
                 }
             }
             read.insert(class, reading);
+            prefer_doubles(&mut bound.members);
             model.classes.push(bound);
         }
         for (name, decls) in &bodies.protocols {
@@ -1635,6 +1636,50 @@ fn documented(tags: &[String]) -> String {
 }
 
 /// `setFrame(_:display:)` as its base name and its labels, `_` for none.
+/// Overloads of one name in the order TypeScript should try them: a
+/// JavaScript number is a double, and TypeScript takes the first overload a
+/// call fits, so where Swift tells `set(_: Int, forKey:)` from `set(_:
+/// Double, forKey:)` by the literal's type, a `number` must reach the
+/// `Double` one -- lossless -- and not the `Int` one declared before it,
+/// which truncated `set(1.5, ...)` without a word. Among one name's members,
+/// those taking a double come first, then a float, then an integer; members
+/// of different names keep the header's order.
+fn prefer_doubles(members: &mut Vec<String>) {
+    let name = |member: &str| {
+        let declaration = member.lines().last().unwrap_or_default().trim();
+        let declaration = declaration.trim_start_matches("static ").trim_start_matches("get ").trim_start_matches("set ");
+        declaration.split('(').next().unwrap_or_default().to_owned()
+    };
+    let rank = |member: &str| {
+        let parameters = member.lines().last().unwrap_or_default().split_once('(').map_or("", |(_, rest)| rest);
+        let parameters = parameters.rsplit_once("):").map_or(parameters, |(parameters, _)| parameters);
+        let has = |names: &[&str]| names.iter().any(|ty| parameters.contains(&format!(": {ty}")) || parameters.contains(&format!(": {ty};")));
+        if has(&["Double", "CGFloat", "TimeInterval"]) {
+            0
+        } else if has(&["Float"]) {
+            1
+        } else if has(&["Int", "UInt", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64"]) {
+            2
+        } else {
+            0
+        }
+    };
+    let mut order: Vec<String> = Vec::new();
+    let mut groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for member in members.drain(..) {
+        let key = name(&member);
+        if !groups.contains_key(&key) {
+            order.push(key.clone());
+        }
+        groups.entry(key).or_default().push(member);
+    }
+    for key in order {
+        let mut group = groups.remove(&key).unwrap_or_default();
+        group.sort_by_key(|member| rank(member));
+        members.extend(group);
+    }
+}
+
 /// The struct a type names, through as many typedefs as it takes: `NSRect`
 /// is `CGRect`, which is `struct CGRect`.
 fn struct_through_typedefs(typedefs: &BTreeMap<String, String>, spelled: &str) -> Option<String> {
@@ -2073,6 +2118,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)linkFrom:(Shape *)start to:(Shape *)middle to:(Shape *)end;
 - (void)countInto:(NSUInteger *)count;
 - (BOOL)holdsAt:(NSString *)name inside:(BOOL *)inside;
+- (void)setInteger:(NSInteger)value forKey:(NSString *)key;
+- (void)setDouble:(double)value forKey:(NSString *)key;
 - (void)placeShapes:(NSDictionary<ShapeKind, Shape *> *)shapes;
 - (NSDictionary<NSString *, NSString *> *)labels;
 - (void)fillWith:(ShapeMaker)maker;
@@ -2146,6 +2193,8 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)linkFrom:to:to:", "swift.method", "link(from:to:to:)", &["Shape", "link(from:to:to:)"], ""),
             symbol("c:objc(cs)Shape(im)countInto:", "swift.method", "count(into:)", &["Shape", "count(into:)"], ""),
             symbol("c:objc(cs)Shape(im)holdsAt:inside:", "swift.method", "holds(at:inside:)", &["Shape", "holds(at:inside:)"], ""),
+            symbol("c:objc(cs)Shape(im)setInteger:forKey:", "swift.method", "set(_:forKey:)", &["Shape", "set(_:forKey:)"], ""),
+            symbol("c:objc(cs)Shape(im)setDouble:forKey:", "swift.method", "set(_:forKey:)", &["Shape", "set(_:forKey:)"], ""),
             symbol("c:objc(cs)Shape(im)placeShapes:", "swift.method", "place(_:)", &["Shape", "place(_:)"], ""),
             symbol("c:objc(cs)Shape(im)labels", "swift.method", "labels()", &["Shape", "labels()"], ""),
             symbol("c:objc(cs)Shape(im)fillWith:", "swift.method", "fill(with:)", &["Shape", "fill(with:)"], ""),
@@ -2273,6 +2322,8 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector countInto: */\n    count(labels: { into: Ptr<UInt> }): void;",
             // And `BOOL *`, Swift's `UnsafeMutablePointer<ObjCBool>`.
             "    /** @ntsSelector holdsAt:inside: */\n    holds(labels: { at: string; inside: Ptr<ObjCBool> }): boolean;",
+            // A `number` reaches the `Double` overload, which comes first.
+            "    /** @ntsSelector setDouble:forKey: */\n    set(value: Double, labels: { forKey: string }): void;\n    /** @ntsSelector setInteger:forKey: */\n    set(value: Int, labels: { forKey: string }): void;",
             // Swift's `[ShapeKind: Shape]`: string keys through their typedef.
             "    /** @ntsSelector placeShapes: */\n    place(shapes: Map<string, Shape>): void;",
             "    /** @ntsSelector labels */\n    labels(): Map<string, string>;",
