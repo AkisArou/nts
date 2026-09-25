@@ -6116,6 +6116,19 @@ static uint32_t nts_hash_number(double number) {
 uint64_t (*nts_objc_key_hash)(const void *object);
 bool (*nts_objc_key_equal)(const void *a, const void *b);
 
+/* The CF host installs both hooks from a constructor, before `main`, and only
+ * a program built for Apple's platforms links the host or makes a table of
+ * this kind. A table made without them is a program this runtime was not
+ * built for, which is said, rather than answered with a call through NULL. */
+static void nts_objc_keys_required(void) {
+  if (!nts_objc_key_hash || !nts_objc_key_equal) {
+    fputs("nts: a table of Objective-C objects, in a program with no "
+          "Objective-C host to hash and compare them\n",
+          stderr);
+    abort();
+  }
+}
+
 /* The object a family's box holds, one word after its header. */
 static inline const void *nts_boxed_object(NtsValue key) {
   const unsigned char *box = (const unsigned char *)nts_value_reference(key);
@@ -6134,6 +6147,7 @@ nts_hash_key(NtsValue key, uint32_t kind) {
   case NTS_KEY_REFERENCE:
     return nts_hash_mix((uint64_t)(uintptr_t)nts_value_reference(key));
   case NTS_KEY_OBJC:
+    nts_objc_keys_required();
     return nts_hash_mix(nts_objc_key_hash(nts_boxed_object(key)));
   default:
     break;
@@ -6179,7 +6193,11 @@ nts_key_eq(NtsValue a, NtsValue b, uint32_t kind) {
   case NTS_KEY_OBJC: {
     const void *left = nts_boxed_object(a);
     const void *right = nts_boxed_object(b);
-    return left == right || nts_objc_key_equal(left, right);
+    if (left == right) {
+      return true;
+    }
+    nts_objc_keys_required();
+    return nts_objc_key_equal(left, right);
   }
   default:
     break;
