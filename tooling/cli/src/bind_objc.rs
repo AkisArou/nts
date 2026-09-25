@@ -86,6 +86,9 @@ pub(crate) struct Output {
     /// the runtime does not have. The headers say what a class declares, and
     /// only the running runtime says what it implements.
     pub(crate) witness: String,
+    /// The values module beside the binding: Swift's `async` forms, each a
+    /// function its `@ntsCall` overload names. Empty when nothing is `async`.
+    pub(crate) values: String,
 }
 
 pub(crate) fn run(request: &Request) -> Result<Output> {
@@ -103,7 +106,7 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     };
     let swift = Swift::read(&symbols, &request.frameworks)?;
     let model = Model::read(&swift, &headers, &bodies, &bound, deployment_target(&request.target)?);
-    Ok(Output { binding: render(request, &model), witness: witness(request, &model) })
+    Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model) })
 }
 
 /// The witness program for `model` (see [`Output::witness`]). Plain C over
@@ -213,6 +216,10 @@ struct Dumped {
     root_protocol: Vec<Value>,
     /// The requested protocols' methods, by protocol.
     protocols: BTreeMap<String, Vec<Value>>,
+    /// Every typedef, and the type it names with its sugar taken off: what a
+    /// block's parameter spelled `NSModalResponse` is, since a block's type
+    /// arrives as one string clang did not desugar.
+    typedefs: BTreeMap<String, String>,
 }
 
 fn dump(request: &Request, unit: &tempfile_path::TempFile, wanted: &Wanted<'_>) -> Result<Dumped> {
@@ -318,6 +325,7 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
         let (mut kind, mut name, mut interface, mut parent, mut width) = (String::new(), None, None, None, None);
         let mut complete = false;
         let mut body = None;
+        let mut aliased = None;
         while let Some(key) = map.next_key::<String>()? {
             match key.as_str() {
                 "kind" => kind = map.next_value()?,
@@ -327,6 +335,9 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                 "completeDefinition" => complete = map.next_value()?,
                 "fixedUnderlyingType" => {
                     width = desugared(&map.next_value::<Value>()?);
+                }
+                "type" if kind == "TypedefDecl" && matches!(self.wanted, Wanted::Headers) => {
+                    aliased = desugared(&map.next_value::<Value>()?);
                 }
                 "inner" => {
                     let keep = match self.wanted {
@@ -355,6 +366,9 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
             }
         }
         let out = self.out;
+        if let (Some(name), Some(aliased)) = (name.as_ref(), aliased) {
+            out.typedefs.entry(name.clone()).or_insert(aliased);
+        }
         match (kind.as_str(), name) {
             ("ObjCInterfaceDecl", Some(name)) => {
                 // A forward `@class` has no super; the definition's wins.
@@ -452,6 +466,22 @@ struct Symbol {
     path: Vec<String>,
     #[serde(default)]
     availability: Vec<Availability>,
+    #[serde(default, rename = "declarationFragments")]
+    fragments: Vec<Fragment>,
+}
+
+/// One piece of Swift's declaration of a symbol, as its graph spells it.
+#[derive(serde::Deserialize, Clone)]
+struct Fragment {
+    spelling: String,
+}
+
+impl Symbol {
+    /// Whether this is Swift's `async` import of a method: the one Swift makes
+    /// from a completion handler, beside the one taking it, under one USR.
+    fn is_async(&self) -> bool {
+        self.fragments.iter().any(|fragment| fragment.spelling.split_whitespace().any(|word| word == "async"))
+    }
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -504,6 +534,9 @@ struct Relationship {
 /// `tooling/apple/symbolgraph.sh`'s files, so every name is the importer's own.
 pub(crate) struct Swift {
     by_usr: BTreeMap<String, Symbol>,
+    /// Swift's `async` import of a method, by the USR it shares with the one
+    /// taking the completion handler.
+    asynchronous: BTreeMap<String, Symbol>,
     /// The protocol members Swift marks optional, by USR.
     optional: BTreeSet<String>,
 }
@@ -512,6 +545,7 @@ impl Swift {
     /// The graphs of `modules` and of `ObjectiveC`, which declares `NSObject`.
     pub(crate) fn read(directory: &std::path::Path, modules: &[String]) -> Result<Self> {
         let mut by_usr = BTreeMap::new();
+        let mut asynchronous = BTreeMap::new();
         let mut optional = BTreeSet::new();
         let mut modules: Vec<&str> = modules.iter().map(String::as_str).collect();
         modules.push("ObjectiveC");
@@ -522,12 +556,13 @@ impl Swift {
             let graph: Graph = serde_json::from_slice(&text).with_context(|| format!("reading {}", path.display()))?;
             // Clang's declarations only: an `s:` symbol is Swift's own, which
             // an Objective-C message cannot reach.
-            by_usr.extend(
-                graph.symbols.into_iter().filter(|s| s.identifier.identifier.starts_with("c:")).map(|s| (s.identifier.identifier.clone(), s)),
-            );
+            for symbol in graph.symbols.into_iter().filter(|s| s.identifier.identifier.starts_with("c:")) {
+                let into = if symbol.is_async() { &mut asynchronous } else { &mut by_usr };
+                into.insert(symbol.identifier.identifier.clone(), symbol);
+            }
             optional.extend(graph.relationships.into_iter().filter(|r| r.kind == "optionalRequirementOf").map(|r| r.source));
         }
-        Ok(Self { by_usr, optional })
+        Ok(Self { by_usr, asynchronous, optional })
     }
 
     fn get(&self, usr: &str) -> Option<&Symbol> {
@@ -619,6 +654,25 @@ struct Model<'a> {
     enums: BTreeMap<String, Enum>,
     /// What each module the binding imports from provides it, by module.
     imports: BTreeMap<&'static str, BTreeSet<&'static str>>,
+    /// Swift's `async` imports, each a function of the values module.
+    promises: Vec<Promise>,
+}
+
+/// A method's `async` form: a function of the values module, which the
+/// binding's `@ntsCall` overload names, returning a promise the completion
+/// handler settles.
+struct Promise {
+    function: String,
+    /// The TypeScript class the method is on: the function's first parameter.
+    receiver: String,
+    /// The method taking the handler, as TypeScript calls it.
+    method: String,
+    /// The parameters after the receiver, as the overload declares them, and
+    /// their names, as the call passes them on.
+    parameters: String,
+    names: Vec<String>,
+    /// What the promise resolves with: `void`, or the handler's one value.
+    value: String,
 }
 
 /// Per class, while it is read.
@@ -654,6 +708,7 @@ impl<'a> Model<'a> {
             records: BTreeSet::new(),
             enums: BTreeMap::new(),
             imports: BTreeMap::new(),
+            promises: Vec::new(),
         };
         let mut read: BTreeMap<String, Reading<'a>> = BTreeMap::new();
         for (class, parent) in root_first(bound, &headers.supers) {
@@ -838,10 +893,17 @@ impl<'a> Model<'a> {
             }
             Ok(text)
         });
+        let is_method = decl.get("kind").and_then(Value::as_str) == Some("ObjCMethodDecl");
         match bound {
             Ok(text) => {
                 class.members.push(text);
                 class.sent.extend(sent_by(decl));
+                if let Some(asynchronous) = self.swift.asynchronous.get(&usr).filter(|_| is_method).cloned() {
+                    match self.promise(class, decl, &symbol, &asynchronous) {
+                        Ok(overload) => class.members.push(overload),
+                        Err(why) => class.skipped.push(format!("{shown} as Swift's `async` form: {why}")),
+                    }
+                }
             }
             Err(why) => class.skipped.push(format!("{shown}: {why}")),
         }
@@ -907,7 +969,7 @@ impl<'a> Model<'a> {
         if labels.len() != parameters.len() {
             return Err(format!("Swift's `{}` awaits a completion handler it passes as `async` (S5)", symbol.names.title));
         }
-        let arguments = self.arguments(class, parameters, &labels)?;
+        let (arguments, _) = self.arguments(class, parameters, &labels)?;
         let mut tags = vec![format!("@ntsSelector {}", if kind == "swift.init" && !instance { format!("+{selector}") } else { selector })];
         if throws {
             tags.push("@ntsThrows error nts_nserror_message".to_owned());
@@ -927,10 +989,63 @@ impl<'a> Model<'a> {
         Ok(format!("{doc}    {modifier}{}({arguments}): {result};", quoted(&base)))
     }
 
+    /// Swift's `async` form of a method taking a completion handler, as the
+    /// overload the binding declares beside it: the same arguments without
+    /// the handler, returning a promise of what the handler is given. The
+    /// promise is a function of the values module, which calls the method
+    /// with a handler that settles it.
+    fn promise(&mut self, class: &Class, decl: &Value, symbol: &Symbol, asynchronous: &Symbol) -> std::result::Result<String, String> {
+        if decl.get("instance").and_then(Value::as_bool) == Some(false) {
+            return Err("a class method, whose `async` form is not bound yet".to_owned());
+        }
+        let parameters = parameters_of(decl);
+        let Some((handler, leading)) = parameters.split_last() else {
+            return Err("no completion handler".to_owned());
+        };
+        let (base, labels) = swift_name(&asynchronous.names.title);
+        let (method, method_labels) = swift_name(&symbol.names.title);
+        if labels.len() != leading.len() || method_labels.get(..leading.len()) != Some(&labels[..]) {
+            return Err("its arguments are labelled otherwise than the handler's method's".to_owned());
+        }
+        let written = strip_availability(&written(handler.get("type").ok_or("a handler with no type")?));
+        if !written.contains("(^") {
+            return Err("a last parameter that is not a block".to_owned());
+        }
+        let (given, result) = self.block_parts(class, &written)?;
+        if result != "void" {
+            return Err("a completion handler that returns a value".to_owned());
+        }
+        let value = match given.as_slice() {
+            [] => "void".to_owned(),
+            [one] if !one.starts_with("NSError") => one.clone(),
+            _ => {
+                return Err(
+                    "a handler given more than one value, which Swift makes a tuple, or an `NSError`, which Swift throws; neither is bound yet"
+                        .to_owned(),
+                );
+            }
+        };
+        let (arguments, names) = self.arguments(class, leading, &labels)?;
+        let mut function = format!("nts_async_{}_{base}", class.objc);
+        while self.promises.iter().any(|promise| promise.function == function) {
+            function.push('_');
+        }
+        let overload = format!("    /** @ntsCall {function} */\n    {}({arguments}): Promise<{value}>;", quoted(&base));
+        self.promises.push(Promise {
+            function,
+            receiver: class.swift.rsplit('.').next().unwrap_or_default().to_owned(),
+            method: quoted(&method),
+            parameters: arguments,
+            names,
+            value,
+        });
+        Ok(overload)
+    }
+
     /// Swift's rule for the arguments: the unlabelled ones first, positional,
     /// and every one from the first label on in one object, keyed by its
     /// label, which the call passes as a literal the compiler never builds.
-    fn arguments(&mut self, class: &Class, parameters: &[&Value], labels: &[String]) -> std::result::Result<String, String> {
+    fn arguments(&mut self, class: &Class, parameters: &[&Value], labels: &[String]) -> std::result::Result<(String, Vec<String>), String> {
         let mut positional = Vec::new();
         let mut labelled = Vec::new();
         let mut trailing = None;
@@ -955,7 +1070,8 @@ impl<'a> Model<'a> {
             positional.push(format!("labels: {{ {} }}", labelled.join("; ")));
         }
         positional.extend(trailing);
-        Ok(positional.join(", "))
+        let names = positional.iter().map(|p| p.split_once(':').map_or(p.as_str(), |(name, _)| name).to_owned()).collect();
+        Ok((positional.join(", "), names))
     }
 
     /// A property, under Swift's name, with the getter and setter tagged
@@ -1076,6 +1192,13 @@ impl<'a> Model<'a> {
     /// block's type as one spelling, which is read apart here: the result
     /// before `(^`, and the parameters in the last parentheses.
     fn block(&mut self, class: &Class, written: &str) -> Spelled {
+        let (given, result) = self.block_parts(class, written)?;
+        let given: Vec<String> = given.iter().enumerate().map(|(at, ty)| format!("arg{at}: {ty}")).collect();
+        Ok(format!("({}) => {result}", given.join(", ")))
+    }
+
+    /// A block's parameters and result, each spelled as a block's are.
+    fn block_parts(&mut self, class: &Class, written: &str) -> std::result::Result<(Vec<String>, String), String> {
         let (result, rest) = written.split_once("(^").ok_or("a block clang spells another way")?;
         let open = rest.find(")(").ok_or("a block clang spells another way")? + 1;
         let parameters = rest[open..].trim().strip_prefix('(').and_then(|p| p.strip_suffix(')')).ok_or("a block clang spells another way")?;
@@ -1095,15 +1218,14 @@ impl<'a> Model<'a> {
             }
         }
         pieces.push(&parameters[start..]);
-        for (at, piece) in pieces.iter().map(|p| p.trim()).filter(|p| !p.is_empty() && *p != "void").enumerate() {
-            let ty = self.spell(class, &block_part(piece), Position::Block)?;
-            spelled.push(format!("arg{at}: {ty}"));
+        for piece in pieces.iter().map(|p| p.trim()).filter(|p| !p.is_empty() && *p != "void") {
+            spelled.push(self.spell(class, &block_part(piece, &self.headers.typedefs), Position::Block)?);
         }
         let result = match result.trim() {
             "void" => "void".to_owned(),
-            result => self.spell(class, &block_part(result), Position::Block)?,
+            result => self.spell(class, &block_part(result, &self.headers.typedefs), Position::Block)?,
         };
-        Ok(format!("({}) => {result}", spelled.join(", ")))
+        Ok((spelled, result))
     }
 
     /// What an `NSArray<T *>` holds, as the element of a TypeScript array:
@@ -1253,12 +1375,22 @@ fn root_first(bound: &BTreeSet<String>, supers: &BTreeMap<String, Option<String>
 /// One part of a block's spelling as clang's type record would give it: the
 /// spelling as written, and without its nullability and ownership qualifiers
 /// as the type it is.
-fn block_part(spelling: &str) -> Value {
+fn block_part(spelling: &str, typedefs: &BTreeMap<String, String>) -> Value {
     let bare: Vec<&str> = spelling
         .split_whitespace()
         .filter(|word| !matches!(*word, "_Nullable" | "_Nonnull" | "_Null_unspecified" | "__strong" | "__autoreleasing" | "__unsafe_unretained"))
         .collect();
-    serde_json::json!({ "qualType": spelling, "desugaredQualType": bare.join(" ") })
+    let mut bare = bare.join(" ");
+    // A typedef, as far down as it goes: `NSModalResponse` is `NSInteger`,
+    // which is `long`. An enum's name is kept, since the enum is what Swift
+    // names it by.
+    for _ in 0..8 {
+        match typedefs.get(&bare) {
+            Some(aliased) if !aliased.starts_with("enum ") => bare = aliased.clone(),
+            _ => break,
+        }
+    }
+    serde_json::json!({ "qualType": spelling, "desugaredQualType": bare })
 }
 
 /// A pointer type's spelling with its qualifiers and spaces gone:
@@ -1493,6 +1625,62 @@ fn render(request: &Request, model: &Model) -> String {
     out
 }
 
+/// The values module: each `async` form as a function wrapping the method
+/// that takes a completion handler in a promise the handler settles, which is
+/// the import Swift itself makes. What each imports is only what it names.
+fn render_values(request: &Request, model: &Model) -> String {
+    if model.promises.is_empty() {
+        return String::new();
+    }
+    let mut bodies = String::new();
+    for promise in &model.promises {
+        let (given, settled) = if promise.value == "void" { ("()", "resolve()") } else { ("(value)", "resolve(value)") };
+        let mut arguments = promise.names.clone();
+        arguments.push(format!("{given} => {settled}"));
+        let parameters = if promise.parameters.is_empty() { String::new() } else { format!(", {}", promise.parameters) };
+        let _ = write!(
+            bodies,
+            "\nexport function {}(self: {}{parameters}): Promise<{}> {{\n  return new Promise((resolve) => self.{}({}));\n}}\n",
+            promise.function,
+            promise.receiver,
+            promise.value,
+            promise.method,
+            arguments.join(", ")
+        );
+    }
+    let words: BTreeSet<&str> = bodies.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).collect();
+    let mut own: BTreeSet<String> = BTreeSet::new();
+    for class in &model.classes {
+        own.extend(class.swift.split('.').next().map(str::to_owned));
+    }
+    for enumeration in model.enums.values() {
+        own.extend(enumeration.path.first().cloned());
+    }
+    own.extend(model.records.iter().cloned());
+    for name in model.mentioned.keys() {
+        own.extend(model.swift.class(name).split('.').next().map(str::to_owned));
+    }
+    let mut out = format!(
+        "// Generated by `nts bind-objc` beside the binding of `{}`. Do not edit: regenerate.\n//\n\
+         // Swift's `async` imports: each method taking a completion handler, as a\n\
+         // function returning a promise the handler settles, which the binding's\n\
+         // `@ntsCall` overload names.\n",
+        request.module
+    );
+    let used: Vec<&str> = own.iter().map(String::as_str).filter(|name| words.contains(name)).collect();
+    if !used.is_empty() {
+        let _ = writeln!(out, "import {{ {} }} from \"{}\";", used.join(", "), request.module);
+    }
+    for (module, names) in &model.imports {
+        let used: Vec<&str> = names.iter().copied().filter(|name| words.contains(name)).collect();
+        if !used.is_empty() {
+            let _ = writeln!(out, "import type {{ {} }} from \"{module}\";", used.join(", "));
+        }
+    }
+    out.push_str(&bodies);
+    out
+}
+
 /// A temporary file that removes itself.
 mod tempfile_path {
     use anyhow::{Context, Result};
@@ -1585,6 +1773,10 @@ NS_ASSUME_NONNULL_BEGIN
 @interface Shape (Named)
 - (void)renameTo:(Shape *)other count:(NSInteger)count;
 @end
+typedef NSInteger Response;
+@interface Shape (Async)
+- (void)settleWith:(Shape *)other completionHandler:(void (^)(Response))handler;
+@end
 @interface Circle : Shape
 @end
 @protocol ShapeDelegate
@@ -1606,6 +1798,8 @@ NS_ASSUME_NONNULL_END
                 r#"{{"identifier":{{"precise":"{usr}","interfaceLanguage":"swift"}},"kind":{{"identifier":"{kind}"}},"names":{{"title":"{title}"}},"pathComponents":{path:?},"availability":[{availability}]}}"#
             )
         };
+        // Swift's two imports of one completion-handler method, under one USR.
+        let asynchronous = r#"{"identifier":{"precise":"c:objc(cs)Shape(im)settleWith:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"settle(with:)"},"pathComponents":["Shape","settle(with:)"],"availability":[],"declarationFragments":[{"kind":"keyword","spelling":"func"},{"kind":"text","spelling":" settle(with other: Shape) "},{"kind":"keyword","spelling":"async"},{"kind":"text","spelling":" -> Int"}]}"#;
         let old = r#"{"domain":"macOS","introduced":{"major":10,"minor":0},"deprecated":{"major":10,"minor":10}}"#;
         let symbols = [
             symbol("c:objc(cs)Root", "swift.class", "Root", &["Root"], ""),
@@ -1641,6 +1835,8 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(pl)ShapeDelegate(im)shapeDidRename:", "swift.method", "shapeDidRename(_:)", &["ShapeWatching", "shapeDidRename(_:)"], ""),
             symbol("c:objc(pl)ShapeDelegate(im)shape:didRenameTo:", "swift.method", "shape(_:didRename:)", &["ShapeWatching", "shape(_:didRename:)"], ""),
             symbol("c:objc(pl)ShapeDelegate(im)shape:shouldHide:", "swift.method", "shape(_:shouldHide:)", &["ShapeWatching", "shape(_:shouldHide:)"], ""),
+            symbol("c:objc(cs)Shape(im)settleWith:completionHandler:", "swift.method", "settle(with:completionHandler:)", &["Shape", "settle(with:completionHandler:)"], ""),
+            asynchronous.to_owned(),
         ];
         let optional = ["shapeDidRename:", "shape:didRenameTo:", "shape:shouldHide:"].map(|selector| {
             format!(r#"{{"kind":"optionalRequirementOf","source":"c:objc(pl)ShapeDelegate(im){selector}","target":"c:objc(pl)ShapeDelegate"}}"#)
@@ -1669,8 +1865,8 @@ NS_ASSUME_NONNULL_END
             target: "x86_64-apple-macos13".to_owned(),
             symbols: Some(symbols),
         };
-        let text = match run(&request) {
-            Ok(output) => output.binding,
+        let (text, values) = match run(&request) {
+            Ok(output) => (output.binding, output.values),
             Err(error) if Command::new("clang").arg("--version").output().is_err() => {
                 eprintln!("skipped: no clang ({error})");
                 return;
@@ -1734,6 +1930,22 @@ NS_ASSUME_NONNULL_END
         // What Swift does not import has no member here: `alloc`, and Swift's
         // own methods.
         assert!(!text.contains("alloc") && !text.contains("swifty"), "{text}");
+        // Swift's `async` import: the method taking the handler, whose block's
+        // typedef'd parameter is its width, and beside it the form returning a
+        // promise, whose body is the values module's.
+        for expected in [
+            "    /** @ntsSelector settleWith:completionHandler: */\n    settle(labels: { with: Shape }, handler: (arg0: Int) => void): void;",
+            "    /** @ntsCall nts_async_Shape_settle */\n    settle(labels: { with: Shape }): Promise<Int>;",
+        ] {
+            assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+        }
+        for expected in [
+            "import { Shape } from \"objc:Fake\";",
+            "import type { Int } from \"objc:types\";",
+            "export function nts_async_Shape_settle(self: Shape, labels: { with: Shape }): Promise<Int> {\n  return new Promise((resolve) => self.settle(labels, (value) => resolve(value)));\n}",
+        ] {
+            assert!(values.contains(expected), "no `{expected}` in:\n{values}");
+        }
     }
 
     #[test]

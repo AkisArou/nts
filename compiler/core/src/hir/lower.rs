@@ -41108,7 +41108,12 @@ impl<'a> FuncBuilder<'a> {
         let Some(declaration) = self.snapshot.call_targets.get(&id).and_then(|target| target.callee) else {
             return Ok(None);
         };
-        if self.kind_of(declaration) != Some(syntax::METHOD_SIGNATURE) {
+        // An interface's method, or a method of an Objective-C class a binding
+        // declares: Swift's `async` form of one, whose body is the values
+        // module's (`nts bind-objc --values`).
+        let objc_member =
+            self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION) && self.objc_class_member(declaration).is_some();
+        if self.kind_of(declaration) != Some(syntax::METHOD_SIGNATURE) && !objc_member {
             return Ok(None);
         }
         let Some(name) = self.node(declaration).native.as_ref().and_then(|n| n.call.clone()) else {

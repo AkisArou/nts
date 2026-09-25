@@ -345,7 +345,7 @@ fn bind_gir(rest: &[String]) -> Result<()> {
 }
 
 /// `nts bind-objc --module objc:AppKit --framework AppKit --class NSWindow ...
-/// [--protocol NSWindowDelegate ...]`
+/// [--protocol NSWindowDelegate ...] [--values appkit.values.ts]`
 ///
 /// The SDK is `--sdk`, else `NTS_APPLE_SDK`, else the one
 /// `tooling/apple/sync-sdk.sh` keeps: a real SDK, since zig's Darwin libc
@@ -376,6 +376,9 @@ fn bind_objc(rest: &[String]) -> Result<()> {
     let output = bind_objc::run(&request)?;
     if let Some(path) = single("--witness") {
         std::fs::write(&path, &output.witness).with_context(|| format!("writing the witness to {path}"))?;
+    }
+    if let Some(path) = single("--values") {
+        std::fs::write(&path, &output.values).with_context(|| format!("writing the values module to {path}"))?;
     }
     match single("--out") {
         Some(path) => {

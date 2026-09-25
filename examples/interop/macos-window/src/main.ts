@@ -68,6 +68,26 @@ class Controller extends NSObject implements NSWindowDelegate {
   }
 }
 
+// A sheet on the window, ended as soon as it is begun, for `sheet` below.
+function makeSheet(): NSWindow {
+  const frame = local<CGRect>();
+  setRect(frame, 0, 0, 200, 100);
+  return new NSWindow({
+    contentRect: frame,
+    styleMask: NSWindow.StyleMask.titled,
+    backing: NSWindow.BackingStoreType.buffered,
+    defer: false,
+  });
+}
+
+// Swift's `await window.beginSheet(sheet)`: the method taking a completion
+// handler, as the promise the handler settles (`types/appkit.values.ts`).
+async function sheet(window: NSWindow, panel: NSWindow): Promise<void> {
+  const ended = window.beginSheet(panel);
+  window.endSheet(panel, { returnCode: 1001 });
+  report(`sheet ${await ended}`);
+}
+
 function main(): void {
   window_control();
   const app = NSApplication.shared;
@@ -96,6 +116,9 @@ function main(): void {
       return;
     }
     timer.invalidate();
+    // Begun and ended here, so what awaits it runs at this callback's
+    // checkpoint: after the window closes, before the loop returns.
+    void sheet(window, makeSheet());
     report("stopped");
     window.close();
     app.stop(null);

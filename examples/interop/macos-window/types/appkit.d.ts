@@ -1068,7 +1068,7 @@ declare module "objc:AppKit" {
     //   -uppercaseStringWithLocale:: Swift's `uppercased` is also a property here
     //   -lowercaseStringWithLocale:: Swift's `lowercased` is also a property here
     //   -capitalizedStringWithLocale:: Swift's `capitalized` is also a property here
-    //   -enumerateSubstringsInRange:options:usingBlock:: a `NSRange`
+    //   -enumerateSubstringsInRange:options:usingBlock:: a `BOOL *`
     //   -enumerateLinesUsingBlock:: a `BOOL *`
     //   -cStringUsingEncoding:: a `const char *`
     //   -getBytes:maxLength:usedLength:encoding:options:range:remainingRange:: a `void *`
@@ -1089,7 +1089,7 @@ declare module "objc:AppKit" {
     //   -stringByAddingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
     //   -stringByReplacingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
     //   -linguisticTagsInRange:scheme:options:orthography:tokenRanges:: an array of `NSValue *> * _Nullable`
-    //   -enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock:: a `NSLinguisticTag`
+    //   -enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock:: a `BOOL *`
   }
 
   /** @ntsClass NSTimer */
@@ -1839,6 +1839,14 @@ declare module "objc:AppKit" {
     setFrameAutosaveName(name: string): boolean;
     /** @ntsSelector removeFrameUsingName: */
     static removeFrame(labels: { usingName: string }): void;
+    /** @ntsSelector beginSheet:completionHandler: */
+    beginSheet(sheetWindow: NSWindow, handler: (arg0: Int) => void): void;
+    /** @ntsCall nts_async_NSWindow_beginSheet */
+    beginSheet(sheetWindow: NSWindow): Promise<Int>;
+    /** @ntsSelector beginCriticalSheet:completionHandler: */
+    beginCriticalSheet(sheetWindow: NSWindow, handler: (arg0: Int) => void): void;
+    /** @ntsCall nts_async_NSWindow_beginCriticalSheet */
+    beginCriticalSheet(sheetWindow: NSWindow): Promise<Int>;
     /** @ntsSelector endSheet: */
     endSheet(sheetWindow: NSWindow): void;
     /** @ntsSelector endSheet:returnCode: */
@@ -1960,8 +1968,6 @@ declare module "objc:AppKit" {
     //   @property backingLocation: deprecated in macOS 10.14
     //   @property windowRef: a `void *`
     //   @property drawers: deprecated in macOS 10.13
-    //   -beginSheet:completionHandler:: Swift's `beginSheet(_:)` awaits a completion handler it passes as `async` (S5)
-    //   -beginCriticalSheet:completionHandler:: Swift's `beginCriticalSheet(_:)` awaits a completion handler it passes as `async` (S5)
     //   +windowNumbersWithOptions:: a nullable array, which Swift reads as `[T]?`
     //   -transferWindowSharingToWindow:completionHandler:: introduced in macOS 13.3
     //   -requestSharingOfWindow:completionHandler:: introduced in macOS 15.0

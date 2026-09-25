@@ -58,16 +58,19 @@ mkdir -p "$out"
 # NTS_REGENERATE=1 writes it instead.
 "$nts" bind-objc --sdk "$sdk" --module objc:AppKit --framework AppKit --framework Foundation \
   --class NSApplication --class NSWindow --class NSButton --class NSString --class NSTimer --class NSEvent --class NSBundle \
-  --protocol NSWindowDelegate --out "$out/appkit.d.ts" --witness "$out/witness.c" >/dev/null
-if [ "${NTS_REGENERATE:-}" = 1 ]; then
-  command cp -f "$out/appkit.d.ts" "$source/types/appkit.d.ts"
-fi
-diff -u "$source/types/appkit.d.ts" "$out/appkit.d.ts" >"$out/appkit.diff" || {
-  head -40 "$out/appkit.diff" >&2
-  echo "macos-window: types/appkit.d.ts is not what nts bind-objc writes; NTS_REGENERATE=1 rewrites it" >&2
-  exit 1
-}
-echo "bind-objc: types/appkit.d.ts is the generator's, unchanged"
+  --protocol NSWindowDelegate --out "$out/appkit.d.ts" --witness "$out/witness.c" \
+  --values "$out/appkit.values.ts" >/dev/null
+for generated in appkit.d.ts appkit.values.ts; do
+  if [ "${NTS_REGENERATE:-}" = 1 ]; then
+    command cp -f "$out/$generated" "$source/types/$generated"
+  fi
+  diff -u "$source/types/$generated" "$out/$generated" >"$out/$generated.diff" || {
+    head -40 "$out/$generated.diff" >&2
+    echo "macos-window: types/$generated is not what nts bind-objc writes; NTS_REGENERATE=1 rewrites it" >&2
+    exit 1
+  }
+done
+echo "bind-objc: types/appkit.d.ts and types/appkit.values.ts are the generator's, unchanged"
 log="$out/build.log"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
@@ -127,6 +130,7 @@ micro 2
 timeout 2
 stopped
 closing
+sheet 1001
 done
 EXPECTED
 diff -u "$out/expected.txt" "$out/main.txt"

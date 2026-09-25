@@ -397,6 +397,32 @@ correctness does not depend on arm64 running by luck.
          still lives to its block's end. Swift's answer for this is a +0
          borrow, and the next step is `own.rs` borrowing an element read
          that never escapes, not a shorter lifetime.
+   - **S5c, `async` as Swift's, landed (2026-09-25).**
+     `const response = await window.beginSheet(sheet)` is Swift's import of
+     `beginSheet:completionHandler:`.
+     - Swift's symbol graph holds both forms under one USR, the `async` one
+       marked in its declaration. `bind-objc` binds the method taking the
+       handler, and beside it an overload returning `Promise<T>`, tagged
+       `@ntsCall`.
+     - The overload's body is in the values module the generator writes
+       beside the binding (`--values appkit.values.ts`): `new Promise((resolve)
+       => self.beginSheet(sheet, (value) => resolve(value)))`. So the
+       machinery is the block S5a already builds, copied by AppKit and called
+       later.
+     - A block's parameter spelled through a typedef (`NSModalResponse`) is
+       read through the headers' typedefs, to its width. Swift's
+       `NSApplication.ModalResponse` wrapper is not modelled; it crosses as
+       `Int`.
+     - `macos-window` begins a sheet and ends it with return code 1001 in
+       the last tick. The awaited 1001 prints at that callback's checkpoint,
+       after `closing` and before `done`, on both backends.
+     - Not yet, each skipped with its reason: a handler given more than one
+       value (Swift's tuple), a handler given an `NSError` (Swift's `async
+       throws`), and a class method.
+     - A handler the platform calls off the main thread ends the process by
+       name, as any block does (`nts_block_on_owner`). Hopping to the main
+       queue instead is the next step, and is what Swift's `@MainActor`
+       resumption amounts to.
    - **S5a, closures as Swift's, landed.** In a message, a plain function
      type is a block, as a Swift closure passed to one is. It is lent for the
      call and copied by a callee that keeps it. `Block<F>` is no longer needed
