@@ -713,6 +713,35 @@ fn an_override_takes_the_selector_it_replaces_and_a_record_by_value() {
     }
 }
 
+/// A field holding a closure, on a class the program writes over an
+/// Objective-C class, called as `this.started()`: read from the object its
+/// ivar holds, and called through the closure's slot, as any closure is.
+#[test]
+fn a_closure_in_an_objective_c_subclass_field_is_called() {
+    let binding = r#"declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+  }
+}
+"#;
+    let source = "import { NSObject } from \"objc:Foundation\";\n\
+                  class Holder extends NSObject {\n  constructor(private readonly started: () => number) { super(); }\n  run(): number { return this.started() + 1; }\n}\n\
+                  export function go(): number {\n  return new Holder(() => 7).run();\n}\n";
+    let Some((_, prepared)) = prepare("objc-field-closure", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for expected in ["= nts_objc_state(", "->header.descriptor->methods["] {
+        assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+    }
+}
+
 /// Swift's `#selector`: `selector(Controller, "pressed")` is the selector the
 /// method was registered under -- Swift's `@objc` rule, `pressed:` with its
 /// one argument and `tick` with none -- and an inherited method of a class a

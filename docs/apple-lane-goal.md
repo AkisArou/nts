@@ -962,6 +962,28 @@ correctness does not depend on arm64 running by luck.
        drawing in C, on both backends. The colours are released (an
        Objective-C weak reference goes nil), and under NoGc that line alone
        differs.
+   - **All of Foundation typechecks (2026-09-25).** 244 classes, bound
+     whole, now typecheck and lower with no refusal. So does all of AppKit.
+     Two rules made the difference:
+     - A subclass that redeclares its base's selector at other types keeps
+       the base's overload beside its own. `DistributedNotificationCenter`'s
+       `addObserver:selector:name:object:` takes a `String?` object where
+       `NotificationCenter`'s takes an `NSObject?`, and TypeScript holds a
+       subclass's overloads to its base's. Two overloads that differ only in
+       a parameter's name (`cView`, `clipView`) are one (`unnamed`).
+     - A property Swift names as an ancestor's *other* property is left to
+       the ancestor: `NSScriptClassDescription`'s `superclass` is read with
+       `superclassDescription`, and `NSObject`'s with `superclass`. An
+       override is read by the same getter; this is not (`Reading::getters`).
+   - **A closure in a field, called (2026-09-25).** `this.started()`, where
+     `started` is a field of a class written over an Objective-C class: read
+     from the object the ivar holds and called through the closure's slot.
+     It was refused as a method of an opaque pointer. `macos-notes`'
+     application delegate is handed what to start once the application
+     has launched, and starts the typing timer from
+     `applicationDidFinishLaunching`, in TypeScript and in Swift alike. The
+     order `launched`, then the notes, is by construction: the first version
+     raced the launch against a 50 ms timer and lost once.
    - **Swift's `Set<T>` (2026-09-25).** `NSSet<T *> *` crosses as
      `Set<T>` both ways: a set of objects, or of strings.
      - A set of Objective-C objects compares as Swift's and `NSSet` do,

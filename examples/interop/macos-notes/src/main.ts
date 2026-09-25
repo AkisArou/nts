@@ -92,18 +92,17 @@ class Notes extends NSObject implements NSTableViewDataSource {
   }
 }
 
-// What the application does once it has launched, set before `run`.
-let started: (() => void) | null = null;
-
 // Swift's `class AppDelegate: NSObject, NSApplicationDelegate`: AppKit tells
 // it the application has finished launching, once `run` has started it, and
 // what the application does from then on starts there.
 class AppDelegate extends NSObject implements NSApplicationDelegate {
+  constructor(private readonly started: () => void) {
+    super();
+  }
+
   applicationDidFinishLaunching(notification: NSNotification): void {
     report("launched");
-    if (started !== null) {
-      started();
-    }
+    this.started();
   }
 }
 
@@ -203,10 +202,9 @@ function main(): void {
       app.postEvent(wake, { atStart: true });
     }
   };
-  started = () => {
+  const delegate = new AppDelegate(() => {
     Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, type);
-  };
-  const delegate = new AppDelegate();
+  });
   app.delegate = delegate;
   app.run();
 }

@@ -41330,6 +41330,36 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin))
     }
 
+    /// A call on a native receiver: a C function a binding declares on it, a
+    /// function of the program's that `@ntsCall` names, a method of a class
+    /// the program writes over an Objective-C class, or a closure one of its
+    /// fields holds. `None` for anything else, which the arms after it take.
+    fn call_on_native(&mut self, id: NodeId, (receiver, receiver_node): (ValueId, NodeId), member: NodeId, arguments: &[NodeId]) -> Result<Option<ValueId>, Diagnostic> {
+        if let Some(method) = self.native_method(id) {
+            return self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments).map(Some);
+        }
+        if let Some(function) = self.called_method(id)? {
+            return self.lower_called_method(id, Some(receiver), function, arguments).map(Some);
+        }
+        if let Some(method) = self.program_objc_method(id) {
+            return self.lower_program_objc_call(id, receiver, method, arguments).map(Some);
+        }
+        self.program_objc_field_call(id, receiver, member, arguments)
+    }
+
+    /// `this.started()`: a field of a class the program writes over an
+    /// Objective-C class that holds a closure, read from the object its ivar
+    /// holds and called as any closure is. `None` for any other member.
+    fn program_objc_field_call(&mut self, id: NodeId, receiver: ValueId, member: NodeId, arguments: &[NodeId]) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(name) = self.literal_name(member) else { return Ok(None) };
+        let Some(Place::Field { object, field }) = self.program_objc_instance_place(id, receiver, &name)? else { return Ok(None) };
+        let Some(&callee) = self.children(id).first() else { return Ok(None) };
+        let ty = self.type_of(callee).ok_or_else(|| self.unrepresentable(callee, "a field holding a function"))?;
+        let origin = self.origin(id);
+        let closure = self.push(OpKind::FieldGet { object, field }, ty, origin);
+        self.call_through_closure(id, callee, closure, arguments).map(Some)
+    }
+
     fn lower_method_on(
         &mut self,
         id: NodeId,
@@ -41341,16 +41371,10 @@ impl<'a> FuncBuilder<'a> {
         // A method a binding declares on a C handle -- a boxed record's box
         // among them: the C function itself, or one of the program's own
         // functions that `@ntsCall` names.
-        if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_) | HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD)))) {
-            if let Some(method) = self.native_method(id) {
-                return self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments);
-            }
-            if let Some(function) = self.called_method(id)? {
-                return self.lower_called_method(id, Some(receiver), function, arguments);
-            }
-            if let Some(method) = self.program_objc_method(id) {
-                return self.lower_program_objc_call(id, receiver, method, arguments);
-            }
+        if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_) | HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD))))
+            && let Some(called) = self.call_on_native(id, (receiver, receiver_node), member, arguments)?
+        {
+            return Ok(called);
         }
 
         // `big.toString()` is the same `ToString` one type over, and
