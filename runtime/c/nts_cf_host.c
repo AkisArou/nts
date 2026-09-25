@@ -284,17 +284,10 @@ void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array) {
   }
 }
 
-/* The object a map holds in a box of its family -- a header, then the handle,
- * `handle_box`'s layout -- or NULL for a value that is not one. */
-static const void *nts_boxed_handle(NtsValue value) {
-  const NtsHeader *box = nts_value_reference(value);
-  if (!box) {
-    return NULL;
-  }
-  const void *handle;
-  memcpy(&handle, (const unsigned char *)box + sizeof(NtsHeader),
-         sizeof handle);
-  return handle;
+/* The object a map holds, as the Objective-C family's tag, or NULL for an
+ * absence. */
+static const void *nts_held_object(NtsValue value) {
+  return nts_value_handle(value, NTS_TAG_HANDLE_OBJC);
 }
 
 static void *nts_nsdictionary_of(const NtsMap *map, bool strings) {
@@ -318,7 +311,7 @@ static void *nts_nsdictionary_of(const NtsMap *map, bool strings) {
         CFRelease(text);
       }
     } else {
-      const void *object = nts_boxed_handle(value);
+      const void *object = nts_held_object(value);
       if (object) {
         CFDictionarySetValue(made, name, object);
       }
@@ -392,7 +385,7 @@ static void *nts_nsset_of(const NtsMap *set, bool strings) {
         CFRelease(text);
       }
     } else {
-      const void *object = nts_boxed_handle(key);
+      const void *object = nts_held_object(key);
       if (object) {
         CFSetAddValue(made, object);
       }
@@ -428,9 +421,21 @@ static bool nts_objc_equal(const void *a, const void *b) {
   return ((BOOL (*)(id, SEL, id))objc_msgSend)((id)a, is_equal, (id)b);
 }
 
+/* ARC's entry points, which no public header declares. The Objective-C
+ * family counts through them where a value holds one of its objects
+ * (`NTS_TAG_HANDLE_OBJC`): `nts_value_retain`/`_release`. */
+id objc_retain(id object);
+void objc_release(id object);
+
+static void nts_objc_value_retain(void *object) { objc_retain((id)object); }
+
+static void nts_objc_value_release(void *object) { objc_release((id)object); }
+
 __attribute__((constructor)) static void nts_objc_keys_install(void) {
   nts_objc_key_hash = nts_objc_hash;
   nts_objc_key_equal = nts_objc_equal;
+  nts_handle_family_register(NTS_TAG_HANDLE_OBJC, nts_objc_value_retain,
+                             nts_objc_value_release, "Objective-C");
 }
 
 /* A registered class with fields: where its ivar is, and what makes the
@@ -571,10 +576,6 @@ void nts_objc_register_class(const char *name, const char *superclass,
   nts_objc_stateful[nts_objc_stateful_count++] =
       (NtsObjcStateful){made, root, offset, make_state};
 }
-
-/* ARC's entry points, which no public header declares. */
-id objc_retain(id object);
-void objc_release(id object);
 
 /* A carried block call: the block, what runs it, and the arguments' copy,
  * with the offsets of the objects in it that it holds a count of. */

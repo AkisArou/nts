@@ -6237,12 +6237,11 @@ static void nts_objc_keys_required(void) {
   }
 }
 
-/* The object a family's box holds, one word after its header. */
-static inline const void *nts_boxed_object(NtsValue key) {
-  const unsigned char *box = (const unsigned char *)nts_value_reference(key);
-  const void *object;
-  memcpy(&object, box + sizeof(NtsHeader), sizeof object);
-  return object;
+/* The object an Objective-C key holds: its family's tag, checked, so a key
+ * that arrives boxed -- the promise path still boxes a handle -- aborts saying
+ * so rather than hashing the box's header. */
+static inline const void *nts_objc_key_object(NtsValue key) {
+  return nts_value_handle(key, NTS_TAG_HANDLE_OBJC);
 }
 
 static inline __attribute__((always_inline)) uint32_t
@@ -6256,7 +6255,7 @@ nts_hash_key(NtsValue key, uint32_t kind) {
     return nts_hash_mix((uint64_t)(uintptr_t)nts_value_reference(key));
   case NTS_KEY_OBJC:
     nts_objc_keys_required();
-    return nts_hash_mix(nts_objc_key_hash(nts_boxed_object(key)));
+    return nts_hash_mix(nts_objc_key_hash(nts_objc_key_object(key)));
   default:
     break;
   }
@@ -6299,8 +6298,10 @@ nts_key_eq(NtsValue a, NtsValue b, uint32_t kind) {
   case NTS_KEY_REFERENCE:
     return nts_value_reference(a) == nts_value_reference(b);
   case NTS_KEY_OBJC: {
-    const void *left = nts_boxed_object(a);
-    const void *right = nts_boxed_object(b);
+    const void *left = nts_objc_key_object(a);
+    const void *right = nts_objc_key_object(b);
+    /* Identity is equality, even for a class whose `-isEqual:` says an
+     * object is not equal to itself: a key must find the entry it made. */
     if (left == right) {
       return true;
     }

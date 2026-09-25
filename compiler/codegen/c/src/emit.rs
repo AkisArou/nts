@@ -5394,8 +5394,8 @@ mod tests {
     }
 
     /// And for a handle of each family, which both lists answer from
-    /// `tags::erased_handle_tag`: a `GObject` or COM one is tagged, an
-    /// Objective-C one is not yet, and a C pointer nothing counts never is.
+    /// `tags::erased_handle_tag`: a counted family's is tagged, and a C
+    /// pointer nothing counts never is.
     #[test]
     fn the_two_erasure_lists_agree_about_handles() {
         use nts_core::hir::native::{Family, Handle, Pointee};
@@ -5411,7 +5411,7 @@ mod tests {
                 erased_tag(&ty).is_some(),
                 "`erasable` and `erased_tag` disagree about a {family:?} handle"
             );
-            assert_eq!(erased_tag(&ty).is_some(), matches!(family, Family::GObject | Family::Com), "{family:?}");
+            assert_eq!(erased_tag(&ty).is_some(), family != Family::C, "{family:?}");
         }
     }
 

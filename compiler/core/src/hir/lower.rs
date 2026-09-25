@@ -15529,14 +15529,6 @@ impl<'a> FuncBuilder<'a> {
     /// [`FuncBuilder::present_of`] is the one read-back that does *not* come
     /// from here, because its licence is different -- see it for why.
     fn narrowed(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
-        // A counted handle a map holds in its box -- an Objective-C one; every
-        // other family's is a tag, which the read-back below answers.
-        if let Some(want) = self.type_of(id)
-            && matches!(&want, HirType::NativePointer(pointee) if pointee.counting().is_some() && super::tags::erased_handle_tag(pointee).is_none())
-            && self.values[value.0 as usize].ty == HirType::Erased
-        {
-            return self.unboxed(id, value, &want);
-        }
         if let Some(want @ HirType::NativePointer(_)) = self.type_of(id)
             && self.values[value.0 as usize].ty != want
         {
@@ -18397,48 +18389,6 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let size = self.push(OpKind::ConstInt(i128::from(record.size)), HirType::Int { bits: 64, signed: false }, origin.clone());
         Ok(self.runtime_call("nts_gobject_boxed_new", vec![gtype, size], ty, origin))
-    }
-
-    /// An erased value a map gave back, as the counted handle its box holds:
-    /// the box's field, or null where the map had nothing (`get` of an absent
-    /// key is `undefined`, whose reference is null).
-    fn unboxed(&mut self, id: NodeId, value: ValueId, want: &HirType) -> Result<ValueId, Diagnostic> {
-        let origin = self.origin(id);
-        self.unboxed_at(value, want, &origin).ok_or_else(|| self.unsupported(id, "a handle of a family with no box"))
-    }
-
-    /// A counted handle a table holds in a box -- an Objective-C one; every
-    /// other family's is a tag, which an `Unerase` reads back.
-    fn boxed_handle_at(&mut self, value: ValueId, element: &HirType, origin: &Origin) -> Option<ValueId> {
-        let HirType::NativePointer(pointee) = element else { return None };
-        if pointee.counting().is_none() || super::tags::erased_handle_tag(pointee).is_some() {
-            return None;
-        }
-        self.unboxed_at(value, element, origin)
-    }
-
-    /// [`Self::unboxed`] where there is only an origin: `None` for a handle
-    /// of a family with no box.
-    fn unboxed_at(&mut self, value: ValueId, want: &HirType, origin: &Origin) -> Option<ValueId> {
-        let HirType::NativePointer(pointee) = want else { return None };
-        let (ty, root) = self.handle_box_layout(pointee)?;
-        let origin = origin.clone();
-        let boxed_ty = HirType::Managed(ManagedType::Object(ty));
-        let boxed = self.push(OpKind::Unerase { value }, boxed_ty.clone(), origin.clone());
-        let null = self.push(OpKind::ConstNull, boxed_ty, origin.clone());
-        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: boxed, rhs: null }, HirType::Bool, origin.clone());
-        let (none_block, some_block, merge) = (self.new_block(), self.new_block(), self.new_block());
-        let result = self.push_block_param(merge, want.clone(), origin.clone());
-        self.terminate(Terminator::Branch { cond: absent, then_target: none_block, then_args: Vec::new(), else_target: some_block, else_args: Vec::new() });
-        self.switch_to(none_block);
-        let none = self.push(OpKind::ConstNull, want.clone(), origin.clone());
-        self.terminate(Terminator::Jump { target: merge, args: vec![none] });
-        self.switch_to(some_block);
-        let handle = self.push(OpKind::FieldGet { object: boxed, field: 0 }, HirType::NativePointer(root), origin.clone());
-        let handle = self.push(OpKind::Convert(handle), want.clone(), origin.clone());
-        self.terminate(Terminator::Jump { target: merge, args: vec![handle] });
-        self.switch_to(merge);
-        Some(result)
     }
 
     /// The one-field object a captured-and-written variable lives in.
@@ -25146,16 +25096,9 @@ impl<'a> FuncBuilder<'a> {
         // stores. Where the element type is concrete the payload is read back
         // here, so the body sees a `Socket` rather than sixteen bytes.
         let unerased = |lower: &mut Self, slot: ValueId, want: &HirType| {
+            // A counted handle is its family's tag, which `Unerase` checks.
             if *want == HirType::Erased {
                 slot
-            } else if let HirType::NativePointer(pointee) = want
-                && pointee.counting().is_some()
-                && super::tags::erased_handle_tag(pointee).is_none()
-                && let Some(handle) = lower.unboxed_at(slot, want, origin)
-            {
-                // A counted handle a map holds in its box -- an Objective-C one;
-                // every other family's is its tag, which `Unerase` checks.
-                handle
             } else {
                 lower.push(
                     OpKind::Unerase { value: slot },
@@ -25216,9 +25159,6 @@ impl<'a> FuncBuilder<'a> {
                 // `Socket` rather than sixteen bytes it has to unpack itself.
                 if *element == HirType::Erased {
                     slot
-                } else if let Some(handle) = self.boxed_handle_at(slot, element, origin)
-                {
-                    handle
                 } else {
                     self.push(
                         OpKind::Unerase { value: slot },
@@ -49527,20 +49467,9 @@ impl<'a> FuncBuilder<'a> {
         if self.values[value.0 as usize].ty == HirType::Erased {
             return value;
         }
-        // A counted foreign object, boxed: the map holds the box, and the box
-        // the object's count, given back when the entry is overwritten or
-        // deleted or the map goes.
-        //
-        // Only an Objective-C one now: every other counted family is erased as
-        // its tag, below, and read back by a checked `Unerase` -- one
-        // representation, so `map.get(k) === widget`.
-        if let HirType::NativePointer(pointee) = self.values[value.0 as usize].ty.clone()
-            && pointee.counting().is_some()
-            && super::tags::erased_handle_tag(&pointee).is_none()
-            && let Some(boxed) = self.boxed(value, &pointee, origin)
-        {
-            return self.push(OpKind::Erase { value: boxed, absent: Absent::Impossible }, HirType::Erased, origin.clone());
-        }
+        // A counted foreign object is erased as its family's tag, and the value
+        // owns the reference the box used to: one representation of a handle in
+        // any value, so `map.get(k) === widget`.
         self.push(OpKind::Erase { value, absent: Absent::Impossible }, HirType::Erased, origin.clone())
     }
 

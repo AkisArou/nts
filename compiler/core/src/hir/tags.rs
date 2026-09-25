@@ -56,18 +56,12 @@ pub fn handle_tag(family: super::native::Family) -> Option<u32> {
 }
 
 /// The tag a handle of this type carries **where lowering erases one** --
-/// `unknown`, a table's value, a props object's optional field. A `GObject` or
-/// COM handle is tagged. An Objective-C one is not yet: a table still holds it
-/// in a box, because its keys hash and compare through `-hash`/`-isEqual:` on
-/// the boxed object, and moving that to tag 9 is its own step, reviewed by the
-/// lane that runs it. Until then an Objective-C handle is boxed in a table and
-/// refused anywhere else it would be erased.
+/// `unknown`, a table's value, a props object's optional field: its family's,
+/// whatever the handle's own tag -- an Objective-C protocol value is an
+/// Objective-C handle like any other. A C pointer nothing counts has none.
 #[must_use]
 pub fn erased_handle_tag(pointee: &super::native::Pointee) -> Option<u32> {
-    match pointee.family()? {
-        super::native::Family::Objc => None,
-        family => handle_tag(family),
-    }
+    handle_tag(pointee.family()?)
 }
 
 /// The first tag of the handle block and the block's size.
