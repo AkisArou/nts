@@ -4193,6 +4193,27 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     ] {
         assert!(binding.contains(expected), "missing `{expected}` from:\n{binding}");
     }
+    // The same out parameters returned, as GJS returns them: an overload
+    // declared before the method, bodied by a wrapper in the companion
+    // module, which passes both slots -- the optional one too, since a
+    // caller asking for the values wants every one.
+    assert!(
+        binding.contains(
+            "     * @ntsCall demo_thing_size_values\n     */\n    \
+             size(this: Const<DemoThing>): [CNumber<\"int\">, CNumber<\"int\">];\n    /**\n     * @ntsNoEscape width"
+        ),
+        "no values form before `size`:\n{binding}"
+    );
+    let values = std::fs::read_to_string(out.join("Demo-1.0.values.ts")).expect("the companion");
+    assert!(
+        values.contains(
+            "export function demo_thing_size_values(thing: Const<DemoThing>): [CNumber<\"int\">, CNumber<\"int\">] {\n  \
+             const width = local<CNumber<\"int\">>();\n  const height = local<CNumber<\"int\">>();\n  \
+             demo_thing_size(thing, width, height);\n  return [width[0], height[0]];\n}"
+        ),
+        "no values wrapper for `demo_thing_size`:\n{values}"
+    );
+    assert!(!values.contains("demo_thing_count_values"), "a method with no out parameter has a values form:\n{values}");
     assert!(!binding.contains("demo_wrong"), "a declaration the header contradicts was kept:\n{binding}");
     let refused = std::fs::read_to_string(out.join("Demo-1.0.refused.txt")).expect("the report");
     assert!(

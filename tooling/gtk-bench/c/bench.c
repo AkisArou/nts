@@ -68,6 +68,19 @@ static void method_run(long n) {
   visible += seen;
 }
 
+/* Out parameters: two ints written through slots on the stack. */
+static long outs_sum;
+static void outs_run(long n) {
+  GtkWidget *widget = button;
+  long sum = 0;
+  for (long i = 0; i < n; i++) {
+    int width, height;
+    gtk_widget_get_size_request(widget, &width, &height);
+    sum += width + height;
+  }
+  outs_sum += sum;
+}
+
 static void mapped(GtkWidget *w, gpointer app) {
   (void)w;
   g_application_quit(G_APPLICATION(app));
@@ -106,6 +119,10 @@ int main(void) {
   } else if (strcmp(name, "method") == 0) {
     button = g_object_ref_sink(gtk_button_new_with_label("x"));
     best("method", 2000000, method_run);
+  } else if (strcmp(name, "outs") == 0) {
+    button = g_object_ref_sink(gtk_button_new_with_label("x"));
+    gtk_widget_set_size_request(button, 3, 4);
+    best("outs", 2000000, outs_run);
   } else {
     printf("unknown case: %s\n", name);
   }

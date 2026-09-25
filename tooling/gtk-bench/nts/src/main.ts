@@ -66,6 +66,20 @@ function method(): void {
   if (visible === 0) bench_log("method: never visible");
 }
 
+// Out parameters returned, as GJS returns them: `[width, height]`.
+function outs(): void {
+  const button = new GtkButton({ label: "x" });
+  button.set_size_request(3, 4);
+  let sum = 0;
+  best("outs", 2000000, (n) => {
+    for (let i = 0; i < n; i++) {
+      const [width, height] = button.get_size_request();
+      sum += width + height;
+    }
+  });
+  if (sum === 0) bench_log("outs: nothing read");
+}
+
 // Startup to a mapped window, timed from outside the process.
 function startup(): void {
   const application = new GtkApplication({ application_id: "dev.nts.Bench", flags: ApplicationFlags.NON_UNIQUE });
@@ -91,6 +105,7 @@ function main(): void {
   else if (name === "property") property();
   else if (name === "construct") construct();
   else if (name === "method") method();
+  else if (name === "outs") outs();
   else bench_log("unknown case: " + name);
 }
 

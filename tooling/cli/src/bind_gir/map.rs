@@ -186,6 +186,11 @@ pub(crate) enum Shape {
     /// program holds as `program` -- `readonly string[]`, `Uint8Array` -- and
     /// which only a foreign function's own parameter can be declared as.
     Lent { program: String },
+    /// A slot C writes a scalar through, typed `value` as the program reads
+    /// it back: what a GJS-style method returns rather than takes. Only a
+    /// scalar, since a handle read out of a slot has an ownership to settle
+    /// that a number does not.
+    Out { value: String },
 }
 
 /// Why something was not bound. Counted, so the most common one is the next
@@ -933,15 +938,17 @@ impl<'a> Mapper<'a> {
             ..param.clone()
         };
         let mapped = self.typed(&value)?;
-        let (slot, pointee) = match mapped.c {
-            Type::Scalar(scalar) => (mapped.ts, Pointee::Scalar(scalar)),
-            Type::Pointer(pointee) => (format!("{} | null", mapped.ts), Pointee::Pointer(Box::new(pointee))),
+        let (slot, pointee, shape) = match mapped.c {
+            Type::Scalar(scalar) => {
+                (mapped.ts.clone(), Pointee::Scalar(scalar), Shape::Out { value: mapped.ts })
+            }
+            Type::Pointer(pointee) => (format!("{} | null", mapped.ts), Pointee::Pointer(Box::new(pointee)), Shape::Other),
             _ => return Err(Reason::OutParameter),
         };
         self.binding.brands.insert("Ptr");
         let ts = format!("Ptr<{slot}>");
         let ts = if param.optional { format!("{ts} | null") } else { ts };
-        Ok(Mapped { shape: Shape::Other, ts, c: Type::Pointer(pointee) })
+        Ok(Mapped { shape, ts, c: Type::Pointer(pointee) })
     }
 
     /// An array the callee reads (or fills) during the call: strings as

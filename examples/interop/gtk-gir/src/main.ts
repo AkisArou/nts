@@ -7,6 +7,8 @@
 //
 //   ymd=2026-9    `g_date_time_get_ymd` wrote two out parameters on the
 //                 stack, and took `null` for the third, which it may skip
+//   values=2026/9/24  `when.get_ymd()` with no slots: all three returned, as
+//                 GJS returns out parameters, through a generated wrapper
 //   keyfile true 5 no-error
 //                 a key file loaded -- its `gboolean` answer a boolean -- and
 //                 read, and the `GError **` slot beside each call left null
@@ -23,6 +25,8 @@
 //   entry typed! 0  `GtkEditable`'s `set_text`, `get_text` and `text` on a
 //                 `GtkEntry`, and `GtkOrientable`'s orientation on a `GtkBox`:
 //                 an interface's methods on the classes implementing it
+//   bounds true 1 3  `entry.get_selection_bounds()`: the `gboolean` result,
+//                 then the two out values
 //   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned, held as
 //                 a plain `GtkWidget`
 //   cast-null     `asGtkLabel` answers null for that same widget
@@ -104,6 +108,9 @@ function outParameters(): void {
   const month = local<CNumber<"int">>();
   g_date_time_get_ymd(when, year, month, null);
   gir_log("ymd=" + String(year[0]) + "-" + String(month[0]));
+  // The same as GJS has it: the out values returned, in order.
+  const [y, m, d] = when.get_ymd();
+  gir_log("values=" + String(y) + "/" + String(m) + "/" + String(d));
   g_date_time_unref(when);
 
   const keys = g_key_file_new();
@@ -217,6 +224,10 @@ function main(): void {
     entry.text = entry.get_text() + "!";
     box.set_orientation(Orientation.HORIZONTAL);
     gir_log("entry " + entry.text + " " + String(box.get_orientation()));
+    // The function's own result first, then its out values.
+    entry.select_region(1, 3);
+    const [selected, start, end] = entry.get_selection_bounds();
+    gir_log("bounds " + String(selected) + " " + String(start) + " " + String(end));
     // A checked downcast, for a handle known only as a widget.
     const widget: GtkWidget = box;
     gir_log(asGtkBox(widget) === null ? "cast-failed" : "cast-ok");

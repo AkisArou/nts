@@ -42,6 +42,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     // The methods of each class, from the functions the self-check kept.
     let promises: std::collections::BTreeMap<&str, &Function> =
         promise_forms(binding).into_iter().map(|(start, finish)| (start.symbol.as_str(), finish)).collect();
+    let outs: std::collections::BTreeSet<&str> = values_forms(binding).into_iter().map(|f| f.symbol.as_str()).collect();
     let mut methods: std::collections::BTreeMap<&str, Vec<&Function>> = std::collections::BTreeMap::new();
     for function in &binding.functions {
         if let Some((class, _)) = &function.method {
@@ -59,6 +60,9 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                 let _ = writeln!(out, "  export interface {name}OwnMethods {{");
                 let own: Vec<&Function> = methods.get(name.as_str()).into_iter().flatten().copied().collect();
                 for function in &own {
+                    if outs.contains(function.symbol.as_str()) {
+                        values_method(&mut out, function);
+                    }
                     method(&mut out, function);
                     if let Some(finish) = promises.get(function.symbol.as_str()) {
                         promise_method(&mut out, function, finish);
@@ -321,6 +325,70 @@ pub(crate) fn promise_forms(binding: &Binding) -> Vec<(&Function, &Function)> {
         .collect()
 }
 
+/// The methods whose out parameters a GJS-style form returns instead of
+/// taking: `const [width, height] = widget.get_size_request()`. Every slot
+/// the caller would pass is a scalar one ([`Shape::Out`]) -- a string or a
+/// handle read out of a slot has an ownership a number does not -- and the
+/// error slot, if any, is last, so leaving it out of the call throws.
+pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
+    binding
+        .functions
+        .iter()
+        .filter(|function| {
+            function.method.is_some()
+                && function.parameters.iter().any(|(_, mapped)| matches!(mapped.shape, Shape::Out { .. }))
+                && function.parameters.iter().all(|(name, mapped)| {
+                    function.throws.as_deref() == Some(name.as_str())
+                        || matches!(mapped.shape, Shape::Out { .. } | Shape::Handle { .. } | Shape::Lent { .. })
+                        || (mapped.shape == Shape::Other && !mapped.ts.starts_with("Ptr<") && !mapped.ts.contains("Closure<"))
+                })
+                && function.throws.as_ref().is_none_or(|slot| function.parameters.last().is_some_and(|(name, _)| name == slot))
+        })
+        .collect()
+}
+
+/// What a values form returns: the function's own result, if it has one,
+/// then each out value, in order -- GJS's shape -- and a lone value unwrapped.
+fn values_result(function: &Function) -> String {
+    let result = (function.result.ts != "void").then(|| function.result.ts.clone());
+    let values: Vec<String> = result
+        .into_iter()
+        .chain(function.parameters.iter().filter_map(|(_, mapped)| match &mapped.shape {
+            Shape::Out { value } => Some(value.clone()),
+            _ => None,
+        }))
+        .collect();
+    if values.len() == 1 { values[0].clone() } else { format!("[{}]", values.join(", ")) }
+}
+
+/// The parameters a values form takes: all but the out slots and the error
+/// slot.
+fn values_taken(function: &Function) -> Vec<(String, Mapped)> {
+    function
+        .parameters
+        .iter()
+        .filter(|(name, mapped)| {
+            !matches!(mapped.shape, Shape::Out { .. }) && function.throws.as_deref() != Some(name.as_str())
+        })
+        .cloned()
+        .collect()
+}
+
+/// The overload of a method that returns its out values, bodied by the
+/// wrapper `values_wrapper` writes (`@ntsCall`). Declared before the method,
+/// so a call leaving every slot out resolves to it.
+fn values_method(out: &mut String, function: &Function) {
+    let Some((_, name)) = &function.method else { return };
+    let taken = values_taken(function);
+    let defaulted = defaults(function, &taken);
+    let mut parameters = taken.iter();
+    let Some((_, instance)) = parameters.next() else { return };
+    let rest: Vec<String> = parameters.map(|(name, mapped)| parameter(function, &defaulted, name, &mapped.ts)).collect();
+    let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
+    let _ = writeln!(out, "    /**\n     * @ntsCall {}_values\n     */", function.symbol);
+    let _ = writeln!(out, "    {name}({this}): {};", values_result(function));
+}
+
 /// The parameters a promise's `_finish` call has to write: all but the error
 /// slot, which a leaving-out throws, and the trailing ones the binding
 /// defaults -- `etag_out` on every GIO `_finish`. Two is the instance and the
@@ -542,8 +610,22 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             }
         }
     }
-    if !binding.casts.is_empty() {
-        out.push_str("\nimport { unsafeDowncast } from \"c:memory\";\n");
+    let values = values_forms(binding);
+    for function in &values {
+        imports.entry(binding.module.clone()).or_default().push(function.symbol.clone());
+        let spellings = function.parameters.iter().map(|(_, mapped)| mapped.ts.as_str()).chain([function.result.ts.as_str()]);
+        for name in spellings.flat_map(|ts| ts.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))) {
+            if let Some(module) = module_of_type(binding, name) {
+                imports.entry(module).or_default().push(format!("type {name}"));
+            }
+        }
+    }
+    let memory: Vec<&str> = [(!binding.casts.is_empty()).then_some("unsafeDowncast"), (!values.is_empty()).then_some("local")]
+        .into_iter()
+        .flatten()
+        .collect();
+    if !memory.is_empty() {
+        let _ = writeln!(out, "\nimport {{ {} }} from \"c:memory\";", memory.join(", "));
     } else if !imports.is_empty() {
         out.push('\n');
     }
@@ -569,7 +651,68 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     for (start, finish) in &promises {
         promise_wrapper(&mut out, start, finish);
     }
+    for function in &values {
+        values_wrapper(&mut out, function);
+    }
     out
+}
+
+/// `function` with its out slots as locals, read once it returns and handed
+/// back as `values_result` says. The error slot is left out of the call, so a
+/// failure is thrown here and propagates.
+fn values_wrapper(out: &mut String, function: &Function) {
+    let taken = values_taken(function);
+    let defaulted = defaults(function, &taken);
+    let declared = declared_parameters(&taken, &defaulted);
+    let mut body = String::new();
+    let mut read = Vec::new();
+    if function.result.ts != "void" {
+        read.push("nts_result".to_owned());
+    }
+    for (name, mapped) in &function.parameters {
+        if let Shape::Out { value } = &mapped.shape {
+            let _ = writeln!(body, "  const {name} = local<{value}>();");
+            read.push(format!("{name}[0]"));
+        }
+    }
+    let passed = function
+        .parameters
+        .iter()
+        .filter(|(name, _)| function.throws.as_deref() != Some(name.as_str()))
+        .map(|(name, _)| name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let call = format!("{}({passed})", function.symbol);
+    let _ = if function.result.ts == "void" { writeln!(body, "  {call};") } else { writeln!(body, "  const nts_result = {call};") };
+    let returned = if read.len() == 1 { read[0].clone() } else { format!("[{}]", read.join(", ")) };
+    let _ = writeln!(
+        out,
+        "\n/** `{symbol}`, returning its out values. */\n\
+         export function {symbol}_values({declared}): {result} {{\n\
+         {body}\x20 return {returned};\n\
+         }}",
+        symbol = function.symbol,
+        result = values_result(function),
+    );
+}
+
+/// A wrapper's own parameters, as it declares them: the trailing defaulted
+/// ones as default parameters, and a lent array as the program holds it,
+/// since it is lent at the call inside.
+fn declared_parameters(taken: &[(String, Mapped)], defaulted: &[(&str, &str)]) -> String {
+    let program = |mapped: &Mapped| match &mapped.shape {
+        Shape::Lent { program } => program.clone(),
+        _ => mapped.ts.clone(),
+    };
+    taken
+        .iter()
+        .map(|(name, mapped)| match defaulted.iter().find(|(given, _)| *given == name.as_str()) {
+            Some((_, "null")) => format!("{name}: {} = null", program(mapped)),
+            Some((_, value)) => format!("{name}: {ts} = {value} as {ts}", ts = program(mapped)),
+            None => format!("{name}: {}", program(mapped)),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Where a type name a spelling uses is declared: this module, the module it
@@ -596,21 +739,7 @@ fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
     // The method leaves these out as the C one would; here they are ordinary
     // default parameters, since this is the program's own function.
     let defaulted = defaults(start, taken);
-    // A lent array only a foreign parameter can be declared as is taken as
-    // the program holds it, and lent at the call inside.
-    let program = |mapped: &Mapped| match &mapped.shape {
-        Shape::Lent { program } => program.clone(),
-        _ => mapped.ts.clone(),
-    };
-    let declared = taken
-        .iter()
-        .map(|(name, mapped)| match defaulted.iter().find(|(given, _)| *given == name.as_str()) {
-            Some((_, "null")) => format!("{name}: {} = null", program(mapped)),
-            Some((_, value)) => format!("{name}: {ts} = {value} as {ts}", ts = program(mapped)),
-            None => format!("{name}: {}", program(mapped)),
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
+    let declared = declared_parameters(taken, &defaulted);
     let passed = taken.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>().join(", ");
     let _ = writeln!(
         out,

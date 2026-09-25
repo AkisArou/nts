@@ -72,6 +72,20 @@ function method() {
         print('method: never visible');
 }
 
+function outs() {
+    const button = new Gtk.Button({ label: 'x' });
+    button.set_size_request(3, 4);
+    let sum = 0;
+    best('outs', 2000000, n => {
+        for (let i = 0; i < n; i++) {
+            const [width, height] = button.get_size_request();
+            sum += width + height;
+        }
+    });
+    if (sum === 0)
+        print('outs: nothing read');
+}
+
 function startup() {
     const application = new Gtk.Application({ application_id: 'dev.nts.Bench', flags: Gio.ApplicationFlags.NON_UNIQUE });
     application.connect('activate', () => {
@@ -98,6 +112,8 @@ if (name === 'startup') {
         construct();
     else if (name === 'method')
         method();
+    else if (name === 'outs')
+        outs();
     else
         print(`unknown case: ${name}`);
 }

@@ -32,7 +32,7 @@ async function load(file: GFile): Promise<string[]> {
   const notes: string[] = [];
   try {
     const lines = g_data_input_stream_new(await file.read_async());
-    for (let line = lines.read_line_utf8(); line !== null; line = lines.read_line_utf8()) {
+    for (let [line] = lines.read_line_utf8(); line !== null; [line] = lines.read_line_utf8()) {
       if (line.length > 0) notes.push(line);
     }
   } catch {

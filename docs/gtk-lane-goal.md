@@ -286,6 +286,31 @@ error and answers a `malloc`'d message, and GLib's is four lines in the GLib
 host (`nts_gerror_take_message`). Checked on C and LLVM under both providers
 with a fake error API and its own converter.
 
+**Out parameters returned.** Without its slots, a method whose out
+parameters are all scalars returns them, as GJS does -- the function's own
+result first, then each out value in order, and a lone value unwrapped:
+
+```ts
+const [width, height] = widget.get_size_request();
+const [selected, start, end] = entry.get_selection_bounds();
+const [year, month, day] = when.get_ymd();
+```
+
+The same mechanism as the Promise forms below: an overload declared before
+the C method, bodied (`@ntsCall`) by a wrapper in the companion module that
+takes the slots as `local`s, makes the call, and reads them back into a
+tuple. An optional slot is passed too, since a caller asking for the values
+wants every one, and an error slot is left out, so a failure throws. A string
+or handle *slot* keeps the C form: what is read out of it has an ownership to
+settle that a number does not. A handle *result* beside scalar outs is fine
+(`gtk_column_view_sorter_get_nth_sort_column`, checked under `--rc` with
+`fatal-criticals`). 125 wrappers across the Gtk-4.0 closure, 66 in Gtk itself.
+
+Cost: 12 ns against C's 4.2 and GJS's 165. The difference from C is the
+tuple, one `NtsArray` allocated per call, since it escapes the wrapper; a
+compiler that scalar-replaced a small tuple returned from an inlined
+function would close it, and the slots are still there for a hot loop.
+
 **Async methods, awaited.** Without its callback, an `_async` method is its
 Promise form:
 
@@ -571,6 +596,7 @@ GTK 4.22; ns per operation, best of three in-process runs after one untimed.
 | property write + read (`label.label`) | 261-263 | 265-273 | 388-825 | 1.5-3.1x |
 | construct (`new GtkLabel({ label })`) | 4811-4890 | 4814-4983 | 5742-5919 | 1.2x |
 | inherited method (`get_visible()`) | 4.0 | 4.1-4.2 | 128-133 | 31x |
+| out values (`const [w, h] = get_size_request()`) | 4.2 | 12.0 | 165 | 13.8x |
 | startup to a mapped window (ms) | 73.1 | 69.7-77.8 | 73.3-78.7 | 1.0-1.1x |
 | startup peak RSS (MB) | | 88-101 | 105-120 | 1.2x |
 | notes app, 1000 notes, open to quit (ms) | | 102-123 | 116-186 | 1.1-1.5x |
