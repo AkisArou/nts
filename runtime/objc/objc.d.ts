@@ -76,6 +76,11 @@ declare module "objc:types" {
   // message a plain `string` is an `NSString`, as Swift's `String` is, so
   // the rare `char *` says so. A plain string passes; it crosses as UTF-8.
   export type CString = string & { readonly __c_utf8?: true };
+  // The converse, where a C function takes or returns an `NSString *`:
+  // outside a message a plain `string` is a C string, and Swift's `String`
+  // crosses a C function as it does a message -- `UIApplicationMain`'s class
+  // names, `NSStringFromClass`'s result. A plain string passes.
+  export type BridgedString = string & { readonly __objc_nsstring?: true };
 }
 
 // Hand-written. The Objective-C runtime's C API: what defining a class at run

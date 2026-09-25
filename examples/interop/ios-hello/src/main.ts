@@ -23,10 +23,12 @@ import {
   UIScreen,
   UIViewController,
   UIWindow,
+  UIApplicationMain,
   type UIApplicationDelegate,
 } from "objc:UIKit";
-import { ios_exit, ios_main, report } from "c:support";
 import { selector } from "objc:runtime";
+import { exit } from "c:stdlib";
+import { report } from "c:support";
 import type { c_int } from "c:types";
 
 // Swift's `class Controller: NSObject` with an `@objc func pressed(_:)`.
@@ -64,10 +66,13 @@ class AppDelegate extends UIResponder implements UIApplicationDelegate {
     button.sendActions({ for: UIControl.Event.touchUpInside });
     Timer.scheduledTimer({ withTimeInterval: 0.2, repeats: false }, () => {
       report("done");
-      ios_exit(0 as c_int);
+      exit(0 as c_int);
     });
     return true;
   }
 }
 
-ios_main("AppDelegate");
+// Swift's `UIApplicationMain(CommandLine.argc, CommandLine.unsafeArgv, nil,
+// NSStringFromClass(AppDelegate.self))`: UIKit makes the application, and the
+// delegate from its class's name, and runs until the program exits.
+UIApplicationMain(0, null, null, "AppDelegate");

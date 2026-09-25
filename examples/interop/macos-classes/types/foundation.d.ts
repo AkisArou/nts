@@ -4,7 +4,8 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { CString, Int, Int32, ObjCBool, UInt } from "objc:types";
+  import type { BridgedString, CString, Int, Int32, ObjCBool, UInt } from "objc:types";
+  import type { ClassObject } from "objc:runtime";
   import type { ByValue, Ptr, Struct } from "c:types";
 
   // Swift's `NSRange`, C's `struct _NSRange`.
@@ -215,4 +216,12 @@ declare module "objc:Foundation" {
     /** Swift's `environment: [String: String]`, a map of strings. */
     readonly environment: Map<string, string>;
   }
+
+  // Foundation's C functions over class names, as `nts bind-objc --function`
+  // writes them: an `NSString *` either way, which a C function's plain
+  // `string` is not.
+  /** @ntsSymbol NSClassFromString */
+  export function NSClassFromString(aClassName: BridgedString): ClassObject | null;
+  /** @ntsSymbol NSStringFromClass */
+  export function NSStringFromClass(aClass: ClassObject): BridgedString;
 }

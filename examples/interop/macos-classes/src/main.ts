@@ -4,6 +4,7 @@
 // against the same program in Objective-C (`reference/classes.m`).
 import {
   FileManager,
+  NSClassFromString,
   NSMutableArray,
   NSNumber,
   NSObject,
@@ -14,6 +15,7 @@ import {
   NSProcessInfo,
   NSSet,
   NSString,
+  NSStringFromClass,
   NSStringSet,
   XMLParser,
   type NSXMLParserDelegate,
@@ -202,6 +204,27 @@ function observed(): string {
   const line = `${replaced} ${loud.bump()} ${loud.tagged("y")}`;
   kvo_forget(loud);
   return line;
+}
+
+// Swift's `NSStringFromClass(NSClassFromString(name)!)`: a C function taking
+// and answering an `NSString *`, given a literal, a variable and a string
+// built at run time -- each crosses as the `NSString` the parameter
+// declares, whatever the argument's own type is.
+function roundTrip(name: string): string {
+  const cls = NSClassFromString(name);
+  return cls === null ? "none" : NSStringFromClass(cls);
+}
+
+function classNames(): string {
+  const name = "NSMutableArray";
+  const tail = "String";
+  const literal = NSClassFromString("NSObject");
+  return [
+    literal === null ? "none" : NSStringFromClass(literal),
+    roundTrip(name),
+    roundTrip("NS" + tail),
+    roundTrip("NoSuchClass"),
+  ].join(" ");
 }
 
 // Swift's `init(owner:opening:)` on an `NSObject` subclass: a constructor
@@ -399,6 +422,7 @@ function main(): void {
   report(`ledgers ${Ledger.described()}`);
   report(`overridden ${overridden()}`);
   report(`observed ${observed()}`);
+  report(`class-names ${classNames()}`);
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.

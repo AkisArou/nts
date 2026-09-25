@@ -22,6 +22,7 @@ import {
   NSObject,
   Timer,
   UIApplication,
+  UIApplicationMain,
   UINavigationController,
   UIResponder,
   UIScreen,
@@ -33,7 +34,8 @@ import {
   type UITableViewDataSource,
   type UITableViewDelegate,
 } from "objc:UIKit";
-import { ios_exit, ios_main, report } from "c:support";
+import { exit } from "c:stdlib";
+import { report } from "c:support";
 import type { c_int } from "c:types";
 import type { Int } from "objc:types";
 
@@ -110,10 +112,10 @@ class AppDelegate extends UIResponder implements UIApplicationDelegate {
     report(`height ${table.delegate?.tableViewHeightForRowAt?.(table, second) ?? -1}`);
     Timer.scheduledTimer({ withTimeInterval: 0.2, repeats: false }, () => {
       report("done");
-      ios_exit(0 as c_int);
+      exit(0 as c_int);
     });
     return true;
   }
 }
 
-ios_main("AppDelegate");
+UIApplicationMain(0, null, null, "AppDelegate");

@@ -50,7 +50,7 @@ mkdir -p "$out"
 "$nts" bind-objc --sdk "$sdk" --target x86_64-apple-ios17.0-simulator --module objc:UIKit \
   --framework UIKit --framework Foundation --class UIApplication --class UIWindow --class UIViewController \
   --class UIView --class UILabel --class UIButton --class UIScreen --class UIColor --class NSTimer \
-  --protocol UIApplicationDelegate --out "$out/uikit.d.ts" --values "$out/uikit.values.ts" >/dev/null
+  --function UIApplicationMain --protocol UIApplicationDelegate --out "$out/uikit.d.ts" --values "$out/uikit.values.ts" >/dev/null
 for generated in uikit.d.ts uikit.values.ts; do
   if [ "${NTS_REGENERATE:-}" = 1 ]; then
     command cp -f "$out/$generated" "$source/types/$generated"

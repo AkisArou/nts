@@ -750,6 +750,11 @@ struct Model<'a> {
     platform: &'static str,
     classes: Vec<Class>,
     protocols: Vec<Protocol>,
+    /// Set while a C function's parameters and result are spelled: there an
+    /// `NSString *` is a `BridgedString`, since a plain `string` is a C
+    /// string outside a message, and a collection is refused, since only a
+    /// message copies one.
+    in_c_function: bool,
     /// The protocols this binding declares, by Objective-C name: an `id<P>`
     /// of one is spelled `P`, Swift's `any P`.
     declared_protocols: BTreeSet<String>,
@@ -857,6 +862,7 @@ impl<'a> Model<'a> {
             classes: Vec::new(),
             protocols: Vec::new(),
             declared_protocols: bodies.protocols.keys().cloned().collect(),
+            in_c_function: false,
             mentioned: BTreeMap::new(),
             records: BTreeSet::new(),
             enums: BTreeMap::new(),
@@ -1472,7 +1478,14 @@ impl<'a> Model<'a> {
             let pointee = pointee.trim_start_matches("__kindof ");
             let base = pointee.split('<').next().unwrap_or_default().trim();
             if base == "NSString" && position != Position::Block {
+                if self.in_c_function {
+                    self.import("objc:types", "BridgedString");
+                    return Ok(or_null("BridgedString".to_owned()));
+                }
                 return Ok(or_null("string".to_owned()));
+            }
+            if self.in_c_function && position != Position::Block && matches!(base, "NSArray" | "NSDictionary" | "NSSet") {
+                return Err(format!("a collection, `{base}`, which a C function passes as the object it is and only a message copies"));
             }
             // Swift's `[T]`: an `NSArray` is copied into a TypeScript array and
             // out of one, its elements objects or strings. Not a mutable one,
@@ -1515,6 +1528,17 @@ impl<'a> Model<'a> {
         if position == Position::Parameter && (pointee == "const char" || pointee == "char") {
             self.import("objc:types", "CString");
             return Ok("CString".to_owned());
+        }
+        // Swift's `UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>`, a
+        // `char **` such as `UIApplicationMain`'s `argv`: an address, as
+        // Swift has it. Not a `CStrings`, which says C gives the array back
+        // when the call returns -- a claim no header makes.
+        if position == Position::Parameter {
+            let strings = pointee.replace("_Nullable", "").replace("_Nonnull", "");
+            if matches!(strings.split_whitespace().collect::<Vec<_>>().join(" ").as_str(), "char *" | "const char *" | "const char *const") {
+                self.import("c:types", "Ptr");
+                return Ok(or_null("Ptr<unknown>".to_owned()));
+            }
         }
         // Swift's `UnsafeMutablePointer<ObjCBool>`: a `BOOL *`, like
         // `fileExists(atPath:isDirectory:)`'s, whose byte is read as `[0]`

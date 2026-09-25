@@ -183,7 +183,10 @@ impl Model<'_> {
 
     /// The result, as a member or a function returns it.
     fn cf_result(&mut self, class: &Class, function: &str, result: &Value, symbol: Option<&Symbol>) -> std::result::Result<String, String> {
-        let spelled = self.spell(class, result, Position::Result)?;
+        self.in_c_function = true;
+        let spelled = self.spell(class, result, Position::Result);
+        self.in_c_function = false;
+        let spelled = spelled?;
         // Swift's word on whether it is optional, where there is one: the
         // SDK's API notes give Swift nullability the header leaves loose, as
         // `CGColorSpaceCreateDeviceRGB`'s `_Nullable` result is `CGColorSpace`.
@@ -267,7 +270,10 @@ impl Model<'_> {
         if labels.len() != parameters.len() {
             return Err(format!("Swift's `{title}` labels {} argument(s) where C takes {}", labels.len(), parameters.len()));
         }
-        Ok(self.arguments(class, parameters, labels)?.0)
+        self.in_c_function = true;
+        let arguments = self.arguments(class, parameters, labels);
+        self.in_c_function = false;
+        Ok(arguments?.0)
     }
 }
 

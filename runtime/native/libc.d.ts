@@ -608,7 +608,7 @@ declare module "c:stdbool" {
 }
 
 /**
- * Allocation, conversion, and the integer absolute values.
+ * Allocation, conversion, the integer absolute values, and `exit`.
  *
  * @ntsHeader stdlib.h
  */
@@ -627,6 +627,9 @@ declare module "c:stdlib" {
 
   export function abs(value: c_int): c_int;
   export function labs(value: c_long): c_long;
+  // Ends the process with `status`, flushing its streams: what Swift's
+  // `exit(0)` is, from a program whose run loop never returns.
+  export function exit(status: c_int): void;
 }
 
 /**

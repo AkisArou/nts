@@ -162,15 +162,26 @@ void *nts_nsstring_of(const NtsString *string) {
     return NULL;
   }
   CFIndex length = (CFIndex)string->length;
+  /* Neither call rejects its input: every byte is a Latin-1 character, and
+   * CFStringCreateWithCharacters takes any UTF-16 units, a lone surrogate
+   * included, as a JavaScript string holds them. So NULL means only that
+   * the allocation failed -- and the program stops there, as any failed
+   * allocation stops it, rather than handing a message a nil receiver that
+   * would answer every message sent to it with nothing. */
+  CFStringRef made;
   /* One-byte storage is Latin-1 by construction, which CoreFoundation keeps
    * as it is: no widening to UTF-16 on the way. */
   if (!(string->flags & NTS_TWO_BYTE)) {
-    return (void *)CFStringCreateWithBytes(
-        NULL, NTS_ELEMENTS(string, const UInt8), length,
-        kCFStringEncodingISOLatin1, false);
+    made = CFStringCreateWithBytes(NULL, NTS_ELEMENTS(string, const UInt8),
+                                   length, kCFStringEncodingISOLatin1, false);
+  } else {
+    made = CFStringCreateWithCharacters(
+        NULL, NTS_ELEMENTS(string, const UniChar), length);
   }
-  return (void *)CFStringCreateWithCharacters(
-      NULL, NTS_ELEMENTS(string, const UniChar), length);
+  if (!made) {
+    abort();
+  }
+  return (void *)made;
 }
 
 NtsString *nts_string_of_nsstring(const void *object) {

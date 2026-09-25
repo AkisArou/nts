@@ -1,10 +1,8 @@
-// Hand-written: output, and the application's start and end.
+// Hand-written: the fixture's output. The application itself needs no C --
+// `UIApplicationMain` is the binding's and `exit` is `c:stdlib`'s.
 /**
  * @ntsHeader "support.h"
  */
 declare module "c:support" {
-  import type { c_int } from "c:types";
   export function report(line: string): void;
-  export function ios_main(delegate: string): void;
-  export function ios_exit(code: c_int): void;
 }

@@ -3076,6 +3076,12 @@ fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> 
                 [property] if property.name == "___c_utf8" && property.optional && property.readonly => {
                     Some(Encoding::Utf8)
                 }
+                // `BridgedString`: a string an `NSString *` carries, which
+                // the call bridges (`bridge_strings`); read here as the text
+                // it is.
+                [property] if property.name == "___objc_nsstring" && property.optional && property.readonly => {
+                    Some(Encoding::Utf8)
+                }
                 _ => None,
             }
         }

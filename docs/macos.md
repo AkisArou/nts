@@ -35,7 +35,9 @@ nts bind-objc --module objc:AppKit --framework AppKit --framework Foundation \
 - A Core Foundation class (`--class CGContext`) is bound as Swift imports it:
   its methods and properties are the C functions that take it.
 - `--function` binds a free C function, such as
-  `CGColorSpaceCreateDeviceRGB`.
+  `CGColorSpaceCreateDeviceRGB`. An `NSString *` it takes or returns is a
+  `BridgedString`, which a plain `string` is passed as. Outside a message a
+  `string` is a C string, and the brand says this one is Swift's `String`.
 - `--witness out.c` writes a C program that asks the runtime on the Mac
   whether it implements every message the binding sends.
 
@@ -215,8 +217,10 @@ target is `target.ios({ minimumVersion: "17.0", arch: "x86_64" })`, bound
 with `nts bind-objc --sdk <iPhoneSimulator.sdk> --target
 x86_64-apple-ios17.0-simulator --framework UIKit ...`. An `application`
 product is an `.app` that `tooling/apple/run-ios.sh` installs and launches
-with `simctl`. UIKit starts it through `UIApplicationMain`, given the
-delegate class by name (see `examples/interop/ios-hello`, and
+with `simctl`. The program starts UIKit as Swift's `main.swift` does,
+`UIApplicationMain(0, null, null, "AppDelegate")`: bound with `--function
+UIApplicationMain`, the delegate class given by name, and `exit` from
+`c:stdlib` to end it (see `examples/interop/ios-hello`, and
 `examples/interop/ios-list` for a table view's data source). Each has a Swift
 twin in `reference/`, whose output is compared with the TypeScript program's.
 A device build needs signing, and is refused.

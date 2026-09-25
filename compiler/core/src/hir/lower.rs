@@ -44633,8 +44633,10 @@ impl<'a> FuncBuilder<'a> {
         // A message that returns an `NSString` the program reads as a
         // `string`, as Swift's `String`: copied by the CF host from its own
         // storage, the eight-bit bytes as they are where it has them. A nil
-        // object is `null`.
-        if target.send.is_some() && matches!(target.result, super::native::Type::Pointer(super::native::Pointee::Opaque(_))) {
+        // object is `null`. A C function's `BridgedString` result is one too
+        // (`bridge_strings`), and not the `char *` its `string` would be.
+        let ns_string = matches!(&target.result, super::native::Type::Pointer(super::native::Pointee::Opaque(handle)) if *handle == super::native::Handle::ns_string());
+        if (target.send.is_some() && matches!(target.result, super::native::Type::Pointer(super::native::Pointee::Opaque(_)))) || ns_string {
             let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
             return Ok(self.runtime_call("nts_string_of_nsstring", vec![pointer], ty, origin));
         }
@@ -45472,11 +45474,7 @@ impl<'a> FuncBuilder<'a> {
                 _ => self.vtable_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?,
             };
         }
-        if let Some(decl) = declaration
-            && let Some(selector) = selector
-        {
-            self.make_message(call, decl, &mut native, signature, selector, class_send)?;
-        }
+        self.make_call(call, declaration, &mut native, signature, (selector, class_send))?;
         self.refuse_unbridged(call, &native)?;
         if let Some(free) = declaration
             .and_then(|decl| self.node(decl).native.as_ref())
@@ -45754,6 +45752,24 @@ impl<'a> FuncBuilder<'a> {
         Ok(Some(self.push(OpKind::ObjcClass { name, frameworks }, ty, self.origin(id))))
     }
 
+    /// `native` as the message `selector` names, where it names one, and
+    /// otherwise as the C function it is: a C function's `BridgedString`,
+    /// Swift's `String` where the header says `NSString *`, still bridged.
+    fn make_call(
+        &self,
+        call: NodeId,
+        declaration: Option<NodeId>,
+        native: &mut super::native::Function,
+        signature: &nts_semantic_schema::SignatureRecord,
+        (selector, class_send): (Option<String>, Option<String>),
+    ) -> Result<(), Diagnostic> {
+        if let (Some(decl), Some(selector)) = (declaration, selector) {
+            return self.make_message(call, decl, native, signature, selector, class_send);
+        }
+        bridge_strings(native, signature, self.snapshot, StringsBridged::Branded);
+        Ok(())
+    }
+
     /// `native` as the Objective-C message `selector` names: its closures,
     /// strings and arrays bridged as Swift's are, and the ownership ARC's
     /// method families give its result and receiver.
@@ -45768,7 +45784,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<(), Diagnostic> {
         bridge_blocks(native, signature, self.snapshot);
         let send = self.objc_send(call, decl, native, selector, class_send)?;
-        bridge_strings(native, signature, self.snapshot);
+        bridge_strings(native, signature, self.snapshot, StringsBridged::Plain);
         // A family is a claim about the returned *object*, so it applies
         // only where the result is a pointer, as in clang: a `newValue`
         // returning a number owns nothing.
@@ -54294,21 +54310,42 @@ fn bridge_blocks(native: &mut super::native::Function, signature: &nts_semantic_
     }
 }
 
+/// Which strings a call bridges to `NSString`s: see [`bridge_strings`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StringsBridged {
+    /// A message's: a plain `string`, or a `BridgedString`.
+    Plain,
+    /// A C function's: a `BridgedString` only.
+    Branded,
+}
+
 /// Swift's `String` at an Objective-C message: a plain `string` parameter is
 /// an `NSString` (`Role::NSString`), and a plain `string` result is one the
 /// program reads back as text. A `CString` stays a C string, and so does
-/// anything a C function takes.
-fn bridge_strings(native: &mut super::native::Function, signature: &nts_semantic_schema::SignatureRecord, snapshot: &SemanticSnapshot) {
-    let plain = |ty: TypeId| {
-        let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-        match kind(ty) {
-            Some(TypeKind::String) => true,
-            Some(TypeKind::Union(parts)) => {
-                parts.iter().any(|part| matches!(kind(*part), Some(TypeKind::String)))
-                    && parts.iter().all(|part| matches!(kind(*part), Some(TypeKind::String | TypeKind::Null)))
-            }
-            _ => false,
+/// what a C function takes -- unless its binding says `BridgedString`, where
+/// the header's type is `NSString *`.
+fn bridge_strings(
+    native: &mut super::native::Function,
+    signature: &nts_semantic_schema::SignatureRecord,
+    snapshot: &SemanticSnapshot,
+    which: StringsBridged,
+) {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let branded = |id: TypeId| match kind(id) {
+        Some(TypeKind::Intersection(parts)) => parts.iter().any(|part| {
+            matches!(kind(*part), Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.name == "___objc_nsstring"))
+        }),
+        _ => false,
+    };
+    let text = |id: TypeId| match which {
+        StringsBridged::Plain => matches!(kind(id), Some(TypeKind::String)) || branded(id),
+        StringsBridged::Branded => branded(id),
+    };
+    let plain = |ty: TypeId| match kind(ty) {
+        Some(TypeKind::Union(parts)) => {
+            parts.iter().any(|part| text(*part)) && parts.iter().all(|part| text(*part) || matches!(kind(*part), Some(TypeKind::Null)))
         }
+        _ => text(ty),
     };
     let utf8 = super::native::Role::String(super::native::Encoding::Utf8);
     let ns_string = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::ns_string()));
@@ -54339,7 +54376,7 @@ fn bridge_strings(native: &mut super::native::Function, signature: &nts_semantic
     }
     // A message's `string[]` is Swift's `[String]`, an `NSArray` of
     // `NSString`s, where a C function's is a NULL-terminated `char **`.
-    if native.returns_string.as_ref().is_some_and(|returned| returned.array) {
+    if which == StringsBridged::Plain && native.returns_string.as_ref().is_some_and(|returned| returned.array) {
         native.returns_string = None;
         native.returns_array = Some(super::native::Bridged::String);
         native.result = super::native::Type::Pointer(super::native::Pointee::Opaque(super::native::Handle::objc("NSArray")));

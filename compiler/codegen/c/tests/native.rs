@@ -456,10 +456,13 @@ fn unrelated_declarations_cannot_supply_a_calls_abi() {
 fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
     let source = r#"
         import type { c_int, c_long, c_float, c_double } from "c:types";
-        import { abs, labs } from "c:stdlib";
+        import { abs, exit, labs } from "c:stdlib";
         import { fabs, fabsf, sqrtf, pow, fmod, floor, ceil, trunc, copysign, ldexp } from "c:math";
         import * as math from "c:math";
         export function run(n: number): number {
+            // `exit` is called where the caller's argument never goes: its
+            // prototype still meets `stdlib.h`'s, and its call is emitted.
+            if (n > 1e300) exit(3 as c_int);
             // `long` is 64 bits here and bigint-branded. A literal rather than
             // `BigInt(n)`, which is a runtime call this translation unit does
             // not link -- the value is the same one `(long)(-3.75)` gave.
@@ -497,8 +500,9 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
         let Some(function) = line.strip_prefix("export function ") else { continue; };
         if std::mem::take(&mut intrinsic) { continue; }
         let function = function.split('(').next().unwrap();
+        // A function answering nothing is called as a statement.
         assert!(
-            text.contains(&format!("= {function}(")),
+            text.contains(&format!("= {function}(")) || text.contains(&format!("    {function}(")),
             "{function} must be called by its actual linker name"
         );
     }

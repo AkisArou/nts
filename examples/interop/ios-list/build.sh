@@ -51,7 +51,7 @@ mkdir -p "$out"
   --framework UIKit --framework Foundation --class UIApplication --class UIWindow --class UINavigationController \
   --class UIViewController --class UINavigationBar --class UINavigationItem --class UIView --class UITableView \
   --class UITableViewCell --class UILabel --class UIScreen --class UIColor --class NSTimer --class NSIndexPath \
-  --protocol UIApplicationDelegate --protocol UITableViewDataSource --protocol UITableViewDelegate --out "$out/uikit.d.ts" --values "$out/uikit.values.ts" >/dev/null
+  --function UIApplicationMain --protocol UIApplicationDelegate --protocol UITableViewDataSource --protocol UITableViewDelegate --out "$out/uikit.d.ts" --values "$out/uikit.values.ts" >/dev/null
 for generated in uikit.d.ts uikit.values.ts; do
   if [ "${NTS_REGENERATE:-}" = 1 ]; then
     command cp -f "$out/$generated" "$source/types/$generated"

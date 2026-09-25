@@ -127,6 +127,18 @@ static NSString *observed(void) {
   return line;
 }
 
+static NSString *classNames(void) {
+  NSString *name = @"NSMutableArray";
+  NSString *tail = @"String";
+  Class found[] = {NSClassFromString(@"NSObject"), NSClassFromString(name),
+                   NSClassFromString([@"NS" stringByAppendingString:tail]), NSClassFromString(@"NoSuchClass")};
+  NSMutableArray<NSString *> *parts = [NSMutableArray array];
+  for (int at = 0; at < 4; at++) {
+    [parts addObject:found[at] ? NSStringFromClass(found[at]) : @"none"];
+  }
+  return [parts componentsJoinedByString:@" "];
+}
+
 @interface Ledger : NSObject
 @property NSString *owner;
 @property NSInteger balance;
@@ -308,6 +320,7 @@ int main(void) {
     @autoreleasepool {
       printf("overridden %s\n", overridden().UTF8String);
       printf("observed %s\n", observed().UTF8String);
+      printf("class-names %s\n", classNames().UTF8String);
     }
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.
