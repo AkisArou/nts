@@ -1,0 +1,1573 @@
+//! Printing a compiled program back to TypeScript, by splicing.
+//!
+//! Most of a compiled file is what the user wrote: every node of the output
+//! that is identical to the original node with the same `_nodeId` is copied as
+//! its exact source text, comments and formatting included. Only what the
+//! compiler changed -- compiled function bodies, the import of its runtime --
+//! is printed, and a type anywhere in printed code is still copied from the
+//! source by its span, so the user's own spelling of every type survives.
+//!
+//! Parentheses are decided by precedence, never by what the source had: a
+//! printed node's operands may be copied text, and copied text is exactly a
+//! node, so wrapping it is always right.
+
+use std::fmt::Write as _;
+
+use react_compiler_ast::File;
+use react_compiler_ast::common::{BaseNode, RawNode};
+use react_compiler_ast::declarations::{
+    Declaration, ExportDefaultDecl, ExportKind, ExportSpecifier, ImportKind, ImportSpecifier, ModuleExportName,
+};
+use react_compiler_ast::expressions::{
+    ArrowFunctionBody, Expression, Identifier, ObjectExpressionProperty, ObjectMethodKind,
+};
+use react_compiler_ast::jsx::{
+    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXChild, JSXElement, JSXElementName,
+    JSXExpressionContainerExpr, JSXFragment, JSXMemberExprObject, JSXMemberExpression,
+};
+use react_compiler_ast::literals::StringLiteral;
+use react_compiler_ast::operators::{AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator, UpdateOperator};
+use react_compiler_ast::patterns::{ObjectPatternProperty, PatternLike};
+use react_compiler_ast::statements::{
+    BlockStatement, ForInOfLeft, ForInit, Statement, VariableDeclaration, VariableDeclarationKind,
+};
+use react_compiler::entrypoint::BindingRenameInfo;
+use react_compiler_ast::scope::BindingId;
+use rustc_hash::FxHashMap;
+use serde::Serialize;
+use serde_json::Value;
+
+use crate::convert::text::SourceText;
+
+/// Prints `compiled`, the compiler's output for `original`, whose text is
+/// `source`, applying the compiler's `renames`.
+#[must_use]
+pub fn print_file(source: &SourceText, original: &File, compiled: &File, renames: &[BindingRenameInfo]) -> String {
+    let mut originals = FxHashMap::default();
+    if let Ok(value) = serde_json::to_value(original) {
+        index_nodes(&value, &mut originals);
+    }
+    let (new_names, renamed_starts) = renamed_references(compiled, renames);
+    let mut printer = Printer { source, originals, renamed: new_names, renamed_starts, out: String::new(), indent: 0 };
+    printer.program(original, compiled);
+    printer.out
+}
+
+/// The identifiers a rename applies to: every one that resolves, in the
+/// compiled program, to the binding declared at the rename's position under
+/// its original name. The Babel plugin applies the compiler's renames the same
+/// way, with Babel's `scope.rename` over the compiled program.
+fn renamed_references(compiled: &File, renames: &[BindingRenameInfo]) -> (FxHashMap<usize, String>, Vec<u32>) {
+    if renames.is_empty() {
+        return (FxHashMap::default(), Vec::new());
+    }
+    let resolution = crate::scope::resolve(compiled);
+    let mut new_names: FxHashMap<BindingId, &str> = FxHashMap::default();
+    for rename in renames {
+        for binding in &resolution.info.bindings {
+            if binding.name == rename.original && binding.declaration_start == Some(rename.declaration_start) {
+                new_names.insert(binding.id, &rename.renamed);
+            }
+        }
+    }
+    let mut by_address = FxHashMap::default();
+    let mut starts = Vec::new();
+    for (address, (binding, start)) in &resolution.by_address {
+        if let Some(name) = new_names.get(binding) {
+            by_address.insert(*address, (*name).to_owned());
+            starts.extend(*start);
+        }
+    }
+    starts.sort_unstable();
+    (by_address, starts)
+}
+
+/// Every node of the original program with an id, as JSON, to tell an
+/// unchanged node from a changed one.
+fn index_nodes(value: &Value, into: &mut FxHashMap<u64, Value>) {
+    match value {
+        Value::Object(map) => {
+            if let Some(id) = map.get("_nodeId").and_then(Value::as_u64) {
+                into.insert(id, value.clone());
+            }
+            for child in map.values() {
+                index_nodes(child, into);
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|item| index_nodes(item, into)),
+        _ => {}
+    }
+}
+
+struct Printer<'a> {
+    source: &'a SourceText,
+    originals: FxHashMap<u64, Value>,
+    /// Identifiers to print under a new name, by node address.
+    renamed: FxHashMap<usize, String>,
+    /// Where renamed identifiers sit: a copied node must not span one.
+    renamed_starts: Vec<u32>,
+    out: String,
+    indent: usize,
+}
+
+// Precedence, lowest first; an operand printed at a lower level than its
+// position needs is wrapped in parentheses.
+const SEQUENCE: u8 = 1;
+const ASSIGN: u8 = 2;
+const CONDITIONAL: u8 = 3;
+const NULLISH: u8 = 4;
+const OR: u8 = 5;
+const AND: u8 = 6;
+const BIT_OR: u8 = 7;
+const BIT_XOR: u8 = 8;
+const BIT_AND: u8 = 9;
+const EQUALITY: u8 = 10;
+const RELATIONAL: u8 = 11;
+const SHIFT: u8 = 12;
+const ADDITIVE: u8 = 13;
+const MULTIPLICATIVE: u8 = 14;
+const EXPONENT: u8 = 15;
+const UNARY: u8 = 16;
+const POSTFIX: u8 = 17;
+const CALL: u8 = 18;
+const PRIMARY: u8 = 20;
+
+impl Printer<'_> {
+    // ---- splicing --------------------------------------------------------
+
+    /// The node's source text, if it is identical to the original node it
+    /// came from.
+    fn unchanged<T: Serialize>(&self, node: &T, base: &BaseNode) -> Option<String> {
+        let (id, start, end) = (base.node_id?, base.start?, base.end?);
+        let first_inside = self.renamed_starts.partition_point(|at| *at < start);
+        if self.renamed_starts.get(first_inside).is_some_and(|at| *at < end) {
+            return None;
+        }
+        let original = self.originals.get(&u64::from(id))?;
+        let value = serde_json::to_value(node).ok()?;
+        (&value == original).then(|| self.source.slice(start, end))
+    }
+
+    /// An opaque node -- a type, a class member -- as its source text.
+    fn raw(&self, raw: &RawNode) -> Option<String> {
+        let value = raw.parse_value();
+        let start = u32::try_from(value.get("start")?.as_u64()?).ok()?;
+        let end = u32::try_from(value.get("end")?.as_u64()?).ok()?;
+        Some(self.source.slice(start, end))
+    }
+
+    /// An identifier's name as printed: its new name if the compiler renamed
+    /// the binding it resolves to.
+    fn name<'n>(&'n self, base: &BaseNode, name: &'n str) -> &'n str {
+        self.renamed.get(&crate::scope::address(base)).map_or(name, String::as_str)
+    }
+
+    fn write(&mut self, text: &str) {
+        self.out.push_str(text);
+    }
+
+    fn newline(&mut self) {
+        self.out.push('\n');
+        for _ in 0..self.indent {
+            self.out.push_str("  ");
+        }
+    }
+
+    // ---- the program -----------------------------------------------------
+
+    /// The compiled program's statements in order: an unchanged one as its
+    /// source text with the gap before it (comments, blank lines), a changed
+    /// one printed in the original's place, a new one printed where it stands.
+    fn program(&mut self, original: &File, compiled: &File) {
+        let mut cursor = 0u32;
+        let first_start = original.program.body.first().and_then(|s| statement_base(s).start).unwrap_or(0);
+        // The file's leading comments (a license, `// @flow`) stay first.
+        let header_end = self.source.token_start(0).min(first_start);
+        if header_end > 0 {
+            self.write(&self.source.slice(0, header_end));
+            cursor = header_end;
+        }
+        for directive in &compiled.program.directives {
+            let _ = writeln!(self.out, "\"{}\";", directive.value.value);
+        }
+        for statement in &compiled.program.body {
+            let base = statement_base(statement);
+            let original_here = base.node_id.is_some() && base.start.is_some_and(|s| s >= cursor);
+            if original_here {
+                let start = base.start.unwrap_or(cursor);
+                self.write(&self.source.slice(cursor, start));
+                self.statement(statement);
+                cursor = base.end.unwrap_or(start);
+            } else {
+                self.statement(statement);
+                self.write("\n");
+            }
+        }
+        self.write(&self.source.slice(cursor, self.source.len()));
+    }
+
+    fn statements(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            self.newline();
+            self.statement(statement);
+        }
+    }
+
+    fn block(&mut self, block: &BlockStatement) {
+        if let Some(text) = self.unchanged(block, &block.base) {
+            self.write(&text);
+            return;
+        }
+        self.write("{");
+        self.indent += 1;
+        for directive in &block.directives {
+            self.newline();
+            let _ = write!(self.out, "\"{}\";", directive.value.value);
+        }
+        self.statements(&block.body);
+        self.indent -= 1;
+        if !block.body.is_empty() || !block.directives.is_empty() {
+            self.newline();
+        }
+        self.write("}");
+    }
+
+    // ---- statements ------------------------------------------------------
+
+    #[allow(clippy::too_many_lines)]
+    fn statement(&mut self, statement: &Statement) {
+        if let Some(text) = self.unchanged(statement, statement_base(statement)) {
+            self.write(&text);
+            return;
+        }
+        match statement {
+            Statement::BlockStatement(block) => self.block(block),
+            Statement::EmptyStatement(_) => self.write(";"),
+            Statement::DebuggerStatement(_) => self.write("debugger;"),
+            Statement::ExpressionStatement(s) => {
+                let parenthesise = starts_ambiguously(&s.expression, true);
+                if parenthesise {
+                    self.write("(");
+                }
+                self.expression(&s.expression, SEQUENCE);
+                if parenthesise {
+                    self.write(")");
+                }
+                self.write(";");
+            }
+            Statement::ReturnStatement(s) => {
+                self.write("return");
+                if let Some(argument) = &s.argument {
+                    self.write(" ");
+                    self.expression(argument, SEQUENCE);
+                }
+                self.write(";");
+            }
+            Statement::ThrowStatement(s) => {
+                self.write("throw ");
+                self.expression(&s.argument, SEQUENCE);
+                self.write(";");
+            }
+            Statement::IfStatement(s) => {
+                self.write("if (");
+                self.expression(&s.test, SEQUENCE);
+                self.write(") ");
+                self.statement(&s.consequent);
+                if let Some(alternate) = &s.alternate {
+                    if matches!(s.consequent.as_ref(), Statement::BlockStatement(_)) {
+                        self.write(" else ");
+                    } else {
+                        self.newline();
+                        self.write("else ");
+                    }
+                    self.statement(alternate);
+                }
+            }
+            Statement::WhileStatement(s) => {
+                self.write("while (");
+                self.expression(&s.test, SEQUENCE);
+                self.write(") ");
+                self.statement(&s.body);
+            }
+            Statement::DoWhileStatement(s) => {
+                self.write("do ");
+                self.statement(&s.body);
+                self.write(" while (");
+                self.expression(&s.test, SEQUENCE);
+                self.write(");");
+            }
+            Statement::ForStatement(s) => {
+                self.write("for (");
+                if let Some(init) = &s.init {
+                    match init.as_ref() {
+                        ForInit::VariableDeclaration(d) => self.variable_declaration(d, true),
+                        ForInit::Expression(e) => self.expression_no_in(e),
+                    }
+                }
+                self.write(";");
+                if let Some(test) = &s.test {
+                    self.write(" ");
+                    self.expression(test, SEQUENCE);
+                }
+                self.write(";");
+                if let Some(update) = &s.update {
+                    self.write(" ");
+                    self.expression(update, SEQUENCE);
+                }
+                self.write(") ");
+                self.statement(&s.body);
+            }
+            Statement::ForOfStatement(s) => {
+                self.write(if s.is_await { "for await (" } else { "for (" });
+                self.for_left(&s.left);
+                self.write(" of ");
+                self.expression(&s.right, ASSIGN);
+                self.write(") ");
+                self.statement(&s.body);
+            }
+            Statement::ForInStatement(s) => {
+                self.write("for (");
+                self.for_left(&s.left);
+                self.write(" in ");
+                self.expression(&s.right, SEQUENCE);
+                self.write(") ");
+                self.statement(&s.body);
+            }
+            Statement::BreakStatement(s) => {
+                self.write("break");
+                if let Some(label) = &s.label {
+                    let _ = write!(self.out, " {}", label.name);
+                }
+                self.write(";");
+            }
+            Statement::ContinueStatement(s) => {
+                self.write("continue");
+                if let Some(label) = &s.label {
+                    let _ = write!(self.out, " {}", label.name);
+                }
+                self.write(";");
+            }
+            Statement::LabeledStatement(s) => {
+                let _ = write!(self.out, "{}: ", s.label.name);
+                self.statement(&s.body);
+            }
+            Statement::SwitchStatement(s) => {
+                self.write("switch (");
+                self.expression(&s.discriminant, SEQUENCE);
+                self.write(") {");
+                self.indent += 1;
+                for case in &s.cases {
+                    self.newline();
+                    if let Some(test) = &case.test {
+                        self.write("case ");
+                        self.expression(test, SEQUENCE);
+                        self.write(":");
+                    } else {
+                        self.write("default:");
+                    }
+                    self.indent += 1;
+                    self.statements(&case.consequent);
+                    self.indent -= 1;
+                }
+                self.indent -= 1;
+                self.newline();
+                self.write("}");
+            }
+            Statement::TryStatement(s) => {
+                self.write("try ");
+                self.block(&s.block);
+                if let Some(handler) = &s.handler {
+                    self.write(" catch ");
+                    if let Some(param) = &handler.param {
+                        self.write("(");
+                        self.pattern(param);
+                        self.write(") ");
+                    }
+                    self.block(&handler.body);
+                }
+                if let Some(finalizer) = &s.finalizer {
+                    self.write(" finally ");
+                    self.block(finalizer);
+                }
+            }
+            Statement::VariableDeclaration(d) => {
+                self.variable_declaration(d, false);
+                self.write(";");
+            }
+            Statement::FunctionDeclaration(f) => self.function_declaration(f),
+            Statement::ImportDeclaration(import) => self.import(import),
+            Statement::ExportNamedDeclaration(export) => {
+                self.write("export ");
+                if matches!(export.export_kind, Some(ExportKind::Type)) && export.declaration.is_none() {
+                    self.write("type ");
+                }
+                if let Some(declaration) = &export.declaration {
+                    self.declaration(declaration);
+                } else {
+                    self.write("{ ");
+                    for (at, specifier) in export.specifiers.iter().enumerate() {
+                        if at > 0 {
+                            self.write(", ");
+                        }
+                        self.export_specifier(specifier);
+                    }
+                    self.write(" }");
+                    if let Some(source) = &export.source {
+                        self.write(" from ");
+                        self.string_literal(source);
+                    }
+                    self.write(";");
+                }
+            }
+            Statement::ExportDefaultDeclaration(export) => {
+                self.write("export default ");
+                match export.declaration.as_ref() {
+                    ExportDefaultDecl::FunctionDeclaration(f) => self.function_declaration(f),
+                    ExportDefaultDecl::ClassDeclaration(c) => self.span(&c.base),
+                    ExportDefaultDecl::Expression(e) => {
+                        let parenthesise = starts_ambiguously(e, false);
+                        if parenthesise {
+                            self.write("(");
+                        }
+                        self.expression(e, ASSIGN);
+                        if parenthesise {
+                            self.write(")");
+                        }
+                        self.write(";");
+                    }
+                    ExportDefaultDecl::EnumDeclaration(d) => self.span(&d.base),
+                }
+            }
+            Statement::ExportAllDeclaration(export) => {
+                self.write("export * from ");
+                self.string_literal(&export.source);
+                self.write(";");
+            }
+            // Declarations the compiler passes through: their source text.
+            other => self.span(statement_base(other)),
+        }
+    }
+
+    /// A node, whatever it is, as its source text.
+    fn span(&mut self, base: &BaseNode) {
+        if let (Some(start), Some(end)) = (base.start, base.end) {
+            self.write(&self.source.slice(start, end));
+        }
+    }
+
+    fn declaration(&mut self, declaration: &Declaration) {
+        match declaration {
+            Declaration::FunctionDeclaration(f) => self.function_declaration(f),
+            Declaration::ClassDeclaration(c) => self.span(&c.base),
+            Declaration::VariableDeclaration(d) => {
+                self.variable_declaration(d, false);
+                self.write(";");
+            }
+            Declaration::TSTypeAliasDeclaration(d) => self.span(&d.base),
+            Declaration::TSInterfaceDeclaration(d) => self.span(&d.base),
+            Declaration::TSEnumDeclaration(d) => self.span(&d.base),
+            Declaration::TSModuleDeclaration(d) => self.span(&d.base),
+            Declaration::TSDeclareFunction(d) => self.span(&d.base),
+            Declaration::TypeAlias(d) => self.span(&d.base),
+            Declaration::OpaqueType(d) => self.span(&d.base),
+            Declaration::InterfaceDeclaration(d) => self.span(&d.base),
+            Declaration::EnumDeclaration(d) => self.span(&d.base),
+        }
+    }
+
+    fn variable_declaration(&mut self, declaration: &VariableDeclaration, in_for: bool) {
+        if let Some(text) = self.unchanged(declaration, &declaration.base) {
+            // A copied declaration statement carries its own `;`.
+            self.write(text.trim_end_matches(';'));
+            return;
+        }
+        self.write(match declaration.kind {
+            VariableDeclarationKind::Var => "var ",
+            VariableDeclarationKind::Let => "let ",
+            VariableDeclarationKind::Const => "const ",
+            VariableDeclarationKind::Using => "using ",
+            VariableDeclarationKind::AwaitUsing => "await using ",
+        });
+        for (at, declarator) in declaration.declarations.iter().enumerate() {
+            if at > 0 {
+                self.write(", ");
+            }
+            self.pattern(&declarator.id);
+            if let Some(init) = &declarator.init {
+                self.write(" = ");
+                if in_for {
+                    self.expression_no_in(init);
+                } else {
+                    self.expression(init, ASSIGN);
+                }
+            }
+        }
+    }
+
+    fn for_left(&mut self, left: &ForInOfLeft) {
+        match left {
+            ForInOfLeft::VariableDeclaration(d) => self.variable_declaration(d, true),
+            ForInOfLeft::Pattern(p) => self.pattern(p),
+        }
+    }
+
+    /// An expression where a bare `in` would read as a `for…in`.
+    fn expression_no_in(&mut self, expression: &Expression) {
+        if contains_top_level_in(expression) {
+            self.write("(");
+            self.expression(expression, SEQUENCE);
+            self.write(")");
+        } else {
+            self.expression(expression, SEQUENCE);
+        }
+    }
+
+    fn import(&mut self, import: &react_compiler_ast::declarations::ImportDeclaration) {
+        self.write("import ");
+        if matches!(import.import_kind, Some(ImportKind::Type)) {
+            self.write("type ");
+        }
+        let mut named = Vec::new();
+        let mut wrote = false;
+        for specifier in &import.specifiers {
+            match specifier {
+                ImportSpecifier::ImportDefaultSpecifier(s) => {
+                    self.write(&s.local.name);
+                    wrote = true;
+                }
+                ImportSpecifier::ImportNamespaceSpecifier(s) => {
+                    if wrote {
+                        self.write(", ");
+                    }
+                    let _ = write!(self.out, "* as {}", s.local.name);
+                    wrote = true;
+                }
+                ImportSpecifier::ImportSpecifier(s) => named.push(s),
+            }
+        }
+        if !named.is_empty() {
+            if wrote {
+                self.write(", ");
+            }
+            self.write("{ ");
+            for (at, s) in named.iter().enumerate() {
+                if at > 0 {
+                    self.write(", ");
+                }
+                if matches!(s.import_kind, Some(ImportKind::Type)) {
+                    self.write("type ");
+                }
+                let imported = module_export_name(&s.imported);
+                if imported == s.local.name {
+                    self.write(&s.local.name);
+                } else {
+                    let _ = write!(self.out, "{imported} as {}", s.local.name);
+                }
+            }
+            self.write(" }");
+            wrote = true;
+        }
+        if wrote {
+            self.write(" from ");
+        }
+        self.string_literal(&import.source);
+        self.write(";");
+    }
+
+    fn export_specifier(&mut self, specifier: &ExportSpecifier) {
+        match specifier {
+            ExportSpecifier::ExportSpecifier(s) => {
+                let (local, exported) = (module_export_name(&s.local), module_export_name(&s.exported));
+                if matches!(s.export_kind, Some(ExportKind::Type)) {
+                    self.write("type ");
+                }
+                if local == exported {
+                    self.write(&local);
+                } else {
+                    let _ = write!(self.out, "{local} as {exported}");
+                }
+            }
+            ExportSpecifier::ExportDefaultSpecifier(s) => self.write(&s.exported.name),
+            ExportSpecifier::ExportNamespaceSpecifier(s) => {
+                let _ = write!(self.out, "* as {}", module_export_name(&s.exported));
+            }
+        }
+    }
+
+    // ---- functions -------------------------------------------------------
+
+    fn function_declaration(&mut self, f: &react_compiler_ast::statements::FunctionDeclaration) {
+        if let Some(text) = self.unchanged(f, &f.base) {
+            self.write(&text);
+            return;
+        }
+        if f.is_async {
+            self.write("async ");
+        }
+        self.write(if f.generator { "function* " } else { "function " });
+        if let Some(id) = &f.id {
+            self.write(&id.name);
+        }
+        self.function_rest(f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+        self.write(" ");
+        self.block(&f.body);
+    }
+
+    /// `<T>(params): R`, the part every function form shares.
+    fn function_rest(&mut self, type_parameters: Option<&RawNode>, params: &[PatternLike], return_type: Option<&RawNode>) {
+        if let Some(text) = type_parameters.and_then(|t| self.raw(t)) {
+            self.write(&text);
+        }
+        self.write("(");
+        for (at, param) in params.iter().enumerate() {
+            if at > 0 {
+                self.write(", ");
+            }
+            self.pattern(param);
+        }
+        self.write(")");
+        if let Some(text) = return_type.and_then(|t| self.raw(t)) {
+            self.write(&text);
+        }
+    }
+
+    // ---- patterns --------------------------------------------------------
+
+    fn annotation(&mut self, annotation: Option<&RawNode>) {
+        if let Some(text) = annotation.and_then(|a| self.raw(a)) {
+            self.write(&text);
+        }
+    }
+
+    fn identifier_binding(&mut self, identifier: &Identifier) {
+        let name = self.name(&identifier.base, &identifier.name).to_owned();
+        self.write(&name);
+        if identifier.optional == Some(true) {
+            self.write("?");
+        }
+        self.annotation(identifier.type_annotation.as_ref());
+    }
+
+    fn pattern(&mut self, pattern: &PatternLike) {
+        match pattern {
+            PatternLike::Identifier(identifier) => {
+                if let Some(text) = self.unchanged(identifier, &identifier.base) {
+                    self.write(&text);
+                } else {
+                    self.identifier_binding(identifier);
+                }
+            }
+            PatternLike::ObjectPattern(object) => {
+                if let Some(text) = self.unchanged(object, &object.base) {
+                    self.write(&text);
+                    return;
+                }
+                self.write("{");
+                for (at, property) in object.properties.iter().enumerate() {
+                    self.write(if at == 0 { " " } else { ", " });
+                    match property {
+                        ObjectPatternProperty::ObjectProperty(p) => {
+                            // Shorthand only while the value still prints as the key's name.
+                            // `{ a }` and `{ a = 1 }` stay shorthand only while the
+                            // value still prints as the key's name.
+                            let shorthand = p.shorthand
+                                && match (p.key.as_ref(), p.value.as_ref()) {
+                                    (Expression::Identifier(k), PatternLike::Identifier(v)) => {
+                                        k.name == self.name(&v.base, &v.name) && v.type_annotation.is_none()
+                                    }
+                                    (Expression::Identifier(k), PatternLike::AssignmentPattern(a)) => {
+                                        matches!(a.left.as_ref(), PatternLike::Identifier(l) if k.name == self.name(&l.base, &l.name))
+                                    }
+                                    _ => false,
+                                };
+                            if shorthand {
+                                self.pattern(&p.value);
+                            } else {
+                                self.property_key(&p.key, p.computed);
+                                self.write(": ");
+                                self.pattern(&p.value);
+                            }
+                        }
+                        ObjectPatternProperty::RestElement(r) => {
+                            self.write("...");
+                            self.pattern(&r.argument);
+                        }
+                    }
+                }
+                self.write(if object.properties.is_empty() { "}" } else { " }" });
+                self.annotation(object.type_annotation.as_ref());
+            }
+            PatternLike::ArrayPattern(array) => {
+                if let Some(text) = self.unchanged(array, &array.base) {
+                    self.write(&text);
+                    return;
+                }
+                self.write("[");
+                for (at, element) in array.elements.iter().enumerate() {
+                    if at > 0 {
+                        self.write(", ");
+                    }
+                    if let Some(element) = element {
+                        self.pattern(element);
+                    }
+                }
+                if array.elements.last().is_some_and(Option::is_none) {
+                    self.write(",");
+                }
+                self.write("]");
+                self.annotation(array.type_annotation.as_ref());
+            }
+            PatternLike::AssignmentPattern(assignment) => {
+                self.pattern(&assignment.left);
+                self.write(" = ");
+                self.expression(&assignment.right, ASSIGN);
+            }
+            PatternLike::RestElement(rest) => {
+                self.write("...");
+                self.pattern(&rest.argument);
+                self.annotation(rest.type_annotation.as_ref());
+            }
+            PatternLike::MemberExpression(member) => self.expression(&Expression::MemberExpression(member.clone()), CALL),
+            PatternLike::TSAsExpression(e) => self.expression(&Expression::TSAsExpression(e.clone()), CALL),
+            PatternLike::TSSatisfiesExpression(e) => self.expression(&Expression::TSSatisfiesExpression(e.clone()), CALL),
+            PatternLike::TSNonNullExpression(e) => self.expression(&Expression::TSNonNullExpression(e.clone()), CALL),
+            PatternLike::TSTypeAssertion(e) => self.expression(&Expression::TSTypeAssertion(e.clone()), CALL),
+            PatternLike::TypeCastExpression(e) => self.expression(&e.expression, CALL),
+        }
+    }
+
+    // ---- expressions -----------------------------------------------------
+
+    fn property_key(&mut self, key: &Expression, computed: bool) {
+        if computed {
+            self.write("[");
+            self.expression(key, ASSIGN);
+            self.write("]");
+        } else {
+            self.expression(key, PRIMARY);
+        }
+    }
+
+    fn string_literal(&mut self, literal: &StringLiteral) {
+        if let Some(text) = self.unchanged(literal, &literal.base) {
+            self.write(&text);
+        } else {
+            self.write(&quote(&literal.value.code_units()));
+        }
+    }
+
+    fn expressions(&mut self, items: &[Expression]) {
+        for (at, item) in items.iter().enumerate() {
+            if at > 0 {
+                self.write(", ");
+            }
+            self.expression(item, ASSIGN);
+        }
+    }
+
+    /// An expression, parenthesised if its precedence is below `min`.
+    #[allow(clippy::too_many_lines)]
+    fn expression(&mut self, expression: &Expression, min: u8) {
+        let parenthesise = precedence(expression) < min;
+        if parenthesise {
+            self.write("(");
+        }
+        if let Some(text) = self.unchanged(expression, expression_base(expression)) {
+            self.write(&text);
+            if parenthesise {
+                self.write(")");
+            }
+            return;
+        }
+        match expression {
+            Expression::Identifier(identifier) => {
+                let name = self.name(&identifier.base, &identifier.name).to_owned();
+                self.write(&name);
+            }
+            Expression::StringLiteral(literal) => self.write(&quote(&literal.value.code_units())),
+            Expression::NumericLiteral(literal) => self.write(&number(literal.value)),
+            Expression::BooleanLiteral(literal) => self.write(if literal.value { "true" } else { "false" }),
+            Expression::NullLiteral(_) => self.write("null"),
+            Expression::BigIntLiteral(literal) => {
+                let _ = write!(self.out, "{}n", literal.value);
+            }
+            Expression::RegExpLiteral(literal) => {
+                let _ = write!(self.out, "/{}/{}", literal.pattern, literal.flags);
+            }
+            Expression::ThisExpression(_) => self.write("this"),
+            Expression::Super(_) => self.write("super"),
+            Expression::Import(_) => self.write("import"),
+            Expression::PrivateName(p) => {
+                let _ = write!(self.out, "#{}", p.id.name);
+            }
+            Expression::MetaProperty(m) => {
+                let _ = write!(self.out, "{}.{}", m.meta.name, m.property.name);
+            }
+            Expression::TemplateLiteral(t) => self.template(t),
+            Expression::TaggedTemplateExpression(t) => {
+                self.expression(&t.tag, CALL);
+                if let Some(text) = t.type_parameters.as_ref().and_then(|p| self.raw(p)) {
+                    self.write(&text);
+                }
+                self.template(&t.quasi);
+            }
+            Expression::ArrayExpression(array) => {
+                self.write("[");
+                for (at, element) in array.elements.iter().enumerate() {
+                    if at > 0 {
+                        self.write(", ");
+                    }
+                    if let Some(element) = element {
+                        self.expression(element, ASSIGN);
+                    }
+                }
+                if array.elements.last().is_some_and(Option::is_none) {
+                    self.write(",");
+                }
+                self.write("]");
+            }
+            Expression::ObjectExpression(object) => {
+                if object.properties.is_empty() {
+                    self.write("{}");
+                } else {
+                    self.write("{");
+                    self.indent += 1;
+                    for (at, property) in object.properties.iter().enumerate() {
+                        if at > 0 {
+                            self.write(",");
+                        }
+                        self.newline();
+                        self.object_member(property);
+                    }
+                    self.indent -= 1;
+                    self.newline();
+                    self.write("}");
+                }
+            }
+            Expression::SpreadElement(s) => {
+                self.write("...");
+                self.expression(&s.argument, ASSIGN);
+            }
+            Expression::MemberExpression(m) => {
+                self.member_object(&m.object, false);
+                self.member_property(&m.property, m.computed, false);
+            }
+            Expression::OptionalMemberExpression(m) => {
+                self.member_object(&m.object, true);
+                self.member_property(&m.property, m.computed, m.optional);
+            }
+            Expression::CallExpression(c) => {
+                self.member_object(&c.callee, false);
+                if let Some(text) = c.type_parameters.as_ref().and_then(|p| self.raw(p)) {
+                    self.write(&text);
+                }
+                self.write("(");
+                self.expressions(&c.arguments);
+                self.write(")");
+            }
+            Expression::OptionalCallExpression(c) => {
+                self.member_object(&c.callee, true);
+                if c.optional {
+                    self.write("?.");
+                }
+                if let Some(text) = c.type_parameters.as_ref().and_then(|p| self.raw(p)) {
+                    self.write(&text);
+                }
+                self.write("(");
+                self.expressions(&c.arguments);
+                self.write(")");
+            }
+            Expression::NewExpression(n) => {
+                self.write("new ");
+                // `new a()()` would call the result: a callee that contains a
+                // call is parenthesised.
+                if contains_call(&n.callee) {
+                    self.write("(");
+                    self.expression(&n.callee, SEQUENCE);
+                    self.write(")");
+                } else {
+                    self.expression(&n.callee, CALL);
+                }
+                if let Some(text) = n.type_parameters.as_ref().and_then(|p| self.raw(p)) {
+                    self.write(&text);
+                }
+                self.write("(");
+                self.expressions(&n.arguments);
+                self.write(")");
+            }
+            Expression::UnaryExpression(u) => {
+                let operator = unary_operator(&u.operator);
+                self.write(operator);
+                let word = operator.chars().all(char::is_alphabetic);
+                let argument_start = Self::leading_char(&u.argument);
+                if word || (operator.ends_with('-') && argument_start == Some('-')) || (operator.ends_with('+') && argument_start == Some('+')) {
+                    self.write(" ");
+                }
+                self.expression(&u.argument, UNARY);
+            }
+            Expression::UpdateExpression(u) => {
+                let operator = if matches!(u.operator, UpdateOperator::Increment) { "++" } else { "--" };
+                if u.prefix {
+                    self.write(operator);
+                    self.expression(&u.argument, UNARY);
+                } else {
+                    self.expression(&u.argument, CALL);
+                    self.write(operator);
+                }
+            }
+            Expression::AwaitExpression(a) => {
+                self.write("await ");
+                self.expression(&a.argument, UNARY);
+            }
+            Expression::YieldExpression(y) => {
+                self.write(if y.delegate { "yield*" } else { "yield" });
+                if let Some(argument) = &y.argument {
+                    self.write(" ");
+                    self.expression(argument, ASSIGN);
+                }
+            }
+            Expression::BinaryExpression(b) => {
+                let level = binary_precedence(&b.operator);
+                let (left_min, right_min) = if matches!(b.operator, BinaryOperator::Exp) { (level + 1, level) } else { (level, level + 1) };
+                // `-a ** b` is a syntax error: a unary on the left of `**` is wrapped.
+                let left_min = if matches!(b.operator, BinaryOperator::Exp) && matches!(b.left.as_ref(), Expression::UnaryExpression(_) | Expression::AwaitExpression(_)) { PRIMARY } else { left_min };
+                self.expression(&b.left, left_min);
+                let _ = write!(self.out, " {} ", binary_operator(&b.operator));
+                self.expression(&b.right, right_min);
+            }
+            Expression::LogicalExpression(l) => {
+                let level = logical_precedence(&l.operator);
+                // `??` cannot sit beside `||` or `&&` without parentheses.
+                let mixes = |e: &Expression| {
+                    matches!(e, Expression::LogicalExpression(inner) if matches!(l.operator, LogicalOperator::NullishCoalescing) != matches!(inner.operator, LogicalOperator::NullishCoalescing))
+                };
+                let left_min = if mixes(&l.left) { PRIMARY } else { level };
+                let right_min = if mixes(&l.right) { PRIMARY } else { level + 1 };
+                self.expression(&l.left, left_min);
+                let _ = write!(self.out, " {} ", logical_operator(&l.operator));
+                self.expression(&l.right, right_min);
+            }
+            Expression::ConditionalExpression(c) => {
+                self.expression(&c.test, NULLISH);
+                self.write(" ? ");
+                self.expression(&c.consequent, ASSIGN);
+                self.write(" : ");
+                self.expression(&c.alternate, ASSIGN);
+            }
+            Expression::AssignmentExpression(a) => {
+                self.pattern(&a.left);
+                let _ = write!(self.out, " {} ", assignment_operator(&a.operator));
+                self.expression(&a.right, ASSIGN);
+            }
+            Expression::SequenceExpression(s) => {
+                for (at, item) in s.expressions.iter().enumerate() {
+                    if at > 0 {
+                        self.write(", ");
+                    }
+                    self.expression(item, ASSIGN);
+                }
+            }
+            Expression::ArrowFunctionExpression(f) => {
+                if f.is_async {
+                    self.write("async ");
+                }
+                self.function_rest(f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+                self.write(" => ");
+                match f.body.as_ref() {
+                    ArrowFunctionBody::BlockStatement(block) => self.block(block),
+                    ArrowFunctionBody::Expression(body) => {
+                        let parenthesise = starts_ambiguously(body, false);
+                        if parenthesise {
+                            self.write("(");
+                        }
+                        self.expression(body, ASSIGN);
+                        if parenthesise {
+                            self.write(")");
+                        }
+                    }
+                }
+            }
+            Expression::FunctionExpression(f) => {
+                if f.is_async {
+                    self.write("async ");
+                }
+                self.write(if f.generator { "function*" } else { "function" });
+                if let Some(id) = &f.id {
+                    let _ = write!(self.out, " {}", id.name);
+                }
+                self.function_rest(f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+                self.write(" ");
+                self.block(&f.body);
+            }
+            Expression::ClassExpression(c) => self.span(&c.base),
+            Expression::ParenthesizedExpression(p) => {
+                self.write("(");
+                self.expression(&p.expression, SEQUENCE);
+                self.write(")");
+            }
+            Expression::JSXElement(element) => self.jsx_element(element),
+            Expression::JSXFragment(fragment) => self.jsx_fragment(fragment),
+            Expression::AssignmentPattern(p) => {
+                self.pattern(&p.left);
+                self.write(" = ");
+                self.expression(&p.right, ASSIGN);
+            }
+            Expression::TSAsExpression(e) => {
+                self.expression(&e.expression, RELATIONAL);
+                self.write(" as ");
+                if let Some(text) = self.raw(&e.type_annotation) {
+                    self.write(&text);
+                }
+            }
+            Expression::TSSatisfiesExpression(e) => {
+                self.expression(&e.expression, RELATIONAL);
+                self.write(" satisfies ");
+                if let Some(text) = self.raw(&e.type_annotation) {
+                    self.write(&text);
+                }
+            }
+            Expression::TSTypeAssertion(e) => {
+                self.write("<");
+                if let Some(text) = self.raw(&e.type_annotation) {
+                    self.write(&text);
+                }
+                self.write(">");
+                self.expression(&e.expression, UNARY);
+            }
+            Expression::TSNonNullExpression(e) => {
+                self.expression(&e.expression, CALL);
+                self.write("!");
+            }
+            Expression::TSInstantiationExpression(e) => {
+                self.expression(&e.expression, CALL);
+                if let Some(text) = self.raw(&e.type_parameters) {
+                    self.write(&text);
+                }
+            }
+            Expression::TypeCastExpression(e) => self.expression(&e.expression, min),
+        }
+        if parenthesise {
+            self.write(")");
+        }
+    }
+
+    /// The object of a member access or the callee of a call. A number like
+    /// `1` needs `(1).x`; an optional chain continued outside its chain needs
+    /// `(a?.b).c`.
+    fn member_object(&mut self, object: &Expression, in_chain: bool) {
+        let chain_ends = !in_chain && matches!(object, Expression::OptionalMemberExpression(_) | Expression::OptionalCallExpression(_));
+        let bare_integer = matches!(object, Expression::NumericLiteral(n) if n.value.fract() == 0.0 && self.unchanged(object, expression_base(object)).is_none_or(|t| !t.contains(['.', 'e', 'x', 'o', 'b', 'E', 'X', 'O', 'B'])));
+        if chain_ends || bare_integer {
+            self.write("(");
+            self.expression(object, SEQUENCE);
+            self.write(")");
+        } else {
+            self.expression(object, CALL);
+        }
+    }
+
+    fn member_property(&mut self, property: &Expression, computed: bool, optional: bool) {
+        if computed {
+            self.write(if optional { "?.[" } else { "[" });
+            self.expression(property, SEQUENCE);
+            self.write("]");
+        } else {
+            self.write(if optional { "?." } else { "." });
+            self.expression(property, PRIMARY);
+        }
+    }
+
+    fn object_member(&mut self, property: &ObjectExpressionProperty) {
+        match property {
+            ObjectExpressionProperty::ObjectProperty(p) => {
+                // Shorthand only while the value still prints as the key's name.
+                let shorthand = p.shorthand
+                    && matches!((p.key.as_ref(), p.value.as_ref()), (Expression::Identifier(k), Expression::Identifier(v)) if k.name == self.name(&v.base, &v.name));
+                if shorthand {
+                    self.expression(&p.value, ASSIGN);
+                } else {
+                    self.property_key(&p.key, p.computed);
+                    self.write(": ");
+                    self.expression(&p.value, ASSIGN);
+                }
+            }
+            ObjectExpressionProperty::ObjectMethod(m) => {
+                if m.is_async {
+                    self.write("async ");
+                }
+                match m.kind {
+                    ObjectMethodKind::Get => self.write("get "),
+                    ObjectMethodKind::Set => self.write("set "),
+                    ObjectMethodKind::Method => {}
+                }
+                if m.generator {
+                    self.write("*");
+                }
+                self.property_key(&m.key, m.computed);
+                self.function_rest(m.type_parameters.as_ref(), &m.params, m.return_type.as_ref());
+                self.write(" ");
+                self.block(&m.body);
+            }
+            ObjectExpressionProperty::SpreadElement(s) => {
+                self.write("...");
+                self.expression(&s.argument, ASSIGN);
+            }
+        }
+    }
+
+    fn template(&mut self, template: &react_compiler_ast::expressions::TemplateLiteral) {
+        self.write("`");
+        for (at, quasi) in template.quasis.iter().enumerate() {
+            self.write(&quasi.value.raw);
+            if let Some(expression) = template.expressions.get(at) {
+                self.write("${");
+                self.expression(expression, SEQUENCE);
+                self.write("}");
+            }
+        }
+        self.write("`");
+    }
+
+    /// The first character an expression prints as, where that decides spacing.
+    fn leading_char(expression: &Expression) -> Option<char> {
+        match expression {
+            Expression::UnaryExpression(u) => unary_operator(&u.operator).chars().next(),
+            Expression::UpdateExpression(u) if u.prefix => Some(if matches!(u.operator, UpdateOperator::Increment) { '+' } else { '-' }),
+            Expression::NumericLiteral(n) if n.value < 0.0 => Some('-'),
+            _ => None,
+        }
+    }
+
+    // ---- JSX -------------------------------------------------------------
+
+    fn jsx_element(&mut self, element: &JSXElement) {
+        if let Some(text) = self.unchanged(element, &element.base) {
+            self.write(&text);
+            return;
+        }
+        let opening = &element.opening_element;
+        self.write("<");
+        self.jsx_name(&opening.name);
+        if let Some(text) = opening.type_parameters.as_ref().and_then(|p| self.raw(p)) {
+            self.write(&text);
+        }
+        for attribute in &opening.attributes {
+            self.write(" ");
+            match attribute {
+                JSXAttributeItem::JSXAttribute(a) => {
+                    match &a.name {
+                        JSXAttributeName::JSXIdentifier(i) => self.write(&i.name),
+                        JSXAttributeName::JSXNamespacedName(n) => {
+                            let _ = write!(self.out, "{}:{}", n.namespace.name, n.name.name);
+                        }
+                    }
+                    if let Some(value) = &a.value {
+                        self.write("=");
+                        match value {
+                            JSXAttributeValue::StringLiteral(s) => {
+                                if let Some(text) = self.unchanged(s, &s.base) {
+                                    self.write(&text);
+                                } else {
+                                    let value = s.value.to_string_lossy();
+                                    let quote = if value.contains('"') { '\'' } else { '"' };
+                                    let _ = write!(self.out, "{quote}{value}{quote}");
+                                }
+                            }
+                            JSXAttributeValue::JSXExpressionContainer(c) => self.jsx_container(&c.expression),
+                            JSXAttributeValue::JSXElement(e) => self.jsx_element(e),
+                            JSXAttributeValue::JSXFragment(f) => self.jsx_fragment(f),
+                        }
+                    }
+                }
+                JSXAttributeItem::JSXSpreadAttribute(s) => {
+                    self.write("{...");
+                    self.expression(&s.argument, ASSIGN);
+                    self.write("}");
+                }
+            }
+        }
+        if opening.self_closing {
+            self.write(" />");
+            return;
+        }
+        self.write(">");
+        self.jsx_children(&element.children);
+        self.write("</");
+        if let Some(closing) = &element.closing_element {
+            self.jsx_name(&closing.name);
+        }
+        self.write(">");
+    }
+
+    fn jsx_fragment(&mut self, fragment: &JSXFragment) {
+        if let Some(text) = self.unchanged(fragment, &fragment.base) {
+            self.write(&text);
+            return;
+        }
+        self.write("<>");
+        self.jsx_children(&fragment.children);
+        self.write("</>");
+    }
+
+    fn jsx_name(&mut self, name: &JSXElementName) {
+        match name {
+            JSXElementName::JSXIdentifier(i) => {
+                let name = self.name(&i.base, &i.name).to_owned();
+                self.write(&name);
+            }
+            JSXElementName::JSXMemberExpression(m) => self.jsx_member(m),
+            JSXElementName::JSXNamespacedName(n) => {
+                let _ = write!(self.out, "{}:{}", n.namespace.name, n.name.name);
+            }
+        }
+    }
+
+    fn jsx_member(&mut self, member: &JSXMemberExpression) {
+        match member.object.as_ref() {
+            JSXMemberExprObject::JSXIdentifier(i) => {
+                let name = self.name(&i.base, &i.name).to_owned();
+                self.write(&name);
+            }
+            JSXMemberExprObject::JSXMemberExpression(inner) => self.jsx_member(inner),
+        }
+        let _ = write!(self.out, ".{}", member.property.name);
+    }
+
+    fn jsx_container(&mut self, expression: &JSXExpressionContainerExpr) {
+        self.write("{");
+        if let JSXExpressionContainerExpr::Expression(e) = expression {
+            self.expression(e, ASSIGN);
+        }
+        self.write("}");
+    }
+
+    fn jsx_children(&mut self, children: &[JSXChild]) {
+        for child in children {
+            match child {
+                JSXChild::JSXText(t) => {
+                    if let Some(text) = self.unchanged(t, &t.base) {
+                        self.write(&text);
+                    } else {
+                        self.write(&t.value);
+                    }
+                }
+                JSXChild::JSXElement(e) => self.jsx_element(e),
+                JSXChild::JSXFragment(f) => self.jsx_fragment(f),
+                JSXChild::JSXExpressionContainer(c) => self.jsx_container(&c.expression),
+                JSXChild::JSXSpreadChild(s) => {
+                    self.write("{...");
+                    self.expression(&s.expression, ASSIGN);
+                    self.write("}");
+                }
+            }
+        }
+    }
+}
+
+fn module_export_name(name: &ModuleExportName) -> String {
+    match name {
+        ModuleExportName::Identifier(i) => i.name.clone(),
+        ModuleExportName::StringLiteral(s) => quote(&s.value.code_units()),
+    }
+}
+
+/// A string as a double-quoted JavaScript literal.
+fn quote(units: &[u16]) -> String {
+    let mut out = String::from("\"");
+    for unit in char::decode_utf16(units.iter().copied()) {
+        match unit {
+            Ok('"') => out.push_str("\\\""),
+            Ok('\\') => out.push_str("\\\\"),
+            Ok('\n') => out.push_str("\\n"),
+            Ok('\r') => out.push_str("\\r"),
+            Ok('\t') => out.push_str("\\t"),
+            Ok('\u{8}') => out.push_str("\\b"),
+            Ok('\u{c}') => out.push_str("\\f"),
+            Ok('\u{b}') => out.push_str("\\v"),
+            Ok('\u{2028}') => out.push_str("\\u2028"),
+            Ok('\u{2029}') => out.push_str("\\u2029"),
+            Ok(c) if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\x{:02x}", c as u32);
+            }
+            Ok(c) => out.push(c),
+            Err(lone) => {
+                let _ = write!(out, "\\u{:04x}", lone.unpaired_surrogate());
+            }
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A number as JavaScript prints it, for the ones the compiler generates:
+/// integers (cache sizes, slot indices) and the occasional fraction.
+fn number(value: f64) -> String {
+    if value.is_nan() {
+        return "NaN".to_owned();
+    }
+    if value.is_infinite() {
+        return if value > 0.0 { "Infinity".to_owned() } else { "-Infinity".to_owned() };
+    }
+    if value.fract() == 0.0 && value.abs() < 1e21 {
+        return format!("{value:.0}");
+    }
+    format!("{value}")
+}
+
+fn precedence(expression: &Expression) -> u8 {
+    match expression {
+        Expression::SequenceExpression(_) => SEQUENCE,
+        Expression::AssignmentExpression(_) | Expression::ArrowFunctionExpression(_) | Expression::YieldExpression(_) | Expression::AssignmentPattern(_) => ASSIGN,
+        Expression::ConditionalExpression(_) => CONDITIONAL,
+        Expression::LogicalExpression(l) => logical_precedence(&l.operator),
+        Expression::BinaryExpression(b) => binary_precedence(&b.operator),
+        Expression::TSAsExpression(_) | Expression::TSSatisfiesExpression(_) => RELATIONAL,
+        Expression::UnaryExpression(_) | Expression::AwaitExpression(_) | Expression::TSTypeAssertion(_) => UNARY,
+        Expression::UpdateExpression(u) => if u.prefix { UNARY } else { POSTFIX },
+        Expression::CallExpression(_) | Expression::OptionalCallExpression(_) | Expression::MemberExpression(_) | Expression::OptionalMemberExpression(_) | Expression::NewExpression(_) | Expression::TaggedTemplateExpression(_) | Expression::TSNonNullExpression(_) | Expression::TSInstantiationExpression(_) => CALL,
+        _ => PRIMARY,
+    }
+}
+
+fn binary_precedence(operator: &BinaryOperator) -> u8 {
+    use BinaryOperator as B;
+    match operator {
+        B::BitOr => BIT_OR,
+        B::BitXor => BIT_XOR,
+        B::BitAnd => BIT_AND,
+        B::Eq | B::Neq | B::StrictEq | B::StrictNeq => EQUALITY,
+        B::Lt | B::Lte | B::Gt | B::Gte | B::In | B::Instanceof => RELATIONAL,
+        B::Shl | B::Shr | B::UShr => SHIFT,
+        B::Add | B::Sub => ADDITIVE,
+        B::Mul | B::Div | B::Rem => MULTIPLICATIVE,
+        B::Exp => EXPONENT,
+        B::Pipeline => NULLISH,
+    }
+}
+
+fn logical_precedence(operator: &LogicalOperator) -> u8 {
+    match operator {
+        LogicalOperator::NullishCoalescing => NULLISH,
+        LogicalOperator::Or => OR,
+        LogicalOperator::And => AND,
+    }
+}
+
+fn binary_operator(operator: &BinaryOperator) -> &'static str {
+    use BinaryOperator as B;
+    match operator {
+        B::Add => "+",
+        B::Sub => "-",
+        B::Mul => "*",
+        B::Div => "/",
+        B::Rem => "%",
+        B::Exp => "**",
+        B::Eq => "==",
+        B::StrictEq => "===",
+        B::Neq => "!=",
+        B::StrictNeq => "!==",
+        B::Lt => "<",
+        B::Lte => "<=",
+        B::Gt => ">",
+        B::Gte => ">=",
+        B::Shl => "<<",
+        B::Shr => ">>",
+        B::UShr => ">>>",
+        B::BitOr => "|",
+        B::BitXor => "^",
+        B::BitAnd => "&",
+        B::In => "in",
+        B::Instanceof => "instanceof",
+        B::Pipeline => "|>",
+    }
+}
+
+fn logical_operator(operator: &LogicalOperator) -> &'static str {
+    match operator {
+        LogicalOperator::Or => "||",
+        LogicalOperator::And => "&&",
+        LogicalOperator::NullishCoalescing => "??",
+    }
+}
+
+fn unary_operator(operator: &UnaryOperator) -> &'static str {
+    match operator {
+        UnaryOperator::Neg => "-",
+        UnaryOperator::Plus => "+",
+        UnaryOperator::Not => "!",
+        UnaryOperator::BitNot => "~",
+        UnaryOperator::TypeOf => "typeof",
+        UnaryOperator::Void => "void",
+        UnaryOperator::Delete => "delete",
+        UnaryOperator::Throw => "throw",
+    }
+}
+
+fn assignment_operator(operator: &AssignmentOperator) -> &'static str {
+    use AssignmentOperator as A;
+    match operator {
+        A::Assign => "=",
+        A::AddAssign => "+=",
+        A::SubAssign => "-=",
+        A::MulAssign => "*=",
+        A::DivAssign => "/=",
+        A::RemAssign => "%=",
+        A::ExpAssign => "**=",
+        A::ShlAssign => "<<=",
+        A::ShrAssign => ">>=",
+        A::UShrAssign => ">>>=",
+        A::BitOrAssign => "|=",
+        A::BitXorAssign => "^=",
+        A::BitAndAssign => "&=",
+        A::OrAssign => "||=",
+        A::AndAssign => "&&=",
+        A::NullishAssign => "??=",
+    }
+}
+
+/// Whether an expression at the start of a statement (or an arrow's body)
+/// would be read as something else: `{` as a block, `function` and `class` as
+/// declarations, `let [` as a declaration. Looks down the leftmost operand.
+fn starts_ambiguously(expression: &Expression, statement: bool) -> bool {
+    match expression {
+        Expression::ObjectExpression(_) => true,
+        Expression::FunctionExpression(_) | Expression::ClassExpression(_) => statement,
+        Expression::Identifier(i) => statement && i.name == "let",
+        Expression::MemberExpression(m) => starts_ambiguously(&m.object, statement),
+        Expression::OptionalMemberExpression(m) => starts_ambiguously(&m.object, statement),
+        Expression::CallExpression(c) => starts_ambiguously(&c.callee, statement),
+        Expression::OptionalCallExpression(c) => starts_ambiguously(&c.callee, statement),
+        Expression::TaggedTemplateExpression(t) => starts_ambiguously(&t.tag, statement),
+        Expression::BinaryExpression(b) => starts_ambiguously(&b.left, statement),
+        Expression::LogicalExpression(l) => starts_ambiguously(&l.left, statement),
+        Expression::ConditionalExpression(c) => starts_ambiguously(&c.test, statement),
+        Expression::SequenceExpression(s) => s.expressions.first().is_some_and(|e| starts_ambiguously(e, statement)),
+        Expression::AssignmentExpression(a) => matches!(a.left.as_ref(), PatternLike::ObjectPattern(_)),
+        Expression::UpdateExpression(u) if !u.prefix => starts_ambiguously(&u.argument, statement),
+        Expression::TSAsExpression(e) => starts_ambiguously(&e.expression, statement),
+        Expression::TSSatisfiesExpression(e) => starts_ambiguously(&e.expression, statement),
+        Expression::TSNonNullExpression(e) => starts_ambiguously(&e.expression, statement),
+        _ => false,
+    }
+}
+
+fn contains_call(expression: &Expression) -> bool {
+    match expression {
+        Expression::CallExpression(_) | Expression::OptionalCallExpression(_) => true,
+        Expression::MemberExpression(m) => contains_call(&m.object),
+        Expression::OptionalMemberExpression(m) => contains_call(&m.object),
+        Expression::TaggedTemplateExpression(t) => contains_call(&t.tag),
+        Expression::TSNonNullExpression(e) => contains_call(&e.expression),
+        _ => false,
+    }
+}
+
+fn contains_top_level_in(expression: &Expression) -> bool {
+    match expression {
+        Expression::BinaryExpression(b) => matches!(b.operator, BinaryOperator::In) || contains_top_level_in(&b.left) || contains_top_level_in(&b.right),
+        Expression::LogicalExpression(l) => contains_top_level_in(&l.left) || contains_top_level_in(&l.right),
+        Expression::ConditionalExpression(c) => contains_top_level_in(&c.test) || contains_top_level_in(&c.consequent) || contains_top_level_in(&c.alternate),
+        Expression::AssignmentExpression(a) => contains_top_level_in(&a.right),
+        Expression::SequenceExpression(s) => s.expressions.iter().any(contains_top_level_in),
+        _ => false,
+    }
+}
+
+fn statement_base(statement: &Statement) -> &BaseNode {
+    match statement {
+        Statement::BlockStatement(s) => &s.base,
+        Statement::ReturnStatement(s) => &s.base,
+        Statement::IfStatement(s) => &s.base,
+        Statement::ForStatement(s) => &s.base,
+        Statement::WhileStatement(s) => &s.base,
+        Statement::DoWhileStatement(s) => &s.base,
+        Statement::ForInStatement(s) => &s.base,
+        Statement::ForOfStatement(s) => &s.base,
+        Statement::SwitchStatement(s) => &s.base,
+        Statement::ThrowStatement(s) => &s.base,
+        Statement::TryStatement(s) => &s.base,
+        Statement::BreakStatement(s) => &s.base,
+        Statement::ContinueStatement(s) => &s.base,
+        Statement::LabeledStatement(s) => &s.base,
+        Statement::ExpressionStatement(s) => &s.base,
+        Statement::EmptyStatement(s) => &s.base,
+        Statement::DebuggerStatement(s) => &s.base,
+        Statement::WithStatement(s) => &s.base,
+        Statement::VariableDeclaration(s) => &s.base,
+        Statement::FunctionDeclaration(s) => &s.base,
+        Statement::ClassDeclaration(s) => &s.base,
+        Statement::ImportDeclaration(s) => &s.base,
+        Statement::ExportNamedDeclaration(s) => &s.base,
+        Statement::ExportDefaultDeclaration(s) => &s.base,
+        Statement::ExportAllDeclaration(s) => &s.base,
+        Statement::TSTypeAliasDeclaration(s) => &s.base,
+        Statement::TSInterfaceDeclaration(s) => &s.base,
+        Statement::TSEnumDeclaration(s) => &s.base,
+        Statement::TSModuleDeclaration(s) => &s.base,
+        Statement::TSDeclareFunction(s) => &s.base,
+        Statement::TypeAlias(s) => &s.base,
+        Statement::OpaqueType(s) => &s.base,
+        Statement::InterfaceDeclaration(s) => &s.base,
+        Statement::DeclareVariable(s) => &s.base,
+        Statement::DeclareFunction(s) => &s.base,
+        Statement::DeclareClass(s) => &s.base,
+        Statement::DeclareModule(s) => &s.base,
+        Statement::DeclareModuleExports(s) => &s.base,
+        Statement::DeclareExportDeclaration(s) => &s.base,
+        Statement::DeclareExportAllDeclaration(s) => &s.base,
+        Statement::DeclareInterface(s) => &s.base,
+        Statement::DeclareTypeAlias(s) => &s.base,
+        Statement::DeclareOpaqueType(s) => &s.base,
+        Statement::EnumDeclaration(s) => &s.base,
+        Statement::Unknown(s) => s.base(),
+    }
+}
+
+fn expression_base(expression: &Expression) -> &BaseNode {
+    match expression {
+        Expression::Identifier(e) => &e.base,
+        Expression::StringLiteral(e) => &e.base,
+        Expression::NumericLiteral(e) => &e.base,
+        Expression::BooleanLiteral(e) => &e.base,
+        Expression::NullLiteral(e) => &e.base,
+        Expression::BigIntLiteral(e) => &e.base,
+        Expression::RegExpLiteral(e) => &e.base,
+        Expression::CallExpression(e) => &e.base,
+        Expression::MemberExpression(e) => &e.base,
+        Expression::OptionalCallExpression(e) => &e.base,
+        Expression::OptionalMemberExpression(e) => &e.base,
+        Expression::BinaryExpression(e) => &e.base,
+        Expression::LogicalExpression(e) => &e.base,
+        Expression::UnaryExpression(e) => &e.base,
+        Expression::UpdateExpression(e) => &e.base,
+        Expression::ConditionalExpression(e) => &e.base,
+        Expression::AssignmentExpression(e) => &e.base,
+        Expression::SequenceExpression(e) => &e.base,
+        Expression::ArrowFunctionExpression(e) => &e.base,
+        Expression::FunctionExpression(e) => &e.base,
+        Expression::ObjectExpression(e) => &e.base,
+        Expression::ArrayExpression(e) => &e.base,
+        Expression::NewExpression(e) => &e.base,
+        Expression::TemplateLiteral(e) => &e.base,
+        Expression::TaggedTemplateExpression(e) => &e.base,
+        Expression::AwaitExpression(e) => &e.base,
+        Expression::YieldExpression(e) => &e.base,
+        Expression::SpreadElement(e) => &e.base,
+        Expression::MetaProperty(e) => &e.base,
+        Expression::ClassExpression(e) => &e.base,
+        Expression::PrivateName(e) => &e.base,
+        Expression::Super(e) => &e.base,
+        Expression::Import(e) => &e.base,
+        Expression::ThisExpression(e) => &e.base,
+        Expression::ParenthesizedExpression(e) => &e.base,
+        Expression::JSXElement(e) => &e.base,
+        Expression::JSXFragment(e) => &e.base,
+        Expression::AssignmentPattern(e) => &e.base,
+        Expression::TSAsExpression(e) => &e.base,
+        Expression::TSSatisfiesExpression(e) => &e.base,
+        Expression::TSNonNullExpression(e) => &e.base,
+        Expression::TSTypeAssertion(e) => &e.base,
+        Expression::TSInstantiationExpression(e) => &e.base,
+        Expression::TypeCastExpression(e) => &e.base,
+    }
+}

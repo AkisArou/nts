@@ -17,7 +17,7 @@ USAGE
   nts-react compile <tsconfig.json> <options.json> <out-dir>
       convert and compile each of the project's own sources with the React
       Compiler, given the plugin's resolved options, writing the result as
-      <out-dir>/<file>.result.json";
+      <out-dir>/<file>.result.json and the program as <out-dir>/<file>";
 
 fn main() -> ExitCode {
     // Deeply nested programs recurse deeply in the compiler; upstream's addon
@@ -104,10 +104,30 @@ fn compile(tsconfig: &str, options: &str, out: &str) -> Result<()> {
         let mut options = options.clone();
         options["__sourceCode"] = serde_json::Value::String(code);
         let options: react_compiler::entrypoint::PluginOptions = serde_json::from_value(options).context("the options are not `PluginOptions`")?;
+        let original = file.clone();
         let result = react_compiler::entrypoint::compile_program(file, scope, options);
         std::fs::write(out.join(format!("{name}.result.json")), serde_json::to_string(&result)?)?;
+        // The program as TypeScript: the user's text wherever the compiler
+        // changed nothing, which is the whole file when it compiled nothing.
+        // The compiler's renames apply even when it compiled nothing, as the
+        // Babel plugin applies them: a function that bailed out may still
+        // have had a shadowing binding renamed while it was being lowered.
+        let printed = match &result {
+            react_compiler::entrypoint::CompileResult::Success { ast: Some(compiled), renames, .. } => {
+                nts_react::print::print_file(&text, &original, compiled, renames)
+            }
+            react_compiler::entrypoint::CompileResult::Success { ast: None, renames, .. } if !renames.is_empty() => {
+                nts_react::print::print_file(&text, &original, &original, renames)
+            }
+            _ => code_for_output(&text),
+        };
+        std::fs::write(out.join(name), printed)?;
         compiled += 1;
     }
     eprintln!("compiled {compiled}, unsupported {unsupported}");
     Ok(())
+}
+
+fn code_for_output(text: &nts_react::convert::text::SourceText) -> String {
+    text.slice(0, text.len())
 }

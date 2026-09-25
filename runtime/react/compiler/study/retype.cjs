@@ -4,7 +4,9 @@
 const babel = require("@babel/core");
 const { parse } = require("@babel/parser");
 const generate = require("@babel/generator").default;
-const ts = require("typescript");
+// Resolved from the study workspace the script runs in: the lane's own
+// `typescript` is TypeScript 7, which has no JavaScript API.
+const ts = require(require.resolve("typescript", { paths: [process.cwd()] }));
 const fs = require("fs"), path = require("path");
 const plugin = require(process.env.HOME + "/.cache/nts-react/upstream/compiler/packages/babel-plugin-react-compiler-rust/dist").default;
 

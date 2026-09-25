@@ -1,7 +1,9 @@
 // Typechecks a directory of modules in one program; per file prints
 // diagnostic codes and the bindings whose type is any/unknown.
 // usage: node measure.cjs <dir> <any|unknown> > out.json
-const ts = require("typescript");
+// Resolved from the study workspace the script runs in: the lane's own
+// `typescript` is TypeScript 7, which has no JavaScript API.
+const ts = require(require.resolve("typescript", { paths: [process.cwd()] }));
 const fs = require("fs"), path = require("path");
 const [dir, arm] = process.argv.slice(2);
 const files = fs.readdirSync(dir).filter((f) => /\.tsx?$/.test(f)).map((f) => path.resolve(dir, f));

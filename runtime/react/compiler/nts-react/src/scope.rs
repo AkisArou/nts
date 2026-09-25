@@ -15,6 +15,7 @@
 
 use indexmap::IndexMap;
 use react_compiler_ast::File;
+use react_compiler_ast::common::BaseNode;
 use react_compiler_ast::declarations::{
     Declaration, ExportDefaultDecl, ExportSpecifier, ImportKind, ImportSpecifier, ModuleExportName,
 };
@@ -38,12 +39,27 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 /// Builds the scope information for `file`.
 #[must_use]
 pub fn build(file: &File) -> ScopeInfo {
+    resolve(file).info
+}
+
+/// The scope information for `file`, and every reference it resolved keyed by
+/// its node's address: the compiler's output has nodes with no id, and
+/// applying its renames means finding those by the binding they resolve to.
+#[derive(Debug)]
+pub struct Resolution {
+    pub info: ScopeInfo,
+    /// Each resolved reference's binding, and its start where it has one.
+    pub by_address: FxHashMap<usize, (BindingId, Option<u32>)>,
+}
+
+#[must_use]
+pub fn resolve(file: &File) -> Resolution {
     let mut builder = Builder { pass: Pass::Declare, ..Builder::default() };
     builder.program(file);
     builder.group_bindings_by_scope();
     builder.pass = Pass::Resolve;
     builder.program(file);
-    ScopeInfo {
+    let info = ScopeInfo {
         scopes: builder.scopes,
         bindings: builder.bindings,
         node_to_scope: builder.node_to_scope,
@@ -52,7 +68,14 @@ pub fn build(file: &File) -> ScopeInfo {
         ref_node_id_to_binding: builder.references,
         node_id_to_scope: builder.node_id_to_scope,
         program_scope: ScopeId(0),
-    }
+    };
+    Resolution { info, by_address: builder.by_address }
+}
+
+/// A node's address, as the key of a node that may have no id.
+#[must_use]
+pub fn address(node: &BaseNode) -> usize {
+    std::ptr::from_ref(node) as usize
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -71,6 +94,10 @@ struct Builder {
     node_to_scope_end: FxHashMap<u32, u32>,
     node_id_to_scope: FxHashMap<u32, ScopeId>,
     references: IndexMap<u32, BindingId, FxBuildHasher>,
+    /// Every resolved reference by its node's address, generated nodes too,
+    /// with the node's start where it has one.
+    by_address: FxHashMap<usize, (BindingId, Option<u32>)>,
+    scope_at: FxHashMap<usize, ScopeId>,
     stack: Vec<ScopeId>,
 }
 
@@ -84,17 +111,20 @@ struct Declared<'a> {
 impl Builder {
     // ---- scopes ----------------------------------------------------------
 
-    /// Enters the scope belonging to the node `id` spanning `start..end`:
-    /// created on the declare pass, found again on the resolve pass.
-    fn enter(&mut self, id: Option<u32>, start: Option<u32>, end: Option<u32>, kind: ScopeKind) {
-        let Some(node) = id else {
-            return;
-        };
+    /// Enters the scope belonging to `node`: created on the declare pass,
+    /// found again on the resolve pass. Scopes are keyed by the node's address,
+    /// which is stable across the two passes over one tree, so a node the
+    /// compiler generated (which has no id) is a scope like any other.
+    fn enter(&mut self, node: &BaseNode, kind: ScopeKind) {
+        let address = address(node);
         let scope = if self.pass == Pass::Declare {
             let scope = ScopeId(u32::try_from(self.scopes.len()).unwrap_or(u32::MAX));
             self.scopes.push(ScopeData { id: scope, parent: self.stack.last().copied(), kind, bindings: FxHashMap::default() });
-            self.node_id_to_scope.insert(node, scope);
-            if let (Some(start), Some(end)) = (start, end)
+            self.scope_at.insert(address, scope);
+            if let Some(id) = node.node_id {
+                self.node_id_to_scope.insert(id, scope);
+            }
+            if let (Some(start), Some(end)) = (node.start, node.end)
                 && end > start
             {
                 self.node_to_scope.insert(start, scope);
@@ -102,15 +132,13 @@ impl Builder {
             }
             scope
         } else {
-            self.node_id_to_scope[&node]
+            self.scope_at[&address]
         };
         self.stack.push(scope);
     }
 
-    fn leave(&mut self, id: Option<u32>) {
-        if id.is_some() {
-            self.stack.pop();
-        }
+    fn leave(&mut self) {
+        self.stack.pop();
     }
 
     fn current(&self) -> ScopeId {
@@ -210,35 +238,38 @@ impl Builder {
         None
     }
 
-    /// Maps the node `id` to the binding `name` resolves to, on the resolve pass.
-    fn reference(&mut self, id: Option<u32>, name: &str) {
+    /// Maps `node` to the binding `name` resolves to, on the resolve pass.
+    fn reference(&mut self, node: &BaseNode, name: &str) {
         if self.pass != Pass::Resolve {
             return;
         }
-        if let (Some(id), Some(binding)) = (id, self.lookup(name)) {
-            self.references.insert(id, binding);
+        if let Some(binding) = self.lookup(name) {
+            if let Some(id) = node.node_id {
+                self.references.insert(id, binding);
+            }
+            self.by_address.insert(address(node), (binding, node.start));
         }
     }
 
     fn identifier(&mut self, identifier: &Identifier) {
-        self.reference(identifier.base.node_id, &identifier.name);
+        self.reference(&identifier.base, &identifier.name);
     }
 
     // ---- the program -----------------------------------------------------
 
     fn program(&mut self, file: &File) {
         let program = &file.program;
-        self.enter(program.base.node_id, program.base.start, program.base.end, ScopeKind::Program);
+        self.enter(&program.base, ScopeKind::Program);
         for statement in &program.body {
             self.statement(statement);
         }
-        self.leave(program.base.node_id);
+        self.leave();
     }
 
     fn block(&mut self, block: &BlockStatement) {
-        self.enter(block.base.node_id, block.base.start, block.base.end, ScopeKind::Block);
+        self.enter(&block.base, ScopeKind::Block);
         self.statements(&block.body);
-        self.leave(block.base.node_id);
+        self.leave();
     }
 
     /// A body whose block is the enclosing function's or catch clause's scope.
@@ -269,19 +300,19 @@ impl Builder {
             // Babel's `Scopable` includes both loops: each is a block scope, with
             // its body block another inside it.
             Statement::WhileStatement(s) => {
-                self.enter(s.base.node_id, s.base.start, s.base.end, ScopeKind::Block);
+                self.enter(&s.base, ScopeKind::Block);
                 self.expression(&s.test);
                 self.statement(&s.body);
-                self.leave(s.base.node_id);
+                self.leave();
             }
             Statement::DoWhileStatement(s) => {
-                self.enter(s.base.node_id, s.base.start, s.base.end, ScopeKind::Block);
+                self.enter(&s.base, ScopeKind::Block);
                 self.statement(&s.body);
                 self.expression(&s.test);
-                self.leave(s.base.node_id);
+                self.leave();
             }
             Statement::ForStatement(s) => {
-                self.enter(s.base.node_id, s.base.start, s.base.end, ScopeKind::For);
+                self.enter(&s.base, ScopeKind::For);
                 if let Some(init) = &s.init {
                     match init.as_ref() {
                         ForInit::VariableDeclaration(declaration) => self.variable_declaration(declaration),
@@ -295,37 +326,37 @@ impl Builder {
                     self.expression(update);
                 }
                 self.statement(&s.body);
-                self.leave(s.base.node_id);
+                self.leave();
             }
             Statement::ForOfStatement(s) => {
-                self.enter(s.base.node_id, s.base.start, s.base.end, ScopeKind::For);
+                self.enter(&s.base, ScopeKind::For);
                 self.for_left(&s.left);
                 self.expression(&s.right);
                 self.statement(&s.body);
-                self.leave(s.base.node_id);
+                self.leave();
             }
             Statement::ForInStatement(s) => {
-                self.enter(s.base.node_id, s.base.start, s.base.end, ScopeKind::For);
+                self.enter(&s.base, ScopeKind::For);
                 self.for_left(&s.left);
                 self.expression(&s.right);
                 self.statement(&s.body);
-                self.leave(s.base.node_id);
+                self.leave();
             }
             Statement::SwitchStatement(s) => {
                 self.expression(&s.discriminant);
-                self.enter(s.base.node_id, s.base.start, s.base.end, ScopeKind::Switch);
+                self.enter(&s.base, ScopeKind::Switch);
                 for case in &s.cases {
                     if let Some(test) = &case.test {
                         self.expression(test);
                     }
                     self.statements(&case.consequent);
                 }
-                self.leave(s.base.node_id);
+                self.leave();
             }
             Statement::TryStatement(s) => {
                 self.block(&s.block);
                 if let Some(handler) = &s.handler {
-                    self.enter(handler.base.node_id, handler.base.start, handler.base.end, ScopeKind::Catch);
+                    self.enter(&handler.base, ScopeKind::Catch);
                     if let Some(param) = &handler.param {
                         let scope = self.current();
                         self.pattern_scope(param, |builder| {
@@ -334,7 +365,7 @@ impl Builder {
                         });
                     }
                     self.statements(&handler.body.body);
-                    self.leave(handler.base.node_id);
+                    self.leave();
                 }
                 if let Some(finalizer) = &s.finalizer {
                     self.block(finalizer);
@@ -380,7 +411,7 @@ impl Builder {
                     // Babel counts the export among the references of what it
                     // declares; with several names, the last one keeps it.
                     for name in declared_names(declaration) {
-                        self.reference(export.base.node_id, name);
+                        self.reference(&export.base, name);
                     }
                 }
                 if export.source.is_none() {
@@ -407,13 +438,13 @@ impl Builder {
                 ExportDefaultDecl::FunctionDeclaration(f) => {
                     self.function_declaration(f);
                     if let Some(id) = &f.id {
-                        self.reference(export.base.node_id, &id.name);
+                        self.reference(&export.base, &id.name);
                     }
                 }
                 ExportDefaultDecl::ClassDeclaration(c) => {
                     self.class_declaration(c);
                     if let Some(id) = &c.id {
-                        self.reference(export.base.node_id, &id.name);
+                        self.reference(&export.base, &id.name);
                     }
                 }
                 ExportDefaultDecl::Expression(expression) => self.expression(expression),
@@ -466,7 +497,7 @@ impl Builder {
             self.declare(scope, id, Declared { kind: BindingKind::Hoisted, declaration_type: "FunctionDeclaration", import: None });
             self.identifier(id);
         }
-        self.function(f.base.node_id, f.base.start, f.base.end, None, &f.params, Body::Block(&f.body));
+        self.function(&f.base, None, &f.params, Body::Block(&f.body));
     }
 
     /// A class declaration's name is a `let` twice over: of the enclosing
@@ -479,14 +510,14 @@ impl Builder {
             self.declare(scope, id, Declared { kind: BindingKind::Let, declaration_type: "ClassDeclaration", import: None });
         }
         let name = c.id.as_ref().map(|id| (id, "ClassDeclaration", BindingKind::Let));
-        self.class(c.base.node_id, c.base.start, c.base.end, name, c.super_class.as_deref(), &c.body);
+        self.class(&c.base, name, c.super_class.as_deref(), &c.body);
     }
 
     /// A function's own scope, with its name (for a function expression), its
     /// parameters and its body. A destructuring parameter is a scope of its
     /// own in Babel, holding no bindings.
-    fn function(&mut self, id: Option<u32>, start: Option<u32>, end: Option<u32>, local: Option<(&Identifier, &str)>, params: &[PatternLike], body: Body<'_>) {
-        self.enter(id, start, end, ScopeKind::Function);
+    fn function(&mut self, node: &BaseNode, local: Option<(&Identifier, &str)>, params: &[PatternLike], body: Body<'_>) {
+        self.enter(node, ScopeKind::Function);
         let scope = self.current();
         // Babel registers the parameters first, then a function expression's
         // own name.
@@ -505,7 +536,7 @@ impl Builder {
             Body::Block(block) => self.statements(&block.body),
             Body::Expression(expression) => self.expression(expression),
         }
-        self.leave(id);
+        self.leave();
     }
 
     /// Runs `walk` inside the scope Babel gives a destructuring parameter.
@@ -518,9 +549,9 @@ impl Builder {
         };
         match base {
             Some(base) => {
-                self.enter(base.node_id, base.start, base.end, ScopeKind::Block);
+                self.enter(base, ScopeKind::Block);
                 walk(self);
-                self.leave(base.node_id);
+                self.leave();
             }
             None => walk(self),
         }
@@ -530,9 +561,7 @@ impl Builder {
     /// expression's (`local`).
     fn class(
         &mut self,
-        id: Option<u32>,
-        start: Option<u32>,
-        end: Option<u32>,
+        node: &BaseNode,
         name: Option<(&Identifier, &str, BindingKind)>,
         super_class: Option<&Expression>,
         _body: &ClassBody,
@@ -540,18 +569,18 @@ impl Builder {
         if let Some(super_class) = super_class {
             self.expression(super_class);
         }
-        self.enter(id, start, end, ScopeKind::Class);
+        self.enter(node, ScopeKind::Class);
         if let Some((name, declaration_type, kind)) = name {
             let scope = self.current();
             self.declare(scope, name, Declared { kind, declaration_type, import: None });
             self.identifier(name);
         }
-        self.leave(id);
+        self.leave();
     }
 
     fn function_expression(&mut self, f: &FunctionExpression) {
         let local = f.id.as_ref().map(|name| (name, "FunctionExpression"));
-        self.function(f.base.node_id, f.base.start, f.base.end, local, &f.params, Body::Block(&f.body));
+        self.function(&f.base, local, &f.params, Body::Block(&f.body));
     }
 
     // ---- patterns and expressions ---------------------------------------
@@ -651,7 +680,7 @@ impl Builder {
                     ArrowFunctionBody::BlockStatement(block) => Body::Block(block),
                     ArrowFunctionBody::Expression(expression) => Body::Expression(expression),
                 };
-                self.function(f.base.node_id, f.base.start, f.base.end, None, &f.params, body);
+                self.function(&f.base, None, &f.params, body);
             }
             Expression::FunctionExpression(f) => self.function_expression(f),
             Expression::ObjectExpression(object) => {
@@ -667,7 +696,7 @@ impl Builder {
                             if m.computed {
                                 self.expression(&m.key);
                             }
-                            self.function(m.base.node_id, m.base.start, m.base.end, None, &m.params, Body::Block(&m.body));
+                            self.function(&m.base, None, &m.params, Body::Block(&m.body));
                         }
                         ObjectExpressionProperty::SpreadElement(s) => self.expression(&s.argument),
                     }
@@ -692,7 +721,7 @@ impl Builder {
             Expression::SpreadElement(e) => self.expression(&e.argument),
             Expression::ClassExpression(c) => {
                 let name = c.id.as_ref().map(|id| (id, "ClassExpression", BindingKind::Local));
-                self.class(c.base.node_id, c.base.start, c.base.end, name, c.super_class.as_deref(), &c.body);
+                self.class(&c.base, name, c.super_class.as_deref(), &c.body);
             }
             Expression::ParenthesizedExpression(e) => self.expression(&e.expression),
             Expression::JSXElement(element) => self.jsx_element(element),
@@ -744,7 +773,7 @@ impl Builder {
         match name {
             JSXElementName::JSXIdentifier(identifier) => {
                 if opening || !is_compat_tag(&identifier.name) {
-                    self.reference(identifier.base.node_id, &identifier.name);
+                    self.reference(&identifier.base, &identifier.name);
                 }
             }
             JSXElementName::JSXMemberExpression(member) => self.jsx_member_object(member),
@@ -755,7 +784,7 @@ impl Builder {
     /// The identifier at the root of `<a.b.C>`.
     fn jsx_member_object(&mut self, member: &JSXMemberExpression) {
         match member.object.as_ref() {
-            JSXMemberExprObject::JSXIdentifier(identifier) => self.reference(identifier.base.node_id, &identifier.name),
+            JSXMemberExprObject::JSXIdentifier(identifier) => self.reference(&identifier.base, &identifier.name),
             JSXMemberExprObject::JSXMemberExpression(inner) => self.jsx_member_object(inner),
         }
     }
