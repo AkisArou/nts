@@ -4973,6 +4973,36 @@ fn uninstantiated(
         None if exported => "an exported generic function this program never instantiates, so \
                              there is no copy for the export to name"
             .to_owned(),
+        // **Called, generic, and no copy: the hidden root.**
+        //
+        // Every caller says "it calls `f`, which was refused above" and there is
+        // nothing above, because this arm used to answer `None` for a generic that
+        // is not exported. Three lanes reported the same shape in three days --
+        // the smallest reproduction is
+        // `blockers/a-generic-pinned-through-two-unions`, four functions -- and in
+        // each of them the census named a cause that was invisible, so the work
+        // was ranked against a sentence nobody could read.
+        //
+        // `unpinned` being empty is what makes it worth its own sentence rather
+        // than the one above: nothing was left unpinned, so the copy was not
+        // missing for want of a binding. It was not made *where the call is*,
+        // which is the deferred expansion's business, and saying so points at the
+        // mechanism instead of at the type parameters.
+        //
+        // Only where something calls it. A generic nothing calls and nothing
+        // exports is dead code, and a refusal for it would be noise in every
+        // census that already has too much.
+        None if generics.copies.get(&id).is_none_or(Vec::is_empty)
+            && snapshot
+                .call_targets
+                .values()
+                .any(|target| target.callee == Some(id)) =>
+        {
+            "a generic function this program calls and never copies, with no type parameter left \
+             unpinned -- so the copy was not made where the call is, and the call has nothing to \
+             name"
+                .to_owned()
+        },
         None => return None,
     };
     Some(FuncBuilder::probe(snapshot).unsupported(id, &what))
