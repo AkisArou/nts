@@ -33,25 +33,9 @@ export interface ReactPortal {
   readonly implementation: unknown;
 }
 
-export interface ReactConsumerType<T> {
-  readonly $$typeof: symbol;
-  readonly _context: ReactContext<T>;
-}
-
-export interface ReactContext<T> {
-  readonly $$typeof: symbol;
-  Consumer: ReactConsumerType<T>;
-  // A context is its own provider.
-  Provider: ReactContext<T>;
-  _currentValue: T;
-  _currentValue2: T;
-  _threadCount: number;
-  // Development only.
-  _currentRenderer?: unknown;
-  _currentRenderer2?: unknown;
-  // Set by applications for tooling.
-  displayName?: string;
-}
+// Contexts are classes: see ReactContext.ts for why.
+import type { ReactContext } from "./ReactContext.ts";
+export type { ReactContext, ReactContextBase, ReactContextConsumer } from "./ReactContext.ts";
 
 export interface RefObject<T> {
   current: T;

@@ -1,4 +1,4 @@
-import type { ReactContext } from "shared/ReactTypes.ts";
+import type { ReactContext, ReactContextBase } from "shared/ReactTypes.ts";
 import type { Fiber, ContextDependency, Dependencies } from "./ReactInternalTypes.ts";
 import type { StackCursor } from "./ReactFiberStack.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
@@ -23,7 +23,7 @@ const renderer2CursorDEV: StackCursor<unknown> = createCursor<unknown>(null);
 const rendererSigil: object = {};
 
 let currentlyRenderingFiber: Fiber | null = null;
-let lastContextDependency: ContextDependency<unknown> | null = null;
+let lastContextDependency: ContextDependency | null = null;
 
 let isDisallowedContextReadInDEV: boolean = false;
 
@@ -49,11 +49,12 @@ export function exitDisallowedContextReadInDEV(): void {
   }
 }
 
-export function pushProvider<T>(providerFiber: Fiber, context: ReactContext<T>, nextValue: T): void {
+// A provider of a context of any value type: its `value` prop, erased.
+export function pushProvider(providerFiber: Fiber, context: ReactContextBase, nextValue: unknown): void {
   if (isPrimaryRenderer) {
-    push(valueCursor, context._currentValue, providerFiber);
+    push(valueCursor, context.currentValue(true), providerFiber);
 
-    context._currentValue = nextValue;
+    context.setCurrentValue(true, nextValue);
     if (isDevelopment) {
       push(rendererCursorDEV, context._currentRenderer, providerFiber);
 
@@ -70,9 +71,9 @@ export function pushProvider<T>(providerFiber: Fiber, context: ReactContext<T>, 
       context._currentRenderer = rendererSigil;
     }
   } else {
-    push(valueCursor, context._currentValue2, providerFiber);
+    push(valueCursor, context.currentValue(false), providerFiber);
 
-    context._currentValue2 = nextValue;
+    context.setCurrentValue(false, nextValue);
     if (isDevelopment) {
       push(renderer2CursorDEV, context._currentRenderer2, providerFiber);
 
@@ -91,19 +92,19 @@ export function pushProvider<T>(providerFiber: Fiber, context: ReactContext<T>, 
   }
 }
 
-export function popProvider<T>(context: ReactContext<T>, providerFiber: Fiber): void {
+export function popProvider(context: ReactContextBase, providerFiber: Fiber): void {
   // The value this provider's push saved: the enclosing provider's.
-  const currentValue = valueCursor.current as T;
+  const currentValue = valueCursor.current;
 
   if (isPrimaryRenderer) {
-    context._currentValue = currentValue;
+    context.setCurrentValue(true, currentValue);
     if (isDevelopment) {
       const currentRenderer = rendererCursorDEV.current;
       pop(rendererCursorDEV, providerFiber);
       context._currentRenderer = currentRenderer;
     }
   } else {
-    context._currentValue2 = currentValue;
+    context.setCurrentValue(false, currentValue);
     if (isDevelopment) {
       const currentRenderer2 = renderer2CursorDEV.current;
       pop(renderer2CursorDEV, providerFiber);
@@ -149,17 +150,17 @@ export function scheduleContextWorkOnParentPath(parent: Fiber | null, renderLane
   }
 }
 
-export function propagateContextChange<T>(workInProgress: Fiber, context: ReactContext<T>, renderLanes: Lanes): void {
+export function propagateContextChange(workInProgress: Fiber, context: ReactContextBase, renderLanes: Lanes): void {
   // TODO: This path is only used by Cache components. Update
   // lazilyPropagateParentContextChanges to look for Cache components so they
   // can take advantage of lazy propagation.
   const forcePropagateEntireTree = true;
-  propagateContextChanges(workInProgress, [context as ReactContext<unknown>], renderLanes, forcePropagateEntireTree);
+  propagateContextChanges(workInProgress, [context], renderLanes, forcePropagateEntireTree);
 }
 
 function propagateContextChanges(
   workInProgress: Fiber,
-  contexts: ReactContext<unknown>[],
+  contexts: ReactContextBase[],
   renderLanes: Lanes,
   forcePropagateEntireTree: boolean,
 ): void {
@@ -178,7 +179,7 @@ function propagateContextChanges(
 
       let dep = list.firstContext;
       findChangedDep: while (dep !== null) {
-        const dependency: ContextDependency<unknown> = dep;
+        const dependency: ContextDependency = dep;
         const consumer: Fiber = fiber;
         for (let i = 0; i < contexts.length; i++) {
           const context = contexts[i];
@@ -328,7 +329,7 @@ function propagateParentContextChanges(
 ): boolean {
   // Collect all the parent providers that changed. Since this is usually small
   // number, we use an Array instead of Set.
-  let contexts: ReactContext<unknown>[] | null = null;
+  let contexts: ReactContextBase[] | null = null;
   let parent: null | Fiber = workInProgress;
   let isInsidePropagationBailout = false;
   while (parent !== null) {
@@ -349,7 +350,7 @@ function propagateParentContextChanges(
 
       const oldProps = currentParent.memoizedProps as { value: unknown } | null;
       if (oldProps !== null) {
-        const context = parent.type as ReactContext<unknown>;
+        const context = parent.type as ReactContextBase;
         const newProps = parent.pendingProps as { value: unknown };
         const newValue = newProps.value;
 
@@ -380,7 +381,7 @@ function propagateParentContextChanges(
       // This uses regular equality instead of Object.is because we assume that
       // host transition state doesn't include NaN as a valid type.
       if (oldState !== newState) {
-        const hostTransitionContext = HostTransitionContext as ReactContext<unknown>;
+        const hostTransitionContext: ReactContextBase = HostTransitionContext;
         if (contexts !== null) {
           contexts.push(hostTransitionContext);
         } else {
@@ -429,7 +430,7 @@ export function checkIfContextChanged(currentDependencies: Dependencies): boolea
   let dependency = currentDependencies.firstContext;
   while (dependency !== null) {
     const context = dependency.context;
-    const newValue = isPrimaryRenderer ? context._currentValue : context._currentValue2;
+    const newValue = context.currentValue(isPrimaryRenderer);
     const oldValue = dependency.memoizedValue;
     if (!Object.is(newValue, oldValue)) {
       return true;
@@ -463,21 +464,35 @@ export function readContext<T>(context: ReactContext<T>): T {
       );
     }
   }
-  return readContextForConsumer(currentlyRenderingFiber, context);
+  const value = isPrimaryRenderer ? context._currentValue : context._currentValue2;
+  recordContextDependency(currentlyRenderingFiber, context, value);
+  return value;
 }
 
-export function readContextDuringReconciliation<T>(consumer: Fiber, context: ReactContext<T>, renderLanes: Lanes): T {
+// A context the reconciler holds by its base -- a consumer element in a child
+// list -- read for `consumer`: its value, erased.
+export function readContextDuringReconciliation(consumer: Fiber, context: ReactContextBase, renderLanes: Lanes): unknown {
   if (currentlyRenderingFiber === null) {
     prepareToReadContext(consumer, renderLanes);
   }
-  return readContextForConsumer(consumer, context);
+  const value = context.currentValue(isPrimaryRenderer);
+  recordContextDependency(consumer, context, value);
+  return value;
 }
 
-function readContextForConsumer<T>(consumer: Fiber | null, context: ReactContext<T>): T {
-  const value = isPrimaryRenderer ? context._currentValue : context._currentValue2;
+// A context read of any value type: what `readContext` does, erased, for a
+// class component's `contextType` and a `<Context.Consumer>`.
+export function readContextOf(context: ReactContextBase): unknown {
+  const value = context.currentValue(isPrimaryRenderer);
+  recordContextDependency(currentlyRenderingFiber, context, value);
+  return value;
+}
 
-  const contextItem: ContextDependency<unknown> = {
-    context: context as ReactContext<unknown>,
+// Records that `consumer` read `value` from `context`, so a change to the
+// context re-renders it.
+function recordContextDependency(consumer: Fiber | null, context: ReactContextBase, value: unknown): void {
+  const contextItem: ContextDependency = {
+    context,
     memoizedValue: value,
     next: null,
   };
@@ -509,5 +524,4 @@ function readContextForConsumer<T>(consumer: Fiber | null, context: ReactContext
     // Append a new context item.
     lastContextDependency = lastContextDependency.next = contextItem;
   }
-  return value;
 }

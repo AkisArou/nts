@@ -1,4 +1,4 @@
-import type { Props } from "shared/ReactTypes.ts";
+import type { Props, ReactContextBase } from "shared/ReactTypes.ts";
 import { shallowEqual } from "shared/shallowEqual.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
@@ -11,7 +11,7 @@ import { ReactStrictModeWarnings } from "./ReactStrictModeWarnings.ts";
 import { getComponentNameFromFiber } from "./getComponentNameFromFiber.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import { REACT_CONTEXT_TYPE, REACT_CONSUMER_TYPE } from "shared/ReactSymbols.ts";
-import type { ReactContext } from "shared/ReactTypes.ts";
+
 
 import { NoMode, StrictLegacyMode, StrictEffectsMode } from "./ReactTypeOfMode.ts";
 
@@ -30,7 +30,7 @@ import {
 } from "./ReactFiberClassUpdateQueue.ts";
 import { NoLanes } from "./ReactFiberLane.ts";
 import { cacheContext, hasContextChanged, emptyContextObject } from "./ReactFiberLegacyContext.ts";
-import { readContext, checkIfContextChanged } from "./ReactFiberNewContext.ts";
+import { readContextOf, checkIfContextChanged } from "./ReactFiberNewContext.ts";
 import { requestUpdateLane, scheduleUpdateOnFiber } from "./ReactFiberWorkLoop.ts";
 import { markForceUpdateScheduled, markStateUpdateScheduled, setIsStrictModeForDevtools } from "./ReactFiberDevToolsHook.ts";
 import { startUpdateTimerByLane } from "./ReactProfilerTimer.ts";
@@ -513,7 +513,7 @@ function constructClassInstance(workInProgress: Fiber, ctor: ClassComponentConst
   }
 
   if (typeof contextType === "object" && contextType !== null) {
-    context = readContext(contextType as ReactContext<unknown>);
+    context = readContextOf(contextType as ReactContextBase);
   }
   // disableLegacyContext: no masked legacy context to read otherwise.
 
@@ -672,7 +672,7 @@ function callComponentWillReceiveProps(
 function readClassContext(ctor: ClassComponentConstructor): unknown {
   const contextType = ctor.contextType;
   if (typeof contextType === "object" && contextType !== null) {
-    return readContext(contextType as ReactContext<unknown>);
+    return readContextOf(contextType as ReactContextBase);
   }
   // disableLegacyContext is on in the stable channel.
   return emptyContextObject;

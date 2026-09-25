@@ -19,7 +19,7 @@ import {
   enableViewTransition,
 } from "shared/ReactFeatureFlags.ts";
 import { REACT_CONTEXT_TYPE, REACT_FORWARD_REF_TYPE, REACT_LAZY_TYPE, REACT_MEMO_TYPE } from "shared/ReactSymbols.ts";
-import type { LazyComponent as LazyComponentType, ReactConsumerType, ReactContext, Transition } from "shared/ReactTypes.ts";
+import type { LazyComponent as LazyComponentType, ReactContextConsumer, Transition, ReactContextBase } from "shared/ReactTypes.ts";
 import { getComponentNameFromFiber } from "./getComponentNameFromFiber.ts";
 import { createCapturedValueAtFiber, createCapturedValueFromError } from "react-reconciler/ReactCapturedValue.ts";
 import {
@@ -153,6 +153,7 @@ import {
   propagateParentContextChangesToDeferredTree,
   pushProvider,
   readContext,
+  readContextOf,
   scheduleContextWorkOnParentPath,
 } from "./ReactFiberNewContext.ts";
 import type {
@@ -3102,7 +3103,7 @@ function updatePortalComponent(current: Fiber | null, workInProgress: Fiber, ren
 let hasWarnedAboutUsingNoValuePropOnContextProvider = false;
 
 function updateContextProvider(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  const context = workInProgress.type as ReactContext<unknown>;
+  const context = workInProgress.type as ReactContextBase;
   const newProps = workInProgress.pendingProps as AnyProps;
   const newValue = newProps["value"];
 
@@ -3125,7 +3126,7 @@ function updateContextProvider(current: Fiber | null, workInProgress: Fiber, ren
 }
 
 function updateContextConsumer(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  const consumerType = workInProgress.type as ReactConsumerType<unknown>;
+  const consumerType = workInProgress.type as ReactContextConsumer;
   const context = consumerType._context;
   const newProps = workInProgress.pendingProps as AnyProps;
   const render = newProps["children"] as (value: unknown) => unknown;
@@ -3142,7 +3143,7 @@ function updateContextConsumer(current: Fiber | null, workInProgress: Fiber, ren
   }
 
   prepareToReadContext(workInProgress, renderLanes);
-  const newValue = readContext(context);
+  const newValue = readContextOf(context);
   if (enableSchedulingProfiler) {
     markComponentRenderStarted(workInProgress);
   }
@@ -3335,7 +3336,7 @@ function attemptEarlyBailoutIfNoScheduledUpdate(current: Fiber, workInProgress: 
       break;
     case ContextProvider: {
       const newValue = (workInProgress.memoizedProps as AnyProps)["value"];
-      const context = workInProgress.type as ReactContext<unknown>;
+      const context = workInProgress.type as ReactContextBase;
       pushProvider(workInProgress, context, newValue);
       break;
     }

@@ -15,7 +15,7 @@ import {
   enableViewTransitionParentEnterExit,
   passChildrenWhenCloningPersistedNodes,
 } from "shared/ReactFeatureFlags.ts";
-import type { ReactContext } from "shared/ReactTypes.ts";
+import type { ReactContextBase } from "shared/ReactTypes.ts";
 import { resetChildFibers } from "./ReactChildFiber.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";
 import type { Cache, SpawnedCachePool } from "./ReactFiberCacheComponent.ts";
@@ -1610,7 +1610,7 @@ function completeWork(current: Fiber | null, workInProgress: Fiber, renderLanes:
       return null;
     case ContextProvider: {
       // Pop provider fiber
-      const context = workInProgress.type as ReactContext<unknown>;
+      const context = workInProgress.type as ReactContextBase;
       popProvider(context, workInProgress);
       bubbleProperties(workInProgress);
       return null;

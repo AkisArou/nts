@@ -1,8 +1,7 @@
-import type { ReactContext } from "shared/ReactTypes.ts";
+import { ReactContext } from "shared/ReactContext.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 
 import { isDevelopment } from "shared/Build.ts";
-import { REACT_CONTEXT_TYPE } from "shared/ReactSymbols.ts";
 
 import { pushProvider, popProvider } from "./ReactFiberNewContext.ts";
 import { scheduleCallback, NormalPriority } from "./Scheduler.ts";
@@ -50,22 +49,10 @@ export interface SpawnedCachePool {
   readonly pool: Cache;
 }
 
-// We don't use Consumer/Provider for Cache components, so both are null, as
-// upstream has them. The values are initialized at the root, so they start
-// null too.
-export const CacheContext: ReactContext<Cache> = {
-  $$typeof: REACT_CONTEXT_TYPE,
-  Consumer: null as unknown as ReactContext<Cache>["Consumer"],
-  Provider: null as unknown as ReactContext<Cache>,
-  _currentValue: null as unknown as Cache,
-  _currentValue2: null as unknown as Cache,
-  _threadCount: 0,
-};
-
-if (isDevelopment) {
-  CacheContext._currentRenderer = null;
-  CacheContext._currentRenderer2 = null;
-}
+// Cache components have no Consumer or Provider of their own: upstream leaves
+// both null, this has the ones every context has, which nothing renders. The
+// value is initialized at the root, so it starts null.
+export const CacheContext: ReactContext<Cache> = new ReactContext<Cache>(null as unknown as Cache);
 
 // Creates a new empty Cache instance with a ref-count of 0. The caller is responsible
 // for retaining the cache once it is in use (retainCache), and releasing the cache

@@ -14,15 +14,7 @@ import {
   REACT_LEGACY_ELEMENT_TYPE,
   REACT_PORTAL_TYPE,
 } from "shared/ReactSymbols.ts";
-import type {
-  LazyComponent,
-  ReactContext,
-  ReactDebugInfo,
-  ReactElement,
-  ReactKey,
-  ReactPortal,
-  Thenable,
-} from "shared/ReactTypes.ts";
+import type { LazyComponent, ReactDebugInfo, ReactElement, ReactKey, ReactPortal, Thenable, ReactContextBase } from "shared/ReactTypes.ts";
 import { getComponentNameFromFiber } from "./getComponentNameFromFiber.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 import {
@@ -685,7 +677,7 @@ class ChildReconcilerImpl {
       }
 
       if (tagged.$$typeof === REACT_CONTEXT_TYPE) {
-        const context = newChild as ReactContext<unknown>;
+        const context = newChild as ReactContextBase;
         return this.createChild(returnFiber, readContextDuringReconciliation(returnFiber, context, lanes), lanes);
       }
 
@@ -761,7 +753,7 @@ class ChildReconcilerImpl {
       }
 
       if (tagged.$$typeof === REACT_CONTEXT_TYPE) {
-        const context = newChild as ReactContext<unknown>;
+        const context = newChild as ReactContextBase;
         return this.updateSlot(returnFiber, oldFiber, readContextDuringReconciliation(returnFiber, context, lanes), lanes);
       }
 
@@ -831,7 +823,7 @@ class ChildReconcilerImpl {
       }
 
       if (tagged.$$typeof === REACT_CONTEXT_TYPE) {
-        const context = newChild as ReactContext<unknown>;
+        const context = newChild as ReactContextBase;
         return this.updateFromMap(
           existingChildren,
           returnFiber,
@@ -1561,7 +1553,7 @@ class ChildReconcilerImpl {
       }
 
       if (tagged.$$typeof === REACT_CONTEXT_TYPE) {
-        const context = newChild as ReactContext<unknown>;
+        const context = newChild as ReactContextBase;
         return this.reconcileChildFibersImpl(
           returnFiber,
           currentFirstChild,

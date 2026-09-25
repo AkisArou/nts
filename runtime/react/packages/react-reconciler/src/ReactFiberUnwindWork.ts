@@ -4,7 +4,7 @@
 // interrupted (unwindInterruptedWork).
 
 import { enableProfilerTimer, enableTransitionTracing } from "shared/ReactFeatureFlags.ts";
-import type { ReactContext } from "shared/ReactTypes.ts";
+import type { ReactContextBase } from "shared/ReactTypes.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";
 import type { Cache } from "./ReactFiberCacheComponent.ts";
 import { popCacheProvider } from "./ReactFiberCacheComponent.ts";
@@ -161,7 +161,7 @@ function unwindWork(current: Fiber | null, workInProgress: Fiber, renderLanes: L
       popHostContainer(workInProgress);
       return null;
     case ContextProvider: {
-      const context = workInProgress.type as ReactContext<unknown>;
+      const context = workInProgress.type as ReactContextBase;
       popProvider(context, workInProgress);
       return null;
     }
@@ -236,7 +236,7 @@ function unwindInterruptedWork(current: Fiber | null, interruptedWork: Fiber, re
       popSuspenseListContext(interruptedWork);
       break;
     case ContextProvider: {
-      const context = interruptedWork.type as ReactContext<unknown>;
+      const context = interruptedWork.type as ReactContextBase;
       popProvider(context, interruptedWork);
       break;
     }

@@ -2,7 +2,7 @@ import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableLegacyHidden, enableViewTransition } from "shared/ReactFeatureFlags.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import { REACT_STRICT_MODE_TYPE } from "shared/ReactSymbols.ts";
-import type { ReactConsumerType, ReactContext } from "shared/ReactTypes.ts";
+import type { ReactContextConsumer, ReactContextBase } from "shared/ReactTypes.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import {
   ActivityComponent,
@@ -72,7 +72,7 @@ function getWrappedName(outerType: unknown, innerType: unknown, wrapperName: str
 }
 
 // Keep in sync with shared/getComponentNameFromType
-function getContextName(type: ReactContext<unknown>): string {
+function getContextName(type: ReactContextBase): string {
   return type.displayName || "Context";
 }
 
@@ -106,11 +106,11 @@ export function getComponentNameFromFiber(fiber: Fiber): string | null {
     case CacheComponent:
       return "Cache";
     case ContextConsumer: {
-      const consumer = type as ReactConsumerType<unknown>;
+      const consumer = type as ReactContextConsumer;
       return getContextName(consumer._context) + ".Consumer";
     }
     case ContextProvider: {
-      const context = type as ReactContext<unknown>;
+      const context = type as ReactContextBase;
       return getContextName(context);
     }
     case DehydratedFragment:

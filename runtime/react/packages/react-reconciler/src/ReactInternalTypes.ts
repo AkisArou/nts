@@ -7,7 +7,7 @@
 // stateNode); they become base-class hierarchies once NTS can downcast (see
 // runtime/react/spikes/fiber-state).
 
-import type { ReactContext, RefObject } from "shared/ReactTypes.ts";
+import type { ReactContextBase, RefObject } from "shared/ReactTypes.ts";
 import type { FiberNode } from "./ReactFiber.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
 import type { FiberRootNode } from "./ReactFiberRoot.ts";
@@ -35,15 +35,17 @@ export type HookType =
   | "useFormState"
   | "useActionState";
 
-export interface ContextDependency<T> {
-  context: ReactContext<T>;
-  next: ContextDependency<unknown> | null;
-  memoizedValue: T;
+// A context a fiber read, and the value it read: a list of contexts of every
+// value type, so the value is erased (see shared/ReactContext.ts).
+export interface ContextDependency {
+  context: ReactContextBase;
+  next: ContextDependency | null;
+  memoizedValue: unknown;
 }
 
 export interface Dependencies {
   lanes: Lanes;
-  firstContext: ContextDependency<unknown> | null;
+  firstContext: ContextDependency | null;
   // Development only.
   _debugThenableState?: ThenableState | null;
 }
