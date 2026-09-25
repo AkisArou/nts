@@ -906,8 +906,8 @@ GTK 4.22; ns per operation, best of three in-process runs after one untimed.
 | startup peak RSS (MB) | | 88-101 | 105-120 | 1.2x |
 | notes app, 1000 notes, open to quit (ms) | | 102-123 | 116-186 | 1.1-1.5x |
 | notes app peak RSS (MB) | | 101 | 118-119 | 1.2x |
-| task list: make and sort 10000 (ms) | | 5.7 | 7.8-8.1 | 1.4x |
-| task list: 15 queries typed (ms) | | 113-133 | 301-316 | 2.4-2.7x |
+| task list: make and sort 10000 (ms) | | 5.7-6.9 | 7.8-8.3 | 1.2-1.4x |
+| task list: 15 queries typed (ms) | | 113-142 | 301-318 | 2.2-2.7x |
 
 Ranges are separate runs on a machine other sessions share, which is also
 why a row's C can read above its nts: both are GTK's own work at the same
@@ -966,9 +966,14 @@ were timed interleaved at a load average of 38, and their ranges overlap
 (118-282 ms against 186-337 for typing). No difference between them is
 shown, and no number from that run is one to quote.
 
-**Next in M4:** the table re-run on a quiet machine, and the reference
-counting cost in the filter's profile (`nts_retain` and the cycle collector)
-checked against a plain build there.
+The task-list rows' upper ends are the `Task`-object version, from a
+`run.sh` pass at load average 7 rising to 14. The micro rows of that pass
+matched the table above, each within its range.
+
+**Next in M4:** the reference counting cost in the filter's profile
+(`nts_retain` and the cycle collector), checked against a plain build on a
+quiet machine; and the `outs` row, whose gap to C is the tuple allocation,
+which a caller that only destructures could avoid.
 
 ## Rules this lane keeps
 
