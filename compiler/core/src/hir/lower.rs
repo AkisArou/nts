@@ -19158,16 +19158,72 @@ impl<'a> FuncBuilder<'a> {
         // pick up the class member `cell`, a symbol no local scope declares,
         // which then looks like an assignment to a name from an enclosing scope
         // and gets the loop refused.
-        if let Some(target) = written
-            && self.kind_of(target) == Some(syntax::IDENTIFIER)
-            && let Some(symbol) = self.node(target).symbol
-            && !into.contains(&symbol.0)
-        {
-            into.push(symbol.0);
+        if let Some(target) = written {
+            self.target_names(target, into);
         }
 
         for child in &self.node(root).children {
             self.assigned_symbols(*child, into);
+        }
+    }
+
+    /// The names an assignment's target writes: the name itself, or every name
+    /// a destructuring pattern binds -- `[line] = next()`, `({ a, k: b } = o)`,
+    /// `[x, ...rest] = xs`, nested. A pattern's defaults (`[a = 1] = xs`) are
+    /// `=` expressions of their own, which [`Self::assigned_symbols`] finds by
+    /// walking into the target. Missing a pattern's names is the loop that
+    /// never advances: `[line] = next()` wrote a value the header never saw.
+    fn target_names(&self, target: NodeId, into: &mut Vec<u32>) {
+        match self.kind_of(target) {
+            Some(syntax::IDENTIFIER) => {
+                if let Some(symbol) = self.node(target).symbol
+                    && !into.contains(&symbol.0)
+                {
+                    into.push(symbol.0);
+                }
+            }
+            Some(
+                syntax::PARENTHESIZED_EXPRESSION
+                | syntax::ARRAY_LITERAL_EXPRESSION
+                | syntax::OBJECT_LITERAL_EXPRESSION
+                | syntax::SPREAD_ELEMENT
+                | syntax::SPREAD_ASSIGNMENT,
+            ) => {
+                for child in self.children(target) {
+                    self.target_names(child, into);
+                }
+            }
+            // `({ line } = o)`: the node carries the *property's* symbol, so
+            // the binding is found by name among the ones in scope, as
+            // `shorthand_value_symbol` finds it when the store is lowered --
+            // one local of that spelling, or none carried (the store itself
+            // then refuses a shadowed name, and a global needs no carrying).
+            Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
+                let Some(text) = self.children(target).first().and_then(|name| self.node(*name).text.as_deref()) else {
+                    return;
+                };
+                let mut local = self.bindings.keys().copied().filter(|symbol| {
+                    self.snapshot.symbols.get(*symbol as usize).is_some_and(|record| record.name == text)
+                });
+                if let (Some(symbol), None) = (local.next(), local.next())
+                    && !into.contains(&symbol)
+                {
+                    into.push(symbol);
+                }
+            }
+            // `{ key: target }`: the key names a property, not a binding.
+            Some(syntax::PROPERTY_ASSIGNMENT) => {
+                if let Some(value) = self.children(target).last() {
+                    self.target_names(*value, into);
+                }
+            }
+            // `[a = 1]`: the name before the default.
+            Some(syntax::BINARY_EXPRESSION) => {
+                if let Some(name) = self.children(target).first() {
+                    self.target_names(*name, into);
+                }
+            }
+            _ => {}
         }
     }
 
