@@ -6,6 +6,12 @@
 //! property bit `i` is comes from tsgo's encoder, as the generated table in
 //! [`children`]. Naming children by property is what lets the converter tell a
 //! declaration's type from its initializer without guessing from their kinds.
+//!
+//! **A copy, until it moves.** [`kinds`] repeats, and extends, the syntax
+//! kinds `nts_semantic_schema::syntax` names, and [`children`] describes
+//! tsgo's encoding, which nts's lowering could read too. Both belong in
+//! compiler/semantic-schema, and the move has been proposed to the compiler
+//! lane. When it lands, this crate imports them from there and these files go.
 
 pub mod children;
 pub mod kinds;
