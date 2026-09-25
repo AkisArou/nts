@@ -117,7 +117,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         return Ok((out, None));
     }
     super::declare_callbacks(&mut out, callbacks_declared);
-    out.push_str("declare void @nts_com_register(ptr)\ndeclare ptr @nts_com_outer_instance(ptr)\ndeclare ptr @nts_com_outer_base(ptr)\n");
+    out.push_str("declare void @nts_com_register(ptr)\ndeclare ptr @nts_com_outer_instance(ptr)\ndeclare ptr @nts_com_outer_base(ptr)\ndeclare ptr @nts_com_answer(ptr)\n");
     for slot in OUTER_SLOTS {
         let _ = writeln!(out, "declare void @{slot}()");
     }
@@ -261,6 +261,9 @@ fn adapter(out: &mut String, platform: Platform, name: &str, method: &ForeignMet
     let call = format!("call {have_ty} {}({})", symbol(&compiled.name), arguments.join(", "));
     if matches!(result, Type::Void | Type::Record(_)) {
         let _ = writeln!(out, "  {call}");
+    } else if matches!(result, Type::Pointer(_)) {
+        // An object: a reference the caller owns, whichever the provider.
+        let _ = writeln!(out, "  %r = {call}\n  %answered = call ptr @nts_com_answer(ptr %r)\n  store ptr %answered, ptr %out");
     } else {
         // A number or a `boolean` the method answers, converted to the slot's
         // type and stored where the caller asked; a `boolean` is a byte there.

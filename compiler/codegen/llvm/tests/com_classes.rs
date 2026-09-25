@@ -190,7 +190,7 @@ fn a_delegate_taking_a_boolean_is_ir() {
 /// Layout overrides as `bind-winmd` writes `FrameworkElement`'s, cut down.
 const LAYOUT: &str = r#"declare module "winrt:Test.Layout" {
   import type { ByValue, CNumber, Struct, c_float } from "c:types";
-  import type { ComClass, HString } from "winrt:types";
+  import type { ComClass, HString, IInspectable } from "winrt:types";
   export type Size = Struct<{ Width: c_float; Height: c_float }, "Test_Size">;
   export type Rect = Struct<{ X: c_float; Y: c_float; Width: c_float; Height: c_float }, "Test_Rect">;
   /**
@@ -218,6 +218,10 @@ const LAYOUT: &str = r#"declare module "winrt:Test.Layout" {
      * @ntsOverride 2B7E1A55-8C3F-4D21-A6E9-0F4B8D2C7E13 6 Allowed
      */
     Allowed(level: CNumber<"int32">): boolean;
+    /**
+     * @ntsOverride 2B7E1A55-8C3F-4D21-A6E9-0F4B8D2C7E13 7 Peer
+     */
+    Peer(): IInspectable | null;
   }
   export type IElement = ComClass<"IElement">;
   export interface Element extends IElement {}
@@ -380,6 +384,36 @@ fn a_composed_class_constructor_runs_after_its_composition() {
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
+/// An override answering an object, as `OnCreateAutomationPeer` does: the
+/// slot's result pointer takes a reference the caller owns, which
+/// `nts_com_answer` makes of the one the method answers under either
+/// provider.
+#[test]
+fn an_override_answers_an_object_the_caller_owns() {
+    let source = "import { Element } from \"winrt:Test.Layout\";\nimport type { IInspectable } from \"winrt:types\";\nclass Panel extends Element {\n  kept: IInspectable | null = null;\n  Allowed(_level: number): boolean {\n    return true;\n  }\n  Peer(): IInspectable | null {\n    return this.kept;\n  }\n}\nexport function start(): void {\n  new Panel();\n}\n";
+    let Some((dir, prepared)) = prepare_with("object-result", LAYOUT, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_1(")).unwrap_or_else(|| panic!("{text}"));
+    assert!(adapter.contains("(void * a0, void **out)") && adapter.contains("*out = nts_com_answer((void *)"), "{adapter}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("%answered = call ptr @nts_com_answer(ptr %r)"), "{}", llvm.text);
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)

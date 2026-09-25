@@ -30,6 +30,9 @@
 //   `Button`'s, back, and out through the slot's result pointer -- so
 //   `measured` counts them and `styled=true` says each arrived whole. The
 //   interface's other slots, `ArrangeOverride` among them, are `Button`'s.
+// - Asked for its automation peer, XAML calls `PressButton`'s
+//   `OnCreateAutomationPeer`, and the peer it answers -- a reference the
+//   framework now owns -- names its class (`peer=Button`).
 // - `PressButton`'s constructor takes its label, as a C# control's would:
 //   `super()` composes it, and the body sets its content with `this`.
 // - Each class keeps its counters in fields, as C#'s do. The runtime holds
@@ -47,7 +50,8 @@ import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
-import { ButtonAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
+import { ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
+import type { AutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
 import { Button, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
 
 // The overridable interface, as XAML reaches an override: bindings keep it
@@ -68,6 +72,7 @@ class PressButton extends Button {
   templated = 0;
   measured = 0;
   states = "";
+  peers = 0;
   label: string;
 
   constructor(label: string) {
@@ -86,6 +91,11 @@ class PressButton extends Button {
   GoToElementStateCore(stateName: string, _useTransitions: boolean): boolean {
     this.states += stateName;
     return false;
+  }
+  OnCreateAutomationPeer(): AutomationPeer {
+    this.peers += 1;
+    // `AutomationPeer`'s instances are its default interface.
+    return ButtonAutomationPeer.CreateInstanceWithOwner(this).as_IAutomationPeer() as AutomationPeer;
   }
   MeasureOverride(available: ByValue<Size>): ByValue<Size> {
     this.measured += 1;
@@ -113,11 +123,12 @@ class App extends Application {
       const focused = button.as_IUIElement().Focus(FocusState.Programmatic);
       button.as_IFrameworkElementOverrides().GoToElementStateCore("Custom", false);
       ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
+      const peer = FrameworkElementAutomationPeer.CreatePeerForElement(button.as_IUIElement()).GetClassName();
       const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
       report(
         "title=" + window.get_Title() + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
           " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-          " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label,
+          " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " peer=" + peer + " peers=" + String(button.peers),
       );
       this.Exit();
     }, 1500);

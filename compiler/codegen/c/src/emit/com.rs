@@ -274,6 +274,11 @@ fn adapter(
     let call = |arguments: &[String]| format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
     let body = match result {
         Type::Void => format!("{};", call(&arguments)),
+        // An object: a reference the caller owns, whichever the provider.
+        Type::Pointer(_) => {
+            parameters.push("void **out".to_owned());
+            format!("*out = nts_com_answer((void *){});", call(&arguments))
+        }
         Type::Record(_) => {
             parameters.push(format!("{} *out", result.c_type()));
             let mut with_out = arguments.clone();

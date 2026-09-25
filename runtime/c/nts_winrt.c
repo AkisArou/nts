@@ -603,6 +603,18 @@ void *nts_com_outer_base(void *face) {
   return at->base;
 }
 
+void *nts_com_answer(void *object) {
+#ifdef NTS_PROVIDER_RC
+  /* The compiled method answered the caller's reference; it is the one the
+   * slot hands on. */
+  return object;
+#else
+  /* Nothing is released without reference counting, so the program's
+   * reference stays the program's and the caller is given one of its own. */
+  return nts_com_addref(object);
+#endif
+}
+
 void *nts_com_state(void *instance) {
   /* `IUnknown` is the object's identity, which an aggregated interface asks
    * its outer object for: this runtime's identity face. */

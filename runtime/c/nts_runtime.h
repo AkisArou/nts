@@ -1970,6 +1970,9 @@ void *nts_com_outer_base(void *face);
 /* The object holding the fields of the composed instance `instance` is an
  * interface of, lent for as long as the instance lives. */
 void *nts_com_state(void *instance);
+/* The object an override answers, as its slot writes it: a reference the
+ * caller owns, whichever provider the program was built with. */
+void *nts_com_answer(void *object);
 /* `super.OnGotFocus(e)`: the base class's own implementation of the
  * interface the IID names, on the object `instance` is. The caller's (+1). */
 void *nts_com_base(void *instance, uint64_t iid_low, uint64_t iid_high);

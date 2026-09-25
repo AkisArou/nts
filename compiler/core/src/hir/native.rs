@@ -3580,12 +3580,15 @@ pub struct Forwarded {
 /// was reached through, each argument, and the value it answers. The
 /// emitters call it by COM's convention -- an HRESULT, the value written
 /// through a pointer after the arguments -- so a `Void` result is a method
-/// answering only its HRESULT. A number, a `boolean` or a record by value is
-/// answered; an object or a string, whose reference the caller would take,
-/// is refused by name.
+/// answering only its HRESULT. A number, a `boolean`, a record by value or an
+/// object (a reference the caller owns, `nts_com_answer`) is answered; a
+/// string is refused by name.
 pub(crate) fn override_signature(snapshot: &SemanticSnapshot, signature: &nts_semantic_schema::SignatureRecord) -> Result<FnPointer, String> {
-    let Some(result @ (Type::Void | Type::Bool | Type::Scalar(_) | Type::Record(_))) = abi_type(snapshot, signature.return_type) else {
-        return Err("a result that is an object or a string, whose reference the caller would own".to_owned());
+    if is_hstring(snapshot, signature.return_type) {
+        return Err("a string result, which the slot would answer as an `HSTRING` the caller owns".to_owned());
+    }
+    let Some(result @ (Type::Void | Type::Bool | Type::Scalar(_) | Type::Record(_) | Type::Pointer(_))) = abi_type(snapshot, signature.return_type) else {
+        return Err("a result with no C type the slot could answer".to_owned());
     };
     let mut parameters = vec![Type::Pointer(Pointee::Void)];
     for parameter in &signature.parameters {

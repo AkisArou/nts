@@ -294,6 +294,11 @@ Application.Start(() => { new App(); });
   `this` (`label=Press`). A constructor that doesn't open with `super()`, and
   `super(...)` with arguments (the base's composable factory takes none), are
   refused by name.
+- **An override answering an object**, as `OnCreateAutomationPeer` does:
+  the slot's result pointer takes a reference the caller owns
+  (`nts_com_answer`: the method's own under `--rc`, one more under nogc).
+  Asked for the button's peer, XAML calls the override, and the peer it
+  answered names its class (`peer=Button peers=1`).
 - **`super.OnLaunched(args)`** calls the base's own implementation through
   its slot (`nts_com_base`), as C#'s `base.OnLaunched(args)` does. The
   control (the runtime answering the program's own face instead) recurses
@@ -301,8 +306,8 @@ Application.Start(() => { new App(); });
 - **Refused by name, for now:**
   - a slot that can't be forwarded yet: a result the binding spells as
     `out` fields;
-  - an override answering an object or a string, whose reference the
-    caller would own;
+  - an override answering a string, which the slot would answer as an
+    `HSTRING` the caller owns;
   - a field initialiser that calls, reads a member or reads `this`, since
     it runs as the instance is made;
   - a `new` with arguments; and an override returning a value.
@@ -319,7 +324,7 @@ Application.Start(() => { new App(); });
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
 2. **W2's rest** as listed above: awaitable operations once `await` honours
-   thenables. **W3:** an override answering an object or a string.
+   thenables. **W3:** an override answering a string; then W4.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT.
 
