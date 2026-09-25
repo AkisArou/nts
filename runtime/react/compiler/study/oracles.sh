@@ -4,7 +4,8 @@
 # usage: oracles.sh <study-dir> <set>...
 #   <study-dir> holds node_modules and, per set, <set>/orig (sources and a
 #   tsconfig.json) and <set>/all-modes.txt; corpus/compile holds the options.
-#   NTS_REACT names the binary (default: the lane's debug build).
+#   NTS_REACT names the binary (default: the lane's debug build), NTS_TSGO
+#   the tsgo it drives (default: the repository's target/tsgo).
 #   ORACLE_WORK keeps the outputs there for reading; otherwise they are
 #   written to a temporary directory and removed.
 set -euo pipefail
@@ -14,6 +15,9 @@ study=$(cd "$1" && pwd)
 shift
 here=$(cd "$(dirname "$0")" && pwd)
 bin=${NTS_REACT:-$HOME/.cache/nts-react/target/debug/nts-react}
+# A binary built outside the repository cannot find the repository's tsgo.
+NTS_TSGO=${NTS_TSGO:-$(cd "$here/../../../.." && pwd)/target/tsgo}
+export NTS_TSGO
 if [[ -n ${ORACLE_WORK:-} ]]; then
   work=$ORACLE_WORK
 else
