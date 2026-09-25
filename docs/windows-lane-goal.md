@@ -166,6 +166,21 @@ the same vtable calls on the VM measured the behaviour first.
   There is no `returnValue` without an `[out, retval]`, and an object written
   there may be null. A failed call throws with nothing allocated: the object
   is made on the success edge. A struct `[out]` is refused.
+- **Async operations:** an `IAsyncAction` or `IAsyncOperation<T>`
+  completes into a Promise on Windows (`await
+  StorageFolder.GetFolderFromPathAsync(...)` answers the folder). An
+  instantiation whose members depend on its arguments is declared for
+  them (`IAsyncOperationOfStorageFolder`, whose `put_Completed` takes a
+  handler with the IID computed for `StorageFolder`); a promise holds a
+  Windows Runtime object in a box of its family's; and an operation the
+  program awaits keeps a console program alive until it completes. A work
+  item handed to the thread pool runs on the owning thread, after its
+  action has completed.
+- **A loose end, not this lane's:** `nts types` labels a promise's handle
+  box (`HANDLE_BOX_GOBJECT`, `_OBJC`, `_COM`) as `cell#N`: it classifies a
+  synthetic type id by range, and the boxes sit at the top of the cells'
+  band (`tooling/cli/src/main.rs`, the `>=` arms). The label is wrong for the
+  one type a person debugging a promise of a handle is looking at.
 - **A handle at module scope** is a global (`const window =
   Window.create()`); a counted one is retained on store and released on
   overwrite under `--rc`, and an ambient `const` holding one, which has no
@@ -194,13 +209,14 @@ the same vtable calls on the VM measured the behaviour first.
   `~/.cache/nts/windows/benches/winrt-crossings`; C# (CsWinRT) is not
   measured yet: the VM has no .NET SDK.
 - **Not yet:**
-  - `IAsyncOperation` as a Promise. Agile delegates took away the need for
-    a console program's loop to pump messages: a single-threaded
-    apartment's source calls an agile handler on the thread pool, and the
-    carry brings it home. What is left is generic delegates whose IID
-    depends on the interface's own parameters
-    (`AsyncOperationCompletedHandler<TResult>`), below, and the Promise
-    over them.
+  - The binding's Promise forms. Awaiting works today, written by hand as
+    windows-winrt's `awaitAction` / `awaitFolder` are: `put_Completed` on
+    the operation, `nts_pending_begin`/`end` around it (`c:pending`), and
+    `GetResults` answering the result or throwing the operation's HRESULT.
+    What a binding should declare -- the raw method and a Promise form side
+    by side, which cannot be overloads since they take the same arguments,
+    or the Promise alone as the JavaScript projection did -- is the user's
+    to decide.
   - Arrays of anything but bytes, and arrays the callee allocates
     (`CopyToByteArray`, the `Get*Array` methods).
   - Generic delegates whose IID depends on the interface's own parameters
