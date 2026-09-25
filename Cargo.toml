@@ -19,7 +19,11 @@ members = [
     "tooling/bench",
     "tooling/differential",
     "tooling/suite",
+    "runtime/react/compiler/nts-react",
 ]
+# The React Compiler's crates, vendored verbatim: their own workspace, used by
+# path (see third_party/react-compiler/UPSTREAM.md).
+exclude = ["third_party/react-compiler"]
 
 [workspace.package]
 version = "0.0.0"
@@ -45,7 +49,12 @@ nts-diagnostics = { path = "compiler/diagnostics" }
 nts-frontend-ts = { path = "compiler/frontend-ts" }
 nts-jvm-emitter = { path = "compiler/jvm-emitter" }
 nts-memory-lowering = { path = "compiler/memory-lowering" }
+nts-react = { path = "runtime/react/compiler/nts-react" }
 nts-semantic-schema = { path = "compiler/semantic-schema" }
+# The React Compiler, vendored at third_party/react-compiler.
+react_compiler = { path = "third_party/react-compiler/crates/react_compiler" }
+react_compiler_ast = { path = "third_party/react-compiler/crates/react_compiler_ast" }
+react_compiler_diagnostics = { path = "third_party/react-compiler/crates/react_compiler_diagnostics" }
 
 # External. Deliberately small; every addition is a maintenance obligation.
 anyhow = "1"

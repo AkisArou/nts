@@ -1,61 +1,32 @@
-# Its own workspace, deliberately outside the repository's.
-#
-# It depends on upstream's Rust React Compiler as a git dependency of
-# facebook/react: 202 MB on a cold Cargo cache (138 MB of git database, 64 MB
-# of checkout). As a member of the root workspace, every lane's `cargo build`
-# would fetch that, and with no network the whole workspace would fail to
-# resolve, not just this crate. Only the React lane builds this, so only it
-# pays: `cargo build --manifest-path runtime/react/compiler/nts-react/Cargo.toml`.
-[workspace]
-
 [package]
 name = "nts-react"
-description = "The React lane's compiler stage: TSX through the upstream Rust React Compiler, with its output typed again, into a project nts builds"
-version = "0.0.0"
-edition = "2024"
-rust-version = "1.97"
-license = "Apache-2.0"
-repository = "https://github.com/AkisArou/nts"
-publish = false
+description = "The React lane's compiler stage: TSX through the upstream Rust React Compiler, its output typed again and its JSX lowered, as source nts builds"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
 
 [[bin]]
 name = "nts-react"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1"
-indexmap = "2"
-rustc-hash = "2"
-camino = { version = "1", features = ["serde1"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["raw_value"] }
-# nts's frontend, used as a library: the tsgo client and the snapshot it
-# decodes. Nothing under compiler/ is edited for this crate.
-nts-diagnostics = { path = "../../../../compiler/diagnostics" }
-nts-frontend-ts = { path = "../../../../compiler/frontend-ts" }
-nts-semantic-schema = { path = "../../../../compiler/semantic-schema" }
-# The upstream Rust React Compiler, pinned to the commit the lane's
-# conformance tests run at (runtime/react/upstream-compile/upstream.lock.json).
-# Moving this `rev` is moving the pin, and the parity harness is what says the
-# move is safe.
-react_compiler = { git = "https://github.com/facebook/react", rev = "1d34f91dfde6bba84d08b683aaba164c7194dacb" }
-react_compiler_ast = { git = "https://github.com/facebook/react", rev = "1d34f91dfde6bba84d08b683aaba164c7194dacb" }
-react_compiler_diagnostics = { git = "https://github.com/facebook/react", rev = "1d34f91dfde6bba84d08b683aaba164c7194dacb" }
-
-# The repository's lints, copied: a separate workspace cannot inherit them.
-[workspace.lints.rust]
-unsafe_code = "forbid"
-missing_debug_implementations = "warn"
-unreachable_pub = "warn"
-
-[workspace.lints.clippy]
-pedantic = { level = "warn", priority = -1 }
-module_name_repetitions = "allow"
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-dbg_macro = "deny"
-todo = "warn"
-unwrap_used = "warn"
+anyhow.workspace = true
+camino.workspace = true
+indexmap.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+nts-diagnostics.workspace = true
+nts-frontend-ts.workspace = true
+nts-semantic-schema.workspace = true
+# The upstream Rust React Compiler, vendored verbatim at the revision the
+# lane's conformance tests run at (third_party/react-compiler/UPSTREAM.md).
+react_compiler.workspace = true
+react_compiler_ast.workspace = true
+react_compiler_diagnostics.workspace = true
 
 [lints]
 workspace = true
