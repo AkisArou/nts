@@ -38,6 +38,8 @@
     "gtk-subclass/nts.config.ts",
     "gtk-notes/nts.config.ts",
     "adw-hello/nts.config.ts",
+    "gtk-iter-lifetime/nts.config.ts",
+    "gtk-iter-lifetime/escape/nts.config.ts",
     "linux-arm64/nts.config.ts",
     "windows-winrt/nts.config.ts",
     "winui-hello/nts.config.ts",
