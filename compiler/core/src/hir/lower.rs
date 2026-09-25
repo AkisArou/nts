@@ -30030,6 +30030,18 @@ impl<'a> FuncBuilder<'a> {
                 };
                 mine == slot
             })
+            // **And a tuple slot wins over the literal's own array.** A tuple
+            // whose elements agree is an array (`[number, number]` is
+            // `number[]`), and one whose elements do not is an object, so
+            // `return [n, n * 10]` from a function returning `[number | null,
+            // number]` built an array of doubles and returned it as the
+            // tuple's struct -- and the caller read `_0_` out of the array's
+            // memory. The literal is being built here; it can be built as the
+            // slot's tuple, each element coerced to its position.
+            .filter(|ty| match self.expecting.as_ref() {
+                Some(slot @ HirType::Managed(ManagedType::Object(tuple))) if self.is_tuple(*tuple) => ty == slot,
+                _ => true,
+            })
             // Unfiltered, and the line below is why: a non-array expected type
             // is rejected there, with a message that names what went wrong.
             // Filtering it here refused the same programs one step earlier and
@@ -32331,7 +32343,11 @@ impl<'a> FuncBuilder<'a> {
         );
         for (at, element) in elements.into_iter().enumerate() {
             let want = layout.fields[at].ty.clone();
-            let value = self.lower_expression(element)?;
+            // At the position's type, not the tuple's: `[null, 0]` lowered
+            // `null` expecting the whole tuple, typed it as the tuple's own
+            // object, and erased it as an object-tagged NULL -- a value
+            // `!== null` answered true for, so a loop waiting for it ran on.
+            let value = self.lower_expecting(element, &want)?;
             let stored = self.coerce(value, &want, element)?;
             let field = u32::try_from(at).unwrap_or(0);
             self.field_set(object, field, stored, &origin);
