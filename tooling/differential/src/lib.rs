@@ -364,13 +364,14 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
         bail!("the program does not typecheck");
     }
 
-    // `NTS_RC=1` compiles the program *and* the runtime for reference counting.
-    // Both halves matter and they have to agree: the provider decides what the
+    // Reference counting compiles the program *and* the runtime for it. Both
+    // halves matter and they have to agree: the provider decides what the
     // compiler emits, not only what the runtime does with it, so selecting one
     // without the other compares a program that never releases against an
-    // allocator that expects it to.
+    // allocator that expects it to. Hence [`counting`], asked here and at the
+    // runtime's defines, and nowhere else.
     let options = hir::Options {
-        provider: if std::env::var("NTS_RC").is_ok_and(|value| value != "0") {
+        provider: if counting() {
             hir::Provider::ReferenceCounting
         } else {
             hir::Provider::NoGc
@@ -476,6 +477,29 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
 /// build". A real defect -- the wrong helper, the arguments the wrong way
 /// round, a missing conversion -- is off by millions of ULP, not by four.
 pub const TOLERANCE: u64 = 4;
+
+/// Whether this run counts references: `NTS_RC=1` in the environment, or `--rc`
+/// on the command line.
+///
+/// **One function, because it is one decision with two halves** -- the provider
+/// the program is lowered for and the define the runtime is built with. They are
+/// asked in two places several hundred lines apart, and a run that answered them
+/// differently would compare a program that never releases against an allocator
+/// that expects it to.
+///
+/// **And one function because `--rc` used to be accepted and ignored.** It is
+/// documented as `build`'s flag and read by `emit-c` and `hir`; `check` read only
+/// the variable, and an unrecognised `--flag` is skipped rather than refused. So
+/// `nts check --rc` compiled with the *no-GC* provider and printed `agreed on
+/// every case`, which is a green answer to a question that was never asked --
+/// and it hid a helper returning a borrowed reference where the counting
+/// convention wanted an owned one (`nts_map_extend`), a double release that
+/// `NTS_RC=1` finds in one run.
+#[must_use]
+pub fn counting() -> bool {
+    std::env::var("NTS_RC").is_ok_and(|value| value != "0")
+        || std::env::args().any(|argument| argument == "--rc")
+}
 
 /// The distance between two doubles, counted in representable values.
 ///
@@ -1488,7 +1512,7 @@ fn run_native(
     // belief into a checked claim, since an unwritten slot then reads as a
     // conspicuous value rather than as whatever the allocator left.
     let poison = std::env::var("NTS_POISON").is_ok_and(|value| value != "0");
-    // `NTS_RC=1` builds against the reference-counting provider instead of the
+    // Counting builds against the reference-counting provider instead of the
     // bump allocator.
     //
     // The retains and releases in the emitted C are the compiler's own work,
@@ -1497,7 +1521,7 @@ fn run_native(
     // Both become visible here: too many frees an object something still holds,
     // and with `NTS_POISON` the next read of it is a conspicuous pattern rather
     // than whatever the allocator left.
-    let counted = std::env::var("NTS_RC").is_ok_and(|value| value != "0");
+    let counted = counting();
     let mut defines: Vec<&str> = Vec::new();
     if poison {
         defines.push("-DNTS_POISON=1");
