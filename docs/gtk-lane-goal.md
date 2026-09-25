@@ -289,9 +289,13 @@ it. The box's last release frees the struct, so the program never calls
   layout of the box with `NtsBoxed`. `gtk-gir`'s `boxedRecords` arm runs
   plain and `--rc`, on C and on LLVM.
 
-Still missing: GJS returns a caller-allocated out as a value
-(`const [start, end] = buffer.get_bounds()`); here the caller makes it and
-passes it in. Also, under `--rc` an iterator can outlive its buffer's last
+- **Values forms.** A caller-allocated out also gets GJS's shape:
+  `const [start, end] = buffer.get_bounds()` makes each record with `new` and
+  returns it (binder `Shape::Filled`). An inout does not, because its
+  storage holds what C reads. This took the closure's values forms from 145
+  to 358.
+
+Still missing: under `--rc` an iterator can outlive its buffer's last
 use. `GtkTextIter` points into the buffer without counting it, so releasing
 the buffer at its last use frees the storage the iterator reads. Foreign
 handles are to be released at block end instead, against the fixture

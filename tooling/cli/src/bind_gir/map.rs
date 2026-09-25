@@ -199,6 +199,11 @@ pub(crate) enum Shape {
     /// scalar, since a handle read out of a slot has an ownership to settle
     /// that a number does not.
     Out { value: String },
+    /// Storage the caller allocates and C fills, a boxed record's
+    /// (`GtkTextIter`): passed as the record, and what a GJS-style method
+    /// makes with `new class()` and returns, as `get_bounds()` does. Only an
+    /// out: an inout's storage holds what C reads, which the caller gives.
+    Filled { class: String },
 }
 
 /// Why something was not bound. Counted, so the most common one is the next
@@ -1020,7 +1025,13 @@ impl<'a> Mapper<'a> {
         let value = Param { direction: Direction::In, nullable: param.optional || param.nullable, optional: false, ..param.clone() };
         let mapped = self.typed(&value)?;
         match &mapped.shape {
-            Shape::Handle { class, .. } if self.boxed_record(class).is_some_and(|(_, size)| size > 0) => Ok(mapped),
+            Shape::Handle { class, .. } if self.boxed_record(class).is_some_and(|(_, size)| size > 0) => {
+                if param.direction == Direction::Out {
+                    let class = class.clone();
+                    return Ok(Mapped { shape: Shape::Filled { class }, ..mapped });
+                }
+                Ok(mapped)
+            }
             _ => Err(Reason::CallerAllocates),
         }
     }

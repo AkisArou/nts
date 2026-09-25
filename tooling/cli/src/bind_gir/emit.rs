@@ -390,10 +390,10 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
         .filter(|function| {
             function.method.is_some()
                 && function.vfunc.is_none()
-                && function.parameters.iter().any(|(_, mapped)| matches!(mapped.shape, Shape::Out { .. }))
+                && function.parameters.iter().any(|(_, mapped)| matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. }))
                 && function.parameters.iter().all(|(name, mapped)| {
                     function.throws.as_deref() == Some(name.as_str())
-                        || matches!(mapped.shape, Shape::Out { .. } | Shape::Handle { .. } | Shape::Lent { .. })
+                        || matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Handle { .. } | Shape::Lent { .. })
                         || (mapped.shape == Shape::Other && !mapped.ts.starts_with("Ptr<") && !mapped.ts.contains("Closure<"))
                 })
                 && function.throws.as_ref().is_none_or(|slot| function.parameters.last().is_some_and(|(name, _)| name == slot))
@@ -409,20 +409,21 @@ fn values_result(function: &Function) -> String {
         .into_iter()
         .chain(function.parameters.iter().filter_map(|(_, mapped)| match &mapped.shape {
             Shape::Out { value } => Some(value.clone()),
+            Shape::Filled { class } => Some(class.clone()),
             _ => None,
         }))
         .collect();
     if values.len() == 1 { values[0].clone() } else { format!("[{}]", values.join(", ")) }
 }
 
-/// The parameters a values form takes: all but the out slots and the error
-/// slot.
+/// The parameters a values form takes: all but the out slots, the storage it
+/// makes, and the error slot.
 fn values_taken(function: &Function) -> Vec<(String, Mapped)> {
     function
         .parameters
         .iter()
         .filter(|(name, mapped)| {
-            !matches!(mapped.shape, Shape::Out { .. }) && function.throws.as_deref() != Some(name.as_str())
+            !matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. }) && function.throws.as_deref() != Some(name.as_str())
         })
         .cloned()
         .collect()
@@ -670,6 +671,14 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     let values = values_forms(binding);
     for function in &values {
         imports.entry(binding.module.clone()).or_default().push(function.symbol.clone());
+        // A record the wrapper makes is a value it imports, `new GtkTextIter()`.
+        for (_, mapped) in &function.parameters {
+            if let Shape::Filled { class } = &mapped.shape
+                && let Some(module) = module_of_type(binding, class)
+            {
+                imports.entry(module).or_default().push(class.clone());
+            }
+        }
         let spellings = function.parameters.iter().map(|(_, mapped)| mapped.ts.as_str()).chain([function.result.ts.as_str()]);
         for name in spellings.flat_map(|ts| ts.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))) {
             if let Some(module) = module_of_type(binding, name) {
@@ -677,7 +686,10 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             }
         }
     }
-    let memory: Vec<&str> = [(!binding.casts.is_empty()).then_some("unsafeDowncast"), (!values.is_empty()).then_some("local")]
+    let memory: Vec<&str> = [(!binding.casts.is_empty()).then_some("unsafeDowncast"), values
+            .iter()
+            .any(|function| function.parameters.iter().any(|(_, mapped)| matches!(mapped.shape, Shape::Out { .. })))
+            .then_some("local")]
         .into_iter()
         .flatten()
         .collect();
@@ -689,6 +701,9 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     for (module, mut names) in imports {
         names.sort();
         names.dedup();
+        // A value import brings its type along, and naming both is an error.
+        let values: Vec<String> = names.iter().filter(|name| !name.starts_with("type ")).cloned().collect();
+        names.retain(|name| name.strip_prefix("type ").is_none_or(|ty| !values.iter().any(|value| value == ty)));
         let _ = writeln!(out, "import {{ {} }} from \"{module}\";", names.join(", "));
     }
     for cast in &binding.casts {
@@ -727,9 +742,16 @@ fn values_wrapper(out: &mut String, function: &Function) {
         read.push("nts_result".to_owned());
     }
     for (name, mapped) in &function.parameters {
-        if let Shape::Out { value } = &mapped.shape {
-            let _ = writeln!(body, "  const {name} = local<{value}>();");
-            read.push(format!("{name}[0]"));
+        match &mapped.shape {
+            Shape::Out { value } => {
+                let _ = writeln!(body, "  const {name} = local<{value}>();");
+                read.push(format!("{name}[0]"));
+            }
+            Shape::Filled { class } => {
+                let _ = writeln!(body, "  const {name} = new {class}();");
+                read.push(name.clone());
+            }
+            _ => {}
         }
     }
     let passed = function

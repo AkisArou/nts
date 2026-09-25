@@ -134,6 +134,9 @@ function boxedRecords(): void {
   gir_log(
     "iter " + all + "|" + buffer.get_text(start, end, false) + " " + String(start.get_offset()) + " " + String(copy.get_offset()) + " " + String(buffer.get_char_count()),
   );
+  // GJS's shape for storage the caller allocates: made and returned.
+  const [first, last] = buffer.get_bounds();
+  gir_log("bounds " + String(first.get_offset()) + "-" + String(last.get_offset()) + " " + String(buffer.get_char_count()));
   const rgba = new GdkRGBA();
   const parsed = rgba.parse("#ff8000");
   gir_log("rgba " + String(parsed) + " " + rgba.to_string());
