@@ -645,6 +645,13 @@ impl<'a> Emitter<'a> {
                 VType::Float
             } else if kind == Kind::Double as u8 {
                 VType::Double
+            } else if kind == Kind::Ref as u8 {
+                // A reference, which the frames must not call an `int`: a swap
+                // of two arrays saved one here and every frame after it said
+                // `Integer` -- "Inconsistent stackmap frames". `Top`, as a local
+                // that crosses no block is: a scratch is saved and restored
+                // within one edge's copies.
+                VType::Top
             } else {
                 VType::Integer
             };

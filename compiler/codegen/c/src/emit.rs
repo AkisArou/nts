@@ -4182,12 +4182,7 @@ fn emit_body(
         );
     }
 
-    let temps = destruct::temp_count(func);
-    for temp in 0..temps {
-        // One scratch per cycle depth. Typed as the widest scalar, since a swap
-        // only ever moves a value into a slot of its own type.
-        writer.line(&func.origin, format!("double t{temp};"));
-    }
+    declare_scratches(writer, func, context)?;
     writer.dedent();
 
     // Only blocks something actually jumps to need a label, and an unreferenced
@@ -5151,6 +5146,35 @@ fn emit_op(
     Ok(())
 }
 
+/// One scratch per parallel-copy cycle depth **and per C type**: a cycle swaps
+/// values of its own type, and that type is whatever the values are --
+/// `double` was every scratch's once, which is right for numbers and C that
+/// does not compile for two arrays swapped in a loop (`t0 = a; a = b; b = t0;`).
+fn declare_scratches(writer: &mut CodeWriter, func: &Func, context: &Context<'_>) -> Result<(), Diagnostic> {
+    let mut scratches = std::collections::BTreeSet::new();
+    for block in &func.blocks {
+        for (target, args) in destruct::outgoing(&block.terminator) {
+            for copy in destruct::edge_copies(&func.blocks[target.0 as usize].params, &args) {
+                if let Copy::Save { temp, from } = copy {
+                    let ty = c_type_of(context.program, &func.value(from).ty, &func.origin)?;
+                    scratches.insert((scratch_name(temp, &ty), ty));
+                }
+            }
+        }
+    }
+    for (name, ty) in &scratches {
+        writer.line(&func.origin, format!("{ty} {name};"));
+    }
+    Ok(())
+}
+
+/// The scratch a parallel copy saves a value of C type `ty` into: one per
+/// cycle depth and type, so the name carries both.
+fn scratch_name(temp: u32, ty: &str) -> String {
+    let spelled: String = ty.chars().map(|c| if c.is_ascii_alphanumeric() { c } else if c == '*' { 'p' } else { '_' }).collect();
+    format!("t{temp}_{spelled}")
+}
+
 fn emit_terminator(
     writer: &mut CodeWriter,
     func: &Func,
@@ -5161,9 +5185,16 @@ fn emit_terminator(
 ) {
     let record = &func.blocks[block.0 as usize];
 
-    // The copies an edge implies run before control leaves.
+    // The copies an edge implies run before control leaves. A saved value
+    // goes into the scratch of its own C type, and comes out of it with the
+    // cast a move would have had.
     let emit_edge = |writer: &mut CodeWriter, target: BlockId, args: &[ValueId]| {
         let params = &func.blocks[target.0 as usize].params;
+        let mut saved: Vec<(u32, ValueId)> = Vec::new();
+        let scratch = |temp: u32, from: ValueId| {
+            let ty = c_type_of(context.program, &func.value(from).ty, origin).unwrap_or_else(|_| "double".to_owned());
+            scratch_name(temp, &ty)
+        };
         for copy in destruct::edge_copies(params, args) {
             let text = match copy {
                 Copy::Move { to, from } => format!(
@@ -5172,8 +5203,16 @@ fn emit_terminator(
                     upcast(func, context, &func.value(to).ty, from),
                     value_name(from)
                 ),
-                Copy::Save { temp, from } => format!("t{temp} = {};", value_name(from)),
-                Copy::Restore { to, temp } => format!("{} = t{temp};", value_name(to)),
+                Copy::Save { temp, from } => {
+                    saved.push((temp, from));
+                    format!("{} = {};", scratch(temp, from), value_name(from))
+                }
+                Copy::Restore { to, temp } => {
+                    let Some(&(_, from)) = saved.iter().rev().find(|(held, _)| *held == temp) else {
+                        continue;
+                    };
+                    format!("{} = {}{};", value_name(to), upcast(func, context, &func.value(to).ty, from), scratch(temp, from))
+                }
             };
             writer.line(origin, text);
         }
