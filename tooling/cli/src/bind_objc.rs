@@ -1660,15 +1660,15 @@ fn record_name(typedefs: &BTreeMap<String, String>, tag: &str) -> String {
 }
 
 /// A method's Swift name with its first label moved into the base name:
-/// `menu(for:inRect:)` is `menuFor(_:inRect:)`. None when the first argument
-/// has no label.
+/// `menu(for:inRect:)` is `menuFor(_:inRect:)`, and where the first argument
+/// has none, the first label there is -- `splitView(_:canCollapseSubview:)`
+/// is `splitViewCanCollapseSubview(_:_:)`. None when no argument has one.
 fn folded_label(title: &str) -> Option<String> {
     let (base, rest) = title.split_once('(')?;
-    let (first, others) = rest.split_once(':')?;
-    if first.is_empty() || first == "_" {
-        return None;
-    }
-    Some(format!("{base}{}(_:{others}", capitalized(first)))
+    let mut labels: Vec<String> = rest.trim_end_matches(')').split(':').filter(|l| !l.is_empty()).map(str::to_owned).collect();
+    let at = labels.iter().position(|label| label != "_")?;
+    let folded = std::mem::replace(&mut labels[at], "_".to_owned());
+    Some(format!("{base}{}({}:)", capitalized(&folded), labels.join(":")))
 }
 
 fn swift_name(title: &str) -> (String, Vec<String>) {
@@ -2068,6 +2068,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)registerTypes:(NSArray<ShapeKind> *)kinds;
 - (NSArray<Shape<ShapeDelegate> *> *)delegates;
 - (Shape *)twinOfShape:(Shape *)other;
+- (BOOL)twinShape:(Shape *)shape canJoin:(Shape *)other;
 - (void)measure:(Span *)span;
 - (void)linkFrom:(Shape *)start to:(Shape *)middle to:(Shape *)end;
 - (void)countInto:(NSUInteger *)count;
@@ -2140,6 +2141,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)registerTypes:", "swift.method", "register(_:)", &["Shape", "register(_:)"], ""),
             symbol("c:objc(cs)Shape(im)delegates", "swift.method", "delegates()", &["Shape", "delegates()"], ""),
             symbol("c:objc(cs)Shape(im)twinOfShape:", "swift.method", "twin(of:)", &["Shape", "twin(of:)"], ""),
+            symbol("c:objc(cs)Shape(im)twinShape:canJoin:", "swift.method", "twin(_:canJoin:)", &["Shape", "twin(_:canJoin:)"], ""),
             symbol("c:objc(cs)Shape(im)measure:", "swift.method", "measure(_:)", &["Shape", "measure(_:)"], ""),
             symbol("c:objc(cs)Shape(im)linkFrom:to:to:", "swift.method", "link(from:to:to:)", &["Shape", "link(from:to:to:)"], ""),
             symbol("c:objc(cs)Shape(im)countInto:", "swift.method", "count(into:)", &["Shape", "count(into:)"], ""),
@@ -2258,6 +2260,8 @@ NS_ASSUME_NONNULL_END
             // first label into its name.
             "    get twin(): Shape;",
             "    /** @ntsSelector twinOfShape: */\n    twinOf(other: Shape): Shape;",
+            // And where the first argument has no label, the first label there is.
+            "    /** @ntsSelector twinShape:canJoin: */\n    twinCanJoin(shape: Shape, other: Shape): boolean;",
             // Swift's `UnsafeMutablePointer<Span>` as the address a program
             // passes, and the record under its typedef's name, its tag the C
             // one.

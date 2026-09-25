@@ -347,8 +347,10 @@ correctness does not depend on arm64 running by luck.
        name (`menu`, `menu(for:)`), the property keeps the name. The method
        takes its first label into its name, as its selector does:
        `menuFor(event)`, `frameForAlignmentRect(rect)`, `uppercasedWith(locale)`.
-       One whose first argument has no label (`splitView(_:…)`) is still
-       skipped, and those are 8 of AppKit's former 45.
+       Where the first argument has no label, the first label there is:
+       `splitView(_:canCollapseSubview:)` is
+       `splitViewCanCollapseSubview(splitView, subview)`. One of AppKit's
+       former 45 has no label at all and is still skipped.
      - Skipped, with reasons: blocks (S5), collections (S3c), and members
        Swift throws or awaits (S5).
      - A label Swift repeats, which one object cannot hold twice, takes its
