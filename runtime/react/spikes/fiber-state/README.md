@@ -21,7 +21,10 @@ downcast: one descriptor compare, with no tag word and no erased slot.
 Arm F is the fastest read, but it costs 8 bytes on every fibre for every
 extra kind. Arm U is no better than `unknown`.
 
-Arm B needs one compiler feature: after `x instanceof Sub`, where `x` is typed
-as a base class, NTS must lower member access on `x` as `Sub`. The `instanceof`
-test already exists, so this is a narrowing rule. The reduced case is
-`readB` in `src/main.ts`.
+Arm B needed one compiler feature: after `x instanceof Sub`, where `x` is
+typed as a base class, NTS must lower member access on `x` as `Sub`. The
+reduced case is `readB` in `src/main.ts`.
+
+**It has it now.** Re-measured on 2026-09-26 with nts at `724021d9`:
+`nts refusals` on this spike prints nothing, and `nts check` agrees with
+node on all 58 cases. The hierarchy is no longer waiting on the compiler.
