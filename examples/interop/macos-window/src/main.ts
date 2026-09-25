@@ -14,6 +14,7 @@
 import {
   NSAnimationContext,
   NSApplication,
+  NSGraphicsContext,
   Bundle,
   NSButton,
   NSEvent,
@@ -100,6 +101,13 @@ class Canvas extends NSView {
   draw(dirtyRect: ByValue<CGRect>): void {
     drawnWidth = dirtyRect.size.width;
     drawnHeight = dirtyRect.size.height;
+    // Swift's `NSGraphicsContext.current?.cgContext`: Core Graphics, in the
+    // context AppKit drew this view into, where there is one.
+    const context = NSGraphicsContext.current?.cgContext;
+    if (context !== undefined) {
+      context.setFillColor({ red: 1, green: 0, blue: 0, alpha: 1 });
+      context.fill({ size: { width: 10, height: 10 } });
+    }
     // `NSView`'s own, which draws nothing: a record by value through a super
     // message.
     super.draw(dirtyRect);
@@ -279,6 +287,14 @@ function main(): void {
   }
   report(`mouse ${sent} ${mouseData}`);
   report(`records ${view_intrinsic_size(canvas)} ${view_alignment_rect(canvas)}`);
+  // AppKit draws the canvas offscreen, as it draws it on screen, and the
+  // pixel `draw` filled through Core Graphics reads back red.
+  const rep = canvas.bitmapImageRepForCachingDisplay({ in: canvas.bounds });
+  if (rep !== null) {
+    canvas.cacheDisplay({ in: canvas.bounds, to: rep });
+    const pixel = rep.colorAt({ x: 1, y: 1 });
+    report(pixel === null ? "cached none" : `cached ${pixel.redComponent} ${pixel.greenComponent} ${pixel.blueComponent}`);
+  }
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
   // the closure a block the timer keeps, and calls from the run loop.

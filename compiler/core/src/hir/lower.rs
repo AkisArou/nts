@@ -10891,8 +10891,13 @@ fn union_representation(
     let Some(shared) = shared else {
         return (has_undefined && !has_null).then_some(HirType::Void);
     };
+    // A native pointer with `undefined` beside it -- the chain
+    // `NSGraphicsContext.current?.cgContext` is `CGContext | undefined` --
+    // has one absence for its null to stand for, as `H | null` has; the
+    // absence tests read it so (`absence_the_type_decides`). With `null`
+    // too there are two, and a pointer has one null.
     if matches!(shared, HirType::NativePointer(_)) {
-        return None;
+        return (has_undefined && !has_null && !mixed).then_some(shared);
     }
     // One representation, and at most one absence for the null pointer
     // to stand for. Two absences need two values and a pointer has one.

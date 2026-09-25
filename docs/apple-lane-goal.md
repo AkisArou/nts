@@ -940,6 +940,19 @@ correctness does not depend on arm64 running by luck.
      - A module of C frameworks alone names their headers (`@ntsHeader
        <CoreGraphics/CoreGraphics.h>`), so the native witness compares every
        prototype with the SDK's.
+     - AppKit and Core Graphics in one module: `macos-window` binds
+       `NSGraphicsContext` and `CGContext` together. Its canvas's
+       `draw(_:)` fills through `NSGraphicsContext.current?.cgContext`, and
+       `cacheDisplay(in:to:)` has AppKit draw it offscreen, as on screen.
+       The pixel reads back red through `NSBitmapImageRep.colorAt(x:y:)`,
+       on both backends. Two things had to change for that:
+       - A module binding Objective-C classes names no header, so the
+         native witness now forward-declares a tagged record a prototype
+         passes (`struct CGRect;`).
+       - The chain's type is `CGContext | undefined`, a handle with
+         `undefined` beside it. It is now represented as the pointer, its
+         null standing for `undefined`, as `H | null`'s stands for `null`.
+         With both absences it is still refused.
      - What Swift hides behind its own overlay is not bound:
        `CGContextMoveToPoint` is `SwiftPrivate`, and `move(to:)` is Swift
        code with an `s:` USR and no C symbol.

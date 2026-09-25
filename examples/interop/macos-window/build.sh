@@ -58,6 +58,7 @@ mkdir -p "$out"
 # NTS_REGENERATE=1 writes it instead.
 "$nts" bind-objc --sdk "$sdk" --module objc:AppKit --framework AppKit --framework Foundation \
   --class NSApplication --class NSWindow --class NSButton --class NSString --class NSTimer --class NSEvent --class NSBundle --class NSAnimationContext \
+  --class NSGraphicsContext --class NSBitmapImageRep --class NSColor --class CGContext --framework CoreGraphics \
   --protocol NSWindowDelegate --out "$out/appkit.d.ts" --witness "$out/witness.c" \
   --values "$out/appkit.values.ts" >/dev/null
 for generated in appkit.d.ts appkit.values.ts; do
@@ -128,6 +129,7 @@ flipped true true false
 scanned 41 41
 mouse 7 7
 records 64048 6030
+cached 1 0 0
 animated 0
 pressed 1
 micro 1
