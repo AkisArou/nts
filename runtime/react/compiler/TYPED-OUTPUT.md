@@ -144,29 +144,49 @@ just not memoized, and the fallback count is reported.
   nothing from it, so upstream's own output doesn't typecheck against the
   official types. Our runtime declares it.
 
-## Next steps
+## Where this went
 
-1. **A typed cache**, to remove the `unknown` reads. After restoration, every
-   `$[k] = v` stores a value whose type is known: an annotated temporary, a
-   declared local, or a dependency expression at its span. So the cache's
-   slot types can be derived from the output:
+All three steps are built. This document keeps the measurements that chose
+the design; the implementation is `nts-react`, which `nts` runs when
+`nts.config.ts` has a `react` section.
+
+1. **The frontend** is `nts-react`'s converter, from tsgo's syntax tree to
+   the compiler's input. It is held identical to Babel's on 271 upstream
+   fixtures and 40 of ours: convert, scope, compile and print.
+2. **The restoration** is its printer, which copies unchanged code from the
+   source and restores types on the compiler's output, as above.
+3. **The typed cache** (`print/cache.rs`, and `useMemoCacheOf` in the
+   runtime). Every `$[k] = v` stores a value whose type the checker names:
+   an annotated temporary, a declared local, or a dependency path, which is
+   its object's type indexed by the path. So the cache becomes a record with
+   a field per slot and a bit per scope that has run, doing the sentinel's
+   work:
 
    ```ts
-   const $ = useMemoCache<[number, () => void, …]>(N)
+   const _cache0 = { create: ..., clone: ... };       // module scope, made once
+   const $ = _cacheOf(_cache0);
+   if (($.f0 & 1) === 0 || $.s0 !== label) { ...; $.s0 = label; $.s1 = t1; $.f0 |= 1; }
+   else { t1 = ($.s1 as (ReactElement)); }
    ```
 
-   That is a tuple local to the function, where its type parameters and local
-   types are in scope. Reads then need no cast. Upstream's sentinel test
-   (`$[k] === Symbol.for("react.memo_cache_sentinel")`) doesn't typecheck
-   against a typed slot, so it becomes a filled-bit test in our runtime. For
-   nts, this is the fixed-layout record the lane's route calls for. Not built
-   yet.
-2. **Port the restoration to Rust**, as a lane-owned crate that works on
-   `react_compiler_ast` output and asks tsgo for types at spans in batches.
-   `fixtures/typed-output/` is its regression corpus, and each fixture must
-   come out clean with its JavaScript unchanged.
-3. **The frontend** is unchanged from AUDIT.md: a tsgo → `react_compiler_ast`
-   converter, or Babel in node until one exists.
+   - The bits are exact because the compiler writes a scope's slots
+     together.
+   - A slot typed `any` or `unknown`, or with no type, keeps the compiler's
+     array. So does a cache that does not typecheck: `nts` steps it down to
+     the array before giving the function back as written.
+   - Measured:
+     - our sweep has 40/40 caches typed, and all 40 files typecheck;
+     - upstream's corpus, mostly `any`-typed JavaScript, has 50 typed;
+     - behaviour on our runtime (`study/evaluate.cjs`) is 231 fixtures
+       agreeing, 0 differing;
+     - on a memoized-list kernel, the typed cache is 1.25-1.3x faster than
+       the array natively, and no slower on node.
+
+What is still open is outside the stage:
+- compiled components need three nts features before they build natively:
+  a module-scope name bound to one of two functions (`jsx`), `map` over a
+  callback held in a variable, and an instantiation expression;
+- on that kernel nts still trails node by about 10%, outside the cache.
 
 ## Reproducing
 
