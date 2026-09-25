@@ -1085,11 +1085,9 @@ impl<'a> Model<'a> {
             [one] => one.clone(),
             many => format!("[{}]", many.join(", ")),
         };
-        // Swift's `throws` rejects with the error's description, which is
-        // read through the binding's `NSError`.
-        if throws && !self.bound.contains("NSError") {
-            return Err("a handler given an `NSError`, whose description the promise rejects with: bind `NSError` too (`--class NSError`)".to_owned());
-        }
+        // Swift's `throws` rejects with the error's description, read through
+        // the binding's `NSError` -- the class, or where it is not bound, the
+        // stub a signature naming it makes, which declares that property.
         let nullable = given.iter().take(arity).any(|v| v.ends_with(" | null"));
         let (arguments, names) = self.arguments(class, leading, &labels)?;
         let mut function = format!("nts_async_{}_{base}", class.objc);
@@ -1761,8 +1759,11 @@ fn render(request: &Request, model: &Model) -> String {
         let extends = parent.as_ref().map(|p| format!(" extends {}", model.swift.class(p))).unwrap_or_default();
         let swift = model.swift.class(name);
         let path: Vec<String> = swift.split('.').map(str::to_owned).collect();
+        // An `NSError` a completion handler is given: what an `async throws`
+        // form rejects with is its description.
+        let members = if name == "NSError" { "\n    get localizedDescription(): string;\n  " } else { "" };
         let text = format!(
-            "  /** Named by a signature here, and not bound: its ancestors' members only.\n   * @ntsClass {name} */\n  export class {}{extends} {{}}\n",
+            "  /** Named by a signature here, and not bound: its ancestors' members only.\n   * @ntsClass {name} */\n  export class {}{extends} {{{members}}}\n",
             path.last().map_or("", String::as_str)
         );
         nest(&mut out, &path, &text);
@@ -2062,7 +2063,7 @@ NS_ASSUME_NONNULL_END
             frameworks: vec!["Fake".to_owned()],
             module: "objc:Fake".to_owned(),
             // `NSError`, for the throwing `async` form's description.
-            classes: vec!["Circle".to_owned(), "NSError".to_owned()],
+            classes: vec!["Circle".to_owned()],
             protocols: vec!["ShapeDelegate".to_owned()],
             sdk: root.to_string_lossy().into_owned(),
             target: "x86_64-apple-macos13".to_owned(),
@@ -2125,6 +2126,9 @@ NS_ASSUME_NONNULL_END
             // passes, and the record under its typedef's name, its tag the C
             // one.
             "    /** @ntsSelector measure: */\n    measure(span: Ptr<Span>): void;",
+            // `NSError`, not bound but named by a throwing handler: what the
+            // promise rejects with is its description, which its stub reads.
+            "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",
             "export type Span = Struct<{ location: UInt; length: UInt }, \"_Span\">;",
             // A struct passed by value is declared, in Swift's numbers.
             "export type CGPoint = Struct<{ x: Double; y: Double }, \"CGPoint\">;",

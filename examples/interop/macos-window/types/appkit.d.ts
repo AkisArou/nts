@@ -2923,7 +2923,9 @@ declare module "objc:AppKit" {
 
   /** Named by a signature here, and not bound: its ancestors' members only.
    * @ntsClass NSError */
-  export class NSError extends NSObject {}
+  export class NSError extends NSObject {
+    get localizedDescription(): string;
+  }
 
   /** Named by a signature here, and not bound: its ancestors' members only.
    * @ntsClass NSException */
