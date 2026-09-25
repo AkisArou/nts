@@ -137,6 +137,21 @@ the same vtable calls on the VM measured the behaviour first.
     owner's.
   - A handler that throws ends the process naming the boundary; it never
     answers S_OK for a failure.
+- **Chosen trades, stated so the first person to hit one knows:**
+  - A `QueryInterface` that fails ends the process naming the IID. That is
+    right for a binding that asserted the class implements the interface. But
+    a query can fail legitimately (the right class on a Windows version that
+    lacks the interface), and a program that could have handled it aborts
+    instead. A fallible form (`as_X()` answering `null`) is the fix when
+    someone needs it.
+- **Priced, and owed:** an `as_X()` parses its IID from a string on every call.
+  Measured on the VM, the runtime's own `nts_parse_iid` costs 435-444 ns per
+  call, and the `QueryInterface` plus `Release` it precedes costs 12.4-12.8 ns.
+  That is 97% of the call for a constant the compiler knows, and a floor,
+  since the UTF-16 conversion before it is extra. The fix is a 16-byte IID
+  constant emitted by the compiler and taken as `const IID *` by
+  `nts_com_query`, `nts_com_delegate` and `nts_winrt_activate`, with this
+  bench as its before and after.
 - **Not yet:**
   - `IAsyncOperation` as a Promise, which needs a decision about whether a
     console program's loop pumps messages (the user's to make).
