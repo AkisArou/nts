@@ -1069,6 +1069,7 @@ void nts_handle_family_register(uint32_t tag, void (*retain)(void *),
   *slot = (NtsHandleCounting){retain, release, name};
 }
 
+#ifdef NTS_PROVIDER_RC
 /* How a handle value is counted, or an abort naming the tag nothing
  * registered. Never a no-op: a release that did nothing would leak, and a
  * retain that did nothing would let the handle be freed under its holder. */
@@ -1086,24 +1087,53 @@ static const NtsHandleCounting *nts_handle_counting(uint32_t tag) {
   }
   return counting;
 }
+#endif
+
+void nts_handle_check(uint32_t found, uint32_t wanted) {
+  if (found == wanted || found == NTS_TAG_UNDEFINED || found == NTS_TAG_NULL) {
+    return;
+  }
+  if (found == NTS_TAG_OBJECT) {
+    fprintf(stderr,
+            "nts: a handle of tag %u arrived boxed, where a value holds it "
+            "tagged; only a promise still boxes a handle, and moving it to "
+            "the tag is the migration that was deferred\n",
+            wanted);
+  } else {
+    fprintf(stderr,
+            "nts: a handle of tag %u was read back from a value with tag %u\n",
+            wanted, found);
+  }
+  abort();
+}
 
 /* Claim and give up what an erased value holds. */
 void nts_value_retain(NtsValue value) {
   uint32_t tag = nts_value_tag(value);
   if (NTS_TAG_IS_MANAGED(tag) && nts_value_reference(value)) {
     nts_retain(nts_value_reference(value));
-  } else if (NTS_TAG_IS_HANDLE(tag) && value.as.native) {
+  }
+#ifdef NTS_PROVIDER_RC
+  /* Only where references are counted: without it nothing counted a handle
+   * in, so nothing may count one out. */
+  else if (NTS_TAG_IS_HANDLE(tag) && value.as.native) {
     nts_handle_counting(tag)->retain(value.as.native);
   }
+#endif
 }
 
 void nts_value_release(NtsValue value) {
   uint32_t tag = nts_value_tag(value);
   if (NTS_TAG_IS_MANAGED(tag) && nts_value_reference(value)) {
     nts_release(nts_value_reference(value));
-  } else if (NTS_TAG_IS_HANDLE(tag) && value.as.native) {
+  }
+#ifdef NTS_PROVIDER_RC
+  /* Only where references are counted: without it nothing counted a handle
+   * in, so nothing may count one out. */
+  else if (NTS_TAG_IS_HANDLE(tag) && value.as.native) {
     nts_handle_counting(tag)->release(value.as.native);
   }
+#endif
 }
 
 /* Give up what a dying object was holding.

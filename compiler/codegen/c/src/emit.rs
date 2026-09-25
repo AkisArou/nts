@@ -557,7 +557,12 @@ impl Emitted {
         // Or registers a class of its own over one (`emit/gobject.rs`), or
         // holds a boxed record (`nts_gobject_boxed`, `_copy`, `_new`).
         let text = self.writer.text();
-        let connects = text.contains("nts_gobject_connect(") || text.contains("nts_gobject_register(") || text.contains("nts_gobject_boxed");
+        // Or erases a `GObject` handle into a value (`NTS_TAG_HANDLE_GOBJECT`),
+        // which the family's registration in that file is what counts.
+        let connects = text.contains("nts_gobject_connect(")
+            || text.contains("nts_gobject_register(")
+            || text.contains("nts_gobject_boxed")
+            || text.contains("NTS_TAG_HANDLE_GOBJECT");
         if connects || self.witness.contains(GOBJECT_HEADER_NAME) {
             files.push(Support { name: GOBJECT_HEADER_NAME, contents: GOBJECT_HEADER, compiled: false });
         }
@@ -1884,6 +1889,16 @@ fn erased_comparison(
         // Every other managed value is a pointer and compares by identity,
         // which is what `===` means for one.
         HirType::Managed(_) => "nts_value_eq_reference",
+        // A counted handle, by its family's tag and its address: identity,
+        // with the family deciding what "the same object" can mean.
+        HirType::NativePointer(_) => {
+            let (tag, _) = erased_tag(other)?;
+            return Some(format!(
+                "{name} = {negate}nts_value_eq_handle({}, (const void *){}, {tag});",
+                value_name(value),
+                value_name(against)
+            ));
+        }
         // `void` and `never` have no value to compare, and a comparison
         // against the absent reference was answered before this ran.
         _ => return None,
@@ -3797,6 +3812,16 @@ fn erased_conversion(
                     "nts_value_of_reference((NtsHeader *){}, {tag})",
                     value_name(*value)
                 ),
+                // A handle, whose absence is the same question a reference's is.
+                "native" if *absent != nts_core::hir::Absent::Impossible => {
+                    let empty = if *absent == nts_core::hir::Absent::Null {
+                        "nts_value_of_null()"
+                    } else {
+                        "nts_value_of_undefined()"
+                    };
+                    format!("({0} == NULL) ? {empty} : nts_value_of_handle((void *){0}, {tag})", value_name(*value))
+                }
+                "native" => format!("nts_value_of_handle((void *){}, {tag})", value_name(*value)),
                 "boolean" => format!("nts_value_of_boolean({})", value_name(*value)),
                 _ if tag == "NTS_TAG_UNDEFINED" => "nts_value_of_undefined()".to_owned(),
                 _ => format!("nts_value_of_number({})", value_name(*value)),
@@ -3804,8 +3829,15 @@ fn erased_conversion(
             Ok(format!("{name} = {built};"))
         }
         OpKind::Unerase { value } => {
-            let (_, field) = erased_tag(&op.ty).ok_or_else(|| refuse(&op.ty, "read back"))?;
+            let (tag, field) = erased_tag(&op.ty).ok_or_else(|| refuse(&op.ty, "read back"))?;
             let read = match field {
+                // Checked, unconditionally: a value of another family here is
+                // a compiler bug that would hand one object system's pointer to
+                // another's release.
+                "native" => {
+                    let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+                    format!("({ty})nts_value_handle({}, {tag})", value_name(*value))
+                }
                 "reference" => {
                     let ty = c_type_of(context.program, &op.ty, &op.origin)?;
                     format!("({ty})nts_value_reference({})", value_name(*value))
@@ -3887,6 +3919,15 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
             | ManagedType::Table(_, _)
             | ManagedType::Set(_),
         ) => Some(("NTS_TAG_OBJECT", "reference")),
+        // A counted C library's object: its family's tag in the handle block,
+        // which the runtime counts through the family's registration. A C
+        // pointer nothing counts has no tag, and stays refused.
+        HirType::NativePointer(pointee) => match nts_core::hir::tags::erased_handle_tag(pointee)? {
+            nts_core::hir::tags::HANDLE_GOBJECT => Some(("NTS_TAG_HANDLE_GOBJECT", "native")),
+            nts_core::hir::tags::HANDLE_OBJC => Some(("NTS_TAG_HANDLE_OBJC", "native")),
+            nts_core::hir::tags::HANDLE_COM => Some(("NTS_TAG_HANDLE_COM", "native")),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -5347,6 +5388,28 @@ mod tests {
              claims to check and does not",
         );
         samples
+    }
+
+    /// And for a handle of each family, which both lists answer from
+    /// `tags::erased_handle_tag`: a `GObject` or COM one is tagged, an
+    /// Objective-C one is not yet, and a C pointer nothing counts never is.
+    #[test]
+    fn the_two_erasure_lists_agree_about_handles() {
+        use nts_core::hir::native::{Family, Handle, Pointee};
+        for family in [Family::C, Family::Objc, Family::GObject, Family::Com] {
+            let ty = HirType::NativePointer(Pointee::Opaque(Handle {
+                tag: "_Thing".to_owned(),
+                ancestors: Vec::new(),
+                family,
+                interface: false,
+            }));
+            assert_eq!(
+                nts_core::hir::lower::erasable(&ty),
+                erased_tag(&ty).is_some(),
+                "`erasable` and `erased_tag` disagree about a {family:?} handle"
+            );
+            assert_eq!(erased_tag(&ty).is_some(), matches!(family, Family::GObject | Family::Com), "{family:?}");
+        }
     }
 
     #[test]

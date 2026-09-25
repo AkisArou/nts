@@ -42,6 +42,34 @@ pub const NULL: u32 = 7;
 pub const HANDLE_GOBJECT: u32 = 8;
 pub const HANDLE_OBJC: u32 = 9;
 pub const HANDLE_COM: u32 = 10;
+/// The tag a counted handle of `family` carries in an erased value, which is
+/// its family's place in the block; `None` for a C pointer nothing counts,
+/// which no erased value holds. The one answer every backend asks.
+#[must_use]
+pub fn handle_tag(family: super::native::Family) -> Option<u32> {
+    match family {
+        super::native::Family::GObject => Some(HANDLE_GOBJECT),
+        super::native::Family::Objc => Some(HANDLE_OBJC),
+        super::native::Family::Com => Some(HANDLE_COM),
+        super::native::Family::C => None,
+    }
+}
+
+/// The tag a handle of this type carries **where lowering erases one** --
+/// `unknown`, a table's value, a props object's optional field. A `GObject` or
+/// COM handle is tagged. An Objective-C one is not yet: a table still holds it
+/// in a box, because its keys hash and compare through `-hash`/`-isEqual:` on
+/// the boxed object, and moving that to tag 9 is its own step, reviewed by the
+/// lane that runs it. Until then an Objective-C handle is boxed in a table and
+/// refused anywhere else it would be erased.
+#[must_use]
+pub fn erased_handle_tag(pointee: &super::native::Pointee) -> Option<u32> {
+    match pointee.family()? {
+        super::native::Family::Objc => None,
+        family => handle_tag(family),
+    }
+}
+
 /// The first tag of the handle block and the block's size.
 pub const HANDLE_BLOCK: u32 = 8;
 pub const HANDLE_BLOCK_SIZE: u32 = 8;

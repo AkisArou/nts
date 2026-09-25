@@ -9718,6 +9718,11 @@ fn readable_back(ty: &HirType) -> bool {
 /// test rather than a comment.
 #[must_use]
 pub fn erasable(ty: &HirType) -> bool {
+    // A counted handle of a family erased as a tag (`tags::erased_handle_tag`),
+    // which the backends' `erased_tag` spells from the same table.
+    if let HirType::NativePointer(pointee) = ty {
+        return super::tags::erased_handle_tag(pointee).is_some();
+    }
     matches!(
         ty,
         HirType::Float { .. }
@@ -15492,9 +15497,10 @@ impl<'a> FuncBuilder<'a> {
     /// [`FuncBuilder::present_of`] is the one read-back that does *not* come
     /// from here, because its licence is different -- see it for why.
     fn narrowed(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
-        // A counted handle a map holds in its box.
+        // A counted handle a map holds in its box -- an Objective-C one; every
+        // other family's is a tag, which the read-back below answers.
         if let Some(want) = self.type_of(id)
-            && matches!(&want, HirType::NativePointer(pointee) if pointee.counting().is_some())
+            && matches!(&want, HirType::NativePointer(pointee) if pointee.counting().is_some() && super::tags::erased_handle_tag(pointee).is_none())
             && self.values[value.0 as usize].ty == HirType::Erased
         {
             return self.unboxed(id, value, &want);
@@ -15529,6 +15535,17 @@ impl<'a> FuncBuilder<'a> {
             {
                 let origin = self.origin(id);
                 return Ok(self.push(OpKind::Convert(value), want, origin));
+            }
+            // An `unknown` the checker narrowed to a handle -- after
+            // `x instanceof GtkButton`, or `map.get(k)` of a `Map<K, GtkButton>`
+            // -- read back as its family's tag, which `Unerase` checks. An `as`
+            // is not a narrowing and stays refused.
+            if !matches!(self.kind_of(id), Some(syntax::AS_EXPRESSION))
+                && self.values[value.0 as usize].ty == HirType::Erased
+                && matches!(&want, HirType::NativePointer(pointee) if super::tags::erased_handle_tag(pointee).is_some())
+            {
+                let origin = self.origin(id);
+                return Ok(self.push(OpKind::Unerase { value }, want, origin));
             }
             return Err(self.unsupported(id, "a value asserted to be an opaque C pointer"));
         }
@@ -16325,7 +16342,11 @@ impl<'a> FuncBuilder<'a> {
         if matches!(want, HirType::NativePointer(_)) && !matches!(have, HirType::NativePointer(_)) {
             return Err(self.unsupported(id, "a managed value where C takes a pointer: pass a handle, a `Ptr`, or `null`"));
         }
-        if matches!(have, HirType::NativePointer(_)) || matches!(want, HirType::NativePointer(_)) {
+        // A counted handle into an erased slot falls through to the erase
+        // below, as its family's tag; every other conversion of a C pointer
+        // stays refused.
+        let tagged = *want == HirType::Erased && erasable(&have);
+        if !tagged && (matches!(have, HirType::NativePointer(_)) || matches!(want, HirType::NativePointer(_))) {
             return Err(self.unsupported(id, "an opaque C pointer converted to a different representation"));
         }
         // A slot of type `never` cannot receive a value, and one is arriving.
@@ -18338,6 +18359,16 @@ impl<'a> FuncBuilder<'a> {
     fn unboxed(&mut self, id: NodeId, value: ValueId, want: &HirType) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         self.unboxed_at(value, want, &origin).ok_or_else(|| self.unsupported(id, "a handle of a family with no box"))
+    }
+
+    /// A counted handle a table holds in a box -- an Objective-C one; every
+    /// other family's is a tag, which an `Unerase` reads back.
+    fn boxed_handle_at(&mut self, value: ValueId, element: &HirType, origin: &Origin) -> Option<ValueId> {
+        let HirType::NativePointer(pointee) = element else { return None };
+        if pointee.counting().is_none() || super::tags::erased_handle_tag(pointee).is_some() {
+            return None;
+        }
+        self.unboxed_at(value, element, origin)
     }
 
     /// [`Self::unboxed`] where there is only an origin: `None` for a handle
@@ -25137,9 +25168,7 @@ impl<'a> FuncBuilder<'a> {
                 // `Socket` rather than sixteen bytes it has to unpack itself.
                 if *element == HirType::Erased {
                     slot
-                } else if let HirType::NativePointer(pointee) = element
-                    && pointee.counting().is_some()
-                    && let Some(handle) = self.unboxed_at(slot, element, origin)
+                } else if let Some(handle) = self.boxed_handle_at(slot, element, origin)
                 {
                     handle
                 } else {
@@ -45975,11 +46004,32 @@ impl<'a> FuncBuilder<'a> {
             return Ok(None);
         };
         let object = self.lower_expression(lhs)?;
+        let origin = self.origin(id);
+        // An `unknown` holds a `GObject` exactly when it carries that family's
+        // tag, and then the payload is the handle the test asks about -- read
+        // back where the tag licensed it, as a narrowing reads one.
+        let object = if self.values[object.0 as usize].ty == HirType::Erased {
+            let root = super::native::gobject_root();
+            let unsigned = HirType::Int { bits: 32, signed: false };
+            let tag = self.push(OpKind::TagOf { value: object }, unsigned.clone(), origin.clone());
+            let gobject = self.push(OpKind::ConstInt(i128::from(super::tags::HANDLE_GOBJECT)), unsigned, origin.clone());
+            let is_one = self.push(OpKind::Binary { op: BinOp::Eq, lhs: tag, rhs: gobject }, HirType::Bool, origin.clone());
+            let (read, joined) = (self.new_block(), self.new_block());
+            let handle = self.push_block_param(joined, HirType::NativePointer(root.clone()), origin.clone());
+            let none = self.push(OpKind::ConstNull, HirType::NativePointer(root.clone()), origin.clone());
+            self.terminate(Terminator::Branch { cond: is_one, then_target: read, then_args: Vec::new(), else_target: joined, else_args: vec![none] });
+            self.switch_to(read);
+            let read_back = self.push(OpKind::Unerase { value: object }, HirType::NativePointer(root), origin.clone());
+            self.terminate(Terminator::Jump { target: joined, args: vec![read_back] });
+            self.switch_to(joined);
+            handle
+        } else {
+            object
+        };
         let object_ty = self.values[object.0 as usize].ty.clone();
         if !matches!(object_ty, HirType::NativePointer(_)) {
             return Err(self.unsupported(id, "an `instanceof` of a `GObject` class on something that is not a handle"));
         }
-        let origin = self.origin(id);
         let null = self.push(OpKind::ConstNull, object_ty, origin.clone());
         let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: object, rhs: null }, HirType::Bool, origin.clone());
         let (asked, answered) = (self.new_block(), self.new_block());
@@ -49159,8 +49209,13 @@ impl<'a> FuncBuilder<'a> {
         // A counted foreign object, boxed: the map holds the box, and the box
         // the object's count, given back when the entry is overwritten or
         // deleted or the map goes.
+        //
+        // Only an Objective-C one now: every other counted family is erased as
+        // its tag, below, and read back by a checked `Unerase` -- one
+        // representation, so `map.get(k) === widget`.
         if let HirType::NativePointer(pointee) = self.values[value.0 as usize].ty.clone()
             && pointee.counting().is_some()
+            && super::tags::erased_handle_tag(&pointee).is_none()
             && let Some(boxed) = self.boxed(value, &pointee, origin)
         {
             return self.push(OpKind::Erase { value: boxed, absent: Absent::Impossible }, HirType::Erased, origin.clone());

@@ -2836,6 +2836,20 @@ impl Emitter<'_> {
         ty: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
+        // A C library's object where any value may go: native programs only.
+        // Said about what the program wrote, since that is what its author can
+        // change.
+        let handle = match kind {
+            OpKind::Erase { value, .. } => matches!(self.func.values[value.0 as usize].ty, HirType::NativePointer(_)),
+            OpKind::Unerase { .. } => matches!(ty, HirType::NativePointer(_)),
+            _ => false,
+        };
+        if handle {
+            return Err(refuse(
+                self.func,
+                "a C handle stored where any value may go -- `unknown`, a table, an optional field -- which the JVM has no representation for; a handle crosses only as a parameter or a result there",
+            ));
+        }
         match kind {
             OpKind::Erase { value, absent } => {
                 self.erase(code, pool, Some(result), *value, *absent, origin)

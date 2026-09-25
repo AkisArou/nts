@@ -511,6 +511,9 @@ fn tag_of(ty: &HirType) -> Option<u32> {
         HirType::Managed(nts_core::hir::ManagedType::Symbol) => tags::SYMBOL,
         HirType::Managed(_) => tags::OBJECT,
         HirType::Void => tags::UNDEFINED,
+        // A counted C library's object: its family's tag in the handle block,
+        // from the one table the C backend reads too.
+        HirType::NativePointer(pointee) => tags::erased_handle_tag(pointee)?,
         _ => return None,
     })
 }
@@ -1692,6 +1695,9 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_bigint_shr",
     "nts_cell_unready",
     "nts_check_fn",
+    // A handle read back out of an erased value is checked in raw IR
+    // (`Unerase`), for the same reason as the rest of this list.
+    "nts_handle_check",
     // The growing pair, here for the reason the view trio is: `index_lines`
     // writes the call as raw IR, so `externals` -- which reads `OpKind::Call` --
     // never sees it, and the module referred to an undefined symbol.
@@ -3101,6 +3107,18 @@ fn mixed_equality(
     platform: Platform,
 ) -> Result<Vec<String>, Diagnostic> {
     let mut lines = Vec::new();
+    // A handle, compared here rather than by a helper: its family's tag, and
+    // the same address.
+    if let HirType::NativePointer(_) = other {
+        let tag = tag_of(other).ok_or_else(|| refuse(func, "an equality between an erased value and a C pointer of a family no value holds"))?;
+        lines.push(format!("{out}.ht = extractvalue {ERASED_TYPE} {}, 0", name(erased)));
+        lines.push(format!("{out}.hb = extractvalue {ERASED_TYPE} {}, 1", name(erased)));
+        lines.push(format!("{out}.hp = ptrtoint ptr {} to i64", name(against)));
+        lines.push(format!("{out}.htag = icmp eq i32 {out}.ht, {tag}"));
+        lines.push(format!("{out}.hptr = icmp eq i64 {out}.hb, {out}.hp"));
+        lines.push(format!("{same} = and i1 {out}.htag, {out}.hptr"));
+        return Ok(lines);
+    }
     let receiver = erased_argument(platform, &name(erased), out, 0, &mut lines);
     // An integer is compared as the number it is, which is what the erased side
     // holds: the tag says `number` and the payload is a double whatever width
@@ -3229,6 +3247,18 @@ fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result
         OpKind::Unerase { value } => {
             let bits = format!("{out}.bits");
             let read = format!("{bits} = extractvalue {ERASED_TYPE} {}, 1", name(*value));
+            // A handle is checked, unconditionally, as the C backend's is: its
+            // family's tag, or an absence, whose payload is zero and so reads
+            // back as the null pointer; anything else aborts in the runtime.
+            if let HirType::NativePointer(_) = &op.ty {
+                let wanted = tag_of(&op.ty).ok_or_else(|| refuse(func, "reading back a C pointer of a family no value holds"))?;
+                return Ok(format!(
+                    "{read}\n  {out}.found = extractvalue {ERASED_TYPE} {}, 0\n  \
+                     call void @nts_handle_check(i32 {out}.found, i32 {wanted})\n  \
+                     {out} = inttoptr i64 {bits} to ptr",
+                    name(*value)
+                ));
+            }
             let narrow = payload_into(func, &out, &bits, &op.ty)?;
             format!("{read}\n  {narrow}")
         }
@@ -3573,7 +3603,7 @@ fn payload_from(
             )
         }
         HirType::Bool => format!("{bits} = zext i1 {} to i64", name(value)),
-        HirType::Managed(_) => format!("{bits} = ptrtoint ptr {} to i64", name(value)),
+        HirType::Managed(_) | HirType::NativePointer(_) => format!("{bits} = ptrtoint ptr {} to i64", name(value)),
         other => return Err(refuse(func, &format!("erasing a value of type {other:?}"))),
     })
 }

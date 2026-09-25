@@ -121,6 +121,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_gobject_boxed", &[None, Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_gobject_boxed_copy", &[None, Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_gobject_boxed_new", &[Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    ("nts_handle_check", &[Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_handle_family_register", &[Some(HirType::Int { bits: 32, signed: false }), None, None, None], None),
     ("nts_has_pending_work", &[], Some(HirType::Bool)),
     ("nts_hresult_message", &[Some(HirType::Int { bits: 32, signed: true })], None),

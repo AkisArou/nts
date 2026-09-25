@@ -258,4 +258,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// 108 for `nts_handle_family_register`, which only a family's C support file
 /// calls, from a load-time constructor: the JVM holds no C handles, so nothing
 /// here registers a family.
-const REFUSED_FLOOR: usize = 108;
+///
+/// 109 for `nts_handle_check`, which reads a C handle back out of an erased
+/// value: the JVM holds no C handles in its values.
+const REFUSED_FLOOR: usize = 109;

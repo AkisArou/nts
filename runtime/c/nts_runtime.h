@@ -756,6 +756,39 @@ static inline NtsValue nts_value_of_reference(NtsHeader *object, uint32_t tag) {
   return value;
 }
 
+/* A C library's object as a value: `tag` is its family's, in the handle block.
+ * The value does not count it; whoever stores the value retains it, as for any
+ * other payload (`nts_value_retain`). */
+static inline NtsValue nts_value_of_handle(void *object, uint32_t tag) {
+  NtsValue value;
+  value.tag = tag;
+  value.as.native = object;
+  return value;
+}
+
+/* `value === handle`: the same family's tag and the same address. */
+static inline bool nts_value_eq_handle(NtsValue value, const void *handle,
+                                       uint32_t tag) {
+  return value.tag == tag && value.as.native == handle;
+}
+
+/* Whether a value with tag `found` may be read back as a handle of `wanted`'s
+ * family: its own tag, or an absence, which reads back as NULL. Returns if so
+ * and aborts otherwise, naming a box (`NTS_TAG_OBJECT`) as its own case, since
+ * the promise path still boxes a handle where every other path tags it. One
+ * function both backends call, so the check is the same wherever it runs. */
+void nts_handle_check(uint32_t found, uint32_t wanted);
+
+/* The handle a value holds, which must be of `tag`'s family, or NULL where it
+ * holds an absence -- `map.get(k)` of a key that is not there is `undefined`,
+ * and a handle's one absent value is the null pointer. Anything else is
+ * checked, unconditionally: a value of another family here is a compiler bug
+ * that would hand one object system's pointer to another's release. */
+static inline void *nts_value_handle(NtsValue value, uint32_t tag) {
+  nts_handle_check(value.tag, tag);
+  return value.tag == tag ? value.as.native : NULL;
+}
+
 /* `typeof` for a tag, as the interned string the language spells it with.
  *
  * A comparison against a literal -- `typeof v === "number"`, which is what
