@@ -348,11 +348,21 @@ Application.Start(() => { new App(); });
      larger and the build 17 s longer. Inherited, the bindings grow 4.6 → 6.2
      MB, and a warm build goes 4.0 → 4.7 s.
    - The ABI names stay on each interface (`as_IContentControl().put_Content`).
+   - **`new Window()`:** a binding's composable class is made by its
+     factory's `CreateInstance`, with no outer object.
+   - **A subclass where its base is taken:** `window.content = button`. A
+     default interface is `ComClass<Tag, BaseDefault> & … Methods`, and the
+     conversion asks for the base's interface (`nts_com_query`), since a COM
+     object's interfaces are different pointers.
+   - **A COM handle where any value may go:** a `Map`, an `unknown[]`,
+     `unknown`, through Gtk's handle tag block (`NTS_TAG_HANDLE_COM`,
+     registered by `nts_winrt.c`). Read back out of a typed `Map` it is the
+     same object. Narrowing an `unknown` by `instanceof` a WinRT class is not
+     done yet; GObject's `lower_gobject_instanceof` is the shape, with
+     `QueryInterface` as the class check.
    - Not yet: events (`add_Click`), generic interfaces (`IVector`), static
-     properties, struct fields (`size.Width`), `new Window()`, strings boxed
-     where a slot takes `IInspectable`, and a subclass passed where its base's
-     interface is taken (`window.content = button`, which needs a query at the
-     conversion). Also started: a record a call takes by value may be
+     properties, struct fields (`size.Width`), and strings boxed where a slot
+     takes `IInspectable`. Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
    record stays `ByValue<T>`.
