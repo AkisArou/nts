@@ -87,13 +87,14 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { availableParallelism, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.mjs";
-import { pinCompiler } from "./project.mjs";
+import { HARNESS, pinCompiler } from "./project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -147,6 +148,7 @@ const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
 // Runtime objects compiled once and kept across runs; `attempt262.mjs`'s
 // `withCachedObjects` says why this is the same program and how it is keyed.
 const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".cache/nts/c-objects");
+const HARNESS_HASH = createHash("sha256").update(HARNESS).digest("hex").slice(0, 16);
 const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE };
 
 // --- the population --------------------------------------------------------
@@ -282,14 +284,17 @@ async function runAll(all) {
   const results = new Map();
   let paths = all;
   if (paths.length === 0) return results;
-  const header = { fingerprint: FINGERPRINT, under };
+  // The harness is part of what a row measured: a stand-in that gains an
+  // overload changes which cases typecheck, so rows from two harnesses are two
+  // runs even under one compiler.
+  const header = { fingerprint: FINGERPRINT, under, harness: HARNESS_HASH };
   if (rowsFile && resume && existsSync(rowsFile)) {
     const [first, ...rest] = readFileSync(rowsFile, "utf8").split("\n");
     let was = null;
     try { was = JSON.parse(first); } catch {}
-    if (was?.fingerprint !== FINGERPRINT || was?.under !== under) {
-      cannotMeasure(`${rowsFile} was written by ${was?.fingerprint ?? "no named compiler"} over ${was?.under}; ` +
-        `this run is ${FINGERPRINT} over ${under}`);
+    if (was?.fingerprint !== FINGERPRINT || was?.under !== under || was?.harness !== HARNESS_HASH) {
+      cannotMeasure(`${rowsFile} was written by ${was?.fingerprint ?? "no named compiler"} over ${was?.under} ` +
+        `with harness ${was?.harness ?? "unnamed"}; this run is ${FINGERPRINT} over ${under} with harness ${HARNESS_HASH}`);
     }
     const wanted = new Set(paths);
     for (const line of rest) {
@@ -373,7 +378,7 @@ function classify(row) {
     case "timeout":
       return { outcome: "no-verdict", cause: `timeout${row.why ? ` (${row.why})` : ""}` };
     case "crash":
-      return { outcome: "no-verdict", cause: `crash (${row.why})` };
+      return { outcome: "no-verdict", cause: `crash (${row.why})${row.first ? `: ${row.first}` : ""}` };
     case "memory-cap":
       return { outcome: "no-verdict", cause: `exceeded the ${MEMORY_CAP_KB / 1e6} GB address-space cap (${row.why})` };
     case "invalid-hir":
@@ -520,7 +525,7 @@ const out = [];
 const say = (line = "") => out.push(line);
 
 say(`  pin ${pin}`);
-say(`  compiler ${NTS} (sha256:${FINGERPRINT})`);
+say(`  compiler ${NTS} (sha256:${FINGERPRINT}), harness sha256:${HARNESS_HASH}`);
 say(`  runtime objects: ${objectTally.hit} cached, ${objectTally.miss} compiled (${OBJECT_CACHE})`);
 say(`  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, refused ${checks.refused}`);
 say(

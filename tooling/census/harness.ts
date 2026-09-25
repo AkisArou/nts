@@ -30,6 +30,17 @@
 // slice actually makes gets a signature, and the implementation signature stays
 // `unknown` where TypeScript requires it but no call resolves to it.
 //
+// **The generic overload is last, and it is the one most calls outside the
+// three primitives reach.** With only `number`, `string` and `boolean`, every
+// `sameValue(x, undefined)`, `sameValue(obj, obj)` and `sameValue(big, 1n)` was
+// `TS2769 No overload matches this call` -- the largest root in the first
+// whole-`test/language` census, 586 cases as the *sole* cause and 1,322 as any
+// cause, all of them this stand-in's narrowness rather than the compiler's.
+// `<T>(actual: T, expected: T)` lets the checker pass them to the lowering,
+// which is what the census exists to measure: on a sample of 59 of those
+// cases, 7 passed, 37 became lowering refusals, 0 became wrong answers, and
+// the 1,803 recorded cases did not move.
+//
 // # This is prepended, not imported
 //
 // The materialiser concatenates this ahead of the test body in one file. An
@@ -56,6 +67,7 @@ class assert {
   static sameValue(actual: number, expected: number, message?: string): void;
   static sameValue(actual: string, expected: string, message?: string): void;
   static sameValue(actual: boolean, expected: boolean, message?: string): void;
+  static sameValue<T>(actual: T, expected: T, message?: string): void;
   static sameValue(actual: unknown, expected: unknown, message?: string): void {
     if (!assert.isSameValue(actual, expected)) {
       throw new Test262Error(message ?? "sameValue");
@@ -65,6 +77,7 @@ class assert {
   static notSameValue(actual: number, expected: number, message?: string): void;
   static notSameValue(actual: string, expected: string, message?: string): void;
   static notSameValue(actual: boolean, expected: boolean, message?: string): void;
+  static notSameValue<T>(actual: T, expected: T, message?: string): void;
   static notSameValue(actual: unknown, expected: unknown, message?: string): void {
     if (assert.isSameValue(actual, expected)) {
       throw new Test262Error(message ?? "notSameValue");

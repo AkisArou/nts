@@ -458,7 +458,15 @@ export function attempt(dir, body, tools) {
       const said = String(error.stderr ?? "").split("\n").find((text) => UNCAUGHT.test(text));
       return { bucket: "threw", thrown: thrown[1], message: said?.trim().slice(0, 240) };
     }
-    return { bucket: "crash", why: error.signal ?? `exit ${error.status}` };
+    // The program's last word, kept: a runtime refusal prints
+    // `nts: refused: index 1 is outside [0, 1)` and aborts, and a row that says
+    // only SIGABRT sends the next reader to reproduce what was already said.
+    const said = String(error.stderr ?? "").split("\n").find((text) => text.startsWith("nts: "));
+    return {
+      bucket: "crash",
+      why: error.signal ?? `exit ${error.status}`,
+      first: said?.trim().replace(/\d+/g, "N").slice(0, 200),
+    };
   }
 }
 
