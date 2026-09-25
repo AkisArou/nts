@@ -18,4 +18,4 @@ missing -[NSView rulerView:willSetClientView:]
 missing -[NSView rulerView:locationForPoint:]
 missing -[NSView rulerView:pointForLocation:]
 missing -[NSWindow setTitlebarAccessoryViewControllers:]
-1203 messages checked, 20 the runtime does not have
+1207 messages checked, 20 the runtime does not have

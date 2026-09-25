@@ -1232,6 +1232,7 @@ declare module "objc:AppKit" {
     get pageHeader(): NSAttributedString;
     get pageFooter(): NSAttributedString;
     get printJobTitle(): string;
+    get registeredDraggedTypes(): string[];
     get isInFullScreenMode(): boolean;
     get isDrawingFindIndicator(): boolean;
     get gestureRecognizers(): NSGestureRecognizer[];
@@ -1489,6 +1490,8 @@ declare module "objc:AppKit" {
     endPage(): void;
     /** @ntsSelector beginDraggingSessionWithItems:event:source: */
     beginDraggingSession(labels: { with: NSDraggingItem[]; event: NSEvent; source: NSObject }): NSDraggingSession;
+    /** @ntsSelector registerForDraggedTypes: */
+    registerForDraggedTypes(newTypes: string[]): void;
     /** @ntsSelector unregisterDraggedTypes */
     unregisterDraggedTypes(): void;
     /** @ntsSelector showDefinitionForAttributedString:atPoint: */
@@ -1582,7 +1585,6 @@ declare module "objc:AppKit" {
     // Not bound, each for the reason given:
     //   @property canDraw: deprecated in macOS 10.14
     //   @property acceptsTouchEvents: deprecated in macOS 10.12
-    //   @property registeredDraggedTypes: an array of `NSPasteboardType`
     //   @property prefersCompactControlSizeMetrics: introduced in macOS 26.0
     //   @property writingToolsCoordinator: introduced in macOS 15.2
     //   @property wantsBestResolutionOpenGLSurface: deprecated in macOS 10.14
@@ -1599,7 +1601,6 @@ declare module "objc:AppKit" {
     //   -getRectsExposedDuringLiveResize:count:: a `NSRect *`
     //   -knowsPageRange:: a `NSRange *`
     //   -drawSheetBorderWithSize:: deprecated in macOS 10.14
-    //   -registerForDraggedTypes:: an array of `NSPasteboardType`
     //   -enterFullScreenMode:withOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -exitFullScreenModeWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -showDefinitionForAttributedString:range:options:baselineOriginProvider:: a collection, `NSDictionary`, which crosses as an object when it is bound
@@ -2038,6 +2039,8 @@ declare module "objc:AppKit" {
     resetCursorRects(): void;
     /** @ntsSelector dragImage:at:offset:event:pasteboard:source:slideBack: */
     drag(image: NSImage, labels: { at: ByValue<CGPoint>; offset: ByValue<CGSize>; event: NSEvent; pasteboard: NSPasteboard; source: NSObject; slideBack: boolean }): void;
+    /** @ntsSelector registerForDraggedTypes: */
+    registerForDraggedTypes(newTypes: string[]): void;
     /** @ntsSelector unregisterDraggedTypes */
     unregisterDraggedTypes(): void;
     /** @ntsSelector disableScreenUpdatesUntilFlush */
@@ -2089,7 +2092,6 @@ declare module "objc:AppKit" {
     //   -requestSharingOfWindowUsingPreview:title:completionHandler:: introduced in macOS 15.0
     //   -trackEventsMatchingMask:timeout:mode:handler:: a `BOOL *`
     //   -beginDraggingSessionWithItems:event:source:: introduced in macOS 15.0
-    //   -registerForDraggedTypes:: an array of `NSPasteboardType`
     //   -displayLinkWithTarget:selector:: introduced in macOS 14.0
     //   -cacheImageInRect:: deprecated in macOS 10.13
     //   -restoreCachedImage: deprecated in macOS 10.13
@@ -2235,6 +2237,8 @@ declare module "objc:AppKit" {
     updateWindowsItem(win: NSWindow): void;
     /** @ntsSelector miniaturizeAll: */
     miniaturizeAll(sender: NSObject | null): void;
+    /** @ntsSelector registerServicesMenuSendTypes:returnTypes: */
+    registerServicesMenuSendTypes(sendTypes: string[], labels: { returnTypes: string[] }): void;
     /** @ntsSelector orderFrontStandardAboutPanel: */
     orderFrontStandardAboutPanel(sender: NSObject | null): void;
     /** @ntsSelector disableRelaunchOnLogin */
@@ -2283,7 +2287,6 @@ declare module "objc:AppKit" {
     //   -runModalSession:: a `struct _NSModalSession *`
     //   -endModalSession:: a `struct _NSModalSession *`
     //   -enumerateWindowsWithOptions:usingBlock:: a `BOOL *`
-    //   -registerServicesMenuSendTypes:returnTypes:: an array of `NSPasteboardType`
     //   -orderFrontStandardAboutPanelWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -beginSheet:modalForWindow:modalDelegate:didEndSelector:contextInfo:: deprecated in macOS 10.10
     //   -endSheet:: deprecated in macOS 10.10

@@ -379,6 +379,10 @@ correctness does not depend on arm64 running by luck.
          as `null`, and sends `NSPredicate(format:argumentArray:)` both a
          `null` and an array. The AppKit binding gains `childWindows` and
          five more members, and the witness has all six.
+       - An element through a typedef of `NSString *`, such as
+         `[NSPasteboard.PasteboardType]`, is a `string`. A class qualified by a
+         protocol, such as `NSView<NSCollectionViewElement>`, is the class.
+         Array skips across AppKit dropped from 56 to 22.
        - `macos-classes` checks all four directions against ARC, and
          `macos-window` reads `window.contentView?.subviews.length` in the
          running window.

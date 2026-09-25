@@ -1296,7 +1296,17 @@ impl<'a> Model<'a> {
         if argument == "id" || argument.starts_with("id<") {
             return Ok(self.object("NSObject"));
         }
+        // `NSView<NSCollectionViewElement> *`: the class, whose protocols a
+        // TypeScript array element does not carry.
         let class = argument.trim_end_matches('*').trim();
+        let class = class.split_once('<').map_or(class, |(class, _)| class.trim());
+        // `NSPasteboardType`, a typedef of `NSString *` Swift wraps as a
+        // struct of statics: a string here, as it is outside an array.
+        if let Some(aliased) = self.headers.typedefs.get(class).cloned()
+            && aliased.trim_end_matches('*').trim() != class
+        {
+            return self.array_element(&format!("NSArray<{aliased}>"));
+        }
         if class == "NSString" {
             return Ok("string".to_owned());
         }
@@ -1844,6 +1854,8 @@ struct Opaque;
 @end
 @interface NSError : Root
 @end
+typedef NSString *ShapeKind;
+@protocol ShapeDelegate;
 @interface Root (Continued)
 - (instancetype)init;
 - (BOOL)isEqual:(Root *)other;
@@ -1861,6 +1873,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSString *> *)names;
 - (nullable NSArray *)maybe;
 - (void)adopt:(NSArray<Shape *> *)shapes;
+- (void)registerTypes:(NSArray<ShapeKind> *)kinds;
+- (NSArray<Shape<ShapeDelegate> *> *)delegates;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
 @property (class, readonly) Shape *unit;
@@ -1920,6 +1934,8 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)names", "swift.method", "names()", &["Shape", "names()"], ""),
             symbol("c:objc(cs)Shape(im)maybe", "swift.method", "maybe()", &["Shape", "maybe()"], ""),
             symbol("c:objc(cs)Shape(im)adopt:", "swift.method", "adopt(_:)", &["Shape", "adopt(_:)"], ""),
+            symbol("c:objc(cs)Shape(im)registerTypes:", "swift.method", "register(_:)", &["Shape", "register(_:)"], ""),
+            symbol("c:objc(cs)Shape(im)delegates", "swift.method", "delegates()", &["Shape", "delegates()"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
             symbol("c:objc(cs)Shape(cpy)unit", "swift.type.property", "unit", &["Shape", "unit"], ""),
@@ -2020,6 +2036,10 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector adopt: */\n    adopt(shapes: Shape[]): void;",
             // Swift's `[T]?`: the array, or `null` for a nil one.
             "    /** @ntsSelector maybe */\n    maybe(): NSObject[] | null;",
+            // Elements through a typedef of `NSString *`, as `[NSPasteboard.PasteboardType]`,
+            // and a class qualified by a protocol, which the element drops.
+            "    /** @ntsSelector registerTypes: */\n    register(kinds: string[]): void;",
+            "    /** @ntsSelector delegates */\n    delegates(): Shape[];",
             // A struct passed by value is declared, in Swift's numbers.
             "export type CGPoint = Struct<{ x: Double; y: Double }, \"CGPoint\">;",
             // And what is not bound is said, with why.
