@@ -17,6 +17,7 @@ import type {
   ReactContext,
   RefObject,
   Usable,
+  MemoCacheShape,
 } from "shared/ReactTypes.ts";
 import { isDevelopment } from "shared/Build.ts";
 import type { HookType } from "./ReactInternalTypes.ts";
@@ -73,6 +74,7 @@ import {
   use,
   useHostTransitionStatus,
   useMemoCache,
+  useMemoCacheOf,
   warnOnUseFormStateInDev,
   type ImperativeRef,
   type RefreshFunction,
@@ -187,6 +189,7 @@ const ContextOnlyDispatcher: FiberDispatcher = {
   useActionState: throwInvalidHookError,
   useOptimistic: throwInvalidHookError,
   useMemoCache: throwInvalidHookError,
+  useMemoCacheOf: throwInvalidHookError,
   useCacheRefresh: throwInvalidHookError,
   useEffectEvent: throwInvalidHookError,
 };
@@ -215,6 +218,7 @@ const HooksDispatcherOnMount: FiberDispatcher = {
   useActionState: mountActionState,
   useOptimistic: mountOptimistic,
   useMemoCache,
+  useMemoCacheOf,
   useCacheRefresh: mountRefresh,
   useEffectEvent: mountEvent,
 };
@@ -243,6 +247,7 @@ const HooksDispatcherOnUpdate: FiberDispatcher = {
   useActionState: updateActionState,
   useOptimistic: updateOptimistic,
   useMemoCache,
+  useMemoCacheOf,
   useCacheRefresh: updateRefresh,
   useEffectEvent: updateEvent,
 };
@@ -271,6 +276,7 @@ const HooksDispatcherOnRerender: FiberDispatcher = {
   useActionState: rerenderActionState,
   useOptimistic: rerenderOptimistic,
   useMemoCache,
+  useMemoCacheOf,
   useCacheRefresh: updateRefresh,
   useEffectEvent: updateEvent,
 };
@@ -457,6 +463,12 @@ function createDevDispatcher(options: DevDispatcherOptions): FiberDispatcher {
         warnInvalidHookAccess();
       }
       return useMemoCache(size);
+    },
+    useMemoCacheOf<T>(shape: MemoCacheShape<T>): T {
+      if (invalid) {
+        warnInvalidHookAccess();
+      }
+      return useMemoCacheOf(shape);
     },
     useCacheRefresh(): RefreshFunction {
       // Upstream records this hook without the invalid-access warning.

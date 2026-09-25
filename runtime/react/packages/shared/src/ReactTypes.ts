@@ -114,6 +114,16 @@ export type EffectCleanup = () => void;
 export type EffectCreate = () => EffectCleanup | void;
 export type Dependencies = readonly unknown[] | null | undefined;
 
+/**
+ * How a typed memo cache is made and copied (`useMemoCacheOf`): `create`
+ * makes one with nothing filled, `clone` copies one for a render that may be
+ * interrupted.
+ */
+export interface MemoCacheShape<T> {
+  readonly create: () => T;
+  readonly clone: (cache: T) => T;
+}
+
 // What `ReactSharedInternals.H` points at while a component renders: one
 // implementation per phase (mount, update, rerender, invalid).
 export interface Dispatcher {
@@ -149,6 +159,7 @@ export interface Dispatcher {
   useId(): string;
   useCacheRefresh(): <T>(createSeed?: () => T, seedValue?: T) => void;
   useMemoCache(size: number): unknown[];
+  useMemoCacheOf<T>(shape: MemoCacheShape<T>): T;
   useHostTransitionStatus(): unknown;
   useOptimistic<S, A>(
     passthrough: S,

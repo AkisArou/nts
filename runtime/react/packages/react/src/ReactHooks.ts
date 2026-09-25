@@ -13,6 +13,7 @@ import type {
   RefObject,
   StartTransitionOptions,
   Usable,
+  MemoCacheShape,
 } from "shared/ReactTypes.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
 
@@ -147,6 +148,11 @@ export function use<T>(usable: Usable<T>): T {
 // component.
 export function useMemoCache(size: number): unknown[] {
   return resolveDispatcher().useMemoCache(size);
+}
+
+// Its typed form: a record the compiled component declares.
+export function useMemoCacheOf<T>(shape: MemoCacheShape<T>): T {
+  return resolveDispatcher().useMemoCacheOf(shape);
 }
 
 export function useEffectEvent<F extends (...args: never[]) => unknown>(callback: F): F {

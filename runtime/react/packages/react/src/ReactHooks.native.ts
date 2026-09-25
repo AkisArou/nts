@@ -14,6 +14,7 @@ import type {
   RefObject,
   StartTransitionOptions,
   Usable,
+  MemoCacheShape,
 } from "shared/ReactTypes.ts";
 import { ReactSharedInternals } from "react/ReactSharedInternalsClient.ts";
 import { getCacheForType as getCacheForTypeInRender } from "react-reconciler/ReactFiberAsyncDispatcher.ts";
@@ -62,6 +63,7 @@ import {
   updateTransition,
   use as useInRender,
   useMemoCache as useMemoCacheInRender,
+  useMemoCacheOf as useMemoCacheOfInRender,
 } from "react-reconciler/ReactFiberHooks.ts";
 import {
   currentDispatcherKind,
@@ -323,6 +325,13 @@ export function useMemoCache(size: number): unknown[] {
     throwInvalidHookError();
   }
   return useMemoCacheInRender(size);
+}
+
+export function useMemoCacheOf<T>(shape: MemoCacheShape<T>): T {
+  if (phase() === Outside) {
+    throwInvalidHookError();
+  }
+  return useMemoCacheOfInRender(shape);
 }
 
 export function useEffectEvent<F extends (...args: never[]) => unknown>(callback: F): F {

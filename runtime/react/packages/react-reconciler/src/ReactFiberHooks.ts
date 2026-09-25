@@ -10,6 +10,7 @@ import type {
   Thenable,
   Transition,
   Usable,
+  MemoCacheShape,
 } from "shared/ReactTypes.ts";
 import type { Fiber, FiberRoot, HookType, MemoCache } from "./ReactInternalTypes.ts";
 import type { Lanes, Lane } from "./ReactFiberLane.ts";
@@ -1109,7 +1110,9 @@ export function use<T>(usable: Usable<T>): T {
   throw new Error("An unsupported type was passed to use(): " + String(usable));
 }
 
-export function useMemoCache(size: number): unknown[] {
+// The rendering fiber's memo caches: its own if this render prepared them,
+// else a copy of the current fiber's (copy-on-write), else none yet.
+function memoCachesInRender(): MemoCache {
   let memoCache: MemoCache | null = null;
   // Fast-path, load memo cache from wip fiber if already prepared
   let updateQueue = currentlyRenderingFiber.updateQueue as FunctionComponentUpdateQueue | null;
@@ -1150,7 +1153,11 @@ export function useMemoCache(size: number): unknown[] {
             data: enableNoCloningMemoCache
               ? currentMemoCache.data
               : // Clone the memo cache before each render (copy-on-write)
-                currentMemoCache.data.map((array) => array.slice()),
+                currentMemoCache.data.map((cache, at) => {
+                  const clone = currentMemoCache.cloners[at];
+                  return clone != null ? clone(cache) : (cache as unknown[]).slice();
+                }),
+            cloners: enableNoCloningMemoCache ? currentMemoCache.cloners : currentMemoCache.cloners.slice(),
             index: 0,
           };
         }
@@ -1161,6 +1168,7 @@ export function useMemoCache(size: number): unknown[] {
   if (memoCache == null) {
     memoCache = {
       data: [],
+      cloners: [],
       index: 0,
     };
   }
@@ -1169,10 +1177,17 @@ export function useMemoCache(size: number): unknown[] {
     currentlyRenderingFiber.updateQueue = updateQueue;
   }
   updateQueue.memoCache = memoCache;
+  return memoCache;
+}
 
-  let data = memoCache.data[memoCache.index];
+export function useMemoCache(size: number): unknown[] {
+  const memoCache = memoCachesInRender();
+
+  let data = memoCache.data[memoCache.index] as unknown[] | undefined;
   if (data === undefined || (isDevelopment && ignorePreviousDependencies)) {
-    data = memoCache.data[memoCache.index] = new Array<unknown>(size);
+    data = new Array<unknown>(size);
+    memoCache.data[memoCache.index] = data;
+    memoCache.cloners[memoCache.index] = null;
     for (let i = 0; i < size; i++) {
       data[i] = REACT_MEMO_CACHE_SENTINEL;
     }
@@ -1189,6 +1204,22 @@ export function useMemoCache(size: number): unknown[] {
   }
   memoCache.index++;
   return data;
+}
+
+// The React Compiler's cache, typed: a record the compiled component
+// declares (one field per slot, a bit per scope filled) rather than an array
+// of slots holding a sentinel until filled. Everything else is useMemoCache.
+export function useMemoCacheOf<T>(shape: MemoCacheShape<T>): T {
+  const memoCache = memoCachesInRender();
+  let data = memoCache.data[memoCache.index];
+  if (data === undefined || (isDevelopment && ignorePreviousDependencies)) {
+    const cache = shape.create();
+    data = cache;
+    memoCache.data[memoCache.index] = cache;
+    memoCache.cloners[memoCache.index] = (previous: unknown): unknown => shape.clone(previous as T);
+  }
+  memoCache.index++;
+  return data as T;
 }
 
 function basicStateReducer<S>(state: S, action: BasicStateAction<S>): S {

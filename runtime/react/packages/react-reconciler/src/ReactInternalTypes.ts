@@ -48,9 +48,13 @@ export interface Dependencies {
   _debugThenableState?: ThenableState | null;
 }
 
-// React Compiler's per-fiber caches (`useMemoCache`).
+// React Compiler's per-fiber caches, one per compiled component or hook in
+// call order: upstream's arrays of slots (`useMemoCache`), or a typed record
+// (`useMemoCacheOf`). `cloners` copies each typed one on write; an array has
+// none and is copied with `slice`, as upstream copies it.
 export interface MemoCache {
-  data: unknown[][];
+  data: unknown[];
+  cloners: (((cache: unknown) => unknown) | null)[];
   index: number;
 }
 
