@@ -1188,7 +1188,7 @@ impl<'a> Model<'a> {
         let spelled = optional_as_swift(clang.clone(), symbol.optionality() == Optionality::Optional);
         // What the setter takes: `null` too for a `null_resettable` property,
         // which Swift writes `T!`.
-        let written = optional_as_swift(spelled.clone(), symbol.optionality() != Optionality::Neither);
+        let written = optional_as_swift(self.or_fields(spelled.clone()), symbol.optionality() != Optionality::Neither);
         let readonly = decl.get("readonly").and_then(Value::as_bool) == Some(true);
         let swift_name = symbol.names.title.clone();
         let getter = decl.get("getter").and_then(named).unwrap_or_else(|| name.clone());
@@ -1351,11 +1351,28 @@ impl<'a> Model<'a> {
             return Err(format!("a `{desugared}`"));
         }
         if let Some(name) = desugared.strip_prefix("struct ").filter(|name| !name.ends_with('*')) {
-            self.record(name)?;
-            self.import("c:types", "ByValue");
-            return Ok(format!("ByValue<{}>", record_name(&self.typedefs, name)));
+            return self.by_value(name, position);
         }
         Err(format!("a `{desugared}`"))
+    }
+
+    /// A record C passes by value: `ByValue<CGRect>`, which a parameter also
+    /// takes written as its fields.
+    fn by_value(&mut self, name: &str, position: Position) -> Spelled {
+        self.record(name)?;
+        self.import("c:types", "ByValue");
+        let spelled = format!("ByValue<{}>", record_name(&self.typedefs, name));
+        Ok(if position == Position::Parameter { self.or_fields(spelled) } else { spelled })
+    }
+
+    /// What a program passes where C takes a record by value: the record's
+    /// storage, or its fields written as a literal, as Swift writes
+    /// `NSRect(origin:size:)` -- `ByValue<CGRect> | Fields<CGRect>`. Any
+    /// other type is itself.
+    fn or_fields(&mut self, spelled: String) -> String {
+        let Some(record) = spelled.strip_prefix("ByValue<").and_then(|rest| rest.strip_suffix('>')) else { return spelled };
+        self.import("c:types", "Fields");
+        format!("{spelled} | Fields<{record}>")
     }
 
     /// A block as the function type a TypeScript closure passed for it has:
@@ -2138,6 +2155,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<TagType> *)tags;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
+@property CGPoint center;
 @property (getter=isHidden) BOOL hidden;
 @property (class, readonly) Shape *unit;
 @property (readonly, weak) Shape *owner;
@@ -2215,6 +2233,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)tags", "swift.method", "tags()", &["Shape", "tags()"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
+            symbol("c:objc(cs)Shape(py)center", "swift.property", "center", &["Shape", "center"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
             symbol("c:objc(cs)Shape(cpy)unit", "swift.type.property", "unit", &["Shape", "unit"], ""),
             // What Swift makes of two properties clang's printed type does not
@@ -2287,7 +2306,7 @@ NS_ASSUME_NONNULL_END
             // An initializer is a constructor, its labels one object; and a
             // descendant repeats it, since TypeScript hides a base's
             // constructors behind a class's own.
-            "    /** @ntsSelector initWithOrigin:mode: */\n    constructor(labels: { origin: ByValue<CGPoint>; mode: CEnum<Shape.Mode, UInt> });",
+            "    /** @ntsSelector initWithOrigin:mode: */\n    constructor(labels: { origin: ByValue<CGPoint> | Fields<CGPoint>; mode: CEnum<Shape.Mode, UInt> });",
             // Unlabelled, positional; a declared `nullable` may be null.
             "    /** @ntsSelector next */\n    next(): Shape | null;",
             // A category is found by the class it extends; labels by Swift.
@@ -2299,6 +2318,9 @@ NS_ASSUME_NONNULL_END
             // As the accessors an Objective-C property is, so a subclass can
             // override one.
             "    get origin(): ByValue<CGPoint>;",
+            // A record is read as its storage and written as that or as its
+            // fields, Swift's `CGPoint(x:y:)`.
+            "    get center(): ByValue<CGPoint>;\n    set center(value: ByValue<CGPoint> | Fields<CGPoint>);",
             "    get isHidden(): boolean;\n    /** @ntsSet setHidden: */\n    set isHidden(value: boolean);",
             "    static get unit(): Shape;",
             // Nullable as Swift makes them: a weak property both ways, and a

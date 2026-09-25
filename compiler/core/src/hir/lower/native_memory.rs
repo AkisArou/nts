@@ -1,6 +1,6 @@
 //! Native places are addresses. Member access and addrOf share this path so
 //! evaluating a receiver never performs an accidental aggregate copy/load.
-use super::{Branch, Diagnostic, FuncBuilder, HirType, NodeId, OpKind, Place, ValueId};
+use super::{Branch, Diagnostic, FuncBuilder, HirType, ManagedType, NodeId, OpKind, Place, ValueId};
 use crate::hir::native::Pointee;
 use nts_semantic_schema::{LiteralValue, TypeKind, syntax};
 
@@ -115,6 +115,103 @@ impl FuncBuilder<'_> {
         };
         let ty = HirType::NativePointer(slot);
         Ok(self.push(OpKind::NativeFieldAddress { pointer, field }, ty, self.origin(id)))
+    }
+
+    /// The storage an object literal is written into, where C takes a
+    /// record by value: its contextual type, a pointer to the record.
+    pub(super) fn native_record_wanted(&self, id: NodeId) -> Option<HirType> {
+        self.contextual_type(id, 0)
+            .filter(|ty| matches!(ty, HirType::NativePointer(view) if matches!(view.viewed(), Pointee::Record(_))))
+    }
+
+    /// `{ origin: { x: 0, y: 0 }, size: { width: 320, height: 200 } }` where
+    /// C takes a record by value (`Fields<T>`), as Swift writes
+    /// `NSRect(origin:size:)`. The literal is storage in the frame, a zeroed
+    /// `NativeLocal` with a local's rules, and `ty` is the pointer to it.
+    /// Nothing is allocated: it is C's compound literal.
+    pub(super) fn native_record_literal(&mut self, id: NodeId, ty: HirType) -> Result<ValueId, Diagnostic> {
+        let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
+        self.fill_native_record(id, storage)?;
+        Ok(storage)
+    }
+
+    /// Each property of the literal `id` written into its field of the record
+    /// at `pointer`, in the order the literal gives them, which is when
+    /// JavaScript evaluates them. A record field written as a literal is
+    /// filled in place, and a field left out keeps the zero it has.
+    fn fill_native_record(&mut self, id: NodeId, pointer: ValueId) -> Result<(), Diagnostic> {
+        for property in self.syntax_children_of(id) {
+            let parts = self.syntax_children_of(property);
+            let (name, value) = match (self.kind_of(property), parts.as_slice()) {
+                (Some(syntax::PROPERTY_ASSIGNMENT), [name, value]) => (*name, Some(*value)),
+                (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), [name]) => (*name, None),
+                _ => return Err(self.unsupported(property, "a spread, a method or an accessor in a C record's literal")),
+            };
+            let key = self.node(name).text.clone().ok_or_else(|| self.unsupported(name, "a C record field whose name is computed"))?;
+            if let Some(value) = value.filter(|value| self.kind_of(*value) == Some(syntax::OBJECT_LITERAL_EXPRESSION)) {
+                let field = self.native_field_address(property, pointer, &key)?;
+                if matches!(&self.values[field.0 as usize].ty, HirType::NativePointer(view) if matches!(view.viewed(), Pointee::Record(_))) {
+                    self.fill_native_record(value, field)?;
+                    continue;
+                }
+            }
+            let place = self.native_field_place(property, pointer, &key)?;
+            let written = if let Some(value) = value {
+                self.lower_expression(value)?
+            } else {
+                let symbol = self.shorthand_value_symbol(name, &key)?;
+                self.lower_named_value(name, symbol)?
+            };
+            self.write_place(property, &place, written)?;
+        }
+        Ok(())
+    }
+
+    /// An object the program holds, where C takes a record by value
+    /// (`Fields<T>` in a variable): each field read from it and written into
+    /// storage in the frame, as labels in a variable are read at the call.
+    /// A field the object does not have stays zero, as a literal's does.
+    pub(super) fn native_record_from_object(&mut self, id: NodeId, object: ValueId, ty: HirType) -> Result<ValueId, Diagnostic> {
+        let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
+        self.copy_into_native_record(id, object, storage)?;
+        Ok(storage)
+    }
+
+    fn copy_into_native_record(&mut self, id: NodeId, object: ValueId, pointer: ValueId) -> Result<(), Diagnostic> {
+        let HirType::Managed(ManagedType::Object(type_id)) = self.values[object.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "a C record's fields held in something other than an object"));
+        };
+        let HirType::NativePointer(view) = self.values[pointer.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "a C record's fields written through something other than its storage"));
+        };
+        let Pointee::Record(record) = view.viewed() else {
+            return Err(self.unsupported(id, "a C record's fields written through something other than its storage"));
+        };
+        let layout = self.layout_of(id, type_id)?;
+        for native in &record.fields {
+            let Some(field) = layout.index_of(&native.name) else {
+                // Read by a getter, which is code, and not a field: refused
+                // rather than written as the zero it was left out as.
+                let accessor = matches!(
+                    self.snapshot.types.get(type_id.0 as usize).map(|record| &record.kind),
+                    Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.name == native.name && !p.kind.is_stored())
+                );
+                if accessor {
+                    return Err(self.unsupported(id, &format!("`{}`, an accessor, as a C record's field", native.name)));
+                }
+                continue;
+            };
+            let ty = layout.fields[field as usize].ty.clone();
+            let value = self.push(OpKind::FieldGet { object, field }, ty.clone(), self.origin(id));
+            if matches!(ty, HirType::Managed(ManagedType::Object(_))) && matches!(native.ty, Pointee::Record(_)) {
+                let inner = self.native_field_address(id, pointer, &native.name)?;
+                self.copy_into_native_record(id, value, inner)?;
+                continue;
+            }
+            let place = self.native_field_place(id, pointer, &native.name)?;
+            self.write_place(id, &place, value)?;
+        }
+        Ok(())
     }
 
     pub(super) fn native_element_place(&mut self, id: NodeId, pointer: ValueId, index: ValueId) -> Result<Place, Diagnostic> {

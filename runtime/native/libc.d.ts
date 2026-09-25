@@ -147,6 +147,22 @@ declare module "c:types" {
   // Plain bytes only: a record holding a counted handle is refused, because a
   // copy of it would be a second owner.
   export type ByValue<T> = Ptr<T> & { readonly __c_by_value?: true };
+  // The same record written as an object literal, where a parameter takes
+  // `ByValue<T> | Fields<T>`: `{ origin: { x: 0, y: 0 }, size: { width: 320,
+  // height: 200 } }` for an `NSRect`, as Swift writes `NSRect(origin:size:)`.
+  // The literal becomes storage in the caller's frame, zeroed, with
+  // `local<T>()`'s rules. Each field is written in the order the literal
+  // gives it, which is when JavaScript evaluates it, and a field left out
+  // stays zero. Nothing is allocated: it is C's compound literal.
+  //
+  // A number field takes a `number` whatever C's width is, converted at the
+  // write as `p.x = n` converts it. A record field takes its own literal.
+  // Only a literal: an object held in a variable is the program's, and has
+  // no storage to pass.
+  export type Fields<T> = ([T] extends [Struct<infer F, string>] ? { [K in keyof F]?: FieldOf<F[K]> } : never) & {
+    readonly __c_fields?: T;
+  };
+  type FieldOf<V> = [V] extends [number] ? number : [V] extends [Struct<any, string>] ? Fields<V> : V;
   // A `GObject`: `Class<Tag, Parent>` for an object GLib counts. Under the
   // reference-counting provider the compiler takes a reference where a
   // second one is kept -- `g_object_ref_sink`, which also takes the floating

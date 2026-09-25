@@ -6,7 +6,7 @@
  * @ntsFramework Foundation
  */
 declare module "objc:AppKit" {
-  import type { ByValue, CEnum, Ptr, Struct } from "c:types";
+  import type { ByValue, CEnum, Fields, Ptr, Struct } from "c:types";
   import type { ClassObject, Selector } from "objc:runtime";
   import type { CGFloat, CString, Double, Float, Int, Int16, Int32, Int64, ObjCBool, TimeInterval, UInt, UInt16, UInt64 } from "objc:types";
 
@@ -1109,7 +1109,7 @@ declare module "objc:AppKit" {
      */
     constructor(labels: { contentsOfFile: string; encoding: UInt });
     /** @ntsSelector substringWithRange: */
-    substring(labels: { with: ByValue<NSRange> }): string;
+    substring(labels: { with: ByValue<NSRange> | Fields<NSRange> }): string;
     /** @ntsSelector substringFromIndex: */
     substring(labels: { from: UInt }): string;
     /** @ntsSelector substringToIndex: */
@@ -1119,9 +1119,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector compare:options: */
     compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt> }): CEnum<ComparisonResult, Int>;
     /** @ntsSelector compare:options:range: */
-    compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> }): CEnum<ComparisonResult, Int>;
+    compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange> }): CEnum<ComparisonResult, Int>;
     /** @ntsSelector compare:options:range:locale: */
-    compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange>; locale: NSObject | null }): CEnum<ComparisonResult, Int>;
+    compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange>; locale: NSObject | null }): CEnum<ComparisonResult, Int>;
     /** @ntsSelector caseInsensitiveCompare: */
     caseInsensitiveCompare(string: string): CEnum<ComparisonResult, Int>;
     /** @ntsSelector localizedCompare: */
@@ -1153,19 +1153,19 @@ declare module "objc:AppKit" {
     /** @ntsSelector rangeOfString:options: */
     range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt> }): ByValue<NSRange>;
     /** @ntsSelector rangeOfString:options:range: */
-    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> }): ByValue<NSRange>;
+    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector rangeOfString:options:range:locale: */
-    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange>; locale: NSLocale | null }): ByValue<NSRange>;
+    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange>; locale: NSLocale | null }): ByValue<NSRange>;
     /** @ntsSelector rangeOfCharacterFromSet: */
     rangeOfCharacter(labels: { from: NSCharacterSet }): ByValue<NSRange>;
     /** @ntsSelector rangeOfCharacterFromSet:options: */
     rangeOfCharacter(labels: { from: NSCharacterSet; options: CEnum<NSString.CompareOptions | 0, UInt> }): ByValue<NSRange>;
     /** @ntsSelector rangeOfCharacterFromSet:options:range: */
-    rangeOfCharacter(labels: { from: NSCharacterSet; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> }): ByValue<NSRange>;
+    rangeOfCharacter(labels: { from: NSCharacterSet; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector rangeOfComposedCharacterSequenceAtIndex: */
     rangeOfComposedCharacterSequence(labels: { at: UInt }): ByValue<NSRange>;
     /** @ntsSelector rangeOfComposedCharacterSequencesForRange: */
-    rangeOfComposedCharacterSequences(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
+    rangeOfComposedCharacterSequences(labels: { for: ByValue<NSRange> | Fields<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector stringByAppendingString: */
     appending(aString: string): string;
     /** @ntsSelector uppercaseStringWithLocale: */
@@ -1175,15 +1175,15 @@ declare module "objc:AppKit" {
     /** @ntsSelector capitalizedStringWithLocale: */
     capitalizedWith(locale: NSLocale | null): string;
     /** @ntsSelector getLineStart:end:contentsEnd:forRange: */
-    getLineStart(startPtr: Ptr<UInt> | null, labels: { end: Ptr<UInt> | null; contentsEnd: Ptr<UInt> | null; for: ByValue<NSRange> }): void;
+    getLineStart(startPtr: Ptr<UInt> | null, labels: { end: Ptr<UInt> | null; contentsEnd: Ptr<UInt> | null; for: ByValue<NSRange> | Fields<NSRange> }): void;
     /** @ntsSelector lineRangeForRange: */
-    lineRange(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
+    lineRange(labels: { for: ByValue<NSRange> | Fields<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector getParagraphStart:end:contentsEnd:forRange: */
-    getParagraphStart(startPtr: Ptr<UInt> | null, labels: { end: Ptr<UInt> | null; contentsEnd: Ptr<UInt> | null; for: ByValue<NSRange> }): void;
+    getParagraphStart(startPtr: Ptr<UInt> | null, labels: { end: Ptr<UInt> | null; contentsEnd: Ptr<UInt> | null; for: ByValue<NSRange> | Fields<NSRange> }): void;
     /** @ntsSelector paragraphRangeForRange: */
-    paragraphRange(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
+    paragraphRange(labels: { for: ByValue<NSRange> | Fields<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector enumerateSubstringsInRange:options:usingBlock: */
-    enumerateSubstrings(labels: { in: ByValue<NSRange>; options: CEnum<NSString.EnumerationOptions | 0, UInt> }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
+    enumerateSubstrings(labels: { in: ByValue<NSRange> | Fields<NSRange>; options: CEnum<NSString.EnumerationOptions | 0, UInt> }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector enumerateLinesUsingBlock: */
     enumerateLines(block: (arg0: NSString, arg1: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector dataUsingEncoding:allowLossyConversion: */
@@ -1211,11 +1211,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector stringByFoldingWithOptions:locale: */
     folding(labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; locale: NSLocale | null }): string;
     /** @ntsSelector stringByReplacingOccurrencesOfString:withString:options:range: */
-    replacingOccurrences(labels: { of: string; with: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> }): string;
+    replacingOccurrences(labels: { of: string; with: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange> }): string;
     /** @ntsSelector stringByReplacingOccurrencesOfString:withString: */
     replacingOccurrences(labels: { of: string; with: string }): string;
     /** @ntsSelector stringByReplacingCharactersInRange:withString: */
-    replacingCharacters(labels: { in: ByValue<NSRange>; with: string }): string;
+    replacingCharacters(labels: { in: ByValue<NSRange> | Fields<NSRange>; with: string }): string;
     /** @ntsSelector stringByApplyingTransform:reverse: */
     applyingTransform(transform: string, labels: { reverse: boolean }): string | null;
     /**
@@ -1245,7 +1245,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector stringByAddingPercentEncodingWithAllowedCharacters: */
     addingPercentEncoding(labels: { withAllowedCharacters: NSCharacterSet }): string | null;
     /** @ntsSelector enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock: */
-    enumerateLinguisticTags(labels: { in: ByValue<NSRange>; scheme: string; options: CEnum<NSLinguisticTagger.Options | 0, UInt>; orthography: NSOrthography | null }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
+    enumerateLinguisticTags(labels: { in: ByValue<NSRange> | Fields<NSRange>; scheme: string; options: CEnum<NSLinguisticTagger.Options | 0, UInt>; orthography: NSOrthography | null }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector self */
     self(): NSString;
     // Not bound, each for the reason given:
@@ -1372,7 +1372,7 @@ declare module "objc:AppKit" {
     get autoresizingMask(): CEnum<NSView.AutoresizingMask | 0, UInt>;
     set autoresizingMask(value: CEnum<NSView.AutoresizingMask | 0, UInt>);
     get frame(): ByValue<CGRect>;
-    set frame(value: ByValue<CGRect>);
+    set frame(value: ByValue<CGRect> | Fields<CGRect>);
     get frameRotation(): CGFloat;
     set frameRotation(value: CGFloat);
     get frameCenterRotation(): CGFloat;
@@ -1380,7 +1380,7 @@ declare module "objc:AppKit" {
     get boundsRotation(): CGFloat;
     set boundsRotation(value: CGFloat);
     get bounds(): ByValue<CGRect>;
-    set bounds(value: ByValue<CGRect>);
+    set bounds(value: ByValue<CGRect> | Fields<CGRect>);
     get isFlipped(): boolean;
     get isRotatedFromBase(): boolean;
     get isRotatedOrScaledFromBase(): boolean;
@@ -1437,7 +1437,7 @@ declare module "objc:AppKit" {
     set userInterfaceLayoutDirection(value: CEnum<NSUserInterfaceLayoutDirection, Int>);
     static get isCompatibleWithResponsiveScrolling(): boolean;
     get preparedContentRect(): ByValue<CGRect>;
-    set preparedContentRect(value: ByValue<CGRect>);
+    set preparedContentRect(value: ByValue<CGRect> | Fields<CGRect>);
     get allowsVibrancy(): boolean;
     get nextKeyView(): NSView | null;
     set nextKeyView(value: NSView | null);
@@ -1463,7 +1463,7 @@ declare module "objc:AppKit" {
     set allowedTouchTypes(value: CEnum<NSTouch.TouchTypeMask | 0, UInt>);
     get safeAreaInsets(): ByValue<NSEdgeInsets>;
     get additionalSafeAreaInsets(): ByValue<NSEdgeInsets>;
-    set additionalSafeAreaInsets(value: ByValue<NSEdgeInsets>);
+    set additionalSafeAreaInsets(value: ByValue<NSEdgeInsets> | Fields<NSEdgeInsets>);
     get safeAreaLayoutGuide(): NSLayoutGuide;
     get safeAreaRect(): ByValue<CGRect>;
     get layoutMarginsGuide(): NSLayoutGuide;
@@ -1505,7 +1505,7 @@ declare module "objc:AppKit" {
     get pressureConfiguration(): NSPressureConfiguration | null;
     set pressureConfiguration(value: NSPressureConfiguration | null);
     /** @ntsSelector initWithFrame: */
-    constructor(labels: { frame: ByValue<CGRect> });
+    constructor(labels: { frame: ByValue<CGRect> | Fields<CGRect> });
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
     /** @ntsSelector init */
@@ -1515,7 +1515,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector ancestorSharedWithView: */
     ancestorShared(labels: { with: NSView }): NSView | null;
     /** @ntsSelector needsToDrawRect: */
-    needsToDraw(rect: ByValue<CGRect>): boolean;
+    needsToDraw(rect: ByValue<CGRect> | Fields<CGRect>): boolean;
     /** @ntsSelector viewDidHide */
     viewDidHide(): void;
     /** @ntsSelector viewDidUnhide */
@@ -1545,107 +1545,107 @@ declare module "objc:AppKit" {
     /** @ntsSelector viewDidChangeBackingProperties */
     viewDidChangeBackingProperties(): void;
     /** @ntsSelector resizeSubviewsWithOldSize: */
-    resizeSubviews(labels: { withOldSize: ByValue<CGSize> }): void;
+    resizeSubviews(labels: { withOldSize: ByValue<CGSize> | Fields<CGSize> }): void;
     /** @ntsSelector resizeWithOldSuperviewSize: */
-    resize(labels: { withOldSuperviewSize: ByValue<CGSize> }): void;
+    resize(labels: { withOldSuperviewSize: ByValue<CGSize> | Fields<CGSize> }): void;
     /** @ntsSelector setFrameOrigin: */
-    setFrameOrigin(newOrigin: ByValue<CGPoint>): void;
+    setFrameOrigin(newOrigin: ByValue<CGPoint> | Fields<CGPoint>): void;
     /** @ntsSelector setFrameSize: */
-    setFrameSize(newSize: ByValue<CGSize>): void;
+    setFrameSize(newSize: ByValue<CGSize> | Fields<CGSize>): void;
     /** @ntsSelector setBoundsOrigin: */
-    setBoundsOrigin(newOrigin: ByValue<CGPoint>): void;
+    setBoundsOrigin(newOrigin: ByValue<CGPoint> | Fields<CGPoint>): void;
     /** @ntsSelector setBoundsSize: */
-    setBoundsSize(newSize: ByValue<CGSize>): void;
+    setBoundsSize(newSize: ByValue<CGSize> | Fields<CGSize>): void;
     /** @ntsSelector translateOriginToPoint: */
-    translateOrigin(labels: { to: ByValue<CGPoint> }): void;
+    translateOrigin(labels: { to: ByValue<CGPoint> | Fields<CGPoint> }): void;
     /** @ntsSelector scaleUnitSquareToSize: */
-    scaleUnitSquare(labels: { to: ByValue<CGSize> }): void;
+    scaleUnitSquare(labels: { to: ByValue<CGSize> | Fields<CGSize> }): void;
     /** @ntsSelector rotateByAngle: */
     rotate(labels: { byDegrees: CGFloat }): void;
     /** @ntsSelector rotateWithEvent: */
     rotate(labels: { with: NSEvent }): void;
     /** @ntsSelector convertPoint:fromView: */
-    convert(point: ByValue<CGPoint>, labels: { from: NSView | null }): ByValue<CGPoint>;
+    convert(point: ByValue<CGPoint> | Fields<CGPoint>, labels: { from: NSView | null }): ByValue<CGPoint>;
     /** @ntsSelector convertPoint:toView: */
-    convert(point: ByValue<CGPoint>, labels: { to: NSView | null }): ByValue<CGPoint>;
+    convert(point: ByValue<CGPoint> | Fields<CGPoint>, labels: { to: NSView | null }): ByValue<CGPoint>;
     /** @ntsSelector convertSize:fromView: */
-    convert(size: ByValue<CGSize>, labels: { from: NSView | null }): ByValue<CGSize>;
+    convert(size: ByValue<CGSize> | Fields<CGSize>, labels: { from: NSView | null }): ByValue<CGSize>;
     /** @ntsSelector convertSize:toView: */
-    convert(size: ByValue<CGSize>, labels: { to: NSView | null }): ByValue<CGSize>;
+    convert(size: ByValue<CGSize> | Fields<CGSize>, labels: { to: NSView | null }): ByValue<CGSize>;
     /** @ntsSelector convertRect:fromView: */
-    convert(rect: ByValue<CGRect>, labels: { from: NSView | null }): ByValue<CGRect>;
+    convert(rect: ByValue<CGRect> | Fields<CGRect>, labels: { from: NSView | null }): ByValue<CGRect>;
     /** @ntsSelector convertRect:toView: */
-    convert(rect: ByValue<CGRect>, labels: { to: NSView | null }): ByValue<CGRect>;
+    convert(rect: ByValue<CGRect> | Fields<CGRect>, labels: { to: NSView | null }): ByValue<CGRect>;
     /** @ntsSelector backingAlignedRect:options: */
-    backingAlignedRect(rect: ByValue<CGRect>, labels: { options: CEnum<AlignmentOptions | 0, UInt64> }): ByValue<CGRect>;
+    backingAlignedRect(rect: ByValue<CGRect> | Fields<CGRect>, labels: { options: CEnum<AlignmentOptions | 0, UInt64> }): ByValue<CGRect>;
     /** @ntsSelector centerScanRect: */
-    centerScanRect(rect: ByValue<CGRect>): ByValue<CGRect>;
+    centerScanRect(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertPointToBacking: */
-    convertToBacking(point: ByValue<CGPoint>): ByValue<CGPoint>;
+    convertToBacking(point: ByValue<CGPoint> | Fields<CGPoint>): ByValue<CGPoint>;
     /** @ntsSelector convertSizeToBacking: */
-    convertToBacking(size: ByValue<CGSize>): ByValue<CGSize>;
+    convertToBacking(size: ByValue<CGSize> | Fields<CGSize>): ByValue<CGSize>;
     /** @ntsSelector convertRectToBacking: */
-    convertToBacking(rect: ByValue<CGRect>): ByValue<CGRect>;
+    convertToBacking(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertPointFromBacking: */
-    convertFromBacking(point: ByValue<CGPoint>): ByValue<CGPoint>;
+    convertFromBacking(point: ByValue<CGPoint> | Fields<CGPoint>): ByValue<CGPoint>;
     /** @ntsSelector convertSizeFromBacking: */
-    convertFromBacking(size: ByValue<CGSize>): ByValue<CGSize>;
+    convertFromBacking(size: ByValue<CGSize> | Fields<CGSize>): ByValue<CGSize>;
     /** @ntsSelector convertRectFromBacking: */
-    convertFromBacking(rect: ByValue<CGRect>): ByValue<CGRect>;
+    convertFromBacking(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertPointToLayer: */
-    convertToLayer(point: ByValue<CGPoint>): ByValue<CGPoint>;
+    convertToLayer(point: ByValue<CGPoint> | Fields<CGPoint>): ByValue<CGPoint>;
     /** @ntsSelector convertSizeToLayer: */
-    convertToLayer(size: ByValue<CGSize>): ByValue<CGSize>;
+    convertToLayer(size: ByValue<CGSize> | Fields<CGSize>): ByValue<CGSize>;
     /** @ntsSelector convertRectToLayer: */
-    convertToLayer(rect: ByValue<CGRect>): ByValue<CGRect>;
+    convertToLayer(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertPointFromLayer: */
-    convertFromLayer(point: ByValue<CGPoint>): ByValue<CGPoint>;
+    convertFromLayer(point: ByValue<CGPoint> | Fields<CGPoint>): ByValue<CGPoint>;
     /** @ntsSelector convertSizeFromLayer: */
-    convertFromLayer(size: ByValue<CGSize>): ByValue<CGSize>;
+    convertFromLayer(size: ByValue<CGSize> | Fields<CGSize>): ByValue<CGSize>;
     /** @ntsSelector convertRectFromLayer: */
-    convertFromLayer(rect: ByValue<CGRect>): ByValue<CGRect>;
+    convertFromLayer(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector setNeedsDisplayInRect: */
-    setNeedsDisplay(invalidRect: ByValue<CGRect>): void;
+    setNeedsDisplay(invalidRect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSelector display */
     display(): void;
     /** @ntsSelector displayRect: */
-    display(rect: ByValue<CGRect>): void;
+    display(rect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSelector displayIfNeeded */
     displayIfNeeded(): void;
     /** @ntsSelector displayIfNeededInRect: */
-    displayIfNeeded(rect: ByValue<CGRect>): void;
+    displayIfNeeded(rect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSelector displayIfNeededIgnoringOpacity */
     displayIfNeededIgnoringOpacity(): void;
     /** @ntsSelector displayIfNeededInRectIgnoringOpacity: */
-    displayIfNeededIgnoringOpacity(rect: ByValue<CGRect>): void;
+    displayIfNeededIgnoringOpacity(rect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSelector displayRectIgnoringOpacity: */
-    displayIgnoringOpacity(rect: ByValue<CGRect>): void;
+    displayIgnoringOpacity(rect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSelector displayRectIgnoringOpacity:inContext: */
-    displayIgnoringOpacity(rect: ByValue<CGRect>, labels: { in: NSGraphicsContext }): void;
+    displayIgnoringOpacity(rect: ByValue<CGRect> | Fields<CGRect>, labels: { in: NSGraphicsContext }): void;
     /** @ntsSelector drawRect: */
-    draw(dirtyRect: ByValue<CGRect>): void;
+    draw(dirtyRect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSelector bitmapImageRepForCachingDisplayInRect: */
-    bitmapImageRepForCachingDisplay(labels: { in: ByValue<CGRect> }): NSBitmapImageRep | null;
+    bitmapImageRepForCachingDisplay(labels: { in: ByValue<CGRect> | Fields<CGRect> }): NSBitmapImageRep | null;
     /** @ntsSelector cacheDisplayInRect:toBitmapImageRep: */
-    cacheDisplay(labels: { in: ByValue<CGRect>; to: NSBitmapImageRep }): void;
+    cacheDisplay(labels: { in: ByValue<CGRect> | Fields<CGRect>; to: NSBitmapImageRep }): void;
     /** @ntsSelector viewWillDraw */
     viewWillDraw(): void;
     /** @ntsSelector scrollPoint: */
-    scroll(point: ByValue<CGPoint>): void;
+    scroll(point: ByValue<CGPoint> | Fields<CGPoint>): void;
     /** @ntsSelector scrollClipView:toPoint: */
-    scroll(clipView: NSClipView, labels: { to: ByValue<CGPoint> }): void;
+    scroll(clipView: NSClipView, labels: { to: ByValue<CGPoint> | Fields<CGPoint> }): void;
     /** @ntsSelector scrollRectToVisible: */
-    scrollToVisible(rect: ByValue<CGRect>): boolean;
+    scrollToVisible(rect: ByValue<CGRect> | Fields<CGRect>): boolean;
     /** @ntsSelector autoscroll: */
     autoscroll(labels: { with: NSEvent }): boolean;
     /** @ntsSelector adjustScroll: */
-    adjustScroll(newVisible: ByValue<CGRect>): ByValue<CGRect>;
+    adjustScroll(newVisible: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector translateRectsNeedingDisplayInRect:by: */
-    translateRectsNeedingDisplay(labels: { in: ByValue<CGRect>; by: ByValue<CGSize> }): void;
+    translateRectsNeedingDisplay(labels: { in: ByValue<CGRect> | Fields<CGRect>; by: ByValue<CGSize> | Fields<CGSize> }): void;
     /** @ntsSelector hitTest: */
-    hitTest(point: ByValue<CGPoint>): NSView | null;
+    hitTest(point: ByValue<CGPoint> | Fields<CGPoint>): NSView | null;
     /** @ntsSelector mouse:inRect: */
-    isMousePoint(point: ByValue<CGPoint>, labels: { in: ByValue<CGRect> }): boolean;
+    isMousePoint(point: ByValue<CGPoint> | Fields<CGPoint>, labels: { in: ByValue<CGRect> | Fields<CGRect> }): boolean;
     /** @ntsSelector viewWithTag: */
     viewWithTag(tag: Int): NSView | null;
     /** @ntsSelector performKeyEquivalent: */
@@ -1679,27 +1679,27 @@ declare module "objc:AppKit" {
     /** @ntsSelector getRectsExposedDuringLiveResize:count: */
     getRectsExposedDuringLiveResize(exposedRects: Ptr<CGRect>, labels: { count: Ptr<Int> }): void;
     /** @ntsSelector rectForSmartMagnificationAtPoint:inRect: */
-    rectForSmartMagnification(labels: { at: ByValue<CGPoint>; in: ByValue<CGRect> }): ByValue<CGRect>;
+    rectForSmartMagnification(labels: { at: ByValue<CGPoint> | Fields<CGPoint>; in: ByValue<CGRect> | Fields<CGRect> }): ByValue<CGRect>;
     /** @ntsSelector prepareForReuse */
     prepareForReuse(): void;
     /** @ntsSelector prepareContentInRect: */
-    prepareContent(labels: { in: ByValue<CGRect> }): void;
+    prepareContent(labels: { in: ByValue<CGRect> | Fields<CGRect> }): void;
     /** @ntsSelector viewDidChangeEffectiveAppearance */
     viewDidChangeEffectiveAppearance(): void;
     /** @ntsSelector setKeyboardFocusRingNeedsDisplayInRect: */
-    setKeyboardFocusRingNeedsDisplay(rect: ByValue<CGRect>): void;
+    setKeyboardFocusRingNeedsDisplay(rect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSelector drawFocusRingMask */
     drawFocusRingMask(): void;
     /** @ntsSelector noteFocusRingMaskChanged */
     noteFocusRingMaskChanged(): void;
     /** @ntsSelector writeEPSInsideRect:toPasteboard: */
-    writeEPS(labels: { inside: ByValue<CGRect>; to: NSPasteboard }): void;
+    writeEPS(labels: { inside: ByValue<CGRect> | Fields<CGRect>; to: NSPasteboard }): void;
     /** @ntsSelector dataWithEPSInsideRect: */
-    dataWithEPS(labels: { inside: ByValue<CGRect> }): NSData;
+    dataWithEPS(labels: { inside: ByValue<CGRect> | Fields<CGRect> }): NSData;
     /** @ntsSelector writePDFInsideRect:toPasteboard: */
-    writePDF(labels: { inside: ByValue<CGRect>; to: NSPasteboard }): void;
+    writePDF(labels: { inside: ByValue<CGRect> | Fields<CGRect>; to: NSPasteboard }): void;
     /** @ntsSelector dataWithPDFInsideRect: */
-    dataWithPDF(labels: { inside: ByValue<CGRect> }): NSData;
+    dataWithPDF(labels: { inside: ByValue<CGRect> | Fields<CGRect> }): NSData;
     /** @ntsSelector print: */
     printView(sender: NSObject | null): void;
     /** @ntsSelector knowsPageRange: */
@@ -1711,15 +1711,15 @@ declare module "objc:AppKit" {
     /** @ntsSelector rectForPage: */
     rectForPage(page: Int): ByValue<CGRect>;
     /** @ntsSelector locationOfPrintRect: */
-    locationOfPrintRect(rect: ByValue<CGRect>): ByValue<CGPoint>;
+    locationOfPrintRect(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGPoint>;
     /** @ntsSelector drawPageBorderWithSize: */
-    drawPageBorder(labels: { with: ByValue<CGSize> }): void;
+    drawPageBorder(labels: { with: ByValue<CGSize> | Fields<CGSize> }): void;
     /** @ntsSelector beginDocument */
     beginDocument(): void;
     /** @ntsSelector endDocument */
     endDocument(): void;
     /** @ntsSelector beginPageInRect:atPlacement: */
-    beginPage(labels: { in: ByValue<CGRect>; atPlacement: ByValue<CGPoint> }): void;
+    beginPage(labels: { in: ByValue<CGRect> | Fields<CGRect>; atPlacement: ByValue<CGPoint> | Fields<CGPoint> }): void;
     /** @ntsSelector endPage */
     endPage(): void;
     /** @ntsSelector beginDraggingSessionWithItems:event:source: */
@@ -1733,9 +1733,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector exitFullScreenModeWithOptions: */
     exitFullScreenMode(labels: { options: Map<string, NSObject> | null }): void;
     /** @ntsSelector showDefinitionForAttributedString:atPoint: */
-    showDefinition(labels: { for: NSAttributedString | null; at: ByValue<CGPoint> }): void;
+    showDefinition(labels: { for: NSAttributedString | null; at: ByValue<CGPoint> | Fields<CGPoint> }): void;
     /** @ntsSelector showDefinitionForAttributedString:range:options:baselineOriginProvider: */
-    showDefinition(labels: { for: NSAttributedString | null; range: ByValue<NSRange>; options: Map<string, NSObject> | null }, originProvider: (arg0: ByValue<NSRange>) => ByValue<CGPoint>): void;
+    showDefinition(labels: { for: NSAttributedString | null; range: ByValue<NSRange> | Fields<NSRange>; options: Map<string, NSObject> | null }, originProvider: (arg0: ByValue<NSRange>) => ByValue<CGPoint>): void;
     /** @ntsSelector addGestureRecognizer: */
     addGestureRecognizer(gestureRecognizer: NSGestureRecognizer): void;
     /** @ntsSelector removeGestureRecognizer: */
@@ -1747,9 +1747,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector updateTrackingAreas */
     updateTrackingAreas(): void;
     /** @ntsSelector addCursorRect:cursor: */
-    addCursorRect(rect: ByValue<CGRect>, labels: { cursor: NSCursor }): void;
+    addCursorRect(rect: ByValue<CGRect> | Fields<CGRect>, labels: { cursor: NSCursor }): void;
     /** @ntsSelector removeCursorRect:cursor: */
-    removeCursorRect(rect: ByValue<CGRect>, labels: { cursor: NSCursor }): void;
+    removeCursorRect(rect: ByValue<CGRect> | Fields<CGRect>, labels: { cursor: NSCursor }): void;
     /** @ntsSelector discardCursorRects */
     discardCursorRects(): void;
     /** @ntsSelector resetCursorRects */
@@ -1771,9 +1771,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector updateConstraints */
     updateConstraints(): void;
     /** @ntsSelector alignmentRectForFrame: */
-    alignmentRect(labels: { forFrame: ByValue<CGRect> }): ByValue<CGRect>;
+    alignmentRect(labels: { forFrame: ByValue<CGRect> | Fields<CGRect> }): ByValue<CGRect>;
     /** @ntsSelector frameForAlignmentRect: */
-    frameForAlignmentRect(alignmentRect: ByValue<CGRect>): ByValue<CGRect>;
+    frameForAlignmentRect(alignmentRect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector invalidateIntrinsicContentSize */
     invalidateIntrinsicContentSize(): void;
     /** @ntsSelector contentHuggingPriorityForOrientation: */
@@ -1813,7 +1813,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector rulerView:willSetClientView: */
     rulerView(ruler: NSRulerView, labels: { willSetClientView: NSView }): void;
     /** @ntsSelector rulerView:locationForPoint: */
-    rulerView(ruler: NSRulerView, labels: { locationFor: ByValue<CGPoint> }): CGFloat;
+    rulerView(ruler: NSRulerView, labels: { locationFor: ByValue<CGPoint> | Fields<CGPoint> }): CGFloat;
     /** @ntsSelector rulerView:pointForLocation: */
     rulerView(ruler: NSRulerView, labels: { pointForLocation: CGFloat }): ByValue<CGPoint>;
     /** @ntsSelector self */
@@ -1876,19 +1876,19 @@ declare module "objc:AppKit" {
     set delegate(value: NSObject | null);
     get windowNumber(): Int;
     /** @ntsSelector windowNumberAtPoint:belowWindowWithWindowNumber: */
-    static windowNumber(labels: { at: ByValue<CGPoint>; belowWindowWithWindowNumber: Int }): Int;
+    static windowNumber(labels: { at: ByValue<CGPoint> | Fields<CGPoint>; belowWindowWithWindowNumber: Int }): Int;
     get styleMask(): CEnum<NSWindow.StyleMask | 0, UInt>;
     set styleMask(value: CEnum<NSWindow.StyleMask | 0, UInt>);
     get frame(): ByValue<CGRect>;
     get inLiveResize(): boolean;
     get resizeIncrements(): ByValue<CGSize>;
-    set resizeIncrements(value: ByValue<CGSize>);
+    set resizeIncrements(value: ByValue<CGSize> | Fields<CGSize>);
     get aspectRatio(): ByValue<CGSize>;
-    set aspectRatio(value: ByValue<CGSize>);
+    set aspectRatio(value: ByValue<CGSize> | Fields<CGSize>);
     get contentResizeIncrements(): ByValue<CGSize>;
-    set contentResizeIncrements(value: ByValue<CGSize>);
+    set contentResizeIncrements(value: ByValue<CGSize> | Fields<CGSize>);
     get contentAspectRatio(): ByValue<CGSize>;
-    set contentAspectRatio(value: ByValue<CGSize>);
+    set contentAspectRatio(value: ByValue<CGSize> | Fields<CGSize>);
     get viewsNeedDisplay(): boolean;
     set viewsNeedDisplay(value: boolean);
     get preservesContentDuringLiveResize(): boolean;
@@ -1966,17 +1966,17 @@ declare module "objc:AppKit" {
     get frameDescriptor(): string;
     get frameAutosaveName(): string;
     get minSize(): ByValue<CGSize>;
-    set minSize(value: ByValue<CGSize>);
+    set minSize(value: ByValue<CGSize> | Fields<CGSize>);
     get maxSize(): ByValue<CGSize>;
-    set maxSize(value: ByValue<CGSize>);
+    set maxSize(value: ByValue<CGSize> | Fields<CGSize>);
     get contentMinSize(): ByValue<CGSize>;
-    set contentMinSize(value: ByValue<CGSize>);
+    set contentMinSize(value: ByValue<CGSize> | Fields<CGSize>);
     get contentMaxSize(): ByValue<CGSize>;
-    set contentMaxSize(value: ByValue<CGSize>);
+    set contentMaxSize(value: ByValue<CGSize> | Fields<CGSize>);
     get minFullScreenContentSize(): ByValue<CGSize>;
-    set minFullScreenContentSize(value: ByValue<CGSize>);
+    set minFullScreenContentSize(value: ByValue<CGSize> | Fields<CGSize>);
     get maxFullScreenContentSize(): ByValue<CGSize>;
-    set maxFullScreenContentSize(value: ByValue<CGSize>);
+    set maxFullScreenContentSize(value: ByValue<CGSize> | Fields<CGSize>);
     get deviceDescription(): Map<string, NSObject>;
     get windowController(): NSWindowController | null;
     set windowController(value: NSWindowController | null);
@@ -2044,19 +2044,19 @@ declare module "objc:AppKit" {
     get restorationClass(): ClassObject | null;
     set restorationClass(value: ClassObject | null);
     /** @ntsSelector frameRectForContentRect:styleMask: */
-    static frameRect(labels: { forContentRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): ByValue<CGRect>;
+    static frameRect(labels: { forContentRect: ByValue<CGRect> | Fields<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): ByValue<CGRect>;
     /** @ntsSelector frameRectForContentRect: */
-    frameRect(labels: { forContentRect: ByValue<CGRect> }): ByValue<CGRect>;
+    frameRect(labels: { forContentRect: ByValue<CGRect> | Fields<CGRect> }): ByValue<CGRect>;
     /** @ntsSelector contentRectForFrameRect:styleMask: */
-    static contentRect(labels: { forFrameRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): ByValue<CGRect>;
+    static contentRect(labels: { forFrameRect: ByValue<CGRect> | Fields<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): ByValue<CGRect>;
     /** @ntsSelector contentRectForFrameRect: */
-    contentRect(labels: { forFrameRect: ByValue<CGRect> }): ByValue<CGRect>;
+    contentRect(labels: { forFrameRect: ByValue<CGRect> | Fields<CGRect> }): ByValue<CGRect>;
     /** @ntsSelector minFrameWidthWithTitle:styleMask: */
     static minFrameWidth(labels: { withTitle: string; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): CGFloat;
     /** @ntsSelector initWithContentRect:styleMask:backing:defer: */
-    constructor(labels: { contentRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt>; backing: CEnum<NSWindow.BackingStoreType, UInt>; defer: boolean });
+    constructor(labels: { contentRect: ByValue<CGRect> | Fields<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt>; backing: CEnum<NSWindow.BackingStoreType, UInt>; defer: boolean });
     /** @ntsSelector initWithContentRect:styleMask:backing:defer:screen: */
-    constructor(labels: { contentRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt>; backing: CEnum<NSWindow.BackingStoreType, UInt>; defer: boolean; screen: NSScreen | null });
+    constructor(labels: { contentRect: ByValue<CGRect> | Fields<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt>; backing: CEnum<NSWindow.BackingStoreType, UInt>; defer: boolean; screen: NSScreen | null });
     /** @ntsSelector +windowWithContentViewController: */
     constructor(labels: { contentViewController: NSViewController });
     /** @ntsSelector init */
@@ -2074,23 +2074,23 @@ declare module "objc:AppKit" {
     /** @ntsSelector endEditingFor: */
     endEditing(labels: { for: NSObject | null }): void;
     /** @ntsSelector constrainFrameRect:toScreen: */
-    constrainFrameRect(frameRect: ByValue<CGRect>, labels: { to: NSScreen | null }): ByValue<CGRect>;
+    constrainFrameRect(frameRect: ByValue<CGRect> | Fields<CGRect>, labels: { to: NSScreen | null }): ByValue<CGRect>;
     /** @ntsSelector setFrame:display: */
-    setFrame(frameRect: ByValue<CGRect>, labels: { display: boolean }): void;
+    setFrame(frameRect: ByValue<CGRect> | Fields<CGRect>, labels: { display: boolean }): void;
     /** @ntsSelector setFrame:display:animate: */
-    setFrame(frameRect: ByValue<CGRect>, labels: { display: boolean; animate: boolean }): void;
+    setFrame(frameRect: ByValue<CGRect> | Fields<CGRect>, labels: { display: boolean; animate: boolean }): void;
     /** @ntsSelector setFrameFromString: */
     setFrame(labels: { from: string }): void;
     /** @ntsSelector setContentSize: */
-    setContentSize(size: ByValue<CGSize>): void;
+    setContentSize(size: ByValue<CGSize> | Fields<CGSize>): void;
     /** @ntsSelector setFrameOrigin: */
-    setFrameOrigin(point: ByValue<CGPoint>): void;
+    setFrameOrigin(point: ByValue<CGPoint> | Fields<CGPoint>): void;
     /** @ntsSelector setFrameTopLeftPoint: */
-    setFrameTopLeftPoint(point: ByValue<CGPoint>): void;
+    setFrameTopLeftPoint(point: ByValue<CGPoint> | Fields<CGPoint>): void;
     /** @ntsSelector cascadeTopLeftFromPoint: */
-    cascadeTopLeft(labels: { from: ByValue<CGPoint> }): ByValue<CGPoint>;
+    cascadeTopLeft(labels: { from: ByValue<CGPoint> | Fields<CGPoint> }): ByValue<CGPoint>;
     /** @ntsSelector animationResizeTime: */
-    animationResizeTime(newFrame: ByValue<CGRect>): TimeInterval;
+    animationResizeTime(newFrame: ByValue<CGRect> | Fields<CGRect>): TimeInterval;
     /** @ntsSelector displayIfNeeded */
     displayIfNeeded(): void;
     /** @ntsSelector display */
@@ -2146,23 +2146,23 @@ declare module "objc:AppKit" {
     /** @ntsSelector resignMainWindow */
     resignMain(): void;
     /** @ntsSelector convertRectToScreen: */
-    convertToScreen(rect: ByValue<CGRect>): ByValue<CGRect>;
+    convertToScreen(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertRectFromScreen: */
-    convertFromScreen(rect: ByValue<CGRect>): ByValue<CGRect>;
+    convertFromScreen(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertPointToScreen: */
-    convertPoint(labels: { toScreen: ByValue<CGPoint> }): ByValue<CGPoint>;
+    convertPoint(labels: { toScreen: ByValue<CGPoint> | Fields<CGPoint> }): ByValue<CGPoint>;
     /** @ntsSelector convertPointFromScreen: */
-    convertPoint(labels: { fromScreen: ByValue<CGPoint> }): ByValue<CGPoint>;
+    convertPoint(labels: { fromScreen: ByValue<CGPoint> | Fields<CGPoint> }): ByValue<CGPoint>;
     /** @ntsSelector convertRectToBacking: */
-    convertToBacking(rect: ByValue<CGRect>): ByValue<CGRect>;
+    convertToBacking(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertRectFromBacking: */
-    convertFromBacking(rect: ByValue<CGRect>): ByValue<CGRect>;
+    convertFromBacking(rect: ByValue<CGRect> | Fields<CGRect>): ByValue<CGRect>;
     /** @ntsSelector convertPointToBacking: */
-    convertPointToBacking(point: ByValue<CGPoint>): ByValue<CGPoint>;
+    convertPointToBacking(point: ByValue<CGPoint> | Fields<CGPoint>): ByValue<CGPoint>;
     /** @ntsSelector convertPointFromBacking: */
-    convertPointFromBacking(point: ByValue<CGPoint>): ByValue<CGPoint>;
+    convertPointFromBacking(point: ByValue<CGPoint> | Fields<CGPoint>): ByValue<CGPoint>;
     /** @ntsSelector backingAlignedRect:options: */
-    backingAlignedRect(rect: ByValue<CGRect>, labels: { options: CEnum<AlignmentOptions | 0, UInt64> }): ByValue<CGRect>;
+    backingAlignedRect(rect: ByValue<CGRect> | Fields<CGRect>, labels: { options: CEnum<AlignmentOptions | 0, UInt64> }): ByValue<CGRect>;
     /** @ntsSelector performClose: */
     performClose(sender: NSObject | null): void;
     /** @ntsSelector performMiniaturize: */
@@ -2170,9 +2170,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector performZoom: */
     performZoom(sender: NSObject | null): void;
     /** @ntsSelector dataWithEPSInsideRect: */
-    dataWithEPS(labels: { inside: ByValue<CGRect> }): NSData;
+    dataWithEPS(labels: { inside: ByValue<CGRect> | Fields<CGRect> }): NSData;
     /** @ntsSelector dataWithPDFInsideRect: */
-    dataWithPDF(labels: { inside: ByValue<CGRect> }): NSData;
+    dataWithPDF(labels: { inside: ByValue<CGRect> | Fields<CGRect> }): NSData;
     /** @ntsSelector print: */
     printWindow(sender: NSObject | null): void;
     /** @ntsSelector setDynamicDepthLimit: */
@@ -2272,7 +2272,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector resetCursorRects */
     resetCursorRects(): void;
     /** @ntsSelector dragImage:at:offset:event:pasteboard:source:slideBack: */
-    drag(image: NSImage, labels: { at: ByValue<CGPoint>; offset: ByValue<CGSize>; event: NSEvent; pasteboard: NSPasteboard; source: NSObject; slideBack: boolean }): void;
+    drag(image: NSImage, labels: { at: ByValue<CGPoint> | Fields<CGPoint>; offset: ByValue<CGSize> | Fields<CGSize>; event: NSEvent; pasteboard: NSPasteboard; source: NSObject; slideBack: boolean }): void;
     /** @ntsSelector registerForDraggedTypes: */
     registerForDraggedTypes(newTypes: string[]): void;
     /** @ntsSelector unregisterDraggedTypes */
@@ -2500,7 +2500,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector unregisterUserInterfaceItemSearchHandler: */
     unregisterUserInterfaceItemSearchHandler(handler: NSObject): void;
     /** @ntsSelector searchString:inUserInterfaceItemString:searchRange:foundRange: */
-    searchString(searchString: string, labels: { inUserInterfaceItemString: string; range: ByValue<NSRange>; found: Ptr<NSRange> | null }): boolean;
+    searchString(searchString: string, labels: { inUserInterfaceItemString: string; range: ByValue<NSRange> | Fields<NSRange>; found: Ptr<NSRange> | null }): boolean;
     /** @ntsSelector restoreWindowWithIdentifier:state:completionHandler: */
     restoreWindow(labels: { withIdentifier: string; state: NSCoder }, completionHandler: (arg0: NSWindow | null, arg1: NSError | null) => void): boolean;
     /** @ntsSelector extendStateRestoration */
@@ -2584,13 +2584,13 @@ declare module "objc:AppKit" {
     get cell(): NSCell | null;
     set cell(value: NSCell | null);
     /** @ntsSelector initWithFrame: */
-    constructor(labels: { frame: ByValue<CGRect> });
+    constructor(labels: { frame: ByValue<CGRect> | Fields<CGRect> });
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
     /** @ntsSelector init */
     constructor();
     /** @ntsSelector sizeThatFits: */
-    sizeThatFits(size: ByValue<CGSize>): ByValue<CGSize>;
+    sizeThatFits(size: ByValue<CGSize> | Fields<CGSize>): ByValue<CGSize>;
     /** @ntsSelector sizeToFit */
     sizeToFit(): void;
     /** @ntsSelector sendActionOn: */
@@ -2612,11 +2612,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector performClick: */
     performClick(sender: NSObject | null): void;
     /** @ntsSelector expansionFrameWithFrame: */
-    expansionFrame(labels: { withFrame: ByValue<CGRect> }): ByValue<CGRect>;
+    expansionFrame(labels: { withFrame: ByValue<CGRect> | Fields<CGRect> }): ByValue<CGRect>;
     /** @ntsSelector drawWithExpansionFrame:inView: */
-    draw(labels: { withExpansionFrame: ByValue<CGRect>; in: NSView }): void;
+    draw(labels: { withExpansionFrame: ByValue<CGRect> | Fields<CGRect>; in: NSView }): void;
     /** @ntsSelector drawRect: */
-    draw(dirtyRect: ByValue<CGRect>): void;
+    draw(dirtyRect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSelector currentEditor */
     currentEditor(): NSText | null;
     /** @ntsSelector abortEditing */
@@ -2624,9 +2624,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector validateEditing */
     validateEditing(): void;
     /** @ntsSelector editWithFrame:editor:delegate:event: */
-    edit(labels: { withFrame: ByValue<CGRect>; editor: NSText; delegate: NSObject | null; event: NSEvent }): void;
+    edit(labels: { withFrame: ByValue<CGRect> | Fields<CGRect>; editor: NSText; delegate: NSObject | null; event: NSEvent }): void;
     /** @ntsSelector selectWithFrame:editor:delegate:start:length: */
-    select(labels: { withFrame: ByValue<CGRect>; editor: NSText; delegate: NSObject | null; start: Int; length: Int }): void;
+    select(labels: { withFrame: ByValue<CGRect> | Fields<CGRect>; editor: NSText; delegate: NSObject | null; start: Int; length: Int }): void;
     /** @ntsSelector endEditing: */
     endEditing(textObj: NSText): void;
     /** @ntsSelector selectedCell */
@@ -2729,11 +2729,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector stopPeriodicEvents */
     static stopPeriodicEvents(): void;
     /** @ntsSelector mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure: */
-    static mouseEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; eventNumber: Int; clickCount: Int; pressure: Float }): NSEvent | null;
+    static mouseEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; eventNumber: Int; clickCount: Int; pressure: Float }): NSEvent | null;
     /** @ntsSelector keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode: */
-    static keyEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; characters: string; charactersIgnoringModifiers: string; isARepeat: boolean; keyCode: UInt16 }): NSEvent | null;
+    static keyEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; characters: string; charactersIgnoringModifiers: string; isARepeat: boolean; keyCode: UInt16 }): NSEvent | null;
     /** @ntsSelector otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2: */
-    static otherEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; subtype: Int16; data1: Int; data2: Int }): NSEvent | null;
+    static otherEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; subtype: Int16; data1: Int; data2: Int }): NSEvent | null;
     /** @ntsSelector addGlobalMonitorForEventsMatchingMask:handler: */
     static addGlobalMonitorForEvents(labels: { matching: CEnum<NSEvent.EventTypeMask | 0, UInt64> }, block: (arg0: NSEvent) => void): NSObject | null;
     /** @ntsSelector addLocalMonitorForEventsMatchingMask:handler: */
@@ -2915,7 +2915,7 @@ declare module "objc:AppKit" {
     get documentVisibleRect(): ByValue<CGRect>;
     get contentSize(): ByValue<CGSize>;
     /** @ntsSelector contentSizeForFrameSize:horizontalScrollerClass:verticalScrollerClass:borderType:controlSize:scrollerStyle: */
-    static contentSize(labels: { forFrameSize: ByValue<CGSize>; horizontalScrollerClass: ClassObject | null; verticalScrollerClass: ClassObject | null; borderType: CEnum<NSBorderType, UInt>; controlSize: CEnum<NSControl.ControlSize, UInt>; scrollerStyle: CEnum<NSScroller.Style, Int> }): ByValue<CGSize>;
+    static contentSize(labels: { forFrameSize: ByValue<CGSize> | Fields<CGSize>; horizontalScrollerClass: ClassObject | null; verticalScrollerClass: ClassObject | null; borderType: CEnum<NSBorderType, UInt>; controlSize: CEnum<NSControl.ControlSize, UInt>; scrollerStyle: CEnum<NSScroller.Style, Int> }): ByValue<CGSize>;
     get documentView(): NSView | null;
     set documentView(value: NSView | null);
     get contentView(): NSClipView;
@@ -2973,9 +2973,9 @@ declare module "objc:AppKit" {
     get automaticallyAdjustsContentInsets(): boolean;
     set automaticallyAdjustsContentInsets(value: boolean);
     get contentInsets(): ByValue<NSEdgeInsets>;
-    set contentInsets(value: ByValue<NSEdgeInsets>);
+    set contentInsets(value: ByValue<NSEdgeInsets> | Fields<NSEdgeInsets>);
     get scrollerInsets(): ByValue<NSEdgeInsets>;
-    set scrollerInsets(value: ByValue<NSEdgeInsets>);
+    set scrollerInsets(value: ByValue<NSEdgeInsets> | Fields<NSEdgeInsets>);
     static get rulerViewClass(): ClassObject;
     static set rulerViewClass(value: ClassObject | null);
     get rulersVisible(): boolean;
@@ -2991,13 +2991,13 @@ declare module "objc:AppKit" {
     get findBarPosition(): CEnum<NSScrollView.FindBarPosition, Int>;
     set findBarPosition(value: CEnum<NSScrollView.FindBarPosition, Int>);
     /** @ntsSelector initWithFrame: */
-    constructor(labels: { frame: ByValue<CGRect> });
+    constructor(labels: { frame: ByValue<CGRect> | Fields<CGRect> });
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
     /** @ntsSelector init */
     constructor();
     /** @ntsSelector frameSizeForContentSize:horizontalScrollerClass:verticalScrollerClass:borderType:controlSize:scrollerStyle: */
-    static frameSize(labels: { forContentSize: ByValue<CGSize>; horizontalScrollerClass: ClassObject | null; verticalScrollerClass: ClassObject | null; borderType: CEnum<NSBorderType, UInt>; controlSize: CEnum<NSControl.ControlSize, UInt>; scrollerStyle: CEnum<NSScroller.Style, Int> }): ByValue<CGSize>;
+    static frameSize(labels: { forContentSize: ByValue<CGSize> | Fields<CGSize>; horizontalScrollerClass: ClassObject | null; verticalScrollerClass: ClassObject | null; borderType: CEnum<NSBorderType, UInt>; controlSize: CEnum<NSControl.ControlSize, UInt>; scrollerStyle: CEnum<NSScroller.Style, Int> }): ByValue<CGSize>;
     /** @ntsSelector tile */
     tile(): void;
     /** @ntsSelector reflectScrolledClipView: */
@@ -3007,11 +3007,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector flashScrollers */
     flashScrollers(): void;
     /** @ntsSelector magnifyToFitRect: */
-    magnify(labels: { toFit: ByValue<CGRect> }): void;
+    magnify(labels: { toFit: ByValue<CGRect> | Fields<CGRect> }): void;
     /** @ntsSelector magnifyWithEvent: */
     magnify(labels: { with: NSEvent }): void;
     /** @ntsSelector setMagnification:centeredAtPoint: */
-    setMagnification(magnification: CGFloat, labels: { centeredAt: ByValue<CGPoint> }): void;
+    setMagnification(magnification: CGFloat, labels: { centeredAt: ByValue<CGPoint> | Fields<CGPoint> }): void;
     /** @ntsSelector addFloatingSubview:forAxis: */
     addFloatingSubview(view: NSView, labels: { for: CEnum<NSEvent.GestureAxis, Int> }): void;
     /** @ntsSelector self */
@@ -3037,7 +3037,7 @@ declare module "objc:AppKit" {
     get gridStyleMask(): CEnum<NSTableView.GridLineStyle | 0, UInt>;
     set gridStyleMask(value: CEnum<NSTableView.GridLineStyle | 0, UInt>);
     get intercellSpacing(): ByValue<CGSize>;
-    set intercellSpacing(value: ByValue<CGSize>);
+    set intercellSpacing(value: ByValue<CGSize> | Fields<CGSize>);
     get usesAlternatingRowBackgroundColors(): boolean;
     set usesAlternatingRowBackgroundColors(value: boolean);
     get backgroundColor(): NSColor;
@@ -3102,7 +3102,7 @@ declare module "objc:AppKit" {
     get usesAutomaticRowHeights(): boolean;
     set usesAutomaticRowHeights(value: boolean);
     /** @ntsSelector initWithFrame: */
-    constructor(labels: { frame: ByValue<CGRect> });
+    constructor(labels: { frame: ByValue<CGRect> | Fields<CGRect> });
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
     /** @ntsSelector init */
@@ -3118,7 +3118,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector columnWithIdentifier: */
     column(labels: { withIdentifier: string }): Int;
     /** @ntsSelector columnAtPoint: */
-    column(labels: { at: ByValue<CGPoint> }): Int;
+    column(labels: { at: ByValue<CGPoint> | Fields<CGPoint> }): Int;
     /** @ntsSelector columnForView: */
     column(labels: { for: NSView }): Int;
     /** @ntsSelector tableColumnWithIdentifier: */
@@ -3144,7 +3144,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector indicatorImageInTableColumn: */
     indicatorImage(labels: { in: NSTableColumn }): NSImage | null;
     /** @ntsSelector canDragRowsWithIndexes:atPoint: */
-    canDragRows(labels: { with: NSIndexSet; at: ByValue<CGPoint> }): boolean;
+    canDragRows(labels: { with: NSIndexSet; at: ByValue<CGPoint> | Fields<CGPoint> }): boolean;
     /** @ntsSelector dragImageForRowsWithIndexes:tableColumns:event:offset: */
     dragImageForRows(labels: { with: NSIndexSet; tableColumns: NSTableColumn[]; event: NSEvent; offset: Ptr<CGPoint> }): NSImage;
     /** @ntsSelector setDraggingSourceOperationMask:forLocal: */
@@ -3172,11 +3172,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector rectOfRow: */
     rect(labels: { ofRow: Int }): ByValue<CGRect>;
     /** @ntsSelector columnIndexesInRect: */
-    columnIndexes(labels: { in: ByValue<CGRect> }): NSIndexSet;
+    columnIndexes(labels: { in: ByValue<CGRect> | Fields<CGRect> }): NSIndexSet;
     /** @ntsSelector rowsInRect: */
-    rows(labels: { in: ByValue<CGRect> }): ByValue<NSRange>;
+    rows(labels: { in: ByValue<CGRect> | Fields<CGRect> }): ByValue<NSRange>;
     /** @ntsSelector rowAtPoint: */
-    row(labels: { at: ByValue<CGPoint> }): Int;
+    row(labels: { at: ByValue<CGPoint> | Fields<CGPoint> }): Int;
     /** @ntsSelector rowForView: */
     row(labels: { for: NSView }): Int;
     /** @ntsSelector frameOfCellAtColumn:row: */
@@ -3184,13 +3184,13 @@ declare module "objc:AppKit" {
     /** @ntsSelector editColumn:row:withEvent:select: */
     editColumn(column: Int, labels: { row: Int; with: NSEvent | null; select: boolean }): void;
     /** @ntsSelector drawRow:clipRect: */
-    drawRow(row: Int, labels: { clipRect: ByValue<CGRect> }): void;
+    drawRow(row: Int, labels: { clipRect: ByValue<CGRect> | Fields<CGRect> }): void;
     /** @ntsSelector highlightSelectionInClipRect: */
-    highlightSelection(labels: { inClipRect: ByValue<CGRect> }): void;
+    highlightSelection(labels: { inClipRect: ByValue<CGRect> | Fields<CGRect> }): void;
     /** @ntsSelector drawGridInClipRect: */
-    drawGrid(labels: { inClipRect: ByValue<CGRect> }): void;
+    drawGrid(labels: { inClipRect: ByValue<CGRect> | Fields<CGRect> }): void;
     /** @ntsSelector drawBackgroundInClipRect: */
-    drawBackground(labels: { inClipRect: ByValue<CGRect> }): void;
+    drawBackground(labels: { inClipRect: ByValue<CGRect> | Fields<CGRect> }): void;
     /** @ntsSelector viewAtColumn:row:makeIfNecessary: */
     view(labels: { atColumn: Int; row: Int; makeIfNecessary: boolean }): NSView | null;
     /** @ntsSelector rowViewAtRow:makeIfNecessary: */
@@ -3296,7 +3296,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector +textFieldWithString: */
     constructor(labels: { string: string });
     /** @ntsSelector initWithFrame: */
-    constructor(labels: { frame: ByValue<CGRect> });
+    constructor(labels: { frame: ByValue<CGRect> | Fields<CGRect> });
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
     /** @ntsSelector init */
@@ -3376,7 +3376,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector +radioButtonWithTitle:target:action: */
     constructor(labels: { radioButtonWithTitle: string; target: NSObject | null; action: Selector });
     /** @ntsSelector initWithFrame: */
-    constructor(labels: { frame: ByValue<CGRect> });
+    constructor(labels: { frame: ByValue<CGRect> | Fields<CGRect> });
     /** @ntsSelector initWithCoder: */
     constructor(labels: { coder: NSCoder });
     /** @ntsSelector init */

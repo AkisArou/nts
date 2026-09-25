@@ -28,26 +28,15 @@ import {
   NSView,
   NSWindow,
   Timer,
-  type CGPoint,
-  type CGRect,
   type NSTableViewDataSource,
 } from "objc:AppKit";
 import { report } from "c:support";
 import { sel_registerName } from "objc:runtime";
-import { local } from "c:memory";
-import type { Ptr } from "c:types";
 import type { Int } from "objc:types";
 
 const PATH = "/tmp/nts-macos-notes.txt";
 // `String.Encoding.utf8`, `NSUTF8StringEncoding`.
 const UTF8 = 4;
-
-function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: number): void {
-  r.origin.x = x;
-  r.origin.y = y;
-  r.size.width = width;
-  r.size.height = height;
-}
 
 // Swift's `try String(contentsOfFile:encoding:)`, which throws when there is
 // no file yet: an empty list then.
@@ -99,10 +88,8 @@ class Notes extends NSObject implements NSTableViewDataSource {
 function main(): void {
   const app = NSApplication.shared;
   app.setActivationPolicy(NSApplication.ActivationPolicy.regular);
-  const frame = local<CGRect>();
-  setRect(frame, 200, 200, 360, 300);
   const window = new NSWindow({
-    contentRect: frame,
+    contentRect: { origin: { x: 200, y: 200 }, size: { width: 360, height: 300 } },
     styleMask: NSWindow.StyleMask.titled | NSWindow.StyleMask.closable,
     backing: NSWindow.BackingStoreType.buffered,
     defer: false,
@@ -168,7 +155,7 @@ function main(): void {
     // `stop:` is seen when the loop next finishes an event, so one is posted.
     const wake = NSEvent.otherEvent({
       with: NSEvent.EventType.applicationDefined,
-      location: local<CGPoint>(),
+      location: { x: 0, y: 0 },
       modifierFlags: 0,
       timestamp: 0,
       windowNumber: 0,

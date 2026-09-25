@@ -15932,6 +15932,13 @@ impl<'a> FuncBuilder<'a> {
             let origin = self.origin(id);
             return Ok(self.push(OpKind::Convert(value), want.clone(), origin));
         }
+        // A record's fields held in an object, where C takes the record by
+        // value: `Fields<T>` in a variable.
+        if matches!(want, HirType::NativePointer(view) if matches!(view.viewed(), super::native::Pointee::Record(_)))
+            && matches!(have, HirType::Managed(ManagedType::Object(_)))
+        {
+            return self.native_record_from_object(id, value, want.clone());
+        }
         if matches!(want, HirType::NativePointer(_)) && !matches!(have, HirType::NativePointer(_)) {
             return Err(self.unsupported(id, "a managed value where C takes a pointer: pass a handle, a `Ptr`, or `null`"));
         }
@@ -31615,6 +31622,8 @@ impl<'a> FuncBuilder<'a> {
         if self.labels_pending.remove(&id) {
             return self.lower_labels(id);
         }
+        // A C record's fields, where C takes the record by value.
+        if let Some(ty) = self.native_record_wanted(id) { return self.native_record_literal(id, ty); }
         if matches!(self.contextual_type(id, 0), Some(HirType::NativePointer(_)))
             || matches!(self.type_of(id), Some(HirType::NativePointer(_)))
         {

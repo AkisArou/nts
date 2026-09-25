@@ -2406,6 +2406,56 @@ export function run(): number {
     }
 }
 
+/// A record C takes by value, written as an object literal (`Fields<T>`):
+/// Swift's `NSRect(origin:size:)`, as `{ origin: { x, y }, size: ... }`.
+///
+/// Three arms: every field given, with a nested record and a shorthand; one
+/// field of one nested record, the rest zero; and the order the literal's
+/// values are evaluated in, which is the order they are written, as
+/// JavaScript's is, and not the struct's. The literal is frame storage, so
+/// nothing is allocated, and fifty more runs under reference counting leave
+/// nothing alive. And the fields held in an object, read at the call.
+#[test]
+fn a_record_by_value_is_written_as_a_literal_on_both_backends() {
+    let source = r"
+import type { ByValue, Fields, Struct, c_double, c_int } from 'c:types';
+type Point = Struct<{ x: c_double; y: c_double }, 'point'>;
+type Rect = Struct<{ origin: Point; size: Point; tag: c_int }, 'rect'>;
+declare function describe(r: ByValue<Rect> | Fields<Rect>): c_double;
+let ticks = 0;
+function tick(): number {
+    return ++ticks;
+}
+export function full(): number {
+    const y = 2;
+    return describe({ origin: { x: 1, y }, size: { x: 3, y: 4 }, tag: 5 });
+}
+export function partial(): number {
+    return describe({ size: { y: 9 } });
+}
+export function ordered(): number {
+    ticks = 0;
+    return describe({ size: { y: tick(), x: tick() }, origin: { x: tick() } });
+}
+export function held(): number {
+    const fields = { origin: { x: 7, y: 0 }, size: { x: 0, y: 1 } };
+    return describe(fields);
+}
+";
+    let library = "struct point { double x; double y; };\n\
+        struct rect { struct point origin; struct point size; int tag; };\n\
+        double describe(struct rect r) { return r.tag * 10000 + r.origin.x * 1000 + r.origin.y * 100 + r.size.x * 10 + r.size.y; }\n";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f %.0f %.0f %.0f", full(), partial(), ordered(), held());"#, "full(); partial(); ordered(); held();");
+        let Some((text, outputs)) = run_on_both_backends("fields", source, provider, library, &caller) else { return; };
+        assert!(text.contains("describe(*v"), "the literal is not passed as the record its storage holds:\n{text}");
+        // 5, 1, 2, 3, 4 by field; 9 alone; and y, then x, then origin.x.
+        for output in outputs {
+            assert_eq!(output, expect("51234 9 3021 7001", provider), "{provider:?}");
+        }
+    }
+}
+
 /// A small class hierarchy in C, with functions taking an instance first.
 const METHODS_LIBRARY: &str = r#"
 #include <stdlib.h>

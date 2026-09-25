@@ -913,6 +913,30 @@ correctness does not depend on arm64 running by luck.
    - **Objective-C handles narrow and assert.** `instanceof` narrows an
      Objective-C object to a subclass, and `as` asserts one, unchecked as every
      TypeScript assertion is. Any other opaque pointer is still refused.
+   - **A record written as its fields (2026-09-25).** Swift writes
+     `NSRect(x: 200, y: 200, width: 320, height: 200)`. Here it is
+     `contentRect: { origin: { x: 200, y: 200 }, size: { width: 320,
+     height: 200 } }`, the C struct's own members. Every fixture used to
+     hand-write a `setRect` helper over `local<CGRect>()`.
+     - `c:types` has `Fields<T>`, and bind-objc writes a by-value record
+       parameter, and a record property's setter, as `ByValue<T> |
+       Fields<T>`. The schema reads that union as the `ByValue<T>` it is to
+       C (`schema::stored`), so nothing else about the parameter changes.
+     - A literal is storage in the caller's frame, a zeroed `NativeLocal`
+       with a local's rules, filled field by field in the order written,
+       which is when JavaScript evaluates them. A nested record is filled in
+       place, and a field left out is zero. Nothing is allocated: it is C's
+       compound literal, for every lane's C records alike.
+     - An object in a variable is read field by field at the call, as
+       labels in a variable are. An accessor is refused by name, not
+       written as zero.
+     - A C-callback test covers the literal (full, partial, and the order
+       its values are evaluated in) and the variable, on both backends and
+       both providers, with no leak. The old compiler refuses the literal.
+       `macos-window` and `macos-notes` write every rectangle and point
+       passed to a message this way, `super` sends included. A rectangle a
+       method returns is still `local<CGRect>()`, since a literal is not
+       storage that outlives it.
 
 5. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.

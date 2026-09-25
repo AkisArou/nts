@@ -37,7 +37,24 @@ fn text(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
 /// separately named incomplete type and are not expanded speculatively here.
 #[must_use]
 pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
-    pointer_within(snapshot, ty, &mut Vec::new())
+    pointer_within(snapshot, stored(snapshot, ty), &mut Vec::new())
+}
+
+/// `ByValue<T> | Fields<T>` as the `ByValue<T>` it is to C and to every
+/// reader of the type: the record, which the argument may also be written as
+/// an object literal. The literal is the lowering's to write into storage
+/// (`native_record_literal`), so no other question about the parameter
+/// changes. Any other type is itself.
+pub(crate) fn stored(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
+    let fields = |part: TypeId| property(snapshot, part, "___c_fields").is_some_and(|p| p.readonly && p.optional);
+    match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+        Some(TypeKind::Union(parts)) => match parts.as_slice() {
+            [a, b] if fields(*b) && !fields(*a) => *a,
+            [a, b] if fields(*a) && !fields(*b) => *b,
+            _ => ty,
+        },
+        _ => ty,
+    }
 }
 
 /// An opaque pointee: `Opaque<Tag>`, or `Class<Tag, Parent>` with its chain.
@@ -146,6 +163,7 @@ fn optional_number(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<u64> {
 /// in that storage. Anything but a record under the brand is not one of these.
 #[must_use]
 pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::sync::Arc<Record>> {
+    let ty = stored(snapshot, ty);
     let brand = property(snapshot, ty, "___c_by_value")?;
     if !(brand.readonly && brand.optional && brand.kind == MemberKind::Field) {
         return None;

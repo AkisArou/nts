@@ -142,18 +142,14 @@ class Canvas extends NSView {
   // x86_64 returns in memory -- so the answer comes through
   // `objc_msgSendSuper_stret`, and arm64's through `objc_msgSendSuper`.
   scannedWidth(width: number): number {
-    const rect = local<CGRect>();
-    setRect(rect, 0.25, 0, width, 30);
-    return super.centerScanRect(rect).size.width;
+    return super.centerScanRect({ origin: { x: 0.25, y: 0 }, size: { width, height: 30 } }).size.width;
   }
 }
 
 // A sheet on the window, ended as soon as it is begun, for `sheet` below.
 function makeSheet(): NSWindow {
-  const frame = local<CGRect>();
-  setRect(frame, 0, 0, 200, 100);
   return new NSWindow({
-    contentRect: frame,
+    contentRect: { size: { width: 200, height: 100 } },
     styleMask: NSWindow.StyleMask.titled,
     backing: NSWindow.BackingStoreType.buffered,
     defer: false,
@@ -187,18 +183,16 @@ function main(): void {
   const app = NSApplication.shared;
   app.setActivationPolicy(NSApplication.ActivationPolicy.regular);
 
-  const frame = local<CGRect>();
-  setRect(frame, 200, 200, 320, 200);
+  // Swift's `NSRect(x: 200, y: 200, width: 320, height: 200)`: the record's
+  // fields, written where the message takes it, in the caller's frame.
   const window = new NSWindow({
-    contentRect: frame,
+    contentRect: { origin: { x: 200, y: 200 }, size: { width: 320, height: 200 } },
     styleMask: NSWindow.StyleMask.titled | NSWindow.StyleMask.closable,
     backing: NSWindow.BackingStoreType.buffered,
     defer: false,
   });
   window.title = "nts";
-  const buttonFrame = local<CGRect>();
-  setRect(buttonFrame, 110, 80, 100, 32);
-  const button = new NSButton({ frame: buttonFrame });
+  const button = new NSButton({ frame: { origin: { x: 110, y: 80 }, size: { width: 100, height: 32 } } });
   button.title = "Press";
   // `contentView` is `nullable` in NSWindow.h: Swift's optional chaining.
   window.contentView?.addSubview(button);
@@ -219,7 +213,7 @@ function main(): void {
     // `stop:` is seen when the loop next finishes an event, so one is posted.
     const wake = NSEvent.otherEvent({
       with: NSEvent.EventType.applicationDefined,
-      location: local<CGPoint>(),
+      location: { x: 0, y: 0 },
       modifierFlags: 0,
       timestamp: 0,
       windowNumber: 0,
@@ -247,17 +241,12 @@ function main(): void {
   // Which the program is: a bare executable has no bundle identifier, and an
   // application has the one its `Info.plist` gives it.
   report(`bundle ${Bundle.main.bundleIdentifier ?? "none"}`);
-  const canvasFrame = local<CGRect>();
-  setRect(canvasFrame, 0, 0, 40, 30);
-  const canvas = new Canvas({ frame: canvasFrame });
+  const canvas = new Canvas({ frame: { size: { width: 40, height: 30 } } });
   window.contentView?.addSubview(canvas);
   // AppKit asks each subview, so the override is called now, synchronously.
-  const point = local<CGPoint>();
-  point.x = 10;
-  point.y = 12;
-  window.contentView?.hitTest(point);
+  window.contentView?.hitTest({ x: 10, y: 12 });
   const content = window.contentView;
-  const found = content === null ? null : content.hitTest(point);
+  const found = content === null ? null : content.hitTest({ x: 10, y: 12 });
   report(`hit ${hitX} ${found === canvas ? "the canvas" : "something else"}`);
   // `drawRect:` sent with a rectangle whose size is known: AppKit's own
   // draws pass what it chooses, which since macOS 14 may exceed the bounds.
@@ -267,12 +256,11 @@ function main(): void {
   report(`flipped ${canvas.isFlipped} ${view_is_flipped(canvas)} ${content === null ? "none" : view_is_flipped(content)}`);
   // Scanned to whole pixels, through `super` and through an ordinary send,
   // which the canvas does not override: the same NSView implementation.
-  const plain = local<CGRect>();
-  setRect(plain, 0.25, 0, 40.6, 30);
+  const plain = { origin: { x: 0.25, y: 0 }, size: { width: 40.6, height: 30 } };
   report(`scanned ${canvas.scannedWidth(40.6)} ${canvas.centerScanRect(plain).size.width}`);
   const click = NSEvent.otherEvent({
     with: NSEvent.EventType.applicationDefined,
-    location: local<CGPoint>(),
+    location: { x: 0, y: 0 },
     modifierFlags: 0,
     timestamp: 0,
     windowNumber: 0,
