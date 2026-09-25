@@ -345,6 +345,9 @@ name = "nts-react"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "camino",
+ "nts-frontend-ts",
+ "nts-semantic-schema",
  "react_compiler",
  "react_compiler_ast",
  "serde",

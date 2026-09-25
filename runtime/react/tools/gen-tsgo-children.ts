@@ -1,0 +1,143 @@
+// Generates nts-react's table of which child property each of a node's
+// children is, for every tsgo syntax kind.
+//
+// nts's snapshot keeps a node's children in visitor order plus a bitmask of
+// which optional ones are present. tsgo's encoder decides that order, in its
+// generated `getChildrenPropertyMask`, and the numbers come from tsgo's own
+// `SyntaxKind` enum. Both are read from the pinned submodule, so moving the pin
+// and rerunning this is the whole update; `--check` fails if the committed
+// table no longer matches.
+//
+// usage: node tools/gen-tsgo-children.ts [--check]
+
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const lane = join(dirname(fileURLToPath(import.meta.url)), "..");
+const tsgo = join(lane, "../../third_party/typescript-go");
+const encoderPath = join(tsgo, "internal/api/encoder/encoder_generated.go");
+const enumPath = join(tsgo, "_packages/native-preview/src/enums/syntaxKind.enum.ts");
+const outPath = join(lane, "compiler/nts-react/src/tsgo/children.rs");
+
+// `SyntaxKind` names to numbers. Aliases (`FirstToken = …`) come after the
+// kind they alias, so the first name seen for a number is the kind's own.
+function syntaxKinds(): Map<string, number> {
+  const kinds = new Map<string, number>();
+  for (const match of readFileSync(enumPath, "utf8").matchAll(/^\s*([A-Za-z]+) = (\d+),/gm)) {
+    const [, name, value] = match;
+    if (name !== undefined && value !== undefined && !kinds.has(name)) kinds.set(name, Number(value));
+  }
+  return kinds;
+}
+
+// A child property's name in the encoder, as nts-react spells it: the Go
+// field or accessor name with its first letter lowered.
+function propertyName(term: string): string {
+  const modifiers = /hasModifiers\(n\.Modifiers\(\)\)/.exec(term);
+  if (modifiers) return "modifiers";
+  const field = /n\.([A-Za-z]+)(?:\(\))? != nil/.exec(term);
+  if (!field || field[1] === undefined) throw new Error(`an encoder term this generator does not know: ${term}`);
+  return field[1][0]!.toLowerCase() + field[1].slice(1);
+}
+
+function childTable(kinds: Map<string, number>): Map<number, string[]> {
+  const source = readFileSync(encoderPath, "utf8");
+  const start = source.indexOf("func getChildrenPropertyMask(");
+  const end = source.indexOf("\n}\n", start);
+  if (start < 0 || end < 0) throw new Error("getChildrenPropertyMask is not in the encoder any more");
+  const body = source.slice(start, end);
+  const table = new Map<number, string[]>();
+  let pending: string[] = [];
+  for (const line of body.split("\n")) {
+    const labels = [...line.matchAll(/ast\.Kind([A-Za-z]+)/g)].map((m) => m[1]!);
+    if (/^\s*(case )?ast\.Kind/.test(line)) {
+      pending.push(...labels);
+      continue;
+    }
+    if (!/^\s*return /.test(line) || pending.length === 0) continue;
+    const properties: string[] = [];
+    // Each term is `boolToByte(<presence>) << bit`; the presence test is one of
+    // two shapes, which propertyName names.
+    for (const term of line.matchAll(/boolToByte\((hasModifiers\(n\.Modifiers\(\)\)|n\.[A-Za-z]+(?:\(\))? != nil)\)(?: << (\d+))?/g)) {
+      const bit = term[2] === undefined ? 0 : Number(term[2]);
+      properties[bit] = propertyName(term[1]!);
+    }
+    if (properties.some((p) => p === undefined)) throw new Error(`a gap in the mask bits after ${pending.join(", ")}`);
+    for (const label of pending) {
+      const kind = kinds.get(label);
+      if (kind === undefined) throw new Error(`ast.Kind${label} is not in SyntaxKind`);
+      table.set(kind, properties);
+    }
+    pending = [];
+  }
+  return table;
+}
+
+// JSDoc nodes are parented to the declaration they document, so nts counts
+// them among its children, but they fill no child property. tsgo's enum names
+// the range: `FirstJSDocNode` and `LastJSDocNode` alias its two ends.
+function jsdocRange(kinds: Map<string, number>): [number, number] {
+  const source = readFileSync(enumPath, "utf8");
+  const end = (alias: string): number => {
+    const target = new RegExp(`^\\s*${alias} = ([A-Za-z]+),`, "m").exec(source)?.[1];
+    const value = target === undefined ? undefined : kinds.get(target);
+    if (value === undefined) throw new Error(`${alias} is not in SyntaxKind`);
+    return value;
+  };
+  return [end("FirstJSDocNode"), end("LastJSDocNode")];
+}
+
+function render(kinds: Map<string, number>, table: Map<number, string[]>): string {
+  const names = new Map<number, string>();
+  for (const [name, value] of kinds) if (!names.has(value)) names.set(value, name);
+  const rows = [...table.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([kind, properties]) => `    (${kind}, &[${properties.map((p) => `"${p}"`).join(", ")}]), // ${names.get(kind)}`);
+  const [firstJsdoc, lastJsdoc] = jsdocRange(kinds);
+  const jsdoc = kinds.get("JSDoc");
+  if (jsdoc === undefined || jsdoc < firstJsdoc || jsdoc > lastJsdoc) throw new Error("JSDoc is outside the JSDoc range");
+  return `// Generated by runtime/react/tools/gen-tsgo-children.ts from the pinned
+// tsgo's encoder. Do not edit; rerun the generator after moving the pin.
+
+/// Whether a node of this kind is \`JSDoc\`: parented to the declaration it
+/// documents, and so among that node's children, but filling no property.
+#[must_use]
+pub fn is_jsdoc(kind: u16) -> bool {
+    (${firstJsdoc}..=${lastJsdoc}).contains(&kind)
+}
+
+/// The child properties of a node of this syntax kind, in the order tsgo's
+/// encoder visits them: bit \`i\` of the node's presence mask says whether the
+/// \`i\`th of these is present. Empty for a kind with no children.
+#[must_use]
+pub fn properties(kind: u16) -> &'static [&'static str] {
+    PROPERTIES
+        .binary_search_by_key(&kind, |(known, _)| *known)
+        .map_or(&[], |at| PROPERTIES[at].1)
+}
+
+/// Sorted by kind.
+static PROPERTIES: &[(u16, &[&str])] = &[
+${rows.join("\n")}
+];
+`;
+}
+
+const kinds = syntaxKinds();
+const text = render(kinds, childTable(kinds));
+if (process.argv.includes("--check")) {
+  let current = "";
+  try {
+    current = readFileSync(outPath, "utf8");
+  } catch {
+    // Missing counts as stale.
+  }
+  if (current !== text) {
+    console.error(`${outPath} is stale: rerun node tools/gen-tsgo-children.ts`);
+    process.exit(1);
+  }
+} else {
+  writeFileSync(outPath, text);
+  console.log(`wrote ${outPath}`);
+}
