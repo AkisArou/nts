@@ -48,7 +48,8 @@ void *nts_gobject_parent_slot(size_t parent, size_t offset);
 
 /* A signal a class the program writes declares (`WithSignals` in `c:types`),
  * added to its `type` once it is registered: `kinds` spells each parameter,
- * `d` a `double`, `b` a `gboolean`, `o` a `GObject`. Returns its id. */
+ * `d` a `double`, `b` a `gboolean`, `s` a UTF-8 string, `o` a `GObject`.
+ * Returns its id. */
 unsigned nts_gobject_add_signal(size_t type, const char *name,
                                 const char *kinds);
 

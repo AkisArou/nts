@@ -1328,7 +1328,15 @@ impl<'a> Mapper<'a> {
         self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "CNumber"]);
         let mut ts_parameters = vec![format!("self: {local}")];
         for param in &signal.signature.parameters {
-            if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename") {
+            // A UTF-8 string GLib passes the handler, lent for the call: the
+            // handler's bridge copies it (`native::abi_type`). A `filename`
+            // is in the file system's encoding, which a `string` is not.
+            if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8") {
+                let ts = if param.nullable { "string | null" } else { "string" };
+                ts_parameters.push(format!("{}: {ts}", identifier(&param.name)));
+                continue;
+            }
+            if matches!(&param.ty, TypeRef::Named { name, .. } if name == "filename") {
                 return Err(Reason::StringInCallback);
             }
             let param = self.with_c_type(param);

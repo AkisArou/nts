@@ -298,6 +298,15 @@ function main(): void {
     const buffer = new GtkEntryBuffer({ max_length: 2 });
     buffer.set_text("abc", -1);
     gir_log("buffer " + buffer.text + " " + String(label.selectable));
+    // A signal passing a string, which GTK lends the handler for the call:
+    // `inserted-text` (position, chars, n_chars) as GTK emits it.
+    let inserted = "";
+    buffer.connect("inserted-text", (_self, position, chars, n_chars) => {
+      inserted += String(position) + ":" + chars + ":" + String(n_chars);
+    });
+    buffer.set_text("", -1);
+    buffer.insert_text(0, "x", -1);
+    gir_log("inserted " + inserted);
     // An interface's methods and properties on a class implementing it, as
     // GJS has them: `GtkEditable`'s on a `GtkEntry`, `GtkOrientable`'s on a
     // `GtkBox` -- each the C function taking the interface.

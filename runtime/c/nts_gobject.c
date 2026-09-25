@@ -390,6 +390,9 @@ unsigned nts_gobject_add_signal(size_t type, const char *name,
     case 'b':
       params[at] = G_TYPE_BOOLEAN;
       break;
+    case 's':
+      params[at] = G_TYPE_STRING;
+      break;
     default:
       params[at] = G_TYPE_OBJECT;
       break;

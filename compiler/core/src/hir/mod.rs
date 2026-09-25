@@ -2200,7 +2200,7 @@ pub struct ForeignClass {
 
 /// One signal a `GObject` class the program writes declares: its name, and
 /// each parameter's kind as the registration and the emit thunks spell it --
-/// `d` a `double`, `b` a `gboolean`, `o` a `GObject`.
+/// `d` a `double`, `b` a `gboolean`, `s` a UTF-8 string, `o` a `GObject`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignSignal {
     pub name: String,

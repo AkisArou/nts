@@ -6204,8 +6204,8 @@ fn register_gobject_class(
 
 /// The signals a class declares, read off its instance type's
 /// `__c_signals` (see `WithSignals` in `c:types`), in the order it writes
-/// them. A parameter is a `number` (`d`), a `boolean` (`b`) or a `GObject`
-/// handle (`o`); anything else is refused by name.
+/// them. A parameter is a `number` (`d`), a `boolean` (`b`), a `string`
+/// (`s`) or a `GObject` handle (`o`); anything else is refused by name.
 fn gobject_signals(snapshot: &SemanticSnapshot, class: NodeId) -> Result<Vec<super::ForeignSignal>, String> {
     let Some(instance) = instance_type_of(snapshot, class) else { return Ok(Vec::new()) };
     signals_of_type(snapshot, instance)
@@ -6247,6 +6247,7 @@ fn signals_of_type(snapshot: &SemanticSnapshot, instance: nts_semantic_schema::T
             };
             kinds.push(match kind(*element) {
                 Some(TypeKind::Number) => 'd',
+                Some(TypeKind::String) => 's',
                 _ if is_boolean => 'b',
                 _ if matches!(
                     super::native::pointer(snapshot, *element),
@@ -6254,7 +6255,7 @@ fn signals_of_type(snapshot: &SemanticSnapshot, instance: nts_semantic_schema::T
                 ) => 'o',
                 _ => {
                     return Err(format!(
-                        "a signal `{}` with a parameter of type {}, where a signal takes a `number`, a `boolean` or a GObject",
+                        "a signal `{}` with a parameter of type {}, where a signal takes a `number`, a `boolean`, a `string` or a GObject",
                         signal.name,
                         describe(snapshot, *element)
                     ));

@@ -23,7 +23,8 @@
 //   tally +2=2+3=5 on kid  signals `Tally` declares (`extends GtkButton<{
 //                 ... }>`): `incremented` emitted by a method, with the
 //                 number it carries and the handler reading the instance's
-//                 field; `toggled` with a boolean, `adopted` with a GObject.
+//                 field; `renamed` with two strings, `toggled` with a
+//                 boolean, `adopted` with a GObject.
 //                 Registered on `Tally`'s own `GType`, so nothing is emitted
 //                 by name: a class that declared none reads `tally` alone
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
@@ -114,9 +115,10 @@ function framed(): string {
 }
 
 // Signals a class declares, GJS's `Signals`: `incremented` carries a number,
-// `toggled` a boolean and `adopted` a handle.
+// `renamed` two strings, `toggled` a boolean and `adopted` a handle.
 class Tally extends GtkButton<{
   incremented: [by: number];
+  renamed: [to: string, from: string];
   toggled: [on: boolean];
   adopted: [child: GtkLabel];
 }> {
@@ -134,6 +136,9 @@ function tally(): string {
   t.connect("incremented", (self, by) => {
     seen += "+" + String(by) + "=" + String(self.total);
   });
+  t.connect("renamed", (_self, to, from) => {
+    seen += " " + from + ">" + to;
+  });
   t.connect("toggled", (_self, on) => {
     seen += on ? " on" : " off";
   });
@@ -142,6 +147,7 @@ function tally(): string {
   });
   t.bump(2);
   t.bump(3);
+  t.emit("renamed", "b", "a");
   t.emit("toggled", true);
   t.emit("adopted", new GtkLabel({ label: "kid" }));
   return "tally " + seen.trim();

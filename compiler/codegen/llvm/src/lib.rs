@@ -1214,6 +1214,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 vec![format!("ptr @{}", static_closure_name(layout))]
             };
             let mut body = String::new();
+            let mut releases = String::new();
             for (at, foreign) in signature.parameters.iter().enumerate() {
                 let from = foreign.abi(platform.abi);
                 // The context, which became the receiver, and any argument C
@@ -1225,6 +1226,14 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 let to = compiled.params[at + 1].ty.clone();
                 let (from_ty, to_ty) = (ty_of(&from, compiled)?, ty_of(&to, compiled)?);
                 parameters.push(format!("{from_ty} %a{at}"));
+                // A string C lends: copied in for the call, given back after
+                // it, as the C bridge does.
+                if nts_core::hir::native::lent_string(foreign, &to) {
+                    let _ = writeln!(body, "  %s{at} = call ptr @nts_string_from_cstring(ptr %a{at})");
+                    let _ = writeln!(releases, "  call void @nts_release(ptr %s{at})");
+                    arguments.push(format!("ptr %s{at}"));
+                    continue;
+                }
                 if from == to {
                     arguments.push(format!("{to_ty} %a{at}"));
                 } else if to == HirType::Bool {
@@ -1252,9 +1261,9 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             // A once-bridge gives the closure back after its one call, before
             // leaving, as the C bridge does.
             let leave = if *once {
-                format!("  call void @nts_closure_unlend_once(ptr %a{last})\n  call void @nts_callback_leave()")
+                format!("{releases}  call void @nts_closure_unlend_once(ptr %a{last})\n  call void @nts_callback_leave()")
             } else {
-                "  call void @nts_callback_leave()".to_owned()
+                format!("{releases}  call void @nts_callback_leave()")
             };
             let callee = bridge_callee(compiled, dispatched, &format!("%a{last}"), &mut body);
             let call = format!("call {} {callee}({})", return_ty_of(&have, compiled)?, arguments.join(", "));
@@ -1717,6 +1726,8 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_str_char_code_at_int_fn",
     "nts_string_cmp",
     "nts_string_eq",
+    // A string a callback's bridge copies from C (`bridges`), in raw IR.
+    "nts_string_from_cstring",
     "nts_string_truthy",
     "nts_to_int32_fn",
     "nts_to_uint32_fn",

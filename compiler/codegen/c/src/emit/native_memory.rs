@@ -1,6 +1,8 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
 use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, native_function_type, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, virtual_signature, Spelling};
+use std::fmt::Write as _;
+
 use nts_core::hir::Callee;
 use nts_codegen_common::symbols::bridge_name;
 use nts_core::hir::native::{NativeAbi, Pointee, Type};
@@ -761,6 +763,7 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 c_type_of(program, &compiled.params[0].ty, &compiled.params[0].origin)?
             )],
         };
+        let (mut copies, mut releases) = (String::new(), String::new());
         for (at, ty) in signature.parameters.iter().enumerate() {
             let slot = format!("a{at}");
             parameters.push(format!("{} {slot}", ty.c_type()));
@@ -777,6 +780,13 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // conversions do the work; what this supplies is the target type,
             // which is the compiled function's and not the foreign one's.
             let want = c_type_of(program, &compiled.params[at + 1].ty, &compiled.params[at + 1].origin)?;
+            // A string C lends: copied in for the call, given back after it.
+            if nts_core::hir::native::lent_string(ty, &compiled.params[at + 1].ty) {
+                let _ = write!(copies, " NtsString *s{at} = nts_string_from_cstring({slot});");
+                let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
+                arguments.push(format!("s{at}"));
+                continue;
+            }
             arguments.push(format!("({want}){slot}"));
         }
         let parameters = if parameters.is_empty() { "void".to_owned() } else { parameters.join(", ") };
@@ -801,11 +811,11 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // nothing that would, and will not call it again.
         let unlend = if *once { format!(" nts_closure_unlend_once(a{last});") } else { String::new() };
         let body = if matches!(&*signature.result, nts_core::hir::native::Type::Void) {
-            format!("nts_callback_enter(); {call};{unlend} nts_callback_leave();")
+            format!("nts_callback_enter();{copies} {call};{releases}{unlend} nts_callback_leave();")
         } else {
             let _ = return_c_type(program, &compiled.return_type, &compiled.origin)?;
             format!(
-                "nts_callback_enter(); {result} r = ({result}){call};{unlend} nts_callback_leave(); return r;"
+                "nts_callback_enter();{copies} {result} r = ({result}){call};{releases}{unlend} nts_callback_leave(); return r;"
             )
         };
         writer.line(origin, format!("static {result} {name}({parameters}) {{ {body} }}"));

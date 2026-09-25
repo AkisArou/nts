@@ -1682,10 +1682,19 @@ impl Type {
                     match &snapshot.types.get(parameter.ty.0 as usize)?.kind {
                         TypeKind::Tuple(elements) if parameter.rest => {
                             for element in elements {
-                                parameters.push(abi_type(snapshot, *element)?);
+                                if is_c_string_parameter(snapshot, *element) {
+                                    parameters.push(Encoding::Utf8.c_type());
+                                } else {
+                                    parameters.push(abi_type(snapshot, *element)?);
+                                }
                             }
                         }
                         _ if parameter.rest => return None,
+                        // A `string` C passes a callback, lent for the call: its
+                        // `const char *`, which the bridge copies into a string
+                        // and gives back after. A `string` a callback *returns*
+                        // has an owner nothing here can name, and stays refused.
+                        _ if is_c_string_parameter(snapshot, parameter.ty) => parameters.push(Encoding::Utf8.c_type()),
                         _ => parameters.push(abi_type(snapshot, parameter.ty)?),
                     }
                 }
@@ -1702,6 +1711,29 @@ impl Type {
             _ => None,
         }
     }
+
+/// Whether a callback bridge's argument is a string C lends: the
+/// `const char *` a `string` parameter is in the callback's C signature
+/// ([`abi_type`]), where the compiled function takes a string. Both backends'
+/// bridges ask this, and copy the string in for the call.
+#[must_use]
+pub fn lent_string(foreign: &Type, compiled: &super::HirType) -> bool {
+    *foreign == Encoding::Utf8.c_type() && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
+}
+
+/// `string` or `string | null`: what a callback's bridge reads from a lent
+/// `const char *` (NULL as `null`).
+fn is_c_string_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    let kind = |ty: &TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+    match kind(&ty) {
+        Some(TypeKind::String) => true,
+        Some(TypeKind::Union(parts)) => {
+            parts.iter().any(|part| matches!(kind(part), Some(TypeKind::String)))
+                && parts.iter().all(|part| matches!(kind(part), Some(TypeKind::String | TypeKind::Null)))
+        }
+        _ => false,
+    }
+}
 
 /// A C function pointer read from an ordinary TypeScript function type.
 ///
