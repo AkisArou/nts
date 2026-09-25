@@ -51,8 +51,8 @@ interface Named {
 function nameOf(value: unknown): string {
   if ((typeof value === "function" || typeof value === "object") && value !== null) {
     const named = value as Named;
-    if (named.displayName) {
-      return String(named.displayName);
+    if (typeof named.displayName === "string" && named.displayName !== "") {
+      return named.displayName;
     }
     if (typeof named.name === "string") {
       return named.name;
@@ -65,11 +65,10 @@ function nameOf(value: unknown): string {
 function getWrappedName(outerType: unknown, innerType: unknown, wrapperName: string): string {
   const functionName = nameOf(innerType);
   const outerDisplayName = (outerType as Named).displayName;
-  return outerDisplayName
-    ? String(outerDisplayName)
-    : functionName !== ""
-      ? `${wrapperName}(${functionName})`
-      : wrapperName;
+  if (typeof outerDisplayName === "string" && outerDisplayName !== "") {
+    return outerDisplayName;
+  }
+  return functionName !== "" ? `${wrapperName}(${functionName})` : wrapperName;
 }
 
 // Keep in sync with shared/getComponentNameFromType
