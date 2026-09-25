@@ -293,6 +293,45 @@ impl FuncBuilder<'_> {
         self.lower_branching_value_at(id, ty, is, Branch::Value(converted), Branch::Value(absent))
     }
 
+    /// `stringFrom(c)`: a C string read into a program string -- the copy a
+    /// foreign function's `string | null` result already gets
+    /// (`nts_string_from_cstring`), for a `char *` that arrives some other
+    /// way: out of an out parameter's slot, or a struct's member. The pointer
+    /// is neither kept nor freed.
+    pub(super) fn native_string_from(&mut self, id: NodeId, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let [pointer] = args else {
+            return Err(self.unsupported(id, "stringFrom takes one C string"));
+        };
+        let pointer = self.lower_expression(*pointer)?;
+        if !matches!(self.values[pointer.0 as usize].ty, HirType::NativePointer(_)) {
+            return Err(self.unsupported(id, "stringFrom of a value that is not a C pointer"));
+        }
+        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a string read from C"))?;
+        let origin = self.origin(id);
+        Ok(self.runtime_call("nts_string_from_cstring", vec![pointer], ty, origin))
+    }
+
+    /// `bytesFrom(bytes, length)`: `length` bytes at a C pointer copied into
+    /// a new `Uint8Array` (`nts_view_from_bytes`) -- a buffer C filled or
+    /// handed back, read into the program's own. The pointer is neither kept
+    /// nor freed.
+    pub(super) fn native_bytes_from(&mut self, id: NodeId, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let [bytes, length] = args else {
+            return Err(self.unsupported(id, "bytesFrom takes a C pointer and a length in bytes"));
+        };
+        let bytes = self.lower_expression(*bytes)?;
+        if !matches!(self.values[bytes.0 as usize].ty, HirType::NativePointer(_)) {
+            return Err(self.unsupported(id, "bytesFrom of a value that is not a C pointer"));
+        }
+        let length = self.lower_expecting(*length, &HirType::NUMBER)?;
+        let length = self.coerce(length, &HirType::NUMBER, id)?;
+        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "bytes read from C"))?;
+        let origin = self.origin(id);
+        let view = self.runtime_call("nts_view_from_bytes", vec![bytes, length], ty, origin);
+        self.guard_allocated_view(id, view)?;
+        Ok(view)
+    }
+
     pub(super) fn native_storage(&mut self, id: NodeId, operation: &str, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
         if operation == "sizeof" {
             if self.type_of(id) != Some(HirType::NUMBER) { return Err(self.unsupported(id, "sizeof must return a number")); }

@@ -1292,6 +1292,17 @@ NTS_ALLOCATES_OR_NULL NtsView *nts_view_subarray(const NtsView *view,
 NTS_ALLOCATES_OR_NULL NtsView *nts_view_slice(const NtsView *view, double from,
                                               double to);
 
+/* `bytesFrom(bytes, length)` in `c:memory`: `length` BYTES at `bytes` -- a
+ * count of bytes, not of elements, since the view is a `Uint8Array` and the
+ * two are one number only there -- copied into a new buffer and a
+ * `Uint8Array` onto it, both the program's. The pointer is neither kept nor
+ * freed. NULL with a length of 0 is an empty array, which is what a C API
+ * handing back "no bytes" usually means; NULL with any other length ends the
+ * process, since a length with nothing behind it is a broken promise and not
+ * an absence. */
+NTS_ALLOCATES_OR_NULL NtsView *nts_view_from_bytes(const void *bytes,
+                                                   double length);
+
 /* `set` and `copyWithin`, the two operations whose entire difficulty is that
  * source and destination can be the same storage.
  *

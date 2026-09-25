@@ -4131,6 +4131,77 @@ int thing_record(struct _Thing *t) { return t->record; }
 }
 
 /// A C function a binding declares as a static member of a value -- GJS's
+/// `stringFrom(p)`: a `char *` read out of a slot into a program string, on
+/// both backends -- the UTF-8 decoded (`é` is one unit, 233), an ill-formed
+/// byte one U+FFFD (65533) and not dropped, and NULL `null`.
+#[test]
+fn a_c_string_read_from_a_slot_is_copied_on_both_backends() {
+    let source = r#"
+import type { Ptr, c_char, c_int } from "c:types";
+import { local, stringFrom } from "c:memory";
+/** @ntsNoEscape out */
+declare function name_into(out: Ptr<Ptr<c_char>>, which: c_int): void;
+export function run(): number {
+    const slot = local<Ptr<c_char>>();
+    name_into(slot, 0 as c_int);
+    const a = stringFrom(slot[0]);
+    name_into(slot, 1 as c_int);
+    const b = stringFrom(slot[0]);
+    name_into(slot, 2 as c_int);
+    const c = stringFrom(slot[0]);
+    if (a === null || b === null) return -1;
+    return a.length * 1e9 + a.charCodeAt(1) * 1e5 + b.length * 1e4 * 0 + b.charCodeAt(1) + (c === null ? 0 : 7e9);
+}
+"#;
+    let library = r#"
+#include <stddef.h>
+void name_into(char **out, int which) {
+    static char plain[] = "h\xc3\xa9llo";
+    static char broken[] = "a\xff" "b";
+    *out = which == 0 ? plain : which == 1 ? broken : NULL;
+}
+"#;
+    let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((_, outputs)) = run_on_both_backends("string-from-probe", source, provider, library, &caller) else { return; };
+        for output in outputs { assert_eq!(output, expect("5023365533", provider)); }
+    }
+}
+
+/// `bytesFrom(p, n)`: `n` bytes at a C pointer copied into a `Uint8Array`
+/// the program owns, on both backends and both providers -- the bytes read
+/// unsigned (200 stays 200), the length in bytes, the copy the program's (a
+/// write to it leaves C's buffer alone), NULL with 0 an empty array, and
+/// nothing leaked under reference counting.
+#[test]
+fn c_bytes_read_from_a_pointer_are_copied_on_both_backends() {
+    let source = r#"
+import type { ConstPtr, c_double, c_uint8 } from "c:types";
+import { bytesFrom } from "c:memory";
+declare function bytes_at(): ConstPtr<c_uint8> | null;
+declare function byte_zero(): c_double;
+export function run(): number {
+    const bytes = bytesFrom(bytes_at(), 4);
+    let sum = 0;
+    for (let i = 0; i < bytes.length; i++) sum = sum * 1000 + bytes[i];
+    bytes[0] = 9;
+    const empty = bytesFrom(null, 0);
+    return sum * 100 + bytes.length * 10 + empty.length + (byte_zero() as number) * 0;
+}
+"#;
+    let library = r"
+#include <stddef.h>
+static unsigned char data[] = { 1, 200, 3, 44 };
+const unsigned char *bytes_at(void) { return data; }
+double byte_zero(void) { return data[0]; }
+";
+    let caller = counted_caller(r#"double byte_zero(void); printf("%.0f byte0=%.0f", run(), byte_zero());"#, "run();");
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((_, outputs)) = run_on_both_backends("bytes-from-probe", source, provider, library, &caller) else { return; };
+        for output in outputs { assert_eq!(output, expect("120000304440 byte0=1", provider)); }
+    }
+}
+
 /// `GtkStringObject.new("x")`, `GtkButton.new_with_label("Add")` -- called on
 /// the value's name: the C function with the written arguments, and the name,
 /// a declaration only, never evaluated. `new` is quoted in the type, since a

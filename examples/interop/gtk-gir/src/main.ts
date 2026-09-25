@@ -9,6 +9,8 @@
 //                 stack, and took `null` for the third, which it may skip
 //   values=2026/9/24  `when.get_ymd()` with no slots: all three returned, as
 //                 GJS returns out parameters, through a generated wrapper
+//   markup=bold x|none  `pango_parse_markup`'s text out parameter, a
+//                 `char *` read with `stringFrom` and freed; `null` is `null`
 //   keyfile true 5 no-error
 //                 a key file loaded -- its `gboolean` answer a boolean -- and
 //                 read, and the `GError **` slot beside each call left null
@@ -80,6 +82,7 @@ import {
   g_error_free,
   g_idle_add_full,
   g_key_file_get_integer,
+  g_free,
   g_key_file_load_from_data,
   g_key_file_new,
   g_key_file_unref,
@@ -90,8 +93,9 @@ import {
   type GError,
 } from "c:GLib-2.0";
 import { g_signal_group_new } from "c:GObject-2.0";
-import type { CNumber } from "c:types";
-import { local } from "c:memory";
+import { pango_parse_markup } from "c:Pango-1.0";
+import type { CNumber, Ptr, c_char } from "c:types";
+import { local, stringFrom } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
 import { asGtkBox, asGtkButton, asGtkLabel } from "../types/gir/Gtk-4.0.values.ts";
 
@@ -114,6 +118,14 @@ function outParameters(): void {
   const [y, m, d] = when.get_ymd();
   gir_log("values=" + String(y) + "/" + String(m) + "/" + String(d));
   g_date_time_unref(when);
+
+  // A string out of a slot: `char *` C wrote there, read by `stringFrom`
+  // (copied; the pointer is still C's to free), and a NULL read as `null`.
+  const stripped = local<Ptr<c_char>>();
+  pango_parse_markup("<b>bold</b> x", -1, 0, null, stripped);
+  const markup = stringFrom(stripped[0]);
+  g_free(stripped[0]);
+  gir_log("markup=" + (markup ?? "none") + "|" + (stringFrom(null) ?? "none"));
 
   const keys = g_key_file_new();
   const error = local<GError | null>();

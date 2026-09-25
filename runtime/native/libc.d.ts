@@ -483,6 +483,28 @@ declare module "c:memory" {
   // cannot see that.
   /** @ntsAbi intrinsic */
   export function copy<T>(destination: Ptr<T>, source: ConstPtr<T>): void;
+  import type { c_char } from "c:types";
+  // A C string as a `string`: the bytes up to its NUL, copied, and decoded as
+  // UTF-8 -- an ill-formed sequence becomes one U+FFFD for its maximal
+  // prefix, as node's `TextDecoder` has it. The pointer is neither kept nor
+  // freed: a string a function handed over is still the caller's to free,
+  // after this has copied it. NULL is `null`.
+  //
+  // For a `char *` that does not arrive as a function's result -- which is
+  // copied without asking -- but out of an out parameter's slot or a
+  // struct's member.
+  /** @ntsAbi intrinsic */
+  export function stringFrom(c: ConstPtr<c_char> | null): string | null;
+  import type { c_uint8 } from "c:types";
+  // `length` **bytes** at `bytes` -- bytes, not elements; the result is a
+  // `Uint8Array`, where the two are the same number -- copied into a new
+  // `Uint8Array` the program owns. The pointer is neither kept nor freed: a
+  // buffer a function handed over is still the caller's to free, after this
+  // has copied it. NULL with a length of 0 is an empty array; NULL with any
+  // other length ends the process, since a length with nothing behind it is
+  // a broken promise rather than an absence.
+  /** @ntsAbi intrinsic */
+  export function bytesFrom(bytes: ConstPtr<c_uint8> | null, length: number): Uint8Array;
   // `value` as the handle type `T` when `is` holds, and `null` otherwise:
   // a downcast along a declared `Class` hierarchy, `GTK_BOX(w)` with its
   // check made explicit.

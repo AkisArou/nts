@@ -402,6 +402,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_view_check_fn", returns: "i32", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_view_copy_within", returns: "void", params: &["ptr", "double", "double", "double"], attributes: &[] },
     Signature { name: "nts_view_fill", returns: "void", params: &["ptr", "double", "double", "double"], attributes: &[] },
+    Signature { name: "nts_view_from_bytes", returns: "noalias ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_view_get", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_view_index_fn", returns: "i32", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_view_join", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },

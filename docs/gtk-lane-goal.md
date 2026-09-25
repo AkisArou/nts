@@ -242,6 +242,19 @@ Two binder fixes it needed:
 
 The binder's `*.refused.txt` is the queue.
 
+**Every binding lowers, checked.** The binder's self-check compiles each
+declaration against the headers, which proves the C side and not the other:
+that the compiler lowers a call at the TypeScript types the binder wrote.
+`tooling/gir-sweep/sweep.mjs` binds each namespace, writes an uncalled
+forwarder per function, builds it, and reports what lowering refused --
+lowering visits every function whether anything calls it or not. Across the
+Gtk-4.0 closure: 7,731 swept, 331 skipped because a closure or lent array is
+among their required parameters (counted, and printed), 75 refusals that are
+the harness's own (a `gpointer` bound as `object` forwarded through a
+managed parameter), and **0** that are the bindings'. The first run found
+four -- `Owned<Erased<GObject>>` results -- and a binary from before their
+fix still reports them.
+
 ## M3, the idiomatic layer: where it stands
 
 **Methods on handles.** Every GIR method is also a method of its class:
@@ -310,6 +323,27 @@ Cost: 12 ns against C's 4.2 and GJS's 165. The difference from C is the
 tuple, one `NtsArray` allocated per call, since it escapes the wrapper; a
 compiler that scalar-replaced a small tuple returned from an inlined
 function would close it, and the slots are still there for a hot loop.
+
+**C strings and bytes read back.** `stringFrom(p)` and `bytesFrom(p, n)`
+in `c:memory` copy a `char *` into a `string` and `n` bytes into a
+`Uint8Array`, for what does not arrive as a function's result -- which is
+copied already -- but out of an out parameter's slot or a struct's member:
+
+```ts
+const stripped = local<Ptr<c_char>>();
+pango_parse_markup("<b>bold</b> x", -1, 0, null, stripped);
+const text = stringFrom(stripped[0]);   // "bold x", the program's copy
+g_free(stripped[0]);
+```
+
+UTF-8 as node decodes it (an ill-formed sequence is one U+FFFD), NULL is
+`null` for a string and, with a length of 0, an empty array; a length with
+no bytes behind it ends the process. `stringFrom` is the copy a string
+result already had (`nts_string_from_cstring`); `bytesFrom` is one new
+helper, `nts_view_from_bytes`. Checked on C and LLVM under both providers,
+nothing leaked under reference counting. They are what string, handle and
+byte-array out values (`const [ok, contents, etag] = file.load_contents()`)
+build on.
 
 **Async methods, awaited.** Without its callback, an `_async` method is its
 Promise form:

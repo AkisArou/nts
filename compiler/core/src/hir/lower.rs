@@ -21925,6 +21925,8 @@ impl<'a> FuncBuilder<'a> {
                 Some("addrOf") => return Some(self.native_address_of(id, arguments)),
                 Some(name @ ("local" | "sizeof" | "malloc" | "free" | "copy")) => return Some(self.native_storage(id, name, arguments)),
                 Some("unsafeDowncast") => return Some(self.native_downcast(id, arguments)),
+                Some("stringFrom") => return Some(self.native_string_from(id, arguments)),
+                Some("bytesFrom") => return Some(self.native_bytes_from(id, arguments)),
                 _ => {},
             }
         }

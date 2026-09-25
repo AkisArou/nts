@@ -7083,6 +7083,28 @@ NtsView *nts_view_slice(const NtsView *view, double from, double to) {
   return out;
 }
 
+NtsView *nts_view_from_bytes(const void *bytes, double length) {
+  size_t count = (size_t)nts_buffer_index(length);
+  if (bytes == NULL && count != 0) {
+    fprintf(stderr, "nts: bytesFrom was given NULL and a length of %zu; "
+                    "a length with no bytes behind it is not an empty array\n",
+            count);
+    abort();
+  }
+  NtsBuffer *copy = nts_buffer_new((double)count);
+  if (!copy) {
+    return 0;
+  }
+  if (count) {
+    memcpy(copy->bytes, bytes, count);
+  }
+  NtsView *out = nts_view_new(copy, 0.0, (double)count, (double)NTS_ELEMENT_U8,
+                              false);
+  /* `nts_view_new` retained it, and this function is the only other owner. */
+  nts_release((NtsHeader *)copy);
+  return out;
+}
+
 void nts_view_copy_within(NtsView *view, double target, double from,
                           double to) {
   unsigned char *bytes = nts_view_bytes(view);
