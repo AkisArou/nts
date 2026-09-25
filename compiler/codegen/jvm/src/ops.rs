@@ -446,6 +446,11 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
     }
     Some(match name {
         "nts_uncaught" => (RUNTIME, "uncaught", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
+        // The end of a lowering-built dispatch chain, which this lane reaches by
+        // the same call the native lanes do rather than by an emitter's own
+        // `unreachable`: the chain is control flow the lowering wrote, so there
+        // is nothing backend-specific about how it ends.
+        "nts_no_arm_of" => (RUNTIME, "noArm", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
         "nts_raise" => (RUNTIME, "raise", "(Lnts/rt/NtsValue;)V"),
         "nts_raising" => (RUNTIME, "raising", "()I"),
         "nts_raise_take" => (RUNTIME, "raiseTake", "()Lnts/rt/NtsValue;"),

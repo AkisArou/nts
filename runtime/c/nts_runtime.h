@@ -2448,6 +2448,19 @@ _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
  * slot; the descriptor's own name is not available to a caller that failed to
  * recognise it. */
 _Noreturn void nts_no_arm(const char *member);
+/* The same, for a chain a **lowering** built rather than an emitter: a call on
+ * an erased receiver whose arms are the classes the receiver's union names.
+ *
+ * Two differences, and each is why this exists rather than a cast to the one
+ * above. The member arrives as an `NtsString *`, because a lowering has no way
+ * to spell a C string literal -- every string it can name is a managed one. And
+ * the *subject* arrives too, which the emitter's version laments not having:
+ * "the descriptor's own name is not available to a caller that failed to
+ * recognise it". Here it is, so the message can say what the value actually was
+ * instead of only which member was wanted -- which is the difference between
+ * "the arm set is wrong" and "the arm set is wrong *and here is the layout it
+ * did not list*". */
+_Noreturn void nts_no_arm_of(NtsValue subject, const NtsString *member);
 
 /* `x instanceof C`, for one candidate class.
  *

@@ -229,6 +229,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_max_fn", returns: "double", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_min_fn", returns: "double", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_no_arm", returns: "void", params: &["ptr"], attributes: &["noreturn"] },
+    Signature { name: "nts_no_arm_of", returns: "void", params: &["[2 x i64]", "ptr"], attributes: &["noreturn"] },
     Signature { name: "nts_nsarray_of_objects", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_nsarray_of_strings", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_nsstring_of", returns: "ptr", params: &["ptr"], attributes: &[] },

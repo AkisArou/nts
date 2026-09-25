@@ -1533,6 +1533,30 @@ _Noreturn void nts_no_arm(const char *member) {
   abort();
 }
 
+_Noreturn void nts_no_arm_of(NtsValue subject, const NtsString *member) {
+  const char *name = "a value with no descriptor";
+  if (NTS_TAG_IS_REFERENCE(nts_value_tag(subject))) {
+    const NtsHeader *header = (const NtsHeader *)nts_value_reference(subject);
+    if (header != 0 && header->descriptor != 0 &&
+        header->descriptor->name != 0) {
+      name = header->descriptor->name;
+    }
+  }
+  fputs("nts: calling `", stderr);
+  /* Unit by unit, as `nts_uncaught` prints its detail: a managed string is not
+     NUL-terminated and converting it here would allocate on the abort path. */
+  if (member != 0) {
+    for (uint32_t at = 0; at < member->length; at++) {
+      fputc((int)nts_unit(member, at), stderr);
+    }
+  }
+  fprintf(stderr,
+          "` on a value no arm of its chain recognised -- it is `%s`, tag %u, "
+          "and the set of inhabiting classes did not list it\n",
+          name, nts_value_tag(subject));
+  abort();
+}
+
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
   /* An embedder with somewhere to put it gets it, and the process survives.
      Popped here rather than by the caller, because the caller is reached by a

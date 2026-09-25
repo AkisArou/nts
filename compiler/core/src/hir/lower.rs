@@ -25563,27 +25563,7 @@ impl<'a> FuncBuilder<'a> {
             ));
         };
 
-        // `C` and everything that extends it, directly or not. Sorted, because
-        // the sources are hash maps and a list that varied between runs would
-        // emit a different program from the same input.
-        let mut classes: Vec<TypeId> = vec![class];
-        classes.extend(
-            self.hierarchy
-                .name
-                .keys()
-                .copied()
-                .filter(|ty| *ty != class && self.descends_from(*ty, class)),
-        );
-        // The provided error classes are not declarations in this program, so
-        // the hierarchy has never heard of them -- and `TypeError extends Error`
-        // all the same. `e instanceof Error` inside a `catch` is the reason
-        // `instanceof` is worth having, so the relation is spelled here rather
-        // than left to a hierarchy that cannot see it.
-        if super::builtin::is_error(self.name_of_type(class).unwrap_or_default()) {
-            classes.extend(self.provided_errors_under(class));
-        }
-        classes.sort_unstable_by_key(|ty| ty.0);
-        classes.dedup();
+        let classes = self.classes_under(class);
 
         let value = self.lower_expression(lhs)?;
         let origin = self.origin(id);
@@ -31945,6 +31925,40 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A genuine type parameter passes through untouched: `<T extends Buffer>`
     /// is named `T`, and this is named `Buffer`.
+    /// `C` and everything that extends it, sorted: the class list an
+    /// [`OpKind::InstanceOf`] tests.
+    ///
+    /// Sorted because the sources are hash maps and a list that varied between
+    /// runs would emit a different program from one input.
+    ///
+    /// The provided error classes are in it, and they are not declarations in
+    /// this program -- the hierarchy has never heard of them, and `TypeError
+    /// extends Error` all the same. `e instanceof Error` inside a `catch` is the
+    /// reason `instanceof` is worth having, so the relation is spelled here
+    /// rather than left to a hierarchy that cannot see it.
+    ///
+    /// **Extracted so the dispatch chain [`Self::open_call`] builds asks the same
+    /// question `x instanceof C` does.** A second derivation of "which classes
+    /// answer yes" would agree on every fixture either author would write and
+    /// differ exactly where a subclass arrives -- which is the case that makes a
+    /// chain fall through to its abort on a value it should have recognised.
+    fn classes_under(&self, class: TypeId) -> Vec<TypeId> {
+        let mut classes: Vec<TypeId> = vec![class];
+        classes.extend(
+            self.hierarchy
+                .name
+                .keys()
+                .copied()
+                .filter(|ty| *ty != class && self.descends_from(*ty, class)),
+        );
+        if super::builtin::is_error(self.name_of_type(class).unwrap_or_default()) {
+            classes.extend(self.provided_errors_under(class));
+        }
+        classes.sort_unstable_by_key(|ty| ty.0);
+        classes.dedup();
+        classes
+    }
+
     fn class_behind(&self, ty: TypeId) -> TypeId {
         let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
             return ty;
@@ -39618,36 +39632,51 @@ impl<'a> FuncBuilder<'a> {
         if let Some(own) = self.own_property_call(id, receiver, &held, member, arguments) {
             return own;
         }
+        // A union of classes, erased: a test per arm and that arm's call. Before
+        // the refusal below, and only for an erased receiver -- everything else
+        // reaching here has no arms to build a chain out of.
+        if held == HirType::Erased
+            && let Some(chain) = self.open_call(id, receiver, receiver_node, member, arguments)
+        {
+            return chain;
+        }
         let HirType::Managed(ManagedType::Object(type_id)) = held else {
-            // **Name what the receiver is.** Everything above this arm is a
-            // representation with methods of its own — a string, an array, a
-            // map, a date, a buffer, a view, a symbol — so what reaches here is
-            // every *other* representation at once: a promise, an erased value,
-            // a number, a native pointer. One sentence for all of them, and
-            // `something` was carrying the whole difference.
-            //
-            // It matters because the causes behind it are not one item. A
-            // promise receiver is `.then`/`.catch`/`.finally`, which has its own
-            // ✗ row and its own design; an erased receiver is a value the
-            // program has not narrowed; a number receiver is `n.toFixed()`.
-            // Ranking a census by this message put all three under one heading,
-            // which is the same thing `on a typed array` was doing to 27 sites
-            // and `a property the type does not declare` did before that.
-            //
-            // The method is named too, in the house style of every other member
-            // refusal, because the representation alone does not say whether a
-            // promise site is `.then` -- a designed row with a scoped fix -- or
-            // something else that fell through to here.
-            let called = self.node(member).text.clone().unwrap_or_default();
-            return Err(self.unsupported(
-                id,
-                &format!(
-                    "`{called}` on {}, which has no method table here",
-                    named_representation(&held)
-                ),
-            ));
+            return Err(self.no_method_table(id, member, &held));
         };
         self.lower_object_method(id, receiver, type_id, member, arguments)
+    }
+
+    /// A method call whose receiver is a representation with no methods of its
+    /// own, named.
+    ///
+    /// **Name what the receiver is.** Everything above the arm that calls this is
+    /// a representation with methods -- a string, an array, a map, a date, a
+    /// buffer, a view, a symbol -- so what reaches here is every *other*
+    /// representation at once: a promise, an erased value the arms could not be
+    /// built for, a number, a native pointer. One sentence for all of them, and
+    /// `something` was carrying the whole difference.
+    ///
+    /// It matters because the causes behind it are not one item. A promise
+    /// receiver is `.then`/`.catch`/`.finally`, which has its own ✗ row and its
+    /// own design; an erased receiver is a value the program has not narrowed and
+    /// whose union is not a set of classes [`Self::open_call`] can chain; a number
+    /// receiver is `n.toFixed()`. Ranking a census by this message put all three
+    /// under one heading, which is the same thing `on a typed array` was doing to
+    /// 27 sites and `a property the type does not declare` did before that.
+    ///
+    /// The method is named too, in the house style of every other member refusal,
+    /// because the representation alone does not say whether a promise site is
+    /// `.then` -- a designed row with a scoped fix -- or something else that fell
+    /// through to here.
+    fn no_method_table(&self, id: NodeId, member: NodeId, held: &HirType) -> Diagnostic {
+        let called = self.node(member).text.clone().unwrap_or_default();
+        self.unsupported(
+            id,
+            &format!(
+                "`{called}` on {}, which has no method table here",
+                named_representation(held)
+            ),
+        )
     }
 
     /// A method on a `Date`.
@@ -47009,6 +47038,170 @@ impl<'a> FuncBuilder<'a> {
                 .any(|member| absence_of_member(self.snapshot, *member).is_some()),
             _ => absence_of_member(self.snapshot, ty).is_some(),
         }
+    }
+
+    /// `receiver.member(args)` on an **erased** receiver whose type is a union of
+    /// classes that each declare the method: a test per arm, that arm's call
+    /// behind it, and a named abort where nothing matches.
+    ///
+    /// # No new operation, which is the finding
+    ///
+    /// [`OpKind::OpenFieldGet`] exists because a field read has to stay *inside*
+    /// one HIR block: C and LLVM render a member read as an expression, and
+    /// wrapping it in a chain of tests would put basic blocks in the middle of a
+    /// block they are emitting statement by statement -- which is what
+    /// `open_chains` builds `alwaysinline` helpers to avoid.
+    ///
+    /// A **call** has no such constraint. `Terminator::Branch` and a merge with a
+    /// block parameter are what this file already builds for `a ? b() : c()`, so
+    /// the chain is ordinary control flow: every backend renders it today, there
+    /// is no op to add, no `verify` rule to write and no three-backend emission
+    /// to keep in agreement. An op here would have been three copies of a shape
+    /// the lowering can say once.
+    ///
+    /// # What has to be true
+    ///
+    /// - The receiver is `HirType::Erased`. A concrete receiver has a method
+    ///   table and takes the ordinary path.
+    /// - Its checker type is a union of **two or more** members, each of which is
+    ///   a class the hierarchy has a declaration of the method for. One that is
+    ///   not is not an arm a test could dispatch through, and the call stays
+    ///   refused by the sentence naming the receiver -- rather than becoming a
+    ///   chain with a hole in it.
+    /// - Every arm has a layout, because the test is `instanceof` and that is
+    ///   what it compares against.
+    ///
+    /// The arguments are lowered **once**, before the first test: a call
+    /// evaluates its arguments before it runs, and an arm that lowered them
+    /// itself would run their side effects once per test taken.
+    ///
+    /// Each arm unerases to **its own** type and never to the union.
+    /// `hierarchy::declared`'s doc is what that rule costs when it is broken: "a
+    /// value erased from `A` and unerased to `C` is a `checkcast nts/gen/C` that
+    /// throws", which record 0289 paid seventeen times in one example.
+    ///
+    /// # The end of the chain
+    ///
+    /// The last arm takes its test like every other, and no-match calls
+    /// `nts_no_arm_of` -- which names the member *and the value's own layout* --
+    /// before an unreachable terminator. A fallthrough into the last arm would
+    /// turn a wrong arm set into a call through the wrong class, and
+    /// `Terminator::Unreachable` alone is `__builtin_unreachable()` in C, which
+    /// turns it into a segfault. The set over-approximates by construction, so
+    /// this is unreachable; the point is that a violation says so.
+    fn open_call(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        receiver_node: NodeId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        let member_name = self.called_member_name(member)?;
+        let ty = *self.snapshot.node_types.get(&receiver_node)?;
+        let TypeKind::Union(members) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        let members = members.clone();
+        if members.len() < 2 {
+            return None;
+        }
+        let mut arms: Vec<(TypeId, Callee)> = Vec::with_capacity(members.len());
+        for arm in &members {
+            let class = self.class_behind(*arm);
+            self.hierarchy.declaring(class, &member_name)?;
+            // The test compares against a layout, so every arm needs one. Asked
+            // before anything is emitted, because a chain with one arm missing is
+            // worse than a refusal naming the receiver.
+            self.layout_of(id, class).ok()?;
+            arms.push((class, self.callee_for(id, class, &member_name).ok()?));
+        }
+        Some(self.chain_of_calls(id, receiver, &member_name, arms, arguments))
+    }
+
+    /// The chain [`Self::open_call`] decided on, emitted.
+    fn chain_of_calls(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        member_name: &str,
+        arms: Vec<(TypeId, Callee)>,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
+        let args = self.lower_arguments_on(id, arguments, receiver)?;
+        // A `void` call has no value to merge, exactly as a `void` conditional
+        // has none: the C backend declares no variable for one, so a block
+        // parameter carrying it would be read in the merge as an identifier
+        // nothing declared.
+        let carries = !matches!(ty, HirType::Void);
+        let merge = self.new_block();
+        let merged = carries.then(|| self.push_block_param(merge, ty.clone(), origin.clone()));
+        for (class, callee) in arms {
+            let classes = self.classes_under(class);
+            let is = self.push(
+                OpKind::InstanceOf {
+                    value: receiver,
+                    classes,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            let taken = self.new_block();
+            let next = self.new_block();
+            self.terminate(Terminator::Branch {
+                cond: is,
+                then_target: taken,
+                then_args: Vec::new(),
+                else_target: next,
+                else_args: Vec::new(),
+            });
+            self.switch_to(taken);
+            let object = self.push(
+                OpKind::Unerase { value: receiver },
+                HirType::Managed(ManagedType::Object(class)),
+                origin.clone(),
+            );
+            let mut call_args = vec![object];
+            call_args.extend(args.iter().copied());
+            let answer = self.push(
+                OpKind::Call {
+                    callee,
+                    args: call_args,
+                    frame: None,
+                },
+                ty.clone(),
+                origin.clone(),
+            );
+            self.terminate(Terminator::Jump {
+                target: merge,
+                args: if carries { vec![answer] } else { Vec::new() },
+            });
+            self.switch_to(next);
+        }
+        let name = self.push(
+            OpKind::ConstString(member_name.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_no_arm_of".to_owned()),
+                args: vec![receiver, name],
+                frame: None,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(merge);
+        Ok(match merged {
+            Some(value) => value,
+            None => self.push(OpKind::ConstUndefined, ty, origin),
+        })
     }
 
     fn lower_object_method(

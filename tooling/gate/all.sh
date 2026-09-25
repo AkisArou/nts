@@ -1242,7 +1242,10 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # ("these two are here so that fixing a narrowing cannot quietly change which
   # operator is being run"); the instrument was what failed. 318 of 319, with
   # `this-in-a-field-initializer` the one this run names.
-  backend_examples 318 "through the LLVM backend, counting" "" 10 ); }
+  #
+  # 318 -> 319 on 2026-09-25 for `a-method-through-a-union-of-classes`, which
+  # agrees under counting as it does everywhere else.
+  backend_examples 319 "through the LLVM backend, counting" "" 10 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1282,7 +1285,9 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # moment nothing is known to fail, and `exact` is available here now that the
   # two numbers are equal. Left ratcheting, because whether this lane wants the
   # stricter instrument is that lane's call and not a side effect of a raise.
-  backend_examples 319 "through the LLVM backend" "" 10 ); }
+  #
+  # 319 -> 320 on 2026-09-25 for `a-method-through-a-union-of-classes`.
+  backend_examples 320 "through the LLVM backend" "" 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1550,7 +1555,11 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # and it is the one backend step the slack was not hiding anything under. The
   # number is brought up to the corpus so that the two readings agree when
   # someone compares the three floors.
-  backend_examples 319 "through the JVM backend" exact 10 ); }
+  #
+  # 319 -> 320 on 2026-09-25 for `a-method-through-a-union-of-classes`. `exact`
+  # means this one would have failed on the day it landed had it not agreed here,
+  # which is the whole point of that flag.
+  backend_examples 320 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

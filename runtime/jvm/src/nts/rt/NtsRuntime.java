@@ -161,6 +161,37 @@ public final class NtsRuntime {
     public static boolean stringTruthy(String text) { return text != null && !text.isEmpty(); }
     public static Error unreachable() { return new NtsRefusal("control reached a block the compiler proved unreachable"); }
     /**
+     * A method call on an erased receiver that no arm of its chain recognised.
+     *
+     * <p>The chain is a test per class the receiver's union names, and its arm
+     * set over-approximates by construction -- so this cannot be reached by a
+     * correct compilation, and it exists so that an incorrect one says which
+     * member and which value rather than calling through whatever the next arm
+     * would have been. The C and LLVM lanes reach the same place through
+     * {@code nts_no_arm_of}.
+     *
+     * <p>Throws rather than returning the error for {@code athrow}, unlike
+     * {@link #unreachable}: the call is emitted by lowering as an ordinary
+     * runtime call, so there is no emitter here to add the throw.
+     */
+    public static void noArm(NtsValue subject, String member) {
+        /* `-source 8`, as `uncaught` above is written for: no switch
+           expressions, so this is a statement and a local. */
+        String was;
+        switch (subject.tag) {
+            case NtsValue.UNDEFINED: was = "undefined"; break;
+            case NtsValue.NULL: was = "null"; break;
+            case NtsValue.NUMBER: was = numberText(subject.num); break;
+            case NtsValue.BOOLEAN: was = subject.num != 0 ? "true" : "false"; break;
+            case NtsValue.STRING: was = "a string"; break;
+            default:
+                was = subject.ref == null ? "a null reference" : subject.ref.getClass().getName();
+                break;
+        }
+        throw new NtsRefusal("calling `" + member + "` on a value no arm of its chain recognised -- it is "
+            + was + ", tag " + subject.tag + ", and the set of inhabiting classes did not list it");
+    }
+    /**
      * A raise in flight: the other way a throw leaves a function.
      *
      * <p>{@code uncaught} ends the process. This records the value and
