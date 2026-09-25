@@ -474,6 +474,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
     for func in &program.funcs {
         check_stores(program, func, problems);
         check_native_memory(func, problems);
+        check_erasures(func, problems);
         // The ops a block still holds, not every value the lowering ever made.
         //
         // This asks whether a call "reaches the linker as an undefined symbol",
@@ -645,6 +646,35 @@ fn compatible(found: &HirType, want: &HirType) -> bool {
     // So the conversion is inserted once, by `specialize::reconcile_stores`,
     // and this says what it now means for a program to be valid.
     false
+}
+
+/// An [`OpKind::Erase`] records an absence only where the payload can be one.
+///
+/// [`super::Absent`] is about a **null pointer**: it says which of `null` and
+/// `undefined` a null operand meant, because the representation cannot. A
+/// `double` and a `bool` have no null -- zero bits are `+0` and `false`, values a
+/// program holds -- so an absence recorded against one is a claim the IR cannot
+/// mean, and a backend that believes it emits a wrong answer rather than a
+/// refusal. The LLVM backend did: it tested the payload for zero instead of
+/// testing the operand for being a reference, and `let zero: number | undefined =
+/// 0; zero ??= 5` settled on 5 there while C and the JVM answered 0.
+///
+/// Lowering cannot produce one now ([`super::tags::payload_is_a_reference`] gates
+/// it), so this is the guard that keeps it that way -- three emitters read this
+/// field and each decided for itself what it applies to, which is one fact with
+/// three derivations and exactly how that bug got in.
+fn check_erasures(func: &Func, problems: &mut Vec<Invalid>) {
+    for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
+        let OpKind::Erase { value, absent } = &op.kind else { continue };
+        let found = &func.value(*value).ty;
+        if *absent != super::Absent::Impossible && !super::tags::payload_is_a_reference(found) {
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: "an erasure recording an absence a payload that is not a reference cannot hold",
+                found: found.clone(),
+            });
+        }
+    }
 }
 
 fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {

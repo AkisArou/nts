@@ -15052,7 +15052,7 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let origin = self.origin(id);
-        let absent = self.absence_at_excluding(source, undefined_is_the_other_arm);
+        let absent = self.absence_at_excluding(source, &have, undefined_is_the_other_arm);
         Ok(self.push(OpKind::Erase { value, absent }, HirType::Erased, origin))
     }
 
@@ -15079,7 +15079,26 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// Asked with the short-circuit's own absence set aside, what is left is
     /// what this arm's value can actually be -- which is the whole question.
-    fn absence_at_excluding(&self, id: NodeId, undefined_is_the_other_arm: bool) -> Absent {
+    fn absence_at_excluding(
+        &self,
+        id: NodeId,
+        have: &HirType,
+        undefined_is_the_other_arm: bool,
+    ) -> Absent {
+        // **Only a reference can be the absence.** The question this answers is
+        // what a *null pointer* means, and a `double` or a `bool` has no null:
+        // zero bits are `+0` and `false`, values a program holds. Asked of the
+        // source type alone this said `Undefined` for `let zero: number |
+        // undefined = 0`, because the annotation is a union whatever the value
+        // narrowed to -- and the LLVM backend, which tested the payload for zero
+        // rather than testing the operand for being a reference, then tagged the
+        // constant `0` as `undefined` and made `zero ??= 5` settle on 5.
+        //
+        // So the representation decides, here, once, and `verify` holds the IR
+        // to it. See [`tags::payload_is_a_reference`].
+        if !super::tags::payload_is_a_reference(have) {
+            return Absent::Impossible;
+        }
         let Some(ty) = self.snapshot.node_types.get(&id) else {
             return Absent::Impossible;
         };

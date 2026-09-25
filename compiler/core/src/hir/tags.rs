@@ -122,6 +122,32 @@ pub fn of_representation(ty: &super::HirType) -> u32 {
     }
 }
 
+/// Whether an erased value of this representation holds a **reference** in its
+/// payload -- and so whether a zero payload is an *absence* rather than a value.
+///
+/// [`super::Absent`] is about a null pointer. A `double` erases to a number
+/// whatever union the source type was written as, and a `bool` to a boolean:
+/// zero bits are `+0` and `false`, both of them values a program holds. Only a
+/// reference's payload can be missing.
+///
+/// **Three backends were answering this separately and one of them got it
+/// wrong.** The C emitter asks `erased_tag`'s payload field, the JVM emitter
+/// matches `HirType::Managed(_)`, and the LLVM emitter asked nothing at all: it
+/// emitted `icmp eq i64 <payload>, 0` for *every* erase carrying an absence, so
+/// the constant `0` was tagged `undefined` and `let zero: number | undefined =
+/// 0; zero ??= 5` settled on 5 at module scope -- on that lane only, with C and
+/// the JVM correct, and 54 cases of `a-narrowed-module-scope-global` disagreeing
+/// with node for a day behind a floor with eleven of slack.
+///
+/// So the question is asked here, of the table that defines the reference range,
+/// and the answer is imposed on the IR: lowering cannot record an absence for a
+/// representation that has no room for one, and `verify` refuses a program that
+/// does. A backend then has nothing left to get wrong.
+#[must_use]
+pub fn payload_is_a_reference(ty: &super::HirType) -> bool {
+    (STRING..=OBJECT).contains(&of_representation(ty))
+}
+
 /// The tag a `typeof` comparison against this literal is asking about.
 ///
 /// `None` for a spelling no tag can produce, which is now only `"bigint"`.
