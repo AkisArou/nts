@@ -8,6 +8,8 @@
 // name. `project.mjs` exists for the same reason one step earlier.
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
 import { environment, HARNESS, materialise, workspace } from "./project.mjs";
@@ -78,7 +80,12 @@ function linkCommand(emitted) {
  * ids `N`), the `named` identifiers it redacted, and `where`:
  *
  *   body     a line of the test itself
- *   harness  a line of the prepended stand-in -- a fact about us, not the test
+ *   harness  a line of the prepended stand-in -- a fact about us, not the test.
+ *            Not its **last** line: a diagnostic's span can start at the
+ *            leading trivia of the test's first statement, which begins right
+ *            after the stand-in's closing `}`. "A function returning
+ *            `IArguments`" was placed there for 50 cases whose function is the
+ *            test's own; nothing of ours on that line (a lone `}`) can refuse.
  *   none     TypeScript prints no location, so a checker error says nothing
  *
  * Duplicates (same code, message and place) are one entry: a generic copy of
@@ -98,7 +105,7 @@ export function parseDiagnostics(text) {
       const [, file, row, , code, said] = located;
       const where = !file.endsWith("src/main.ts")
         ? "other"
-        : Number(row) >= BODY_FIRST_LINE
+        : Number(row) >= BODY_FIRST_LINE - 1
           ? "body"
           : "harness";
       const text = said.replace(/ is not supported by this lowering yet$/, "");
@@ -107,6 +114,9 @@ export function parseDiagnostics(text) {
         message: text.replace(/`[^`]*`/g, "`X`").replace(/\btype \d+/g, "type N").trim(),
         named: [...new Set(text.match(/`[^`]*`/g) ?? [])].map((quoted) => quoted.slice(1, -1)),
         where,
+        // The line in the test body (1-based), so a later rule about `where`
+        // can be re-applied to stored rows instead of re-running them.
+        line: Number(row) - BODY_FIRST_LINE + 1,
       };
     } else {
       const checker = /^(TS\d{4,5})\s+(.*)$/.exec(line);
@@ -129,6 +139,105 @@ export function parseDiagnostics(text) {
     found.push(entry);
   }
   return found;
+}
+
+/**
+ * The printed link command, with every source but `program.c` replaced by an
+ * object compiled once and kept.
+ *
+ * **Why.** Every case compiles the whole C runtime at `-O2` -- the same
+ * `nts_runtime.c` for every one of 1,803 recorded cases -- and that was the
+ * run: 1.8 cases a second, seventeen minutes, too slow to gate on. Only
+ * `program.c` differs between cases.
+ *
+ * **Why it is the same program.** The printed command already compiles each
+ * source as its own translation unit; this splits the one `cc` into a `-c` per
+ * source and a link, with the same flags, and no LTO is involved. It
+ * transforms the command `emit-c` printed rather than reconstructing one, so a
+ * runtime that gains a source gains it here too.
+ *
+ * **Keyed by content**: the flags, the source, and every local header the
+ * source *transitively includes* -- so a changed runtime or a different
+ * compiler's output is a miss, never a stale hit. Not every header in the
+ * directory: `program.h` differs per program and nothing in the build includes
+ * it (it is for foreign callers), and keying on it made 55 of 120 lookups miss
+ * on a cold run where three should have. `tools.objectCache` unset (or `NTS_CENSUS_NO_OBJECT_CACHE`)
+ * runs the printed command untouched. Returns `objects: { hit, miss }` so a
+ * run can show the cache hits -- a cache that never hits passes every test.
+ */
+/**
+ * Every local header `source` reaches through `#include "..."`, as one string of
+ * names and contents in a fixed order. Paths resolve against the build
+ * directory (`-I.`) and then the including file's own directory; a name that
+ * resolves to nothing is a system header or a macro include and is skipped --
+ * both are the same for every case, which is all the key needs.
+ */
+function includedHeaders(out, source) {
+  const seen = new Map();
+  const visit = (file) => {
+    const text = readFileSync(join(out, file), "utf8");
+    for (const [, name] of text.matchAll(/^\s*#\s*include\s+"([^"]+)"/gm)) {
+      const here = file.includes("/") ? file.slice(0, file.lastIndexOf("/") + 1) : "";
+      const found = [name, here + name].find((candidate) => existsSync(join(out, candidate)));
+      if (found === undefined || seen.has(found)) continue;
+      seen.set(found, readFileSync(join(out, found), "utf8"));
+      visit(found);
+    }
+  };
+  visit(source);
+  return [...seen].sort(([a], [b]) => a.localeCompare(b)).map(([n, t]) => `${n}\0${t}`).join("\0");
+}
+
+function withCachedObjects(printed, out, tools) {
+  const cache = tools.objectCache;
+  if (!cache || process.env.NTS_CENSUS_NO_OBJECT_CACHE) return { args: printed, objects: undefined };
+  const sources = printed.filter((part) => part.endsWith(".c"));
+  const at = printed.indexOf("-o");
+  const libraries = printed.filter((part) => /^-l/.test(part));
+  const compileFlags = printed.filter(
+    (part, index) =>
+      !part.endsWith(".c") && !/^-l/.test(part) && !part.startsWith("-Wl,") &&
+      index !== at && index !== at + 1,
+  );
+  mkdirSync(cache, { recursive: true });
+  const objects = { hit: 0, miss: 0 };
+  const linked = [];
+  for (const source of sources) {
+    if (source === "program.c") {
+      linked.push(source);
+      continue;
+    }
+    const key = createHash("sha256")
+      .update(compileFlags.join("\0"))
+      .update("\0")
+      .update(readFileSync(join(out, source)))
+      .update("\0")
+      .update(includedHeaders(out, source))
+      .digest("hex")
+      .slice(0, 32);
+    const object = join(cache, `${key}.o`);
+    if (existsSync(object)) {
+      objects.hit += 1;
+    } else {
+      objects.miss += 1;
+      // Written beside and renamed into place: eight workers can miss on the
+      // same key at once, and a reader must never see half an object.
+      const partial = join(out, `${source}.o`);
+      execFileSync(tools.cc, [...compileFlags, "-c", source, "-o", partial], {
+        cwd: out,
+        encoding: "utf8",
+        timeout: 180_000,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      renameSync(partial, object);
+    }
+    linked.push(object);
+  }
+  const linkFlags = printed.filter((part) => part.startsWith("-Wl,"));
+  return {
+    args: [...compileFlags, ...linkFlags, ...linked, ...libraries, "-o", printed[at + 1]],
+    objects,
+  };
 }
 
 /**
@@ -228,6 +337,14 @@ export function attempt(dir, body, tools) {
         first: invalid[1].replace(/"[^"]*"/g, '"X"').replace(/\b(\w*Id)\(\d+\)/g, "$1(N)").trim().slice(0, 200),
       };
     }
+    // **A backend decline exits 1 and still says why.** "this program's
+    // top-level code was declined by the C backend" follows NTS lines naming the
+    // cause; the first census of the whole of `test/language` scored 12 of them
+    // as "exited non-zero with no diagnostic" because only the exit-0 branch
+    // below read NTS lines. A refusal, then, with its diagnostics.
+    if (/NTS\d{4}/.test(diagnostics)) {
+      return { bucket: "unsupported", why: "backend", diagnostics: parseDiagnostics(diagnostics) };
+    }
     return { bucket: "unsupported", why: "emit" };
   }
   // `emit-c` exits 0 while refusing, so the diagnostics decide, never the
@@ -265,9 +382,12 @@ export function attempt(dir, body, tools) {
     };
   }
 
-  const args = linkCommand(stdout);
-  if (!args) return { bucket: "infrastructure-error", why: "no link command in the emit output" };
+  const printed = linkCommand(stdout);
+  if (!printed) return { bucket: "infrastructure-error", why: "no link command in the emit output" };
+  let args = printed;
+  let objects;
   try {
+    ({ args, objects } = withCachedObjects(printed, out, tools));
     execFileSync(cc, args, {
       cwd: out,
       encoding: "utf8",
@@ -327,7 +447,7 @@ export function attempt(dir, body, tools) {
       maxBuffer: 16 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    return { bucket: "strict-pass" };
+    return { bucket: "strict-pass", objects };
   } catch (error) {
     if (error.signal === "SIGTERM") return { bucket: "timeout" };
     const thrown = UNCAUGHT.exec(String(error.stderr ?? ""));

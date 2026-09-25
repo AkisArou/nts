@@ -144,7 +144,10 @@ mkdirSync(process.env.TMPDIR, { recursive: true });
 // Per-case address-space cap; `attempt262.mjs`'s `capped` carries why it exists
 // and why 6 GB. `NTS_CENSUS_MEMORY_CAP_KB=0` removes it.
 const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
-const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB };
+// Runtime objects compiled once and kept across runs; `attempt262.mjs`'s
+// `withCachedObjects` says why this is the same program and how it is keyed.
+const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".cache/nts/c-objects");
+const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE };
 
 // --- the population --------------------------------------------------------
 
@@ -307,7 +310,7 @@ async function runAll(all) {
     new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [join(HERE, "attempt262-worker.mjs"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB)],
+        [join(HERE, "attempt262-worker.mjs"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE],
         { stdio: ["pipe", "pipe", "inherit"] },
       );
       const feed = () => {
@@ -412,6 +415,11 @@ rmSync(SCRATCH, { recursive: true, force: true });
 // --- tallies -------------------------------------------------------------------
 
 const OUTCOMES = ["pass", "fail", "refused", "unsupported", "no-verdict"];
+const objectTally = { hit: 0, miss: 0 };
+for (const row of rows.values()) {
+  objectTally.hit += row.objects?.hit ?? 0;
+  objectTally.miss += row.objects?.miss ?? 0;
+}
 const count = (list, pick) => {
   const map = new Map();
   for (const item of list) for (const key of [pick(item)].flat()) map.set(key, (map.get(key) ?? 0) + 1);
@@ -513,6 +521,7 @@ const say = (line = "") => out.push(line);
 
 say(`  pin ${pin}`);
 say(`  compiler ${NTS} (sha256:${FINGERPRINT})`);
+say(`  runtime objects: ${objectTally.hit} cached, ${objectTally.miss} compiled (${OBJECT_CACHE})`);
 say(`  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, refused ${checks.refused}`);
 say(
   `  ${under}: ${records.length} case(s) in the selection` +
