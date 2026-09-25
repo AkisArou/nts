@@ -45,7 +45,7 @@ use super::lower::representation;
 /// for the template's id. The first is what a body's expressions need, the
 /// second what its object types need; one value carries both so a copy cannot
 /// have one without the other.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Substitution {
     types: FxHashMap<TypeId, HirType>,
     instances: FxHashMap<TypeId, TypeId>,
@@ -70,6 +70,25 @@ impl Substitution {
     #[must_use]
     pub fn instance_of(&self, template: TypeId) -> Option<TypeId> {
         self.instances.get(&template).copied()
+    }
+
+    /// Whether it binds nothing.
+    ///
+    /// For `unify`'s union arm, which unifies each member on a copy and has to
+    /// tell "this member bound nothing" from "this member bound something".
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.types.is_empty() && self.instances.is_empty()
+    }
+
+    /// Take everything another one binds.
+    ///
+    /// Also for the union arm: the member that agreed is merged into the caller's
+    /// substitution once, rather than `unify` writing into it speculatively and
+    /// having to undo a binding that turned out to disagree.
+    pub fn absorb(&mut self, other: Self) {
+        self.types.extend(other.types);
+        self.instances.extend(other.instances);
     }
 
     /// Wire the templates a copy of `owner` under `sigma` resolves.
@@ -545,6 +564,60 @@ fn unify(
     // Arity has to match. A callback passed where fewer parameters are declared
     // is ordinary TypeScript, and pairing them off positionally past the short
     // one would unify a parameter against whatever happened to follow.
+    // **Through a union on the declared side, which is where React's hooks
+    // live.** `useState<S>(initialState: (() => S) | S)` is the shape, and this
+    // function had no arm for it: the argument `start: number` was unified
+    // against a `TypeKind::Union`, nothing descended, `S` was never bound, and
+    // `useState` -- with `mountState`, `mountStateImpl`, `updateState`,
+    // `updateReducer`, `dispatchSetStateInternal` and `useStateThroughDispatcher`
+    // behind it -- refused as "a generic function no call pins down". Every
+    // reduction of the shape compiled, because a reduction writes the parameter
+    // as a bare `S`.
+    //
+    // The rule is **agreement, not first match**. Each member is unified against
+    // the argument on a copy, and a binding is taken only where the members that
+    // produce one agree about it. For `(() => S) | S` against `number`: the
+    // function member binds nothing (the kinds differ) and `S` binds `number`, so
+    // one answer and no disagreement. For the same union against `() => number`
+    // -- React's lazy initial state -- the function member binds `S = number` and
+    // the bare member binds `S = () => number`, which disagree, so nothing is
+    // bound and the call stays unpinned exactly as it was. A wrong binding names
+    // a copy the call does not make, and that is worse than a missing one; this
+    // file's own comment says so about instantiation arguments and it is the same
+    // rule.
+    //
+    // **Nothing in the corpus reaches the disagreement branch**, and that is
+    // recorded rather than assumed: a fixture arm was written for it --
+    // `ambiguous<S>(value: (() => S) | S)` called with an arrow -- and it
+    // compiled, because by the time this runs the checker has resolved the
+    // call's signature and both members agree. The branch is the conservative
+    // answer if that ever stops holding, and it is a guard nobody reaches until
+    // then.
+    if let TypeKind::Union(members) = &generic.kind {
+        let mut agreed: Option<(Substitution, Sources, Sources)> = None;
+        let mut disagreed = false;
+        for member in members {
+            let (mut mine, mut source, mut later) =
+                (Substitution::default(), Sources::default(), Sources::default());
+            unify(snapshot, *member, actual_id, &mut mine, &mut source, &mut later, depth + 1);
+            if mine.is_empty() && source.is_empty() && later.is_empty() {
+                continue;
+            }
+            match &agreed {
+                Some((seen, _, _)) if *seen != mine => disagreed = true,
+                Some(_) => {},
+                None => agreed = Some((mine, source, later)),
+            }
+        }
+        if let Some((mine, source, later)) = agreed
+            && !disagreed
+        {
+            into.absorb(mine);
+            sources.extend(source);
+            deferred.extend(later);
+        }
+        return;
+    }
     if let (TypeKind::Function(generic_signature), TypeKind::Function(actual_signature)) =
         (&generic.kind, &actual.kind)
         && let (Some(declared), Some(resolved)) = (
