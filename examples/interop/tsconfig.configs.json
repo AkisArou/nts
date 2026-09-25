@@ -37,6 +37,7 @@
     "gtk-list/nts.config.ts",
     "gtk-subclass/nts.config.ts",
     "gtk-notes/nts.config.ts",
+    "adw-hello/nts.config.ts",
     "linux-arm64/nts.config.ts",
     "windows-winrt/nts.config.ts",
     "winui-hello/nts.config.ts",

@@ -262,7 +262,26 @@ fn construction(
             continue;
         }
         let Some(set) = settable(own, &property.name, property.setter.as_deref()) else { continue };
-        let _ = writeln!(out, "    {}?: {};", property.name, set.parameters[1].1.ts);
+        // **A nullable property is given or not.** Absent is the NULL a
+        // construction starts from, so its props type has no `| null`: a
+        // subclass that redeclares a property as nullable (`AdwPreferencesPage`
+        // `name`, a `string` on `GtkWidget`) then still extends its parent's
+        // props, which TypeScript otherwise refuses (TS2430) -- and a handle
+        // beside both absences has no representation. Tagged, so the folded
+        // set can be counted and undone.
+        let ts = &set.parameters[1].1.ts;
+        let ts = match ts.strip_suffix(" | null") {
+            Some(given) => {
+                let _ = writeln!(
+                    out,
+                    "    /**\n     * @ntsNullable GIR's `{}` is nullable, and absent is the NULL a construction starts from.\n     * So a props object cannot clear it to NULL: it is for construction only.\n     */",
+                    property.name
+                );
+                given
+            }
+            None => ts.as_str(),
+        };
+        let _ = writeln!(out, "    {}?: {ts};", property.name);
     }
     out.push_str("  }\n");
     let kept = |function: &str| binding.functions.iter().find(|f| f.name == function && f.throws.is_none());
