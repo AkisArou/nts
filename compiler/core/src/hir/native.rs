@@ -1026,7 +1026,14 @@ pub fn handle_box(family: Family) -> Option<(super::TypeId, Pointee, &'static st
             Pointee::Opaque(Handle { tag: "NSObject".to_owned(), ancestors: Vec::new(), family: Family::Objc, interface: false }),
             "HandleBoxObjc",
         )),
-        _ => None,
+        // `interface` is `GObjectInterface`'s mark (`___c_interface`), not
+        // "a COM interface": every Windows Runtime handle is one of those.
+        Family::Com => Some((
+            super::TypeId(super::HANDLE_BOX_COM),
+            Pointee::Opaque(Handle { tag: "IInspectable".to_owned(), ancestors: Vec::new(), family: Family::Com, interface: false }),
+            "HandleBoxCom",
+        )),
+        Family::C => None,
     }
 }
 
