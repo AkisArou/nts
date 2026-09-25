@@ -19677,18 +19677,20 @@ impl<'a> FuncBuilder<'a> {
             }
             ("Object", "is", [left, right]) => Some(self.decide_object_is(id, *left, *right)),
             ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
-            // `Object.assign(target, source)` between two dictionaries. React's
+            // `Object.assign(target, ...sources)` between dictionaries. React's
             // `cloneElement`, its class state merge and its props resolution are
             // all this shape, and it was 6 root refusals in that runtime.
             //
-            // Two arguments only. `Object.assign(a, b, c)` is a fold, and a fold
-            // over a variable number of tables is a loop the caller can write --
-            // so it is refused by name rather than unrolled, which keeps the
-            // number of sources a thing the program says rather than a thing this
-            // arm guesses.
-            ("Object", "assign", [target, source]) => {
-                Some(self.decide_object_assign(id, *target, *source))
-            },
+            // **Every arity**, because the argument list is written down. The
+            // first version of this arm took two arguments and called three a
+            // fold "the caller can write", which was wrong twice over: a fold
+            // over three *named* sources is three calls and not a loop, and the
+            // arm it refused into says "a global member with no definition here"
+            // -- so `Object.assign({}, prevState, partialState)`, React's one
+            // canonical state merge, read as an unimplemented member.
+            ("Object", "assign", [target, sources @ ..]) => {
+                Some(self.decide_object_assign(id, *target, sources))
+            }
             // `BigInt.asIntN(64, v)`, which is how the profile reads a signed
             // 64-bit quantity back out of an unsigned one. A width and a value,
             // both already machine types here.
@@ -20930,8 +20932,7 @@ impl<'a> FuncBuilder<'a> {
         Ok(array)
     }
 
-    /// `Object.hasOwn(o, "k")`, which a layout answers with a constant.
-    /// `Object.assign(target, source)`, where both are dictionaries.
+    /// `Object.assign(target, ...sources)`, where all of them are dictionaries.
     ///
     /// A table's entries are not known at compile time, so this is the runtime's
     /// loop rather than a sequence of stores -- unlike `Object.keys`, whose
@@ -20943,18 +20944,42 @@ impl<'a> FuncBuilder<'a> {
     /// evaluates to: `const merged = Object.assign(target, source)` and the
     /// statement form are the same call.
     ///
-    /// A **struct** on either side is refused by name. The source's fields would
-    /// be a static list and the target's slots fixed, so that case is a sequence
-    /// of `FieldSet`s and not this loop -- a different piece of work, and one
-    /// whose refusal should not be borrowed by this one.
+    /// **One call per source, left to right.** That order is what makes a later
+    /// source win, and the count is read off the argument list -- so three named
+    /// tables are three calls rather than a loop. The only variable-arity form
+    /// is a spread, and a spread has no argument list to read; it arrives here
+    /// as a single source whose type is not a table and is refused as one.
+    ///
+    /// Every source is lowered **before** the first merge, because a call
+    /// evaluates all of its arguments before it runs and a source can be a call
+    /// of its own. Merging as we lowered would run the second source's side
+    /// effects after the first source's entries had already landed.
+    ///
+    /// A **struct** anywhere is refused by name, and at the argument rather than
+    /// at the call, so a merge of four tables says which one it could not walk.
+    /// Such a source's fields would be a static list and such a target's slots
+    /// fixed, so that case is a sequence of `FieldSet`s and not this loop -- a
+    /// different piece of work, and one whose refusal should not be borrowed by
+    /// this one.
     fn decide_object_assign(
         &mut self,
         id: NodeId,
         target: NodeId,
-        source: NodeId,
+        sources: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        if sources.is_empty() {
+            // `Object.assign(x)` is `ToObject(x)`: for a primitive it answers a
+            // wrapper object, and for anything else it answers the argument
+            // unchanged. Neither is a merge, and the first is a boxing this
+            // representation does not have, so it is named rather than treated
+            // as the identity.
+            return Err(self.unsupported(
+                id,
+                "`Object.assign` with no source, which converts its argument to an object rather \
+                 than merging anything into it",
+            ));
+        }
         let target = self.lower_expression(target)?;
-        let source = self.lower_expression(source)?;
         let ty = self.values[target.0 as usize].ty.clone();
         if !matches!(ty, HirType::Managed(ManagedType::Table(_, _))) {
             return Err(self.unsupported(
@@ -20963,19 +20988,32 @@ impl<'a> FuncBuilder<'a> {
                  static list of stores rather than a walk",
             ));
         }
-        if !matches!(
-            self.values[source.0 as usize].ty,
-            HirType::Managed(ManagedType::Table(_, _))
-        ) {
-            return Err(self.unsupported(
-                id,
-                "`Object.assign` from something other than a dictionary",
-            ));
+        let mut lowered = Vec::with_capacity(sources.len());
+        for source in sources {
+            let value = self.lower_expression(*source)?;
+            if !matches!(
+                self.values[value.0 as usize].ty,
+                HirType::Managed(ManagedType::Table(_, _))
+            ) {
+                return Err(
+                    self.unsupported(*source, "`Object.assign` from something other than a dictionary")
+                );
+            }
+            lowered.push(value);
         }
         let origin = self.origin(id);
-        Ok(self.call_runtime("nts_map_extend", vec![target, source], ty, &origin))
+        let mut into = target;
+        for value in lowered {
+            // The call's own result is the next call's target. It is the same
+            // pointer either way -- `nts_map_extend` answers the table it wrote
+            // into -- but threading it makes the order a data dependency rather
+            // than a fact about the order these were pushed in.
+            into = self.call_runtime("nts_map_extend", vec![into, value], ty.clone(), &origin);
+        }
+        Ok(into)
     }
 
+    /// `Object.hasOwn(o, "k")`, which a layout answers with a constant.
     fn decide_has_own(
         &mut self,
         id: NodeId,

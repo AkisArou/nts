@@ -1509,6 +1509,14 @@ NTS_ALLOCATES NtsMap *nts_map_copy(const NtsMap *map);
  * assign. `nts_map_set` retains what it stores and the source keeps its own
  * count, exactly as in the copy beside it.
  *
+ * **The answer is the argument, unretained**, which is why this name is in
+ * `own::RUNTIME_HANDS_BACK`: the counting pass releases every reference a call
+ * hands it, and without that row the target was released twice -- once for the
+ * call's result and once for the binding that already held it -- and the second
+ * read of the table was a use-after-free. Retaining here instead would balance
+ * it and leak one count per assign, which is the same fact recorded in two
+ * places disagreeing.
+ *
  * Later entries win, because that is the order `Object.assign` specifies and
  * the order this loop writes in. */
 NtsMap *nts_map_extend(NtsMap *target, const NtsMap *source);
@@ -2160,8 +2168,9 @@ void nts_array_set_length_value(NtsArray *a, double n);
  *
  * `slice` and `splice` on such an array are still refused. They were written
  * with this one and withdrawn, because landing a helper nothing calls is
- * scaffolding: `slice` needs `nts_value_retain` per copied element and both need
- * the argument defaults JavaScript gives them, which is the lowering's half. */
+ * scaffolding: `slice` needs `nts_value_retain` per copied element and both
+ * need the argument defaults JavaScript gives them, which is the lowering's
+ * half. */
 double nts_array_push_value(NtsArray *a, NtsValue value);
 NtsArray *nts_array_splice(NtsArray *a, double start, double count);
 /* `concat(ys)`, one array argument. See the note beside the definition for what

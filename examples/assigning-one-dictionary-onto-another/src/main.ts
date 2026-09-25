@@ -62,3 +62,41 @@ export function theSourceSurvives(n: number): number {
   const still = source["a"];
   return typeof still === "number" ? still : -1;
 }
+
+/**
+ * **Three sources, folded left to right**, which is React's one canonical state
+ * merge: `Object.assign({}, prevState, partialState)`. The last source wins over
+ * the middle one, so a fold written the other way round passes every two-source
+ * case above and fails this.
+ */
+export function threeSourcesFoldLeftToRight(n: number): number {
+  const prev: Props = { count: n, kept: 1 };
+  const partial: Props = { count: n + 10 };
+  const merged = Object.assign({} as Props, prev, partial);
+  const count = merged["count"];
+  const kept = merged["kept"];
+  return typeof count === "number" && typeof kept === "number" ? count + kept : -1;
+}
+
+function readsWhatTheTargetHolds(target: Props, absent: number): Props {
+  const a = target["a"];
+  return { seen: typeof a === "number" ? a : absent };
+}
+
+/**
+ * **Every source is evaluated before the first merge**, because that is what a
+ * call does with its arguments. This source reads the target while it runs: the
+ * arguments are evaluated first, so it sees nothing and answers `absent`. A
+ * lowering that merged each source as it lowered it would have already written
+ * `a`, and this returns `n` instead of `-1`.
+ */
+export function everySourceIsEvaluatedFirst(n: number): number {
+  const target: Props = {};
+  const merged = Object.assign(
+    target,
+    { a: n } as Props,
+    readsWhatTheTargetHolds(target, -1),
+  );
+  const seen = merged["seen"];
+  return typeof seen === "number" ? seen : -2;
+}
