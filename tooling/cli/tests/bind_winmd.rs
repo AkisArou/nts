@@ -267,9 +267,11 @@ fn winrt_structs_cross_by_value() {
     assert!(imaging.contains("get_Bounds(this: IBitmapTransform): ByValue<BitmapBounds>;"), "{imaging}");
     assert!(foundation.contains("export type DateTime = Struct<{ UniversalTime: c_int64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
     assert!(globalization.contains("SetDateTime(this: ICalendar, value: ByValue<DateTime>): void;"), "{globalization}");
-    assert!(!imaging.contains("IAsyncOperation<BitmapPropertySet>"), "a refused class is named:\n{imaging}");
-    assert!(refused.contains("BitmapPropertySet\ta runtime class whose default interface is generic"), "{refused}");
-    assert!(refused.contains("`BitmapPropertySet`, a runtime class whose default interface is generic"), "{refused}");
+    // A class whose default interface is an instantiation is bound as it,
+    // and named where a method answers it.
+    assert!(imaging.contains("export type BitmapPropertySet = IMap<HString, IBitmapTypedValue> & BitmapPropertySetInterfaces;"), "{imaging}");
+    assert!(imaging.contains("): IAsyncOperation<BitmapPropertySet>;"), "{imaging}");
+    assert!(!refused.contains("BitmapPropertySet"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -337,6 +339,13 @@ fn composable_classes_are_constructed_as_themselves() {
     // The factory interface's own method is that constructor, not a method
     // to call with an outer object and answer an inner one: refused, saying
     // so, rather than as the `[out]` parameter its inner object is.
+    // A class whose default interface is an instantiation is that
+    // instantiation: a panel's children are an `IVector<IUIElement>`.
+    assert!(
+        module.contains("export type UIElementCollection = IVector<IUIElement> & UIElementCollectionInterfaces;"),
+        "UIElementCollection is not its IVector<IUIElement>:\n{}",
+        module.lines().filter(|line| line.contains("UIElementCollection")).collect::<Vec<_>>().join("\n")
+    );
     let refused = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
     assert!(
         refused.contains("IButtonFactory.CreateInstance\ta composable factory method, called as its class's constructor"),

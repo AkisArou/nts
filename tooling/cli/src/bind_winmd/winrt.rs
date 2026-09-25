@@ -418,10 +418,18 @@ impl Writer<'_> {
     fn class(&mut self, def: TypeDef, body: &mut String) -> bool {
         let name = def.name();
         let default = def.interface_impls().find(|implemented| implemented.has_attribute("DefaultAttribute"));
+        // An instantiation as any other type is (`UIElementCollection` is
+        // `IVector<UIElement>`), its imports with it.
         let spelled = match default.map(|implemented| implemented.interface(&[])) {
-            Some(Type::ClassName(interface)) if interface.generics.is_empty() => self.named(&interface.namespace, &interface.name),
+            Some(interface @ Type::ClassName(_)) => match self.spell(&interface, false) {
+                Ok(spelled) => spelled,
+                Err(why) => {
+                    self.refuse(name, &format!("a runtime class whose default interface is {why}"));
+                    return false;
+                }
+            },
             Some(_) => {
-                self.refuse(name, "a runtime class whose default interface is generic");
+                self.refuse(name, "a runtime class whose default interface is not an interface");
                 return false;
             }
             // A static-only class (`Windows.Globalization.ApplicationLanguages`)
@@ -817,9 +825,16 @@ impl Writer<'_> {
                 if def.category() == TypeCategory::Delegate {
                     return self.delegate(ty, def, argument);
                 }
-                // A class `class` refuses is not declared, so nothing may name it.
-                if def.category() == TypeCategory::Class && generic_default(def) {
-                    return Err(format!("`{}`, a runtime class whose default interface is generic", name.name));
+                // A class `class` refuses is not declared, so nothing may
+                // name it: one whose default interface does not spell.
+                if def.category() == TypeCategory::Class
+                    && let Some(interface @ Type::ClassName(_)) = def
+                        .interface_impls()
+                        .find(|implemented| implemented.has_attribute("DefaultAttribute"))
+                        .map(|implemented| implemented.interface(&[]))
+                    && let Err(why) = self.spell(&interface, false)
+                {
+                    return Err(format!("`{}`, a runtime class whose default interface is {why}", name.name));
                 }
                 // A class where one is taken is its default interface, which is
                 // what the ABI passes: so an instance of it, or of a class
@@ -827,12 +842,12 @@ impl Writer<'_> {
                 // (`button.as_IUIElement()`), is accepted.
                 if argument
                     && def.category() == TypeCategory::Class
-                    && let Some(Type::ClassName(interface)) = def
+                    && let Some(interface @ Type::ClassName(_)) = def
                         .interface_impls()
                         .find(|implemented| implemented.has_attribute("DefaultAttribute"))
                         .map(|implemented| implemented.interface(&[]))
                 {
-                    return Ok(format!("{} | null", self.named(&interface.namespace, &interface.name)));
+                    return Ok(format!("{} | null", self.spell(&interface, false)?));
                 }
                 let base = self.named(&name.namespace, generic_base(&name.name));
                 // An instantiation, `IVectorView<HString>`: each argument as
@@ -934,11 +949,11 @@ impl Writer<'_> {
             && named.generics.is_empty()
             && let Ok(def) = self.find(&named.namespace, &named.name)
             && def.category() == TypeCategory::Class
-            && !generic_default(def)
             && let Some(Type::ClassName(interface)) = def
                 .interface_impls()
                 .find(|implemented| implemented.has_attribute("DefaultAttribute"))
                 .map(|implemented| implemented.interface(&[]))
+            && interface.generics.is_empty()
         {
             return Ok(self.named(&interface.namespace, &interface.name));
         }
@@ -1036,14 +1051,6 @@ impl Writer<'_> {
         self.spelled.insert(key, spelled.clone());
         spelled
     }
-}
-
-/// Whether a runtime class's default interface is an instantiation, which
-/// `Writer::class` refuses -- and so every reference to the class with it.
-fn generic_default(def: TypeDef) -> bool {
-    def.interface_impls()
-        .find(|implemented| implemented.has_attribute("DefaultAttribute"))
-        .is_some_and(|implemented| matches!(implemented.interface(&[]), Type::ClassName(interface) if !interface.generics.is_empty()))
 }
 
 /// ``IVectorView`1`` as TypeScript names it: `IVectorView`.

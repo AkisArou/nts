@@ -26,6 +26,7 @@
 // - `structs`: records by value, both sizes Win64 passes (see `structs`).
 // - `outs`: `[out]` parameters, as fields of the result (see `outs`).
 // - `bytes`: byte arrays both ways (see `bytes`).
+// - `map`: a class whose default interface is an instantiation (see `map`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
 //   call that was handed it -- and 19 under `--rc`, those two and one for
@@ -49,6 +50,7 @@ import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import { local } from "c:memory";
 import type { c_int64, c_uint32 } from "c:types";
 import { MemoryBuffer } from "winrt:Windows.Foundation";
+import { StringMap } from "winrt:Windows.Foundation.Collections";
 import type { DateTime } from "winrt:Windows.Foundation";
 import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
 import { BitmapTransform } from "winrt:Windows.Graphics.Imaging";
@@ -112,6 +114,19 @@ function bytes(): string {
   const back = new Uint8Array(3);
   DataReader.FromBuffer(buffer).ReadBytes(back);
   return CryptographicBuffer.EncodeToHexString(buffer) + ",read=" + String(back[0]) + ":" + String(back[1]) + ":" + String(back[2]);
+}
+
+// A runtime class whose default interface is an instantiation: `StringMap`
+// is `IMap<HString, HString>`, made by its default constructor, which asks
+// the object for that interface by the IID computed for the instantiation (a
+// wrong one ends the process naming it). Two keys, one replaced -- `Insert`
+// answers whether it replaced -- and one that is not there.
+function map(): string {
+  const map = StringMap.create();
+  map.Insert("a", "1");
+  map.Insert("b", "2");
+  const replaced = map.Insert("a", "3");
+  return String(map.get_Size()) + ":" + map.Lookup("a") + ":" + String(replaced) + ":" + String(map.HasKey("c"));
 }
 
 // An event: two TypeScript functions handed to `add_Closed` as delegates, one
@@ -185,7 +200,7 @@ function run(): string {
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
-    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes();
+    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " map=" + map();
 }
 
 if (asked("throw")) {
