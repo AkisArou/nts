@@ -1139,9 +1139,7 @@ impl Carried {
 /// declares fields: see [`Hierarchy::objc_states`].
 fn note_objc_state(snapshot: &SemanticSnapshot, probe: &FuncBuilder<'_>, class: NodeId, declared: TypeId, hierarchy: &mut Hierarchy) {
     if super::native::extends_objc(snapshot, class)
-        && probe.children(class).into_iter().any(|member| {
-            probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION) && !is_static_member(snapshot, member)
-        })
+        && probe.declares_instance_fields(class)
         && let Some(name) = super::native::objc_name(snapshot, class)
     {
         let index = hierarchy.objc_states.len();
@@ -5767,6 +5765,17 @@ fn lower_object_literal_members(
         wanted.extend(builder.used_closures.iter().copied());
         collect_layouts(&mut lowered.program, builder.layouts);
     }
+}
+
+/// The constructor being lowered of a class the program writes over an
+/// Objective-C class: the class its `super(...)` makes an instance of,
+/// whether it has fields to make with it, and the parameters that are fields
+/// too, stored once there is an instance to store them in.
+#[derive(Clone)]
+struct ObjcConstruct {
+    handle: super::native::Handle,
+    fields: bool,
+    parameter_properties: Vec<(NodeId, u32)>,
 }
 
 /// Swift's `@objc` selector for a method of `count` parameters: its name,
@@ -11438,7 +11447,7 @@ struct FuncBuilder<'a> {
     /// In the constructor of a class the program writes over an Objective-C
     /// class: the class, which its `super(...)` makes an instance of, and
     /// whether it has fields to make with it.
-    objc_construct: Option<(super::native::Handle, bool)>,
+    objc_construct: Option<ObjcConstruct>,
     /// What the module declares outside any function.
     module: ModuleScope,
     /// What every class in the program declares, and what it extends.
@@ -13717,25 +13726,24 @@ impl<'a> FuncBuilder<'a> {
         if !opens_with_super {
             return Err(self.unsupported(member, "a constructor of a class extending an Objective-C class that does not open with its `super(...)`"));
         }
-        let fields = self.children(class).into_iter().any(|m| {
-            self.kind_of(m) == Some(syntax::PROPERTY_DECLARATION) && !is_static_member(self.snapshot, m)
-        });
+        let fields = self.declares_instance_fields(class);
         let origin = self.origin(member);
         self.this = None;
         self.base = self.base_class(class);
         self.in_constructor = true;
-        self.objc_construct = Some((handle.clone(), fields));
         let mut params = Vec::new();
+        let mut parameter_properties = Vec::new();
         for child in self.children(member) {
             if self.kind_of(child) != Some(syntax::PARAMETER) {
                 continue;
             }
-            if self.declares_a_field(child) {
-                return Err(self.unsupported(child, "a parameter property of a class extending an Objective-C class"));
-            }
             let index = u32::try_from(params.len()).unwrap_or(0);
+            if self.declares_a_field(child) {
+                parameter_properties.push((child, index));
+            }
             params.extend(self.lower_param(child, index)?);
         }
+        self.objc_construct = Some(ObjcConstruct { handle: handle.clone(), fields, parameter_properties });
         let ty = HirType::NativePointer(super::native::Pointee::Opaque(handle.clone()));
         self.returns = ty.clone();
         self.lower_block(body)?;
@@ -13752,7 +13760,7 @@ impl<'a> FuncBuilder<'a> {
     /// binding imports as a constructor makes the superclass's own instance,
     /// not this class's, and is refused.
     fn lower_objc_super_init(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
-        let Some((handle, fields)) = self.objc_construct.clone() else {
+        let Some(ObjcConstruct { handle, fields, parameter_properties }) = self.objc_construct.clone() else {
             return Err(self.unsupported(id, "`super(...)` outside a constructor"));
         };
         if self.this.is_some() {
@@ -13796,6 +13804,9 @@ impl<'a> FuncBuilder<'a> {
             let state = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
             let _ = self.runtime_call("nts_objc_state", vec![made], state, origin);
         }
+        // `constructor(private model: Model)`: the fields its parameters
+        // declare, stored now that there is an instance.
+        self.store_parameter_properties(&parameter_properties)?;
         Ok(made)
     }
 
@@ -18219,6 +18230,12 @@ impl<'a> FuncBuilder<'a> {
             let receiver = self
                 .this
                 .ok_or_else(|| self.unsupported(child, "a parameter property outside a class"))?;
+            // An instance of a class over an Objective-C class: the field is
+            // in the object its ivar holds.
+            if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_)) {
+                self.store_objc_parameter_property(child, index, receiver, &name)?;
+                continue;
+            }
             let HirType::Managed(ManagedType::Object(owner)) =
                 self.values[receiver.0 as usize].ty.clone()
             else {
@@ -18263,6 +18280,47 @@ impl<'a> FuncBuilder<'a> {
             self.field_set(receiver, field, value, &origin);
         }
         Ok(())
+    }
+
+    /// `store_parameter_properties` for an instance of a class the program
+    /// writes over an Objective-C class: the parameter's value, bound under
+    /// the parameter's own symbol too, set in the field of the object the
+    /// instance's ivar holds.
+    fn store_objc_parameter_property(&mut self, child: NodeId, index: u32, receiver: ValueId, name: &str) -> Result<(), Diagnostic> {
+        let value = self
+            .values
+            .iter()
+            .position(|op| matches!(op.kind, OpKind::Param(at) if at == index))
+            .map(|at| ValueId(u32::try_from(at).unwrap_or(0)))
+            .ok_or_else(|| self.unsupported(child, "a parameter property with no parameter"))?;
+        let property = self.name_node(child).and_then(|node| self.node(node).symbol);
+        if let Some(parameter) = self.symbol_declared_by(child, property.map(|s| s.0)) {
+            self.bindings.insert(parameter, value);
+        }
+        let Some(Place::Field { object, field }) = self.program_objc_instance_place(child, receiver, name)? else {
+            return Err(self.unsupported(child, "a parameter property with no field in its Objective-C instance"));
+        };
+        let HirType::Managed(ManagedType::Object(state)) = self.values[object.0 as usize].ty.clone() else {
+            return Err(self.unsupported(child, "a parameter property of an Objective-C instance with no fields"));
+        };
+        let want = self.layout_of(child, state)?.fields[field as usize].ty.clone();
+        let value = self.coerce(value, &want, child)?;
+        let origin = self.origin(child);
+        self.field_set(object, field, value, &origin);
+        Ok(())
+    }
+
+    /// Whether a class declares instance fields: a property that is not
+    /// `static`, or a constructor parameter that is one too.
+    fn declares_instance_fields(&self, class: NodeId) -> bool {
+        self.children(class).into_iter().any(|member| match self.kind_of(member) {
+            Some(syntax::PROPERTY_DECLARATION) => !is_static_member(self.snapshot, member),
+            Some(syntax::CONSTRUCTOR) => self
+                .children(member)
+                .into_iter()
+                .any(|child| self.kind_of(child) == Some(syntax::PARAMETER) && self.declares_a_field(child)),
+            _ => false,
+        })
     }
 
     /// Whether a parameter also declares a field.

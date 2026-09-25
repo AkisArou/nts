@@ -631,9 +631,11 @@ correctness does not depend on arm64 running by luck.
      - `macos-classes` sets a field from an argument and sends the new
        instance its own message, against the same class in Objective-C, on
        both backends. The instance is released at its last use.
+     - A parameter property, `constructor(readonly owner: string, ...)`, is
+       a field stored once `super(...)` has made the instance.
      - Refused by name: a constructor that does not open with its
-       `super(...)`, a parameter property, a `super(...)` into a factory, and
-       a `new` of a class that inherits a program class's constructor.
+       `super(...)`, a `super(...)` into a factory, and a `new` of a class
+       that inherits a program class's constructor.
      - An instance Objective-C makes itself (`[Ledger new]`, a nib) runs its
        superclass's `init` and not the constructor.
      - A `static` member (Swift's `static var`, `static func`) is the

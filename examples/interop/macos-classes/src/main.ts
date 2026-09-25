@@ -91,7 +91,8 @@ function tallied(): string {
 
 // Swift's `init(owner:opening:)` on an `NSObject` subclass: a constructor
 // taking arguments, whose `super()` makes the instance and whose body then
-// sets a field and sends the instance a message of its own.
+// sets its fields -- one a parameter property -- and sends the instance a
+// message of its own.
 class Ledger extends NSObject {
   // Swift's `static var` and `static func`: the program's alone.
   static opened = 0;
@@ -99,14 +100,16 @@ class Ledger extends NSObject {
     return `${Ledger.opened} opened`;
   }
 
-  owner: string;
   balance = 0;
   entries = 0;
 
-  constructor(owner: string, opening: number) {
+  // `owner` a field too, as `readonly` declares it.
+  constructor(
+    readonly owner: string,
+    opening: number,
+  ) {
     super();
     Ledger.opened++;
-    this.owner = owner;
     this.record(opening);
   }
 
