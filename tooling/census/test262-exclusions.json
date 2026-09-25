@@ -1,0 +1,16 @@
+{
+  "//": [
+    "Test262 cases excluded from conformance262.mjs's headline, beyond features.json's",
+    "`inapplicable` class (which is read directly and must not be copied here).",
+    "",
+    "Each entry: { kind: \"path\" | \"feature\", match, reason, authority }. A `path`",
+    "matches a file or a directory prefix. Excluded cases are still RUN: the exclusion",
+    "only moves them out of the headline's denominator, and the report prints how many",
+    "each entry covers and how many of those now pass (FIXED?).",
+    "",
+    "An entry naming a path the suite does not have fails the run. Adding one needs an",
+    "authority -- a docs/ section that makes it a non-goal -- not a count that looks bad.",
+    "docs/eval.md is a possible design, not a non-goal, so eval-code is not excluded."
+  ],
+  "exclusions": []
+}
