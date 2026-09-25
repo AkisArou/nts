@@ -12,11 +12,15 @@ void loop_run(void);
 void loop_stop(void);
 int weak_watch(struct NSObject *object);
 bool weak_alive(int watch);
-// Keeps a copy of `block` (`_Block_copy`), as an API that stores one does.
+// Keeps a copy of `block` (`_Block_copy`), as an API that stores a completion
+// handler does. `block` takes an object and an `int`.
 void hold_block(void *block);
-// Releases the held copy from another thread and waits for it: the arm that
-// checks a block's dispose refuses off the thread that owns its closure.
-void release_held_off_thread(void);
+// Calls the held copy with `value` and `n` on another thread, then releases it
+// there, and waits for that thread: a completion handler called and let go on
+// a background queue.
+void call_held_off_thread(struct NSObject *value, int n);
+// Whether this is the main thread.
+bool on_main_thread(void);
 // Whether `BLOCKS_OFF_THREAD` is set.
 bool off_thread_arm(void);
 

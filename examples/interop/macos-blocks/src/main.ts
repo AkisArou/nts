@@ -17,8 +17,9 @@ import {
   hold_block,
   loop_run,
   loop_stop,
+  call_held_off_thread,
   off_thread_arm,
-  release_held_off_thread,
+  on_main_thread,
   report,
   weak_alive,
   weak_watch,
@@ -71,17 +72,22 @@ function ticking(): void {
   });
 }
 
-// A block copied on this thread and released on another: its dispose would
-// touch the closure's count from a thread that does not own it, so the
-// process stops, by name. Only when `BLOCKS_OFF_THREAD` is set (build.sh's
-// guard arm); otherwise nothing is held.
+// A completion handler the platform calls on a background queue and then
+// releases there: both are carried to this thread, where the closure's count
+// and heap are. The closure runs here, given what the other thread passed,
+// and is released here, with the object it captured. Only when
+// `BLOCKS_OFF_THREAD` is set (build.sh's arm), since Objective-C itself runs
+// the block where it is called, and the oracle is Objective-C.
+let offWatch = 0 as c_int;
+
 function offThread(): void {
-  let kept = 0;
-  hold_block(() => {
-    kept++;
+  const sentinel = newObject();
+  offWatch = weak_watch(sentinel);
+  hold_block((value, n) => {
+    report(`off thread: called on the main thread ${on_main_thread()} with ${n} ${value === sentinel ? "same" : "other"}`);
   });
-  release_held_off_thread();
-  report("released off thread " + String(kept));
+  call_held_off_thread(sentinel, 7 as c_int);
+  report("off thread: called and released");
 }
 
 function finish(): void {
@@ -89,6 +95,11 @@ function finish(): void {
   report("ticking " + state(tickingWatch));
   if (off_thread_arm()) {
     offThread();
+    setTimeout(() => {
+      report("off thread: closure " + state(offWatch));
+      loop_stop();
+    }, 20);
+    return;
   }
   loop_stop();
 }

@@ -236,3 +236,43 @@ mod tests {
         assert_ne!(mangle("a_c"), mangle("a:"));
     }
 }
+
+/// How one argument of a block is carried to the thread that owns its
+/// closure, when the platform calls the block on another: copied as it is,
+/// or an object held across with a count of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Carried {
+    Copied,
+    Counted(nts_core::hir::native::Counting),
+}
+
+/// Each argument's carriage, for a block the platform may call on a thread
+/// that is not its closure's -- a completion handler on a background queue
+/// -- or `None` where the call cannot be carried: a block that returns a
+/// value, whose caller is waiting for it, or one given a pointer into memory
+/// the caller owns only for the call (`BOOL *stop`).
+#[must_use]
+pub fn hop_arguments(signature: &FnPointer) -> Option<Vec<Carried>> {
+    if !matches!(*signature.result, nts_core::hir::native::Type::Void) {
+        return None;
+    }
+    signature
+        .parameters
+        .iter()
+        .map(|ty| match ty {
+            nts_core::hir::native::Type::Record(_) => Some(Carried::Copied),
+            _ => match ty.representation() {
+                nts_core::hir::HirType::Int { .. } | nts_core::hir::HirType::Float { .. } | nts_core::hir::HirType::Bool => {
+                    Some(Carried::Copied)
+                }
+                other => other.counting().map(Carried::Counted),
+            },
+        })
+        .collect()
+}
+
+/// A signature's carried call, `nts_block_hop_NtsFn_void_id`.
+#[must_use]
+pub fn block_hop_symbol(signature: &FnPointer) -> String {
+    format!("nts_block_hop_{}", signature.name)
+}

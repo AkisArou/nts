@@ -228,10 +228,17 @@ fn blocks(program: &Program) -> String {
         "  %lent = call ptr @nts_closure_lend(ptr %context)".to_owned(),
         "  ret void".to_owned(),
         "}".to_owned(),
+        // A platform lets go of a handler on whatever thread called it; the
+        // closure's give-back is carried to the one owning it.
         "define internal void @nts_block_dispose(ptr %block) {".to_owned(),
-        "  call void @nts_block_on_owner(ptr @nts.block.released)".to_owned(),
         "  %slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5".to_owned(),
         "  %context = load ptr, ptr %slot".to_owned(),
+        "  %owned = call zeroext i1 @nts_is_owner_thread()".to_owned(),
+        "  br i1 %owned, label %here, label %carry".to_owned(),
+        "carry:".to_owned(),
+        "  call void @nts_block_unlend(ptr %context)".to_owned(),
+        "  ret void".to_owned(),
+        "here:".to_owned(),
         "  call void @nts_closure_unlend(ptr %context)".to_owned(),
         "  ret void".to_owned(),
         "}".to_owned(),
@@ -286,7 +293,37 @@ fn adapter(text: &mut String, signature: &FnPointer) {
     }
     types.push("ptr".to_owned());
     arguments.push("ptr %context".to_owned());
+    // Called off the thread owning the closure: carried there, where `run`
+    // unpacks the arguments into the bridge. Not for a record by value,
+    // which this adapter passes as its address; that one keeps the owner check.
+    let carried = nts_codegen_common::objc::hop_arguments(signature)
+        .filter(|_| !signature.parameters.iter().any(|ty| matches!(ty, Type::Record(_))));
+    if let Some(carried) = &carried {
+        hop(text, signature, carried, &types, &arguments);
+    }
     let _ = writeln!(text, "define internal {result} @{}({}) {{", block_invoke_symbol(signature), parameters.join(", "));
+    if let Some(carried) = &carried {
+        let hop = nts_codegen_common::objc::block_hop_symbol(signature);
+        let _ = writeln!(text, "  %owned = call zeroext i1 @nts_is_owner_thread()");
+        let _ = writeln!(text, "  br i1 %owned, label %here, label %carry");
+        let _ = writeln!(text, "carry:");
+        let _ = writeln!(text, "  %h = alloca %{hop}");
+        for (at, ty) in signature.parameters.iter().enumerate() {
+            let _ = writeln!(text, "  %h{at} = getelementptr inbounds %{hop}, ptr %h, i32 0, i32 {at}");
+            let _ = writeln!(text, "  store {} %a{at}, ptr %h{at}", bare(&ty.representation()));
+        }
+        let _ = writeln!(text, "  %size.at = getelementptr %{hop}, ptr null, i32 1");
+        let _ = writeln!(text, "  %size = ptrtoint ptr %size.at to i64");
+        let objects = if carried.iter().any(|c| matches!(c, nts_codegen_common::objc::Carried::Counted(_))) {
+            format!("@{hop}.objects")
+        } else {
+            "null".to_owned()
+        };
+        let count = carried.iter().filter(|c| matches!(c, nts_codegen_common::objc::Carried::Counted(_))).count();
+        let _ = writeln!(text, "  call void @nts_block_carry(ptr %block, ptr %h, i64 %size, ptr {objects}, i32 {count}, ptr @{hop}.run)");
+        let _ = writeln!(text, "  ret void");
+        let _ = writeln!(text, "here:");
+    }
     let _ = writeln!(text, "  %context.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5");
     let _ = writeln!(text, "  %context = load ptr, ptr %context.slot");
     let _ = writeln!(text, "  %bridge.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 6");
@@ -300,6 +337,35 @@ fn adapter(text: &mut String, signature: &FnPointer) {
         let _ = writeln!(text, "  ret {returned} %r");
     }
     let _ = writeln!(text, "}}");
+}
+
+/// The carried call of a block signature: the arguments' type, the offsets of
+/// the objects in it, and `run`, which unpacks them on the owning thread and
+/// calls the bridge -- the C backend's `hop`, in the other spelling.
+fn hop(text: &mut String, signature: &FnPointer, carried: &[nts_codegen_common::objc::Carried], types: &[String], arguments: &[String]) {
+    let hop = nts_codegen_common::objc::block_hop_symbol(signature);
+    let fields: Vec<&str> = signature.parameters.iter().map(|ty| bare(&ty.representation())).collect();
+    let _ = writeln!(text, "%{hop} = type {{ {} }}", if fields.is_empty() { "i8".to_owned() } else { fields.join(", ") });
+    let offsets: Vec<String> = carried
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| matches!(c, nts_codegen_common::objc::Carried::Counted(_)))
+        .map(|(at, _)| format!("i32 ptrtoint (ptr getelementptr (%{hop}, ptr null, i32 0, i32 {at}) to i32)"))
+        .collect();
+    if !offsets.is_empty() {
+        let _ = writeln!(text, "@{hop}.objects = private constant [{} x i32] [{}]", offsets.len(), offsets.join(", "));
+    }
+    let _ = writeln!(text, "define internal void @{hop}.run(ptr %block, ptr %h) {{");
+    for (at, field) in fields.iter().enumerate() {
+        let _ = writeln!(text, "  %h{at} = getelementptr inbounds %{hop}, ptr %h, i32 0, i32 {at}");
+        let _ = writeln!(text, "  %a{at} = load {field}, ptr %h{at}");
+    }
+    let _ = writeln!(text, "  %context.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5");
+    let _ = writeln!(text, "  %context = load ptr, ptr %context.slot");
+    let _ = writeln!(text, "  %bridge.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 6");
+    let _ = writeln!(text, "  %bridge = load ptr, ptr %bridge.slot");
+    let _ = writeln!(text, "  call void ({}) %bridge({})", types.join(", "), arguments.join(", "));
+    let _ = writeln!(text, "  ret void\n}}");
 }
 
 /// A `NativeBlock`: its frame slot filled, and the slot's address as the value.

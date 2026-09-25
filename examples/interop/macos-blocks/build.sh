@@ -13,10 +13,10 @@
 #   block runtime lets go of them. stderr is empty.
 # - **Control:** under NoGc the two closures outlive their blocks, so the two
 #   lifetime lines, and only those, differ from the oracle.
-# - **Guard:** `BLOCKS_OFF_THREAD` releases a copied block on another thread.
-#   Its dispose would touch the closure's count off the owning thread, so the
-#   process must stop, naming why. A block's copy and dispose run without the
-#   block being called, so the guard is in those helpers.
+# - **Off thread:** `BLOCKS_OFF_THREAD` calls a copied block on another thread
+#   and releases it there, as a completion handler on a background queue is;
+#   both are carried to the thread owning the closure, where its count and
+#   heap are. Only a copy made off that thread still stops the process.
 # - **arm64:** built and linked, never run here (tooling/apple/vm.md).
 #
 # Needs a macOS SDK. Without one it prints SKIP; with no Mac reachable it
@@ -113,15 +113,15 @@ if [ "$differs" != "> cancelled alive|> ticking alive|" ]; then
 fi
 echo "control: under NoGc both closures outlive their blocks, and nothing else differs"
 
-set +e
-guard=$("$root/tooling/apple/run.sh" --env BLOCKS_OFF_THREAD=1 "$out/blocks/macos-13-x86_64/blocks" 2>&1)
-status=$?
-set -e
-case $guard in
-  *"nts: a block was released off the thread that owns its closure"*) ;;
-  *) echo "macos-blocks: a block released off its thread did not stop the process by name:" >&2
-     printf '%s\n' "$guard" >&2
-     exit 1 ;;
-esac
-[ "$status" -ne 0 ] || { echo "macos-blocks: the off-thread release exited 0" >&2; exit 1; }
-echo "guard: a block released off the owning thread stops the process, by name"
+# The handler called and released on another thread: both carried to the
+# owning one, in that order, and nothing written to stderr.
+for product in blocks blocksLlvm; do
+  "$root/tooling/apple/run.sh" --env BLOCKS_OFF_THREAD=1 "$out/$product/macos-13-x86_64/$product" \
+    >"$out/$product-off.txt" 2>"$out/$product-off.err" ||
+    { cat "$out/$product-off.txt" "$out/$product-off.err" >&2; exit 1; }
+  [ -s "$out/$product-off.err" ] && { cat "$out/$product-off.err" >&2; exit 1; }
+  grep '^off thread' "$out/$product-off.txt" >"$out/$product-off.lines"
+  printf '%s\n' "off thread: called and released" "off thread: called on the main thread true with 7 same" \
+    "off thread: closure gone" | diff -u - "$out/$product-off.lines"
+done
+echo "off thread: a handler called and released on another thread runs and is released on this one, on both backends"

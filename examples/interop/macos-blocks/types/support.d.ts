@@ -13,7 +13,8 @@ declare module "c:support" {
   export function loop_stop(): void;
   export function weak_watch(object: NSObject): c_int;
   export function weak_alive(watch: c_int): boolean;
-  export function hold_block(block: Block<() => void>): void;
-  export function release_held_off_thread(): void;
+  export function hold_block(block: Block<(value: NSObject, n: c_int) => void>): void;
+  export function call_held_off_thread(value: NSObject, n: c_int): void;
+  export function on_main_thread(): boolean;
   export function off_thread_arm(): boolean;
 }

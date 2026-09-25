@@ -419,10 +419,29 @@ correctness does not depend on arm64 running by luck.
      - Not yet, each skipped with its reason: a handler given more than one
        value (Swift's tuple), a handler given an `NSError` (Swift's `async
        throws`), and a class method.
-     - A handler the platform calls off the main thread ends the process by
-       name, as any block does (`nts_block_on_owner`). Hopping to the main
-       queue instead is the next step, and is what Swift's `@MainActor`
-       resumption amounts to.
+     - A handler the platform calls off the main thread is carried to it
+       (below), so a completion on a background queue settles the promise
+       on the owning thread, which is what Swift's `@MainActor` resumption
+       amounts to.
+   - **Blocks called off the owning thread are carried to it (2026-09-25).**
+     A completion handler is usually called, and then released, on the
+     queue the work ran on. The closure's count and heap belong to the
+     thread that made it.
+     - The invoke adapter tests the thread. Off it, the adapter packs its
+       arguments and the host (`nts_block_carry`) copies them, holds a count
+       of each object and of the block, and posts a task
+       (`nts_post_from_any_thread`) that calls the closure on the owning
+       thread and gives it all back. Dispose off that thread posts the
+       closure's give-back (`nts_block_unlend`).
+     - Both backends. `macos-blocks` calls a held block on a pthread with
+       an object and an `int` and releases it there. The closure runs on
+       the main thread with those values, and its captures are gone
+       afterwards. Before this, the LLVM build of the same arm stopped with
+       "a callback entered compiled code from a thread this environment
+       does not own".
+     - Still refused by name: a copy made off the thread, and a call off it
+       to a block that returns a value or is given a pointer (`BOOL *stop`),
+       whose caller is waiting or owns the memory only for the call.
    - **S5a, closures as Swift's, landed.** In a message, a plain function
      type is a block, as a Swift closure passed to one is. It is lent for the
      call and copied by a callee that keeps it. `Block<F>` is no longer needed

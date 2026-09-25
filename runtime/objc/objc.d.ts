@@ -25,9 +25,12 @@ declare module "objc:types" {
   // releases it. The closure may capture: what it sees of a `let` is the
   // variable, not a snapshot.
   //
-  // Runs on the main thread only: a block called, copied or released on
-  // another thread ends the process by name, since the closure's count is
-  // not atomic.
+  // The closure runs on the thread that made it, since its count is not
+  // atomic. A block the platform calls on another thread -- a completion
+  // handler on a background queue -- is carried there (`nts_block_carry`),
+  // and so is its release. What cannot be carried ends the process by name:
+  // a copy made on another thread, and a call there to a block that returns
+  // a value or is given a pointer into memory the caller owns (`BOOL *stop`).
   export type Block<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "block" };
 
   // The class object of `Tag`: what `NSWindow` means as a value, so that

@@ -88,6 +88,8 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_bigint_shl", returns: "<2 x i64>", params: &["ptr dead_on_return", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_bigint_shr", returns: "<2 x i64>", params: &["ptr dead_on_return", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_bigint_to_string", returns: "ptr", params: &["ptr dead_on_return"], attributes: &[] },
+    Signature { name: "nts_block_carry", returns: "void", params: &["ptr", "ptr", "i64", "ptr", "i32", "ptr"], attributes: &[] },
+    Signature { name: "nts_block_unlend", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_bool_to_string", returns: "ptr", params: &["i1 zeroext"], attributes: &[] },
     Signature { name: "nts_bounds", returns: "void", params: &["double", "i32"], attributes: &[] },
     Signature { name: "nts_buffer_byte_length", returns: "double", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },

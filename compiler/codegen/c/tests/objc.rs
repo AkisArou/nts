@@ -274,9 +274,11 @@ export function run(): number {
         "extern void *_NSConcreteStackBlock[32];",
         // The block's own signature, as clang encodes `void (^)(int)`.
         "\"v12@?0i8\"",
-        // Copy and dispose check the thread before touching the count.
+        // A copy checks the thread before touching the count; a release off
+        // it is carried to it, as is a call.
         "nts_block_on_owner(\"copied\");",
-        "nts_block_on_owner(\"released\");",
+        "if (!nts_is_owner_thread()) { nts_block_unlend(context); return; }",
+        "nts_block_carry(block, &h, sizeof h, 0, 0u, nts_block_hop_",
         // The adapter reads the bridge and the context out of the block.
         "b->bridge)(a0, b->context);",
         // `BLOCK_HAS_COPY_DISPOSE | BLOCK_HAS_SIGNATURE` on a stack block.

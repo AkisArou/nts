@@ -1748,6 +1748,21 @@ void *nts_objc_state(void *self);
  * mentions has no runtime object, and adopting it is skipped: nothing could
  * ask for it either. */
 void nts_objc_adopt(const char *name, const char *protocol);
+/* A block the platform calls, or lets go of, on a thread that does not own
+ * its closure -- a completion handler on a background queue -- carried to the
+ * one that does, where the closure's count and heap are. Defined by the CF
+ * host.
+ *
+ * `nts_block_carry` copies `size` bytes of `arguments`, retains the object at
+ * each of the `count` byte offsets in `objects`, keeps the block
+ * (`_Block_copy`), and posts a task that calls `run(block, copy)` on the
+ * owning thread and then gives all of it back -- as does dropping the task
+ * unrun. `nts_block_unlend` posts a closure's give-back the same way, for a
+ * block's dispose off that thread. */
+void nts_block_carry(const void *block, const void *arguments, size_t size,
+                     const uint32_t *objects, uint32_t count,
+                     void (*run)(const void *block, void *arguments));
+void nts_block_unlend(void *context);
 void *nts_nsstring_of(const NtsString *string);
 NtsString *nts_string_of_nsstring(const void *string);
 void *nts_nsarray_of_objects(const NtsArray *array);

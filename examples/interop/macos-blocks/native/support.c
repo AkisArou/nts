@@ -35,19 +35,28 @@ static void *held;
 
 void hold_block(void *block) { held = _Block_copy(block); }
 
-static void *release_held(void *unused) {
+static struct NSObject *passed;
+static int passed_n;
+
+static void *call_held(void *unused) {
   (void)unused;
+  ((void (^)(struct NSObject *, int))held)(passed, passed_n);
   _Block_release(held);
+  held = NULL;
   return NULL;
 }
 
 bool off_thread_arm(void) { return getenv("BLOCKS_OFF_THREAD") != NULL; }
 
-void release_held_off_thread(void) {
+void call_held_off_thread(struct NSObject *value, int n) {
+  passed = value;
+  passed_n = n;
   pthread_t thread;
-  pthread_create(&thread, NULL, release_held, NULL);
+  pthread_create(&thread, NULL, call_held, NULL);
   pthread_join(thread, NULL);
 }
+
+bool on_main_thread(void) { return pthread_main_np() != 0; }
 
 bool weak_alive(int watch) {
   id object = objc_loadWeakRetained(&watches[watch]);

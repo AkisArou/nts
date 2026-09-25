@@ -3,6 +3,7 @@
 #include "nts_runtime.h"
 #include "nts_uv_host.h"
 
+#include <Block.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
@@ -363,6 +364,73 @@ void nts_objc_register_class(const char *name, const char *superclass,
   nts_objc_stateful[nts_objc_stateful_count++] = (NtsObjcStateful){
       made, ivar_getOffset(class_getInstanceVariable(made, "nts_state")),
       make_state};
+}
+
+/* ARC's entry points, which no public header declares. */
+id objc_retain(id object);
+void objc_release(id object);
+
+/* A carried block call: the block, what runs it, and the arguments' copy,
+ * with the offsets of the objects in it that it holds a count of. */
+typedef struct NtsBlockCarried {
+  const void *block;
+  void (*run)(const void *block, void *arguments);
+  uint32_t count;
+  uint32_t objects[8];
+  unsigned char arguments[];
+} NtsBlockCarried;
+
+static void nts_block_carried_free(NtsBlockCarried *carried) {
+  for (uint32_t at = 0; at < carried->count; at++) {
+    void *object;
+    memcpy(&object, carried->arguments + carried->objects[at], sizeof object);
+    objc_release(object);
+  }
+  _Block_release(carried->block);
+  free(carried);
+}
+
+static void nts_block_carried_run(void *state) {
+  NtsBlockCarried *carried = state;
+  carried->run(carried->block, carried->arguments);
+  nts_block_carried_free(carried);
+}
+
+static void nts_block_carried_drop(void *state) {
+  nts_block_carried_free(state);
+}
+
+void nts_block_carry(const void *block, const void *arguments, size_t size,
+                     const uint32_t *objects, uint32_t count,
+                     void (*run)(const void *block, void *arguments)) {
+  if (count > 8) {
+    fprintf(stderr, "nts: a block given more than eight objects was called off "
+                    "the thread that owns its closure\n");
+    abort();
+  }
+  NtsBlockCarried *carried = malloc(sizeof *carried + size);
+  if (!carried) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  carried->block = _Block_copy(block);
+  carried->run = run;
+  carried->count = count;
+  memcpy(carried->arguments, arguments, size);
+  for (uint32_t at = 0; at < count; at++) {
+    void *object;
+    carried->objects[at] = objects[at];
+    memcpy(&object, carried->arguments + objects[at], sizeof object);
+    objc_retain(object);
+  }
+  nts_post_from_any_thread(
+      (NtsTask){nts_block_carried_run, nts_block_carried_drop, carried});
+}
+
+static void nts_block_unlend_run(void *context) { nts_closure_unlend(context); }
+
+void nts_block_unlend(void *context) {
+  nts_post_from_any_thread((NtsTask){nts_block_unlend_run, 0, context});
 }
 
 void nts_objc_adopt(const char *name, const char *protocol) {

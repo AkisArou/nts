@@ -215,9 +215,12 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
     writer.line(origin, "    nts_block_on_owner(\"copied\");");
     writer.line(origin, "    (void)nts_closure_lend((NtsHeader *)((const struct nts_block *)block)->context);");
     writer.line(origin, "}");
+    // A platform releases a handler on whatever thread called it, and the
+    // closure's count is the owning thread's: the release is carried there.
     writer.line(origin, "static void nts_block_dispose(const void *block) {");
-    writer.line(origin, "    nts_block_on_owner(\"released\");");
-    writer.line(origin, "    nts_closure_unlend(((const struct nts_block *)block)->context);");
+    writer.line(origin, "    void *context = ((const struct nts_block *)block)->context;");
+    writer.line(origin, "    if (!nts_is_owner_thread()) { nts_block_unlend(context); return; }");
+    writer.line(origin, "    nts_closure_unlend(context);");
     writer.line(origin, "}");
     for signature in signatures {
         let result = signature.result.c_type();
@@ -232,13 +235,15 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
         bridge_types.push("void *".to_owned());
         arguments.push("b->context".to_owned());
         let give = if matches!(*signature.result, Type::Void) { "" } else { "return " };
+        let bridge = format!("(({result} (*)({}))b->bridge)", bridge_types.join(", "));
+        let hop = nts_codegen_common::objc::hop_arguments(signature).map(|carried| hop(writer, origin, signature, &carried, &bridge));
         writer.line(
             origin,
             format!(
-                "static {result} {}({}) {{ const struct nts_block *b = block; {give}(({result} (*)({}))b->bridge)({}); }}",
+                "static {result} {}({}) {{ const struct nts_block *b = block; {}{give}{bridge}({}); }}",
                 block_invoke_symbol(signature),
                 parameters.join(", "),
-                bridge_types.join(", "),
+                hop.unwrap_or_default(),
                 arguments.join(", ")
             ),
         );
@@ -251,6 +256,51 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
             ),
         );
     }
+}
+
+/// A block called off the thread owning its closure, carried there by the
+/// host (`nts_block_carry`): its arguments packed here, the objects' offsets
+/// named, and `run` unpacking them on the owning thread into the bridge.
+/// Returns the test the invoke adapter starts with.
+fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried: &[nts_codegen_common::objc::Carried], bridge: &str) -> String {
+    use nts_codegen_common::objc::Carried;
+    let hop = nts_codegen_common::objc::block_hop_symbol(signature);
+    let mut fields = Vec::new();
+    let mut packed = Vec::new();
+    let mut objects = Vec::new();
+    let mut arguments = Vec::new();
+    for (at, (ty, carriage)) in signature.parameters.iter().zip(carried).enumerate() {
+        fields.push(format!("{} a{at};", ty.c_type()));
+        packed.push(format!("a{at}"));
+        arguments.push(format!("h->a{at}"));
+        if matches!(carriage, Carried::Counted(_)) {
+            objects.push(format!("(uint32_t)offsetof(struct {hop}, a{at})"));
+        }
+    }
+    if fields.is_empty() {
+        fields.push("char unused;".to_owned());
+        packed.push("0".to_owned());
+    }
+    arguments.push("b->context".to_owned());
+    writer.line(origin, format!("struct {hop} {{ {} }};", fields.join(" ")));
+    writer.line(
+        origin,
+        format!(
+            "static void {hop}_run(const void *block, void *arguments) {{ const struct nts_block *b = block; struct {hop} *h = arguments; {bridge}({}); }}",
+            arguments.join(", ")
+        ),
+    );
+    let objects_table = if objects.is_empty() {
+        "0".to_owned()
+    } else {
+        writer.line(origin, format!("static const uint32_t {hop}_objects[] = {{ {} }};", objects.join(", ")));
+        format!("{hop}_objects")
+    };
+    format!(
+        "if (!nts_is_owner_thread()) {{ struct {hop} h = {{ {} }}; nts_block_carry(block, &h, sizeof h, {objects_table}, {}u, {hop}_run); return; }} ",
+        packed.join(", "),
+        objects.len()
+    )
 }
 
 /// The statements that fill a `NativeBlock`'s frame slot and take its address.
