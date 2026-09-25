@@ -10,6 +10,9 @@
 #   (`LC_BUILD_VERSION` names `iossimulator`), installed and launched with
 #   `simctl`. UIKit starts it, sends the application delegate its launch, the
 #   button's action reaches the program's controller, and a timer ends it.
+# - **Swift:** `reference/hello.swift`, the same application in Swift, line
+#   for line, built by `swiftc` for the simulator: it says what the two
+#   TypeScript products say.
 #
 # Needs `tooling/apple/sync-sdk.sh iphonesimulator` and
 # `NTS_APPLE_PLATFORM=iphonesimulator tooling/apple/symbolgraph.sh UIKit
@@ -87,3 +90,21 @@ for product in hello helloLlvm; do
   diff -u "$out/expected.txt" "$out/$product.txt"
 done
 echo "simulator: UIKit launched the TypeScript delegate, the button's action reached its controller, on both backends"
+
+# The oracle: `reference/hello.swift`, the same application in Swift, built by
+# `swiftc` for the simulator on the Mac and bundled from the TypeScript
+# product's `Info.plist` under a name and identifier of its own.
+dest=${NTS_APPLE_SSH:-nts-mac}
+swift_app="$out/helloSwift.app"
+rm -rf "$swift_app"
+command cp -R "$out/hello/ios-17-x86_64/hello.app" "$swift_app"
+rm -f "$swift_app/hello"
+sed -i -e 's|<string>hello</string>|<string>helloSwift</string>|' \
+  -e 's|<string>dev.nts.examples.ios-hello</string>|<string>dev.nts.examples.ios-hello-swift</string>|' "$swift_app/Info.plist"
+scp -q -o BatchMode=yes "$source/reference/hello.swift" "$dest:/tmp/nts-ios-hello.swift"
+ssh -o BatchMode=yes "$dest" 'cd /tmp && swiftc -O -target x86_64-apple-ios17.0-simulator -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" nts-ios-hello.swift -o nts-ios-hello-swift' >&2
+scp -q -o BatchMode=yes "$dest:/tmp/nts-ios-hello-swift" "$swift_app/helloSwift"
+"$root/tooling/apple/run-ios.sh" "$swift_app" >"$out/swift.txt" 2>"$out/swift.err" ||
+  { cat "$out/swift.txt" "$out/swift.err" >&2; exit 1; }
+diff -u "$out/expected.txt" "$out/swift.txt"
+echo "swift: the same application in Swift says the same, line for line"
