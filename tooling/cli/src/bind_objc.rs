@@ -1156,7 +1156,14 @@ impl<'a> Model<'a> {
     /// to override an accessor, and refuses it to override a field.
     fn property(&mut self, class: &Class, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
         let name = named(decl).unwrap_or_default();
-        let clang = self.spell(class, decl.get("type").ok_or("no type")?, Position::Result)?;
+        let ty = decl.get("type").ok_or("no type")?;
+        // A block: a closure the program sets -- Swift's `var completionBlock:
+        // (() -> Void)?` -- and not one it reads back, which would make a
+        // function of a block. So only the setter.
+        if written(ty).contains("(^") || desugared(ty).is_some_and(|d| d.contains("(^")) {
+            return self.block_property(class, decl, symbol, ty);
+        }
+        let clang = self.spell(class, ty, Position::Result)?;
         let spelled = optional_as_swift(clang.clone(), symbol.optionality() == Optionality::Optional);
         // What the setter takes: `null` too for a `null_resettable` property,
         // which Swift writes `T!`.
@@ -1179,6 +1186,27 @@ impl<'a> Model<'a> {
             }
             let _ = write!(text, "    {is_static}set {key}(value: {written});");
         }
+        Ok(text)
+    }
+
+    /// A block property as its setter alone: `set completionBlock(value: (()
+    /// => void) | null)`. A read-only one has nothing to set.
+    fn block_property(&mut self, class: &Class, decl: &Value, symbol: &Symbol, ty: &Value) -> std::result::Result<String, String> {
+        if decl.get("readonly").and_then(Value::as_bool) == Some(true) {
+            return Err("a block as a result or a read-only property".to_owned());
+        }
+        let name = named(decl).unwrap_or_default();
+        let closure = self.spell(class, ty, Position::Parameter)?;
+        let optional = written(ty).contains("_Nullable") || symbol.optionality() != Optionality::Neither;
+        let value = if optional { format!("({closure}) | null") } else { closure };
+        let swift_name = symbol.names.title.clone();
+        let setter = decl.get("setter").and_then(named).unwrap_or_else(|| format!("set{}:", capitalized(&name)));
+        let is_static = if decl.get("class").and_then(Value::as_bool) == Some(true) { "static " } else { "" };
+        let mut text = String::new();
+        if setter != format!("set{}:", capitalized(&swift_name)) {
+            let _ = writeln!(text, "    /** @ntsSet {setter} */");
+        }
+        let _ = write!(text, "    {is_static}set {}(value: {value});", quoted_key(&swift_name));
         Ok(text)
     }
 
@@ -2038,6 +2066,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (class, readonly) Shape *unit;
 @property (readonly, weak) Shape *owner;
 @property (null_resettable, copy) NSString *label;
+@property (nullable, copy) void (^onChange)(Shape *shape);
 @end
 @interface Shape (Named)
 - (void)renameTo:(Shape *)other count:(NSInteger)count;
@@ -2102,6 +2131,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)placeShapes:", "swift.method", "place(_:)", &["Shape", "place(_:)"], ""),
             symbol("c:objc(cs)Shape(im)labels", "swift.method", "labels()", &["Shape", "labels()"], ""),
             symbol("c:objc(cs)Shape(im)fillWith:", "swift.method", "fill(with:)", &["Shape", "fill(with:)"], ""),
+            symbol("c:objc(cs)Shape(py)onChange", "swift.property", "onChange", &["Shape", "onChange"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2227,6 +2257,8 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector labels */\n    labels(): Map<string, string>;",
             // A block type the header names by a typedef, read from what it spells.
             "    /** @ntsSelector fillWith: */\n    fill(maker: (arg0: Int) => Shape): void;",
+            // A block property: its setter alone, a closure or `null`.
+            "    set onChange(value: ((arg0: Shape) => void) | null);",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",

@@ -476,6 +476,13 @@ correctness does not depend on arm64 running by luck.
        `NSTableViewDiffableDataSourceCellProvider`, is read from what the
        typedef spells, so the diffable data sources bind with a trailing
        closure.
+     - A writable block property, such as `completionBlock` or a diffable
+       data source's `rowViewProvider`, is its setter alone, taking a closure
+       (`set completionBlock(value: (() => void) | null)`). A closure the
+       program set is not read back as a function. `macos-blocks` sets an
+       operation's `completionBlock`, which Foundation calls on a thread of
+       its own and which is carried home, on both backends. Setting `null` is
+       refused by name for now.
      - A block returning an object hands it back at +0, as ARC's caller
        expects. Under reference counting the adapter autoreleases the
        closure's count. `macos-blocks` watches such an object go once its

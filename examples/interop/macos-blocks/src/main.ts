@@ -30,6 +30,7 @@ import {
   weak_watch,
 } from "c:support";
 import { nts_pending_begin, nts_pending_end } from "c:pending";
+import { NSOperation } from "objc:Foundation";
 import { arrayWithCapacity, newObject, scheduledTimer, type NSObject } from "objc:Foundation";
 import type { c_double, c_int, c_int8, c_ulong } from "c:types";
 
@@ -172,6 +173,14 @@ async function offThreadAll(): Promise<void> {
   }
   const [first, second] = await pair();
   report(`off thread: a pair of ${first === second ? "one object" : "two objects"}`);
+  // A block property: `operation.completionBlock = { ... }`, which Foundation
+  // calls on a thread of its own once the operation finishes.
+  const operation = new NSOperation();
+  const finished = new Promise<boolean>((resolve) => {
+    operation.completionBlock = () => resolve(on_main_thread());
+  });
+  operation.start();
+  report(`off thread: an operation's completion block ran on the main thread ${await finished}`);
   await new Promise<void>((resolve) => setTimeout(() => resolve(), 20));
   report("off thread: closure " + state(offWatch));
   loop_stop();

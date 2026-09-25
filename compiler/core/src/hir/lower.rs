@@ -51544,7 +51544,19 @@ fn append_error_slot(native: &mut super::native::Function, converter: String) {
 /// still, and a `Block<F>` is a block wherever it is written.
 fn bridge_blocks(native: &mut super::native::Function, signature: &nts_semantic_schema::SignatureRecord, snapshot: &SemanticSnapshot) {
     use super::native::{Pointee, Role, Type};
-    let function = |ty: TypeId| matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Function(_)));
+    // A function, or one that may be `null` -- Swift's optional closure, a
+    // block property's `(() => void) | null`.
+    let function = |ty: TypeId| {
+        let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+        match kind(ty) {
+            Some(TypeKind::Function(_)) => true,
+            Some(TypeKind::Union(members)) => {
+                members.iter().any(|m| matches!(kind(*m), Some(TypeKind::Function(_))))
+                    && members.iter().all(|m| matches!(kind(*m), Some(TypeKind::Function(_) | TypeKind::Null)))
+            }
+            _ => false,
+        }
+    };
     let slots: Vec<(usize, Option<usize>)> = native.slots().map(|(at, _, fed)| (at, fed)).collect();
     for (at, fed) in slots {
         let Some(parameter) = fed.and_then(|ts| signature.parameters.get(ts)) else { continue };

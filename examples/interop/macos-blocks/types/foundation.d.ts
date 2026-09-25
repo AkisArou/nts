@@ -63,4 +63,17 @@ declare module "objc:Foundation" {
   export class NSError {
     readonly localizedDescription: string;
   }
+
+  /**
+   * Swift's `Operation`, for its `completionBlock: (() -> Void)?`: a block
+   * property the program sets, which Foundation calls on a thread of its own
+   * once the operation finishes.
+   * @ntsClass NSOperation */
+  export class NSOperation {
+    /** @ntsSelector init */
+    constructor();
+    set completionBlock(value: (() => void) | null);
+    /** @ntsSelector start */
+    start(): void;
+  }
 }
