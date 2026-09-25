@@ -110,6 +110,12 @@ void nts_hstring_release(const NtsString *s, void *h) {
 
 /* An HSTRING a WinRT method returned, as a `string`: copied, and the HSTRING
  * deleted, since the caller owned it. NULL is the empty string. */
+NtsString *nts_string_copy_hstring(void *h) {
+  UINT32 length = 0;
+  const wchar_t *units = WindowsGetStringRawBuffer((HSTRING)h, &length);
+  return nts_str_alloc((const uint16_t *)units, length);
+}
+
 NtsString *nts_string_from_hstring(void *h) {
   UINT32 length = 0;
   const wchar_t *units = WindowsGetStringRawBuffer((HSTRING)h, &length);

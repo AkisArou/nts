@@ -40,16 +40,30 @@ import type { ByValue } from "c:types";
 import { PropertyValue } from "winrt:Windows.Foundation";
 import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
-import type { ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
+import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { ButtonAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
 import { Button, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+
+// The overridable interface, as XAML reaches an override: bindings keep it
+// off a class's queries, since it is a subclass's contract with its base, so
+// the fixture declares the one query it uses to call the override the way
+// the framework does.
+declare module "winrt:Microsoft.UI.Xaml.Controls" {
+  interface ButtonInterfaces {
+    /**
+     * @ntsQuery FFC6FD98-F38C-5904-9CE4-97A3427CF4BA
+     */
+    as_IFrameworkElementOverrides(this: Button): IFrameworkElementOverrides;
+  }
+}
 
 let launched = 0;
 let entered = 0;
 
 let templated = 0;
 let measured = 0;
+let states = "";
 
 class PressButton extends Button {
   OnPointerEntered(_e: IPointerRoutedEventArgs | null): void {
@@ -58,6 +72,10 @@ class PressButton extends Button {
   OnApplyTemplate(): void {
     super.OnApplyTemplate();
     templated += 1;
+  }
+  GoToElementStateCore(stateName: string, _useTransitions: boolean): boolean {
+    states += stateName;
+    return false;
   }
   MeasureOverride(available: ByValue<Size>): ByValue<Size> {
     measured += 1;
@@ -82,9 +100,10 @@ class App extends Application {
     window.Activate();
     setTimeout(() => {
       const focused = button.as_IUIElement().Focus(FocusState.Programmatic);
+      button.as_IFrameworkElementOverrides().GoToElementStateCore("Custom", false);
       ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
       const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
-      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(entered) + " templated=" + String(templated) + " measured=" + String(measured > 0));
+      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(entered) + " templated=" + String(templated) + " measured=" + String(measured > 0) + " states=" + states);
       this.Exit();
     }, 1500);
   }

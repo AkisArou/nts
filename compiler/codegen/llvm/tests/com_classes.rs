@@ -295,6 +295,37 @@ fn an_override_answers_through_the_result_pointer() {
     assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
 }
 
+/// A string the Windows Runtime lends an override arrives as its `HSTRING`
+/// and is bound to a string holding its text, copied rather than taken: the
+/// caller still owns the handle (`nts_string_copy_hstring`, not
+/// `nts_string_from_hstring`, which deletes it).
+#[test]
+fn a_string_argument_is_the_text_of_the_lent_hstring() {
+    let source = "import { Element } from \"winrt:Test.Layout\";\nlet last = \"\";\nclass Panel extends Element {\n  GoToElementStateCore(stateName: string, useTransitions: boolean): boolean {\n    last = stateName;\n    return useTransitions && stateName.length > 0;\n  }\n}\nexport function start(): string {\n  new Panel();\n  return last;\n}\n";
+    let Some((dir, prepared)) = prepare_with("hstring", LAYOUT, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0(")).unwrap_or_else(|| panic!("{text}"));
+    assert!(adapter.contains("(void * a0, void * a1, bool a2, bool *out)"), "{adapter}");
+    assert!(text.contains("nts_string_copy_hstring("), "the lent HSTRING is not copied:\n{text}");
+    assert!(!text.contains("nts_string_from_hstring("), "the lent HSTRING is taken, and deleted:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
 /// `super.OnLaunched(args)` in an override is the base's own implementation
 /// of the interface, from the runtime (`nts_com_base`, which answers the
 /// program's reference), called through the override's slot with its

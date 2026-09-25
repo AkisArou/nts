@@ -5854,6 +5854,10 @@ struct ObjcEntry {
 #[derive(Clone, Copy)]
 struct ComEntry {
     returns_record: bool,
+    /// The parameters, by index (`this` is 0), that are an `HSTRING` the
+    /// Windows Runtime lends: each arrives as its handle and is bound to a
+    /// string holding its text.
+    hstrings: u64,
 }
 
 /// Swift's `@objc` selector for a method of `count` parameters: its name,
@@ -11726,6 +11730,10 @@ struct FuncBuilder<'a> {
     /// While an override of a composable Windows Runtime class is lowered,
     /// what its adapter passes it: see [`ComEntry`].
     com_entry: Option<ComEntry>,
+    /// An override's lent `HSTRING` parameters, bound to the strings their
+    /// text is copied into once the parameter list is complete: the symbol,
+    /// the handle, its name's node and the string's type.
+    pending_hstrings: Vec<(u32, ValueId, NodeId, HirType)>,
     /// Labels parameters taken as arguments, whose objects are made once
     /// every parameter is: a backend names parameters by position, so none
     /// may come after another value.
@@ -11989,6 +11997,7 @@ impl<'a> FuncBuilder<'a> {
             objc_entry: None,
             record_out: None,
             com_entry: None,
+            pending_hstrings: Vec::new(),
             pending_labels: Vec::new(),
             hierarchy: Hierarchy::default(),
             base: None,
@@ -14073,7 +14082,13 @@ impl<'a> FuncBuilder<'a> {
             .cloned()
             .ok_or_else(|| self.unsupported(member, "an override whose binding declares no signature"))?;
         let adapter = super::native::override_signature(self.snapshot, &signature).map_err(|why| self.unsupported(member, &format!("an override's {why}")))?;
-        self.com_entry = Some(ComEntry { returns_record: matches!(*adapter.result, super::native::Type::Record(_)) });
+        let hstrings = signature
+            .parameters
+            .iter()
+            .enumerate()
+            .filter(|(_, parameter)| super::native::is_hstring(self.snapshot, parameter.ty))
+            .fold(0u64, |mask, (at, _)| mask | (1u64 << (at + 1).min(63)));
+        self.com_entry = Some(ComEntry { returns_record: matches!(*adapter.result, super::native::Type::Record(_)), hstrings });
         let func = self.lower_method_of(class, member, instance);
         self.com_entry = None;
         let func = func?;
@@ -19100,6 +19115,11 @@ impl<'a> FuncBuilder<'a> {
             return_type
         };
         self.make_pending_labels()?;
+        for (symbol, handle, name_node, ty) in std::mem::take(&mut self.pending_hstrings) {
+            let text = self.runtime_call("nts_string_copy_hstring", vec![handle], ty, origin.clone());
+            let text = self.open_cell(symbol, text, name_node);
+            self.bindings.insert(symbol, text);
+        }
         Ok(return_type)
     }
 
@@ -19590,6 +19610,9 @@ impl<'a> FuncBuilder<'a> {
         // `Named`, which is the distinction the first attempt got wrong by
         // substituting the type. See [`Structural`].
         let ty = self.retyped.get(&index).cloned().unwrap_or(ty);
+        if let Some(lent) = self.lent_hstring_param(name_node, index, &name, &ty) {
+            return Ok(vec![lent]);
+        }
         self.materialize(name_node, &ty)?;
 
         let origin = self.origin(name_node);
@@ -19641,13 +19664,25 @@ impl<'a> FuncBuilder<'a> {
             ParamShape::Ordinary
         };
 
-        Ok(vec![Param {
-            name,
-            ty,
-            origin,
-            shape,
-            known,
-        }])
+        Ok(vec![Param { name, ty, origin, shape, known }])
+    }
+
+    /// An override's string argument, lent by the Windows Runtime as its
+    /// `HSTRING`: the parameter is the handle, and the name the string its
+    /// text is copied into, which this function then owns. `None` for any
+    /// other parameter.
+    fn lent_hstring_param(&mut self, name_node: NodeId, index: u32, name: &str, ty: &HirType) -> Option<Param> {
+        if !self.com_entry.is_some_and(|entry| index < 64 && entry.hstrings & (1u64 << index) != 0) {
+            return None;
+        }
+        let symbol = self.node(name_node).symbol?;
+        let origin = self.origin(name_node);
+        let handle_ty = HirType::NativePointer(super::native::Pointee::Void);
+        let handle = self.push(OpKind::Param(index), handle_ty.clone(), origin.clone());
+        // Copied once every parameter is in place (`finish_params`): the
+        // parameters are the function's first values, in order.
+        self.pending_hstrings.push((symbol.0, handle, name_node, ty.clone()));
+        Some(Param { name: name.to_owned(), shape: ParamShape::Ordinary, ty: handle_ty, origin, known: Facts::TOP })
     }
 
     fn lower_block(&mut self, id: NodeId) -> Result<(), Diagnostic> {

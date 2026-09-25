@@ -276,6 +276,10 @@ Application.Start(() => { new App(); });
   `super.MeasureOverride(available)`, and every layout pass measures through
   it (`measured=true`, `styled=true`). The control that leaves the result
   pointer unwritten gives `styled=false`.
+- **A string argument** (`GoToElementStateCore(stateName: string, ...)`)
+  arrives as the `HSTRING` the caller lends, and the name is bound to a
+  string its text is copied into (`nts_string_copy_hstring`). The fixture
+  calls the override through its slot, as XAML would (`states=Custom`).
 - **`super.OnLaunched(args)`** calls the base's own implementation through
   its slot (`nts_com_base`), as C#'s `base.OnLaunched(args)` does. The
   control (the runtime answering the program's own face instead) recurses

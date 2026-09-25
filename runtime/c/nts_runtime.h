@@ -1864,6 +1864,10 @@ void nts_utf16_release(const NtsString *s, const uint16_t *units);
 void *nts_string_to_hstring(const NtsString *s);
 void nts_hstring_release(const NtsString *s, void *h);
 NtsString *nts_string_from_hstring(void *h);
+/* The text of an HSTRING the caller keeps, where `nts_string_from_hstring`
+ * takes one it is given: an argument the Windows Runtime lends a method the
+ * program overrides. */
+NtsString *nts_string_copy_hstring(void *h);
 void *nts_com_take(void *slot);
 void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high);
 void *nts_com_addref(void *object);
