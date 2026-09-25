@@ -591,10 +591,23 @@ The folded set can be counted, so undoing it is a sweep.
 **`super(props)`, a props object passed through, is parked.** An optional
 property's slot is erased whatever its type. Reading a handle back out of
 one needs handles in `NtsValue`, which the C backend refuses (NTS2008). The
-work toward that has started: `NTS_TAG_IS_REFERENCE` is now
-`NTS_TAG_IS_POINTER` and `NTS_TAG_IS_MANAGED`, each of its 24 runtime uses
-decided on its own, and a handle tag will join the first and never the
-second.
+work toward that is in steps that each land on their own:
+
+1. `NTS_TAG_IS_REFERENCE` became `NTS_TAG_IS_POINTER` and
+   `NTS_TAG_IS_MANAGED`, with each of its 24 runtime uses decided on its own.
+2. The **handle tag block**, 8..15: `NTS_TAG_HANDLE_GOBJECT` 8, `_OBJC` 9,
+   `_COM` 10. The tag is the object system, so a tag and a family cannot
+   disagree. The block is a pointer and never managed. A handle counts
+   through what its family registered, from the family's support file's
+   load-time constructor (`nts_gobject.c` registers
+   `g_object_ref`/`g_object_unref`), and every way it can go wrong aborts
+   in its own words (`runtime/c/tests/handles.c`). This step is inert:
+   nothing produces a handle value yet. `NtsValue` did not change, and a
+   named `family` field was set aside because it would have changed how
+   System V passes every erased value on LLVM.
+3. Next, `Erase` and `Unerase` of a handle in the lowering and in both
+   native backends, with the JVM refusing by name, and `typeof` answering
+   "object".
 
 ### Lifetimes nts does not keep, witnessed
 
