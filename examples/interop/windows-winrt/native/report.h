@@ -22,6 +22,13 @@ bool asked(const char *word);
 // How many delegate objects the program made are alive: `nts_com_delegates`.
 unsigned delegates(void);
 
+// A Win32 message loop until `quit_message_loop`.
+void run_message_loop(void);
+void quit_message_loop(void);
+void quit_message_loop_after(unsigned ms);
+// The process's CPU time so far, in milliseconds.
+double process_cpu_ms(void);
+
 // How many operations the program awaits are outstanding.
 unsigned pending(void);
 

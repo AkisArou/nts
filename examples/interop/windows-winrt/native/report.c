@@ -80,6 +80,40 @@ static DWORD WINAPI elsewhere(void *argument) {
   return 0;
 }
 
+// A Win32 message loop, as a windowed program runs one from inside module
+// evaluation, until `quit_message_loop` posts WM_QUIT. libuv turns inside it
+// only through the win host's wake message.
+void run_message_loop(void) {
+  MSG message;
+  while (GetMessageW(&message, 0, 0, 0) > 0) {
+    TranslateMessage(&message);
+    DispatchMessageW(&message);
+  }
+}
+
+void quit_message_loop(void) { PostQuitMessage(0); }
+
+static void CALLBACK quit_now(HWND window, UINT message, UINT_PTR id,
+                              DWORD time) {
+  (void)window;
+  (void)message;
+  (void)time;
+  KillTimer(0, id);
+  PostQuitMessage(0);
+}
+
+// WM_QUIT after `ms`, from a Win32 timer: nothing of libuv's.
+void quit_message_loop_after(unsigned ms) { SetTimer(0, 0, ms, quit_now); }
+
+// The process's CPU time so far, user and kernel, in milliseconds.
+double process_cpu_ms(void) {
+  FILETIME created, exited, kernel, user;
+  GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user);
+  ULARGE_INTEGER k = {{kernel.dwLowDateTime, kernel.dwHighDateTime}};
+  ULARGE_INTEGER u = {{user.dwLowDateTime, user.dwHighDateTime}};
+  return (double)(k.QuadPart + u.QuadPart) / 10000.0;
+}
+
 void invoke_elsewhere(void *delegate, void *sender) {
   Elsewhere *e = malloc(sizeof *e);
   e->delegate = delegate;

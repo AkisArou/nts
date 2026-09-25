@@ -46,11 +46,22 @@
 //   providers -- the handler captures `reference`, which holds the delegate,
 //   which holds the handler: the cycle an event handler that captures its
 //   source makes in every language with counted references.
-import { activations, asked, delegates, invoke_elsewhere, pending, releases, report } from "c:report";
+import {
+  activations,
+  asked,
+  delegates,
+  invoke_elsewhere,
+  pending,
+  process_cpu_ms,
+  quit_message_loop_after,
+  releases,
+  report,
+  run_message_loop,
+} from "c:report";
 // Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import { local } from "c:memory";
-import type { c_int64, c_uint32 } from "c:types";
+import type { c_int64, c_uint, c_uint32 } from "c:types";
 import { GuidHelper, MemoryBuffer } from "winrt:Windows.Foundation";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
 import { ThreadPool } from "winrt:Windows.System.Threading";
@@ -322,7 +333,30 @@ async function reportAwaited(): Promise<void> {
   report(await awaited());
 }
 
-if (asked("async")) {
+// Run as `winrt pumped`: the same carried call, inside a Win32 message loop
+// with nothing else of libuv's alive -- no timer, nothing awaited -- which a
+// Win32 timer leaves after two seconds. The pump drains the carried call
+// itself, so the handler runs either way; what the loop's idle time shows is
+// whether the pump's libuv turn consumed the cross-thread packet. One that
+// did not poll left it on the completion port, and the watcher took it off,
+// put it back and woke the pump again, for as long as the loop ran: a spin,
+// with nothing else wrong (the lost wakeup Apple fixed in 238d1f8b, as it
+// shows on Windows). So the loop's CPU time is the measurement: a few
+// milliseconds idle, against the whole two seconds spinning.
+function pumped(): void {
+  invoke_elsewhere((sender) => {
+    report("carried " + String(sender.GetNumber()));
+  }, JsonValue.Parse("7"));
+  quit_message_loop_after(2000 as c_uint);
+  const before = process_cpu_ms();
+  run_message_loop();
+  const spent = process_cpu_ms() - before;
+  report("left the loop, " + (spent < 500 ? "idle" : "spinning: " + String(Math.round(spent)) + " ms"));
+}
+
+if (asked("pumped")) {
+  pumped();
+} else if (asked("async")) {
   void reportAwaited();
 } else if (asked("thread")) {
   threaded();

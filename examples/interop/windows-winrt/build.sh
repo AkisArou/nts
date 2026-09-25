@@ -125,6 +125,25 @@ for provider in nogc rc; do
       *) cat "$build/windows-$product-async.err" >&2; echo "windows-winrt: $product async ($provider) exited $status on Windows" >&2; exit 1 ;;
     esac
   done
+  # Run as `pumped`, the carried call inside a Win32 message loop with
+  # nothing else of libuv's alive, left by a Win32 timer after two seconds:
+  # the handler runs, and the loop stays idle rather than spinning on a
+  # packet the pump never consumed. Bounded all the same.
+  for product in winrt winrtLlvm; do
+    exe="$build/$product/windows-x86_64/$product.exe"
+    set +e
+    timeout 120 "$root/tooling/windows/run.sh" "$exe" pumped >"$build/windows-$product-pumped.txt" 2>"$build/windows-$product-pumped.err"
+    status=$?
+    set -e
+    case $status in
+      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      0)
+        printf 'carried 7\nleft the loop, idle\n' | diff -u - "$build/windows-$product-pumped.txt"
+        echo "windows-x86_64 ($product, $provider): a carried call inside an idle message loop leaves it idle, run on Windows"
+        ;;
+      *) cat "$build/windows-$product-pumped.err" >&2; echo "windows-winrt: $product pumped ($provider) exited $status on Windows" >&2; exit 1 ;;
+    esac
+  done
   # Run as `thread`, a delegate called and released last on a thread the
   # program does not own: both carried to the owning thread, where the
   # handler reports with the object it was given, and the delegate is gone

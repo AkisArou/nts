@@ -1,5 +1,5 @@
 declare module "c:report" {
-  import type { c_uint } from "c:types";
+  import type { c_double, c_uint } from "c:types";
   export function report(line: string): void;
   // How many runtime classes the Windows Runtime has activated so far.
   export function activations(): c_uint;
@@ -9,6 +9,12 @@ declare module "c:report" {
   export function asked(word: string): boolean;
   // How many delegates the program made are still alive.
   export function delegates(): c_uint;
+  // A Win32 message loop, until `quit_message_loop` posts WM_QUIT.
+  export function run_message_loop(): void;
+  export function quit_message_loop(): void;
+  export function quit_message_loop_after(ms: c_uint): void;
+  // The process's CPU time so far, in milliseconds.
+  export function process_cpu_ms(): c_double;
   // How many operations the program awaits are outstanding.
   export function pending(): c_uint;
   // Calls `handler` with `sender` on a thread of its own after 100 ms, and
