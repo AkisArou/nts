@@ -353,7 +353,7 @@ fn a_class_is_a_value_and_a_class_method_a_message_to_it() {
 #[test]
 fn a_class_value_is_declared_by_an_objc_module_with_a_class_name() {
     for (name, import, module, expected) in [
-        ("stray", "Stray", "c:elsewhere", "a module-scope variable of a native pointer"),
+        ("stray", "Stray", "c:elsewhere", "an ambient constant holding a native handle"),
         ("misnamed", "Misnamed", "objc:AppKit", "`not a class` is not one"),
     ] {
         let source = format!(

@@ -354,17 +354,20 @@ fn sizes_of_two_structs_in_one_function_are_not_merged() {
 
 #[test]
 fn local_addresses_cannot_outlive_or_free_their_storage() {
+    // `global` and `store-helper` were refused as a module-scope variable of
+    // a native pointer, which no global could hold. One can now, and what
+    // refuses them is the rule these cases are about: the address escapes.
     for (name, body, reason) in [
         ("return", "export function bad(): Ptr<c_int> { return local<c_int>(); }", "escapes"),
         ("field-return", "export function bad(): Ptr<c_int> { return addrOf(local<S>().x); }", "escapes"),
         ("join-return", "export function bad(n: number): Ptr<c_int> { const p = local<c_int>(); const q = n > 0 ? p : local<c_int>(); return q; }", "escapes"),
-        ("global", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } export function bad(): void { held = local<c_int>(); }", "module-scope variable"),
+        ("global", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } export function bad(): void { held = local<c_int>(); }", "escapes"),
         ("object", "export function bad(): {p: Ptr<c_int>} { return {p: local<c_int>()}; }", "escapes"),
         ("closure", "export function bad(): () => number { const p = local<c_int>(); return () => p[0]; }", "escapes"),
         ("store", "export function bad(out: Ptr<Ptr<c_int>>): void { out[0] = local<c_int>(); }", "escapes"),
         ("unknown-call", "declare function consume(p: Ptr<c_int>): void; export function bad(): void { consume(local<c_int>()); }", "escapes"),
         ("return-helper", "function alias(p: Ptr<c_int>): Ptr<c_int> { return p; } export function bad(): number { return alias(local<c_int>())[0]; }", "escapes"),
-        ("store-helper", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } function keep(p: Ptr<c_int>): void { held = p; } export function bad(): void { keep(local<c_int>()); }", "module-scope variable"),
+        ("store-helper", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } function keep(p: Ptr<c_int>): void { held = p; } export function bad(): void { keep(local<c_int>()); }", "escapes"),
         ("free", "export function bad(): void { const p = local<c_int>(2); const q = addrOf(p[0]); free(q); }", "escapes"),
         // A local used before the function can suspend, or within one
         // iteration, is allowed (`native_storage::confined`); these use the

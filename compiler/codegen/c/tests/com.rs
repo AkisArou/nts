@@ -299,6 +299,26 @@ fn a_static_taking_bytes_passes_the_count_before_them() {
     windows_syntax(&dir, &emitted);
 }
 
+/// A handle held at module scope is a global: a pointer that starts null and
+/// that `module#init` assigns, which a function reads. It was refused as "a
+/// module-scope variable of a native pointer, which a global has no storage
+/// for", so a program kept its window or its app object in `main()`.
+#[test]
+fn a_handle_at_module_scope_is_a_global() {
+    let source = "import { Parse } from \"winrt:Windows.Data.Json\";\nconst value = Parse(\"42.5\");\nexport function run(): string {\n  return value.Stringify();\n}\n";
+    let Some((dir, prepared)) = prepare("global", &binding("", ""), source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert!(text.contains("IJsonValue * value = 0;"), "the handle is not a global starting null:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
 /// Two tags on one line are one tag with the second's text in it: the reader
 /// takes a tag to the end of its line. The case `windows-winrt` was first
 /// written with, refused rather than read as a three-word slot.

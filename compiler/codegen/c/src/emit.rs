@@ -2500,6 +2500,8 @@ fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagno
                     // `initial` is one `f64` and cannot spell a pointer, so
                     // emitting it here would declare `NtsString *s = 0.0;`.
                     ref ty if ty.may_hold_a_reference() => "0".to_owned(),
+                    // A native handle starts null for the same reason.
+                    HirType::NativePointer(_) => "0".to_owned(),
                     _ => float_literal(global.initial),
                 }
             ),

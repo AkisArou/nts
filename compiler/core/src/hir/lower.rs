@@ -3458,6 +3458,15 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
     naming
 }
 
+/// Why a module-scope `const` with no initializer -- ambient, since
+/// TypeScript accepts one nowhere else -- cannot hold a native handle: it has
+/// no value, and nothing assigns the global.
+fn ambient_handle(kind: nts_semantic_schema::VariableKind, initialized: bool, ty: &HirType) -> Option<String> {
+    (kind == nts_semantic_schema::VariableKind::Const && !initialized && matches!(ty, HirType::NativePointer(_))).then(|| {
+        "an ambient constant holding a native handle, which has no value: nothing makes or names it".to_owned()
+    })
+}
+
 /// Whether a module-scope variable can be a global, and why not.
 ///
 /// One decision in three questions, together because the walk that asks them is
@@ -4001,6 +4010,17 @@ fn collect_module_scope(
         }
 
         if let Err(reason) = storable(&mut probe, *name_node, &ty) {
+            scope.unsupported.insert(symbol.0, reason);
+            continue;
+        }
+        // **A `const` with no initializer is ambient** -- TypeScript accepts
+        // one nowhere else -- and so has no value: nothing assigns the global,
+        // and a read would answer null. A native handle is made by a call or
+        // named by a binding that knows how to (an Objective-C class); a
+        // declaration alone names nothing. This was refused, by accident, as
+        // a global having no storage for a handle, and a handle global made
+        // the accident the only thing standing in front of a silent null.
+        if let Some(reason) = ambient_handle(kind, initializer.is_some(), &ty) {
             scope.unsupported.insert(symbol.0, reason);
             continue;
         }

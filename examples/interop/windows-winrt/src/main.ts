@@ -28,6 +28,7 @@
 // - `bytes`: byte arrays both ways (see `bytes`).
 // - `map`: a class whose default interface is an instantiation (see `map`).
 // - `guids`: `Guid` by value and by reference (see `guids`).
+// - `global`: a handle held at module scope, read from a function (`held`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
 //   call that was handed it -- and 19 under `--rc`, those two and one for
@@ -193,6 +194,11 @@ function throwing(): void {
   report("after");
 }
 
+// A handle at module scope: a global the module's initializer assigns and a
+// function reads. Under `--rc` it is held until the process ends, and each
+// read takes a reference and gives it back.
+const held = JsonValue.Parse("7");
+
 function run(): string {
   const value = JsonValue.Parse("42.5");
   const number = value.GetNumber();
@@ -216,7 +222,7 @@ function run(): string {
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
-    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " map=" + map() + " guids=" + guids();
+    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " map=" + map() + " guids=" + guids() + " global=" + String(held.GetNumber());
 }
 
 if (asked("throw")) {

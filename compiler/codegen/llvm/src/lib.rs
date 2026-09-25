@@ -178,7 +178,8 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
             continue;
         };
         let linkage = if global.exported { "" } else { "internal " };
-        let zero = if matches!(global.ty, HirType::Managed(_)) {
+        // A native handle starts null, as a reference does.
+        let zero = if matches!(global.ty, HirType::Managed(_) | HirType::NativePointer(_)) {
             "null".to_owned()
         } else if matches!(global.ty, HirType::Erased) {
             // An erased global is a tag beside a payload -- an aggregate, and

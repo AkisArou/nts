@@ -619,6 +619,38 @@ fn byval_is_a_pointer_to_a_copy_on_win64() {
     assert!(body.contains("callq\ttake"), "{body}");
 }
 
+/// A module-scope variable may hold a native handle, and a pointer into a
+/// function's own storage is one: stored into the global, it would outlive
+/// the frame it points into. `local<T>()`'s escape rule is what refuses it --
+/// the one thing between a handle global and a pointer to a dead frame.
+#[test]
+fn a_local_stored_in_a_global_is_refused() {
+    let binding = r#"declare module "c:held" {
+  import type { Struct, c_double } from "c:types";
+  export type Pair = Struct<{ a: c_double; b: c_double }, "pair">;
+}
+"#;
+    let source = "import type { Pair } from \"c:held\";\n\
+                  import { local } from \"c:memory\";\n\
+                  import type { Ptr } from \"c:types\";\n\
+                  let held: Ptr<Pair> | null = null;\n\
+                  export function run(): void {\n  held = local<Pair>();\n}\n";
+    let Some((_, prepared)) = prepare("held-local", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("native local address escapes")),
+        "a local's address stored into a global is not refused: {:?}",
+        prepared.diagnostics
+    );
+    // The control: memory that outlives the frame is a pointer a global may
+    // hold, so the refusal above is the escape rule's and not the global's.
+    let heap = source.replace("import { local } from \"c:memory\";", "import { malloc } from \"c:stdlib\";").replace("local<Pair>()", "malloc<Pair>(16)");
+    let Some((_, prepared)) = prepare("held-heap", binding, &heap) else { return };
+    assert!(prepared.diagnostics.is_empty(), "a heap pointer is refused as a global: {:?}", prepared.diagnostics);
+}
+
 /// Each record that cannot cross by value is refused where the binding is
 /// read, naming it. The last case is the result's storage escaping, which is
 /// `local<T>()`'s rule and so the result's.

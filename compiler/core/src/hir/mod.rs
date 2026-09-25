@@ -451,7 +451,7 @@ impl HirType {
     /// as "a module-scope variable holding a reference", which a bigint is not.
     #[must_use]
     pub const fn can_be_global(&self) -> bool {
-        self.is_scalar() || self.may_hold_a_reference() || matches!(self, Self::BigInt)
+        self.is_scalar() || self.may_hold_a_reference() || matches!(self, Self::BigInt | Self::NativePointer(_))
     }
 }
 
