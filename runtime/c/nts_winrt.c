@@ -13,32 +13,99 @@
 #include <string.h>
 #include <winstring.h>
 
-/* A `string` as an HSTRING for one call: a copy (`WindowsCreateString`),
- * deleted by `nts_hstring_release` once the call returns. NULL is the empty
- * HSTRING, which WinRT spells NULL too.
+/* A `string` as an HSTRING for one call: a fast-pass reference
+ * (`WindowsCreateStringReference`), which copies nothing and, once the pool
+ * below holds a frame, allocates nothing -- over the string's own units when
+ * it is stored two bytes wide, or over a copy widened into the frame when it
+ * is stored one byte wide, as every ASCII string is. A callee that keeps the
+ * string makes its own copy (`WindowsDuplicateString`), which is the
+ * reference's contract. NULL is the empty HSTRING, which WinRT spells NULL
+ * too. Given back by `nts_hstring_release` once the call returns.
  *
- * A copy, not `WindowsCreateStringReference` over the string's own units:
- * the fast-pass reference needs a header that outlives the call, and whether
- * saving the copy is worth that is a measurement not yet made. */
+ * It was a copy (`WindowsCreateString`) of a copy (`nts_string_to_utf16`
+ * widens a one-byte string into a `malloc`): a string argument cost 64-74 ns
+ * on the VM where C making the same call through the same slot costs 22.
+ *
+ * The references in use are a list, and the one being released is found by
+ * its handle rather than by assuming a fast-pass HSTRING is its header's
+ * address, which is true and documented nowhere. The list is as long as the
+ * strings one call passes. */
+#define NTS_HSTRING_INLINE 64
+
+typedef struct NtsHstringFrame {
+  HSTRING_HEADER header;
+  HSTRING handle;
+  uint16_t *heap;
+  struct NtsHstringFrame *next;
+  uint16_t units[NTS_HSTRING_INLINE + 1];
+} NtsHstringFrame;
+
+static _Thread_local NtsHstringFrame *nts_hstring_free;
+static _Thread_local NtsHstringFrame *nts_hstring_used;
+
 void *nts_string_to_hstring(const NtsString *s) {
   if (s == 0 || s->length == 0) {
     return 0;
   }
-  const uint16_t *units = nts_string_to_utf16(s);
-  HSTRING made = 0;
-  HRESULT hr = WindowsCreateString((const wchar_t *)units, s->length, &made);
-  nts_utf16_release(s, units);
+  NtsHstringFrame *frame = nts_hstring_free;
+  if (frame != 0) {
+    nts_hstring_free = frame->next;
+  } else if ((frame = malloc(sizeof *frame)) == 0) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  frame->heap = 0;
+  const uint16_t *units = 0;
+  if ((s->flags & NTS_TWO_BYTE) && NTS_ELEMENTS(s, uint16_t)[s->length] == 0) {
+    units = NTS_ELEMENTS(s, uint16_t);
+  } else {
+    uint16_t *into = frame->units;
+    if (s->length > NTS_HSTRING_INLINE &&
+        (into = frame->heap = malloc(((size_t)s->length + 1u) * 2u)) == 0) {
+      fprintf(stderr, "nts: out of memory\n");
+      abort();
+    }
+    if (s->flags & NTS_TWO_BYTE) {
+      memcpy(into, NTS_ELEMENTS(s, uint16_t), (size_t)s->length * 2u);
+    } else {
+      const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
+      for (uint32_t at = 0; at < s->length; at++) {
+        into[at] = bytes[at];
+      }
+    }
+    into[s->length] = 0;
+    units = into;
+  }
+  HRESULT hr = WindowsCreateStringReference((const wchar_t *)units, s->length,
+                                            &frame->header, &frame->handle);
   if (FAILED(hr)) {
-    fprintf(stderr, "nts: WindowsCreateString failed (0x%08lx)\n",
+    fprintf(stderr, "nts: WindowsCreateStringReference failed (0x%08lx)\n",
             (unsigned long)hr);
     abort();
   }
-  return made;
+  frame->next = nts_hstring_used;
+  nts_hstring_used = frame;
+  return frame->handle;
 }
 
 void nts_hstring_release(const NtsString *s, void *h) {
   (void)s;
-  WindowsDeleteString((HSTRING)h);
+  if (h == 0) {
+    return;
+  }
+  for (NtsHstringFrame **link = &nts_hstring_used; *link != 0;
+       link = &(*link)->next) {
+    NtsHstringFrame *frame = *link;
+    if (frame->handle == (HSTRING)h) {
+      *link = frame->next;
+      free(frame->heap);
+      frame->next = nts_hstring_free;
+      nts_hstring_free = frame;
+      return;
+    }
+  }
+  fprintf(stderr, "nts: an HSTRING released that was not lent\n");
+  abort();
 }
 
 /* An HSTRING a WinRT method returned, as a `string`: copied, and the HSTRING
@@ -108,12 +175,6 @@ static void nts_winrt_initialize(void) {
     abort();
   }
 }
-
-/* A run of UTF-16 units: a string's, lent for a call, or a literal's. */
-typedef struct {
-  const uint16_t *units;
-  uint32_t length;
-} NtsUnits;
 
 /* An IID from the two words the compiler passes: its sixteen bytes as they
  * lie in memory, low word first. The compiler knows every IID a program
@@ -233,12 +294,12 @@ void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high) {
   return nts_query(object, &wanted);
 }
 
-/* One activated factory: its class's UTF-16 units and the interface's
- * sixteen bytes, as a key the cache owns -- a call site's string may be
- * released once the call returns -- and the object. */
+/* One activated factory: its class's name as UTF-16, which the cache owns,
+ * the interface it was asked as, and the object. */
 typedef struct NtsFactory {
-  uint16_t *key;
+  uint16_t *name;
   uint32_t length;
+  IID iid;
   void *factory;
   struct NtsFactory *next;
 } NtsFactory;
@@ -249,17 +310,24 @@ static uint32_t activations;
  * hits: a cache that never hits returns the right factory every time. */
 uint32_t nts_winrt_activations(void) { return activations; }
 
-/* `class` and `iid` as one key, `class` then a NUL then the IID's bytes as
- * eight units, in `into` when it is large enough; the length either way. */
-static uint32_t nts_factory_key(NtsUnits class_name, NtsUnits iid,
-                                uint16_t *into, uint32_t room) {
-  uint32_t length = class_name.length + 1 + iid.length;
-  if (into != 0 && length <= room) {
-    memcpy(into, class_name.units, class_name.length * sizeof *into);
-    into[class_name.length] = 0;
-    memcpy(into + class_name.length + 1, iid.units, iid.length * sizeof *into);
+/* Whether `s` is the class name `name`, compared in `s`'s own width: a
+ * class name is ASCII and so stored one byte wide, and widening it to
+ * compare was a `malloc` and a copy on every static call. */
+static int nts_same_name(const NtsString *s, const uint16_t *name,
+                         uint32_t length) {
+  if (s->length != length) {
+    return 0;
   }
-  return length;
+  if (s->flags & NTS_TWO_BYTE) {
+    return memcmp(NTS_ELEMENTS(s, uint16_t), name, (size_t)length * 2u) == 0;
+  }
+  const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
+  for (uint32_t at = 0; at < length; at++) {
+    if (bytes[at] != name[at]) {
+      return 0;
+    }
+  }
+  return 1;
 }
 
 /* A runtime class's activation factory, as the interface `iid` names --
@@ -312,40 +380,45 @@ static void nts_winappsdk_bootstrap(void) {
   }
 }
 
-static void *nts_factory(NtsUnits class_name, const IID *wanted) {
-  NtsUnits iid = {(const uint16_t *)wanted, sizeof *wanted / sizeof(uint16_t)};
+static void *nts_factory(const NtsString *class_name, const IID *wanted) {
   static NtsFactory *factories;
-  uint16_t probe[256];
-  uint32_t length = nts_factory_key(class_name, iid, probe, 256);
-  uint16_t *key = length <= 256 ? probe : malloc(length * sizeof *key);
-  if (key == 0) {
-    abort();
-  }
-  if (key != probe) {
-    nts_factory_key(class_name, iid, key, length);
-  }
-  for (NtsFactory *known = factories; known != 0; known = known->next) {
-    if (known->length == length &&
-        memcmp(known->key, key, length * sizeof *key) == 0) {
-      if (key != probe) {
-        free(key);
-      }
+  for (NtsFactory **link = &factories; *link != 0; link = &(*link)->next) {
+    NtsFactory *known = *link;
+    if (IsEqualGUID(&known->iid, wanted) &&
+        nts_same_name(class_name, known->name, known->length)) {
+      /* To the front: a program's loops call a few classes' statics. */
+      *link = known->next;
+      known->next = factories;
+      factories = known;
       return known->factory;
     }
   }
   nts_winrt_initialize();
+  NtsFactory *kept = malloc(sizeof *kept);
+  uint16_t *name = malloc(((size_t)class_name->length + 1u) * 2u);
+  if (kept == 0 || name == 0) {
+    abort();
+  }
+  for (uint32_t at = 0; at < class_name->length; at++) {
+    name[at] = (class_name->flags & NTS_TWO_BYTE)
+                   ? NTS_ELEMENTS(class_name, uint16_t)[at]
+                   : NTS_ELEMENTS(class_name, unsigned char)[at];
+  }
+  name[class_name->length] = 0;
   static const uint16_t microsoft[] = {'M', 'i', 'c', 'r', 'o',
                                        's', 'o', 'f', 't', '.'};
-  if (class_name.length > 10 &&
-      memcmp(class_name.units, microsoft, sizeof microsoft) == 0) {
+  if (class_name->length > 10 &&
+      memcmp(name, microsoft, sizeof microsoft) == 0) {
     nts_winappsdk_bootstrap();
   }
-  HSTRING name = 0;
-  WindowsCreateString((const wchar_t *)class_name.units, class_name.length,
-                      &name);
+  HSTRING_HEADER header;
+  HSTRING reference = 0;
   void *factory = 0;
-  HRESULT hr = RoGetActivationFactory(name, wanted, &factory);
-  WindowsDeleteString(name);
+  HRESULT hr = WindowsCreateStringReference(
+      (const wchar_t *)name, class_name->length, &header, &reference);
+  if (SUCCEEDED(hr)) {
+    hr = RoGetActivationFactory(reference, wanted, &factory);
+  }
   if (FAILED(hr)) {
     fprintf(stderr,
             "nts: the Windows Runtime has no class the binding names "
@@ -354,19 +427,9 @@ static void *nts_factory(NtsUnits class_name, const IID *wanted) {
     abort();
   }
   activations++;
-  NtsFactory *kept = malloc(sizeof *kept);
-  if (kept == 0) {
-    abort();
-  }
-  if (key == probe) {
-    key = malloc(length * sizeof *key);
-    if (key == 0) {
-      abort();
-    }
-    memcpy(key, probe, length * sizeof *key);
-  }
-  kept->key = key;
-  kept->length = length;
+  kept->name = name;
+  kept->length = class_name->length;
+  kept->iid = *wanted;
   kept->factory = factory;
   kept->next = factories;
   factories = kept;
@@ -376,10 +439,7 @@ static void *nts_factory(NtsUnits class_name, const IID *wanted) {
 void *nts_winrt_factory(const NtsString *class_name, uint64_t iid_low,
                         uint64_t iid_high) {
   IID wanted = nts_iid(iid_low, iid_high);
-  const uint16_t *name = nts_string_to_utf16(class_name);
-  void *factory = nts_factory((NtsUnits){name, class_name->length}, &wanted);
-  nts_utf16_release(class_name, name);
-  return factory;
+  return nts_factory(class_name, &wanted);
 }
 
 /* A runtime class made by its default constructor, as the interface `iid`
@@ -391,10 +451,7 @@ void *nts_winrt_activate(const NtsString *class_name, uint64_t iid_low,
   /* `IActivationFactory`: {00000035-0000-0000-C000-000000000046}. */
   static const IID activation = {
       0x00000035, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
-  const uint16_t *name = nts_string_to_utf16(class_name);
-  void *factory =
-      nts_factory((NtsUnits){name, class_name->length}, &activation);
-  nts_utf16_release(class_name, name);
+  void *factory = nts_factory(class_name, &activation);
   typedef HRESULT(STDMETHODCALLTYPE * Activate)(void *, void **);
   void *made = 0;
   HRESULT hr = ((Activate)(*(void ***)factory)[6])(factory, &made);
