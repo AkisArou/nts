@@ -68,3 +68,29 @@ b=$(awk -F'"mean": ' 'NF > 1 { n++; if (n == 2) { split($2, v, ","); print v[1] 
 printf '| notes app, 1000 notes (ms) | | %.1f | %.1f | %s |\n' "$a" "$b" "$(awk -v a="$a" -v b="$b" 'BEGIN { printf "%.1fx", b / a }')"
 set -- $app
 printf '| notes app peak RSS (MB) | | %.1f | %.1f | %s |\n' "$(($1 / 1024))" "$(($2 / 1024))" "$(awk -v a="$1" -v b="$2" 'BEGIN { printf "%.1fx", b / a }')"
+
+# The task list (tasks/src/main.ts, and gjs/tasks.js line for line): ten
+# thousand tasks made and sorted in the program, and fifteen queries typed
+# into a search whose filter is the program's own closure, run once per task
+# per query. Its log is checked equal on both sides before anything is timed;
+# the timing is the program's own (its `ms` line), best of five runs.
+"$nts" build "$here/tasks/tsconfig.json" --out "$out/tasks" --rc >/dev/null
+tasks="$out/tasks/tasks/linux-gnu-x86_64/tasks"
+env GSK_RENDERER=cairo xvfb-run -a sh -c "
+  '$tasks' > '$out/tasks.nts.log' 2>/dev/null
+  gjs '$here/gjs/tasks.js' > '$out/tasks.gjs.log' 2>/dev/null
+  for run in 1 2 3 4 5; do '$tasks' 2>/dev/null | grep '^ms ' >> '$out/tasks.nts.ms'; done
+  for run in 1 2 3 4 5; do gjs '$here/gjs/tasks.js' 2>/dev/null | grep '^ms ' >> '$out/tasks.gjs.ms'; done
+"
+grep -v '^ms ' "$out/tasks.nts.log" > "$out/tasks.nts.checked"
+grep -v '^ms ' "$out/tasks.gjs.log" > "$out/tasks.gjs.checked"
+if [ ! -s "$out/tasks.nts.checked" ] || ! cmp -s "$out/tasks.nts.checked" "$out/tasks.gjs.checked"; then
+  echo "FAILED gtk-bench: the task list's logs differ between nts and gjs" >&2
+  exit 1
+fi
+best() { awk -v f="$1" 'NR == 1 || $f < m { m = $f } END { printf "%.1f", m }' "$2"; }
+a=$(best 3 "$out/tasks.nts.ms"); b=$(best 3 "$out/tasks.gjs.ms")
+printf '| task list: make and sort 10000 (ms) | | %s | %s | %s |\n' "$a" "$b" "$(awk -v a="$a" -v b="$b" 'BEGIN { printf "%.1fx", b / a }')"
+a=$(best 5 "$out/tasks.nts.ms"); b=$(best 5 "$out/tasks.gjs.ms")
+printf '| task list: 15 queries typed (ms) | | %s | %s | %s |\n' "$a" "$b" "$(awk -v a="$a" -v b="$b" 'BEGIN { printf "%.1fx", b / a }')"
+rm -f "$out/tasks.nts.ms" "$out/tasks.gjs.ms" "$out/tasks.nts.checked" "$out/tasks.gjs.checked"
