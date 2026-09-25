@@ -7,12 +7,15 @@
 declare module "c:support" {
   import type { Block } from "objc:types";
   import type { Implementation } from "objc:runtime";
-  import type { NSObject, Timer } from "objc:AppKit";
+  import type { NSObject, NSView, Timer } from "objc:AppKit";
+  import type { c_double } from "c:types";
   export function report(line: string): void;
   /** `WINDOW_CONTROL=detached` takes libuv's sources off the run loop. */
   export function window_control(): void;
   /** Under `WINDOW_NESTED=1`, a nested run loop inside the callback. */
   export function nested_while_readable(): void;
+  /** Sends `view` `drawRect:` with a rectangle, as AppKit does. */
+  export function send_draw_rect(view: NSView, x: c_double, y: c_double, width: c_double, height: c_double): void;
   /**
    * @ntsSymbol imp_implementationWithBlock
    */

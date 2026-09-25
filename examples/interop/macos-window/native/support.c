@@ -10,6 +10,20 @@
 
 #include "nts_cf_host.h"
 
+/* `CGRect`'s layout, four doubles, without CoreGraphics or <objc/runtime.h>:
+ * the second's `imp_implementationWithBlock` is declared above with the block
+ * as `void *`, and the two would conflict. */
+typedef struct NtsRect {
+  double x, y, width, height;
+} NtsRect;
+struct objc_selector *sel_registerName(const char *name);
+void objc_msgSend(void);
+
+void send_draw_rect(struct NSView *view, double x, double y, double width, double height) {
+  NtsRect rect = {x, y, width, height};
+  ((void (*)(struct NSView *, struct objc_selector *, NtsRect))objc_msgSend)(view, sel_registerName("drawRect:"), rect);
+}
+
 void report(const char *line) {
   fputs(line, stdout);
   fputc('\n', stdout);

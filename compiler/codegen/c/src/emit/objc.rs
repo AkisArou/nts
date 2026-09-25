@@ -122,7 +122,10 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                     continue;
                 }
                 let want = compiled.params[if slot == 0 { 0 } else { slot - 1 }].clone();
-                arguments.push(format!("({})a{slot}", c_type_of(program, &want.ty, &want.origin)?));
+                // A record arrives by value and the compiled method reads it
+                // through its address, as every `ByValue<T>` is carried.
+                let by_value = if matches!(ty, Type::Record(_)) { "&" } else { "" };
+                arguments.push(format!("({}){by_value}a{slot}", c_type_of(program, &want.ty, &want.origin)?));
             }
             let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
             let symbol = nts_codegen_common::objc::imp_symbol(&class.name, at);

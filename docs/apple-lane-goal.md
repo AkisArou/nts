@@ -516,6 +516,25 @@ correctness does not depend on arm64 running by luck.
      - Refused by name until the second half: a field (the runtime's object
        has no room for one yet), a constructor, a static member, an accessor,
        and `super` calls.
+   - **S6, overrides landed (2026-09-25).** `class Canvas extends NSView {
+     draw(dirtyRect) {...} }` is Swift's `override func draw(_:)`.
+     - An override takes the selector of the method it overrides, from the
+       superclass's binding (`drawRect:`). Swift's naming rule would give
+       `draw:`, and `value(forKey:)` would get `value:` for `valueForKey:`.
+     - A method the runtime passes a record by value (`NSRect`, `NSPoint`)
+       takes it as C does. The LLVM entry point receives it by the
+       platform's convention, from the same `aggregate::plan` a call uses:
+       a `byval` pointer on System V, the parts stored into memory from
+       registers, or an HFA stored whole. The method's type encoding spells
+       the record as clang does (`{CGRect={CGPoint=dd}{CGSize=dd}}`).
+     - `macos-window`'s `Canvas` gets `hitTest:` from AppKit synchronously
+       (a point, in two registers) and `drawRect:` sent with a known
+       rectangle (in memory), on both backends. With the override rule
+       disabled, `drawn 40x30` reads `0x0`. AppKit's own draws are not the
+       check: since macOS 14 they may pass a rect larger than the bounds.
+     - An optional chain as a statement (`window.contentView?.hitTest(p);`)
+       compiles. Its value, `T | null | undefined`, has no representation,
+       and nothing reads it, so each absent link jumps past the rest.
    - **S6, fields landed (2026-09-25).** `class Tally extends NSObject {
      count = 0; names: string[] = [] }` is Swift's stored properties.
      - The instance is the runtime's object, so the fields live in an

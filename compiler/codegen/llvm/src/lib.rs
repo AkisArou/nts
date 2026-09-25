@@ -1297,9 +1297,6 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
     if classes.iter().any(|class| !class.protocols.is_empty()) {
         out.push_str("declare void @nts_objc_adopt(ptr, ptr)\n");
     }
-    let text = |out: &mut String, name: &str, value: &str| {
-        let _ = writeln!(out, "@{name} = private unnamed_addr constant [{} x i8] c\"{value}\\00\"", value.len() + 1);
-    };
     let mut registrations = Vec::new();
     for class in &classes {
         let table = nts_codegen_common::objc::methods_symbol(&class.name);
@@ -1314,60 +1311,11 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
                     None => Ok(String::new()),
                 };
             };
-            if compiled.params.len() + 1 != method.signature.parameters.len() {
-                return Err(refuse(compiled, "an Objective-C method whose entry point and compiled function disagree about arity"));
-            }
-            let imp = nts_codegen_common::objc::imp_symbol(&class.name, at);
-            let mut parameters = Vec::new();
-            let mut arguments = Vec::new();
-            let mut body = String::new();
-            for (slot, foreign) in method.signature.parameters.iter().enumerate() {
-                let from = foreign.abi(platform.abi);
-                let from_ty = ty_of(&from, compiled)?;
-                parameters.push(format!("{from_ty} %a{slot}"));
-                // `_cmd` is the runtime's; the compiled method never reads it.
-                if slot == 1 {
-                    continue;
-                }
-                let to = compiled.params[if slot == 0 { 0 } else { slot - 1 }].ty.clone();
-                let to_ty = ty_of(&to, compiled)?;
-                if from == to {
-                    arguments.push(format!("{to_ty} %a{slot}"));
-                } else if to == HirType::Bool {
-                    let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));
-                    arguments.push(format!("{to_ty} %p{slot}"));
-                } else {
-                    let instruction = conversion(&from, &to, compiled)?;
-                    let _ = writeln!(body, "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}");
-                    arguments.push(format!("{to_ty} %p{slot}"));
-                }
-            }
-            let want = method.signature.result.abi(platform.abi);
-            let have = compiled.return_type.clone();
-            let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
-            if want == HirType::Void {
-                let _ = writeln!(out, "define internal void @{imp}({}) nounwind {{", parameters.join(", "));
-                out.push_str(&body);
-                let _ = writeln!(out, "  call void @nts_callback_enter()\n  {call}\n  call void @nts_callback_leave()\n  ret void\n}}");
-            } else {
-                let want_ty = ty_of(&want, compiled)?;
-                let _ = writeln!(out, "define internal {want_ty} @{imp}({}) nounwind {{", parameters.join(", "));
-                out.push_str(&body);
-                let _ = writeln!(out, "  call void @nts_callback_enter()\n  %r = {call}\n  call void @nts_callback_leave()");
-                if have == want {
-                    let _ = writeln!(out, "  ret {want_ty} %r\n}}");
-                } else {
-                    let instruction = conversion(&have, &want, compiled)?;
-                    let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}", ty_of(&have, compiled)?);
-                }
-            }
-            text(&mut out, &format!("{imp}.sel"), &method.selector);
-            text(&mut out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
-            rows.push(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"));
+            rows.push(imp(&mut out, platform, &class.name, at, method, compiled)?);
         }
         let _ = writeln!(out, "@{table} = internal constant [{} x {{ ptr, ptr, ptr }}] [{}]", rows.len(), rows.join(", "));
-        text(&mut out, &format!("{table}.name"), &class.name);
-        text(&mut out, &format!("{table}.super"), &class.superclass);
+        text_constant(&mut out, &format!("{table}.name"), &class.name);
+        text_constant(&mut out, &format!("{table}.super"), &class.superclass);
         let state = match state_maker(program, class, &mut out) {
             Ok(Some(maker)) => format!("ptr @{maker}"),
             Ok(None) => "ptr null".to_owned(),
@@ -1379,7 +1327,7 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
             class.methods.len()
         ));
         for (at, protocol) in class.protocols.iter().enumerate() {
-            text(&mut out, &format!("{table}.protocol{at}"), protocol);
+            text_constant(&mut out, &format!("{table}.protocol{at}"), protocol);
             registrations.push(format!("  call void @nts_objc_adopt(ptr @{table}.name, ptr @{table}.protocol{at})"));
         }
     }
@@ -1388,6 +1336,84 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
     Ok(out)
 }
 
+/// A private NUL-terminated string constant, `@name`.
+fn text_constant(out: &mut String, name: &str, value: &str) {
+    let _ = writeln!(out, "@{name} = private unnamed_addr constant [{} x i8] c\"{value}\\00\"", value.len() + 1);
+}
+
+/// One method's entry point, `nts_imp_<Class>_<at>`: the runtime's arguments
+/// -- `self`, `_cmd`, then the method's, a record by value by the platform's
+/// convention -- converted to the compiled method's, and its result back.
+/// Returns the method table's row for it.
+fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nts_core::hir::ObjcMethod, compiled: &Func) -> Result<String, Diagnostic> {
+    if compiled.params.len() + 1 != method.signature.parameters.len() {
+        return Err(refuse(compiled, "an Objective-C method whose entry point and compiled function disagree about arity"));
+    }
+    let imp = nts_codegen_common::objc::imp_symbol(class, at);
+    let mut parameters = Vec::new();
+    let mut arguments = Vec::new();
+    let mut body = String::new();
+    // How each argument arrives: a record by value by the platform's
+    // convention, the rest as themselves.
+    let Some(plan) = aggregate::plan(0, &method.signature.parameters, &method.signature.result, platform) else {
+        return Err(refuse(compiled, "an Objective-C method of the program's whose record arguments this platform's convention cannot place here; the C backend builds it"));
+    };
+    for (slot, foreign) in method.signature.parameters.iter().enumerate() {
+        if let (nts_core::hir::native::Type::Record(record), Some(aggregate::Crossing::Record(passing))) = (foreign, plan.arguments.get(slot)) {
+            let mut stores = Vec::new();
+            let Some((received, address)) = aggregate::receive(passing, record, platform, &format!("%a{slot}"), &mut stores) else {
+                return Err(refuse(compiled, "an Objective-C method of the program's taking a record this backend cannot place"));
+            };
+            parameters.extend(received);
+            for line in stores {
+                let _ = writeln!(body, "  {line}");
+            }
+            arguments.push(format!("ptr {address}"));
+            continue;
+        }
+        let from = foreign.abi(platform.abi);
+        let from_ty = ty_of(&from, compiled)?;
+        parameters.push(format!("{from_ty} %a{slot}"));
+        // `_cmd` is the runtime's; the compiled method never reads it.
+        if slot == 1 {
+            continue;
+        }
+        let to = compiled.params[if slot == 0 { 0 } else { slot - 1 }].ty.clone();
+        let to_ty = ty_of(&to, compiled)?;
+        if from == to {
+            arguments.push(format!("{to_ty} %a{slot}"));
+        } else if to == HirType::Bool {
+            let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));
+            arguments.push(format!("{to_ty} %p{slot}"));
+        } else {
+            let instruction = conversion(&from, &to, compiled)?;
+            let _ = writeln!(body, "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}");
+            arguments.push(format!("{to_ty} %p{slot}"));
+        }
+    }
+    let want = method.signature.result.abi(platform.abi);
+    let have = compiled.return_type.clone();
+    let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
+    if want == HirType::Void {
+        let _ = writeln!(out, "define internal void @{imp}({}) nounwind {{", parameters.join(", "));
+        out.push_str(&body);
+        let _ = writeln!(out, "  call void @nts_callback_enter()\n  {call}\n  call void @nts_callback_leave()\n  ret void\n}}");
+    } else {
+        let want_ty = ty_of(&want, compiled)?;
+        let _ = writeln!(out, "define internal {want_ty} @{imp}({}) nounwind {{", parameters.join(", "));
+        out.push_str(&body);
+        let _ = writeln!(out, "  call void @nts_callback_enter()\n  %r = {call}\n  call void @nts_callback_leave()");
+        if have == want {
+            let _ = writeln!(out, "  ret {want_ty} %r\n}}");
+        } else {
+            let instruction = conversion(&have, &want, compiled)?;
+            let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}", ty_of(&have, compiled)?);
+        }
+    }
+    text_constant(out, &format!("{imp}.sel"), &method.selector);
+    text_constant(out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
+    Ok(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"))
+}
 /// The fields' maker of `class`, where it has fields: the compiled
 /// `{Class}#state` entered as an entry point is, because the runtime calls it
 /// from the `init` it adds, on whatever stack sent `init`. `Err(None)` for a

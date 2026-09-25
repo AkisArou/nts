@@ -12167,6 +12167,68 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// An optional chain as a statement, whose value is discarded: each
+    /// absent link jumps past the rest, and the last is lowered for what it
+    /// does. The two absences a chain can end in are one here, since nothing
+    /// asks which it was -- the case that makes such a chain's value
+    /// unrepresentable, and that a statement never has.
+    fn chain_for_effect(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let links = self.chain_links(id);
+        let join = self.new_block();
+        let entry = self.bindings.clone();
+        self.chain_effect_step(id, &links, join)?;
+        // A link that assigns a variable would need its value merged at the
+        // join, as a conditional's arms are; none is written this way today.
+        if self.bindings != entry {
+            return Err(self.unsupported(id, "an assignment inside an optional chain whose value is discarded"));
+        }
+        self.switch_to(join);
+        Ok(())
+    }
+
+    fn chain_effect_step(&mut self, id: NodeId, links: &[NodeId], join: BlockId) -> Result<(), Diagnostic> {
+        let Some((&link, rest)) = links.split_first() else {
+            self.lower_expression(id)?;
+            if !self.is_terminated() {
+                self.terminate(Terminator::Jump { target: join, args: Vec::new() });
+            }
+            return Ok(());
+        };
+        if self.kind_of(link) == Some(syntax::CALL_EXPRESSION) {
+            return Err(self.unsupported(link, "an optional call `f?.()` inside a longer chain"));
+        }
+        let Some(&object) = self.children(link).first() else {
+            return Err(self.unsupported(link, "an optional link with no receiver"));
+        };
+        let receiver = self.lower_expression(object)?;
+        let receiver = match self.absence_of(object, receiver) {
+            None => receiver,
+            Some(absent) => {
+                let present = self.present_of(object, receiver);
+                let here = self.new_block();
+                self.terminate(Terminator::Branch {
+                    cond: absent,
+                    then_target: join,
+                    then_args: Vec::new(),
+                    else_target: here,
+                    else_args: Vec::new(),
+                });
+                self.switch_to(here);
+                match present {
+                    Some(ty) => {
+                        let origin = self.origin(link);
+                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                    }
+                    None => receiver,
+                }
+            }
+        };
+        self.chain_present.insert(link, receiver);
+        let result = self.chain_effect_step(id, rest, join);
+        self.chain_present.remove(&link);
+        result
+    }
+
     /// Member `member` of a receiver an optional chain found present: an
     /// Objective-C property's getter, or the program's own member.
     fn member_on_present(&mut self, id: NodeId, object: NodeId, member: NodeId, receiver: ValueId) -> Result<ValueId, Diagnostic> {
@@ -13441,13 +13503,15 @@ impl<'a> FuncBuilder<'a> {
         let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
         // The selector: the one `@ntsSelector` gives the method, else the one
         // a protocol the class adopts declares for a member of its name, else
-        // Swift's `@objc` rule for its name.
+        // the one of the superclass's method it overrides -- `draw(_:)` is
+        // `drawRect:` -- else Swift's `@objc` rule for its name.
         let selector = self
             .node(member)
             .native
             .as_ref()
             .and_then(|native| native.selector.clone())
             .or_else(|| self.protocol_selector(class, &name))
+            .or_else(|| self.overridden_selector(class, &name, signature.parameters.len()))
             .unwrap_or_else(|| objc_selector(&name, signature.parameters.len()));
         let func = self.lower_method_of(class, member, instance)?;
         let method = super::ObjcMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
@@ -13579,6 +13643,32 @@ impl<'a> FuncBuilder<'a> {
             .into_iter()
             .filter(|interface| self.in_objc_module(*interface))
             .collect()
+    }
+
+    /// The selector of the method a class the program writes overrides: the
+    /// nearest superclass's instance method of `name` taking `arity`
+    /// arguments, as its binding tags it. Swift's names are not selectors --
+    /// `draw(_:)` is `drawRect:`, `value(forKey:)` is `valueForKey:` -- so an
+    /// override answers the runtime by the selector it replaces.
+    fn overridden_selector(&self, class: NodeId, name: &str, arity: usize) -> Option<String> {
+        let mut base = super::native::superclass(self.snapshot, class);
+        for _ in 0..64 {
+            let here = base?;
+            let found = self.children(here).into_iter().find_map(|member| {
+                let arguments = self.children(member).into_iter().filter(|c| self.kind_of(*c) == Some(syntax::PARAMETER)).count();
+                (self.kind_of(member) == Some(syntax::METHOD_DECLARATION)
+                    && !is_static_member(self.snapshot, member)
+                    && self.member_name(member).as_deref() == Some(name)
+                    && arguments == arity)
+                    .then(|| self.node(member).native.as_ref().and_then(|native| native.selector.clone()))
+                    .flatten()
+            });
+            if found.is_some() {
+                return found;
+            }
+            base = super::native::superclass(self.snapshot, here);
+        }
+        None
     }
 
     /// The selector a protocol the class adopts declares for member `name`.
@@ -28919,6 +29009,12 @@ impl<'a> FuncBuilder<'a> {
                 let Some(expression) = self.children(id).first().copied() else {
                     return Ok(());
                 };
+                // `window.contentView?.hitTest(point);`: a chain whose value
+                // nothing reads, though its type -- `NSView | null |
+                // undefined` -- has no representation to read it in.
+                if self.ends_an_optional_chain(expression) && self.type_of(expression).is_none() {
+                    return self.chain_for_effect(expression);
+                }
                 let value = self.lower_expression(expression)?;
                 // A call to something declared `never` does not come back, and
                 // saying so is what makes the rest of the block dead rather

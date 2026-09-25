@@ -12,6 +12,11 @@ void window_control(void);
 // nested run loop for a second from inside the current callback, and report
 // the CPU that took. Nothing otherwise.
 void nested_while_readable(void);
+struct NSView;
+// Sends `view` `drawRect:` with the rectangle (x, y, width, height), as AppKit
+// does: a rectangle by value, which the override receives by the platform's
+// convention -- in memory on x86_64.
+void send_draw_rect(struct NSView *view, double x, double y, double width, double height);
 // libobjc's, declared by <objc/runtime.h> only with blocks enabled.
 struct objc_imp *imp_implementationWithBlock(void *block);
 

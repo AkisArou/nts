@@ -645,6 +645,52 @@ fn a_class_extending_an_objective_c_class_is_registered_with_the_runtime() {
     assert!(bump.split("\n}").next().unwrap_or_default().contains("Counter__twice(v0,"), "{text}");
 }
 
+/// Swift's `override func draw(_:)`: an override answers the selector of the
+/// method it overrides, `drawRect:`, where Swift's naming rule would make
+/// `draw:`. The runtime passes it a rectangle by value, which its entry point
+/// takes as C does and hands the compiled method by address, with the type
+/// encoding clang writes for it. And an optional chain as a statement, whose
+/// value -- a handle, `null` or `undefined` -- nothing reads, compiles.
+#[test]
+fn an_override_takes_the_selector_it_replaces_and_a_record_by_value() {
+    let binding = r#"declare module "objc:Foundation" {
+  import type { ByValue, Struct, c_double } from "c:types";
+  export type Size = Struct<{ width: c_double; height: c_double }, "Size">;
+  export type Box = Struct<{ origin: Size; size: Size }, "Box">;
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+  }
+  /** @ntsClass Surface */
+  export class Surface extends NSObject {
+    /** @ntsSelector drawRect: */
+    draw(dirtyRect: ByValue<Box>): void;
+    readonly parent: Surface | null;
+  }
+}
+"#;
+    let source = "import { Surface, type Box } from \"objc:Foundation\";\n\
+                  import type { ByValue } from \"c:types\";\n\
+                  let seen = 0;\n\
+                  class Canvas extends Surface {\n  draw(dirtyRect: ByValue<Box>): void { seen = dirtyRect.size.width; }\n}\n\
+                  export function run(): number {\n  const canvas = new Canvas();\n  canvas.parent?.parent;\n  return seen;\n}\n";
+    let Some((_, prepared)) = prepare("objc-override-record", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for expected in [
+        "{ \"drawRect:\", (void (*)(void))nts_imp_Canvas_0, \"v48@0:8{Box={Size=dd}{Size=dd}}16\" }",
+        "struct Box a2) { nts_callback_enter(); Canvas__draw((struct Canvas *)a0, (struct Box *)&a2);",
+    ] {
+        assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+    }
+}
+
 /// Swift's stored properties: fields of such a class live in an object its
 /// ivar holds (`Held#state`), made by the `init` the runtime adds -- whose
 /// maker the registration hands over -- and every read and write goes

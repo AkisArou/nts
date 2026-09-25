@@ -102,6 +102,7 @@ pub fn block_encoding(signature: &FnPointer) -> String {
     let mut arguments = String::new();
     for parameter in &signature.parameters {
         let (code, size) = encoding(parameter);
+        let code = code.as_str();
         let _ = write!(arguments, "{code}{offset}");
         offset += size;
     }
@@ -118,7 +119,8 @@ pub fn method_encoding(signature: &FnPointer) -> String {
     let mut offset = 0usize;
     let mut arguments = String::new();
     for (at, parameter) in signature.parameters.iter().enumerate() {
-        let (code, size) = if at == 1 { (":", 8) } else { encoding(parameter) };
+        let (code, size) = if at == 1 { (":".to_owned(), 8) } else { encoding(parameter) };
+        let code = code.as_str();
         let _ = write!(arguments, "{code}{offset}");
         offset += size;
     }
@@ -169,7 +171,36 @@ pub fn classes_in_order(program: &Program) -> Vec<&nts_core::hir::ObjcClass> {
 }
 
 /// One type's encoding and its size in an argument frame.
-fn encoding(ty: &Type) -> (&'static str, usize) {
+fn encoding(ty: &Type) -> (String, usize) {
+    if let Type::Record(record) = ty {
+        // `{CGRect={CGPoint=dd}{CGSize=dd}}`, as clang writes a struct by
+        // value, and its size, as Apple's LP64 lays it out.
+        let size = nts_core::hir::layout::native_place(record, nts_core::hir::native::NativeAbi::SysV).map_or(0, |placed| placed.size);
+        return (record_encoding(record), usize::try_from(size).unwrap_or(0));
+    }
+    let (code, size) = scalar_encoding(ty);
+    (code.to_owned(), size)
+}
+
+/// A record's encoding: its tag, then each member's.
+fn record_encoding(record: &nts_core::hir::native::Record) -> String {
+    let members: String = record.fields.iter().map(|field| pointee_encoding(&field.ty)).collect();
+    format!("{{{}={members}}}", record.name)
+}
+
+/// A member's encoding, as it sits inside a record.
+fn pointee_encoding(pointee: &Pointee) -> String {
+    match pointee {
+        Pointee::Scalar(scalar) => scalar_encoding(&Type::Scalar(*scalar)).0.to_owned(),
+        Pointee::Record(record) => record_encoding(record),
+        Pointee::Array { element, length } => format!("[{length}{}]", pointee_encoding(element)),
+        Pointee::Const(inner) => pointee_encoding(inner),
+        _ => "^v".to_owned(),
+    }
+}
+
+/// A type's one-letter (or pointer) encoding and its size in a frame.
+fn scalar_encoding(ty: &Type) -> (&'static str, usize) {
     match ty {
         Type::Void => ("v", 0),
         Type::Bool => ("B", 4),
@@ -194,7 +225,8 @@ fn encoding(ty: &Type) -> (&'static str, usize) {
         Type::Pointer(Pointee::Const(inner)) if matches!(**inner, Pointee::Scalar(Scalar::Char)) => ("r*", 8),
         Type::FnPointer(_) => ("^?", 8),
         Type::Pointer(_) | Type::Managed(_) | Type::Erased => ("^v", 8),
-        Type::Record(_) => unreachable!("a function type never holds a record by value: `abi_type` refuses one"),
+        // Handled by `encoding`, which builds the record's spelling.
+        Type::Record(_) => ("?", 0),
     }
 }
 

@@ -17,6 +17,7 @@ import {
   NSButton,
   NSEvent,
   NSObject,
+  NSView,
   NSWindow,
   Timer,
   type CGPoint,
@@ -24,10 +25,10 @@ import {
   type NSNotification,
   type NSWindowDelegate,
 } from "objc:AppKit";
-import { nested_while_readable, report, window_control } from "c:support";
+import { nested_while_readable, report, send_draw_rect, window_control } from "c:support";
 import { sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
-import type { Ptr } from "c:types";
+import type { ByValue, Ptr, c_double } from "c:types";
 
 let presses = 0;
 let ticks = 0;
@@ -65,6 +66,27 @@ class Controller extends NSObject implements NSWindowDelegate {
   // timer closes the window.
   windowWillClose(notification: NSNotification): void {
     report("closing");
+  }
+}
+
+// Swift's `override func draw(_ dirtyRect: NSRect)` and `hitTest(_:)`: a view
+// of the program's own, whose overrides answer the selectors the methods they
+// override have, `drawRect:` and `hitTest:` -- not the ones Swift's names
+// would make. The runtime passes each a record by value: a rectangle in
+// memory, and a point in two registers.
+let drawnWidth = 0;
+let drawnHeight = 0;
+let hitX = 0;
+
+class Canvas extends NSView {
+  draw(dirtyRect: ByValue<CGRect>): void {
+    drawnWidth = dirtyRect.size.width;
+    drawnHeight = dirtyRect.size.height;
+  }
+
+  hitTest(point: ByValue<CGPoint>): NSView | null {
+    hitX = point.x;
+    return null;
   }
 }
 
@@ -153,6 +175,20 @@ function main(): void {
   // Which the program is: a bare executable has no bundle identifier, and an
   // application has the one its `Info.plist` gives it.
   report(`bundle ${Bundle.main.bundleIdentifier ?? "none"}`);
+  const canvasFrame = local<CGRect>();
+  setRect(canvasFrame, 0, 0, 40, 30);
+  const canvas = new Canvas({ frame: canvasFrame });
+  window.contentView?.addSubview(canvas);
+  // AppKit asks each subview, so the override is called now, synchronously.
+  const point = local<CGPoint>();
+  point.x = 10;
+  point.y = 12;
+  window.contentView?.hitTest(point);
+  report(`hit ${hitX}`);
+  // `drawRect:` sent with a rectangle whose size is known: AppKit's own
+  // draws pass what it chooses, which since macOS 14 may exceed the bounds.
+  send_draw_rect(canvas, 1 as c_double, 2 as c_double, 40 as c_double, 30 as c_double);
+  report(`drawn ${drawnWidth}x${drawnHeight}`);
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
   // the closure a block the timer keeps, and calls from the run loop.

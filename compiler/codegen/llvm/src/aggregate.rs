@@ -473,6 +473,40 @@ pub(crate) fn store_result(passing: &Passing, align: u32, returned: &str, destin
     }
 }
 
+/// A record an entry point receives by value, as the parameters it arrives
+/// in, named after `name`, and the statements that put it in memory: the
+/// address is what the compiled function reads, as it reads every `ByValue`.
+/// A copy in memory is already one -- a `byval` pointer on System V.
+pub(crate) fn receive(passing: &Passing, record: &Record, platform: Platform, name: &str, body: &mut Vec<String>) -> Option<(Vec<String>, String)> {
+    let (size, align) = extent(record, platform)?;
+    let store = format!("{name}.store");
+    match passing {
+        Passing::Memory { .. } => Some((vec![format!("{} {name}", parameter_types(passing)[0])], name.to_owned())),
+        Passing::Homogeneous { .. } => {
+            let ty = &parameter_types(passing)[0];
+            body.push(format!("{store} = alloca [{size} x i8], align {align}"));
+            body.push(format!("store {ty} {name}, ptr {store}, align {}", eightbyte_align(align)));
+            Some((vec![format!("{ty} {name}")], store))
+        }
+        Passing::Registers(eightbytes) => {
+            body.push(format!("{store} = alloca [{size} x i8], align {align}"));
+            let mut parameters = Vec::new();
+            for (at, eightbyte) in eightbytes.iter().enumerate() {
+                let part = format!("{name}.e{at}");
+                parameters.push(format!("{} {part}", eightbyte.ty));
+                let address = if at == 0 {
+                    store.clone()
+                } else {
+                    body.push(format!("{part}.at = getelementptr inbounds i8, ptr {store}, i64 {}", at * 8));
+                    format!("{part}.at")
+                };
+                body.push(format!("store {} {part}, ptr {address}, align {}", eightbyte.ty, eightbyte_align(align)));
+            }
+            Some((parameters, store))
+        }
+    }
+}
+
 /// The alignment of a record's storage, which the loads and stores above may
 /// assume of the pointer they are handed.
 pub(crate) fn alignment(record: &Record, platform: Platform) -> Option<u32> {
