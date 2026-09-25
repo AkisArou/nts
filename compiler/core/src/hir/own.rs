@@ -1904,9 +1904,17 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
 /// There is exactly one emitter, `lower_pushes`, and the runtime's own comment
 /// states the convention, so the two cannot drift silently. `unshift` is the
 /// same operation at the other end and joins it here for the same reason.
+///
+/// **`nts_array_push_value` too**, which its header has always called
+/// "consuming, like `nts_array_push_ref`" and which stores without a retain.
+/// Missing from here, the caller released the reference the array had just
+/// taken: twenty pushes of one object into an `unknown[]` left its count
+/// where it was, and truncating the array freed it while another array still
+/// held it -- invisible to valgrind for a managed object, whose freed memory
+/// the runtime pools, and a `g_object_unref` of a freed `GObject` for a handle.
 pub(super) fn consumes(name: &str) -> Option<usize> {
     match name {
-        "nts_array_push_ref" | "nts_array_unshift_ref" => Some(1),
+        "nts_array_push_ref" | "nts_array_unshift_ref" | "nts_array_push_value" => Some(1),
         _ => None,
     }
 }
