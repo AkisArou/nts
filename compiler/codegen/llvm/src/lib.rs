@@ -44,6 +44,7 @@ mod aggregate;
 mod native;
 mod objc;
 mod com;
+mod gobject;
 mod indirect;
 /// How many sixteen-byte arguments a Win64 runtime call can pass; see `indirect`.
 pub use indirect::SLOTS as WIN64_INDIRECT_SLOTS;
@@ -1277,7 +1278,15 @@ fn entry_points(program: &Program, platform: Platform, diagnostics: &mut Vec<Dia
             false
         }
     };
+    let mut declared = bridged;
     match objc_classes(program, platform, bridged) {
+        Ok(classes) => {
+            declared |= classes.contains("declare void @nts_callback_enter()");
+            text.push_str(&classes);
+        }
+        Err(diagnostic) => diagnostics.push(diagnostic),
+    }
+    match gobject::classes(program, platform, declared) {
         Ok(classes) => text.push_str(&classes),
         Err(diagnostic) => diagnostics.push(diagnostic),
     }

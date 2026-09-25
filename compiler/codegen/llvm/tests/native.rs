@@ -4131,6 +4131,37 @@ int thing_record(struct _Thing *t) { return t->record; }
 }
 
 /// A C function a binding declares as a static member of a value -- GJS's
+/// A class the program writes over a C handle's class value that nothing
+/// registers -- not a `GObject` class a binding declares, not an Objective-C
+/// class -- is refused whole, and so is its `new`: its instances are the
+/// handle, and `new` would resolve to the parent's construct signature and
+/// make a parent, every override silently never called. That is what
+/// `class Counter extends GtkButton` did before subclasses were registered.
+#[test]
+fn a_class_over_an_unregistered_handle_is_refused_with_its_new() {
+    let Some((_, prepared)) = prepare("unregistered-subclass", r#"
+import type { Class } from "c:types";
+type Thing = Class<"_Thing">;
+declare const Thing: {
+    /**
+     * @ntsConstruct thing_new
+     */
+    new (props?: {}): Thing;
+};
+declare function thing_new(): Thing;
+class Sub extends Thing {
+    ping(): number { return 1; }
+}
+export function run(): void {
+    const made = new Sub({});
+    void made;
+}
+"#) else { return; };
+    let text = format!("{:?}", prepared.diagnostics);
+    assert!(text.contains("a class extending a C handle's class that nothing registers"), "{text}");
+    assert!(text.contains("`new` of a class extending a C handle's class that nothing registers"), "{text}");
+}
+
 /// A virtual function (`@ntsVfunc`) is a class struct's slot a subclass
 /// overrides and has no C symbol: a direct call is refused by name, not
 /// lowered to a call of a symbol named after the method.

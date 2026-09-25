@@ -150,10 +150,11 @@ pub(crate) struct Function {
     /// a class rather than a method: a static member of the class's value,
     /// `GtkStringObject.new("x")`, as GJS has it.
     pub(crate) statics: Option<(String, String)>,
-    /// `(class struct, member)` for a virtual function (`@ntsVfunc`): a slot
-    /// a subclass overrides, with no symbol of its own. Written only as a
-    /// method, `vfunc_clicked`, as GJS names an override.
-    pub(crate) vfunc: Option<(String, String)>,
+    /// `(class struct, member, offset)` for a virtual function
+    /// (`@ntsVfunc`): a slot a subclass overrides, with no symbol of its own,
+    /// at the offset C's `offsetof` gives. Written only as a method,
+    /// `vfunc_clicked`, as GJS names an override.
+    pub(crate) vfunc: Option<(String, String, u64)>,
 }
 
 #[derive(Debug)]
@@ -209,6 +210,8 @@ pub(crate) enum Reason {
     OwnedString,
     WritableBuffer,
     OutParameter,
+    /// A virtual function whose class struct member the headers do not place.
+    NoSlot,
     StringOut,
     CallerAllocates,
     Array,
@@ -242,6 +245,7 @@ impl fmt::Display for Reason {
             Self::OwnedString => write!(f, "a string parameter the callee takes ownership of"),
             Self::WritableBuffer => write!(f, "a `char *` buffer the callee may write into, which GIR calls a string"),
             Self::OutParameter => write!(f, "an out parameter of a type written through no slot here"),
+            Self::NoSlot => write!(f, "a virtual function whose class struct member the headers do not place"),
             Self::StringOut => write!(f, "a string out parameter"),
             Self::CallerAllocates => write!(f, "an out parameter whose storage the caller allocates"),
             Self::Array => write!(f, "an array"),
@@ -471,6 +475,10 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
             // Mapped as the method it is, under the name it gets here, since
             // there is no C identifier to map it under.
             let named = Callable { c_identifier: Some(format!("{class_struct}_{}", vfunc.name)), ..vfunc.clone() };
+            let Some(offset) = mapper.facts.offsets.get(&(class_struct.clone(), vfunc.name.clone())).copied() else {
+                mapper.binding.refused.push((label, Reason::NoSlot));
+                continue;
+            };
             match mapper.function(&named, Some(class)) {
                 Ok(function) => {
                     let Some((class, _)) = function.method.clone() else {
@@ -485,7 +493,7 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                         method_only: true,
                         statics: None,
                         finish: None,
-                        vfunc: Some((class_struct.clone(), vfunc.name.clone())),
+                        vfunc: Some((class_struct.clone(), vfunc.name.clone(), offset)),
                         ..function
                     });
                 }

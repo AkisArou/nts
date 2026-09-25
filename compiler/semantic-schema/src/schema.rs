@@ -807,9 +807,12 @@ pub struct NativeAttributes {
     /// overrides. It has no C symbol.
     #[serde(default)]
     pub vfunc: Option<String>,
-    /// `@ntsGType gtk_button_get_type`, on the construct signature of a value
-    /// a binding declares beside a `GObject` class: the function answering the
-    /// class's `GType`, which a subclass the program writes registers under.
+    /// `@ntsGType gtk_button_get_type`, on the phantom `__c_gtype` member of
+    /// the value a binding declares beside a `GObject` class: the function
+    /// answering the class's `GType`, which a subclass the program writes
+    /// registers under. On a member because the snapshot keeps a value with a
+    /// construct signature as that signature, members and all dropped, and
+    /// the member's declaration is still in the tree.
     #[serde(default)]
     pub gtype: Option<String>,
 }

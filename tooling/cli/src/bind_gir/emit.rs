@@ -274,18 +274,19 @@ fn construction(
         return;
     }
     // `class Counter extends GtkButton`: the value names the class's `GType`
-    // (`@ntsGType`), and a class with no construct signature of its own --
-    // `GtkWidget`, abstract -- gets an abstract one, so it can be extended and
-    // still not constructed.
-    if let Some(gtype) = gtype {
-        let _ = writeln!(out, "  /**\n   * @ntsGType {gtype}\n   */");
-    }
+    // function (`@ntsGType`) on a phantom member, whose declaration carries
+    // the tag where a `const` could not -- and a class with no construct
+    // signature of its own (`GtkWidget`, abstract) gets an abstract one, so it
+    // can be extended and still not constructed.
     let abstract_construct = if construct.is_none() && gtype.is_some() {
         format!("(abstract new (props?: {name}Props) => {name}) & ")
     } else {
         String::new()
     };
     let _ = writeln!(out, "  export const {name}: {abstract_construct}{{");
+    if let Some(gtype) = gtype {
+        let _ = writeln!(out, "    /**\n     * @ntsGType {gtype}\n     */\n    readonly __c_gtype?: never;");
+    }
     out.push_str(construct.as_deref().unwrap_or_default());
     for function in statics {
         static_member(out, function);
@@ -544,8 +545,8 @@ fn notes(out: &mut String, function: &Function, symbol: bool, defaulted: &[(&str
         notes.push(format!("@ntsNoEscape {name}"));
     }
     // A virtual function names its slot, and has no symbol to name.
-    if let Some((class_struct, member)) = &function.vfunc {
-        notes.push(format!("@ntsVfunc {class_struct} {member}"));
+    if let Some((class_struct, member, offset)) = &function.vfunc {
+        notes.push(format!("@ntsVfunc {class_struct} {member} {offset}"));
     } else if symbol {
         notes.push(format!("@ntsSymbol {}", function.symbol));
     }

@@ -3985,7 +3985,7 @@ const DEMO_HEADER: &str = "#ifndef DEMO_H\n#define DEMO_H\n#include <stddef.h>\n
          char **demo_split(const char *text);\n\
          int demo_checksum(const uint8_t *data, size_t length);\n\
          typedef struct _DemoWidget { int size; } DemoWidget;\n\
-         typedef struct _DemoWidgetClass { int (*measure)(DemoWidget *widget, int for_size); long (*wrong)(DemoWidget *widget); } DemoWidgetClass;\n\
+         typedef struct _DemoWidgetClass { long (*wrong)(DemoWidget *widget); int (*measure)(DemoWidget *widget, int for_size); } DemoWidgetClass;\n\
          unsigned long demo_widget_get_type(void);\n\
          #endif\n";
 
@@ -4239,13 +4239,14 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         "no values wrapper for `demo_thing_size`:\n{values}"
     );
     assert!(!values.contains("demo_thing_count_values"), "a method with no out parameter has a values form:\n{values}");
-    // A virtual function: its class struct's member, with no symbol,
-    // written as the `vfunc_` method a subclass overrides -- and checked
+    // A virtual function: its class struct's member, with no symbol, at the
+    // offset clang gives (8: `wrong` is first), written as the `vfunc_` method
+    // a subclass overrides -- and checked
     // against the member's type in the header as a function is against its
     // prototype, so GIR's `gint` for a `long` member is refused.
     assert!(
         binding.contains(
-            "     * @ntsVfunc DemoWidgetClass measure\n     */\n    vfunc_measure(this: DemoWidget, for_size: CNumber<\"int\">): CNumber<\"int\">;"
+            "     * @ntsVfunc DemoWidgetClass measure 8\n     */\n    vfunc_measure(this: DemoWidget, for_size: CNumber<\"int\">): CNumber<\"int\">;"
         ),
         "no `vfunc_measure`:\n{binding}"
     );

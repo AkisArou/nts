@@ -157,6 +157,39 @@ pub(crate) fn extends_objc(snapshot: &SemanticSnapshot, declaration: NodeId) -> 
     false
 }
 
+/// For a class the program writes over a `GObject` class a binding declares
+/// -- `class Counter extends GtkButton` -- the function answering that
+/// class's `GType`, which the subclass registers under: the `@ntsGType` on
+/// the `__c_gtype` member of the value it extends. `None` for any other
+/// class.
+///
+/// Read from the value's declaration, not its type: the snapshot keeps a
+/// value with a construct signature as that signature, and its members are
+/// gone from it.
+pub(crate) fn gobject_parent(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<String> {
+    let node = |id: NodeId| snapshot.nodes.get(id.0 as usize);
+    let is = |id: NodeId, kind: u16| matches!(node(id).map(|n| &n.kind), Some(NodeKind::Syntax(k)) if *k == kind);
+    let base = syntax_children(snapshot, declaration)
+        .into_iter()
+        .filter(|child| is(*child, syntax::HERITAGE_CLAUSE))
+        .flat_map(|clause| syntax_children(snapshot, clause))
+        .find_map(|expression| syntax_children(snapshot, expression).first().copied())?;
+    let mut record = snapshot.symbols.get(node(base)?.symbol?.0 as usize)?;
+    while let Some(aliased) = record.aliased {
+        record = snapshot.symbols.get(aliased.0 as usize)?;
+    }
+    let value = record.declarations.iter().copied().find(|d| is(*d, syntax::VARIABLE_DECLARATION))?;
+    // The tag is on a member of the value's type literal, a few levels down.
+    let mut pending = vec![value];
+    while let Some(at) = pending.pop() {
+        if let Some(gtype) = node(at).and_then(|n| n.native.as_ref()).and_then(|n| n.gtype.clone()) {
+            return Some(gtype);
+        }
+        pending.extend(syntax_children(snapshot, at));
+    }
+    None
+}
+
 /// Whether a class declaration binds an Objective-C class (`@ntsClass`).
 pub(crate) fn is_objc_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
     objc_tag(snapshot, declaration).is_some()

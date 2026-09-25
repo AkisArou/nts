@@ -42,16 +42,30 @@ pub(crate) struct Facts {
     /// the type system (`super::prerequisites`), for the interfaces GIR gives
     /// no prerequisite.
     pub(crate) prerequisites: BTreeMap<String, String>,
+    /// `(class struct, member) -> offset`: where each virtual function's slot
+    /// is, which a subclass's registration writes an entry point at. C's
+    /// `offsetof`, so no struct's layout is worked out here.
+    pub(crate) offsets: BTreeMap<(String, String), u64>,
 }
 
 /// Ask the headers about `structs` and `enums`, which are C type names.
-pub(crate) fn resolve(headers: &[String], structs: &[&str], enums: &[&str], cflags: &[String]) -> Result<Facts> {
-    if structs.is_empty() && enums.is_empty() {
+pub(crate) fn resolve(
+    headers: &[String],
+    structs: &[&str],
+    enums: &[&str],
+    slots: &[(String, String)],
+    cflags: &[String],
+) -> Result<Facts> {
+    if structs.is_empty() && enums.is_empty() && slots.is_empty() {
         return Ok(Facts::default());
     }
     let mut probe = String::new();
     for header in headers {
         let _ = writeln!(probe, "#include <{header}>");
+    }
+    probe.push_str("#include <stddef.h>\n");
+    for (at, (class_struct, member)) in slots.iter().enumerate() {
+        let _ = writeln!(probe, "enum {{ {PREFIX}offset_{at} = (int)offsetof({class_struct}, {member}) }};");
     }
     for (at, c_type) in structs.iter().enumerate() {
         let _ = writeln!(probe, "extern {c_type} {PREFIX}tag_{at};");
@@ -75,7 +89,7 @@ pub(crate) fn resolve(headers: &[String], structs: &[&str], enums: &[&str], cfla
         .output()
         .context("running clang to read what the headers define")?;
     let _ = std::fs::remove_dir_all(&dir);
-    Ok(parse(&String::from_utf8_lossy(&output.stdout), structs, enums))
+    Ok(parse(&String::from_utf8_lossy(&output.stdout), structs, enums, slots))
 }
 
 /// Read the dump back: `VarDecl ... <prefix>tag_<n> '<T>':'struct <tag>'`,
@@ -83,7 +97,7 @@ pub(crate) fn resolve(headers: &[String], structs: &[&str], enums: &[&str], cfla
 /// `ConstantExpr`. The test's dump is clang's own output, copied: the first
 /// version of it put the value on the next line, which is where this parser
 /// looked, and clang does not.
-fn parse(dump: &str, structs: &[&str], enums: &[&str]) -> Facts {
+fn parse(dump: &str, structs: &[&str], enums: &[&str], slots: &[(String, String)]) -> Facts {
     let mut facts = Facts::default();
     let mut lines = dump.lines().peekable();
     while let Some(line) = lines.next() {
@@ -98,27 +112,21 @@ fn parse(dump: &str, structs: &[&str], enums: &[&str]) -> Facts {
                 facts.tags.insert((*c_type).to_owned(), tag.trim().to_owned());
             }
         } else if line.contains("EnumConstantDecl") && !line.contains(" invalid ") {
-            let Some(rest) = line.split_once(&format!(" {PREFIX}sign_")).map(|(_, rest)| rest) else { continue };
-            let Some(c_type) = rest.split(' ').next().and_then(|n| n.parse::<usize>().ok()).and_then(|n| enums.get(n)) else {
-                continue;
+            let index = |kind: &str| {
+                line.split_once(&format!(" {PREFIX}{kind}_"))
+                    .and_then(|(_, rest)| rest.split(' ').next())
+                    .and_then(|n| n.parse::<usize>().ok())
             };
-            // The value sits under the initialiser's `ConstantExpr`, a line or
-            // two down, before the next declaration.
-            let mut value = None;
-            while let Some(next) = lines.peek() {
-                if next.contains("Decl ") && !next.contains("Expr") {
-                    break;
+            if let Some(slot) = index("offset").and_then(|n| slots.get(n)) {
+                if let Some(offset) = enumerator_value(&mut lines).and_then(|v| v.parse().ok()) {
+                    facts.offsets.insert(slot.clone(), offset);
                 }
-                let next = lines.next().unwrap_or_default();
-                if let Some((_, v)) = next.split_once("value: Int ") {
-                    value = Some(v.trim());
-                    break;
-                }
+                continue;
             }
-            let Some(value) = value else { continue };
-            match value {
-                "1" => facts.signed.insert((*c_type).to_owned()),
-                "0" => facts.unsigned.insert((*c_type).to_owned()),
+            let Some(c_type) = index("sign").and_then(|n| enums.get(n)) else { continue };
+            match enumerator_value(&mut lines) {
+                Some("1") => facts.signed.insert((*c_type).to_owned()),
+                Some("0") => facts.unsigned.insert((*c_type).to_owned()),
                 _ => false,
             };
         }
@@ -126,11 +134,27 @@ fn parse(dump: &str, structs: &[&str], enums: &[&str]) -> Facts {
     facts
 }
 
+/// An enumerator's value, which sits under its initialiser's `ConstantExpr`
+/// a line or two down, before the next declaration.
+fn enumerator_value<'d>(lines: &mut std::iter::Peekable<std::str::Lines<'d>>) -> Option<&'d str> {
+    while let Some(next) = lines.peek() {
+        if next.contains("Decl ") && !next.contains("Expr") {
+            return None;
+        }
+        let next = lines.next().unwrap_or_default();
+        if let Some((_, v)) = next.split_once("value: Int ") {
+            return Some(v.trim());
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     /// Clang's text dump, as it prints each case: a conventional tag, a typedef
     /// of another library's struct, a name already naming the struct, a type
-    /// the headers do not declare, and a signed and an unsigned enum.
+    /// the headers do not declare, a signed and an unsigned enum, and a slot's
+    /// offset -- one found, and one whose member the struct does not have.
     #[test]
     fn a_dump_reads_back_as_facts() {
         let dump = "\
@@ -145,12 +169,24 @@ EnumConstantDecl 0x5 <t.c:6:8, col:47> col:8 ntsbindgir_sign_0 'int'
 EnumConstantDecl 0x6 <t.c:7:8, col:44> col:8 ntsbindgir_sign_1 'int'
 `-ConstantExpr 0x9 <col:28, col:48> 'int'
   |-value: Int 0
+EnumConstantDecl 0xa <t.c:8:8, col:60> col:8 ntsbindgir_offset_0 'int'
+`-ConstantExpr 0xb <col:28, col:60> 'int'
+  |-value: Int 424
+  `-CStyleCastExpr 0xc <col:28, col:60> 'int' <IntegralCast>
+EnumConstantDecl 0xd <t.c:9:8, col:60> col:8 invalid ntsbindgir_offset_1 'int'
 ";
+        let slots = [
+            ("GtkButtonClass".to_owned(), "clicked".to_owned()),
+            ("GtkButtonClass".to_owned(), "no_such_member".to_owned()),
+        ];
         let facts = super::parse(
             dump,
             &["GtkWidget", "GdkRectangle", "struct _Plain", "NoSuchType"],
             &["GParamFlags", "GtkAlign"],
+            &slots,
         );
+        assert_eq!(facts.offsets[&slots[0]], 424);
+        assert!(!facts.offsets.contains_key(&slots[1]), "an invalid offsetof answered");
         assert_eq!(facts.tags["GtkWidget"], "_GtkWidget");
         assert_eq!(facts.tags["GdkRectangle"], "_cairo_rectangle_int");
         assert_eq!(facts.tags["struct _Plain"], "_Plain");

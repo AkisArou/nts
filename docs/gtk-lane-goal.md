@@ -617,7 +617,45 @@ backends against real libgobject
 an instance the library let go of is never collected, and with the family not
 registered no cycle is.
 
-### Subclassing a GObject: design (for review, not built)
+### Subclassing a GObject: built, step one
+
+**Where it stands** (`examples/interop/gtk-subclass`, C and LLVM, plain and
+`--rc`): `class Counter extends GtkButton` is a `GType` of its own,
+`Nts_Counter`, registered the first time one is made. A `vfunc_clicked()`
+method is the override GTK calls through `GtkButtonClass.clicked`, with
+`this` the button and the class's other methods callable on it. A class over
+the abstract `GtkWidget` answers `gtk_widget_measure` through
+`vfunc_measure`, writing through the out slots GTK passes. `new Counter({
+label })` makes one of the class's own type, then runs the setters.
+
+How, and where it differs from the design below:
+
+- **Each slot is an offset.** The binder asks clang for `offsetof` of every
+  class struct member it declares a `vfunc_` for (`@ntsVfunc GtkButtonClass
+  clicked 408`), and the witness asserts both the member's type and that
+  offset. Registration (`nts_gobject_register` in `runtime/c/nts_gobject.c`)
+  writes each entry point at its offset in `class_init`, so neither backend
+  needs a class struct's type. `program.c` does not include GLib's headers,
+  which is what forced this, and the LLVM backend needed it anyway.
+- **Registration is lazy**, GObject's own `get_type` convention. There is no
+  constructor before `main`, and so no `llvm.global_ctors` to share with the
+  Objective-C and COM lanes.
+- **The parent's `GType` comes from the value**, `@ntsGType` on a phantom
+  `__c_gtype` member. The snapshot keeps a value with a construct signature as
+  that signature, with its members dropped, so the member's declaration is
+  where the tag survives.
+- **Until now it was a silent miscompile.** Before this, `class Counter
+  extends GtkButton` compiled and ran: `new` made a plain `GtkButton`, and
+  `vfunc_clicked` was never called. A class over any handle that nothing
+  registers (a subclass of such a subclass among them) is now refused, and
+  so is its `new`.
+
+Still refused, each by name: a constructor of such a class; instance fields,
+which have no state storage yet; a direct call of a `vfunc_` method, which
+is chaining up (`super.vfunc_clicked()`); a slot taking a record by value;
+and extending a subclass the program wrote.
+
+The design as reviewed:
 
 ```ts
 class Counter extends GtkButton {

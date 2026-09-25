@@ -2091,6 +2091,23 @@ pub(crate) fn imp_signature(
     Ok(FnPointer::spell(parameters, result))
 }
 
+/// The C signature of a `GObject` virtual function's slot, as the class struct
+/// declares it: the instance, as the overridden declaration's `this` is, then
+/// its parameters exactly as a call of the declaration would pass them
+/// (`from_signature`, with its `@ntsDefault`s, so an optional out slot is the
+/// pointer it is). What a subclass's entry point is defined as, so that it is
+/// exactly the slot's type.
+pub(crate) fn vfunc_signature(
+    snapshot: &SemanticSnapshot,
+    receiver: Pointee,
+    signature: &nts_semantic_schema::SignatureRecord,
+    defaults: &[(String, ParameterDefault)],
+) -> Result<FnPointer, String> {
+    let slot = Function::from_signature(snapshot, "the virtual function".to_owned(), signature, None, None, defaults, None)?;
+    let parameters = std::iter::once(Type::Pointer(receiver)).chain(slot.parameters).collect();
+    Ok(FnPointer::spell(parameters, slot.result))
+}
+
 /// When a closure lent to C is given back, and by whom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lifetime {
@@ -3468,7 +3485,7 @@ fn branded_members(
 
 pub(crate) mod schema;
 pub use schema::{is_layout, pointer, storage};
-pub(crate) use schema::{extends_objc, implemented, is_objc_class, objc_meta, objc_name, superclass};
+pub(crate) use schema::{extends_objc, gobject_parent, implemented, is_objc_class, objc_meta, objc_name, superclass};
 
 /// Whether a declared parameter is TypeScript's `object`, or `object | null`.
 ///

@@ -35,6 +35,7 @@
     "gtk-gir/nts.config.ts",
     "gtk-cycles/nts.config.ts",
     "gtk-list/nts.config.ts",
+    "gtk-subclass/nts.config.ts",
     "gtk-notes/nts.config.ts",
     "linux-arm64/nts.config.ts",
     "windows-winrt/nts.config.ts",

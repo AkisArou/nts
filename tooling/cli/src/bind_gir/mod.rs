@@ -192,8 +192,9 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
                         )
                         .collect();
                     let enums: Vec<&str> = namespace.enums.iter().filter_map(|e| e.c_type.as_deref()).collect();
+                    let slots = vfunc_slots(namespace);
                     let flags = pkg_config(repository, namespace, "--cflags");
-                    let mut facts = facts::resolve(&namespace.headers, &structs, &enums, &flags)?;
+                    let mut facts = facts::resolve(&namespace.headers, &structs, &enums, &slots, &flags)?;
                     // The interfaces GIR gives no prerequisite, which the
                     // type system is asked about instead.
                     let interfaces: Vec<(&str, &str)> = namespace
@@ -213,6 +214,7 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
             let one = run.join().map_err(|_| anyhow::anyhow!("a thread reading the headers panicked"))??;
             all.tags.extend(one.tags);
             all.signed.extend(one.signed);
+            all.offsets.extend(one.offsets);
             all.unsigned.extend(one.unsigned);
             all.prerequisites.extend(one.prerequisites);
         }
@@ -365,4 +367,18 @@ fn report(binding: &map::Binding) -> String {
 
 fn write(path: &camino::Utf8Path, text: &str) -> Result<()> {
     std::fs::write(path, text).with_context(|| format!("writing {path}"))
+}
+
+/// Each virtual function's slot in a namespace, by its class struct's C type
+/// and member, for the headers to be asked where it is (`facts::resolve`).
+fn vfunc_slots(namespace: &model::Namespace) -> Vec<(String, String)> {
+    namespace
+        .classes
+        .iter()
+        .filter_map(|class| {
+            let record = namespace.records.iter().find(|r| Some(&r.name) == class.type_struct.as_ref())?;
+            Some((record.c_type.clone()?, class))
+        })
+        .flat_map(|(class_struct, class)| class.vfuncs.iter().map(move |v| (class_struct.clone(), v.name.clone())))
+        .collect()
 }

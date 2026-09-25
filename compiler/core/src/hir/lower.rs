@@ -5844,6 +5844,29 @@ fn lower_class(
 ) {
     let members = members_of(snapshot, foreign, class);
     let mut objc_methods = Vec::new();
+    let mut gobject_methods = Vec::new();
+    let gobject = super::native::gobject_parent(snapshot, class);
+    // **A class over a C handle that nothing registers is refused whole.**
+    // Its instances are the handle -- the parent's representation, inherited
+    // with its brands -- so without a registration `new` made a parent and
+    // every override was silently never called: `class Counter extends
+    // GtkButton` ran as a plain button before subclasses were registered. What
+    // is registered is a GObject class's subclass and an Objective-C class's;
+    // anything else extending a handle, a subclass of such a subclass among
+    // them, is refused by name rather than lowered as its parent.
+    if gobject.is_none() && !super::native::extends_objc(snapshot, class) && !super::native::is_objc_class(snapshot, class) {
+        let probe = FuncBuilder::probe(snapshot);
+        let handle = instance_type_of(snapshot, class).and_then(|ty| probe.represent(ty));
+        if let Some(HirType::NativePointer(_)) = handle {
+            let diagnostic = probe.unsupported(
+                class,
+                "a class extending a C handle's class that nothing registers -- only a GObject class a binding declares, or an Objective-C class, can be extended",
+            );
+            note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+            lowered.diagnostics.push(diagnostic);
+            return;
+        }
+    }
     for (copy, (instance, substitution)) in copies_of(generic, class).into_iter().enumerate() {
         for &member in &members {
             // One function for a `static` member, however many copies the class
@@ -5873,6 +5896,25 @@ fn lower_class(
             // call resolving to a signature is built against that one -- so
             // there is nothing here to lower and nothing absent to report.
             if builder.is_an_overload_signature(class, member) {
+                continue;
+            }
+            // A class the program writes over a GObject class is a GType of
+            // its own, registered the first time one is made, with each
+            // `vfunc_` method its class struct's slot. Its instances are the
+            // parent's handle, so every method takes one as `this`.
+            if gobject.is_some() && !is_static_member(snapshot, member) {
+                match builder.lower_gobject_member(class, member, instance) {
+                    Ok((func, method)) => {
+                        lowered.program.funcs.push(func);
+                        gobject_methods.extend(method);
+                    }
+                    Err(diagnostic) => {
+                        note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                        lowered.diagnostics.push(diagnostic);
+                    }
+                }
+                wanted.extend(builder.used_closures.iter().copied());
+                collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
             }
             // A class the program writes over an Objective-C class is an
@@ -5942,6 +5984,46 @@ fn lower_class(
         let state = objc_state_function(snapshot, foreign, class, shared, lowered);
         register_objc_class(snapshot, class, objc_methods, state, lowered);
     }
+    if let Some(parent) = gobject {
+        register_gobject_class(snapshot, class, parent, gobject_methods, lowered);
+    }
+}
+
+/// A class the program writes over a `GObject` class, recorded as the backend
+/// will register it (`Program::foreign_classes`): its own name, the function
+/// answering its parent's `GType`, and the class struct slot each override
+/// fills. A class with fields is refused whole, since its state has nowhere
+/// to live yet -- a `GObject`'s instance struct is its parent's.
+fn register_gobject_class(
+    snapshot: &SemanticSnapshot,
+    class: NodeId,
+    parent: String,
+    methods: Vec<super::ForeignMethod>,
+    lowered: &mut Lowered,
+) {
+    let probe = FuncBuilder::probe(snapshot);
+    let Some(name) = probe.children(class).into_iter().find_map(|child| {
+        (probe.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| probe.node(child).text.clone()).flatten()
+    }) else {
+        return;
+    };
+    if probe.declares_instance_fields(class) {
+        let diagnostic = probe.unsupported(
+            class,
+            &format!("fields of `{name}`, a class extending a GObject class, whose state has nowhere to live yet"),
+        );
+        note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+        lowered.diagnostics.push(diagnostic);
+        return;
+    }
+    lowered.program.foreign_classes.push(super::ForeignClass {
+        family: super::native::Family::GObject,
+        name,
+        superclass: parent,
+        methods,
+        protocols: Vec::new(),
+        state: None,
+    });
 }
 
 /// For a class the program writes over an Objective-C class and gives
@@ -13674,6 +13756,86 @@ impl<'a> FuncBuilder<'a> {
         let return_type = self.return_type_of(member)?;
         self.materialize(member, &return_type)?;
         Ok(return_type)
+    }
+
+    /// A member of a class the program writes over a `GObject` class: the
+    /// compiled function, and -- for a `vfunc_` method -- the class struct
+    /// slot it fills and the C signature the slot is called with, which are
+    /// the overridden declaration's (`@ntsVfunc`). A constructor is refused:
+    /// the instance is made by `new` with its properties, and a body run
+    /// after that has no `super(...)` to open with yet.
+    fn lower_gobject_member(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+    ) -> Result<(Func, Option<super::ForeignMethod>), Diagnostic> {
+        if self.kind_of(member) == Some(syntax::CONSTRUCTOR) {
+            return Err(self.unsupported(member, "a constructor of a class extending a GObject class; `new` sets the properties it is given"));
+        }
+        let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
+        if !name.starts_with("vfunc_") {
+            return Ok((self.lower_method_of(class, member, instance)?, None));
+        }
+        let receiver = instance
+            .or_else(|| instance_type_of(self.snapshot, class))
+            .and_then(|ty| super::native::pointer(self.snapshot, ty));
+        let Some(super::native::Pointee::Opaque(handle)) = receiver else {
+            return Err(self.unsupported(member, "a virtual function of a class whose instances are not a GObject handle"));
+        };
+        let (declaration, slot) = self.overridden_vfunc(&handle, &name).ok_or_else(|| {
+            self.unsupported(member, &format!("`{name}`, which overrides no virtual function of `{}` or its ancestors", handle.tag))
+        })?;
+        let signature = super::generics::declared_signature(self.snapshot, declaration)
+            .cloned()
+            .ok_or_else(|| self.unsupported(member, "a virtual function with no signature"))?;
+        let this = signature
+            .this_type
+            .and_then(|ty| super::native::pointer(self.snapshot, ty))
+            .ok_or_else(|| self.unsupported(member, "a virtual function whose instance is not a handle"))?;
+        let defaults = self
+            .node(declaration)
+            .native
+            .as_ref()
+            .and_then(|n| n.defaults.as_deref())
+            .map(super::native::parse_defaults)
+            .transpose()
+            .map_err(|why| self.unsupported(member, &why))?
+            .unwrap_or_default();
+        let entry = super::native::vfunc_signature(self.snapshot, this, &signature, &defaults)
+            .map_err(|why| self.unsupported(member, &format!("a virtual function's {why}")))?;
+        let func = self.lower_method_of(class, member, instance)?;
+        let method = super::ForeignMethod { selector: slot, function: func.name.clone(), signature: std::sync::Arc::new(entry) };
+        Ok((func, Some(method)))
+    }
+
+    /// The virtual function `name` (`vfunc_clicked`) a class whose instances
+    /// are `handle` inherits: the declaration a binding writes on the nearest
+    /// ancestor that has one, and its slot (`GtkButtonClass clicked`). A
+    /// binding declares a class as a type, not a class, so this is found by
+    /// the method's own `this`, whose tag is on the handle's chain.
+    fn overridden_vfunc(&self, handle: &super::native::Handle, name: &str) -> Option<(NodeId, String)> {
+        let chain: Vec<&str> = handle.ancestors.iter().map(String::as_str).chain(std::iter::once(handle.tag.as_str())).collect();
+        self.snapshot
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node.kind == nts_semantic_schema::NodeKind::Syntax(syntax::METHOD_SIGNATURE))
+            .filter_map(|(at, node)| {
+                let slot = node.native.as_ref()?.vfunc.clone()?;
+                let declaration = NodeId(u32::try_from(at).ok()?);
+                if self.member_name(declaration).as_deref() != Some(name) {
+                    return None;
+                }
+                let this = super::generics::declared_signature(self.snapshot, declaration)?.this_type?;
+                let Some(super::native::Pointee::Opaque(owner)) = super::native::pointer(self.snapshot, this) else {
+                    return None;
+                };
+                let depth = chain.iter().position(|tag| *tag == owner.tag)?;
+                Some((depth, declaration, slot))
+            })
+            .max_by_key(|(depth, ..)| *depth)
+            .map(|(_, declaration, slot)| (declaration, slot))
     }
 
     /// A method of a class the program writes over an Objective-C class: the
@@ -27170,6 +27332,9 @@ impl<'a> FuncBuilder<'a> {
     /// `@ntsConstruct GtkLabel_construct gtk_label_get_type` is
     /// `g_object_new_with_properties(gtk_label_get_type(), 0, NULL, NULL)`.
     fn native_construct(&mut self, id: NodeId) -> Option<Result<ValueId, Diagnostic>> {
+        if let Some(constructed) = self.gobject_new(id) {
+            return Some(constructed);
+        }
         let declaration = self.snapshot.call_targets.get(&id)?.callee?;
         if self.kind_of(declaration) != Some(syntax::CONSTRUCT_SIGNATURE) {
             return None;
@@ -27199,25 +27364,7 @@ impl<'a> FuncBuilder<'a> {
         // The literal's values first, in the order it writes them -- the
         // literal is known here, so no object is built -- then the
         // constructor, then a setter for each value it did not take.
-        let written: Vec<(String, ValueId, NodeId)> = match self.arguments_of(id).as_slice() {
-            [] => Vec::new(),
-            [literal] if self.kind_of(*literal) == Some(syntax::OBJECT_LITERAL_EXPRESSION) => {
-                let mut written = Vec::new();
-                for property in self.children(*literal) {
-                    // Read the literal's way: `{ label }` names the local,
-                    // and a computed name is refused.
-                    let (name, value) = self.property_parts(property, None)?;
-                    written.push((name, value, property));
-                }
-                written
-            }
-            _ => {
-                return Err(self.unsupported(
-                    id,
-                    "a handle constructed from properties that are not written as an object literal, which is what lets them be set without building an object",
-                ));
-            }
-        };
+        let written = self.constructed_properties(id)?;
         let mut arguments = names.map(|name| self.call_foreign_named(id, name, Vec::new())).collect::<Result<Vec<_>, _>>()?;
         for name in &from {
             let (_, value, _) = written.iter().find(|(given, ..)| given == name).ok_or_else(|| {
@@ -27226,7 +27373,42 @@ impl<'a> FuncBuilder<'a> {
             arguments.push(*value);
         }
         let handle = self.call_foreign_named(id, function, arguments)?;
-        for (name, value, property) in written.iter().filter(|(name, ..)| !from.contains(&name.as_str())) {
+        self.set_constructed(id, handle, ty, &written, &from)?;
+        Ok(handle)
+    }
+
+    /// The properties a handle's `new` is given, in the order the literal
+    /// writes them: `{ label }` names the local, and a computed name is
+    /// refused.
+    fn constructed_properties(&mut self, id: NodeId) -> Result<Vec<(String, ValueId, NodeId)>, Diagnostic> {
+        match self.arguments_of(id).as_slice() {
+            [] => Ok(Vec::new()),
+            [literal] if self.kind_of(*literal) == Some(syntax::OBJECT_LITERAL_EXPRESSION) => {
+                let mut written = Vec::new();
+                for property in self.children(*literal) {
+                    let (name, value) = self.property_parts(property, None)?;
+                    written.push((name, value, property));
+                }
+                Ok(written)
+            }
+            _ => Err(self.unsupported(
+                id,
+                "a handle constructed from properties that are not written as an object literal, which is what lets them be set without building an object",
+            )),
+        }
+    }
+
+    /// Each property a constructed handle was given and its constructor did
+    /// not take (`except`), written through the setter its `@ntsSet` names.
+    fn set_constructed(
+        &mut self,
+        id: NodeId,
+        handle: ValueId,
+        ty: TypeId,
+        written: &[(String, ValueId, NodeId)],
+        except: &[&str],
+    ) -> Result<(), Diagnostic> {
+        for (name, value, property) in written.iter().filter(|(name, ..)| !except.contains(&name.as_str())) {
             let setter = super::native::schema::property(self.snapshot, ty, name)
                 .and_then(|record| record.declaration)
                 .and_then(|declaration| self.node(declaration).native.as_ref())
@@ -27236,6 +27418,71 @@ impl<'a> FuncBuilder<'a> {
                 })?;
             self.lower_accessor_on(id, handle, ty, &setter, Some(*value))?;
         }
+        Ok(())
+    }
+
+    /// `new Counter({ label })`, where `Counter` is a class the program writes
+    /// over a `GObject` class: an instance of its own `GType`, made by the
+    /// function its backend emits beside the registration
+    /// (`nts_gobject_new_Counter`, one reference the caller owns, floating or
+    /// not), then a setter for each property. `None` for any other `new`.
+    fn gobject_new(&mut self, id: NodeId) -> Option<Result<ValueId, Diagnostic>> {
+        let callee = *self.children(id).first()?;
+        let symbol = self.node(callee).symbol?;
+        let class = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().copied().find(|declaration| {
+            self.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION)
+        })?;
+        if super::native::gobject_parent(self.snapshot, class).is_none() {
+            // A class of the program's over a handle that nothing registers
+            // (`lower_class` refuses it): its `new` would resolve to the
+            // parent's construct signature and make a parent.
+            let registered = super::native::extends_objc(self.snapshot, class) || super::native::is_objc_class(self.snapshot, class);
+            let handle = instance_type_of(self.snapshot, class).and_then(|ty| self.represent(ty));
+            return (!registered && matches!(handle, Some(HirType::NativePointer(_))))
+                .then(|| Err(self.unsupported(id, "`new` of a class extending a C handle's class that nothing registers")));
+        }
+        let name = self.children(class).into_iter().find_map(|child| {
+            (self.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| self.node(child).text.clone()).flatten()
+        })?;
+        Some(self.lower_gobject_new(id, &name))
+    }
+
+    fn lower_gobject_new(&mut self, id: NodeId, name: &str) -> Result<ValueId, Diagnostic> {
+        let ty = self.snapshot.node_types.get(&id).copied().ok_or_else(|| self.unsupported(id, "a constructed handle with no type"))?;
+        let Some(HirType::NativePointer(pointee @ super::native::Pointee::Opaque(_))) = self.represent(ty) else {
+            return Err(self.unsupported(id, "an instance of a class extending a GObject class that is not a handle"));
+        };
+        let represented = HirType::NativePointer(pointee.clone());
+        let written = self.constructed_properties(id)?;
+        let make = super::native::Function {
+            name: format!("nts_gobject_new_{name}"),
+            convention: super::native::Convention::C,
+            parameters: Vec::new(),
+            result: super::native::Type::Pointer(pointee.clone()),
+            retention: Vec::new(),
+            variadic: None,
+            declared_at: None,
+            roles: Vec::new(),
+            returns_string: None,
+            returns_array: None,
+            returns_dictionary: None,
+            send: None,
+            returns_owned: true,
+            consumes: Vec::new(),
+            frameworks: Vec::new(),
+            libraries: Vec::new(),
+            defaults: Vec::new(),
+            result_as: None,
+            vtable: None,
+            hresult: false,
+        };
+        let origin = self.origin(id);
+        let handle = self.push(
+            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(make)), args: Vec::new(), frame: None },
+            represented,
+            origin,
+        );
+        self.set_constructed(id, handle, ty, &written, &[])?;
         Ok(handle)
     }
 
@@ -27345,6 +27592,10 @@ impl<'a> FuncBuilder<'a> {
         value: Option<ValueId>,
     ) -> Result<ValueId, Diagnostic> {
         let unknown = || format!("a native property whose accessor `{method}` the handle's type does not declare as a method");
+        // `this.label` in a method of a class the program writes over a
+        // handle's: `this` is the class's polymorphic `this`, and its members
+        // are the class's.
+        let ty = self.class_behind(ty);
         let record = super::native::schema::property(self.snapshot, ty, method).ok_or_else(|| self.unsupported(id, &unknown()))?;
         let declaration = record.declaration.ok_or_else(|| self.unsupported(id, &unknown()))?;
         let Some(TypeKind::Function(signature)) = self.snapshot.types.get(record.ty.0 as usize).map(|t| &t.kind) else {
@@ -40164,10 +40415,50 @@ impl<'a> FuncBuilder<'a> {
         {
             return chain;
         }
+        if let Some(call) = self.gobject_method_call(id, receiver, &held, arguments) {
+            return call;
+        }
         let HirType::Managed(ManagedType::Object(type_id)) = held else {
             return Err(self.no_method_table(id, member, &held));
         };
         self.lower_object_method(id, receiver, type_id, member, arguments)
+    }
+
+    /// A method of a class the program writes over a `GObject` class, called on
+    /// one of its instances -- a handle, which has no method table: the
+    /// compiled method itself, with the handle as `this`. Static, which is
+    /// right while nothing can extend such a class (a class extending one is
+    /// not a `GObject` subclass the program can write yet, so no override of
+    /// this method exists to dispatch to). `None` for any other call.
+    fn gobject_method_call(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        held: &HirType,
+        arguments: &[NodeId],
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if !matches!(held, HirType::NativePointer(_)) {
+            return None;
+        }
+        let declaration = self.snapshot.call_targets.get(&id)?.callee?;
+        if self.kind_of(declaration) != Some(syntax::METHOD_DECLARATION) || is_static_member(self.snapshot, declaration) {
+            return None;
+        }
+        // The class the method is a member of: its members are in a list, so
+        // the class is a parent or two up.
+        let class = std::iter::successors(self.node(declaration).parent, |at| self.node(*at).parent)
+            .take(3)
+            .find(|at| self.kind_of(*at) == Some(syntax::CLASS_DECLARATION))?;
+        super::native::gobject_parent(self.snapshot, class)?;
+        let owner = self.children(class).into_iter().find_map(|child| {
+            (self.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| self.node(child).text.clone()).flatten()
+        })?;
+        let name = self.member_name(declaration)?;
+        let callee = Callee::Direct(format!("{owner}#{name}"));
+        Some(self.lower_call_arguments(id, &callee, arguments, None).and_then(|(mut args, lent)| {
+            args.insert(0, receiver);
+            self.finish_call(id, callee, args, lent, Some(declaration))
+        }))
     }
 
     /// A method call whose receiver is a representation with no methods of its

@@ -550,7 +550,8 @@ impl Emitted {
         // The header wherever a binding names it, which the witness then
         // includes; the source only where a signal is connected, since that is
         // what brings libgobject into the link.
-        let connects = self.writer.text().contains("nts_gobject_connect(");
+        // Or registers a class of its own over one (`emit/gobject.rs`).
+        let connects = self.writer.text().contains("nts_gobject_connect(") || self.writer.text().contains("nts_gobject_register(");
         if connects || self.witness.contains(GOBJECT_HEADER_NAME) {
             files.push(Support { name: GOBJECT_HEADER_NAME, contents: GOBJECT_HEADER, compiled: false });
         }
@@ -935,6 +936,9 @@ fn emit_bridges(
     // A method the runtime calls is an entry point of the same kind: after
     // every prototype, before every body.
     if let Err(diagnostic) = objc::classes(writer, origin, program) {
+        diagnostics.push(diagnostic);
+    }
+    if let Err(diagnostic) = gobject::classes(writer, origin, program) {
         diagnostics.push(diagnostic);
     }
 }
@@ -5759,6 +5763,7 @@ mod tests {
 
 mod com;
 mod native_memory;
+mod gobject;
 mod objc;
 
 /// The foreign counting pairs the program calls, declared -- and for a pair

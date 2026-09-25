@@ -24,4 +24,20 @@ gulong nts_gobject_connect(gpointer instance, const gchar *detailed_signal,
                            GCallback handler, gpointer data,
                            GClosureNotify notify, GConnectFlags flags);
 
+/* A class the program writes over a GObject class (`class Counter extends
+ * GtkButton`), registered as a `GType` of its own: `name` below `parent`,
+ * sized as `parent` is, whose `class_init` writes each entry point into its
+ * class struct slot. `slots` is `count` pairs of a byte offset -- C's
+ * `offsetof` of the slot, which the binding recorded and its witness checked
+ * -- and the entry point written there, and must live as long as the program:
+ * a type is never unregistered. Plain `size_t` for `GType`, which is `gsize`,
+ * so that `program.c` can declare this without GLib's headers. */
+size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
+                            size_t count);
+
+/* One instance of `type`, and one reference to it the caller owns: a floating
+ * reference -- a widget's -- is sunk here, so the program counts the same
+ * kind of reference whatever the class descends from. */
+void *nts_gobject_new(size_t type);
+
 #endif /* NTS_GOBJECT_H */

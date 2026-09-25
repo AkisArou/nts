@@ -2,6 +2,10 @@
 
 #include "nts_runtime.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 /* One connection: the closure the program lent, and the notify the program
  * gave with it, which runs when the connection ends -- unless the collector
  * ended it (`severed`), in which case the closure is already garbage and the
@@ -194,4 +198,53 @@ gulong nts_gobject_connect(gpointer instance, const gchar *detailed_signal,
   g_closure_add_finalize_notifier(closure, held, nts_gobject_unheld);
   return g_signal_connect_closure_by_id(instance, signal, detail, closure,
                                         (flags & G_CONNECT_AFTER) != 0);
+}
+
+/* One slot of a class the program writes: its offset in the class struct,
+ * and the entry point written there. `program.c` lays the table out the same
+ * way. */
+typedef struct NtsGObjectSlot {
+  size_t offset;
+  void (*entry)(void);
+} NtsGObjectSlot;
+
+typedef struct NtsGObjectClassData {
+  const NtsGObjectSlot *slots;
+  size_t count;
+} NtsGObjectClassData;
+
+static void nts_gobject_class_init(gpointer klass, gpointer data) {
+  const NtsGObjectClassData *table = data;
+  for (size_t at = 0; at < table->count; at++) {
+    memcpy((char *)klass + table->slots[at].offset, &table->slots[at].entry,
+           sizeof table->slots[at].entry);
+  }
+}
+
+size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
+                            size_t count) {
+  GTypeQuery query;
+  g_type_query((GType)parent, &query);
+  if (query.type == 0) {
+    fprintf(stderr, "nts: `%s` extends a class GObject does not know\n", name);
+    abort();
+  }
+  /* Lives as long as the type, which is as long as the program. */
+  NtsGObjectClassData *data = g_new(NtsGObjectClassData, 1);
+  data->slots = slots;
+  data->count = count;
+  GTypeInfo info = {0};
+  info.class_size = (guint16)query.class_size;
+  info.class_init = nts_gobject_class_init;
+  info.class_data = data;
+  info.instance_size = (guint16)query.instance_size;
+  return (size_t)g_type_register_static((GType)parent, name, &info, 0);
+}
+
+void *nts_gobject_new(size_t type) {
+  GObject *made = g_object_new((GType)type, NULL);
+  if (g_object_is_floating(made)) {
+    g_object_ref_sink(made);
+  }
+  return made;
 }
