@@ -11,11 +11,19 @@
 // answer here is "when everything except the target is the same", and nothing
 // enforces it.
 //
-// No React dependency is declared. This names a planned feature.
+// No React dependency is declared yet, but the React stage is on: its
+// components go through the React Compiler and their JSX is lowered before
+// nts reads the program. Both fields are spelled out, though each is its
+// default, because this is the fixture that selects them. `App` has no JSX
+// and calls no hook, so today the stage leaves it as written.
 import { defineConfig, app, target } from "@nts/config";
 
 export default defineConfig({
   tsconfig: "./tsconfig.json",
+  react: {
+    compiler: true,
+    compilationMode: "infer",
+  },
   products: {
     mobile: app({
       entry: "./src/main.tsx",
