@@ -36,7 +36,36 @@ sources=(
 )
 defines=(-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_DARWIN_UNLIMITED_SELECT=1 -D_DARWIN_USE_64_BIT_INODE=1)
 
+# `build_into DEST CC...`: every source compiled with CC into DEST's archive,
+# and the headers beside it.
+build_into() {
+  local dest=$1
+  shift
+  local objs="$dest/obj/libuv"
+  mkdir -p "$objs" "$dest/lib" "$dest/include"
+  local objects=()
+  for src in "${sources[@]}"; do
+    local obj="$objs/$(echo "$src" | tr / _).o"
+    "$@" -O2 -fno-strict-aliasing -w "${defines[@]}" \
+      -I"$uv/include" -I"$uv/src" -c "$uv/$src" -o "$obj"
+    objects+=("$obj")
+  done
+  rm -f "$dest/lib/libuv.a"
+  "${ar[@]}" rcs "$dest/lib/libuv.a" "${objects[@]}"
+  rm -rf "$dest/include/uv" "$dest/include/uv.h"
+  cp -R "$uv/include/." "$dest/include/"
+}
+
 for arch in "${archs[@]}"; do
+  # `x86_64-ios-simulator`: the iOS simulator on an Intel Mac, against the
+  # SDK `tooling/apple/sync-sdk.sh iphonesimulator` copies.
+  if [[ "$arch" == x86_64-ios-simulator ]]; then
+    ar=(llvm-ar)
+    build_into "$root/$arch" clang -target x86_64-apple-ios13.0-simulator \
+      -isysroot "${NTS_IOS_SIMULATOR_SDK:-$root/iPhoneSimulator.sdk}"
+    echo "libuv for the iOS simulator: $root/$arch/lib/libuv.a"
+    continue
+  fi
   case "$arch" in aarch64) apple=arm64 ;; x86_64) apple=x86_64 ;; *) echo "unknown arch $arch" >&2; exit 1 ;; esac
   if [[ -n "${NTS_APPLE_SDK:-}" ]]; then
     cc=(clang -target "$apple-apple-macos11" -isysroot "$NTS_APPLE_SDK")
@@ -45,19 +74,6 @@ for arch in "${archs[@]}"; do
     cc=(zig cc -target "$arch-macos")
     ar=(zig ar)
   fi
-  dest="$root/$arch"
-  objs="$dest/obj/libuv"
-  mkdir -p "$objs" "$dest/lib" "$dest/include"
-  objects=()
-  for src in "${sources[@]}"; do
-    obj="$objs/$(echo "$src" | tr / _).o"
-    "${cc[@]}" -O2 -fno-strict-aliasing -w "${defines[@]}" \
-      -I"$uv/include" -I"$uv/src" -c "$uv/$src" -o "$obj"
-    objects+=("$obj")
-  done
-  rm -f "$dest/lib/libuv.a"
-  "${ar[@]}" rcs "$dest/lib/libuv.a" "${objects[@]}"
-  rm -rf "$dest/include/uv" "$dest/include/uv.h"
-  cp -R "$uv/include/." "$dest/include/"
-  echo "libuv for $arch-macos: $dest/lib/libuv.a"
+  build_into "$root/$arch" "${cc[@]}"
+  echo "libuv for $arch-macos: $root/$arch/lib/libuv.a"
 done

@@ -116,7 +116,9 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     let protocols: BTreeSet<String> = request.protocols.iter().cloned().collect();
     let functions = cf::functions(&swift, &cf_types, &request.functions);
     let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols, &functions))?;
-    let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, deployment_target(&request.target)?);
+    let (platform, target) = deployment_target(&request.target)?;
+    let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, target);
+    model.platform = platform;
     model.read_cf(&bodies.functions, &request.functions);
     Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model) })
 }
@@ -158,23 +160,38 @@ fn witness(request: &Request, model: &Model) -> String {
 
 /// `symbolgraph/26.5` beside the SDK, for the SDK's own version: a graph of
 /// another SDK names members this one may not have.
+/// Where `tooling/apple/symbolgraph.sh` put the graphs for `sdk`: beside it,
+/// under the SDK's version for macOS (`symbolgraph/26.5`), and under its
+/// canonical name for any other platform (`symbolgraph/iphonesimulator26.5`),
+/// since iOS and macOS number their SDKs alike.
 fn default_symbols(sdk: &str) -> Result<std::path::PathBuf> {
     let sdk = std::path::Path::new(sdk);
     let settings = sdk.join("SDKSettings.json");
     let text = std::fs::read(&settings).with_context(|| format!("reading {}", settings.display()))?;
     let settings: Value = serde_json::from_slice(&text).with_context(|| format!("reading {}", settings.display()))?;
     let version = settings.get("Version").and_then(Value::as_str).context("SDKSettings.json names no `Version`")?;
-    Ok(sdk.parent().unwrap_or(sdk).join("symbolgraph").join(version))
+    let canonical = settings.get("CanonicalName").and_then(Value::as_str).unwrap_or("macosx");
+    let directory = if canonical.starts_with("macosx") { version } else { canonical };
+    Ok(sdk.parent().unwrap_or(sdk).join("symbolgraph").join(directory))
 }
 
-/// `x86_64-apple-macos13` is macOS 13.0.
-fn deployment_target(target: &str) -> Result<Version> {
-    let version = target.rsplit_once("macos").map(|(_, v)| v).with_context(|| format!("`{target}` is not a macOS target"))?;
+/// The platform a clang target is for, as a symbol graph's availability names
+/// it, and its deployment version: `x86_64-apple-macos13` is macOS 13.0, and
+/// `x86_64-apple-ios17.0-simulator` iOS 17.0.
+fn deployment_target(target: &str) -> Result<(&'static str, Version)> {
+    let target = target.trim_end_matches("-simulator");
+    let (platform, version) = if let Some((_, version)) = target.rsplit_once("macos") {
+        ("macOS", version)
+    } else if let Some((_, version)) = target.rsplit_once("ios") {
+        ("iOS", version)
+    } else {
+        bail!("`{target}` is not a macOS or an iOS target");
+    };
     let mut parts = version.split('.').map(str::parse::<u32>);
     match (parts.next(), parts.next()) {
-        (Some(Ok(major)), None) => Ok(Version { major, minor: 0 }),
-        (Some(Ok(major)), Some(Ok(minor))) => Ok(Version { major, minor }),
-        _ => bail!("`{target}` names no macOS version"),
+        (Some(Ok(major)), None) => Ok((platform, Version { major, minor: 0 })),
+        (Some(Ok(major)), Some(Ok(minor))) => Ok((platform, Version { major, minor })),
+        _ => bail!("`{target}` names no {platform} version"),
     }
 }
 
@@ -702,6 +719,8 @@ struct Model<'a> {
     /// The deployment target: a member Swift marks as introduced after it, or
     /// deprecated by it, is not bound.
     target: Version,
+    /// The platform the target is for, as availability names it: `macOS`.
+    platform: &'static str,
     classes: Vec<Class>,
     protocols: Vec<Protocol>,
     /// Classes a signature names that are not bound, by Objective-C name,
@@ -804,6 +823,7 @@ impl<'a> Model<'a> {
             typedefs,
             bound,
             target,
+            platform: "macOS",
             classes: Vec::new(),
             protocols: Vec::new(),
             mentioned: BTreeMap::new(),
@@ -1096,14 +1116,14 @@ impl<'a> Model<'a> {
             if availability.is_unconditionally_deprecated {
                 return Err("deprecated".to_owned());
             }
-            if !matches!(availability.domain.as_deref(), Some("macOS")) {
+            if availability.domain.as_deref() != Some(self.platform) {
                 continue;
             }
             if let Some(introduced) = availability.introduced.filter(|v| *v > self.target) {
-                return Err(format!("introduced in macOS {}.{}", introduced.major, introduced.minor));
+                return Err(format!("introduced in {} {}.{}", self.platform, introduced.major, introduced.minor));
             }
             if let Some(deprecated) = availability.deprecated.filter(|v| *v <= self.target) {
-                return Err(format!("deprecated in macOS {}.{}", deprecated.major, deprecated.minor));
+                return Err(format!("deprecated in {} {}.{}", self.platform, deprecated.major, deprecated.minor));
             }
         }
         Ok(())
@@ -1214,7 +1234,7 @@ impl<'a> Model<'a> {
         // the binding's `NSError` -- the class, or where it is not bound, the
         // stub a signature naming it makes, which declares that property.
         let nullable = given.iter().take(arity).any(|v| v.ends_with(" | null"));
-        let (arguments, names) = self.arguments(class, leading, &labels)?;
+        let (arguments, names) = self.arguments_shaped(class, leading, &labels, false)?;
         let mut function = format!("nts_async_{}_{base}", class.objc);
         while self.promises.iter().any(|promise| promise.function == function) {
             function.push('_');
@@ -1241,6 +1261,20 @@ impl<'a> Model<'a> {
     /// and every one from the first label on in one object, keyed by its
     /// label, which the call passes as a literal the compiler never builds.
     fn arguments(&mut self, class: &Class, parameters: &[&Value], labels: &[String]) -> std::result::Result<(String, Vec<String>), String> {
+        self.arguments_shaped(class, parameters, labels, true)
+    }
+
+    /// The same, told whether a block last may be the trailing closure. It
+    /// may not in an `async` form: the method it calls takes the completion
+    /// handler last, so a block before it -- `animateKeyframes`'s
+    /// `animations` -- is one of the labels there, and has to be here.
+    fn arguments_shaped(
+        &mut self,
+        class: &Class,
+        parameters: &[&Value],
+        labels: &[String],
+        trailing_closure: bool,
+    ) -> std::result::Result<(String, Vec<String>), String> {
         let mut positional = Vec::new();
         let mut labelled = Vec::new();
         let mut keys = BTreeSet::new();
@@ -1250,7 +1284,7 @@ impl<'a> Model<'a> {
             let name = named(parameter).filter(|n| !n.is_empty() && !reserved(n) && n != "labels").unwrap_or_else(|| format!("arg{at}"));
             // Swift's trailing closure: a block last is passed after the
             // labels, unlabelled, as `sort { a, b in ... }` is written.
-            if at + 1 == parameters.len() && spelled.contains(") => ") {
+            if trailing_closure && at + 1 == parameters.len() && spelled.contains(") => ") {
                 trailing = Some(format!("{name}: {spelled}"));
             } else if label == "_" && labelled.is_empty() {
                 positional.push(format!("{name}: {spelled}"));
@@ -2699,6 +2733,15 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         ] {
             assert!(values.contains(expected), "no `{expected}` in:\n{values}");
         }
+    }
+
+    #[test]
+    fn a_target_names_its_platform_and_deployment_version() {
+        let (platform, version) = deployment_target("x86_64-apple-macos13").unwrap();
+        assert_eq!((platform, version.major, version.minor), ("macOS", 13, 0));
+        let (platform, version) = deployment_target("x86_64-apple-ios17.2-simulator").unwrap();
+        assert_eq!((platform, version.major, version.minor), ("iOS", 17, 2));
+        assert!(deployment_target("x86_64-linux-gnu").is_err());
     }
 
     #[test]

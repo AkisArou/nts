@@ -197,6 +197,17 @@ export default defineConfig({
 `id` and `minimumVersion`. A `kind: "executable"` product is a bare binary.
 Each target picks `x86_64` or `aarch64`, and the `c` or `llvm` backend.
 
+## iOS
+
+The same surface builds a UIKit application for the iOS simulator. The
+target is `target.ios({ minimumVersion: "17.0", arch: "x86_64" })`, bound
+with `nts bind-objc --sdk <iPhoneSimulator.sdk> --target
+x86_64-apple-ios17.0-simulator --framework UIKit ...`. An `application`
+product is an `.app` that `tooling/apple/run-ios.sh` installs and launches
+with `simctl`. UIKit starts it through `UIApplicationMain`, given the
+delegate class by name (see `examples/interop/ios-hello`). A device build
+needs signing, and is refused.
+
 ## Not yet
 
 - **Out-parameters of objects.** `NSString **` and

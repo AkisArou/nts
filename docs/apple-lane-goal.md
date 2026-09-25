@@ -962,6 +962,38 @@ correctness does not depend on arm64 running by luck.
        drawing in C, on both backends. The colours are released (an
        Objective-C weak reference goes nil), and under NoGc that line alone
        differs.
+   - **iOS, on the simulator (2026-09-25).** A UIKit application written in
+     TypeScript runs on the iOS simulator of the lane's Mac, from both
+     backends: `examples/interop/ios-hello`.
+     - `nts build` refused every iOS target ("needs a bundle, signing and a
+       simulator"). An `x86_64` iOS target can only be the simulator, on an
+       Intel Mac, and needs no signing. `ios_toolchain` builds it with the
+       simulator's triple (`x86_64-apple-ios17.0-simulator`) against its SDK
+       (`sync-sdk.sh iphonesimulator`) and a libuv built for it
+       (`build-libuv.sh x86_64-ios-simulator`). The binary's
+       `LC_BUILD_VERSION` names `iossimulator`. `aarch64` is a device, or
+       Apple silicon's simulator, and is refused as needing signing.
+     - An `application` for iOS is a flat bundle (`<name>.app/<name>`,
+       `Info.plist` with `LSRequiresIPhoneOS`, a launch screen, and the
+       `CFBundleVersion` the simulator requires), installed and launched by
+       `tooling/apple/run-ios.sh` through `simctl`. The application's console
+       is the run's output.
+     - The CoreFoundation host serves UIKit's main run loop, as it serves
+       AppKit's, so timers and promises run inside `UIApplicationMain`.
+     - bind-objc knows the platform from the target. Availability is read for
+       `iOS` rather than `macOS`, and an iOS SDK's graphs live under its
+       canonical name (`symbolgraph/iphonesimulator26.5`), which
+       `NTS_APPLE_PLATFORM=iphonesimulator symbolgraph.sh` writes.
+     - An `async` form's arguments are shaped as the method it calls takes
+       them. A block before the completion handler, such as
+       `animateKeyframes`'s `animations`, stays among the labels rather than
+       becoming a trailing closure. UIKit's `UIView` found this.
+     - `ios-hello`: an application delegate over `UIResponder` receives
+       `application(_:didFinishLaunchingWithOptions:)`, builds a window, a
+       view controller, a label and a button, and the button's action,
+       `selector(Controller, "pressed")`, reaches the program's controller
+       through `sendActions(for:)`. A timer from UIKit's run loop ends it. A
+       screenshot of the simulator shows the blue view and the white label.
    - **Swift's one `nil` (2026-09-25).** `window.contentView?.superview`
      is `NSView | null | undefined`: a nullable property down an optional
      chain. It is now the pointer, its null standing for both absences, as

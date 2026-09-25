@@ -15,21 +15,34 @@ set -euo pipefail
 
 dest="${NTS_APPLE_SSH:-nts-mac}"
 root="${NTS_APPLE_ROOT:-$HOME/.cache/nts/apple}"
-sdk="${NTS_APPLE_SDK:-$root/MacOSX.sdk}"
+# `NTS_APPLE_PLATFORM=iphonesimulator` extracts for the iOS simulator, against
+# the SDK `sync-sdk.sh iphonesimulator` copied, into a directory named for it.
+platform="${NTS_APPLE_PLATFORM:-macosx}"
+case "$platform" in
+  macosx) sdk="${NTS_APPLE_SDK:-$root/MacOSX.sdk}"; triple=x86_64-apple-macos13 ;;
+  iphonesimulator) sdk="${NTS_IOS_SIMULATOR_SDK:-$root/iPhoneSimulator.sdk}"; triple=x86_64-apple-ios17.0-simulator ;;
+  *) echo "NTS_APPLE_PLATFORM is macosx or iphonesimulator" >&2; exit 2 ;;
+esac
 [ "$#" -gt 0 ] || { echo "usage: $0 Framework..." >&2; exit 2; }
 version=$(sed -n 's/.*"Version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$sdk/SDKSettings.json" | head -1)
 [ -n "$version" ] || { echo "no Version in $sdk/SDKSettings.json" >&2; exit 1; }
-remote_version=$(ssh -o BatchMode=yes "$dest" 'plutil -extract Version raw "$(xcrun --sdk macosx --show-sdk-path)/SDKSettings.plist"')
+remote_version=$(ssh -o BatchMode=yes "$dest" "plutil -extract Version raw \"\$(xcrun --sdk $platform --show-sdk-path)/SDKSettings.plist\"")
 [ "$version" = "$remote_version" ] || {
   echo "the synced SDK is $version and the Mac's is $remote_version: run tooling/apple/sync-sdk.sh first" >&2
   exit 1
 }
-out="$root/symbolgraph/$version"
+# macOS under its version, as bind-objc has always looked; any other platform
+# under the SDK's canonical name, since iOS and macOS number their SDKs alike.
+if [ "$platform" = macosx ]; then
+  out="$root/symbolgraph/$version"
+else
+  out="$root/symbolgraph/$platform$version"
+fi
 mkdir -p "$out"
 for framework in "$@"; do
   ssh -o BatchMode=yes "$dest" "rm -rf /tmp/nts-symbolgraph && mkdir -p /tmp/nts-symbolgraph && \
-    xcrun swift-symbolgraph-extract -module-name '$framework' -target x86_64-apple-macos13 \
-      -sdk \"\$(xcrun --sdk macosx --show-sdk-path)\" -output-dir /tmp/nts-symbolgraph -minimum-access-level public >/dev/null"
+    xcrun swift-symbolgraph-extract -module-name '$framework' -target $triple \
+      -sdk \"\$(xcrun --sdk $platform --show-sdk-path)\" -output-dir /tmp/nts-symbolgraph -minimum-access-level public >/dev/null"
   scp -q "$dest:/tmp/nts-symbolgraph/$framework.symbols.json" "$out/$framework.symbols.json.partial"
   mv -f "$out/$framework.symbols.json.partial" "$out/$framework.symbols.json"
   echo "$out/$framework.symbols.json"

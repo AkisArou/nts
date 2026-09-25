@@ -1844,7 +1844,8 @@ fn a_windows_dll_publishes_its_entry_and_nothing_else() {
     assert!(exports.len() < 5, "the runtime's internals are public: {exports:?}");
 }
 
-/// iOS is refused by name, and not with the macOS reason.
+/// An iOS device is refused by name, and not with the macOS reason: its
+/// binary has to be signed. The simulator (`arch: "x86_64"`) builds.
 ///
 /// **This test used to be about macOS**, refused because "Apple needs its SDK".
 /// That reason was wrong -- the runtime's own `_POSIX_C_SOURCE` hid a Darwin
@@ -1875,8 +1876,10 @@ export default defineConfig({
     );
     let run = build(&project, &[]);
     assert!(!run.ok, "it produced something for iOS:\n{}", run.stdout);
+    // An iOS device -- the default arch -- needs a signed binary, which is what
+    // is missing; the simulator (`arch: "x86_64"`) builds, in `ios-hello`.
     assert!(
-        run.stderr.contains("iOS is not built from here") && run.stderr.contains("ios-17"),
+        run.stderr.contains("iOS device") && run.stderr.contains("signed") && run.stderr.contains("ios-17"),
         "the refusal names neither the target nor what is missing:\n{}",
         run.stderr
     );
@@ -3194,7 +3197,7 @@ fn a_missing_toolchain_is_reported_before_a_dependency_it_would_never_reach() {
     let run = build(&project, &[]);
     assert!(!run.ok, "an Apple target built on this machine:\n{}", run.stdout);
     assert!(
-        run.stderr.contains("iOS is not built from here"),
+        run.stderr.contains("iOS device"),
         "the toolchain is not what it reported:\n{}",
         run.stderr
     );

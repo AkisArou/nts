@@ -3620,7 +3620,7 @@ fn build_c(
     // the program's to say (see `Emission::host`).
     let host = if needs.libs.iter().any(|flag| flag == "-lglib-2.0") {
         nts_codegen_c::LoopHost::Glib
-    } else if target.os == "macos" {
+    } else if matches!(target.os.as_str(), "macos" | "ios") {
         nts_codegen_c::LoopHost::CoreFoundation
     } else if target.os == "windows" {
         nts_codegen_c::LoopHost::Win32
@@ -3632,6 +3632,9 @@ fn build_c(
     println!("  {artifact}");
     if is_macos_application(product, target) {
         println!("  {}", package_macos_app(name, product, &artifact, target)?);
+    }
+    if is_ios_application(product, target) {
+        println!("  {}", package_ios_app(name, product, &artifact, target)?);
     }
     // Named here as well as on stderr, because a build whose last line is
     // `1 artifact(s)` has told the reader the opposite of what happened.
@@ -3990,11 +3993,24 @@ fn is_macos_application(product: &nts_build::config::Product, target: &nts_build
     product.kind == "application" && target.os == "macos"
 }
 
+/// Whether a product is packaged as an iOS application bundle, which the
+/// simulator installs and launches by its identifier.
+fn is_ios_application(product: &nts_build::config::Product, target: &nts_build::config::Target) -> bool {
+    product.kind == "application" && target.os == "ios"
+}
+
 /// A bundle's identifier is the product's `id`, and one is refused without it,
 /// before anything is written: `CFBundleIdentifier` is what the system files an
 /// application's preferences, permissions and notifications under, and an
 /// invented one collides with somebody else's.
 fn refuse_unidentified_bundle(name: &str, product: &nts_build::config::Product, target: &nts_build::config::Target) -> Result<()> {
+    if is_ios_application(product, target) && product.application_id.is_none() {
+        bail!(
+            "product `{name}` is an iOS application and declares no `id`. The simulator \
+             installs and launches an application by its `CFBundleIdentifier`, and this \
+             cannot invent one. Add `id: \"com.example.{name}\"` to the product"
+        );
+    }
     if is_macos_application(product, target) && product.application_id.is_none() {
         bail!(
             "product `{name}` is a macOS application and declares no `id`. Its bundle's \
@@ -4054,6 +4070,58 @@ fn package_macos_app(
     }
     plist.push_str("</dict>\n</plist>\n");
     let info = bundle.join("Contents/Info.plist");
+    std::fs::write(&info, plist).with_context(|| format!("writing {info}"))?;
+    Ok(bundle)
+}
+
+/// An iOS application is a flat bundle: `<name>.app/<name>` beside its
+/// `Info.plist`, which the simulator installs (`simctl install`) and launches
+/// by its identifier. Unlike a macOS bundle it has no `Contents`.
+///
+/// `CFBundleVersion` is the one key the product does not state, and it is
+/// here because the simulator refuses to install a bundle without one: `1`,
+/// the version of an application nobody has versioned.
+fn package_ios_app(
+    name: &str,
+    product: &nts_build::config::Product,
+    executable: &Utf8Path,
+    target: &nts_build::config::Target,
+) -> Result<Utf8PathBuf> {
+    let id = product.application_id.as_deref().context("checked by `refuse_unidentified_bundle`")?;
+    let bundle = executable.parent().unwrap_or_else(|| Utf8Path::new(".")).join(format!("{name}.app"));
+    if bundle.exists() {
+        std::fs::remove_dir_all(&bundle).with_context(|| format!("removing the old {bundle}"))?;
+    }
+    std::fs::create_dir_all(&bundle).with_context(|| format!("creating {bundle}"))?;
+    std::fs::copy(executable, bundle.join(name)).with_context(|| format!("copying {executable} into {bundle}"))?;
+    let escaped = |text: &str| text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let mut keys = vec![
+        ("CFBundleExecutable", format!("<string>{}</string>", escaped(name))),
+        ("CFBundleIdentifier", format!("<string>{}</string>", escaped(id))),
+        ("CFBundleInfoDictionaryVersion", "<string>6.0</string>".to_owned()),
+        ("CFBundleName", format!("<string>{}</string>", escaped(name))),
+        ("CFBundlePackageType", "<string>APPL</string>".to_owned()),
+        ("CFBundleVersion", "<string>1</string>".to_owned()),
+        ("CFBundleSupportedPlatforms", "<array><string>iPhoneSimulator</string></array>".to_owned()),
+        ("LSRequiresIPhoneOS", "<true/>".to_owned()),
+        // A launch screen, even an empty one, is what makes the window the
+        // whole screen rather than the letterboxed size of an old iPhone.
+        ("UILaunchScreen", "<dict/>".to_owned()),
+        ("UIDeviceFamily", "<array><integer>1</integer><integer>2</integer></array>".to_owned()),
+    ];
+    if let Some(minimum) = &target.minimum_version {
+        keys.push(("MinimumOSVersion", format!("<string>{}</string>", escaped(minimum))));
+    }
+    let mut plist = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+         <plist version=\"1.0\">\n<dict>\n",
+    );
+    for (key, value) in keys {
+        let _ = writeln!(plist, "  <key>{key}</key>\n  {value}");
+    }
+    plist.push_str("</dict>\n</plist>\n");
+    let info = bundle.join("Info.plist");
     std::fs::write(&info, plist).with_context(|| format!("writing {info}"))?;
     Ok(bundle)
 }
@@ -5072,17 +5140,7 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         return windows_toolchain(name, target);
     }
     if target.os == "ios" {
-        // **Not the macOS reason.** Compiling for iOS is the same command line
-        // with another triple; what is missing is everything after it -- an
-        // app bundle, signing, and a simulator or device to run it on.
-        bail!(
-            "product `{name}` targets {} and this is a {} machine. iOS is not built \
-             from here yet: an iOS artifact needs a bundle, signing and a simulator or \
-             device, and none of those exist in this build. Build it on a Mac, or set \
-             CC to a cross compiler for iOS",
-            target.id,
-            host_os()
-        )
+        return ios_toolchain(name, target);
     }
     let Some(triple) = zig_triple(target) else {
         bail!(
@@ -5162,6 +5220,46 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
     ];
     let mut link = vec!["-fuse-ld=lld".to_owned()];
     let uv = root.join(arch);
+    if uv.join("include/uv.h").is_file() {
+        leading.push(format!("-I{}", uv.join("include")));
+        link.push(format!("-L{}", uv.join("lib")));
+    }
+    Ok(Toolchain { program: "clang".to_owned(), leading, link, linker: None })
+}
+
+/// The iOS simulator on an Intel Mac, which is what `x86_64` iOS can only be:
+/// the macOS toolchain's command line with the simulator's triple and SDK
+/// (`tooling/apple/sync-sdk.sh iphonesimulator`), and its libuv
+/// (`tooling/apple/build-libuv.sh x86_64-ios-simulator`). An `aarch64` iOS
+/// target is a device, or Apple silicon's simulator, and a device's binary
+/// has to be signed, which nothing here does.
+fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
+    let arch = target.arch.as_deref().unwrap_or("aarch64");
+    if arch != "x86_64" {
+        bail!(
+            "product `{name}` targets {} on {arch}, which is an iOS device, and a \
+             device's binary has to be signed, which this build does not do. `arch: \
+             \"x86_64\"` builds for the iOS simulator on an Intel Mac",
+            target.id
+        );
+    }
+    let minimum = target.minimum_version.as_deref().unwrap_or("13.0");
+    let root = apple_root();
+    let sdk = std::env::var("NTS_IOS_SIMULATOR_SDK").map_or_else(|_| root.join("iPhoneSimulator.sdk"), Utf8PathBuf::from);
+    if !sdk.join("usr/include").is_dir() {
+        bail!(
+            "product `{name}` targets the iOS simulator, and there is no iPhoneSimulator.sdk \
+             at {sdk}. Run `tooling/apple/sync-sdk.sh iphonesimulator`, or set NTS_IOS_SIMULATOR_SDK"
+        );
+    }
+    let mut leading = vec![
+        "-target".to_owned(),
+        format!("x86_64-apple-ios{minimum}-simulator"),
+        "-isysroot".to_owned(),
+        sdk.to_string(),
+    ];
+    let mut link = vec!["-fuse-ld=lld".to_owned()];
+    let uv = root.join("x86_64-ios-simulator");
     if uv.join("include/uv.h").is_file() {
         leading.push(format!("-I{}", uv.join("include")));
         link.push(format!("-L{}", uv.join("lib")));
