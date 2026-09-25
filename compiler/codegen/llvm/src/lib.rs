@@ -1351,7 +1351,10 @@ fn text_constant(out: &mut String, name: &str, value: &str) {
 /// convention -- converted to the compiled method's, and its result back.
 /// Returns the method table's row for it.
 fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nts_core::hir::ObjcMethod, compiled: &Func) -> Result<String, Diagnostic> {
-    if compiled.params.len() + 1 != method.signature.parameters.len() {
+    // A record result is written through an address the entry point passes
+    // the compiled method last.
+    let record_out = matches!(*method.signature.result, nts_core::hir::native::Type::Record(_));
+    if compiled.params.len() + 1 != method.signature.parameters.len() + usize::from(record_out) {
         return Err(refuse(compiled, "an Objective-C method whose entry point and compiled function disagree about arity"));
     }
     let imp = nts_codegen_common::objc::imp_symbol(class, at);
@@ -1395,6 +1398,34 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
             let _ = writeln!(body, "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}");
             arguments.push(format!("{to_ty} %p{slot}"));
         }
+    }
+    // The record goes back as the convention says: through the `sret`
+    // pointer the caller passed, which the compiled method writes directly,
+    // or loaded from a slot of the entry point's in its registers' types.
+    if let (true, Some(passing)) = (record_out, &plan.result) {
+        let nts_core::hir::native::Type::Record(record) = &*method.signature.result else { unreachable!() };
+        let (size, align) = aggregate::extent_of(record, platform)
+            .ok_or_else(|| refuse(compiled, "an Objective-C method returning a record this backend cannot place"))?;
+        let call_args = |slot: &str| {
+            let mut all = arguments.clone();
+            all.push(format!("ptr {slot}"));
+            all.join(", ")
+        };
+        if let Some(hidden) = aggregate::sret(passing, "%ret") {
+            let _ = writeln!(out, "define internal void @{imp}({}) nounwind {{", std::iter::once(hidden).chain(parameters.iter().cloned()).collect::<Vec<_>>().join(", "));
+            out.push_str(&body);
+            let _ = writeln!(out, "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()\n  ret void\n}}", symbol(&compiled.name), call_args("%ret"));
+        } else {
+            let spelled = aggregate::result_type(passing);
+            let _ = writeln!(out, "define internal {spelled} @{imp}({}) nounwind {{", parameters.join(", "));
+            out.push_str(&body);
+            let _ = writeln!(out, "  %slot = alloca [{size} x i8], align {align}");
+            let _ = writeln!(out, "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()", symbol(&compiled.name), call_args("%slot"));
+            let _ = writeln!(out, "  %r = load {spelled}, ptr %slot, align {}\n  ret {spelled} %r\n}}", align.min(8));
+        }
+        text_constant(out, &format!("{imp}.sel"), &method.selector);
+        text_constant(out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
+        return Ok(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"));
     }
     let want = method.signature.result.abi(platform.abi);
     let have = compiled.return_type.clone();

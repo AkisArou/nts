@@ -5778,6 +5778,14 @@ struct ObjcConstruct {
     parameter_properties: Vec<(NodeId, u32)>,
 }
 
+/// A method the Objective-C runtime calls, through an entry point that
+/// passes each label as an argument of its own, and -- where the method
+/// returns a record by value -- the address to write it to.
+#[derive(Clone, Copy)]
+struct ObjcEntry {
+    returns_record: bool,
+}
+
 /// Swift's `@objc` selector for a method of `count` parameters: its name,
 /// with a colon for each (`pressed(sender)` is `pressed:`).
 fn objc_selector(name: &str, count: usize) -> String {
@@ -11448,6 +11456,17 @@ struct FuncBuilder<'a> {
     /// class: the class, which its `super(...)` makes an instance of, and
     /// whether it has fields to make with it.
     objc_construct: Option<ObjcConstruct>,
+    /// Lowering a method the runtime calls through an entry point of its own:
+    /// see [`ObjcEntry`].
+    objc_entry: Option<ObjcEntry>,
+    /// Where such a method writes the record it returns by value: the
+    /// address its entry point passes, as the method's last parameter. A
+    /// `return` copies the record there.
+    record_out: Option<ValueId>,
+    /// Labels parameters taken as arguments, whose objects are made once
+    /// every parameter is: a backend names parameters by position, so none
+    /// may come after another value.
+    pending_labels: Vec<(NodeId, Vec<(String, ValueId)>)>,
     /// What the module declares outside any function.
     module: ModuleScope,
     /// What every class in the program declares, and what it extends.
@@ -11697,6 +11716,9 @@ impl<'a> FuncBuilder<'a> {
             retyped_symbols: std::collections::BTreeMap::new(),
             in_constructor: false,
             objc_construct: None,
+            objc_entry: None,
+            record_out: None,
+            pending_labels: Vec::new(),
             hierarchy: Hierarchy::default(),
             base: None,
             module: ModuleScope::default(),
@@ -13693,6 +13715,7 @@ impl<'a> FuncBuilder<'a> {
                 .or_else(|| self.overridden_selector(class, &name, signature.parameters.len()))
                 .unwrap_or_else(|| objc_selector(&name, signature.parameters.len())),
         };
+        self.objc_entry = Some(ObjcEntry { returns_record: matches!(*imp.result, super::native::Type::Record(_)) });
         let func = self.lower_method_of(class, member, instance)?;
         let method = super::ObjcMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
         Ok((func, method))
@@ -14132,7 +14155,7 @@ impl<'a> FuncBuilder<'a> {
             if self.declares_a_field(child) {
                 declared.push((child, index));
             }
-            params.extend(self.lower_param(child, index)?);
+            params.extend(self.lower_param_or_labels(child, index)?);
         }
 
         self.store_parameter_properties(&declared)?;
@@ -14168,6 +14191,7 @@ impl<'a> FuncBuilder<'a> {
 
         let asynchronous = self.begin_async(member, &return_type)?;
         self.returns = return_type.clone();
+        let return_type = self.finish_params(&mut params, return_type, &origin)?;
         // A class with no base has no `super()`, so its own field initialisers
         // go at the top of its constructor. A derived class's go immediately
         // after the `super()` call, which `lower_super` emits -- the language
@@ -18310,6 +18334,89 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// A method parameter: labels, for a method the runtime calls, or else
+    /// an ordinary one.
+    fn lower_param_or_labels(&mut self, id: NodeId, index: u32) -> Result<Vec<Param>, Diagnostic> {
+        if let Some(name) = self.name_node(id)
+            && let Some(params) = self.lower_label_params(name, index)?
+        {
+            return Ok(params);
+        }
+        self.lower_param(id, index)
+    }
+
+    /// The parameters an Objective-C entry point adds, and what the function
+    /// then returns. A record by value is written through the address the
+    /// entry point passes last, so the function returns nothing; any other
+    /// result is returned as it is. Then the labels objects are made, with
+    /// every parameter in place.
+    fn finish_params(&mut self, params: &mut Vec<Param>, return_type: HirType, origin: &Origin) -> Result<HirType, Diagnostic> {
+        let return_type = if self.objc_entry.is_some_and(|entry| entry.returns_record) {
+            let index = u32::try_from(params.len()).unwrap_or(0);
+            let out = self.push(OpKind::Param(index), return_type.clone(), origin.clone());
+            params.push(Param { name: "returned".to_owned(), shape: ParamShape::Ordinary, ty: return_type, origin: origin.clone(), known: Facts::TOP });
+            self.record_out = Some(out);
+            HirType::Void
+        } else {
+            return_type
+        };
+        self.make_pending_labels()?;
+        Ok(return_type)
+    }
+
+    /// The labels parameter of a method the runtime calls, which it passes
+    /// as it is sent -- one argument each, in declared order -- made into the
+    /// object the method's body reads: `override mouseDown(labels: { with:
+    /// NSEvent })`, Swift's `mouseDown(with:)`, is `mouseDown:` taking the
+    /// event.
+    fn lower_label_params(&mut self, name_node: NodeId, index: u32) -> Result<Option<Vec<Param>>, Diagnostic> {
+        let Some(labels) = self
+            .objc_entry
+            .and(self.snapshot.node_types.get(&name_node).copied())
+            .filter(|declared| super::native::abi_type(self.snapshot, *declared).is_none())
+            .and_then(|declared| super::native::labels_of(self.snapshot, declared))
+        else {
+            return Ok(None);
+        };
+        let origin = self.origin(name_node);
+        let mut params = Vec::new();
+        let mut values = Vec::new();
+        for (at, (key, ty)) in labels.into_iter().enumerate() {
+            let ty = self.represent(ty).ok_or_else(|| self.unrepresentable(name_node, "a label"))?;
+            let value = self.push(OpKind::Param(index + u32::try_from(at).unwrap_or(0)), ty.clone(), origin.clone());
+            params.push(Param { name: key.clone(), shape: ParamShape::Ordinary, ty, origin: origin.clone(), known: Facts::TOP });
+            values.push((key, value));
+        }
+        self.pending_labels.push((name_node, values));
+        Ok(Some(params))
+    }
+
+    /// The labels objects of [`Self::lower_label_params`], made from their
+    /// parameters now that every parameter is, and bound to their names.
+    fn make_pending_labels(&mut self) -> Result<(), Diagnostic> {
+        for (name_node, values) in std::mem::take(&mut self.pending_labels) {
+            let object_ty = self.type_of(name_node).ok_or_else(|| self.unrepresentable(name_node, "labels"))?;
+            let HirType::Managed(ManagedType::Object(type_id)) = object_ty.clone() else {
+                return Err(self.unsupported(name_node, "labels that are not an object"));
+            };
+            self.materialize(name_node, &object_ty)?;
+            let layout = self.layout_of(name_node, type_id)?;
+            let origin = self.origin(name_node);
+            let object = self.push(OpKind::ObjectNew { frame: false }, object_ty, origin.clone());
+            for (key, value) in values {
+                let field = layout.index_of(&key).ok_or_else(|| self.absent_member(name_node, type_id, &key))?;
+                let want = layout.fields[field as usize].ty.clone();
+                let value = self.coerce(value, &want, name_node)?;
+                self.field_set(object, field, value, &origin);
+            }
+            if let Some(symbol) = self.node(name_node).symbol {
+                let object = self.open_cell(symbol.0, object, name_node);
+                self.bindings.insert(symbol.0, object);
+            }
+        }
+        Ok(())
+    }
+
     /// Whether a class declares instance fields: a property that is not
     /// `static`, or a constructor parameter that is one too.
     fn declares_instance_fields(&self, class: NodeId) -> bool {
@@ -18634,6 +18741,7 @@ impl<'a> FuncBuilder<'a> {
         if self.annotates_this(name_node) {
             return Ok(Vec::new());
         }
+
 
         // A parameter list that does not line up with the argument list, one
         // way or the other. Both were *silently* lowered as ordinary
@@ -29330,6 +29438,12 @@ impl<'a> FuncBuilder<'a> {
                 if self.is_terminated() {
                     // A `finally` returned or threw, which replaces this
                     // return outright.
+                    return Ok(());
+                }
+                if let (Some(out), Some(value)) = (self.record_out, value) {
+                    let origin = self.origin(id);
+                    self.push(OpKind::NativeCopy { destination: out, source: value }, HirType::Void, origin);
+                    self.terminate(Terminator::Return(None));
                     return Ok(());
                 }
                 self.terminate(Terminator::Return(value));
@@ -41761,6 +41875,24 @@ impl<'a> FuncBuilder<'a> {
         }
         let mut args = vec![receiver];
         for (argument, parameter) in arguments.iter().zip(&parameters) {
+            // Labels, which the method takes as the runtime passes them: a
+            // literal's properties, never built, or an object's fields.
+            let declared = self.snapshot.node_types.get(parameter).copied();
+            if let Some(labels) = declared
+                .filter(|ty| super::native::abi_type(self.snapshot, *ty).is_none())
+                .and_then(|ty| super::native::labels_of(self.snapshot, ty))
+            {
+                if self.kind_of(*argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+                    self.labels_pending.insert(*argument);
+                }
+                let given = self.lower_expression(*argument)?;
+                for (key, ty) in labels {
+                    let value = self.label_value(*argument, Some(given), &key)?;
+                    let want = self.represent(ty).ok_or_else(|| self.unrepresentable(*argument, "a label"))?;
+                    args.push(self.coerce(value, &want, *argument)?);
+                }
+                continue;
+            }
             let ty = self.type_of(*parameter).ok_or_else(|| self.unrepresentable(*parameter, "a method parameter"))?;
             let value = self.lower_expecting(*argument, &ty)?;
             args.push(self.coerce(value, &ty, *argument)?);

@@ -126,6 +126,8 @@ hit 10 the canvas
 drawn 40x30
 flipped true true false
 scanned 41 41
+mouse 7 7
+records 64048 6030
 pressed 1
 micro 1
 timeout 1

@@ -507,6 +507,11 @@ pub(crate) fn receive(passing: &Passing, record: &Record, platform: Platform, na
     }
 }
 
+/// A record's size and alignment on `platform`.
+pub(crate) fn extent_of(record: &Record, platform: Platform) -> Option<(u32, u32)> {
+    extent(record, platform)
+}
+
 /// The alignment of a record's storage, which the loads and stores above may
 /// assume of the pointer they are handed.
 pub(crate) fn alignment(record: &Record, platform: Platform) -> Option<u32> {

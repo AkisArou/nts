@@ -16,8 +16,29 @@
 typedef struct NtsRect {
   double x, y, width, height;
 } NtsRect;
+typedef struct NtsSize {
+  double width, height;
+} NtsSize;
 struct objc_selector *sel_registerName(const char *name);
 void objc_msgSend(void);
+void objc_msgSend_stret(void);
+
+double view_intrinsic_size(struct NSView *view) {
+  NtsSize size = ((NtsSize(*)(struct NSView *, struct objc_selector *))objc_msgSend)(view, sel_registerName("intrinsicContentSize"));
+  return size.width * 1000 + size.height;
+}
+
+/* `[view alignmentRectForFrame:{1, 2, 30, 40}]`, its x and width as one
+ * number: 32 bytes back, in memory on x86_64. */
+double view_alignment_rect(struct NSView *view) {
+  NtsRect frame = {1, 2, 30, 40};
+#if defined(__x86_64__)
+  NtsRect rect = ((NtsRect(*)(struct NSView *, struct objc_selector *, NtsRect))objc_msgSend_stret)(view, sel_registerName("alignmentRectForFrame:"), frame);
+#else
+  NtsRect rect = ((NtsRect(*)(struct NSView *, struct objc_selector *, NtsRect))objc_msgSend)(view, sel_registerName("alignmentRectForFrame:"), frame);
+#endif
+  return rect.x * 1000 + rect.width;
+}
 
 bool view_is_flipped(struct NSView *view) {
   return ((signed char (*)(struct NSView *, struct objc_selector *))objc_msgSend)(view, sel_registerName("isFlipped")) != 0;
@@ -26,6 +47,10 @@ bool view_is_flipped(struct NSView *view) {
 void send_draw_rect(struct NSView *view, double x, double y, double width, double height) {
   NtsRect rect = {x, y, width, height};
   ((void (*)(struct NSView *, struct objc_selector *, NtsRect))objc_msgSend)(view, sel_registerName("drawRect:"), rect);
+}
+
+void send_mouse_down(struct NSView *view, struct NSEvent *event) {
+  ((void (*)(struct NSView *, struct objc_selector *, struct NSEvent *))objc_msgSend)(view, sel_registerName("mouseDown:"), event);
 }
 
 void report(const char *line) {

@@ -7,7 +7,7 @@
 declare module "c:support" {
   import type { Block } from "objc:types";
   import type { Implementation } from "objc:runtime";
-  import type { NSObject, NSView, Timer } from "objc:AppKit";
+  import type { NSEvent, NSObject, NSView, Timer } from "objc:AppKit";
   import type { c_double } from "c:types";
   export function report(line: string): void;
   /** `WINDOW_CONTROL=detached` takes libuv's sources off the run loop. */
@@ -18,6 +18,9 @@ declare module "c:support" {
   export function view_is_flipped(view: NSView): boolean;
   /** Sends `view` `drawRect:` with a rectangle, as AppKit does. */
   export function send_draw_rect(view: NSView, x: c_double, y: c_double, width: c_double, height: c_double): void;
+  export function send_mouse_down(view: NSView, event: NSEvent): void;
+  export function view_intrinsic_size(view: NSView): c_double;
+  export function view_alignment_rect(view: NSView): c_double;
   /**
    * @ntsSymbol imp_implementationWithBlock
    */

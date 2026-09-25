@@ -22,10 +22,20 @@ import {
   Timer,
   type CGPoint,
   type CGRect,
+  type CGSize,
   type NSNotification,
   type NSWindowDelegate,
 } from "objc:AppKit";
-import { nested_while_readable, report, send_draw_rect, view_is_flipped, window_control } from "c:support";
+import {
+  nested_while_readable,
+  report,
+  send_draw_rect,
+  send_mouse_down,
+  view_alignment_rect,
+  view_intrinsic_size,
+  view_is_flipped,
+  window_control,
+} from "c:support";
 import { sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
 import type { ByValue, Ptr, c_double } from "c:types";
@@ -77,6 +87,7 @@ class Controller extends NSObject implements NSWindowDelegate {
 let drawnWidth = 0;
 let drawnHeight = 0;
 let hitX = 0;
+let mouseData = 0;
 
 class Canvas extends NSView {
   // Swift's `override var isFlipped: Bool { true }`: the getter of the
@@ -98,6 +109,32 @@ class Canvas extends NSView {
   hitTest(point: ByValue<CGPoint>): NSView | null {
     hitX = point.x;
     return super.hitTest(point);
+  }
+
+  // Swift's `override var intrinsicContentSize: NSSize`: a record by value
+  // back to the runtime -- 16 bytes, in registers.
+  get intrinsicContentSize(): ByValue<CGSize> {
+    const size = local<CGSize>();
+    size.width = 64;
+    size.height = 48;
+    return size;
+  }
+
+  // Swift's `override func alignmentRect(forFrame:)`: labels in and a
+  // rectangle out, 32 bytes that x86_64 returns in memory. What `super`
+  // answers, moved right by 5.
+  alignmentRect(labels: { forFrame: ByValue<CGRect> }): ByValue<CGRect> {
+    const rect = local<CGRect>();
+    const aligned = super.alignmentRect(labels);
+    setRect(rect, aligned.origin.x + 5, aligned.origin.y, aligned.size.width, aligned.size.height);
+    return rect;
+  }
+
+  // Swift's `override func mouseDown(with event: NSEvent)`: a labelled
+  // selector, `mouseDown:`, whose IMP takes the event as its one argument and
+  // hands the method the labels object it declares.
+  mouseDown(labels: { with: NSEvent }): void {
+    mouseData = labels.with.data1;
   }
 
   // `super.centerScanRect(_:)`: a rectangle in and one out, 32 bytes that
@@ -218,6 +255,27 @@ function main(): void {
   const plain = local<CGRect>();
   setRect(plain, 0.25, 0, 40.6, 30);
   report(`scanned ${canvas.scannedWidth(40.6)} ${canvas.centerScanRect(plain).size.width}`);
+  const click = NSEvent.otherEvent({
+    with: NSEvent.EventType.applicationDefined,
+    location: local<CGPoint>(),
+    modifierFlags: 0,
+    timestamp: 0,
+    windowNumber: 0,
+    context: null,
+    subtype: 0,
+    data1: 7,
+    data2: 0,
+  });
+  // Sent by the runtime, through the IMP, and called by the program.
+  let sent = 0;
+  if (click !== null) {
+    send_mouse_down(canvas, click);
+    sent = mouseData;
+    mouseData = 0;
+    canvas.mouseDown({ with: click });
+  }
+  report(`mouse ${sent} ${mouseData}`);
+  report(`records ${view_intrinsic_size(canvas)} ${view_alignment_rect(canvas)}`);
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
   // the closure a block the timer keeps, and calls from the run loop.

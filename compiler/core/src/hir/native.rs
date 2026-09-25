@@ -2060,11 +2060,24 @@ pub(crate) fn imp_signature(
                 .then_some(Type::Scalar(Scalar::Double))
         })
     };
-    for parameter in &signature.parameters {
-        let ty = ty_of(parameter.ty)
+    let passable = |name: &str, ty: TypeId| {
+        ty_of(ty)
             .filter(|ty| *ty != Type::Void)
-            .ok_or_else(|| format!("parameter `{}`, whose type has no C type the runtime could pass", parameter.name))?;
-        parameters.push(ty);
+            .ok_or_else(|| format!("parameter `{name}`, whose type has no C type the runtime could pass"))
+    };
+    for parameter in &signature.parameters {
+        // Labels -- `mouseDown(labels: { with: NSEvent })`, Swift's
+        // `mouseDown(with:)` -- are what a send passes: one argument each, in
+        // the order they are declared.
+        if ty_of(parameter.ty).is_none()
+            && let Some(labels) = labels_of(snapshot, parameter.ty)
+        {
+            for (key, ty) in labels {
+                parameters.push(passable(&format!("{}.{key}", parameter.name), ty)?);
+            }
+            continue;
+        }
+        parameters.push(passable(&parameter.name, parameter.ty)?);
     }
     let result = ty_of(signature.return_type).ok_or("a result whose type has no C type the runtime could take")?;
     Ok(FnPointer::spell(parameters, result))

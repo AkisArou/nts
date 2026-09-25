@@ -596,10 +596,20 @@ correctness does not depend on arm64 running by luck.
        `Canvas.scannedWidth` sends `super.centerScanRect(_:)` and answers what
        an ordinary send of it answers, 41 for a width of 40.6, on both
        backends.
-     - Not yet: a program method overriding a selector whose Swift form takes
-       labels (its IMP would build the labels object from its arguments), and
-       one returning a record by value, whose result is refused as an
-       escaping local.
+     - A method whose Swift form takes labels, `mouseDown(labels: { with:
+       NSEvent })` for Swift's `override func mouseDown(with:)`, is
+       `mouseDown:` taking the event. The IMP takes each label as its own
+       argument, and the method makes the labels object its body reads. A
+       call the program writes passes a literal's properties, never built.
+       The canvas's `mouseDown` sees an event's `data1` sent from C and
+       called from TypeScript, on both backends.
+     - A method returning a record by value, Swift's `override var
+       intrinsicContentSize: NSSize`, writes it through an address its entry
+       point passes last, so its `return` copies the record. The entry point
+       returns it as the platform does: in registers, or through the `sret`
+       pointer on x86_64. The canvas answers `intrinsicContentSize` and
+       `alignmentRect(forFrame:)` (labels in, 32 bytes out, `super`'s moved
+       right) to sends from C, on both backends.
      - An optional chain as a statement (`window.contentView?.hitTest(p);`)
        compiles. Its value, `T | null | undefined`, has no representation,
        and nothing reads it, so each absent link jumps past the rest.

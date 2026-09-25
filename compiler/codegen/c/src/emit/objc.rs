@@ -120,7 +120,10 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .iter()
                 .find(|func| func.name == method.function)
                 .ok_or_else(|| refuse("an Objective-C method whose compiled function this program does not define"))?;
-            if compiled.params.len() + 1 != method.signature.parameters.len() {
+            // A record result is written through an address the entry point
+            // passes the compiled method last.
+            let record_out = matches!(*method.signature.result, Type::Record(_));
+            if compiled.params.len() + 1 != method.signature.parameters.len() + usize::from(record_out) {
                 return Err(refuse("an Objective-C method whose entry point and compiled function disagree about arity"));
             }
             let mut parameters = Vec::new();
@@ -137,10 +140,15 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 let by_value = if matches!(ty, Type::Record(_)) { "&" } else { "" };
                 arguments.push(format!("({}){by_value}a{slot}", c_type_of(program, &want.ty, &want.origin)?));
             }
+            if record_out {
+                arguments.push("&r".to_owned());
+            }
             let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
             let symbol = nts_codegen_common::objc::imp_symbol(&class.name, at);
             let result = method.signature.result.c_type();
-            let body = if matches!(*method.signature.result, Type::Void) {
+            let body = if record_out {
+                format!("{result} r; nts_callback_enter(); {call}; nts_callback_leave(); return r;")
+            } else if matches!(*method.signature.result, Type::Void) {
                 format!("nts_callback_enter(); {call}; nts_callback_leave();")
             } else {
                 format!("nts_callback_enter(); {result} r = ({result}){call}; nts_callback_leave(); return r;")
