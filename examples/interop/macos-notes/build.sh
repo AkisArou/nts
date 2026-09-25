@@ -4,8 +4,10 @@
 #
 # The arms:
 #
-# - **First run:** no file, so the throwing read gives an empty list. Three
-#   notes are typed and added by the button's action, the table's data source
+# - **First run:** no file, so the throwing read gives an empty list. The
+#   application delegate hears the launch. Three notes are typed and added
+#   by the button's action, the third through the main menu's item, the
+#   table's data source
 #   answers three rows, and the file is written.
 # - **Swift:** `reference/notes.swift`, the same application in Swift, line for
 #   line, compiled with `swiftc` on the Mac: its first run prints what the
@@ -52,8 +54,8 @@ mkdir -p "$out"
   --class NSApplication --class NSWindow --class NSButton --class NSTextField --class NSTableView \
   --class NSTableColumn --class NSScrollView --class NSString --class NSTimer --class NSEvent \
   --class NSView --class NSLayoutConstraint --class NSLayoutAnchor --class NSLayoutXAxisAnchor \
-  --class NSLayoutYAxisAnchor --class NSLayoutDimension \
-  --protocol NSTableViewDataSource --out "$out/appkit.d.ts" --values "$out/appkit.values.ts" >/dev/null
+  --class NSLayoutYAxisAnchor --class NSLayoutDimension --class NSMenu --class NSMenuItem \
+  --protocol NSTableViewDataSource --protocol NSApplicationDelegate --out "$out/appkit.d.ts" --values "$out/appkit.values.ts" >/dev/null
 for generated in appkit.d.ts appkit.values.ts; do
   if [ "${NTS_REGENERATE:-}" = 1 ]; then
     command cp -f "$out/$generated" "$source/types/$generated"
@@ -99,7 +101,7 @@ run() {
     cat "$out/$product-$1.err" >&2
     exit 1
   fi
-  printf '%s\n' "loaded $2" "layout 240 270 224" "added note 1 of $(($2 + 1))" "added note 2 of $(($2 + 2))" "added note 3 of $(($2 + 3))" \
+  printf '%s\n' "loaded $2" "layout 240 270 224" "launched" "added note 1 of $(($2 + 1))" "added note 2 of $(($2 + 2))" "added note 3 of $(($2 + 3))" \
     "rows $(($2 + 3))" "saved $(($2 + 3))" | diff -u - "$out/$product-$1.txt" ||
     { echo "macos-notes: the $1 run of $product did not say what it should" >&2; exit 1; }
 }

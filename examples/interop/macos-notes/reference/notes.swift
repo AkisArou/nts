@@ -59,6 +59,12 @@ class Notes: NSObject, NSTableViewDataSource {
   }
 }
 
+class AppDelegate: NSObject, NSApplicationDelegate {
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    report("launched")
+  }
+}
+
 func main() {
   let app = NSApplication.shared
   app.setActivationPolicy(.regular)
@@ -102,6 +108,13 @@ func main() {
   table.dataSource = notes
   button.target = notes
   button.action = #selector(Notes.add(_:))
+  let menu = NSMenu(title: "Notes")
+  let item = NSMenuItem(title: "Add", action: #selector(Notes.add(_:)), keyEquivalent: "n")
+  item.target = notes
+  menu.addItem(item)
+  app.mainMenu = menu
+  let delegate = AppDelegate()
+  app.delegate = delegate
   window.makeKeyAndOrderFront(nil)
 
   var typed = 0
@@ -109,7 +122,11 @@ func main() {
     typed += 1
     if typed <= 3 {
       field.stringValue = "note \(typed) of \(initially + typed)"
-      button.performClick(nil)
+      if typed < 3 {
+        button.performClick(nil)
+      } else {
+        menu.performActionForItem(at: 0)
+      }
       return
     }
     timer.invalidate()

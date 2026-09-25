@@ -11,14 +11,19 @@
 //              throws on the first run, when there is no file
 //   layout W X H  the field's width, the button's x and the list's height,
 //              as Auto Layout placed them from the anchors' constraints
+//   launched   the application delegate's `applicationDidFinishLaunching`,
+//              which AppKit sends once `run` has started
 //   added T    each note typed into the field and added by the button's
-//              action, which reads the field's `stringValue` and clears it
+//              action -- the third by the main menu's Add item, the same
+//              action -- which reads the field's `stringValue` and clears it
 //   rows N     the table's `numberOfRows`, which asks the data source
 //   saved N    the notes written back through `write(toFile:atomically:encoding:)`
 import {
   NSApplication,
   NSButton,
   NSEvent,
+  NSMenu,
+  NSMenuItem,
   NSObject,
   NSScrollView,
   NSString,
@@ -28,6 +33,8 @@ import {
   NSView,
   NSWindow,
   Timer,
+  type NSApplicationDelegate,
+  type NSNotification,
   type NSTableViewDataSource,
 } from "objc:AppKit";
 import { report } from "c:support";
@@ -85,6 +92,14 @@ class Notes extends NSObject implements NSTableViewDataSource {
   }
 }
 
+// Swift's `class AppDelegate: NSObject, NSApplicationDelegate`: AppKit tells
+// it the application has finished launching, once `run` has started it.
+class AppDelegate extends NSObject implements NSApplicationDelegate {
+  applicationDidFinishLaunching(notification: NSNotification): void {
+    report("launched");
+  }
+}
+
 function main(): void {
   const app = NSApplication.shared;
   app.setActivationPolicy(NSApplication.ActivationPolicy.regular);
@@ -136,6 +151,15 @@ function main(): void {
   table.dataSource = notes;
   button.target = notes;
   button.action = selector(Notes, "add");
+  // A main menu whose item adds a note as the button does: Swift's
+  // `NSMenuItem(title:action:keyEquivalent:)`, its target the controller.
+  const menu = new NSMenu({ title: "Notes" });
+  const item = new NSMenuItem({ title: "Add", action: selector(Notes, "add"), keyEquivalent: "n" });
+  item.target = notes;
+  menu.addItem(item);
+  app.mainMenu = menu;
+  const delegate = new AppDelegate();
+  app.delegate = delegate;
   window.makeKeyAndOrderFront(null);
 
   // Typed and pressed from a timer, as a person would, then saved and quit.
@@ -144,7 +168,12 @@ function main(): void {
     typed++;
     if (typed <= 3) {
       field.stringValue = `note ${typed} of ${initially + typed}`;
-      button.performClick(null);
+      // The last through the menu, as choosing Add there would.
+      if (typed < 3) {
+        button.performClick(null);
+      } else {
+        menu.performActionForItem({ at: 0 });
+      }
       return;
     }
     timer.invalidate();
