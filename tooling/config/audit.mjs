@@ -290,11 +290,7 @@ ask(
 // version of this said `NativeBackend`, the name the *config* spells, and the
 // key matched nothing. The finding survived rather than being quietly excused,
 // which is the direction a lookup miss should fail in.
-const DELIBERATELY_UNSELECTED = {
-  Backend: {
-    llvm: "selecting it cannot produce an artifact -- `emit-llvm` renders to stdout, so `nts build` refuses the target by name",
-  },
-};
+const DELIBERATELY_UNSELECTED = {};
 
 for (const [name, members] of unions) {
   if (!(name in unionPath)) continue;
