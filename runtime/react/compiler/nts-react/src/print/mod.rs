@@ -57,10 +57,36 @@ impl TypeOracle for NoTypes {
     }
 }
 
+/// How a file is printed.
+#[derive(Debug, Default)]
+pub struct PrintOptions {
+    /// JSX is printed as the calls it stands for ([`jsx`]).
+    pub lower_jsx: bool,
+    /// Functions, by their original span, printed as the user wrote them
+    /// whatever the compiler made of them: the ones whose compiled form did
+    /// not typecheck.
+    pub as_written: FxHashSet<(u32, u32)>,
+}
+
+/// A printed file.
+#[derive(Debug)]
+pub struct Printed {
+    pub text: String,
+    /// Each function printed from the compiler's output: its original span,
+    /// and where it is in `text`, both in UTF-16 units -- what a diagnostic
+    /// on `text` is traced back through.
+    pub functions: Vec<PrintedFunction>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PrintedFunction {
+    pub original: (u32, u32),
+    pub output: (u32, u32),
+}
+
 /// Prints `compiled`, the compiler's output for `original`, whose text is
 /// `source`, applying the compiler's `renames` and restoring the types its
-/// code generation dropped (see [`Printer`]'s restoration rules). With
-/// `lower_jsx`, JSX is printed as the calls it stands for ([`jsx`]).
+/// code generation dropped (see [`Printer`]'s restoration rules).
 #[must_use]
 pub fn print_file(
     source: &SourceText,
@@ -68,8 +94,8 @@ pub fn print_file(
     compiled: &File,
     renames: &[BindingRenameInfo],
     types: &mut dyn TypeOracle,
-    lower_jsx: bool,
-) -> String {
+    options: &PrintOptions,
+) -> Printed {
     let mut originals = FxHashMap::default();
     let mut by_span = FxHashMap::default();
     let mut definite = FxHashSet::default();
@@ -91,14 +117,37 @@ pub fn print_file(
         typed_locals: FxHashSet::default(),
         restoring: None,
         assigning: false,
-        lower_jsx,
-        jsx_spans: if lower_jsx { jsx_spans } else { Vec::new() },
+        lower_jsx: options.lower_jsx,
+        jsx_spans: if options.lower_jsx { jsx_spans } else { Vec::new() },
         jsx_imports: jsx::JsxImports::default(),
+        as_written: &options.as_written,
+        functions: Vec::new(),
         out: String::new(),
         indent: 0,
     };
     printer.program(original, compiled);
-    printer.out
+    let functions = utf16_ranges(&printer.out, &printer.functions);
+    Printed { text: printer.out, functions }
+}
+
+/// A function printed from the compiler's output: its original span, and its
+/// byte range in the output.
+type OutputFunction = ((u32, u32), (usize, usize));
+
+/// The printed functions' output ranges, from byte offsets into `text` to
+/// UTF-16 units, as tsgo counts them.
+fn utf16_ranges(text: &str, functions: &[OutputFunction]) -> Vec<PrintedFunction> {
+    let mut offsets: Vec<usize> = functions.iter().flat_map(|(_, (start, end))| [*start, *end]).collect();
+    offsets.sort_unstable();
+    offsets.dedup();
+    let mut units = FxHashMap::default();
+    let (mut at, mut counted) = (0usize, 0u32);
+    for offset in offsets {
+        counted += text.get(at..offset).map_or(0, |part| u32::try_from(part.encode_utf16().count()).unwrap_or(u32::MAX));
+        at = offset;
+        units.insert(offset, counted);
+    }
+    functions.iter().map(|(original, (start, end))| PrintedFunction { original: *original, output: (units[start], units[end]) }).collect()
 }
 
 /// Every node of the original program with a span, by that span, outermost
@@ -219,6 +268,10 @@ struct Printer<'a> {
     jsx_spans: Vec<(u32, u32, u64)>,
     /// The runtime functions the lowered JSX calls.
     jsx_imports: jsx::JsxImports,
+    /// Functions to print as the user wrote them; see [`PrintOptions`].
+    as_written: &'a FxHashSet<(u32, u32)>,
+    /// The functions printed from the compiler's output.
+    functions: Vec<OutputFunction>,
     out: String,
     indent: usize,
 }
@@ -452,7 +505,14 @@ impl Printer<'_> {
             }
         }
         self.write(&self.source.slice(cursor, self.source.len()));
-        self.out.insert_str(imports_at, &self.jsx_imports.declarations());
+        let imports = self.jsx_imports.declarations();
+        self.out.insert_str(imports_at, &imports);
+        for (_, (start, end)) in &mut self.functions {
+            if *start >= imports_at {
+                *start += imports.len();
+                *end += imports.len();
+            }
+        }
     }
 
     fn statements(&mut self, statements: &[Statement]) {
@@ -914,6 +974,30 @@ impl Printer<'_> {
             self.write(&text);
             return;
         }
+        let Some(started) = self.function_start(&f.base) else { return };
+        self.function_declaration_compiled(f);
+        self.function_end(&f.base, started);
+    }
+
+    /// Where a function the compiler changed starts in the output -- or
+    /// `None` when it is to be printed as written, which this has done.
+    fn function_start(&mut self, base: &BaseNode) -> Option<usize> {
+        let span = span_of_base(base, self.source);
+        if let Some((start, end)) = span.filter(|span| self.as_written.contains(span)) {
+            let text = self.copy(start, end);
+            self.write(&text);
+            return None;
+        }
+        Some(self.out.len())
+    }
+
+    fn function_end(&mut self, base: &BaseNode, started: usize) {
+        if let Some(span) = span_of_base(base, self.source) {
+            self.functions.push((span, (started, self.out.len())));
+        }
+    }
+
+    fn function_declaration_compiled(&mut self, f: &react_compiler_ast::statements::FunctionDeclaration) {
         if f.is_async {
             self.write("async ");
         }
@@ -1359,6 +1443,7 @@ impl Printer<'_> {
                 }
             }
             Expression::ArrowFunctionExpression(f) => {
+                let Some(started) = self.function_start(&f.base) else { return };
                 if f.is_async {
                     self.write("async ");
                 }
@@ -1377,8 +1462,10 @@ impl Printer<'_> {
                         }
                     }
                 }
+                self.function_end(&f.base, started);
             }
             Expression::FunctionExpression(f) => {
+                let Some(started) = self.function_start(&f.base) else { return };
                 if f.is_async {
                     self.write("async ");
                 }
@@ -1389,6 +1476,7 @@ impl Printer<'_> {
                 self.function_rest(&f.base, f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
                 self.write(" ");
                 self.function_body(&f.base, &f.body);
+                self.function_end(&f.base, started);
             }
             Expression::ClassExpression(c) => self.span(&c.base),
             Expression::ParenthesizedExpression(p) => {

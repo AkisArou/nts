@@ -94,48 +94,22 @@ fn compile(tsconfig: &str, options: &str, out: &str, lower_jsx: bool) -> Result<
     for path in session.own_sources()? {
         let tree = session.file(&path)?;
         let code = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
-        let text = nts_react::convert::text::SourceText::new(&code);
         let name = path.file_name().unwrap_or("source");
         let nodes = nts_react::tsgo::Nodes::new(&tree.nodes);
-        let Ok(file) = nts_react::convert::convert_file(nodes, nts_semantic_schema::NodeId(0), &text) else {
-            unsupported += 1;
-            continue;
-        };
-        let scope = nts_react::scope::build(&file);
-        // The plugin's bridge hands the compiler the file's text beside its
-        // options; so does this.
-        let mut options = options.clone();
-        options["__sourceCode"] = serde_json::Value::String(code);
-        let options: react_compiler::entrypoint::PluginOptions = serde_json::from_value(options).context("the options are not `PluginOptions`")?;
-        let original = file.clone();
-        let result = react_compiler::entrypoint::compile_program(file, scope, options);
-        std::fs::write(out.join(format!("{name}.result.json")), serde_json::to_string(&result)?)?;
-        // The program as TypeScript: the user's text wherever the compiler
-        // changed nothing, which is the whole file when it compiled nothing.
-        // The compiler's renames apply even when it compiled nothing, as the
-        // Babel plugin applies them: a function that bailed out may still
-        // have had a shadowing binding renamed while it was being lowered.
-        // Lowering JSX prints every file.
         let mut types = SessionTypes { session: &mut session, path: &path, tree: &tree };
-        let printed = match &result {
-            react_compiler::entrypoint::CompileResult::Success { ast: Some(compiled), renames, .. } => {
-                nts_react::print::print_file(&text, &original, compiled, renames, &mut types, lower_jsx)
+        let print = nts_react::print::PrintOptions { lower_jsx, ..Default::default() };
+        match nts_react::stage::compile_file(&code, nodes, path.as_str(), &options, &mut types, &print) {
+            Ok(outcome) => {
+                std::fs::write(out.join(format!("{name}.result.json")), serde_json::to_string(&outcome.result)?)?;
+                std::fs::write(out.join(name), outcome.text)?;
+                compiled += 1;
             }
-            react_compiler::entrypoint::CompileResult::Success { ast: None, renames, .. } if lower_jsx || !renames.is_empty() => {
-                nts_react::print::print_file(&text, &original, &original, renames, &mut types, lower_jsx)
-            }
-            _ if lower_jsx => nts_react::print::print_file(&text, &original, &original, &[], &mut types, lower_jsx),
-            _ => code_for_output(&text),
-        };
-        std::fs::write(out.join(name), printed)?;
-        compiled += 1;
+            Err(nts_react::stage::Refused::Options(error)) => return Err(error).context("the options are not `PluginOptions`"),
+            Err(nts_react::stage::Refused::Unsupported(_)) => unsupported += 1,
+        }
     }
     eprintln!("compiled {compiled}, unsupported {unsupported}");
     Ok(())
-}
-
-fn code_for_output(text: &nts_react::convert::text::SourceText) -> String {
-    text.slice(0, text.len())
 }
 
 /// The checker's types, from the session that checked the file being printed.

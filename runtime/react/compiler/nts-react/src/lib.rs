@@ -11,4 +11,5 @@ pub mod jsx_text;
 pub mod print;
 pub mod project;
 pub mod scope;
+pub mod stage;
 pub mod tsgo;
