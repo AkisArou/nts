@@ -706,6 +706,8 @@ declare module "objc:AppKit" {
     perform(aSelector: Selector): NSObject;
     /** @ntsSelector performSelector:withObject: */
     perform(aSelector: Selector, labels: { with: NSObject }): NSObject;
+    /** @ntsSelector performSelector:withObject:withObject: */
+    perform(aSelector: Selector, labels: { with: NSObject; object2: NSObject }): NSObject;
     /** @ntsSelector isProxy */
     isProxy(): boolean;
     /** @ntsSelector isKindOfClass: */
@@ -720,7 +722,6 @@ declare module "objc:AppKit" {
     //   -finalize: deprecated
     //   -methodForSelector:: a `void (*)(void)`
     //   +instanceMethodForSelector:: a `void (*)(void)`
-    //   -performSelector:withObject:withObject:: Swift repeats the label `with`, which one object cannot
   }
 
   /** @ntsClass NSResponder */

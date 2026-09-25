@@ -1115,6 +1115,7 @@ impl<'a> Model<'a> {
     fn arguments(&mut self, class: &Class, parameters: &[&Value], labels: &[String]) -> std::result::Result<(String, Vec<String>), String> {
         let mut positional = Vec::new();
         let mut labelled = Vec::new();
+        let mut keys = BTreeSet::new();
         let mut trailing = None;
         for (at, (parameter, label)) in parameters.iter().zip(labels).enumerate() {
             let spelled = self.spell(class, parameter.get("type").ok_or("a parameter with no type")?, Position::Parameter)?;
@@ -1126,12 +1127,17 @@ impl<'a> Model<'a> {
             } else if label == "_" && labelled.is_empty() {
                 positional.push(format!("{name}: {spelled}"));
             } else {
-                labelled.push(format!("{}: {spelled}", quoted_key(if label == "_" { &name } else { label })));
+                // Swift repeats a label -- `NSLayoutConstraint(item:attribute:
+                // relatedBy:toItem:attribute:multiplier:constant:)` -- which one
+                // object cannot hold twice: the repeat takes its parameter's own
+                // name, the header's (`attr2`, `endRadius`, `newParent`).
+                let key = if label == "_" { name.clone() } else { label.clone() };
+                let key = if keys.contains(&key) { name.clone() } else { key };
+                if !keys.insert(key.clone()) {
+                    return Err(format!("Swift repeats the label `{key}`, which one object cannot"));
+                }
+                labelled.push(format!("{}: {spelled}", quoted_key(&key)));
             }
-        }
-        let mut keys = BTreeSet::new();
-        if let Some(repeated) = labelled.iter().map(|l| l.split_once(": ").map_or(l.as_str(), |(k, _)| k)).find(|k| !keys.insert(*k)) {
-            return Err(format!("Swift repeats the label `{repeated}`, which one object cannot"));
         }
         if !labelled.is_empty() {
             positional.push(format!("labels: {{ {} }}", labelled.join("; ")));
@@ -1949,6 +1955,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<Shape<ShapeDelegate> *> *)delegates;
 - (Shape *)twinOfShape:(Shape *)other;
 - (void)measure:(Span *)span;
+- (void)linkFrom:(Shape *)start to:(Shape *)middle to:(Shape *)end;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
@@ -2013,6 +2020,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)delegates", "swift.method", "delegates()", &["Shape", "delegates()"], ""),
             symbol("c:objc(cs)Shape(im)twinOfShape:", "swift.method", "twin(of:)", &["Shape", "twin(of:)"], ""),
             symbol("c:objc(cs)Shape(im)measure:", "swift.method", "measure(_:)", &["Shape", "measure(_:)"], ""),
+            symbol("c:objc(cs)Shape(im)linkFrom:to:to:", "swift.method", "link(from:to:to:)", &["Shape", "link(from:to:to:)"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2126,6 +2134,8 @@ NS_ASSUME_NONNULL_END
             // passes, and the record under its typedef's name, its tag the C
             // one.
             "    /** @ntsSelector measure: */\n    measure(span: Ptr<Span>): void;",
+            // A label Swift repeats: the repeat keyed by its parameter's name.
+            "    /** @ntsSelector linkFrom:to:to: */\n    link(labels: { from: Shape; to: Shape; end: Shape }): void;",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",

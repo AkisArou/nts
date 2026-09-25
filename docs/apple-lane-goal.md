@@ -349,8 +349,12 @@ correctness does not depend on arm64 running by luck.
        `menuFor(event)`, `frameForAlignmentRect(rect)`, `uppercasedWith(locale)`.
        One whose first argument has no label (`splitView(_:…)`) is still
        skipped, and those are 8 of AppKit's former 45.
-     - Skipped, with reasons: blocks (S5), collections (S3c), members Swift
-       throws or awaits (S5), and a label Swift repeats (`perform(_:with:with:)`).
+     - Skipped, with reasons: blocks (S5), collections (S3c), and members
+       Swift throws or awaits (S5).
+     - A label Swift repeats, which one object cannot hold twice, takes its
+       parameter's name from the header the second time.
+       `NSLayoutConstraint(item:attribute:relatedBy:toItem:attribute:...)` is
+       `{ item, attribute, relatedBy, toItem, attr2, multiplier, constant }`.
      - The binding's cost to the checker: the 2.6k-line `macos-window`
        binding type-checks in 0.12 s, the same as `macos-classes`. The
        full-framework cost is still to be measured.
@@ -439,8 +443,8 @@ correctness does not depend on arm64 running by luck.
      - **`async throws` too.** A handler given an `NSError` rejects the
        promise with the error's `localizedDescription` when it is set, and
        otherwise resolves with the value, no longer optional, as Swift
-       returns it. This needs `NSError` bound (`--class NSError`); without
-       it the form is skipped, saying so.
+       returns it. An `NSError` that is not bound gets a stub declaring
+       `localizedDescription`, so every such form binds with no flag.
      - A promise of an Objective-C object holds it in a box of its family,
        `HANDLE_BOX_OBJC`, beside GObject's, through `native::handle_box`.
        Before, a promise refused any counted handle that was not a
