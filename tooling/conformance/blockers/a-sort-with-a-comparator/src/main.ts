@@ -1,35 +1,19 @@
-// expect: NTS1001 a `sort` with a comparator, which would have to call back into it
+// expect: nothing refused
 
-// `xs.sort(cmp)` — the comparator form, which is a different feature from the
-// default one and refuses by name rather than falling through to `this array
-// method is not supported`.
+// `xs.sort(cmp)` -- the comparator form, which refused by name until 72605753:
+// "a `sort` with a comparator, which would have to call back into it".
 //
-// `sort()` with no comparator landed on 2026-09-17 as a plain runtime helper:
-// no callback, so no machinery. Every one of the three sites in `runtime/node`
-// is that form, which is what made it the cheap half.
+// This fixture filed three routes. The second was built: the sort is emitted
+// as HIR, a stable bottom-up merge (`lower_sort_with`), with no runtime
+// surface and all three backends answering. It does not inline the body.
+// The merge *calls* the comparator as the function value it is, which is
+// what answered "one inside a condition": the call's result is a value the
+// branch reads, not a delivery into a loop the callback machinery built. A
+// capturing arrow, a named function and anything else holding one work alike.
 //
-// The comparator is not a harder version of it. The callback would have to be
-// reached from **inside** the sort, which is neither of the two shapes this
-// compiler has for a callback: it is not the inlined-into-a-loop shape every
-// other array method takes — those call the body once per element, in the loop
-// body, and a sort needs one in a nested loop's condition — and it is not a C
-// function pointer either, once the arrow captures anything.
-//
-// Filed rather than left silent so that whoever builds it finds the analysis.
-// The three routes, with what each costs:
-//
-//   bridge the arrow to a function pointer and call a runtime sort
-//     — works on C and LLVM; the JVM relates classes by name and would need
-//       its own answer, and a capturing comparator has no bridge at all
-//   emit the sort as HIR with the body inlined
-//     — no runtime surface and all three backends for free, but the callback
-//       machinery delivers one value per element into a loop this compiler
-//       built, and this needs one inside a condition
-//   a stable sort in the runtime taking a closure object
-//     — one helper per backend, and the JVM half is the only one that is short
-//
-// A `FIXED` here means one of the three was built; a `CHANGED` means the
-// refusal moved, which is worth reading because the message names the reason.
+// Now a guard: this compiling again is the claim. The behaviour -- stable,
+// NaN as 0, a comparator that mutates the array, `toSorted` -- is
+// `examples/a-sort-with-a-comparator`, which node checks.
 
 export function f(n: number): string {
   const xs = ["b", "a", String(n)];
