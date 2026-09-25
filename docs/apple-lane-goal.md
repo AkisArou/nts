@@ -1004,6 +1004,47 @@ correctness does not depend on arm64 running by luck.
        `selector(Controller, "pressed")`, reaches the program's controller
        through `sendActions(for:)`. A timer from UIKit's run loop ends it. A
        screenshot of the simulator shows the blue view and the white label.
+     - **Each iOS fixture has a Swift twin (2026-09-25).**
+       `reference/hello.swift` and `reference/list.swift` are built by
+       `swiftc` for the simulator, bundled from the TypeScript product's
+       `Info.plist` under their own identifiers, and diffed with it.
+     - **`ios-list` (2026-09-25):** a `UITableView` in a navigation
+       controller, backed by a data source the program writes. Building it
+       found three gaps:
+       - A method no message could carry (`append(item: string)`) is now
+         Swift's method without `@objc`: lowered, and not registered.
+       - `a?.b?.c` typed `c`'s receiver as `B | null | undefined`. It is now
+         the present type (`present_part`).
+       - **A defect, and not a gap.** A call to a program class's method
+         went straight to the static type's method, so an override in a
+         subclass was never reached (`const x: A = new B(); x.f()` ran
+         `A#f`). Dispatch compares `object_getClass` with each of the
+         program's classes below the method's, then calls the matching
+         method directly. `isKindOfClass:` covers a class the runtime made,
+         which key-value observing's `NSKVONotifying_` subclass is (the
+         `observed` line in macos-classes). It costs 0.8 ns against Swift's
+         0.9 (the `override` bench row).
+     - **A protocol as a value's type (2026-09-25).** bind-objc spells
+       `id<P>` as `P` where it declares `P`, and each protocol interface
+       `extends NSObject`. A value of one is an Objective-C interface
+       handle over `NSObject`'s chain. Its methods are messages, and
+       `delegate?.m?.(...)` asks `respondsToSelector:` first. Before this, a
+       call through the optional-method path tested the object against the
+       program's classes and was dropped silently.
+     - **`UIApplicationMain` from the binding (2026-09-26).** `--function
+       UIApplicationMain`, with `exit` from `c:stdlib`. A C function's
+       `NSString *` is a `BridgedString` (`objc:types`), the converse of
+       `CString`: a plain `string` is a `char *` outside a message, and
+       binding one as `string` handed UIKit a C string for a class name,
+       which printed nothing and refused nothing. A `BridgedString` result is
+       read back as an `NSString`. Arguments and results are checked by
+       macos-classes' `class-names` line: a literal, a variable, a
+       concatenation, and nil.
+     - Still C in each iOS fixture: `report`, the test's output.
+       `console.log` is the node lane's runtime, which a native application
+       does not link.
+     - Not yet: an array of `ClassObject`, an uncounted C pointer, is
+       unrepresentable.
    - **Swift's one `nil` (2026-09-25).** `window.contentView?.superview`
      is `NSView | null | undefined`: a nullable property down an optional
      chain. It is now the pointer, its null standing for both absences, as
