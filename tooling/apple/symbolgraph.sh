@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Asks the lane's Mac how Swift imports each framework, and keeps the answer:
 # `swift-symbolgraph-extract` for every framework named, copied to
-# ${NTS_APPLE_ROOT:-~/.cache/nts/apple}/symbolgraph/<SDK version>/<Framework>.symbols.json.
+# ${NTS_APPLE_ROOT:-~/.cache/nts/apple}/symbolgraph/<SDK version>/<Framework>.symbols.json,
+# with the `<Framework>@<Other>.symbols.json` files beside it: a framework's
+# category on another's class (UIKit's `row` on Foundation's `NSIndexPath`)
+# is written to the graph of the module it extends.
 #
 # This is where `nts bind-objc` gets Swift's names from -- `init(contentRect:
 # styleMask:backing:defer:)`, `NSWindow.StyleMask.titled`, `Timer` for
@@ -43,7 +46,10 @@ for framework in "$@"; do
   ssh -o BatchMode=yes "$dest" "rm -rf /tmp/nts-symbolgraph && mkdir -p /tmp/nts-symbolgraph && \
     xcrun swift-symbolgraph-extract -module-name '$framework' -target $triple \
       -sdk \"\$(xcrun --sdk $platform --show-sdk-path)\" -output-dir /tmp/nts-symbolgraph -minimum-access-level public >/dev/null"
-  scp -q "$dest:/tmp/nts-symbolgraph/$framework.symbols.json" "$out/$framework.symbols.json.partial"
-  mv -f "$out/$framework.symbols.json.partial" "$out/$framework.symbols.json"
-  echo "$out/$framework.symbols.json"
+  rm -rf "$out/.partial" && mkdir "$out/.partial"
+  scp -q "$dest:/tmp/nts-symbolgraph/*.symbols.json" "$out/.partial/"
+  rm -f "$out/$framework.symbols.json" "$out/$framework"@*.symbols.json
+  mv -f "$out/.partial/"* "$out/"
+  rmdir "$out/.partial"
+  ls "$out/$framework.symbols.json" "$out/$framework"@*.symbols.json 2>/dev/null || true
 done

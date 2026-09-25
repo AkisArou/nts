@@ -619,17 +619,21 @@ impl Swift {
         let mut modules: Vec<&str> = modules.iter().map(String::as_str).collect();
         modules.push("ObjectiveC");
         for module in modules {
-            let path = directory.join(format!("{module}.symbols.json"));
-            let text = std::fs::read(&path)
-                .with_context(|| format!("reading {} -- run tooling/apple/symbolgraph.sh {module}", path.display()))?;
-            let graph: Graph = serde_json::from_slice(&text).with_context(|| format!("reading {}", path.display()))?;
+            for path in graphs(directory, module)? {
+                let text = std::fs::read(&path)
+                    .with_context(|| format!("reading {} -- run tooling/apple/symbolgraph.sh {module}", path.display()))?;
+                let graph: Graph =
+                    serde_json::from_slice(&text).with_context(|| format!("reading {}", path.display()))?;
             // Clang's declarations only: an `s:` symbol is Swift's own, which
             // an Objective-C message cannot reach.
-            for symbol in graph.symbols.into_iter().filter(|s| s.identifier.identifier.starts_with("c:")) {
-                let into = if symbol.is_async() { &mut asynchronous } else { &mut by_usr };
-                into.insert(symbol.identifier.identifier.clone(), symbol);
+                for symbol in graph.symbols.into_iter().filter(|s| s.identifier.identifier.starts_with("c:")) {
+                    let into = if symbol.is_async() { &mut asynchronous } else { &mut by_usr };
+                    into.insert(symbol.identifier.identifier.clone(), symbol);
+                }
+                optional.extend(
+                    graph.relationships.into_iter().filter(|r| r.kind == "optionalRequirementOf").map(|r| r.source),
+                );
             }
-            optional.extend(graph.relationships.into_iter().filter(|r| r.kind == "optionalRequirementOf").map(|r| r.source));
         }
         Ok(Self { by_usr, asynchronous, optional })
     }
@@ -642,6 +646,24 @@ impl Swift {
     fn class(&self, class: &str) -> String {
         self.get(&format!("c:objc(cs){class}")).map_or_else(|| class.to_owned(), |s| s.names.title.clone())
     }
+}
+
+/// `module`'s graph, then the graphs of its categories on other modules'
+/// classes: Swift writes `UIKit`'s `row` on Foundation's `NSIndexPath` to
+/// `UIKit@Foundation.symbols.json`, not to `UIKit.symbols.json`.
+fn graphs(directory: &std::path::Path, module: &str) -> Result<Vec<std::path::PathBuf>> {
+    let prefix = format!("{module}@");
+    let mut extensions = Vec::new();
+    for entry in std::fs::read_dir(directory).with_context(|| format!("reading {}", directory.display()))? {
+        let name = entry?.file_name();
+        if name.to_str().is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".symbols.json")) {
+            extensions.push(directory.join(name));
+        }
+    }
+    extensions.sort();
+    let mut paths = vec![directory.join(format!("{module}.symbols.json"))];
+    paths.extend(extensions);
+    Ok(paths)
 }
 
 /// One bound class, as TypeScript declares it.
@@ -1719,8 +1741,7 @@ impl<'a> Model<'a> {
 /// what can be nil; a number Swift makes optional is another matter.
 fn optional_as_swift(spelled: String, optional: bool) -> String {
     let object = !matches!(spelled.as_str(), "boolean" | "void") && !spelled.starts_with("CEnum<") && !spelled.starts_with("ByValue<");
-    let numeric = spelled.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && spelled.len() <= 7 && !spelled.contains('<');
-    if object && !numeric && !spelled.ends_with(" | null") && optional {
+    if object && !SWIFT_NUMBERS.contains(&spelled.as_str()) && !spelled.ends_with(" | null") && optional {
         format!("{spelled} | null")
     } else {
         spelled
@@ -1951,6 +1972,13 @@ fn swift_name(title: &str) -> (String, Vec<String>) {
     let labels = rest.trim_end_matches(')').split(':').filter(|l| !l.is_empty()).map(str::to_owned).collect();
     (base.to_owned(), labels)
 }
+
+/// Every name [`swift_number`] answers: a number, which no `?` makes
+/// nullable.
+const SWIFT_NUMBERS: [&str; 14] = [
+    "CGFloat", "TimeInterval", "Int", "UInt", "Double", "Float", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32",
+    "Int64", "UInt64",
+];
 
 /// The name Swift gives a C number: by its written spelling where that is a
 /// name Swift keeps (`CGFloat`, `NSInteger` as `Int`), and otherwise by its C
@@ -2313,6 +2341,9 @@ mod tests {
     #[test]
     fn a_number_is_named_as_swift_names_it() {
         assert_eq!(swift_number("CGFloat", "double"), Some("CGFloat"));
+        // A class whose name is as short as a number's is still an object.
+        assert_eq!(optional_as_swift("UILabel".to_owned(), true), "UILabel | null");
+        assert_eq!(optional_as_swift("UInt64".to_owned(), true), "UInt64");
         assert_eq!(swift_number("NSInteger", "long"), Some("Int"));
         assert_eq!(swift_number("double", "double"), Some("Double"));
         assert_eq!(swift_number("uint16_t", "unsigned short"), Some("UInt16"));

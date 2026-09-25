@@ -702,8 +702,8 @@ declare module "objc:UIKit" {
     get undoManager(): UndoManager | null;
     get editingInteractionConfiguration(): CEnum<UIEditingInteractionConfiguration, Int>;
     get keyCommands(): UIKeyCommand[] | null;
-    get inputView(): UIView;
-    get inputAccessoryView(): UIView;
+    get inputView(): UIView | null;
+    get inputAccessoryView(): UIView | null;
     get inputAssistantItem(): UITextInputAssistantItem;
     get inputViewController(): UIInputViewController | null;
     get inputAccessoryViewController(): UIInputViewController | null;
@@ -800,7 +800,7 @@ declare module "objc:UIKit" {
     get currentEDRHeadroom(): CGFloat;
     get potentialEDRHeadroom(): CGFloat;
     get focusedItem(): NSObject | null;
-    get focusedView(): UIView;
+    get focusedView(): UIView | null;
     get supportsFocus(): boolean;
     get applicationFrame(): ByValue<CGRect>;
     /** @ntsSelector displayLinkWithTarget:selector: */
@@ -875,8 +875,8 @@ declare module "objc:UIKit" {
     get keyboardLayoutGuide(): UIKeyboardLayoutGuide;
     get clipsToBounds(): boolean;
     set clipsToBounds(value: boolean);
-    get backgroundColor(): UIColor;
-    set backgroundColor(value: UIColor);
+    get backgroundColor(): UIColor | null;
+    set backgroundColor(value: UIColor | null);
     get alpha(): CGFloat;
     set alpha(value: CGFloat);
     get isOpaque(): boolean;
@@ -890,11 +890,11 @@ declare module "objc:UIKit" {
     get contentMode(): CEnum<UIView.ContentMode, Int>;
     set contentMode(value: CEnum<UIView.ContentMode, Int>);
     /** @ntsSelector maskView */
-    get mask(): UIView;
+    get mask(): UIView | null;
     /** @ntsSet setMaskView: */
-    set mask(value: UIView);
+    set mask(value: UIView | null);
     get tintColor(): UIColor;
-    set tintColor(value: UIColor);
+    set tintColor(value: UIColor | null);
     get tintAdjustmentMode(): CEnum<UIView.TintAdjustmentMode, Int>;
     set tintAdjustmentMode(value: CEnum<UIView.TintAdjustmentMode, Int>);
     static get areAnimationsEnabled(): boolean;
@@ -944,8 +944,8 @@ declare module "objc:UIKit" {
     set showsLargeContentViewer(value: boolean);
     get largeContentTitle(): string | null;
     set largeContentTitle(value: string | null);
-    get largeContentImage(): UIImage;
-    set largeContentImage(value: UIImage);
+    get largeContentImage(): UIImage | null;
+    set largeContentImage(value: UIImage | null);
     get scalesLargeContentImage(): boolean;
     set scalesLargeContentImage(value: boolean);
     get largeContentImageInsets(): ByValue<UIEdgeInsets>;
@@ -1171,11 +1171,11 @@ declare module "objc:UIKit" {
   /** @ntsClass UIViewController */
   export class UIViewController extends UIResponder {
     get view(): UIView;
-    set view(value: UIView);
-    get viewIfLoaded(): UIView;
+    set view(value: UIView | null);
+    get viewIfLoaded(): UIView | null;
     get isViewLoaded(): boolean;
     get nibName(): string | null;
-    get nibBundle(): Bundle;
+    get nibBundle(): Bundle | null;
     get storyboard(): UIStoryboard | null;
     get title(): string | null;
     set title(value: string | null);
@@ -1700,13 +1700,13 @@ declare module "objc:UIKit" {
     get text(): string | null;
     set text(value: string | null);
     get font(): UIFont;
-    set font(value: UIFont);
+    set font(value: UIFont | null);
     get textColor(): UIColor;
-    set textColor(value: UIColor);
+    set textColor(value: UIColor | null);
     get preferredVibrancy(): CEnum<UILabelVibrancy, Int>;
     set preferredVibrancy(value: CEnum<UILabelVibrancy, Int>);
-    get shadowColor(): UIColor;
-    set shadowColor(value: UIColor);
+    get shadowColor(): UIColor | null;
+    set shadowColor(value: UIColor | null);
     get shadowOffset(): ByValue<CGSize>;
     set shadowOffset(value: ByValue<CGSize> | Fields<CGSize>);
     get textAlignment(): CEnum<NSTextAlignment, Int>;
@@ -1715,8 +1715,8 @@ declare module "objc:UIKit" {
     set lineBreakMode(value: CEnum<NSLineBreakMode, Int>);
     get attributedText(): NSAttributedString | null;
     set attributedText(value: NSAttributedString | null);
-    get highlightedTextColor(): UIColor;
-    set highlightedTextColor(value: UIColor);
+    get highlightedTextColor(): UIColor | null;
+    set highlightedTextColor(value: UIColor | null);
     get isHighlighted(): boolean;
     /** @ntsSet setHighlighted: */
     set isHighlighted(value: boolean);
@@ -1762,7 +1762,7 @@ declare module "objc:UIKit" {
     get automaticallyUpdatesConfiguration(): boolean;
     set automaticallyUpdatesConfiguration(value: boolean);
     get tintColor(): UIColor;
-    set tintColor(value: UIColor);
+    set tintColor(value: UIColor | null);
     get buttonType(): CEnum<UIButton.ButtonType, Int>;
     get isHovered(): boolean;
     get isHeld(): boolean;
@@ -1771,8 +1771,8 @@ declare module "objc:UIKit" {
     get isPointerInteractionEnabled(): boolean;
     /** @ntsSet setPointerInteractionEnabled: */
     set isPointerInteractionEnabled(value: boolean);
-    get menu(): UIMenu;
-    set menu(value: UIMenu);
+    get menu(): UIMenu | null;
+    set menu(value: UIMenu | null);
     get preferredMenuElementOrder(): CEnum<UIContextMenuConfiguration.ElementOrder, Int>;
     set preferredMenuElementOrder(value: CEnum<UIContextMenuConfiguration.ElementOrder, Int>);
     get changesSelectionAsPrimaryAction(): boolean;
@@ -1784,9 +1784,9 @@ declare module "objc:UIKit" {
     get currentBackgroundImage(): UIImage | null;
     get currentPreferredSymbolConfiguration(): UIImage.SymbolConfiguration | null;
     get currentAttributedTitle(): NSAttributedString | null;
-    get titleLabel(): UILabel;
+    get titleLabel(): UILabel | null;
     get imageView(): UIImageView | null;
-    get subtitleLabel(): UILabel;
+    get subtitleLabel(): UILabel | null;
     get contentEdgeInsets(): ByValue<UIEdgeInsets>;
     set contentEdgeInsets(value: ByValue<UIEdgeInsets> | Fields<UIEdgeInsets>);
     get titleEdgeInsets(): ByValue<UIEdgeInsets>;

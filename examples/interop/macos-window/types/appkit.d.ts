@@ -645,6 +645,15 @@ declare module "objc:AppKit" {
   }
 
   export namespace NSString {
+    export const enum DrawingOptions {
+      usesLineFragmentOrigin = 1,
+      usesFontLeading = 2,
+      usesDeviceMetrics = 8,
+      truncatesLastVisibleLine = 32,
+    }
+  }
+
+  export namespace NSString {
     export const enum EncodingConversionOptions {
       allowLossy = 1,
       externalRepresentation = 2,
@@ -1306,6 +1315,20 @@ declare module "objc:AppKit" {
     addingPercentEncoding(labels: { withAllowedCharacters: NSCharacterSet }): string | null;
     /** @ntsSelector enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock: */
     enumerateLinguisticTags(labels: { in: ByValue<NSRange> | Fields<NSRange>; scheme: string; options: CEnum<NSLinguisticTagger.Options | 0, UInt>; orthography: NSOrthography | null }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
+    /** @ntsSelector sizeWithAttributes: */
+    size(labels: { withAttributes: Map<string, NSObject> | null }): ByValue<CGSize>;
+    /** @ntsSelector drawAtPoint:withAttributes: */
+    draw(labels: { at: ByValue<CGPoint> | Fields<CGPoint>; withAttributes: Map<string, NSObject> | null }): void;
+    /** @ntsSelector drawInRect:withAttributes: */
+    draw(labels: { in: ByValue<CGRect> | Fields<CGRect>; withAttributes: Map<string, NSObject> | null }): void;
+    /** @ntsSelector drawWithRect:options:attributes:context: */
+    draw(labels: { with: ByValue<CGRect> | Fields<CGRect>; options: CEnum<NSString.DrawingOptions | 0, Int>; attributes: Map<string, NSObject> | null; context: NSStringDrawingContext | null }): void;
+    /** @ntsSelector drawWithRect:options:attributes: */
+    draw(labels: { with: ByValue<CGRect> | Fields<CGRect>; options: CEnum<NSString.DrawingOptions | 0, Int>; attributes: Map<string, NSObject> | null }): void;
+    /** @ntsSelector boundingRectWithSize:options:attributes:context: */
+    boundingRect(labels: { with: ByValue<CGSize> | Fields<CGSize>; options: CEnum<NSString.DrawingOptions | 0, Int>; attributes: Map<string, NSObject> | null; context: NSStringDrawingContext | null }): ByValue<CGRect>;
+    /** @ntsSelector boundingRectWithSize:options:attributes: */
+    boundingRect(labels: { with: ByValue<CGSize> | Fields<CGSize>; options: CEnum<NSString.DrawingOptions | 0, Int>; attributes: Map<string, NSObject> | null }): ByValue<CGRect>;
     /** @ntsSelector self */
     self(): NSString;
     // Not bound, each for the reason given:
@@ -1415,8 +1438,8 @@ declare module "objc:AppKit" {
     set layerContentsPlacement(value: CEnum<NSView.LayerContentsPlacement, Int>);
     get wantsLayer(): boolean;
     set wantsLayer(value: boolean);
-    get layer(): CALayer;
-    set layer(value: CALayer);
+    get layer(): CALayer | null;
+    set layer(value: CALayer | null);
     get wantsUpdateLayer(): boolean;
     get canDrawSubviewsIntoLayer(): boolean;
     set canDrawSubviewsIntoLayer(value: boolean);
@@ -1878,8 +1901,8 @@ declare module "objc:AppKit" {
     get contentLayoutGuide(): NSObject | null;
     get titlebarAccessoryViewControllers(): NSTitlebarAccessoryViewController[];
     set titlebarAccessoryViewControllers(value: NSTitlebarAccessoryViewController[]);
-    get representedURL(): NSURL;
-    set representedURL(value: NSURL);
+    get representedURL(): NSURL | null;
+    set representedURL(value: NSURL | null);
     get representedFilename(): string;
     set representedFilename(value: string);
     get isExcludedFromWindowsMenu(): boolean;
@@ -1916,7 +1939,7 @@ declare module "objc:AppKit" {
     get isZoomed(): boolean;
     get isMiniaturized(): boolean;
     get backgroundColor(): NSColor;
-    set backgroundColor(value: NSColor);
+    set backgroundColor(value: NSColor | null);
     get isMovable(): boolean;
     /** @ntsSet setMovable: */
     set isMovable(value: boolean);
@@ -2395,10 +2418,10 @@ declare module "objc:AppKit" {
     get windows(): NSWindow[];
     get mainMenu(): NSMenu | null;
     set mainMenu(value: NSMenu | null);
-    get helpMenu(): NSMenu;
-    set helpMenu(value: NSMenu);
+    get helpMenu(): NSMenu | null;
+    set helpMenu(value: NSMenu | null);
     get applicationIconImage(): NSImage;
-    set applicationIconImage(value: NSImage);
+    set applicationIconImage(value: NSImage | null);
     get dockTile(): NSDockTile;
     get presentationOptions(): CEnum<NSApplication.PresentationOptions | 0, UInt>;
     set presentationOptions(value: CEnum<NSApplication.PresentationOptions | 0, UInt>);
@@ -2649,6 +2672,8 @@ declare module "objc:AppKit" {
     path(labels: { forResource: string | null; ofType: string | null; inDirectory: string | null }): string | null;
     /** @ntsSelector pathForResource:ofType:inDirectory:forLocalization: */
     path(labels: { forResource: string | null; ofType: string | null; inDirectory: string | null; forLocalization: string | null }): string | null;
+    /** @ntsSelector pathForSoundResource: */
+    path(labels: { forSoundResource: string }): string | null;
     /** @ntsSelector URLsForResourcesWithExtension:subdirectory:inBundleWithURL: */
     static urls(labels: { forResourcesWithExtension: string | null; subdirectory: string | null; in: NSURL }): NSURL[] | null;
     /** @ntsSelector URLsForResourcesWithExtension:subdirectory: */
@@ -2667,8 +2692,18 @@ declare module "objc:AppKit" {
     object(labels: { forInfoDictionaryKey: string }): NSObject | null;
     /** @ntsSelector classNamed: */
     classNamed(className: string): ClassObject | null;
+    /** @ntsSelector contextHelpForKey: */
+    contextHelp(labels: { forKey: string }): NSAttributedString | null;
+    /** @ntsSelector imageForResource: */
+    image(labels: { forResource: string }): NSImage | null;
+    /** @ntsSelector pathForImageResource: */
+    pathForImageResource(name: string): string | null;
+    /** @ntsSelector URLForImageResource: */
+    urlForImageResource(name: string): NSURL | null;
     /** @ntsSelector self */
     self(): Bundle;
+    // Not bound, each for the reason given:
+    //   -loadNibNamed:owner:topLevelObjects:: a `NSArray * _Nullable *`
   }
 
   /** @ntsClass NSColor */
@@ -3378,10 +3413,10 @@ declare module "objc:AppKit" {
     set isTransparent(value: boolean);
     get showsBorderOnlyWhileMouseInside(): boolean;
     set showsBorderOnlyWhileMouseInside(value: boolean);
-    get bezelColor(): NSColor;
-    set bezelColor(value: NSColor);
-    get contentTintColor(): NSColor;
-    set contentTintColor(value: NSColor);
+    get bezelColor(): NSColor | null;
+    set bezelColor(value: NSColor | null);
+    get contentTintColor(): NSColor | null;
+    set contentTintColor(value: NSColor | null);
     get image(): NSImage | null;
     set image(value: NSImage | null);
     get alternateImage(): NSImage | null;
@@ -3994,6 +4029,10 @@ declare module "objc:AppKit" {
   /** Named by a signature here, and not bound: its ancestors' members only.
    * @ntsClass NSSound */
   export class NSSound extends NSObject {}
+
+  /** Named by a signature here, and not bound: its ancestors' members only.
+   * @ntsClass NSStringDrawingContext */
+  export class NSStringDrawingContext extends NSObject {}
 
   /** Named by a signature here, and not bound: its ancestors' members only.
    * @ntsClass NSText */
