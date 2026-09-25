@@ -80,6 +80,12 @@ for arch in x86_64 aarch64; do
   llvm-objdump --macho --dylibs-used "$out/window/macos-13-$arch/window" | grep -q AppKit ||
     { echo "macos-window: the $arch program does not link AppKit" >&2; exit 1; }
 done
+# The arm64 slice of the LLVM product: built and linked, and not run, since
+# the lane's Mac is x86_64. Its records cross by AAPCS64, which
+# `arm64-records` runs under qemu against C.
+llvm_arm64="$out/windowLlvm/macos-13-aarch64/windowLlvm"
+file -b "$llvm_arm64" | grep -q "Mach-O.*arm64" && [ -f "$out/windowLlvm/macos-13-aarch64/program.ll.o" ] ||
+  { echo "macos-window: no arm64 Mach-O compiled from LLVM IR at $llvm_arm64" >&2; exit 1; }
 echo "macos: both slices link AppKit"
 
 program="$out/window/macos-13-x86_64/window"

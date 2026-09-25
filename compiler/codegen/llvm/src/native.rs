@@ -24,9 +24,9 @@ pub(super) fn plan(func: &Func, target: &Function, leading: usize, platform: Pla
     }
     aggregate::plan(leading, &target.parameters, &target.result, platform).ok_or_else(|| {
         refuse(func, if aggregate::classifies_on(platform) {
-            "a C record passed or returned by value that this backend cannot classify (a union, or a member it cannot place); the C backend builds it"
+            "a C record passed or returned by value that this backend cannot classify (a union, a member it cannot place, or on arm64 a `float` aggregate argument, a size its registers would run past, or an argument over sixteen bytes); the C backend builds it"
         } else {
-            "a C record passed or returned by value, or an erased value, crossing a call on arm64, whose calling convention (AAPCS64) this backend does not implement; the C backend builds it"
+            "a C record passed or returned by value, or an erased value, crossing a call on arm64 Windows, whose calling convention this backend does not implement; the C backend builds it"
         })
     })
 }

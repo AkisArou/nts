@@ -17,7 +17,10 @@ export default defineConfig({
     classesLlvm: app({
       kind: "executable",
       entry: "./src/main.ts",
-      targets: [target.macos({ minimumVersion: "13.0", arch: "x86_64", backend: "llvm" })],
+      targets: [
+        target.macos({ minimumVersion: "13.0", arch: "x86_64", backend: "llvm" }),
+        target.macos({ minimumVersion: "13.0", arch: "aarch64", backend: "llvm" }),
+      ],
     }),
   },
   native: [sources({ dir: "native" })],

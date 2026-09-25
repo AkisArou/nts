@@ -511,9 +511,26 @@ correctness does not depend on arm64 running by luck.
      - Each arm asserts that its program was compiled from `program.ll` and
        that `program.c`, which the C emission also writes, never was. So a
        build that fell back to C cannot pass as LLVM's.
-     - Still x86_64 only, as before: arm64 LLVM refuses a record crossing a
-       call, and the arm64 signature table has not yet been compared with
-       clang's for `arm64-apple-macos`.
+     - **arm64 too (2026-09-25).** Each fixture's LLVM product also builds
+       for `aarch64`, and its `build.sh` asserts an arm64 Mach-O compiled from
+       `program.ll`. These are built and linked, not run, since the lane's Mac
+       is x86_64.
+       - Records crossing a call follow AAPCS64 (`aggregate::aapcs64`). A
+         homogeneous aggregate of doubles (all of AppKit's geometry) goes in
+         SIMD registers, 8 or 16 bytes of integers in general ones, and a
+         result over 16 bytes through `x8`. An arm64 send never uses
+         `_stret`.
+       - `by_value.rs` compares the declarations with clang's for
+         `arm64-apple-macos13`.
+       - `examples/interop/arm64-records` *runs* them. The same program is
+         built by both backends for arm64 Linux, which spells every admitted
+         shape as Apple does, and run under qemu. The LLVM build must print
+         what the C build prints. Spelling the four doubles as integers
+         prints denormals.
+       - Refused by name: a `float` aggregate as an argument (Apple and Linux
+         align it differently on the stack), sizes whose integer load or
+         store would run past the record, and arguments over 16 bytes (a
+         pointer to a caller's copy, not built yet).
    - **Against Swift, measured (2026-09-25).**
      `examples/interop/macos-bench/bench.sh` runs the same loops in
      TypeScript and in Swift (`reference/bench.swift`, `swiftc -O`) on the

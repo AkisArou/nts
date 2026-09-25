@@ -52,6 +52,16 @@ for arch in x86_64 aarch64; do
   file -b "$out/geometry/macos-13-$arch/geometry" | grep -q "Mach-O" ||
     { echo "macos-geometry: no $arch Mach-O executable" >&2; exit 1; }
 done
+# The arm64 slice of the LLVM product: built and linked, and not run, since
+# the lane's Mac is x86_64. Its records cross by AAPCS64, which
+# `arm64-records` runs under qemu against C.
+llvm_arm64="$out/geometryLlvm/macos-13-aarch64/geometryLlvm"
+file -b "$llvm_arm64" | grep -q "Mach-O.*arm64" && [ -f "$out/geometryLlvm/macos-13-aarch64/program.ll.o" ] ||
+  { echo "macos-geometry: no arm64 Mach-O compiled from LLVM IR at $llvm_arm64" >&2; exit 1; }
+if llvm-nm -u "$llvm_arm64" | grep -q "_objc_msgSend_stret$"; then
+  echo "macos-geometry: the arm64 LLVM slice sends through objc_msgSend_stret, which arm64 does not have" >&2
+  exit 1
+fi
 llvm-nm -u "$out/geometry/macos-13-x86_64/geometry" | grep -q "_objc_msgSend_stret$" ||
   { echo "macos-geometry: the x86_64 slice does not use objc_msgSend_stret" >&2; exit 1; }
 if llvm-nm -u "$out/geometry/macos-13-aarch64/geometry" | grep -q "_objc_msgSend_stret$"; then

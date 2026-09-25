@@ -1,10 +1,32 @@
 //! Records passed and returned by value, and erased values past the integer
 //! registers: how each crosses a call, by the platform's convention.
 //!
-//! Two conventions are implemented, both clang's, and `tests/by_value.rs`
+//! Three conventions are implemented, all clang's, and `tests/by_value.rs`
 //! compares each against `clang -emit-llvm` for its target directly. arm64
-//! (AAPCS64, Apple's and Windows') is neither, and a record by value there is
-//! refused by name rather than lowered by `x86_64`'s rules.
+//! Windows is none of them, and a record by value there is refused by name
+//! rather than lowered by another platform's rules.
+//!
+//! **AAPCS64** (`AArch64ABIInfo`), Apple's and Linux's arm64, which clang
+//! spells alike except for one hint. A register is never counted here: each
+//! record crosses as one LLVM value, and LLVM places it.
+//!
+//! - one to four members of one floating type, and nothing else, is a
+//!   *homogeneous floating-point aggregate*, in that many SIMD registers:
+//!   `[N x double]` as an argument, `{ double, ... }` as a result. `CGRect`
+//!   is four doubles, nested two by two, and crosses in `d0`-`d3`.
+//! - otherwise, sixteen bytes or fewer are integer registers: an argument of
+//!   eight bytes is an `i64` and of sixteen `[2 x i64]` (`i128` when the
+//!   record is aligned to sixteen); a result of up to eight bytes is an
+//!   integer of its own width, and of sixteen the same `[2 x i64]`.
+//! - over sixteen bytes, a result is written through `sret` (`x8`).
+//!
+//! Refused by name, each where the spelling above would be wrong rather than
+//! merely unbuilt: an argument that is a homogeneous aggregate of `float`s,
+//! which Linux aligns to eight on the stack and Apple to four (the one
+//! difference, and `Platform` does not say which of the two it is); an
+//! argument or result whose size is not one of those above, which the load or
+//! store of its integer would run past; and an argument over sixteen bytes,
+//! which is a pointer to a copy the caller makes and is not built here.
 //!
 //! **Win64** (`WinX86_64ABIInfo`) decides by size alone, unions included: a
 //! record of 1, 2, 4 or 8 bytes is one integer of that width, as an argument
@@ -39,6 +61,9 @@ pub(crate) enum Passing {
     Registers(Vec<Eightbyte>),
     /// A copy in memory: `byval` as an argument, `sret` as a result.
     Memory { size: u32, align: u32 },
+    /// AAPCS64's homogeneous floating-point aggregate: `count` members of one
+    /// floating type, `element`, in as many consecutive SIMD registers.
+    Homogeneous { element: &'static str, count: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,14 +99,17 @@ const SSE_REGISTERS: usize = 8;
 /// parameters and result are these. `None` when a record in it cannot be
 /// classified here.
 pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, platform: Platform) -> Option<Plan> {
+    if convention(platform) == Some(Convention::Aapcs64) {
+        return aapcs64_plan(parameters, result_type, platform);
+    }
     let result = match result_type {
         Type::Record(record) => Some(classify(record, platform)?),
         _ => None,
     };
     let Some(convention) = convention(platform) else {
-        // arm64: a scalar or a pointer crosses as itself, whatever the
-        // convention. A record or an erased value is placed by rules this
-        // backend implements only for x86_64, so the call is refused.
+        // arm64 Windows: a scalar or a pointer crosses as itself, whatever
+        // the convention. A record or an erased value is placed by rules
+        // this backend does not implement there, so the call is refused.
         let placed_by_convention = |ty: &Type| matches!(ty, Type::Record(_)) || ty.representation() == HirType::Erased;
         if parameters.iter().chain(std::iter::once(result_type)).any(placed_by_convention) {
             return None;
@@ -121,7 +149,8 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, plat
                         Crossing::Record(Passing::Memory { size, align })
                     }
                 }
-                memory @ Passing::Memory { .. } => Crossing::Record(memory),
+                // Only AAPCS64 classifies one of these, and it has its own plan.
+                other @ (Passing::Memory { .. } | Passing::Homogeneous { .. }) => Crossing::Record(other),
             },
             other => {
                 let ty = other.representation();
@@ -151,15 +180,85 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, plat
 enum Convention {
     SysV,
     Win64,
+    Aapcs64,
 }
 
-/// `None` on arm64, whose convention this backend does not implement.
+/// `None` on arm64 Windows, whose convention this backend does not implement.
 fn convention(platform: Platform) -> Option<Convention> {
     match (platform.abi, platform.arch) {
         (NativeAbi::SysV, Arch::X86_64) => Some(Convention::SysV),
         (NativeAbi::Win64, Arch::X86_64) => Some(Convention::Win64),
-        (_, Arch::Aarch64) => None,
+        (NativeAbi::SysV, Arch::Aarch64) => Some(Convention::Aapcs64),
+        (NativeAbi::Win64, Arch::Aarch64) => None,
     }
+}
+
+/// Which side of a call a record is on: AAPCS64 spells the two differently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Role {
+    Argument,
+    Result,
+}
+
+/// AAPCS64's plan: each record classified for where it is, and an erased
+/// value refused, since no native declaration here passes one.
+fn aapcs64_plan(parameters: &[Type], result_type: &Type, platform: Platform) -> Option<Plan> {
+    let erased = |ty: &Type| !matches!(ty, Type::Record(_)) && ty.representation() == HirType::Erased;
+    if parameters.iter().chain(std::iter::once(result_type)).any(erased) {
+        return None;
+    }
+    let result = match result_type {
+        Type::Record(record) => Some(aapcs64(record, platform, Role::Result)?),
+        _ => None,
+    };
+    let arguments = parameters
+        .iter()
+        .map(|parameter| match parameter {
+            Type::Record(record) => aapcs64(record, platform, Role::Argument).map(Crossing::Record),
+            _ => Some(Crossing::Scalar),
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(Plan { arguments, result })
+}
+
+/// One record under AAPCS64, as the module doc sets out.
+fn aapcs64(record: &Record, platform: Platform, role: Role) -> Option<Passing> {
+    if record.kind == RecordKind::Union {
+        return None;
+    }
+    let (size, align) = extent(record, platform)?;
+    let mut leaves = Vec::new();
+    if !walk(&Pointee::Record(std::sync::Arc::new(record.clone())), 0, platform, &mut leaves)? {
+        return None;
+    }
+    if let Some(element) = homogeneous(&leaves, size) {
+        // Apple and Linux align a `float` aggregate on the stack differently.
+        if element == "float" && role == Role::Argument {
+            return None;
+        }
+        return Some(Passing::Homogeneous { element, count: u32::try_from(leaves.len()).ok()? });
+    }
+    let integer = |ty: String| Some(Passing::Registers(vec![Eightbyte { ty, sse: false }]));
+    match (role, size) {
+        (_, 16) if align == 16 => integer("i128".to_owned()),
+        (_, 16) => integer("[2 x i64]".to_owned()),
+        (Role::Argument, 8) => integer("i64".to_owned()),
+        (Role::Result, 1..=8) => integer(format!("i{}", size * 8)),
+        (Role::Result, 17..) => Some(Passing::Memory { size, align }),
+        _ => None,
+    }
+}
+
+/// The floating type of a homogeneous floating-point aggregate: one to four
+/// members, every one a `float` or every one a `double`, packed with nothing
+/// between them.
+fn homogeneous(leaves: &[Leaf], size: u32) -> Option<&'static str> {
+    let first = leaves.first()?;
+    let count = u32::try_from(leaves.len()).ok()?;
+    let packed = leaves.iter().enumerate().all(|(at, leaf)| {
+        leaf.float && leaf.size == first.size && u32::try_from(at).is_ok_and(|at| leaf.offset == at * first.size)
+    });
+    (packed && (1..=4).contains(&count) && size == first.size * count).then_some(if first.size == 8 { "double" } else { "float" })
 }
 
 /// Whether this backend knows how a record or an erased value crosses a call
@@ -176,6 +275,7 @@ pub(crate) fn classify(record: &Record, platform: Platform) -> Option<Passing> {
     match convention(platform)? {
         Convention::SysV => sysv(record, platform),
         Convention::Win64 => win64(record, platform),
+        Convention::Aapcs64 => aapcs64(record, platform, Role::Result),
     }
 }
 
@@ -286,6 +386,7 @@ pub(crate) fn parameter_types(passing: &Passing) -> Vec<String> {
     match passing {
         Passing::Registers(eightbytes) => eightbytes.iter().map(|e| e.ty.clone()).collect(),
         Passing::Memory { size, align } => vec![format!("ptr byval([{size} x i8]) align {align}")],
+        Passing::Homogeneous { element, count } => vec![format!("[{count} x {element}]")],
     }
 }
 
@@ -298,6 +399,7 @@ pub(crate) fn result_type(passing: &Passing) -> String {
             format!("{{ {} }}", eightbytes.iter().map(|e| e.ty.as_str()).collect::<Vec<_>>().join(", "))
         }
         Passing::Memory { .. } => "void".to_owned(),
+        Passing::Homogeneous { element, count } => format!("{{ {} }}", vec![*element; *count as usize].join(", ")),
     }
 }
 
@@ -305,7 +407,7 @@ pub(crate) fn result_type(passing: &Passing) -> String {
 pub(crate) fn sret(passing: &Passing, pointer: &str) -> Option<String> {
     match passing {
         Passing::Memory { size, align } => Some(format!("ptr sret([{size} x i8]) align {align} {pointer}")),
-        Passing::Registers(_) => None,
+        Passing::Registers(_) | Passing::Homogeneous { .. } => None,
     }
 }
 
@@ -338,12 +440,21 @@ pub(crate) fn load_argument(passing: &Passing, align: u32, pointer: &str, temp: 
             })
             .collect(),
         Passing::Memory { .. } => vec![format!("{} {pointer}", parameter_types(passing)[0])],
+        Passing::Homogeneous { .. } => {
+            let ty = &parameter_types(passing)[0];
+            before.push(format!("{temp}.e0 = load {ty}, ptr {pointer}, align {}", eightbyte_align(align)));
+            vec![format!("{ty} {temp}.e0")]
+        }
     }
 }
 
 /// Store a record result returned in registers, `returned`, into
 /// `destination`. Nothing to do for one returned through `sret`.
 pub(crate) fn store_result(passing: &Passing, align: u32, returned: &str, destination: &str, before: &mut Vec<String>) {
+    if let Passing::Homogeneous { .. } = passing {
+        before.push(format!("store {} {returned}, ptr {destination}, align {}", result_type(passing), eightbyte_align(align)));
+        return;
+    }
     let Passing::Registers(eightbytes) = passing else { return };
     for (at, eightbyte) in eightbytes.iter().enumerate() {
         let value = if eightbytes.len() == 1 {

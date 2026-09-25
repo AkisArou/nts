@@ -76,6 +76,12 @@ for arch in x86_64 aarch64; do
   fi
   echo "macos-$arch: Mach-O $cpu, libobjc + Foundation + CoreFoundation + libSystem"
 done
+# The arm64 slice of the LLVM product: built and linked, and not run, since
+# the lane's Mac is x86_64. Its records cross by AAPCS64, which
+# `arm64-records` runs under qemu against C.
+llvm_arm64="$out/foundationLlvm/macos-13-aarch64/foundationLlvm"
+file -b "$llvm_arm64" | grep -q "Mach-O.*arm64" && [ -f "$out/foundationLlvm/macos-13-aarch64/program.ll.o" ] ||
+  { echo "macos-foundation: no arm64 Mach-O compiled from LLVM IR at $llvm_arm64" >&2; exit 1; }
 
 clang -target x86_64-apple-macos13 -isysroot "$sdk" -fuse-ld=lld -std=c11 -Wall -Wextra -Werror \
   "$source/reference/foundation.c" -lobjc -framework Foundation -o "$out/reference"

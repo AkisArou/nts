@@ -71,7 +71,8 @@ pub(super) fn module(program: &Program) -> String {
         }
     }
     // A record result in memory comes back through `objc_msgSend_stret` on
-    // x86_64, the only arch this backend emits for; see `send`.
+    // x86_64; arm64 has none, and an unused declaration costs nothing. See
+    // `send`.
     if found.returns_records && !bound(program, "objc_msgSend_stret") {
         let _ = writeln!(text, "declare void @objc_msgSend_stret()");
     }
@@ -152,8 +153,11 @@ pub(super) fn send(
         let align = super::native::record_alignment(func, Some(&target.result), platform)?;
         let returned = format!("{out}.returned");
         let (entry, prefix) = match passing {
-            Passing::Memory { .. } => ("objc_msgSend_stret", String::new()),
-            Passing::Registers(_) => ("objc_msgSend", format!("{returned} = ")),
+            // arm64 has no `_stret`: `objc_msgSend` itself takes the `sret`
+            // pointer, in `x8`.
+            Passing::Memory { .. } if platform.arch == crate::Arch::X86_64 => ("objc_msgSend_stret", String::new()),
+            Passing::Memory { .. } => ("objc_msgSend", String::new()),
+            Passing::Registers(_) | Passing::Homogeneous { .. } => ("objc_msgSend", format!("{returned} = ")),
         };
         let spelled = aggregate::result_type(passing);
         before.push(format!(

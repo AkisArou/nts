@@ -1,0 +1,11 @@
+offset 1.5 0 30 40
+center 16 22
+one 42.5
+three 11 22 33
+range 105 7
+pair -4 3
+mixed 18 4.5
+rgb 250 128 7
+transform 2 3 0
+floats 0.5 0.25
+area 68

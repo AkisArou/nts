@@ -377,13 +377,24 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
         return;
     };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
-    let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
+    let windows_arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::Win64, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let llvm = nts_codegen_llvm::emit(&prepared.program, windows_arm64);
     assert!(
-        llvm.diagnostics.iter().any(|d| d.message.contains("crossing a call on arm64, whose calling convention (AAPCS64)")),
+        llvm.diagnostics.iter().any(|d| d.message.contains("crossing a call on arm64 Windows")),
         "{:?}",
         llvm.diagnostics
     );
+    // Apple's and Linux's arm64 place the same rectangle: four doubles, in
+    // `d0`-`d3` both ways, and a send that returns one needs no `_stret`.
+    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(
+        llvm.text.contains("declare { double, double, double, double } @inset([4 x double], double)"),
+        "{}",
+        llvm.text
+    );
+    assert!(!llvm.text.contains("call void (ptr, ptr, ptr) @objc_msgSend_stret"), "{}", llvm.text);
 
     let binding = r#"declare module "c:u" {
   import type { ByValue, Union, c_double, c_int } from "c:types";
@@ -403,6 +414,136 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
     let win64 = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(win64.diagnostics.is_empty(), "{:?}", win64.diagnostics);
     assert!(win64.text.contains("declare void @take(i64)"), "an 8-byte union is not one integer:\n{}", win64.text);
+}
+
+/// AAPCS64's shapes, one per rule in `aggregate`'s module doc, and results of
+/// the sizes an argument is refused at. `(C declarations, binding, program)`.
+const ARM64_C: &str = r"
+struct pd { double a; double b; };
+struct d1 { double a; };
+struct quad { double a; double b; double c; double d; };
+struct rect { struct pd origin; struct pd size; };
+struct ci { int a; double b; };
+struct ic { int a; char b; };
+struct pi { void *p; int n; };
+struct c3 { char a; char b; char c; };
+struct tf { float a; float b; float c; };
+struct big { long a; long b; long c; };
+struct pd f_pd(struct pd v);
+struct d1 f_d1(struct d1 v);
+struct quad f_quad(struct quad v);
+struct rect f_rect(struct rect v, double by);
+struct ci f_ci(struct ci v);
+struct ic f_ic(struct ic v);
+struct pi f_pi(struct pi v);
+struct c3 make_c3(int n);
+struct tf make_tf(int n);
+struct big make_big(int n);
+double spill(struct rect a, struct rect b, struct rect c);
+";
+
+const ARM64_TS: &str = r#"
+declare module "c:shapes" {
+  import type { ByValue, Ptr, Struct, c_char, c_double, c_float, c_int, c_long } from "c:types";
+  export type Pd = Struct<{ a: c_double; b: c_double }, "pd">;
+  export type D1 = Struct<{ a: c_double }, "d1">;
+  export type Quad = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double }, "quad">;
+  export type Rect = Struct<{ origin: Pd; size: Pd }, "rect">;
+  export type Ci = Struct<{ a: c_int; b: c_double }, "ci">;
+  export type Ic = Struct<{ a: c_int; b: c_char }, "ic">;
+  export type Pi = Struct<{ p: Ptr<unknown>; n: c_int }, "pi">;
+  export type C3 = Struct<{ a: c_char; b: c_char; c: c_char }, "c3">;
+  export type Tf = Struct<{ a: c_float; b: c_float; c: c_float }, "tf">;
+  export type Big = Struct<{ a: c_long; b: c_long; c: c_long }, "big">;
+  export function f_pd(v: ByValue<Pd>): ByValue<Pd>;
+  export function f_d1(v: ByValue<D1>): ByValue<D1>;
+  export function f_quad(v: ByValue<Quad>): ByValue<Quad>;
+  export function f_rect(v: ByValue<Rect>, by: c_double): ByValue<Rect>;
+  export function f_ci(v: ByValue<Ci>): ByValue<Ci>;
+  export function f_ic(v: ByValue<Ic>): ByValue<Ic>;
+  export function f_pi(v: ByValue<Pi>): ByValue<Pi>;
+  export function make_c3(n: c_int): ByValue<C3>;
+  export function make_tf(n: c_int): ByValue<Tf>;
+  export function make_big(n: c_int): ByValue<Big>;
+  export function spill(a: ByValue<Rect>, b: ByValue<Rect>, c: ByValue<Rect>): c_double;
+}
+"#;
+
+const ARM64_PROGRAM: &str = r#"import * as shapes from "c:shapes";
+import { local } from "c:memory";
+import type { c_double, c_int } from "c:types";
+export function run(): number {
+  shapes.f_pd(local<shapes.Pd>());
+  shapes.f_d1(local<shapes.D1>());
+  shapes.f_quad(local<shapes.Quad>());
+  shapes.f_rect(local<shapes.Rect>(), 1 as c_double);
+  shapes.f_ci(local<shapes.Ci>());
+  shapes.f_ic(local<shapes.Ic>());
+  shapes.f_pi(local<shapes.Pi>());
+  shapes.make_c3(1 as c_int);
+  shapes.make_tf(1 as c_int);
+  shapes.make_big(1 as c_int);
+  const r = local<shapes.Rect>();
+  return shapes.spill(r, r, r);
+}
+"#;
+
+/// AAPCS64 against clang for `arm64-apple-macos13`. clang names a record
+/// result by its struct type where this backend writes the literal one of its
+/// members, which LLVM returns in the same registers; the comparison maps
+/// each name to what this backend spells it as.
+#[test]
+fn the_llvm_declarations_are_clangs_on_arm64() {
+    let Some((dir, prepared)) = prepare("shapes-arm64", ARM64_TS, ARM64_PROGRAM) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("shapes.c"), format!(
+        "{ARM64_C}\nvoid *used[] = {{ (void *)f_pd, (void *)f_d1, (void *)f_quad, (void *)f_rect, (void *)f_ci, (void *)f_ic, \
+         (void *)f_pi, (void *)make_c3, (void *)make_tf, (void *)make_big, (void *)spill }};\n"
+    )).unwrap();
+    let Ok(clang) = Command::new("clang")
+        .args(["--target=arm64-apple-macos13", "-S", "-emit-llvm", "-O0", "-o", "-"])
+        .arg(dir.join("shapes.c"))
+        .output()
+    else {
+        eprintln!("skipped: no clang");
+        return;
+    };
+    assert!(clang.status.success(), "{}", String::from_utf8_lossy(&clang.stderr));
+    let spelled = [
+        ("pd", "{ double, double }"),
+        ("d1", "{ double }"),
+        ("quad", "{ double, double, double, double }"),
+        ("rect", "{ double, double, double, double }"),
+        ("tf", "{ float, float, float }"),
+        ("big", "[24 x i8]"),
+    ];
+    let spell = |line: &str| {
+        let mut text = normalized(line, &std::collections::BTreeMap::new());
+        for (name, ours) in spelled {
+            text = text.replace(&format!("%struct.{name}"), ours);
+        }
+        text
+    };
+    let theirs: std::collections::BTreeMap<String, String> = String::from_utf8_lossy(&clang.stdout)
+        .lines()
+        .filter(|line| line.starts_with("declare "))
+        .map(|line| (line.split('@').nth(1).and_then(|rest| rest.split('(').next()).unwrap_or_default().to_owned(), spell(line)))
+        .collect();
+    assert_eq!(theirs.len(), 11, "clang declared {theirs:?}");
+    for (function, expected) in &theirs {
+        let ours = llvm
+            .text
+            .lines()
+            .find(|line| line.starts_with("declare ") && line.contains(&format!("@{function}(")))
+            .map_or_else(|| panic!("no declaration of {function}:\n{}", llvm.text), spell);
+        assert_eq!(&ours, expected, "{function}");
+    }
 }
 
 /// On arm64 only what the convention places is refused: a scalar C call and

@@ -60,6 +60,12 @@ for arch in x86_64 aarch64; do
   file -b "$out/blocks/macos-13-$arch/blocks" | grep -q "Mach-O" ||
     { echo "macos-blocks: no $arch Mach-O executable" >&2; exit 1; }
 done
+# The arm64 slice of the LLVM product: built and linked, and not run, since
+# the lane's Mac is x86_64. Its records cross by AAPCS64, which
+# `arm64-records` runs under qemu against C.
+llvm_arm64="$out/blocksLlvm/macos-13-aarch64/blocksLlvm"
+file -b "$llvm_arm64" | grep -q "Mach-O.*arm64" && [ -f "$out/blocksLlvm/macos-13-aarch64/program.ll.o" ] ||
+  { echo "macos-blocks: no arm64 Mach-O compiled from LLVM IR at $llvm_arm64" >&2; exit 1; }
 echo "macos: both slices built and linked"
 
 set -- -target x86_64-apple-macos13 -isysroot "$sdk"
