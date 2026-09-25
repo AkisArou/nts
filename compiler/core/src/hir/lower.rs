@@ -15888,6 +15888,51 @@ impl<'a> FuncBuilder<'a> {
         self.coerce_arm(value, want, id, source, false)
     }
 
+    /// The conversions into a native pointer that are not refusals: a boxed
+    /// record's storage, `null`, any native pointer to `void *`, and a
+    /// record's fields held in an object. `None` for anything else, which
+    /// [`Self::coerce_arm`] goes on to convert or refuse.
+    fn coerce_to_native_pointer(&mut self, value: ValueId, have: &HirType, want: &HirType, id: NodeId) -> Option<Result<ValueId, Diagnostic>> {
+        // A boxed record where C takes the struct's pointer: the box's.
+        if *have == HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD)))
+            && matches!(want, HirType::NativePointer(_))
+        {
+            let origin = self.origin(id);
+            return Some(Ok(self.unbox_record(value, want, &origin)));
+        }
+        if matches!(want, HirType::NativePointer(_))
+            && matches!(self.values[value.0 as usize].kind, OpKind::ConstNull)
+        {
+            let origin = self.origin(id);
+            return Some(Ok(self.push(OpKind::ConstNull, want.clone(), origin)));
+        }
+        // Any native pointer converts to `void *`, which is what C does at the
+        // call and the only pointer conversion it does without being asked. One
+        // direction: `void *` back to a typed pointer is where the mistakes
+        // live, and it stays refused here. TypeScript refuses it too, since
+        // `Ptr<unknown>` is not assignable to `Ptr<c_uint8>` -- this is the
+        // second of the two, not the only one.
+        //
+        // A `Convert` rather than a relabel: the address is unchanged, but the
+        // verifier checks call argument types, so the value reaching the call
+        // has to *be* of the parameter's type rather than merely share its
+        // representation.
+        if let (HirType::NativePointer(from), HirType::NativePointer(to)) = (have, want)
+            && from.converts_to(to)
+        {
+            let origin = self.origin(id);
+            return Some(Ok(self.push(OpKind::Convert(value), want.clone(), origin)));
+        }
+        // A record's fields held in an object, where C takes the record by
+        // value: `Fields<T>` in a variable.
+        if matches!(want, HirType::NativePointer(view) if matches!(view.viewed(), super::native::Pointee::Record(_)))
+            && matches!(have, HirType::Managed(ManagedType::Object(_)))
+        {
+            return Some(self.native_record_from_object(id, value, want.clone()));
+        }
+        None
+    }
+
     /// The same again, told whether the merge's **other** arm is the
     /// short-circuit's `undefined`. See [`Self::absence_at_excluding`].
     fn coerce_arm(
@@ -15902,42 +15947,8 @@ impl<'a> FuncBuilder<'a> {
         if have == *want {
             return Ok(value);
         }
-        // A boxed record where C takes the struct's pointer: the box's.
-        if have == HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD)))
-            && matches!(want, HirType::NativePointer(_))
-        {
-            let origin = self.origin(id);
-            return Ok(self.unbox_record(value, want, &origin));
-        }
-        if matches!(want, HirType::NativePointer(_))
-            && matches!(self.values[value.0 as usize].kind, OpKind::ConstNull)
-        {
-            let origin = self.origin(id);
-            return Ok(self.push(OpKind::ConstNull, want.clone(), origin));
-        }
-        // Any native pointer converts to `void *`, which is what C does at the
-        // call and the only pointer conversion it does without being asked. One
-        // direction: `void *` back to a typed pointer is where the mistakes
-        // live, and it stays refused here. TypeScript refuses it too, since
-        // `Ptr<unknown>` is not assignable to `Ptr<c_uint8>` -- this is the
-        // second of the two, not the only one.
-        //
-        // A `Convert` rather than a relabel: the address is unchanged, but the
-        // verifier checks call argument types, so the value reaching the call
-        // has to *be* of the parameter's type rather than merely share its
-        // representation.
-        if let (HirType::NativePointer(from), HirType::NativePointer(to)) = (&have, want)
-            && from.converts_to(to)
-        {
-            let origin = self.origin(id);
-            return Ok(self.push(OpKind::Convert(value), want.clone(), origin));
-        }
-        // A record's fields held in an object, where C takes the record by
-        // value: `Fields<T>` in a variable.
-        if matches!(want, HirType::NativePointer(view) if matches!(view.viewed(), super::native::Pointee::Record(_)))
-            && matches!(have, HirType::Managed(ManagedType::Object(_)))
-        {
-            return self.native_record_from_object(id, value, want.clone());
+        if let Some(converted) = self.coerce_to_native_pointer(value, &have, want, id) {
+            return converted;
         }
         if matches!(want, HirType::NativePointer(_)) && !matches!(have, HirType::NativePointer(_)) {
             return Err(self.unsupported(id, "a managed value where C takes a pointer: pass a handle, a `Ptr`, or `null`"));
