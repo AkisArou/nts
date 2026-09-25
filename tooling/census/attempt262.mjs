@@ -131,6 +131,31 @@ export function parseDiagnostics(text) {
   return found;
 }
 
+/**
+ * `sh -c 'ulimit -v <cap>; exec "$0" "$@"'` -- the argv that runs `command`
+ * under an address-space cap, or with none when `tools.memoryCapKb` is unset.
+ *
+ * **Why a cap at all.** `identifiers/start-unicode-16.0.0-escaped.js` is 65 KB of
+ * source and takes the frontend to **7.2 GB** resident and ten seconds: tsgo
+ * JSON-encodes one API response that grows with the number of distinct
+ * identifiers. Twelve workers reaching that directory together took the whole
+ * machine into the kernel's OOM killer three runs in a row, each time at
+ * ~4,800 rows, and the killer chose whatever it liked -- the run, this
+ * session, a peer's VM. A cap turns that into one row that says so.
+ *
+ * **Why address space, and why 6 GB.** Linux enforces no RSS limit, and Go
+ * reserves address space up front: at a 3 GB cap *every* case failed, the
+ * trivial ones included. At 6 GB an ordinary case peaks under 100 MB resident
+ * and the unicode case dies at 2.4 GB -- so the cap is loose for anything
+ * ordinary, and a case that hits it is reported as `memory-cap`, never
+ * dropped and never scored as a refusal.
+ */
+function capped(tools, command, args) {
+  const cap = tools.memoryCapKb;
+  if (!cap) return ["-c", 'exec "$0" "$@"', command, ...args];
+  return ["-c", `ulimit -v ${Number(cap)}; exec "$0" "$@"`, command, ...args];
+}
+
 /** Compile, link and run one program body. Never reads an exit status alone. */
 export function attempt(dir, body, tools) {
   const { nts, cc } = tools;
@@ -158,7 +183,7 @@ export function attempt(dir, body, tools) {
   //
   // The two self-checks below could not see it: neither program has a refusal
   // in it, so the arm that would have fired never ran. `refused()` is that arm.
-  const emit = spawnSync(nts, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main"], {
+  const emit = spawnSync("sh", capped(tools, nts, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main"]), {
     encoding: "utf8",
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
@@ -169,6 +194,12 @@ export function attempt(dir, body, tools) {
   const diagnostics = `${stdout}${emit.stderr ?? ""}`;
   if (emit.error || emit.status !== 0) {
     if (emit.signal === "SIGTERM") return { bucket: "timeout", why: "emit" };
+    // Before the crash test: Go's own out-of-memory is `fatal error`, not a
+    // `panic:`, and it is the cap below firing -- a resource verdict about this
+    // case, not a crash of the compiler.
+    if (/^fatal error: out of memory$/m.test(diagnostics)) {
+      return { bucket: "memory-cap", why: "emit", peak: /\((\d+) in use\)/.exec(diagnostics)?.[1] };
+    }
     if (diagnostics.includes("frontend transport failed") || diagnostics.includes("panic: ")) {
       return { bucket: "frontend-crash" };
     }
@@ -290,7 +321,7 @@ export function attempt(dir, body, tools) {
   }
 
   try {
-    execFileSync(join(out, "program"), [], {
+    execFileSync("sh", capped(tools, join(out, "program"), []), {
       encoding: "utf8",
       timeout: 30_000,
       maxBuffer: 16 * 1024 * 1024,

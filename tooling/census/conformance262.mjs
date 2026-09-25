@@ -3,7 +3,13 @@
 //
 //   node tooling/census/conformance262.mjs [--under test/language] [--jobs N]
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
-//        [--record <tsv>] [--check <tsv>] [--recorded <tsv>]
+//        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
+//
+// `--resume` continues a `--rows` file instead of truncating it. Long node runs
+// die on this box -- a full run was killed twice at ~4,800 of 8,005, detached
+// or not -- so the rows are the checkpoint. The file's first line names the
+// compiler's fingerprint and the directory, and a resume against a different
+// binary or directory refuses: rows from two compilers are not one run.
 //
 // `--recorded <tsv>` is the gate's mode: the population is the cases the record
 // names -- the ones that ran -- and each is checked against what it did. Minutes
@@ -105,9 +111,13 @@ const flag = (name, fallback) => {
   return at === -1 ? fallback : argv[at + 1];
 };
 const under = flag("--under", "test/language");
-const jobs = Number(flag("--jobs", String(Math.max(1, Math.floor(availableParallelism() / 4)))));
+// Eight, not a fraction of the cores: memory, not CPU, is what ran out. The
+// frontend is the large process, and eight of them at their ordinary ~100 MB
+// leave room for one case that climbs to the cap.
+const jobs = Number(flag("--jobs", String(Math.min(8, availableParallelism()))));
 const sample = Number(flag("--sample", "0")) || 0;
 const rowsFile = flag("--rows", null);
+const resume = argv.includes("--resume");
 const jsonFile = flag("--json", null);
 const sites = Number(flag("--sites", "25"));
 const recordFile = flag("--record", null);
@@ -124,7 +134,10 @@ if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
 
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
-const TOOLS = { nts: PINNED, cc: CC };
+// Per-case address-space cap; `attempt262.mjs`'s `capped` carries why it exists
+// and why 6 GB. `NTS_CENSUS_MEMORY_CAP_KB=0` removes it.
+const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
+const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB };
 
 // --- the population --------------------------------------------------------
 
@@ -255,10 +268,31 @@ const namesHarness = (diagnostic) =>
 
 // --- attempts, in parallel workers -----------------------------------------
 
-async function runAll(paths) {
+async function runAll(all) {
   const results = new Map();
+  let paths = all;
   if (paths.length === 0) return results;
-  if (rowsFile) writeFileSync(rowsFile, "");
+  const header = { fingerprint: FINGERPRINT, under };
+  if (rowsFile && resume && existsSync(rowsFile)) {
+    const [first, ...rest] = readFileSync(rowsFile, "utf8").split("\n");
+    let was = null;
+    try { was = JSON.parse(first); } catch {}
+    if (was?.fingerprint !== FINGERPRINT || was?.under !== under) {
+      cannotMeasure(`${rowsFile} was written by ${was?.fingerprint ?? "no named compiler"} over ${was?.under}; ` +
+        `this run is ${FINGERPRINT} over ${under}`);
+    }
+    const wanted = new Set(paths);
+    for (const line of rest) {
+      if (line === "") continue;
+      let row;
+      // A run killed mid-write leaves a partial last line; it is re-attempted.
+      try { row = JSON.parse(line); } catch { continue; }
+      if (wanted.has(row.path)) results.set(row.path, row);
+    }
+    writeFileSync(rowsFile, [JSON.stringify(header), ...[...results.values()].map((row) => JSON.stringify(row))].join("\n") + "\n");
+    process.stderr.write(`  resumed: ${results.size} row(s) kept from ${rowsFile}\n`);
+    paths = paths.filter((path) => !results.has(path));
+  } else if (rowsFile) writeFileSync(rowsFile, `${JSON.stringify(header)}\n`);
   let next = 0;
   let done = 0;
   const started = Date.now();
@@ -266,7 +300,7 @@ async function runAll(paths) {
     new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [join(HERE, "attempt262-worker.mjs"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE],
+        [join(HERE, "attempt262-worker.mjs"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB)],
         { stdio: ["pipe", "pipe", "inherit"] },
       );
       const feed = () => {
@@ -288,7 +322,9 @@ async function runAll(paths) {
       child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`worker ${index} exited ${code}`))));
       feed();
     });
-  await Promise.all(Array.from({ length: Math.min(jobs, paths.length) }, (_, index) => worker(index)));
+  if (paths.length > 0) {
+    await Promise.all(Array.from({ length: Math.min(jobs, paths.length) }, (_, index) => worker(index)));
+  }
   return results;
 }
 
@@ -328,6 +364,8 @@ function classify(row) {
       return { outcome: "no-verdict", cause: `timeout${row.why ? ` (${row.why})` : ""}` };
     case "crash":
       return { outcome: "no-verdict", cause: `crash (${row.why})` };
+    case "memory-cap":
+      return { outcome: "no-verdict", cause: `exceeded the ${MEMORY_CAP_KB / 1e6} GB address-space cap (${row.why})` };
     case "invalid-hir":
       return { outcome: "no-verdict", cause: `invalid HIR: ${row.first}` };
     case "frontend-crash":
