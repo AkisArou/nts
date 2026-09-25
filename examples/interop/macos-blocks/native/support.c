@@ -13,6 +13,19 @@
 id objc_initWeak(id *location, id value);
 id objc_loadWeakRetained(id *location);
 void objc_release(id value);
+id objc_retainAutoreleasedReturnValue(id value);
+void *objc_autoreleasePoolPush(void);
+void objc_autoreleasePoolPop(void *pool);
+
+int made_by_block(void *block) {
+  void *pool = objc_autoreleasePoolPush();
+  id (^maker)(void) = block;
+  id made = objc_retainAutoreleasedReturnValue(maker());
+  int watch = weak_watch((struct NSObject *)made);
+  objc_release(made);
+  objc_autoreleasePoolPop(pool);
+  return watch;
+}
 
 void report(const char *line) {
   fputs(line, stdout);
@@ -26,6 +39,7 @@ void loop_stop(void) { CFRunLoopStop(CFRunLoopGetMain()); }
 
 static id watches[16];
 static int watched;
+int weak_watch(struct NSObject *object);
 
 int weak_watch(struct NSObject *object) {
   if (watched == 16) abort();

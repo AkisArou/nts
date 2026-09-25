@@ -86,8 +86,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 8 ] ||
-  { echo "macos-blocks: the oracle printed $(wc -l <"$out/expected.txt") lines, not 8" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 9 ] ||
+  { echo "macos-blocks: the oracle printed $(wc -l <"$out/expected.txt") lines, not 9" >&2; exit 1; }
 
 run_quietly "$out/blocks/macos-13-x86_64/blocks" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"
@@ -107,8 +107,8 @@ nogc="$out/nogc"
 build "$nogc"
 run_quietly "$nogc/blocks/macos-13-x86_64/blocks" "$out/nogc-actual"
 differs=$(diff "$out/expected.txt" "$out/nogc-actual.txt" | grep '^>' | tr '\n' '|')
-if [ "$differs" != "> cancelled alive|> ticking alive|" ]; then
-  echo "macos-blocks: under NoGc the difference from the oracle was [$differs], not the two lifetime lines" >&2
+if [ "$differs" != "> returned alive|> cancelled alive|> ticking alive|" ]; then
+  echo "macos-blocks: under NoGc the difference from the oracle was [$differs], not the three lifetime lines" >&2
   exit 1
 fi
 echo "control: under NoGc both closures outlive their blocks, and nothing else differs"

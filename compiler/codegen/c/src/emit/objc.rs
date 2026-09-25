@@ -221,6 +221,16 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
         "struct nts_block_descriptor { unsigned long reserved; unsigned long size; void (*copy)(void *, const void *); void (*dispose)(const void *); const char *signature; const char *layout; };",
     );
     writer.line(origin, "extern void *_NSConcreteStackBlock[32];");
+    // A block returning an object hands it back at +0, as ARC's caller
+    // expects (`objc_retainAutoreleasedReturnValue`): the closure's own count
+    // of it, which reference counting makes it return, goes to the pool.
+    // Without counting the closure owns nothing to give.
+    writer.line(origin, "extern void *objc_autoreleaseReturnValue(void *value);");
+    writer.line(origin, "#if defined(NTS_PROVIDER_RC)");
+    writer.line(origin, "#define NTS_BLOCK_RETURNED(value) objc_autoreleaseReturnValue((void *)(value))");
+    writer.line(origin, "#else");
+    writer.line(origin, "#define NTS_BLOCK_RETURNED(value) (value)");
+    writer.line(origin, "#endif");
     writer.line(origin, "extern void abort(void);");
     writer.line(origin, "extern int dprintf(int descriptor, const char *format, ...);");
     writer.line(origin, "static void nts_block_on_owner(const char *what) {");
@@ -258,14 +268,15 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
         let give = if matches!(*signature.result, Type::Void) { "" } else { "return " };
         let bridge = format!("(({result} (*)({}))b->bridge)", bridge_types.join(", "));
         let hop = nts_codegen_common::objc::hop_arguments(signature).map(|carried| hop(writer, origin, signature, &carried, &bridge));
+        let call = format!("{bridge}({})", arguments.join(", "));
+        let call = if returns_object(&signature.result) { format!("({result})NTS_BLOCK_RETURNED({call})") } else { call };
         writer.line(
             origin,
             format!(
-                "static {result} {}({}) {{ const struct nts_block *b = block; {}{give}{bridge}({}); }}",
+                "static {result} {}({}) {{ const struct nts_block *b = block; {}{give}{call}; }}",
                 block_invoke_symbol(signature),
                 parameters.join(", "),
                 hop.unwrap_or_default(),
-                arguments.join(", ")
             ),
         );
         writer.line(
@@ -322,6 +333,12 @@ fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried:
         packed.join(", "),
         objects.len()
     )
+}
+
+/// Whether a block's result is an Objective-C object, which it hands back at
+/// +0.
+fn returns_object(result: &Type) -> bool {
+    matches!(result, Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if handle.family == nts_core::hir::native::Family::Objc)
 }
 
 /// The statements that fill a `NativeBlock`'s frame slot and take its address.

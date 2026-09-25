@@ -21,6 +21,7 @@ import {
   complete_off_thread,
   complete_pair_off_thread,
   complete_later,
+  made_by_block,
   console_arm,
   off_thread_arm,
   on_main_thread,
@@ -57,6 +58,10 @@ function enumerate(): void {
     }
   });
   report("stopped after " + String(visited));
+  // A block returning an object, which a caller takes at +0: the object
+  // lives only as long as the caller counts it.
+  const madeWatch = made_by_block(() => newObject());
+  report("returned " + state(madeWatch));
 }
 
 function cancelled(): c_int {

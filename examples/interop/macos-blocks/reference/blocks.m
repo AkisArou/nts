@@ -39,6 +39,16 @@ static void enumerate(void) {
     }
   }];
   report([NSString stringWithFormat:@"stopped after %d", visited]);
+  // A block returning an object, called and let go of under ARC.
+  __weak id madeWeak = nil;
+  @autoreleasepool {
+    id (^maker)(void) = ^id(void) {
+      return [NSObject new];
+    };
+    id made = maker();
+    madeWeak = made;
+  }
+  report([NSString stringWithFormat:@"returned %s", madeWeak ? "alive" : "gone"]);
 }
 
 static void cancelled(void) {

@@ -21,6 +21,7 @@ declare module "c:support" {
     block: Block<(first: NSObject | null, second: NSObject | null, error: NSError | null) => void>,
   ): void;
   export function complete_later(ms: c_int, block: Block<(value: NSObject | null, error: NSError | null) => void>): void;
+  export function made_by_block(block: Block<() => NSObject>): c_int;
   export function off_thread_arm(): boolean;
   export function console_arm(): c_int;
 }

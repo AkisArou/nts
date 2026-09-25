@@ -276,8 +276,18 @@ fn blocks(program: &Program) -> String {
     ] {
         let _ = writeln!(text, "{line}");
     }
+    // A block returning an object hands it back at +0, as ARC's caller
+    // expects: under reference counting the closure returns its own count,
+    // which goes to the pool. Without counting it owns nothing to give.
+    let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
+    if counted
+        && signatures.iter().any(|signature| returns_object(&signature.result))
+        && !bound(program, "objc_autoreleaseReturnValue")
+    {
+        let _ = writeln!(text, "declare ptr @objc_autoreleaseReturnValue(ptr)");
+    }
     for signature in signatures {
-        adapter(&mut text, signature);
+        adapter(&mut text, signature, counted);
         let encoding = format!("@{}.signature", block_descriptor_symbol(signature));
         let _ = writeln!(text, "{}", constant(&encoding, &block_encoding(signature)));
         let _ = writeln!(
@@ -311,7 +321,12 @@ pub(super) fn bare(ty: &HirType) -> &'static str {
 
 /// `R @nts_block_invoke_X(ptr %block, A...)`: the context and the bridge out
 /// of the block, then the bridge with the context last.
-fn adapter(text: &mut String, signature: &FnPointer) {
+/// Whether a block's result is an Objective-C object.
+fn returns_object(result: &Type) -> bool {
+    matches!(result, Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if handle.family == nts_core::hir::native::Family::Objc)
+}
+
+fn adapter(text: &mut String, signature: &FnPointer, counted: bool) {
     let result = abi(&signature.result);
     let mut parameters = vec!["ptr %block".to_owned()];
     let mut types = Vec::new();
@@ -365,7 +380,12 @@ fn adapter(text: &mut String, signature: &FnPointer) {
         let _ = writeln!(text, "  ret void");
     } else {
         let _ = writeln!(text, "  %r = call {result} ({}) %bridge({})", types.join(", "), arguments.join(", "));
-        let _ = writeln!(text, "  ret {returned} %r");
+        if counted && returns_object(&signature.result) {
+            let _ = writeln!(text, "  %given = call ptr @objc_autoreleaseReturnValue(ptr %r)");
+            let _ = writeln!(text, "  ret {returned} %given");
+        } else {
+            let _ = writeln!(text, "  ret {returned} %r");
+        }
     }
     let _ = writeln!(text, "}}");
 }

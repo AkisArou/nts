@@ -31,6 +31,11 @@ void complete_off_thread(bool fail, void *block);
 void complete_pair_off_thread(void *block);
 // Calls `block` with an object from a new thread, `ms` milliseconds from now.
 void complete_later(int ms, void *block);
+// Calls `block`, an `id (^)(void)`, as ARC code does -- its result retained
+// out of the pool it may be autoreleased into -- watches the object, then
+// gives it back and drains the pool: the watch says whether anything else
+// still counts it.
+int made_by_block(void *block);
 // Whether `BLOCKS_OFF_THREAD` is set.
 bool off_thread_arm(void);
 // `BLOCKS_CONSOLE`: 0 unset, 1 "held", 2 "unheld".
