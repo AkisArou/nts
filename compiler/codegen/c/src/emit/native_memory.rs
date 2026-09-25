@@ -447,7 +447,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     // none, and the function type the header's declaration must have.
     let mut declared: std::collections::BTreeMap<&str, (bool, String, String)> =
         std::collections::BTreeMap::new();
-    let mut opaque: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    let mut opaque: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
             let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
@@ -495,8 +495,8 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     // `struct X;` licenses, and it stays legal where a header *does* define the
     // struct -- a tag may be declared any number of times before it is
     // completed. So this costs nothing in the case that already worked.
-    for tag in &opaque {
-        writer.line(origin, format!("struct {tag};"));
+    for declared in &opaque {
+        writer.line(origin, format!("{declared};"));
         wrote = true;
     }
     for (name, (names_a_header, prototype, function_type)) in &declared {
@@ -568,7 +568,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 /// The witness has to declare these before it mentions them; see the loop that
 /// writes them out for why a forward declaration is the whole of what an opaque
 /// type needs.
-fn collect_opaque_tags<'a>(ty: &'a Type, into: &mut std::collections::BTreeSet<&'a str>) {
+fn collect_opaque_tags(ty: &Type, into: &mut std::collections::BTreeSet<String>) {
     match ty {
         Type::Pointer(pointee) => collect_opaque_pointee(pointee, into),
         Type::FnPointer(signature) => {
@@ -580,21 +580,32 @@ fn collect_opaque_tags<'a>(ty: &'a Type, into: &mut std::collections::BTreeSet<&
                 collect_opaque_tags(ty, into);
             }
         }
-        // A record by value is a complete type the header defines, not a
-        // forward-declared tag.
+        // A record by value: complete where a header defines it, and a tag a
+        // prototype may still name where none does -- a declaration's
+        // parameter may have incomplete type -- which without this is
+        // `-Wvisibility`, as an opaque tag was. `macos-draw`'s Core Graphics
+        // names a header; a module binding Objective-C classes beside it
+        // cannot, and its `CGRect` arguments met this.
+        Type::Record(layout) => declare_record(layout, into),
         Type::Scalar(_) | Type::Bool | Type::Void | Type::Managed(_) | Type::Erased
-        | Type::BigInt | Type::Record(_) => {}
+        | Type::BigInt => {}
     }
 }
 
-fn collect_opaque_pointee<'a>(
-    pointee: &'a Pointee,
-    into: &mut std::collections::BTreeSet<&'a str>,
-) {
+/// A forward declaration of a tagged record: `struct CGRect`. A record a
+/// typedef names, or none, has no tag to declare, and is left to the header.
+fn declare_record(layout: &nts_core::hir::native::Record, into: &mut std::collections::BTreeSet<String>) {
+    if !layout.untagged() && !layout.spelled_bare() {
+        into.insert(format!("{} {}", layout.kind.keyword(), layout.name));
+    }
+}
+
+fn collect_opaque_pointee(pointee: &Pointee, into: &mut std::collections::BTreeSet<String>) {
     match pointee {
         Pointee::Opaque(name) => {
-            into.insert(name.as_str());
+            into.insert(format!("struct {name}"));
         }
+        Pointee::Record(layout) => declare_record(layout, into),
         Pointee::FnPointer(signature) => {
             for ty in signature
                 .parameters
@@ -607,7 +618,7 @@ fn collect_opaque_pointee<'a>(
         Pointee::Pointer(inner) | Pointee::Const(inner) | Pointee::Unaligned(inner)
         | Pointee::Flexible(inner) => collect_opaque_pointee(inner, into),
         Pointee::Array { element, .. } => collect_opaque_pointee(element, into),
-        Pointee::Scalar(_) | Pointee::Void | Pointee::Bits { .. } | Pointee::Record(_) => {}
+        Pointee::Scalar(_) | Pointee::Void | Pointee::Bits { .. } => {}
     }
 }
 
@@ -868,8 +879,8 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
             collect_opaque_tags(ty, &mut tags);
         }
     }
-    for tag in tags {
-        writer.line(origin, format!("struct {tag};"));
+    for declared in tags {
+        writer.line(origin, format!("{declared};"));
     }
     for signature in seen.values() {
         writer.line(origin, signature.typedef());

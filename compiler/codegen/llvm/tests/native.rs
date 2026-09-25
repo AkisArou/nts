@@ -2038,6 +2038,11 @@ fn run_on_both_backends(
     for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
     std::fs::write(dir.join("native.c"), library).unwrap();
     std::fs::write(dir.join("caller.c"), caller).unwrap();
+    // The witness `nts build` compiles beside the program, which names no
+    // header here: each prototype must still be a declaration C accepts.
+    if dir.join(nts_codegen_c::NATIVE_WITNESS_NAME).exists() {
+        clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME]);
+    }
     let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
     for file in ["native.c", "caller.c"] {
         clang(&dir, &[&["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file][..], counted].concat());
