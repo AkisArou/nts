@@ -3960,6 +3960,12 @@ fn relate_tokens_to_the_slot_they_reach(program: &mut Program) {
 }
 
 fn settle(lowered: &mut lower::Lowered) {
+    // Before that: a branch whose condition is already a constant is not two
+    // arms, and the arm nothing can enter may be code this compiler cannot
+    // represent. See `fold::decided_branches`, which exists because a copy of a
+    // generic folds `typeof held` to a literal and the comparison beside it was
+    // left for a backend that would never see it.
+    fold::decided_branches(&mut lowered.program);
     // First of all: everything below reads the block graph, and a block nothing
     // can reach is not part of it. See `dce::prune_unreachable`.
     dce::prune_unreachable_blocks(&mut lowered.program);
