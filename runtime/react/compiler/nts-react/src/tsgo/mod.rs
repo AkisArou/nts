@@ -8,6 +8,7 @@
 //! declaration's type from its initializer without guessing from their kinds.
 
 pub mod children;
+pub mod kinds;
 
 use nts_semantic_schema::{NodeData, NodeId, NodeKind, SemanticSnapshot};
 

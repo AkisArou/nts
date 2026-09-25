@@ -6,4 +6,5 @@
 //! measurements it rests on.
 
 pub mod babel;
+pub mod convert;
 pub mod tsgo;
