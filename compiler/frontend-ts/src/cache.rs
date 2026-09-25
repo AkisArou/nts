@@ -80,6 +80,10 @@ pub fn snapshot<S: SemanticSource>(
     let Some(dir) = cache_dir() else {
         return source.snapshot(tsconfig);
     };
+    // A source transform answers too: its version and options decide the
+    // snapshot as much as the files do, so they are part of the question.
+    let identity = source.identity();
+    let tool = &*if identity.is_empty() { tool.to_owned() } else { format!("{tool}+{identity}") };
     // **The key is a path, so it has to be *the* path.**
     //
     // It was `tsconfig.as_str()` verbatim, and `nts build` run from a project

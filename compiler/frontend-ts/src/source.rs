@@ -22,6 +22,13 @@ pub trait SemanticSource {
     /// Reported in the build report rather than logged, because the number only
     /// matters if it is visible on every build.
     fn stats(&self) -> FrontendStats;
+
+    /// What besides the files decides the snapshot -- a source transform's
+    /// version and options -- for the snapshot cache's key. Empty when the
+    /// files alone decide it.
+    fn identity(&self) -> String {
+        String::new()
+    }
 }
 
 /// What the frontend cost.

@@ -29,6 +29,7 @@ pub mod ast;
 pub mod decompose;
 pub mod proto;
 pub mod symbols;
+pub mod transform;
 pub mod types;
 pub mod wire;
 
@@ -109,6 +110,16 @@ pub enum TsgoError {
     )]
     UnexpectedCallback(String),
 
+    #[error("an overlay was set on a tsgo client spawned without overlays")]
+    NoOverlays,
+
+    #[error(
+        "{identity} was still revising its rewrite of the project after {rounds} rounds, the most a \
+         source transform is given: each revision drew errors the last had not. This is the cap \
+         stopping it, not a fault in tsgo"
+    )]
+    TransformUnsettled { rounds: usize, identity: String },
+
     #[error("could not decode tsgo's answer to `{method}`: {source}")]
     Decode {
         method: String,
@@ -152,19 +163,37 @@ pub struct Client {
     stdin: BufWriter<ChildStdin>,
     stdout: BufReader<ChildStdout>,
     round_trips: u64,
+    /// Text tsgo reads in place of a file's, by the path tsgo names it with;
+    /// `None` unless spawned with [`Client::spawn_with_overlays`].
+    overlays: Option<FxHashMap<String, String>>,
 }
 
 impl Client {
     /// Spawn `executable --api` with `cwd` as its working directory.
     ///
-    /// Filesystem callbacks are deliberately not enabled: tsgo reads the disk
-    /// itself, so the conversation stays strictly request/response and we never
-    /// have to service a server-initiated [`MessageType::Call`] mid-request.
+    /// Filesystem callbacks are not enabled: tsgo reads the disk itself, so the
+    /// conversation stays strictly request/response and a server-initiated
+    /// [`MessageType::Call`] is an error.
     pub fn spawn(executable: &Utf8Path, cwd: &Utf8Path) -> Result<Self, TsgoError> {
-        let mut child = Command::new(executable.as_str())
-            .arg("--api")
-            .arg("--cwd")
-            .arg(cwd.as_str())
+        Self::spawn_inner(executable, cwd, false)
+    }
+
+    /// Spawn as [`Client::spawn`] does, with tsgo reading files through this
+    /// client: a file given text with [`Client::set_overlay`] is read as that
+    /// text, and every other file from the disk, as before. Each file tsgo
+    /// reads costs a callback round trip, so a client that will set no
+    /// overlays should be spawned without them.
+    pub fn spawn_with_overlays(executable: &Utf8Path, cwd: &Utf8Path) -> Result<Self, TsgoError> {
+        Self::spawn_inner(executable, cwd, true)
+    }
+
+    fn spawn_inner(executable: &Utf8Path, cwd: &Utf8Path, overlays: bool) -> Result<Self, TsgoError> {
+        let mut command = Command::new(executable.as_str());
+        command.arg("--api").arg("--cwd").arg(cwd.as_str());
+        if overlays {
+            command.arg("--callbacks").arg("readFile");
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -182,7 +211,32 @@ impl Client {
             stdin: BufWriter::new(stdin),
             stdout: BufReader::new(stdout),
             round_trips: 0,
+            overlays: overlays.then(FxHashMap::default),
         })
+    }
+
+    /// Have tsgo read `text` as the file at `path` from the next snapshot on;
+    /// see [`Client::update_files`]. `path` is spelled as tsgo names the file.
+    pub fn set_overlay(&mut self, path: &str, text: String) -> Result<(), TsgoError> {
+        let overlays = self.overlays.as_mut().ok_or(TsgoError::NoOverlays)?;
+        overlays.insert(path.to_owned(), text);
+        Ok(())
+    }
+
+    /// Answer one server-initiated call. Only `readFile` is enabled: an
+    /// overlaid file's text, or `null`, which has tsgo read the disk.
+    fn answer_call(&mut self, method: &str, payload: &[u8]) -> Result<(), TsgoError> {
+        let Some(overlays) = &self.overlays else {
+            return Err(TsgoError::UnexpectedCallback(method.to_owned()));
+        };
+        if method != "readFile" {
+            write_frame(&mut self.stdin, MessageType::CallError, method, b"not enabled")?;
+            return Ok(());
+        }
+        let path: String = serde_json::from_slice(payload).map_err(|source| TsgoError::Decode { method: method.to_owned(), source })?;
+        let answer = overlays.get(&path).map_or_else(|| b"null".to_vec(), |text| serde_json::json!({ "content": text }).to_string().into_bytes());
+        write_frame(&mut self.stdin, MessageType::CallResponse, method, &answer)?;
+        Ok(())
     }
 
     /// Request/response pairs exchanged so far.
@@ -208,23 +262,30 @@ impl Client {
         write_frame(&mut self.stdin, MessageType::Request, method, &payload)?;
         self.round_trips += 1;
 
-        let Frame {
-            message_type,
-            payload,
-            ..
-        } = read_frame(&mut self.stdout)?;
+        loop {
+            let Frame {
+                message_type,
+                method: called,
+                payload,
+            } = read_frame(&mut self.stdout)?;
 
-        match message_type {
-            MessageType::Response => Ok(payload),
-            MessageType::Error => Err(TsgoError::Server {
-                method: method.to_owned(),
-                message: String::from_utf8_lossy(&payload).into_owned(),
-            }),
-            MessageType::Call => Err(TsgoError::UnexpectedCallback(method.to_owned())),
-            other => Err(TsgoError::UnexpectedFrame {
-                method: method.to_owned(),
-                got: frame_name(other),
-            }),
+            return match message_type {
+                MessageType::Response => Ok(payload),
+                MessageType::Error => Err(TsgoError::Server {
+                    method: method.to_owned(),
+                    message: String::from_utf8_lossy(&payload).into_owned(),
+                }),
+                // tsgo reading a file mid-request, when overlays are on; the
+                // answer to the request follows.
+                MessageType::Call => {
+                    self.answer_call(&called, &payload)?;
+                    continue;
+                }
+                other => Err(TsgoError::UnexpectedFrame {
+                    method: method.to_owned(),
+                    got: frame_name(other),
+                }),
+            };
         }
     }
 
@@ -255,8 +316,63 @@ impl Client {
             proto::method::UPDATE_SNAPSHOT,
             &UpdateSnapshotParams {
                 open_projects: vec![DocumentIdentifier::file(tsconfig)],
+                ..UpdateSnapshotParams::default()
             },
         )
+    }
+
+    /// Take a snapshot in which `changed` -- files given new text with
+    /// [`Client::set_overlay`] -- are read again. tsgo rechecks what they
+    /// affect, not the whole program.
+    pub fn update_files(&mut self, changed: &[String]) -> Result<UpdateSnapshotResponse, TsgoError> {
+        self.request(
+            proto::method::UPDATE_SNAPSHOT,
+            &UpdateSnapshotParams {
+                file_changes: Some(proto::FileChanges {
+                    changed: changed.iter().map(|path| DocumentIdentifier(path.clone())).collect(),
+                }),
+                ..UpdateSnapshotParams::default()
+            },
+        )
+    }
+
+    /// The syntactic and semantic diagnostics of one file.
+    pub fn file_diagnostics(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        file: &str,
+    ) -> Result<Vec<DiagnosticResponse>, TsgoError> {
+        let params = GetDiagnosticsParams {
+            snapshot,
+            project: project.clone(),
+            file: Some(DocumentIdentifier(file.to_owned())),
+        };
+        let mut all: Vec<DiagnosticResponse> = self.request(proto::method::GET_SYNTACTIC_DIAGNOSTICS, &params)?;
+        all.extend(self.request::<Vec<DiagnosticResponse>>(proto::method::GET_SEMANTIC_DIAGNOSTICS, &params)?);
+        Ok(all)
+    }
+
+    /// A type printed as TypeScript would write it at `location`, with
+    /// tsgo's `TypeFormatFlags` `flags`.
+    pub fn type_to_string(
+        &mut self,
+        snapshot: SnapshotHandle,
+        project: &ProjectHandle,
+        type_id: u32,
+        location: NodeHandle,
+        flags: i32,
+    ) -> Result<String, TsgoError> {
+        #[derive(Serialize)]
+        struct Params<'a> {
+            snapshot: SnapshotHandle,
+            project: &'a ProjectHandle,
+            #[serde(rename = "type")]
+            type_id: u32,
+            location: NodeHandle,
+            flags: i32,
+        }
+        self.request(proto::method::TYPE_TO_STRING, &Params { snapshot, project, type_id, location, flags })
     }
 
     /// Fetch one file's encoded AST.
@@ -892,6 +1008,8 @@ pub struct TsgoApi {
     decompose: Option<decompose::Budget>,
     resolve_calls: Option<decompose::Budget>,
     fold_constants: Option<decompose::Budget>,
+    /// Rewrites the project's files before they are read; see [`transform`].
+    transform: Option<Box<dyn transform::SourceTransform>>,
     stats: FrontendStats,
 }
 
@@ -919,8 +1037,16 @@ impl TsgoApi {
             decompose: None,
             resolve_calls: None,
             fold_constants: None,
+            transform: None,
             stats: FrontendStats::default(),
         }
+    }
+
+    /// Have `transform` rewrite the project's own files before they are read.
+    #[must_use]
+    pub fn with_transform(mut self, transform: Box<dyn transform::SourceTransform>) -> Self {
+        self.transform = Some(transform);
+        self
     }
 
     /// Also decompose structured types into members and properties.
@@ -967,10 +1093,11 @@ impl TsgoApi {
     }
 }
 
-/// Start tsgo beside the config file it is being asked about, and shake hands.
-fn connect(executable: &Utf8Path, tsconfig: &Utf8Path) -> Result<Client, TsgoError> {
+/// Start tsgo beside the config file it is being asked about, and shake hands;
+/// reading files through the client when `overlays`.
+fn connect(executable: &Utf8Path, tsconfig: &Utf8Path, overlays: bool) -> Result<Client, TsgoError> {
     let cwd = tsconfig.parent().unwrap_or(Utf8Path::new("."));
-    let mut client = Client::spawn(executable, cwd)?;
+    let mut client = if overlays { Client::spawn_with_overlays(executable, cwd)? } else { Client::spawn(executable, cwd)? };
     client.initialize()?;
     Ok(client)
 }
@@ -1139,14 +1266,27 @@ impl TsgoApi {
     }
 }
 
+impl TsgoApi {
+    /// Start tsgo, open the project, and have the source transform, if there
+    /// is one, rewrite it: the client, and the snapshot nts reads.
+    fn open(&mut self, tsconfig: &Utf8Path, root: &Utf8Path) -> Result<(Client, UpdateSnapshotResponse, Vec<String>), TsgoError> {
+        let mut client = connect(&self.executable, tsconfig, self.transform.is_some())?;
+        let opened = client.open_project(tsconfig)?;
+        let Some(transform) = self.transform.as_deref_mut() else {
+            return Ok((client, opened, Vec::new()));
+        };
+        let (opened, rewritten) = transform::apply(transform, &mut client, opened, root)?;
+        Ok((client, opened, rewritten))
+    }
+}
+
 impl SemanticSource for TsgoApi {
     fn snapshot(&mut self, tsconfig: &Utf8Path) -> Result<SemanticSnapshot, SnapshotError> {
         let started = Instant::now();
 
         let tsconfig = &absolute(tsconfig);
         let cwd = tsconfig.parent().unwrap_or(Utf8Path::new("."));
-        let mut client = connect(&self.executable, tsconfig)?;
-        let opened = client.open_project(tsconfig)?;
+        let (mut client, opened, rewritten) = self.open(tsconfig, cwd)?;
 
         let mut snapshot = SemanticSnapshot {
             schema_version: SCHEMA_VERSION,
@@ -1223,6 +1363,7 @@ impl SemanticSource for TsgoApi {
                     // answer to a question that has one.
                     digest: Digest(decoded.content_hash),
                     display_path: path.to_owned(),
+                    rewritten_by: rewritten.iter().any(|done| done == path.as_str()).then(|| self.identity()),
                 });
             }
         }
@@ -1281,6 +1422,10 @@ impl SemanticSource for TsgoApi {
 
     fn stats(&self) -> FrontendStats {
         self.stats
+    }
+
+    fn identity(&self) -> String {
+        self.transform.as_ref().map_or_else(String::new, |transform| transform.identity())
     }
 }
 

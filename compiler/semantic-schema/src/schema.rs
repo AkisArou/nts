@@ -41,8 +41,9 @@ use crate::origin::Origin;
 /// same line and merged into none: whoever lands second takes the next
 /// number, and checks that it did. 30: `composable` and `overridable`, for a
 /// class written over a composable Windows Runtime class; and GTK's `vfunc`
-/// and `gtype`, which landed at 29 without one.
-pub const SCHEMA_VERSION: u32 = 30;
+/// and `gtype`, which landed at 29 without one. 31: `SourceFile::rewritten_by`,
+/// a file a source transform rewrote before it was read.
+pub const SCHEMA_VERSION: u32 = 31;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

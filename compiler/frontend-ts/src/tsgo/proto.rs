@@ -26,6 +26,8 @@ pub mod method {
     pub const GET_TYPE_OF_SYMBOL: &str = "getTypeOfSymbol";
     pub const GET_RESOLVED_SIGNATURE: &str = "getResolvedSignature";
     pub const GET_SEMANTIC_DIAGNOSTICS: &str = "getSemanticDiagnostics";
+    /// A type printed as TypeScript would write it at a location.
+    pub const TYPE_TO_STRING: &str = "typeToString";
 
     pub const GET_BASE_TYPES: &str = "getBaseTypes";
     pub const IS_TYPE_ASSIGNABLE_TO: &str = "isTypeAssignableTo";
@@ -116,12 +118,23 @@ pub struct InitializeResponse {
 
 /// Parameters for `updateSnapshot`.
 ///
-/// Every field is optional server-side; we only ever open projects, so the rest
-/// are omitted rather than sent empty.
-#[derive(Debug, Clone, Serialize)]
+/// Every field is optional server-side: a snapshot either opens projects or
+/// takes in files whose text changed, and what it does not do is omitted
+/// rather than sent empty.
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSnapshotParams {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub open_projects: Vec<DocumentIdentifier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_changes: Option<FileChanges>,
+}
+
+/// Files whose text differs from what the last snapshot read.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileChanges {
+    pub changed: Vec<DocumentIdentifier>,
 }
 
 /// Answer to `updateSnapshot`.
@@ -189,10 +202,25 @@ mod tests {
     fn update_snapshot_params_use_camel_case() {
         let params = UpdateSnapshotParams {
             open_projects: vec![DocumentIdentifier("/w/tsconfig.json".to_owned())],
+            ..UpdateSnapshotParams::default()
         };
         assert_eq!(
             serde_json::to_string(&params).unwrap(),
             r#"{"openProjects":["/w/tsconfig.json"]}"#
+        );
+    }
+
+    #[test]
+    fn changed_files_are_sent_without_projects() {
+        let params = UpdateSnapshotParams {
+            file_changes: Some(FileChanges {
+                changed: vec![DocumentIdentifier("/w/a.tsx".to_owned())],
+            }),
+            ..UpdateSnapshotParams::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&params).unwrap(),
+            r#"{"fileChanges":{"changed":["/w/a.tsx"]}}"#
         );
     }
 

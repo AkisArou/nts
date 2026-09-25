@@ -37,6 +37,11 @@ pub struct SourceFile {
     pub digest: Digest,
     /// Path as written, for diagnostics only. Never enters a release artifact.
     pub display_path: Utf8PathBuf,
+    /// What rewrote the file before it was read -- a source transform's
+    /// identity -- or `None` when it was read as the disk has it. Positions
+    /// in a rewritten file are in the rewritten text, which no disk holds.
+    #[serde(default)]
+    pub rewritten_by: Option<String>,
 }
 
 /// A half-open byte range within a source file.
