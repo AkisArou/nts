@@ -92,6 +92,12 @@ fn a_com_method_is_a_call_through_its_table() {
         assert!(text.contains("(*(void ***)") && text.contains(&format!("[{slot}])(")), "no call through slot {slot} ({what}):\n{text}");
     }
     assert!(text.contains("nts_winrt_factory("), "a static is not called on its factory:\n{text}");
+    // The factory's IID crosses as the two words of its bytes, both above
+    // 2^53, and exactly: widening them through a double on the way rounded
+    // the low bits away, and Windows answered E_NOINTERFACE.
+    for word in ["5251530675620369482", "6644118215154181009"] {
+        assert!(text.contains(word), "the IID word {word} does not reach the C exactly:\n{text}");
+    }
     assert!(text.contains("nts_com_take("), "the object Parse writes is not taken:\n{text}");
     assert!(text.contains("nts_hresult_message("), "no HRESULT is checked:\n{text}");
     assert!(text.contains("nts_string_from_hstring("), "the HSTRING Stringify writes is not read:\n{text}");

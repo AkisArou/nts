@@ -35,6 +35,27 @@ fn scalar(spelling: &str) -> Option<HirType> {
     })
 }
 
+/// A parameter list split at its own commas, not those inside a parameter's
+/// parentheses: `void (*)(const void *, void *)` is one parameter, and was
+/// read as two once a helper took a callback (`nts_block_carry`).
+fn top_level(list: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let (mut depth, mut start) = (0usize, 0usize);
+    for (at, character) in list.char_indices() {
+        match character {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(&list[start..at]);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&list[start..]);
+    parts
+}
+
 /// One helper as clang reports it: name, parameters, result.
 type Reported = (String, Vec<Option<HirType>>, Option<HirType>);
 
@@ -95,11 +116,13 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Reported>>
         let signature = &rest[open + 2..close];
         let Some(paren) = signature.find('(') else { continue };
         let returns = scalar(&signature[..paren]);
-        let inside = signature[paren + 1..].trim_end_matches(')');
+        // The list's own closing parenthesis only: a function-pointer
+        // parameter (`void (*run)(const void *, void *)`) ends in one too.
+        let inside = signature[paren + 1..].strip_suffix(')').unwrap_or(&signature[paren + 1..]);
         let params: Vec<Option<HirType>> = if inside.trim().is_empty() || inside.trim() == "void" {
             Vec::new()
         } else {
-            inside.split(',').map(scalar).collect()
+            top_level(inside).into_iter().map(scalar).collect()
         };
         if params.iter().all(Option::is_none) && returns.is_none() {
             continue;
@@ -141,10 +164,20 @@ fn the_table_still_matches_the_header() {
         None => eprintln!("SKIP the Windows-only helpers: no zig for mingw headers"),
     }
     let mut checked = 0;
+    let mut unrowed_wide = Vec::new();
     for (name, params, returns) in &fresh {
         let Some(known) = runtime::parameters(name) else {
             // A helper the table does not carry has its scalar arguments
-            // converted as numbers, which is right only for a `double`.
+            // converted as numbers, which is right only for a `double` -- and
+            // for a 64-bit integer is a rounding through 53 bits, since a
+            // declared helper is the only kind `specialize` passes an integer
+            // to exactly (MemoryBuffer's factory IID word arrived rounded,
+            // and Windows answered E_NOINTERFACE). So one of those must have
+            // a row; a narrower parameter's absence still costs a register on
+            // LLVM but not the value.
+            if params.iter().flatten().any(|ty| matches!(ty, HirType::Int { bits: 64, .. })) {
+                unrowed_wide.push(name.clone());
+            }
             continue;
         };
         assert_eq!(
@@ -157,6 +190,10 @@ fn the_table_still_matches_the_header() {
         );
         checked += 1;
     }
+    assert!(
+        unrowed_wide.is_empty(),
+        "helpers taking a 64-bit integer with no row in src/hir/runtime.rs, so the value rounds through a double: {unrowed_wide:?}"
+    );
     eprintln!("checked {checked} helpers against the header");
     assert!(checked > 80, "only {checked} helpers checked; the parse is wrong");
 }

@@ -1273,12 +1273,25 @@ fn insert_conversions(
                         },
                         _ => None,
                     };
-                    // A foreign callee's parameters are C's, and `specialize`
-                    // converts each argument to its own exactly. Widening an
-                    // integer to a double on the way would round a 64-bit one
-                    // -- a `GType` a tag passed straight from
-                    // `gtk_label_get_type()` -- through 53 bits.
-                    let native = matches!(callee, Callee::Native(_));
+                    // **A callee whose arguments are converted exactly is not
+                    // widened first.** Widening an integer to a double and
+                    // converting it back is two derivations of one type, and
+                    // the one through a double rounds a 64-bit value to 53
+                    // bits. That covers a foreign callee, whose parameters are
+                    // C's and which `specialize` converts to exactly (a `GType`
+                    // passed straight from `gtk_label_get_type()` was the first
+                    // case), and a runtime helper `hir::runtime` declares,
+                    // which `runtime_arguments` converts to exactly (the second:
+                    // a COM helper's IID word `0x11E4245BFBC4DD2B` arrived as
+                    // `...DD00`, and Windows answered E_NOINTERFACE for a
+                    // factory that exists). A helper the table does not
+                    // declare has no exact type to convert to, and still takes
+                    // a `number` as a double.
+                    let native = match &callee {
+                        Callee::Native(_) => true,
+                        Callee::External(name) => super::runtime::parameters(name).is_some(),
+                        _ => false,
+                    };
                     let args = args
                         .into_iter()
                         .enumerate()
@@ -1592,5 +1605,73 @@ impl BinOp {
             self,
             Self::Lt | Self::Le | Self::Gt | Self::Ge | Self::Eq | Self::Ne
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::hir::{Block, Callee, Func, HirType, Op, OpKind, Param, Terminator, ValueId};
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::Origin;
+
+    const U64: HirType = HirType::Int { bits: 64, signed: false };
+
+    fn op(kind: OpKind, ty: HirType) -> Op {
+        Op { kind, ty, origin: Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) }) }
+    }
+
+    /// `n: u64 => helper(n, n, n)`, specialized: what the call's second
+    /// argument is afterwards.
+    fn second_argument_after_specialize(helper: &str) -> (OpKind, HirType) {
+        let origin = Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) });
+        let n = ValueId(0);
+        let call = OpKind::Call { callee: Callee::External(helper.to_owned()), args: vec![n, n, n], frame: None };
+        let mut func = Func {
+            name: "f".to_owned(),
+            params: vec![Param {
+                name: "n".to_owned(),
+                ty: U64,
+                origin: origin.clone(),
+                known: crate::hir::facts::Facts::TOP,
+                shape: crate::hir::ParamShape::Ordinary,
+            }],
+            return_type: HirType::Void,
+            values: vec![op(OpKind::Param(0), U64), op(call, HirType::NativePointer(crate::hir::native::Pointee::Void))],
+            blocks: vec![Block { params: Vec::new(), ops: vec![n, ValueId(1)], terminator: Terminator::Return(None) }],
+            origin,
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+        };
+        let analysis = crate::hir::flow::analyze(&func);
+        super::specialize(&mut func, &analysis, &crate::hir::signatures::Expected::default());
+        let call = func.blocks[0].ops.iter().map(|value| &func.values[value.0 as usize]).find(|op| matches!(op.kind, OpKind::Call { .. }));
+        let Some(OpKind::Call { args, .. }) = call.map(|op| &op.kind) else { panic!("the call is gone") };
+        let second = &func.values[args[1].0 as usize];
+        (second.kind.clone(), second.ty.clone())
+    }
+
+    /// A `u64` computed at run time -- here a parameter, whose value no fold
+    /// can see -- reaches a runtime helper the table declares as `u64` as
+    /// itself, not widened to a double and narrowed back: above 2^53 that
+    /// rounds. The control is a helper the table does not declare, whose
+    /// argument still widens, so the test can tell the two apart.
+    #[test]
+    fn a_declared_helper_takes_its_integer_exactly() {
+        // The precondition, asserted rather than assumed: were `nts_com_query`
+        // ever undeclared, both arms below would be the control and the test
+        // would test nothing while passing.
+        assert_eq!(
+            crate::hir::runtime::parameters("nts_com_query").and_then(|params| params.get(1).cloned().flatten()),
+            Some(U64),
+            "`nts_com_query` no longer declares a u64 second parameter; pick another declared helper"
+        );
+        assert!(crate::hir::runtime::parameters("nts_no_such_helper").is_none(), "the control helper is declared");
+        let (kind, ty) = second_argument_after_specialize("nts_com_query");
+        assert_eq!((kind, ty), (OpKind::Param(0), U64), "the declared helper's u64 argument was converted");
+        let (_, ty) = second_argument_after_specialize("nts_no_such_helper");
+        assert_eq!(ty, HirType::NUMBER, "an undeclared helper's integer argument no longer widens");
     }
 }

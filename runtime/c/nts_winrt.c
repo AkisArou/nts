@@ -115,7 +115,24 @@ typedef struct {
   uint32_t length;
 } NtsUnits;
 
-static int nts_parse_iid(NtsUnits text, IID *out);
+/* An IID from the two words the compiler passes: its sixteen bytes as they
+ * lie in memory, low word first. The compiler knows every IID a program
+ * names, so none is parsed here -- a parse from text cost 440 ns a call,
+ * measured, against 12.5 ns for the `QueryInterface` it served. */
+static IID nts_iid(uint64_t low, uint64_t high) {
+  IID iid;
+  memcpy(&iid, &low, sizeof low);
+  memcpy((unsigned char *)&iid + sizeof low, &high, sizeof high);
+  return iid;
+}
+
+/* `iid` as `5F6B544A-2F53-48E1-91A3-F78B50A6345C`, for a message. */
+static void nts_print_iid(FILE *to, const IID *iid) {
+  fprintf(to, "%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+          (unsigned long)iid->Data1, iid->Data2, iid->Data3, iid->Data4[0],
+          iid->Data4[1], iid->Data4[2], iid->Data4[3], iid->Data4[4],
+          iid->Data4[5], iid->Data4[6], iid->Data4[7]);
+}
 
 /* A delegate object: the layout the adapter reads (`NtsComDelegate`), then
  * this object's own table -- `Invoke` differs by signature, so the table is
@@ -173,19 +190,13 @@ static HRESULT STDMETHODCALLTYPE nts_delegate_query(void *self, const IID *iid,
 }
 
 void *nts_com_delegate(void *invoke, void *bridge, void *context,
-                       const NtsString *iid) {
+                       uint64_t iid_low, uint64_t iid_high) {
   NtsDelegateObject *delegate = malloc(sizeof *delegate);
   if (delegate == 0) {
     fprintf(stderr, "nts: out of memory making a delegate\n");
     abort();
   }
-  const uint16_t *units = nts_string_to_utf16(iid);
-  int parsed = nts_parse_iid((NtsUnits){units, iid->length}, &delegate->iid);
-  nts_utf16_release(iid, units);
-  if (!parsed) {
-    fprintf(stderr, "nts: a delegate's interface ID does not parse\n");
-    abort();
-  }
+  delegate->iid = nts_iid(iid_low, iid_high);
   delegate->slots[0] = (const void *)nts_delegate_query;
   delegate->slots[1] = (const void *)nts_delegate_add_ref;
   delegate->slots[2] = (const void *)nts_delegate_release;
@@ -204,59 +215,27 @@ uint32_t nts_com_delegates(void) { return delegates; }
  * its own, which the caller releases. An object without the interface ends
  * the process naming it -- the binding said its class implements it, and a
  * wrong table is not something to call through. */
-void *nts_com_query(void *object, const NtsString *iid) {
-  IID wanted;
-  const uint16_t *units = nts_string_to_utf16(iid);
-  int parsed = nts_parse_iid((NtsUnits){units, iid->length}, &wanted);
-  nts_utf16_release(iid, units);
-  if (!parsed) {
-    fprintf(stderr,
-            "nts: @ntsQuery names an interface ID that does not parse\n");
-    abort();
-  }
+static void *nts_query(void *object, const IID *iid) {
   void *answer = 0;
   HRESULT hr = (*(const NtsUnknownTable **)object)
-                   ->query_interface(object, &wanted, &answer);
+                   ->query_interface(object, iid, &answer);
   if (FAILED(hr) || answer == 0) {
-    const uint16_t *units = nts_string_to_utf16(iid);
-    fprintf(stderr,
-            "nts: the object does not implement the interface %ls (0x%08lx)\n",
-            (const wchar_t *)units, (unsigned long)hr);
+    fprintf(stderr, "nts: the object does not implement the interface ");
+    nts_print_iid(stderr, iid);
+    fprintf(stderr, " (0x%08lx)\n", (unsigned long)hr);
     abort();
   }
   return answer;
 }
 
-/* `{5F6B544A-2F53-48E1-91A3-F78B50A6345C}` or without the braces. */
-static int nts_parse_iid(NtsUnits text, IID *out) {
-  char buffer[40];
-  uint32_t n = 0;
-  for (uint32_t at = 0; at < text.length && n + 1 < sizeof buffer; at++) {
-    uint16_t unit = text.units[at];
-    if (unit != '{' && unit != '}') {
-      buffer[n++] = (char)unit;
-    }
-  }
-  buffer[n] = 0;
-  unsigned long data1;
-  unsigned int data2, data3, bytes[8];
-  if (sscanf(buffer, "%8lx-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x", &data1, &data2,
-             &data3, &bytes[0], &bytes[1], &bytes[2], &bytes[3], &bytes[4],
-             &bytes[5], &bytes[6], &bytes[7]) != 11) {
-    return 0;
-  }
-  out->Data1 = data1;
-  out->Data2 = (unsigned short)data2;
-  out->Data3 = (unsigned short)data3;
-  for (int i = 0; i < 8; i++) {
-    out->Data4[i] = (unsigned char)bytes[i];
-  }
-  return 1;
+void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high) {
+  IID wanted = nts_iid(iid_low, iid_high);
+  return nts_query(object, &wanted);
 }
 
-/* One activated factory: its class and the interface asked for, as UTF-16
- * units the cache owns -- a call site's strings may be released once the
- * call returns -- and the object. */
+/* One activated factory: its class's UTF-16 units and the interface's
+ * sixteen bytes, as a key the cache owns -- a call site's string may be
+ * released once the call returns -- and the object. */
 typedef struct NtsFactory {
   uint16_t *key;
   uint32_t length;
@@ -270,8 +249,8 @@ static uint32_t activations;
  * hits: a cache that never hits returns the right factory every time. */
 uint32_t nts_winrt_activations(void) { return activations; }
 
-/* `class` and `iid` as one key, `class` then a NUL then `iid`, in `into` when
- * it is large enough; the length either way. */
+/* `class` and `iid` as one key, `class` then a NUL then the IID's bytes as
+ * eight units, in `into` when it is large enough; the length either way. */
 static uint32_t nts_factory_key(NtsUnits class_name, NtsUnits iid,
                                 uint16_t *into, uint32_t room) {
   uint32_t length = class_name.length + 1 + iid.length;
@@ -333,7 +312,8 @@ static void nts_winappsdk_bootstrap(void) {
   }
 }
 
-static void *nts_factory(NtsUnits class_name, NtsUnits iid) {
+static void *nts_factory(NtsUnits class_name, const IID *wanted) {
+  NtsUnits iid = {(const uint16_t *)wanted, sizeof *wanted / sizeof(uint16_t)};
   static NtsFactory *factories;
   uint16_t probe[256];
   uint32_t length = nts_factory_key(class_name, iid, probe, 256);
@@ -360,17 +340,11 @@ static void *nts_factory(NtsUnits class_name, NtsUnits iid) {
       memcmp(class_name.units, microsoft, sizeof microsoft) == 0) {
     nts_winappsdk_bootstrap();
   }
-  IID wanted;
-  if (!nts_parse_iid(iid, &wanted)) {
-    fprintf(stderr,
-            "nts: a WinRT binding names an interface ID that does not parse\n");
-    abort();
-  }
   HSTRING name = 0;
   WindowsCreateString((const wchar_t *)class_name.units, class_name.length,
                       &name);
   void *factory = 0;
-  HRESULT hr = RoGetActivationFactory(name, &wanted, &factory);
+  HRESULT hr = RoGetActivationFactory(name, wanted, &factory);
   WindowsDeleteString(name);
   if (FAILED(hr)) {
     fprintf(stderr,
@@ -399,12 +373,11 @@ static void *nts_factory(NtsUnits class_name, NtsUnits iid) {
   return factory;
 }
 
-void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid) {
+void *nts_winrt_factory(const NtsString *class_name, uint64_t iid_low,
+                        uint64_t iid_high) {
+  IID wanted = nts_iid(iid_low, iid_high);
   const uint16_t *name = nts_string_to_utf16(class_name);
-  const uint16_t *id = nts_string_to_utf16(iid);
-  void *factory = nts_factory((NtsUnits){name, class_name->length},
-                              (NtsUnits){id, iid->length});
-  nts_utf16_release(iid, id);
+  void *factory = nts_factory((NtsUnits){name, class_name->length}, &wanted);
   nts_utf16_release(class_name, name);
   return factory;
 }
@@ -413,11 +386,14 @@ void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid) {
  * names: `IActivationFactory::ActivateInstance` (slot 6) on the class's cached
  * factory, then `QueryInterface` from the `IInspectable` that answers. A
  * reference the caller owns. */
-void *nts_winrt_activate(const NtsString *class_name, const NtsString *iid) {
-  static const uint16_t activation[] = u"00000035-0000-0000-C000-000000000046";
+void *nts_winrt_activate(const NtsString *class_name, uint64_t iid_low,
+                         uint64_t iid_high) {
+  /* `IActivationFactory`: {00000035-0000-0000-C000-000000000046}. */
+  static const IID activation = {
+      0x00000035, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
   const uint16_t *name = nts_string_to_utf16(class_name);
-  void *factory = nts_factory((NtsUnits){name, class_name->length},
-                              (NtsUnits){activation, 36});
+  void *factory =
+      nts_factory((NtsUnits){name, class_name->length}, &activation);
   nts_utf16_release(class_name, name);
   typedef HRESULT(STDMETHODCALLTYPE * Activate)(void *, void **);
   void *made = 0;
@@ -428,7 +404,8 @@ void *nts_winrt_activate(const NtsString *class_name, const NtsString *iid) {
             (unsigned long)hr);
     abort();
   }
-  void *answer = nts_com_query(made, iid);
+  IID wanted = nts_iid(iid_low, iid_high);
+  void *answer = nts_query(made, &wanted);
   nts_unknown_release(made);
   return answer;
 }

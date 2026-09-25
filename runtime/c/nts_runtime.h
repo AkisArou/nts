@@ -1825,12 +1825,14 @@ void *nts_string_to_hstring(const NtsString *s);
 void nts_hstring_release(const NtsString *s, void *h);
 NtsString *nts_string_from_hstring(void *h);
 void *nts_com_take(void *slot);
-void *nts_com_query(void *object, const NtsString *iid);
+void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high);
 void *nts_com_addref(void *object);
 void nts_com_release(void *object);
 uint32_t nts_com_releases(void);
-void *nts_winrt_factory(const NtsString *class_name, const NtsString *iid);
-void *nts_winrt_activate(const NtsString *class_name, const NtsString *iid);
+void *nts_winrt_factory(const NtsString *class_name, uint64_t iid_low,
+                        uint64_t iid_high);
+void *nts_winrt_activate(const NtsString *class_name, uint64_t iid_low,
+                         uint64_t iid_high);
 uint32_t nts_winrt_activations(void);
 char *nts_hresult_message(int32_t hr);
 /* A TypeScript function as a Windows Runtime delegate: a COM object whose
@@ -1847,7 +1849,7 @@ typedef struct NtsComDelegate {
   void *context;
 } NtsComDelegate;
 void *nts_com_delegate(void *invoke, void *bridge, void *context,
-                       const NtsString *iid);
+                       uint64_t iid_low, uint64_t iid_high);
 uint32_t nts_com_delegates(void);
 #endif
 /* A `string[]` as C's NULL-terminated array of strings, for a parameter

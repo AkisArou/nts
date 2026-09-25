@@ -92,6 +92,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_bigint_shl", &[Some(HirType::BigInt), Some(HirType::BigInt)], Some(HirType::BigInt)),
     ("nts_bigint_shr", &[Some(HirType::BigInt), Some(HirType::BigInt)], Some(HirType::BigInt)),
     ("nts_bigint_to_string", &[Some(HirType::BigInt)], None),
+    ("nts_block_carry", &[None, None, Some(HirType::Int { bits: 64, signed: false }), None, Some(HirType::Int { bits: 32, signed: false }), None], None),
     ("nts_bool_to_string", &[Some(HirType::Bool)], None),
     ("nts_bounds", &[Some(HirType::Float { bits: 64 }), Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_callback_task", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Bool)], None),
@@ -104,6 +105,8 @@ static SIGNATURES: &[Declared] = &[
     ("nts_closure_notify", &[], None),
     ("nts_closure_unlend", &[None], None),
     ("nts_closure_unlend_once", &[None], None),
+    ("nts_com_delegate", &[None, None, None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    ("nts_com_query", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_cstring_release", &[None, None], None),
     ("nts_cstrings_release", &[None], None),
     ("nts_cycle_candidates", &[], Some(HirType::Int { bits: 64, signed: false })),
@@ -267,6 +270,8 @@ static SIGNATURES: &[Declared] = &[
     ("nts_value_truthy", &[None], Some(HirType::Bool)),
     ("nts_value_truthy_fn", &[None], Some(HirType::Bool)),
     ("nts_view_unlend", &[None], None),
+    ("nts_winrt_activate", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    ("nts_winrt_factory", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
 ];
 
 #[must_use]
