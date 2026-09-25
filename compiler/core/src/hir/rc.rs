@@ -356,6 +356,45 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
     report
 }
 
+/// Whether every use of a value is an `Erase` of it, or of a view of it (a
+/// `Convert` to another counted type, the same object): a foreign object only
+/// ever handed to nts's own slots. `map.set(k, new NSObject())` is the shape,
+/// whose temporary ARC gives back at the end of the statement, and which the
+/// box this erasure replaced consumed.
+///
+/// **Precondition: every consumer of an erased value counts what it holds** --
+/// a table's entry, an `unknown` local, a field, an array's element, a
+/// promise's value each retain it -- so the platform never holds it without a
+/// count, and giving the local's reference back at its last use is balanced.
+/// What would break it is an erased value handed somewhere that does *not*
+/// count; that leaves a dangling payload, not a late release. None is known
+/// today. A delegate is handed to the platform itself, a use of another kind,
+/// which keeps the block's end -- as does a handle any native call reads, a
+/// props setter's receiver included, where the cost is only lateness.
+fn only_erased(func: &Func, value: ValueId) -> bool {
+    let mut erased = false;
+    let mut views = vec![value];
+    // Bounded: a chain of views is as long as a class hierarchy.
+    while let Some(at) = views.pop().filter(|_| views.len() < 64) {
+        if func.blocks.iter().any(|block| super::operands_of_terminator(&block.terminator).contains(&at)) {
+            return false;
+        }
+        // The arena, not the blocks: this pass has the block it is rebuilding
+        // out of `func.blocks`, and a use there is still a use.
+        for (index, op) in func.values.iter().enumerate() {
+            if matches!(op.kind, OpKind::Retain(_) | OpKind::Release(_)) || !super::operands_of(&op.kind).contains(&at) {
+                continue;
+            }
+            match op.kind {
+                OpKind::Erase { value: erasing, .. } if erasing == at => erased = true,
+                OpKind::Convert(_) if op.ty.counting().is_some() => views.push(ValueId(u32::try_from(index).unwrap_or(u32::MAX))),
+                _ => return false,
+            }
+        }
+    }
+    erased
+}
+
 /// One block, as [`release_at_last_use`] reads it.
 struct Block<'a> {
     at: BlockId,
@@ -389,8 +428,9 @@ fn release_at_last_use(
             live.dies_in(at, *value)
                 // A foreign object keeps the block's end. The platform may
                 // hold it without a count -- `parser.delegate = delegate` is an
-                // `assign` property -- and nothing here can see that.
-                && func.values[value.0 as usize].ty.counting().is_none()
+                // `assign` property -- and nothing here can see that. Unless
+                // it only ever goes where nts holds it (`only_erased`).
+                && (func.values[value.0 as usize].ty.counting().is_none() || only_erased(func, *value))
                 && !block.moved.contains(value)
                 && !map.borrowed(*value)
                 && !matches!(map.of(*value), Ownership::Unowned)
@@ -1261,6 +1301,70 @@ mod tests {
             "the delegate is released before `parse` sends to it: {:?}",
             func.blocks[0].ops.iter().map(|v| &func.values[v.0 as usize].kind).collect::<Vec<_>>()
         );
+    }
+
+    /// An Objective-C handle, `Elements : NSObject`, or the `NSObject` view of
+    /// one.
+    fn objc_handle(tag: &str) -> HirType {
+        HirType::NativePointer(crate::hir::native::Pointee::Opaque(crate::hir::native::Handle {
+            tag: tag.to_owned(),
+            ancestors: if tag == "NSObject" { Vec::new() } else { vec!["NSObject".to_owned()] },
+            family: crate::hir::native::Family::Objc,
+            interface: false,
+        }))
+    }
+
+    /// `f(n) { %1 = make(n); ...erase %1, through `views` Converts...; store(erased); later() }`,
+    /// and where the release of %1 landed against `later`.
+    fn erased_temporary(views: usize) -> (Vec<usize>, Option<usize>) {
+        let mut values = vec![
+            op(OpKind::Param(0), number()),                               // %0
+            call("objc_make", vec![ValueId(0)], objc_handle("Elements")), // %1  owned
+        ];
+        for _ in 0..views {
+            let from = ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX));
+            values.push(op(OpKind::Convert(from), objc_handle("NSObject")));
+        }
+        let erasing = ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX));
+        values.push(op(OpKind::Erase { value: erasing, absent: Absent::Impossible }, HirType::Erased));
+        let erased = ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX));
+        values.push(call("store", vec![erased], HirType::Void));
+        values.push(call("later", Vec::new(), number()));
+        let later = ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX));
+        let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
+        program.funcs[0].blocks[0].ops = (0..values.len()).map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX))).collect();
+        program.funcs[0].blocks[0].terminator = Terminator::Return(Some(later));
+        program.funcs[0].values = values;
+        insert(&mut program);
+        let func = &program.funcs[0];
+        let ops = &func.blocks[0].ops;
+        let releases = ops
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1))))
+            .map(|(at, _)| at)
+            .collect();
+        (releases, ops.iter().position(|v| *v == later))
+    }
+
+    /// The other half of the delegate's rule: a foreign object whose only use
+    /// is being erased goes where nts counts it -- `map.set(k, new NSObject())`
+    /// -- so nothing on the platform's side holds it uncounted, and it is given
+    /// back after its last use, as ARC gives back a temporary at the end of its
+    /// statement. Held to the end instead, a map's entry deleted before `later`
+    /// was not the last holder (examples/interop/gtk-values, `temporary`).
+    #[test]
+    fn a_foreign_object_only_erased_is_released_after_its_last_use() {
+        let (releases, later) = erased_temporary(0);
+        assert!(releases.len() == 1 && later.is_some_and(|later| releases[0] < later), "{releases:?} against `later` at {later:?}");
+    }
+
+    /// The same through a view: `new GtkButton()` is a `GtkWidget *` converted
+    /// to the button, and it is the view that is erased.
+    #[test]
+    fn a_foreign_object_erased_through_a_view_is_released_after_its_last_use() {
+        let (releases, later) = erased_temporary(1);
+        assert!(releases.len() == 1 && later.is_some_and(|later| releases[0] < later), "{releases:?} against `later` at {later:?}");
     }
 
     /// An erased copy that takes a count of its own frees the original to go

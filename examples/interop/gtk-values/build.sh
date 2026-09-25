@@ -22,7 +22,7 @@ fi
 for mode in plain rc; do
   watch="held alive"
   [ "$mode" = rc ] && watch="held gone"
-  expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch "
+  expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch temporary $watch "
   flag=""
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086

@@ -22,6 +22,12 @@
 //                 hold is still there after its maker returned, and finalized
 //                 when the entry is deleted (`held alive` without counting,
 //                 where nothing is released)
+//   temporary held gone  the same for a button that is never a local, made in
+//                 `m.set`'s argument list: its own reference goes after the
+//                 store, so the entry's is the last. `watch` alone passed while
+//                 this failed -- `stash` routes around the shape by returning
+//                 before the delete, and a fixture that avoids the shape
+//                 cannot see it
 import { GtkButton, GtkLabel, gtk_init } from "c:Gtk-4.0";
 import { sub_gone, sub_log, sub_watch } from "c:sub";
 
@@ -51,7 +57,7 @@ function churn(): string {
 
 // A button whose only holder is a map's entry: `stash` makes it, watches it and
 // stores it, and its own reference goes when `stash` returns -- a foreign
-// handle keeps its function's end. Deleting the entry then gives back the
+// handle a name holds keeps its function's end. Deleting the entry then gives back the
 // last reference, so under reference counting the button is finalized there:
 // the entry owned one reference, no more and no fewer.
 function stash(m: Map<string, GtkButton>): void {
@@ -66,6 +72,29 @@ function released(): string {
   const before = sub_gone() ? "early" : "held";
   m.delete("k");
   return before + " " + (sub_gone() ? "gone" : "alive");
+}
+
+// The same, for a button that is never a local: made in the argument list and
+// only ever erased into the entry, as `m.set(k, new GtkButton())` is. Nothing on
+// GTK's side can hold it without a count, so its own reference goes after the
+// store, as ARC gives a temporary back at the end of its statement, and the
+// entry's is the last. `watchEntry` reads the entry back in a call of its own,
+// so that reading holds nothing past it.
+function watchEntry(m: Map<string, GtkButton>, key: string): void {
+  sub_watch(m.get(key)!);
+}
+
+function temporary(): string {
+  const m = new Map<string, GtkButton>();
+  m.set("t", new GtkButton());
+  watchEntry(m, "t");
+  // Both read before any branch: a branch ends the block, and a foreign
+  // handle's release waits for its block's end, so a branch here would give
+  // the button back before the delete whatever the rule.
+  const early = sub_gone();
+  m.delete("t");
+  const gone = sub_gone();
+  return (early ? "early" : "held") + " " + (gone ? "gone" : "alive");
 }
 
 function main(): void {
@@ -97,6 +126,7 @@ function main(): void {
   for (const button of byName.values()) walked += button === b ? "same " : "other ";
   sub_log("walked " + walked.trim());
   sub_log("watch " + released());
+  sub_log("temporary " + temporary());
 }
 
 main();
