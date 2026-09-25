@@ -384,6 +384,13 @@ correctness does not depend on arm64 running by luck.
          as `null`, and sends `NSPredicate(format:argumentArray:)` both a
          `null` and an array. The AppKit binding gains `childWindows` and
          five more members, and the witness has all six.
+       - A record parameter by address, Swift's `UnsafeMutablePointer<NSRange>`,
+         is `Ptr<NSRange>`, which a program passes as `local<NSRange>()`. A
+         send does not keep it past the call, as Swift's own `&range`
+         promises. A record takes Swift's name where its tag is underscored
+         (`NSRange`, `struct _NSRange`). 39 more AppKit members bind this
+         way. `macos-classes` reads the range `attribute(_:at:effectiveRange:)`
+         writes, against clang, on both backends.
        - An element through a typedef of `NSString *`, such as
          `[NSPasteboard.PasteboardType]`, is a `string`. A class qualified by a
          protocol, such as `NSView<NSCollectionViewElement>`, is the class.

@@ -1247,12 +1247,24 @@ impl<'a> Model<'a> {
                 self.import("objc:types", "CString");
                 return Ok("CString".to_owned());
             }
+            // Swift's `UnsafeMutablePointer<NSRange>` -- an out parameter, or
+            // a record read in place -- as the address a program passes:
+            // `local<NSRange>()`.
+            if position == Position::Parameter
+                && let Some(name) = struct_through_typedefs(&self.headers.typedefs, pointee.trim_start_matches("const "))
+                && self.headers.records.contains_key(&name)
+            {
+                let name = name.as_str();
+                self.record(name)?;
+                self.import("c:types", "Ptr");
+                return Ok(or_null(format!("Ptr<{}>", record_name(&self.headers.typedefs, name))));
+            }
             return Err(format!("a `{desugared}`"));
         }
         if let Some(name) = desugared.strip_prefix("struct ").filter(|name| !name.ends_with('*')) {
             self.record(name)?;
             self.import("c:types", "ByValue");
-            return Ok(format!("ByValue<{name}>"));
+            return Ok(format!("ByValue<{}>", record_name(&self.headers.typedefs, name)));
         }
         Err(format!("a `{desugared}`"))
     }
@@ -1509,6 +1521,30 @@ fn documented(tags: &[String]) -> String {
 }
 
 /// `setFrame(_:display:)` as its base name and its labels, `_` for none.
+/// The struct a type names, through as many typedefs as it takes: `NSRect`
+/// is `CGRect`, which is `struct CGRect`.
+fn struct_through_typedefs(typedefs: &BTreeMap<String, String>, spelled: &str) -> Option<String> {
+    let mut at = spelled.trim().to_owned();
+    for _ in 0..8 {
+        if let Some(tag) = at.strip_prefix("struct ") {
+            return Some(tag.trim().to_owned());
+        }
+        at = typedefs.get(&at)?.trim().to_owned();
+    }
+    None
+}
+
+/// The name a record is written under: Swift's, which for a struct whose tag
+/// is underscored is the typedef beside it (`_NSRange` is `NSRange`), and
+/// otherwise the tag.
+fn record_name(typedefs: &BTreeMap<String, String>, tag: &str) -> String {
+    let plain = tag.trim_start_matches('_');
+    if plain != tag && typedefs.get(plain).is_some_and(|aliased| aliased.trim() == format!("struct {tag}")) {
+        return plain.to_owned();
+    }
+    tag.to_owned()
+}
+
 /// A method's Swift name with its first label moved into the base name:
 /// `menu(for:inRect:)` is `menuFor(_:inRect:)`. None when the first argument
 /// has no label.
@@ -1664,14 +1700,19 @@ fn render(request: &Request, model: &Model) -> String {
     }
     for name in &model.records {
         let fields = model.headers.records.get(name).map(Vec::as_slice).unwrap_or_default();
+        let typedefs = &model.headers.typedefs;
         let members: Vec<String> = fields
             .iter()
             .map(|(field, ty)| {
-                let spelled = ty.strip_prefix("struct ").map_or_else(|| swift_number(ty, ty).unwrap_or("never").to_owned(), str::to_owned);
+                let spelled = ty
+                    .strip_prefix("struct ")
+                    .map_or_else(|| swift_number(ty, ty).unwrap_or("never").to_owned(), |inner| record_name(typedefs, inner));
                 format!("{field}: {spelled}")
             })
             .collect();
-        let _ = writeln!(out, "\n  export type {name} = Struct<{{ {} }}, \"{name}\">;", members.join("; "));
+        // Under Swift's name, and C's struct tag in the brand, which is what
+        // the backends spell: `NSRange` is `struct _NSRange`.
+        let _ = writeln!(out, "\n  export type {} = Struct<{{ {} }}, \"{name}\">;", record_name(typedefs, name), members.join("; "));
     }
     for enumeration in model.enums.values() {
         let mut text = String::new();
@@ -1789,7 +1830,7 @@ fn render_values(request: &Request, model: &Model) -> String {
     for enumeration in model.enums.values() {
         own.extend(enumeration.path.first().cloned());
     }
-    own.extend(model.records.iter().cloned());
+    own.extend(model.records.iter().map(|name| record_name(&model.headers.typedefs, name)));
     for name in model.mentioned.keys() {
         own.extend(model.swift.class(name).split('.').next().map(str::to_owned));
     }
@@ -1871,6 +1912,7 @@ typedef unsigned long NSUInteger;
 typedef double CGFloat;
 struct CGPoint { CGFloat x; CGFloat y; };
 typedef struct CGPoint CGPoint;
+typedef struct _Span { NSUInteger location; NSUInteger length; } Span;
 typedef enum Mode : NSUInteger Mode;
 enum Mode : NSUInteger { ModeA = 1, ModeB };
 struct Opaque;
@@ -1905,6 +1947,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)registerTypes:(NSArray<ShapeKind> *)kinds;
 - (NSArray<Shape<ShapeDelegate> *> *)delegates;
 - (Shape *)twinOfShape:(Shape *)other;
+- (void)measure:(Span *)span;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
@@ -1968,6 +2011,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)registerTypes:", "swift.method", "register(_:)", &["Shape", "register(_:)"], ""),
             symbol("c:objc(cs)Shape(im)delegates", "swift.method", "delegates()", &["Shape", "delegates()"], ""),
             symbol("c:objc(cs)Shape(im)twinOfShape:", "swift.method", "twin(of:)", &["Shape", "twin(of:)"], ""),
+            symbol("c:objc(cs)Shape(im)measure:", "swift.method", "measure(_:)", &["Shape", "measure(_:)"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2077,6 +2121,11 @@ NS_ASSUME_NONNULL_END
             // first label into its name.
             "    get twin(): Shape;",
             "    /** @ntsSelector twinOfShape: */\n    twinOf(other: Shape): Shape;",
+            // Swift's `UnsafeMutablePointer<Span>` as the address a program
+            // passes, and the record under its typedef's name, its tag the C
+            // one.
+            "    /** @ntsSelector measure: */\n    measure(span: Ptr<Span>): void;",
+            "export type Span = Struct<{ location: UInt; length: UInt }, \"_Span\">;",
             // A struct passed by value is declared, in Swift's numbers.
             "export type CGPoint = Struct<{ x: Double; y: Double }, \"CGPoint\">;",
             // And what is not bound is said, with why.

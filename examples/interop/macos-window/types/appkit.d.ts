@@ -6,7 +6,7 @@
  * @ntsFramework Foundation
  */
 declare module "objc:AppKit" {
-  import type { ByValue, CEnum, Struct } from "c:types";
+  import type { ByValue, CEnum, Ptr, Struct } from "c:types";
   import type { ClassObject, Selector } from "objc:runtime";
   import type { CGFloat, CString, Double, Float, Int, Int16, Int32, Int64, TimeInterval, UInt, UInt16, UInt64 } from "objc:types";
 
@@ -18,7 +18,7 @@ declare module "objc:AppKit" {
 
   export type NSEdgeInsets = Struct<{ top: Double; left: Double; bottom: Double; right: Double }, "NSEdgeInsets">;
 
-  export type _NSRange = Struct<{ location: UInt; length: UInt }, "_NSRange">;
+  export type NSRange = Struct<{ location: UInt; length: UInt }, "_NSRange">;
 
   export const enum AlignmentOptions {
     alignMinXInward = 1,
@@ -923,15 +923,15 @@ declare module "objc:AppKit" {
     /** @ntsSelector substringToIndex: */
     substring(labels: { to: UInt }): string;
     /** @ntsSelector substringWithRange: */
-    substring(labels: { with: ByValue<_NSRange> }): string;
+    substring(labels: { with: ByValue<NSRange> }): string;
     /** @ntsSelector compare: */
     compare(string: string): CEnum<ComparisonResult, Int>;
     /** @ntsSelector compare:options: */
     compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt> }): CEnum<ComparisonResult, Int>;
     /** @ntsSelector compare:options:range: */
-    compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<_NSRange> }): CEnum<ComparisonResult, Int>;
+    compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> }): CEnum<ComparisonResult, Int>;
     /** @ntsSelector compare:options:range:locale: */
-    compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<_NSRange>; locale: NSObject | null }): CEnum<ComparisonResult, Int>;
+    compare(string: string, labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange>; locale: NSObject | null }): CEnum<ComparisonResult, Int>;
     /** @ntsSelector caseInsensitiveCompare: */
     caseInsensitiveCompare(string: string): CEnum<ComparisonResult, Int>;
     /** @ntsSelector localizedCompare: */
@@ -955,25 +955,25 @@ declare module "objc:AppKit" {
     /** @ntsSelector localizedStandardContainsString: */
     localizedStandardContains(str: string): boolean;
     /** @ntsSelector localizedStandardRangeOfString: */
-    localizedStandardRange(labels: { of: string }): ByValue<_NSRange>;
+    localizedStandardRange(labels: { of: string }): ByValue<NSRange>;
     /** @ntsSelector rangeOfString: */
-    range(labels: { of: string }): ByValue<_NSRange>;
+    range(labels: { of: string }): ByValue<NSRange>;
     /** @ntsSelector rangeOfString:options: */
-    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt> }): ByValue<_NSRange>;
+    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt> }): ByValue<NSRange>;
     /** @ntsSelector rangeOfString:options:range: */
-    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<_NSRange> }): ByValue<_NSRange>;
+    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector rangeOfString:options:range:locale: */
-    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<_NSRange>; locale: NSLocale | null }): ByValue<_NSRange>;
+    range(labels: { of: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange>; locale: NSLocale | null }): ByValue<NSRange>;
     /** @ntsSelector rangeOfCharacterFromSet: */
-    rangeOfCharacter(labels: { from: NSCharacterSet }): ByValue<_NSRange>;
+    rangeOfCharacter(labels: { from: NSCharacterSet }): ByValue<NSRange>;
     /** @ntsSelector rangeOfCharacterFromSet:options: */
-    rangeOfCharacter(labels: { from: NSCharacterSet; options: CEnum<NSString.CompareOptions | 0, UInt> }): ByValue<_NSRange>;
+    rangeOfCharacter(labels: { from: NSCharacterSet; options: CEnum<NSString.CompareOptions | 0, UInt> }): ByValue<NSRange>;
     /** @ntsSelector rangeOfCharacterFromSet:options:range: */
-    rangeOfCharacter(labels: { from: NSCharacterSet; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<_NSRange> }): ByValue<_NSRange>;
+    rangeOfCharacter(labels: { from: NSCharacterSet; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector rangeOfComposedCharacterSequenceAtIndex: */
-    rangeOfComposedCharacterSequence(labels: { at: UInt }): ByValue<_NSRange>;
+    rangeOfComposedCharacterSequence(labels: { at: UInt }): ByValue<NSRange>;
     /** @ntsSelector rangeOfComposedCharacterSequencesForRange: */
-    rangeOfComposedCharacterSequences(labels: { for: ByValue<_NSRange> }): ByValue<_NSRange>;
+    rangeOfComposedCharacterSequences(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector stringByAppendingString: */
     appending(aString: string): string;
     /** @ntsSelector uppercaseStringWithLocale: */
@@ -983,13 +983,13 @@ declare module "objc:AppKit" {
     /** @ntsSelector capitalizedStringWithLocale: */
     capitalizedWith(locale: NSLocale | null): string;
     /** @ntsSelector getLineStart:end:contentsEnd:forRange: */
-    getLineStart(startPtr: UInt, labels: { end: UInt; contentsEnd: UInt; for: ByValue<_NSRange> }): void;
+    getLineStart(startPtr: UInt, labels: { end: UInt; contentsEnd: UInt; for: ByValue<NSRange> }): void;
     /** @ntsSelector lineRangeForRange: */
-    lineRange(labels: { for: ByValue<_NSRange> }): ByValue<_NSRange>;
+    lineRange(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector getParagraphStart:end:contentsEnd:forRange: */
-    getParagraphStart(startPtr: UInt, labels: { end: UInt; contentsEnd: UInt; for: ByValue<_NSRange> }): void;
+    getParagraphStart(startPtr: UInt, labels: { end: UInt; contentsEnd: UInt; for: ByValue<NSRange> }): void;
     /** @ntsSelector paragraphRangeForRange: */
-    paragraphRange(labels: { for: ByValue<_NSRange> }): ByValue<_NSRange>;
+    paragraphRange(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector dataUsingEncoding:allowLossyConversion: */
     data(labels: { using: UInt; allowLossyConversion: boolean }): NSData | null;
     /** @ntsSelector dataUsingEncoding: */
@@ -1015,11 +1015,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector stringByFoldingWithOptions:locale: */
     folding(labels: { options: CEnum<NSString.CompareOptions | 0, UInt>; locale: NSLocale | null }): string;
     /** @ntsSelector stringByReplacingOccurrencesOfString:withString:options:range: */
-    replacingOccurrences(labels: { of: string; with: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<_NSRange> }): string;
+    replacingOccurrences(labels: { of: string; with: string; options: CEnum<NSString.CompareOptions | 0, UInt>; range: ByValue<NSRange> }): string;
     /** @ntsSelector stringByReplacingOccurrencesOfString:withString: */
     replacingOccurrences(labels: { of: string; with: string }): string;
     /** @ntsSelector stringByReplacingCharactersInRange:withString: */
-    replacingCharacters(labels: { in: ByValue<_NSRange>; with: string }): string;
+    replacingCharacters(labels: { in: ByValue<NSRange>; with: string }): string;
     /** @ntsSelector stringByApplyingTransform:reverse: */
     applyingTransform(transform: string, labels: { reverse: boolean }): string | null;
     /**
@@ -1451,6 +1451,8 @@ declare module "objc:AppKit" {
     viewWillStartLiveResize(): void;
     /** @ntsSelector viewDidEndLiveResize */
     viewDidEndLiveResize(): void;
+    /** @ntsSelector getRectsExposedDuringLiveResize:count: */
+    getRectsExposedDuringLiveResize(exposedRects: Ptr<CGRect>, labels: { count: Int }): void;
     /** @ntsSelector rectForSmartMagnificationAtPoint:inRect: */
     rectForSmartMagnification(labels: { at: ByValue<CGPoint>; in: ByValue<CGRect> }): ByValue<CGRect>;
     /** @ntsSelector prepareForReuse */
@@ -1475,6 +1477,8 @@ declare module "objc:AppKit" {
     dataWithPDF(labels: { inside: ByValue<CGRect> }): NSData;
     /** @ntsSelector print: */
     printView(sender: NSObject | null): void;
+    /** @ntsSelector knowsPageRange: */
+    knowsPageRange(range: Ptr<NSRange>): boolean;
     /** @ntsSelector adjustPageWidthNew:left:right:limit: */
     adjustPageWidthNew(newRight: CGFloat, labels: { left: CGFloat; right: CGFloat; limit: CGFloat }): void;
     /** @ntsSelector adjustPageHeightNew:top:bottom:limit: */
@@ -1604,8 +1608,6 @@ declare module "objc:AppKit" {
     //   -lockFocusIfCanDrawInContext:: deprecated in macOS 10.13
     //   -scrollRect:by:: deprecated in macOS 10.14
     //   -addToolTipRect:owner:userData:: a `void *`
-    //   -getRectsExposedDuringLiveResize:count:: a `NSRect *`
-    //   -knowsPageRange:: a `NSRange *`
     //   -drawSheetBorderWithSize:: deprecated in macOS 10.14
     //   -enterFullScreenMode:withOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -exitFullScreenModeWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
@@ -2270,6 +2272,8 @@ declare module "objc:AppKit" {
     registerUserInterfaceItemSearchHandler(handler: NSObject): void;
     /** @ntsSelector unregisterUserInterfaceItemSearchHandler: */
     unregisterUserInterfaceItemSearchHandler(handler: NSObject): void;
+    /** @ntsSelector searchString:inUserInterfaceItemString:searchRange:foundRange: */
+    searchString(searchString: string, labels: { inUserInterfaceItemString: string; range: ByValue<NSRange>; found: Ptr<NSRange> | null }): boolean;
     /** @ntsSelector restoreWindowWithIdentifier:state:completionHandler: */
     restoreWindow(labels: { withIdentifier: string; state: NSCoder }, completionHandler: (arg0: NSWindow | null, arg1: NSError | null) => void): boolean;
     /** @ntsSelector extendStateRestoration */
@@ -2297,7 +2301,6 @@ declare module "objc:AppKit" {
     //   -endSheet:: deprecated in macOS 10.10
     //   -endSheet:returnCode:: deprecated in macOS 10.10
     //   -makeWindowsPerform:inOrder:: deprecated in macOS 10.14
-    //   -searchString:inUserInterfaceItemString:searchRange:foundRange:: a `NSRange *`
   }
 
   /** @ntsClass NSBundle */

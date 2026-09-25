@@ -8,7 +8,9 @@ import {
   NSNumber,
   NSObject,
   NSOperation,
+  NSAttributedString,
   NSPredicate,
+  type NSRange,
   NSProcessInfo,
   NSString,
   XMLParser,
@@ -17,6 +19,7 @@ import {
 import { live_objects, report, weak_alive, weak_watch } from "c:support";
 import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
 import type { c_int } from "c:types";
+import { local } from "c:memory";
 
 let watch = 0 as c_int;
 
@@ -216,6 +219,12 @@ function main(): void {
   const always = new NSPredicate({ format: "TRUEPREDICATE", argumentArray: null });
   const three = new NSPredicate({ format: "SELF == %@", argumentArray: [new NSNumber(3)] });
   report(`predicates ${always.predicateFormat} ${three.predicateFormat}`);
+  // Swift's `UnsafeMutablePointer<NSRange>`: the method writes the range the
+  // attribute is absent across, the whole string.
+  const attributed = new NSAttributedString("hello world");
+  const range = local<NSRange>();
+  const font = attributed.attribute("NSFont", { at: 3, effectiveRange: range });
+  report(`attributed ${font === null} ${range.location} ${range.length}`);
   // Labels held in a variable, as a wrapper passes on the ones it was given:
   // each read from its field at the call.
   const byDash = { separatedBy: "-" };

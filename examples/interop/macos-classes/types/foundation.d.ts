@@ -5,6 +5,10 @@
  */
 declare module "objc:Foundation" {
   import type { CString, Int, Int32, UInt } from "objc:types";
+  import type { Ptr, Struct } from "c:types";
+
+  // Swift's `NSRange`, C's `struct _NSRange`.
+  export type NSRange = Struct<{ location: UInt; length: UInt }, "_NSRange">;
 
   /** @ntsClass NSObject */
   export class NSObject {
@@ -97,6 +101,19 @@ declare module "objc:Foundation" {
      * @ntsSelector subpathsAtPath:
      */
     subpaths(labels: { atPath: string }): string[] | null;
+  }
+
+  /** @ntsClass NSAttributedString */
+  export class NSAttributedString extends NSObject {
+    /** @ntsSelector initWithString: */
+    constructor(string: string);
+    /**
+     * Swift's `attribute(_:at:effectiveRange:)`, whose range is an
+     * `UnsafeMutablePointer<NSRange>` the method writes: the address a
+     * program passes, `local<NSRange>()`.
+     * @ntsSelector attribute:atIndex:effectiveRange:
+     */
+    attribute(name: string, labels: { at: UInt; effectiveRange: Ptr<NSRange> | null }): NSObject | null;
   }
 
   /** @ntsClass NSPredicate */
