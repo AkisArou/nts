@@ -22,4 +22,8 @@ bool asked(const char *word);
 // How many delegate objects the program made are alive: `nts_com_delegates`.
 unsigned delegates(void);
 
+// Calls a delegate's `Invoke` with `sender` on a thread of its own, after
+// 100 ms, and releases both there 300 ms later.
+void invoke_elsewhere(void *delegate, void *sender);
+
 #endif

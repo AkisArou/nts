@@ -1858,6 +1858,19 @@ typedef struct NtsComDelegate {
 } NtsComDelegate;
 void *nts_com_delegate(void *invoke, void *bridge, void *context,
                        uint64_t iid_low, uint64_t iid_high);
+/* A delegate's `Invoke` called on a thread that does not own its closure --
+ * an async operation's `Completed` on the thread pool -- carried to the one
+ * that does: `size` bytes of `arguments` copied, the object at each of the
+ * `count` byte offsets in `objects` and the delegate itself held, and a task
+ * posted that calls `run(delegate, copy)` on the owning thread and then gives
+ * all of it back, as dropping the task unrun does.
+ *
+ * `arguments` is copied and need not outlive the call; `objects` is kept as
+ * it is, so it must outlive the carried call -- the emitter passes a
+ * `static const` table. */
+void nts_com_carry(void *delegate, const void *arguments, size_t size,
+                   const uint32_t *objects, uint32_t count,
+                   void (*run)(void *delegate, void *arguments));
 uint32_t nts_com_delegates(void);
 #endif
 /* A `string[]` as C's NULL-terminated array of strings, for a parameter

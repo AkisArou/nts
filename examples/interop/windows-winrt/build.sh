@@ -17,7 +17,8 @@
 #   asserted by its count (a cache that never hit prints `activations=3`,
 #   measured), and `released` and `delegates` as `src/main.ts` accounts for
 #   them. Run as `throw`, a delegate whose function throws ends the process
-#   with status 1, naming the boundary.
+#   with status 1, naming the boundary. Run as `thread`, a delegate called
+#   and released last on another thread is carried to the owning one.
 #
 # With no Windows reachable the run arms say so by name, and the rest still
 # count.
@@ -104,6 +105,25 @@ for provider in nogc rc; do
         echo "windows-x86_64 ($product, $provider): a throwing delegate ends the process by name, run on Windows"
         ;;
       *) cat "$build/windows-$product-throw.err" >&2; echo "windows-winrt: $product throw ($provider) exited $status on Windows, not 1" >&2; exit 1 ;;
+    esac
+  done
+  # Run as `thread`, a delegate called and released last on a thread the
+  # program does not own: both carried to the owning thread, where the
+  # handler reports with the object it was given, and the delegate is gone
+  # by the time the timer reads the count.
+  for product in winrt winrtLlvm; do
+    exe="$build/$product/windows-x86_64/$product.exe"
+    set +e
+    "$root/tooling/windows/run.sh" "$exe" thread >"$build/windows-$product-thread.txt" 2>"$build/windows-$product-thread.err"
+    status=$?
+    set -e
+    case $status in
+      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      0)
+        printf 'returned\ncarried 7\ndelegates=0\n' | diff -u - "$build/windows-$product-thread.txt"
+        echo "windows-x86_64 ($product, $provider): a delegate called off its thread is carried to it, run on Windows"
+        ;;
+      *) cat "$build/windows-$product-thread.err" >&2; echo "windows-winrt: $product thread ($provider) exited $status on Windows" >&2; exit 1 ;;
     esac
   done
 done

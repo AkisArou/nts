@@ -240,4 +240,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// `nts_winrt_factory`), whose rows now carry their IID as two 64-bit words,
 /// and `nts_block_carry`, which only a Core Foundation host's block calls:
 /// Windows and Apple hosts, native calls again.
-const REFUSED_FLOOR: usize = 99;
+///
+/// 100 for `nts_com_carry`, a delegate's `Invoke` called off its thread and
+/// carried to it, which only a Windows Runtime delegate's adapter calls.
+const REFUSED_FLOOR: usize = 100;

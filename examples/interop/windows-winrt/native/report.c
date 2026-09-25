@@ -45,3 +45,43 @@ bool asked(const char *word) {
 unsigned delegates(void) {
   return nts_com_delegates();
 }
+
+#ifdef _WIN32
+#include <windows.h>
+
+// A delegate called on a thread the program does not own, as an async
+// operation's `Completed` is: after 100 ms, with `sender`, and released
+// there 300 ms later -- after the program has given its own reference back
+// and the carried call has run and given back the one it held, so that this
+// release is the last. (Released at once, it is not: the carry's reference
+// outlives it.)
+typedef struct {
+  void *delegate;
+  void *sender;
+} Elsewhere;
+
+static void com_release(void *object) {
+  ((ULONG(STDMETHODCALLTYPE *)(void *))(*(void ***)object)[2])(object);
+}
+
+static DWORD WINAPI elsewhere(void *argument) {
+  Elsewhere *e = argument;
+  Sleep(100);
+  ((HRESULT(STDMETHODCALLTYPE *)(void *, void *))(*(void ***)e->delegate)[3])(
+      e->delegate, e->sender);
+  Sleep(300);
+  com_release(e->sender);
+  com_release(e->delegate);
+  free(e);
+  return 0;
+}
+
+void invoke_elsewhere(void *delegate, void *sender) {
+  Elsewhere *e = malloc(sizeof *e);
+  e->delegate = delegate;
+  e->sender = sender;
+  ((ULONG(STDMETHODCALLTYPE *)(void *))(*(void ***)delegate)[1])(delegate);
+  ((ULONG(STDMETHODCALLTYPE *)(void *))(*(void ***)sender)[1])(sender);
+  CloseHandle(CreateThread(0, 0, elsewhere, e, 0, 0));
+}
+#endif

@@ -46,7 +46,7 @@
 //   providers -- the handler captures `reference`, which holds the delegate,
 //   which holds the handler: the cycle an event handler that captures its
 //   source makes in every language with counted references.
-import { activations, asked, delegates, releases, report } from "c:report";
+import { activations, asked, delegates, invoke_elsewhere, releases, report } from "c:report";
 // Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import { local } from "c:memory";
@@ -228,5 +228,24 @@ function run(): string {
 if (asked("throw")) {
   throwing();
 }
-const line = run();
-report(line + " released=" + String(releases()) + " delegates=" + String(delegates()));
+// Run as `winrt thread`: a delegate called on a thread the program does not
+// own, and released there last. The delegate is agile, so a source calls it
+// wherever it completes; the call is carried to this thread, with `sender`
+// held across, and so is the release -- `delegates=0` once both have run.
+// Before, each ended the process by name.
+function threaded(): void {
+  invoke_elsewhere((sender) => {
+    report("carried " + String(sender.GetNumber()));
+  }, JsonValue.Parse("7"));
+  report("returned");
+  setTimeout(() => {
+    report("delegates=" + String(delegates()));
+  }, 1000);
+}
+
+if (asked("thread")) {
+  threaded();
+} else {
+  const line = run();
+  report(line + " released=" + String(releases()) + " delegates=" + String(delegates()));
+}

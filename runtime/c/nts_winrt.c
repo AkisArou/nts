@@ -199,11 +199,12 @@ static void nts_print_iid(FILE *to, const IID *iid) {
  * this object's own table -- `Invoke` differs by signature, so the table is
  * per object rather than per type -- its count, and the interface it is.
  *
- * Not agile, and says so: `QueryInterface` answers `IUnknown` and the
- * delegate's own interface, never `IAgileObject`. The closure it calls is
- * the owning thread's, and a source that would call it from another thread
- * has to marshal to this one; one that calls it here directly is what the
- * bridge checks, ending the process by name. */
+ * Agile, as C++/WinRT's delegates are: `QueryInterface` answers
+ * `IAgileObject`, so a source calls it on whatever thread it completes on
+ * rather than marshalling to this one -- which in a single-threaded
+ * apartment would wait on a message loop to pump. The closure is still the
+ * owning thread's: an `Invoke` there calls it, and one anywhere else is
+ * carried there (`nts_com_carry`), as the last `Release` is. */
 typedef struct {
   NtsComDelegate head;
   const void *slots[4];
@@ -218,6 +219,14 @@ static uint32_t delegates;
 static const IID nts_iid_unknown = {
     0x00000000, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
 
+/* The delegate's end, on the thread owning its closure. */
+static void nts_delegate_free(void *self) {
+  NtsDelegateObject *delegate = self;
+  nts_closure_unlend(delegate->head.context);
+  delegates--;
+  free(delegate);
+}
+
 static ULONG STDMETHODCALLTYPE nts_delegate_add_ref(void *self) {
   return (ULONG)InterlockedIncrement(&((NtsDelegateObject *)self)->count);
 }
@@ -226,14 +235,14 @@ static ULONG STDMETHODCALLTYPE nts_delegate_release(void *self) {
   NtsDelegateObject *delegate = self;
   LONG left = InterlockedDecrement(&delegate->count);
   if (left == 0) {
-    if (!nts_is_owner_thread()) {
-      fprintf(stderr, "nts: a delegate was released off the thread that owns "
-                      "its closure\n");
-      abort();
+    if (nts_is_owner_thread()) {
+      nts_delegate_free(delegate);
+    } else {
+      /* The closure's count is the owning thread's: its give-back is
+       * carried there, and so is the object, which counts delegates. */
+      nts_post_from_any_thread(
+          (NtsTask){nts_delegate_free, nts_delegate_free, delegate});
     }
-    nts_closure_unlend(delegate->head.context);
-    delegates--;
-    free(delegate);
   }
   return (ULONG)left;
 }
@@ -241,13 +250,68 @@ static ULONG STDMETHODCALLTYPE nts_delegate_release(void *self) {
 static HRESULT STDMETHODCALLTYPE nts_delegate_query(void *self, const IID *iid,
                                                     void **out) {
   NtsDelegateObject *delegate = self;
-  if (IsEqualGUID(iid, &nts_iid_unknown) || IsEqualGUID(iid, &delegate->iid)) {
+  /* {94EA2B94-E9CC-49E0-C0FF-EE64CA8F5B90}: callable on any thread. */
+  static const IID agile = {0x94EA2B94,
+                            0xE9CC,
+                            0x49E0,
+                            {0xC0, 0xFF, 0xEE, 0x64, 0xCA, 0x8F, 0x5B, 0x90}};
+  if (IsEqualGUID(iid, &nts_iid_unknown) || IsEqualGUID(iid, &agile) ||
+      IsEqualGUID(iid, &delegate->iid)) {
     nts_delegate_add_ref(self);
     *out = self;
     return S_OK;
   }
   *out = 0;
   return E_NOINTERFACE;
+}
+
+/* One carried `Invoke`: the delegate and the arguments' copy, with the
+ * offsets of the objects in it, which the carry holds a count of. */
+typedef struct {
+  void *delegate;
+  void (*run)(void *delegate, void *arguments);
+  const uint32_t *objects;
+  uint32_t count;
+  unsigned char arguments[];
+} NtsCarried;
+
+static void nts_carried_give_back(void *state) {
+  NtsCarried *carried = state;
+  for (uint32_t at = 0; at < carried->count; at++) {
+    nts_com_release(*(void **)(carried->arguments + carried->objects[at]));
+  }
+  nts_com_release(carried->delegate);
+  free(carried);
+}
+
+/* The give-back follows the call and is not skipped by it: a handler that
+ * throws does not unwind through here, since the bridge ends the process at
+ * the boundary, naming it (windows-winrt's `throw` arm). */
+static void nts_carried_run(void *state) {
+  NtsCarried *carried = state;
+  carried->run(carried->delegate, carried->arguments);
+  nts_carried_give_back(state);
+}
+
+void nts_com_carry(void *delegate, const void *arguments, size_t size,
+                   const uint32_t *objects, uint32_t count,
+                   void (*run)(void *delegate, void *arguments)) {
+  NtsCarried *carried = malloc(sizeof *carried + size);
+  if (carried == 0) {
+    fprintf(stderr, "nts: out of memory carrying a delegate's call\n");
+    abort();
+  }
+  carried->delegate = delegate;
+  carried->run = run;
+  carried->objects = objects;
+  carried->count = count;
+  memcpy(carried->arguments, arguments, size);
+  nts_com_addref(delegate);
+  for (uint32_t at = 0; at < count; at++) {
+    nts_com_addref(*(void **)(carried->arguments + objects[at]));
+  }
+  nts_post_from_any_thread(
+      (NtsTask){nts_carried_run, nts_carried_give_back, carried});
 }
 
 void *nts_com_delegate(void *invoke, void *bridge, void *context,

@@ -1936,6 +1936,19 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
     }
     // A block's copy and dispose helpers lend and give back its closure, on
     // the owning thread only (`objc::module`), and no operation names them.
+    // A delegate's `Invoke` adapter tests the thread and carries an off-thread
+    // call (`com::delegates`), and no operation names either.
+    if !nts_codegen_common::com::delegate_signatures(program).is_empty() {
+        for helper in ["nts_is_owner_thread", "nts_com_carry"] {
+            let helper = helper.to_owned();
+            if !seen.contains(&helper)
+                && let Some(line) = declaration(&helper, platform)
+            {
+                seen.push(helper);
+                lines.push(line);
+            }
+        }
+    }
     if !nts_codegen_common::objc::block_signatures(program).is_empty() {
         for helper in ["nts_is_owner_thread", "nts_closure_lend", "nts_closure_unlend", "nts_block_carry", "nts_block_unlend"] {
             let helper = helper.to_owned();

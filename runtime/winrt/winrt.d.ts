@@ -54,8 +54,10 @@ declare module "winrt:types" {
   // `Invoke` answers S_OK; a function that throws ends the process by name,
   // as any callback does.
   //
-  // Not agile: called, or released for the last time, on another thread,
-  // it ends the process by name.
+  // Agile, as C++/WinRT's delegates are: a source calls it on whatever thread
+  // it completes on. The function still runs on the thread that made it --
+  // a call from another is carried there, with its objects held across, and
+  // so is the last release -- so it runs after the source's call returns.
   export type Delegate<F extends (...args: never[]) => void, IID extends string> = F & {
     readonly __c_closure?: "delegate";
     readonly __c_iid?: IID;

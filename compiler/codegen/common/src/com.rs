@@ -21,6 +21,13 @@ pub fn delegate_signatures(program: &Program) -> Vec<&FnPointer> {
     found
 }
 
+/// A signature's carried `Invoke`, `nts_com_hop_NtsFn_void_ptr_ptr`: the
+/// arguments' type and the `run` that unpacks them on the owning thread.
+#[must_use]
+pub fn delegate_hop_symbol(signature: &FnPointer) -> String {
+    format!("nts_com_hop_{}", signature.name)
+}
+
 /// A signature's `Invoke` adapter, `nts_com_invoke_NtsFn_void_ptr_ptr`.
 #[must_use]
 pub fn delegate_invoke_symbol(signature: &FnPointer) -> String {
