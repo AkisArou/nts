@@ -18,11 +18,10 @@ import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import {
   IdlePriority as IdleSchedulerPriority,
   ImmediatePriority as ImmediateSchedulerPriority,
-  isMockScheduler,
   NormalPriority as NormalSchedulerPriority,
-  setDisableYieldValue,
   UserBlockingPriority as UserBlockingSchedulerPriority,
 } from "./Scheduler.ts";
+import { isMockScheduler, setDisableYieldValue } from "react-reconciler/SchedulerMockExtras.ts";
 
 // The parts of `__REACT_DEVTOOLS_GLOBAL_HOOK__` React calls. DevTools'
 // own types depend on the DOM renderer, so this describes only the surface.

@@ -38,6 +38,9 @@
       "react-reconciler/ReactFiberDevToolsPresence.ts": [
         "./packages/react-reconciler/src/ReactFiberDevToolsPresence.native.ts"
       ],
+      "react-reconciler/SchedulerMockExtras.ts": [
+        "./packages/react-reconciler/src/SchedulerMockExtras.native.ts"
+      ],
       "shared/*": [
         "./packages/shared/src/*"
       ],
