@@ -571,6 +571,34 @@ check behind it, and needs one.
   and values.
 - Cycles through a GObject (below).
 
+### A handle where any value may go
+
+`unknown`, an `unknown[]`, a `Map`'s key or value hold a GObject as the value
+tag `NTS_TAG_HANDLE_GOBJECT` (8) with the `GObject *` as payload: tags 8-15 are
+the handle block, one per object system (Objective-C 9, COM 10), and each family
+registers its retain and release (`nts_handle_family_register`) from a
+load-time constructor, so `nts_value_retain`/`_release` count it under `--rc`.
+One source of truth for which type erases to which tag: `hir::tags::
+erased_handle_tag`. Reading one back (`instanceof`, a narrowed `Map<K, GtkButton>`
+read, `for...of`) is a checked `Unerase`: `nts_handle_check` accepts the family's
+tag or an absence and aborts otherwise, naming a box as its own case.
+
+- Built in steps: (i) the tag block and family registration; (ii-a) GObject and
+  COM erased as their tag; (ii-b) Objective-C too, replacing the box every
+  table used to hold -- `nts_objc_key_object` and the CF host read the tag.
+  Only a promise still boxes a handle.
+- **Release timing.** A counted foreign local keeps its block's end, because a
+  platform may hold one without a count (an `assign` delegate). One whose every
+  use is an `Erase` -- directly or through a `Convert` view, `new GtkButton()`
+  being a `GtkWidget *` converted -- goes only where nts counts it, and is
+  released at its last use (`rc::only_erased`), as ARC gives a temporary back
+  at the end of its statement. `held_to_the_end` (own.rs) treats the erased
+  slot as the holder for the same reason.
+- Witness: `examples/interop/gtk-values`, C and LLVM, plain and `--rc`. Its
+  `watch` arm alone passed while the release gap was open -- `stash()` returned
+  before the delete -- and its `temporary` arm, a button made in `m.set`'s
+  argument list, is the one that read `held alive` before the rule.
+
 ### libadwaita, and what a props type says
 
 Adw-1 binds from GIR like any other namespace (12,342 functions), and
