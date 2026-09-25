@@ -79,7 +79,8 @@ try {
     if (existsSync(rewritten)) replace.set(join(compiledProbe, "src", name), readFileSync(rewritten, "utf8"));
   }
   if (!replace.has(join(compiledProbe, "src/main.tsx"))) throw new Error("the stage wrote no main.tsx: nothing would be compared");
-  if (!replace.get(join(compiledProbe, "src/main.tsx"))!.includes("_c(")) throw new Error("the staged main.tsx memoizes nothing: the compiler did not run");
+  // The compiler's cache, as an array (`_c(n)`) or typed (`_cacheOf(shape)`).
+  if (!/\b_c\(|\b_cacheOf\(/.test(replace.get(join(compiledProbe, "src/main.tsx"))!)) throw new Error("the staged main.tsx memoizes nothing: the compiler did not run");
 
   const answers = {
     plain: run(await load(join(plainProbe, "src/main.ts"), join(plainProbe, "tsconfig.json"), work)),

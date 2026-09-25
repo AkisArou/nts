@@ -14,15 +14,16 @@ USAGE
       convert each of the project's own sources into the compiler's input
       format, writing <out-dir>/<file>.ast.json and <file>.scope.json, or
       <file>.unsupported.txt naming the construct that stopped it
-  nts-react compile <tsconfig.json> <options.json> <out-dir> [--lower-jsx]
+  nts-react compile <tsconfig.json> <options.json> <out-dir> [--lower-jsx] [--typed-cache]
       convert and compile each of the project's own sources with the React
       Compiler, given the plugin's resolved options, writing the result as
       <out-dir>/<file>.result.json and the program as <out-dir>/<file>;
       with --lower-jsx, JSX is written as React's automatic-runtime calls,
-      as TypeScript's `--jsx react-jsx` writes it
+      as TypeScript's `--jsx react-jsx` writes it; with --typed-cache, the
+      compiler's memo cache is a typed record where every slot can be typed
   nts-react stage <tsconfig.json> <out-dir>
       what `react` in nts.config.ts has nts read: `compile` with the
-      stage's default options and JSX lowered";
+      stage's default options, JSX lowered and the cache typed";
 
 fn main() -> ExitCode {
     // Deeply nested programs recurse deeply in the compiler; upstream's addon
@@ -51,9 +52,21 @@ fn run() -> Result<()> {
             Ok(())
         }
         [command, tsconfig, out] if command == "convert" => convert(tsconfig, out),
-        [command, tsconfig, options, out] if command == "compile" => compile(tsconfig, &read_options(options)?, out, false),
-        [command, tsconfig, out] if command == "stage" => compile(tsconfig, &nts_react::stage::default_options(), out, true),
-        [command, tsconfig, options, out, flag] if command == "compile" && flag == "--lower-jsx" => compile(tsconfig, &read_options(options)?, out, true),
+        [command, tsconfig, options, out, flags @ ..] if command == "compile" => {
+            let mut print = nts_react::print::PrintOptions::default();
+            for flag in flags {
+                match flag.as_str() {
+                    "--lower-jsx" => print.lower_jsx = true,
+                    "--typed-cache" => print.typed_cache = true,
+                    other => bail!("unknown flag {other}\n\n{USAGE}"),
+                }
+            }
+            compile(tsconfig, &read_options(options)?, out, &print)
+        }
+        [command, tsconfig, out] if command == "stage" => {
+            let print = nts_react::print::PrintOptions { lower_jsx: true, typed_cache: true, ..Default::default() };
+            compile(tsconfig, &nts_react::stage::default_options(), out, &print)
+        }
         _ => bail!("{USAGE}"),
     }
 }
@@ -91,7 +104,7 @@ fn read_options(path: &str) -> Result<serde_json::Value> {
     Ok(serde_json::from_str(&std::fs::read_to_string(path).with_context(|| format!("cannot read {path}"))?)?)
 }
 
-fn compile(tsconfig: &str, options: &serde_json::Value, out: &str, lower_jsx: bool) -> Result<()> {
+fn compile(tsconfig: &str, options: &serde_json::Value, out: &str, print: &nts_react::print::PrintOptions) -> Result<()> {
     let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
     let out = camino::Utf8PathBuf::from(out);
     std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
@@ -103,8 +116,7 @@ fn compile(tsconfig: &str, options: &serde_json::Value, out: &str, lower_jsx: bo
         let name = path.file_name().unwrap_or("source");
         let nodes = nts_react::tsgo::Nodes::new(&tree.nodes);
         let mut types = SessionTypes { session: &mut session, path: &path, tree: &tree };
-        let print = nts_react::print::PrintOptions { lower_jsx, ..Default::default() };
-        match nts_react::stage::compile_file(&code, nodes, path.as_str(), options, &mut types, &print) {
+        match nts_react::stage::compile_file(&code, nodes, path.as_str(), options, &mut types, print) {
             Ok(outcome) => {
                 std::fs::write(out.join(format!("{name}.result.json")), serde_json::to_string(&outcome.result)?)?;
                 std::fs::write(out.join(name), outcome.text)?;

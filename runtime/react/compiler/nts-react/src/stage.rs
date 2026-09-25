@@ -5,8 +5,9 @@
 //! span: compiled, skipped (the compiler found nothing to do, or was told not
 //! to), or failed (the compiler bailed out, and the function is as written).
 //! A caller that checks the output hands back the functions whose compiled
-//! form did not typecheck as [`PrintOptions::as_written`], and they are
-//! printed as the user wrote them.
+//! form did not typecheck: first as [`PrintOptions::array_cache`], when the
+//! cache it gave them was the typed one, and then as
+//! [`PrintOptions::as_written`], printed as the user wrote them.
 
 use react_compiler::entrypoint::{CompileResult, LoggerEvent, LoggerSourceLocation, PluginOptions};
 use serde_json::{Value, json};
@@ -51,6 +52,8 @@ pub struct Function {
     /// Where its compiled form is in the output, if it was printed from the
     /// compiler's output rather than as written.
     pub output: Option<(u32, u32)>,
+    /// Its memo cache was printed typed rather than as the compiler's array.
+    pub typed_cache: bool,
     pub state: FunctionState,
 }
 
@@ -118,7 +121,9 @@ pub fn compile_file(
     let printed = if compiled.is_some() || !renames.is_empty() || print.lower_jsx {
         let printed = print::print_file(&text, &original, compiled.unwrap_or(&original), renames, types, print);
         for function in &mut functions {
-            function.output = printed.functions.iter().find(|p| p.original == function.span).map(|p| p.output);
+            let printed = printed.functions.iter().find(|p| p.original == function.span);
+            function.output = printed.map(|p| p.output);
+            function.typed_cache = printed.is_some_and(|p| p.typed_cache);
         }
         printed.text
     } else {
@@ -137,7 +142,7 @@ fn function_of(event: &LoggerEvent, text: &SourceText) -> Option<Function> {
             (fn_loc.as_ref()?, None, FunctionState::Failed(data.clone()))
         }
     };
-    Some(Function { name, span: span_of(location, text)?, output: None, state })
+    Some(Function { name, span: span_of(location, text)?, output: None, typed_cache: false, state })
 }
 
 fn span_of(location: &LoggerSourceLocation, text: &SourceText) -> Option<(u32, u32)> {

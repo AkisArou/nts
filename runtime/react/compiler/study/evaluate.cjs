@@ -7,7 +7,7 @@
 //
 //   written   the source, JSX by esbuild
 //   upstream  upstream's Babel plugin output, outlining off
-//   ours      `nts-react compile ... --lower-jsx`, outlining off
+//   ours      `nts-react compile ... --lower-jsx --typed-cache`, outlining off
 //
 // A render is the host tree with every prop printed, plus what the render
 // logged; an exception is recorded as the render's result, as sprout's error
@@ -19,9 +19,10 @@
 //   Run from the study workspace (NODE_PATH=$PWD/node_modules), with
 //   NTS_REACT and NTS_TSGO as oracles.sh sets them.
 //   EVALUATE_SHOW=1 prints what agreeing fixtures rendered, too.
-//   EVALUATE_CONTROL=1 flips every cache comparison in `ours` (`$[k] !== x`
-//   to `===`): a variant that memoizes wrongly, which must disagree wherever
-//   a fixture's renders depend on its inputs.
+//   EVALUATE_CONTROL=1 flips every cache comparison in `ours` (`$[k] !== x`,
+//   or `$.sK !== x` in a typed cache, to `===`): a variant that memoizes
+//   wrongly, which must disagree wherever a fixture's renders depend on its
+//   inputs.
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -182,7 +183,7 @@ async function run(fixturePath, text, name) {
     const optionsPath = path.join(work, `options-${mode}.json`);
     fs.writeFileSync(optionsPath, JSON.stringify(options));
     ours[mode] = path.join(work, "ours", mode);
-    execFileSync(ntsReact, ["compile", path.join(setDir, "orig/tsconfig.json"), optionsPath, ours[mode], "--lower-jsx"], { stdio: ["ignore", "ignore", "inherit"] });
+    execFileSync(ntsReact, ["compile", path.join(setDir, "orig/tsconfig.json"), optionsPath, ours[mode], "--lower-jsx", "--typed-cache"], { stdio: ["ignore", "ignore", "inherit"] });
   }
 
   const tally = { agree: 0, differ: 0, notEvaluable: 0, upstreamDiffers: 0 };
@@ -198,7 +199,7 @@ async function run(fixturePath, text, name) {
     const texts = {
       written: source,
       upstream: upstream(path.resolve(file), mode),
-      ours: control ? oursText.replaceAll("] !== ", "] === ") : oursText,
+      ours: control ? oursText.replace(/(\]|\.s\d+) !== /g, "$1 === ") : oursText,
     };
     const results = {};
     for (const [variant, text] of Object.entries(texts)) results[variant] = await run(path.resolve(file), text, `${name}.${variant}`);

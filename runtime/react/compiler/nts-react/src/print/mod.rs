@@ -39,6 +39,7 @@ use serde_json::Value;
 
 use crate::convert::text::SourceText;
 
+mod cache;
 mod jsx;
 
 /// The checker, for a compiler temporary's type: the type at the original
@@ -66,6 +67,11 @@ pub struct PrintOptions {
     /// whatever the compiler made of them: the ones whose compiled form did
     /// not typecheck.
     pub as_written: FxHashSet<(u32, u32)>,
+    /// The compiler's memo cache written as a typed record ([`cache`]).
+    pub typed_cache: bool,
+    /// Functions, by their original span, whose cache stays the compiler's
+    /// array: their typed cache did not typecheck.
+    pub array_cache: FxHashSet<(u32, u32)>,
 }
 
 /// A printed file.
@@ -82,6 +88,8 @@ pub struct Printed {
 pub struct PrintedFunction {
     pub original: (u32, u32),
     pub output: (u32, u32),
+    /// Its memo cache was printed typed.
+    pub typed_cache: bool,
 }
 
 /// Prints `compiled`, the compiler's output for `original`, whose text is
@@ -122,17 +130,73 @@ pub fn print_file(
         jsx_imports: jsx::JsxImports::default(),
         as_written: &options.as_written,
         functions: Vec::new(),
+        caches: Caches {
+            callee: options.typed_cache.then(|| cache_callee(compiled)).flatten(),
+            forced_array: options.array_cache.clone(),
+            ..Caches::default()
+        },
+        hoists: Vec::new(),
+        edits: Vec::new(),
+        fresh: 0,
         out: String::new(),
         indent: 0,
     };
     printer.program(original, compiled);
-    let functions = utf16_ranges(&printer.out, &printer.functions);
+    let mut functions = utf16_ranges(&printer.out, &printer.functions);
+    for function in &mut functions {
+        function.typed_cache = printer.caches.typed_spans.contains(&function.original);
+    }
     Printed { text: printer.out, functions }
 }
 
 /// A function printed from the compiler's output: its original span, and its
 /// byte range in the output.
 type OutputFunction = ((u32, u32), (usize, usize));
+
+/// What the printer knows about the memo caches it types ([`cache`]).
+#[derive(Debug, Default)]
+struct Caches {
+    /// The local name of the compiler runtime's `c`, when caches are typed.
+    callee: Option<String>,
+    /// The typed cache of each function being printed, innermost last.
+    stack: Vec<Option<cache::CachePlan>>,
+    /// Some function's cache was typed, so `cacheOf` is imported.
+    typed: bool,
+    /// Some function kept the compiler's array cache, so `c` stays imported.
+    array: bool,
+    /// Where the compiler runtime's import was printed, rewritten once it is
+    /// known which of the two the file uses.
+    runtime_import: Option<(usize, usize)>,
+    /// Functions to keep on the array cache ([`PrintOptions::array_cache`]).
+    forced_array: FxHashSet<(u32, u32)>,
+    /// The functions whose cache was typed, by original span.
+    typed_spans: FxHashSet<(u32, u32)>,
+}
+
+/// A change to the printed text decided after the text it touches was
+/// printed: `remove` bytes at `at` replaced by `insert`.
+#[derive(Debug)]
+struct Edit {
+    at: usize,
+    remove: usize,
+    insert: String,
+}
+
+/// The local name the compiled program imports the compiler runtime's `c`
+/// under, if it imports it.
+fn cache_callee(compiled: &File) -> Option<String> {
+    compiled.program.body.iter().find_map(|statement| match statement {
+        Statement::ImportDeclaration(import) if import.source.value == "react/compiler-runtime" => import.specifiers.iter().find_map(|specifier| match specifier {
+            react_compiler_ast::declarations::ImportSpecifier::ImportSpecifier(named)
+                if matches!(&named.imported, ModuleExportName::Identifier(i) if i.name == "c") =>
+            {
+                Some(named.local.name.clone())
+            }
+            _ => None,
+        }),
+        _ => None,
+    })
+}
 
 /// The printed functions' output ranges, from byte offsets into `text` to
 /// UTF-16 units, as tsgo counts them.
@@ -147,7 +211,7 @@ fn utf16_ranges(text: &str, functions: &[OutputFunction]) -> Vec<PrintedFunction
         at = offset;
         units.insert(offset, counted);
     }
-    functions.iter().map(|(original, (start, end))| PrintedFunction { original: *original, output: (units[start], units[end]) }).collect()
+    functions.iter().map(|(original, (start, end))| PrintedFunction { original: *original, output: (units[start], units[end]), typed_cache: false }).collect()
 }
 
 /// Every node of the original program with a span, by that span, outermost
@@ -272,6 +336,14 @@ struct Printer<'a> {
     as_written: &'a FxHashSet<(u32, u32)>,
     /// The functions printed from the compiler's output.
     functions: Vec<OutputFunction>,
+    /// The memo caches being typed.
+    caches: Caches,
+    /// Shapes hoisted out of the top-level statement being printed.
+    hoists: Vec<String>,
+    /// Text to insert or replace once the whole file is printed.
+    edits: Vec<Edit>,
+    /// The next number `fresh_name` tries.
+    fresh: u32,
     out: String,
     indent: usize,
 }
@@ -497,20 +569,66 @@ impl Printer<'_> {
             if original_here {
                 let start = base.start.unwrap_or(cursor);
                 self.write(&self.source.slice(cursor, start));
-                self.statement(statement);
+                self.top_level(statement);
                 cursor = base.end.unwrap_or(start);
             } else {
-                self.statement(statement);
+                self.top_level(statement);
                 self.write("\n");
             }
         }
         self.write(&self.source.slice(cursor, self.source.len()));
         let imports = self.jsx_imports.declarations();
-        self.out.insert_str(imports_at, &imports);
-        for (_, (start, end)) in &mut self.functions {
-            if *start >= imports_at {
-                *start += imports.len();
-                *end += imports.len();
+        if !imports.is_empty() {
+            self.edits.push(Edit { at: imports_at, remove: 0, insert: imports });
+        }
+        self.import_cache_runtime(imports_at);
+        self.apply_edits();
+    }
+
+    /// A top-level statement, with the cache shapes it hoists before it.
+    fn top_level(&mut self, statement: &Statement) {
+        let at = self.out.len();
+        self.statement(statement);
+        if !self.hoists.is_empty() {
+            let insert = self.hoists.drain(..).map(|hoist| hoist + "\n\n").collect();
+            self.edits.push(Edit { at, remove: 0, insert });
+        }
+    }
+
+    /// The compiler runtime's import, naming what the file's caches use:
+    /// `cacheOf` for the typed ones, `c` for any left an array.
+    fn import_cache_runtime(&mut self, imports_at: usize) {
+        if !self.caches.typed {
+            return;
+        }
+        let callee = self.caches.callee.clone().unwrap_or_default();
+        let typed = "cacheOf as _cacheOf";
+        match self.caches.runtime_import {
+            Some((start, end)) => {
+                let printed = self.out[start..end].to_owned();
+                let array = format!("c as {callee}");
+                let names = if self.caches.array { format!("{array}, {typed}") } else { typed.to_owned() };
+                self.edits.push(Edit { at: start, remove: end - start, insert: printed.replacen(&array, &names, 1) });
+            }
+            None => self.edits.push(Edit { at: imports_at, remove: 0, insert: format!("import {{ {typed} }} from \"react/compiler-runtime\";\n") }),
+        }
+    }
+
+    /// Applies the edits, last first, and moves every recorded function range
+    /// past each by its change in length. At one position a replacement goes
+    /// first, so that an insertion there lands in front of what replaced it
+    /// rather than inside the range it replaces.
+    fn apply_edits(&mut self) {
+        let mut edits = std::mem::take(&mut self.edits);
+        edits.sort_by_key(|edit| (std::cmp::Reverse(edit.at), std::cmp::Reverse(edit.remove)));
+        for edit in edits {
+            self.out.replace_range(edit.at..edit.at + edit.remove, &edit.insert);
+            let after = edit.at + edit.remove;
+            for (_, (start, end)) in &mut self.functions {
+                if *start >= after {
+                    *start = *start + edit.insert.len() - edit.remove;
+                    *end = *end + edit.insert.len() - edit.remove;
+                }
             }
         }
     }
@@ -552,10 +670,148 @@ impl Printer<'_> {
         self.write("}");
     }
 
+    /// A block with `epilogue` as its last statement.
+    fn block_with_epilogue(&mut self, block: &BlockStatement, epilogue: &str) {
+        self.write("{");
+        self.indent += 1;
+        self.statements(&block.body);
+        self.newline();
+        self.write(epilogue);
+        self.indent -= 1;
+        self.newline();
+        self.write("}");
+    }
+
+    /// `const $ = _c(n)` in a function whose cache is typed: the shape the
+    /// typed cache is made from, in its place.
+    fn cache_declaration(&self, id: &PatternLike, init: &Expression) -> Option<String> {
+        let plan = self.cache()?;
+        let callee = self.caches.callee.as_deref()?;
+        let is_cache = matches!(id, PatternLike::Identifier(i) if i.name == plan.name)
+            && matches!(init, Expression::CallExpression(call) if matches!(call.callee.as_ref(), Expression::Identifier(c) if c.name == callee));
+        is_cache.then(|| plan.argument())
+    }
+
+    /// A memo scope's `if`, when the cache is typed: the next bit of the
+    /// function's filled words is this scope's.
+    fn cache_scope(&mut self, test: &Expression) -> Option<cache::Scope> {
+        let name = self.cache()?.name.clone();
+        let json = serde_json::to_value(test).ok()?;
+        if !cache::reads(&json, &name) {
+            return None;
+        }
+        let plan = self.caches.stack.last_mut()?.as_mut()?;
+        Some(plan.scope(cache::is_sentinel_test(&json, &name)))
+    }
+
     /// A compiled function's body, with the local types it lost restored.
     fn function_body(&mut self, function: &BaseNode, body: &BlockStatement) {
         let prelude = self.dropped_local_types(function);
+        let plan = self.cache_plan(function, body);
+        self.caches.stack.push(plan);
         self.block_with(body, &prelude);
+        self.caches.stack.pop();
+    }
+
+    /// The typed cache for a compiled function's body, if it has a cache and
+    /// every slot's type can be named.
+    fn cache_plan(&mut self, function: &BaseNode, body: &BlockStatement) -> Option<cache::CachePlan> {
+        let callee = self.caches.callee.clone()?;
+        let json = serde_json::to_value(body).ok()?;
+        let found = cache::find(&json, &callee)?;
+        let span = span_of_base(function, self.source);
+        if span.is_some_and(|span| self.caches.forced_array.contains(&span)) {
+            self.caches.array = true;
+            return None;
+        }
+        let types = found
+            .stored
+            .iter()
+            .map(|value| self.stored_type(value.as_ref()?))
+            .collect();
+        let Some(mut plan) = cache::plan(&found, types) else {
+            self.caches.array = true;
+            return None;
+        };
+        self.caches.typed = true;
+        self.caches.typed_spans.extend(span);
+        // The shape goes to module scope, made once, unless its types name
+        // something only this function sees, or it is nested in a function
+        // whose own cache is being printed.
+        let nested = self.caches.stack.iter().any(Option::is_some);
+        if !nested && !plan.names_any(&self.local_type_names(function)) {
+            let name = self.fresh_name("_cache");
+            self.hoists.push(format!("const {name} = {};", plan.shape()));
+            plan.hoisted = Some(name);
+        }
+        Some(plan)
+    }
+
+    /// The type of a value stored into a cache slot: the checker's, at the
+    /// place it came from. A dependency path the compiler built (`p.items`,
+    /// `pair[1]`) has no place of its own, only its object has; its type is
+    /// its object's, indexed by the path -- `({ items: string[] })["items"]`.
+    fn stored_type(&mut self, value: &Value) -> Option<String> {
+        let base: BaseNode = serde_json::from_value(value.clone()).ok()?;
+        if let Some(ty) = self.checker_type(&base) {
+            return Some(ty);
+        }
+        if value.get("type").and_then(Value::as_str) != Some("MemberExpression") {
+            return None;
+        }
+        let property = value.get("property")?;
+        let key = if value.get("computed").and_then(Value::as_bool) == Some(true) {
+            match property.get("type").and_then(Value::as_str)? {
+                "NumericLiteral" => number(property.get("value")?.as_f64()?),
+                "StringLiteral" => serde_json::to_string(property.get("value")?.as_str()?).ok()?,
+                _ => return None,
+            }
+        } else {
+            serde_json::to_string(property.get("name")?.as_str()?).ok()?
+        };
+        let object = self.stored_type(value.get("object")?)?;
+        Some(format!("({object})[{key}]"))
+    }
+
+    /// The type parameters and local types of the original function spanning
+    /// `function`'s span.
+    fn local_type_names(&self, function: &BaseNode) -> Vec<String> {
+        let Some(node) = self.originals_at(function).iter().find(|node| node.get("body").is_some()) else {
+            return Vec::new();
+        };
+        let parameters = node.get("typeParameters").and_then(|p| p.get("params")).and_then(Value::as_array);
+        let locals = node.get("body").and_then(|body| body.get("body")).and_then(Value::as_array);
+        parameters
+            .into_iter()
+            .flatten()
+            .filter_map(|parameter| parameter.get("name").and_then(Value::as_str))
+            .chain(locals.into_iter().flatten().filter_map(|statement| statement.get("id").and_then(|id| id.get("name")).and_then(Value::as_str)))
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// A name the file does not use: `base` numbered.
+    fn fresh_name(&mut self, base: &str) -> String {
+        let text = self.source.slice(0, self.source.len());
+        loop {
+            let name = format!("{base}{}", self.fresh);
+            self.fresh += 1;
+            if !text.contains(&name) {
+                return name;
+            }
+        }
+    }
+
+    /// The typed cache of the function being printed.
+    fn cache(&self) -> Option<&cache::CachePlan> {
+        self.caches.stack.last().and_then(Option::as_ref)
+    }
+
+    /// The slot `expression` reads or writes, if it is the typed cache's.
+    fn cache_slot(&self, expression: &Expression) -> Option<usize> {
+        let plan = self.cache()?;
+        let json = serde_json::to_value(expression).ok()?;
+        cache::slot_of(&json, &plan.name)
     }
 
     // ---- statements ------------------------------------------------------
@@ -596,9 +852,20 @@ impl Printer<'_> {
             }
             Statement::IfStatement(s) => {
                 self.write("if (");
-                self.expression(&s.test, SEQUENCE);
+                let scope = self.cache_scope(&s.test);
+                match &scope {
+                    Some(scope) if scope.sentinel_only => self.write(&scope.unfilled),
+                    Some(scope) => {
+                        let _ = write!(self.out, "{} || ", scope.unfilled);
+                        self.expression(&s.test, OR);
+                    }
+                    None => self.expression(&s.test, SEQUENCE),
+                }
                 self.write(") ");
-                self.statement(&s.consequent);
+                match (&scope, s.consequent.as_ref()) {
+                    (Some(scope), Statement::BlockStatement(block)) => self.block_with_epilogue(block, &scope.fill),
+                    _ => self.statement(&s.consequent),
+                }
                 if let Some(alternate) = &s.alternate {
                     if matches!(s.consequent.as_ref(), Statement::BlockStatement(_)) {
                         self.write(" else ");
@@ -858,7 +1125,11 @@ impl Printer<'_> {
                 let name = self.name(&identifier.base, &identifier.name).to_owned();
                 self.typed_locals.insert(name);
             }
-            if let Some(init) = &declarator.init {
+            if let Some(init) = &declarator.init
+                && let Some(shape) = self.cache_declaration(&declarator.id, init)
+            {
+                let _ = write!(self.out, " = _cacheOf({shape})");
+            } else if let Some(init) = &declarator.init {
                 self.write(" = ");
                 if in_for {
                     self.expression_no_in(init);
@@ -896,6 +1167,14 @@ impl Printer<'_> {
     }
 
     fn import(&mut self, import: &react_compiler_ast::declarations::ImportDeclaration) {
+        let started = self.out.len();
+        self.import_statement(import);
+        if self.caches.callee.is_some() && import.source.value == "react/compiler-runtime" {
+            self.caches.runtime_import = Some((started, self.out.len()));
+        }
+    }
+
+    fn import_statement(&mut self, import: &react_compiler_ast::declarations::ImportDeclaration) {
         self.write("import ");
         if matches!(import.import_kind, Some(ImportKind::Type)) {
             self.write("type ");
@@ -1311,6 +1590,14 @@ impl Printer<'_> {
                 self.expression(&s.argument, ASSIGN);
             }
             Expression::MemberExpression(m) => {
+                // A slot of the typed cache: its field. A read into a value is
+                // cast where it is stored (see the assignment below); a
+                // comparison needs no cast.
+                if let Some(at) = self.cache_slot(expression) {
+                    let name = self.cache().map_or("$", |plan| plan.name.as_str()).to_owned();
+                    let _ = write!(self.out, "{name}.s{at}");
+                    return;
+                }
                 self.member_object(&m.object, false);
                 self.member_property(&m.property, m.computed, false);
             }
@@ -1422,10 +1709,18 @@ impl Printer<'_> {
             Expression::AssignmentExpression(a) => {
                 self.assignment_target(&a.left);
                 let _ = write!(self.out, " {} ", assignment_operator(&a.operator));
+                // `t1 = $[1]`: a read of the typed cache, cast to what the
+                // slot was stored from.
+                if let Some(at) = self.cache_slot(&a.right) {
+                    let read = self.cache().map(|plan| plan.read(at)).unwrap_or_default();
+                    self.write(&read);
+                    return;
+                }
                 self.expression(&a.right, ASSIGN);
                 // `t1 = $[1]` reads an erased cache slot into a typed
                 // temporary. Until the cache is typed (M3.4), the read is cast.
                 if let (PatternLike::Identifier(target), Expression::MemberExpression(read)) = (a.left.as_ref(), a.right.as_ref())
+                    && self.cache().is_none()
                     && matches!(read.object.as_ref(), Expression::Identifier(cache) if cache.name == "$")
                 {
                     let name = self.name(&target.base, &target.name).to_owned();

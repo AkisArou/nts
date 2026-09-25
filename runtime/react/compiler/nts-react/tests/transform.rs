@@ -96,3 +96,53 @@ fn an_error_inside_a_compiled_function_gives_it_back_as_written() {
     // Nothing more to give back.
     assert_eq!(transform.revise(&path, &[(start + 1, start + 2)]), None);
 }
+
+/// The checker, through a session: what `nts` asks when it runs the stage.
+struct SessionTypes<'s> {
+    session: &'s mut Session,
+    path: &'s Utf8Path,
+    tree: &'s nts_frontend_ts::tsgo::ast::EncodedSourceFile,
+}
+
+impl NodeTypes for SessionTypes<'_> {
+    fn type_at(&mut self, node: NodeId) -> Option<String> {
+        self.session.type_text(self.path, self.tree, node)
+    }
+}
+
+#[test]
+fn a_typed_cache_that_does_not_typecheck_steps_down_to_the_array_before_giving_the_function_back() {
+    if tsgo().is_none() {
+        return;
+    }
+    // The TSX probe: it resolves our React, so its JSX is typed and so are
+    // its caches. (The JSX fixtures do not resolve `react`: their caches hold
+    // `any`, and stay the compiler's array.)
+    let probe = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../native/compiled/tsconfig.json").canonicalize_utf8().expect("checked in");
+    let mut session = Session::open(&probe).unwrap();
+    let path = session.own_sources().unwrap().into_iter().find(|p| p.file_name() == Some("main.tsx")).unwrap();
+    let tree = session.file(&path).unwrap();
+    let code = std::fs::read_to_string(&path).unwrap();
+
+    let (mut transform, report) = ReactTransform::new(stage::default_options());
+    let typed = {
+        let mut types = SessionTypes { session: &mut session, path: &path, tree: &tree };
+        transform.transform(&TransformInput { path: &path, text: &code, tree: &tree }, &mut types).expect("rewritten")
+    };
+    let item = |report: &nts_react::transform::Report| report.lock().unwrap()[&path].functions.iter().find(|f| f.name.as_deref() == Some("Item")).cloned().unwrap();
+    let first = item(&report);
+    assert!(first.typed_cache && typed.contains("_cacheOf("), "with the checker, Item's cache is typed");
+
+    // An error inside it: the array cache, still memoized, and not given back.
+    let (start, _) = first.output.unwrap();
+    let array = transform.revise(&path, &[(start + 1, start + 2)]).expect("revised");
+    let second = item(&report);
+    assert!(!second.typed_cache && second.output.is_some(), "Item is compiled, on the array cache");
+    assert!(array.contains("_c(") && report.lock().unwrap()[&path].fell_back.is_empty(), "memoized, not given back");
+
+    // An error inside it again: now it is given back as written.
+    let (start, _) = second.output.unwrap();
+    transform.revise(&path, &[(start + 1, start + 2)]).expect("revised again");
+    assert_eq!(report.lock().unwrap()[&path].fell_back, vec![first.span]);
+}
+

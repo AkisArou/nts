@@ -131,7 +131,7 @@ fn described(function: &Function, path: &Utf8Path, code: &str) -> String {
 impl SourceTransform for ReactTransform {
     fn identity(&self) -> String {
         let options = serde_json::to_string(&self.options).unwrap_or_default();
-        format!("react-compiler@{COMPILER_PIN} jsx={} {:032x}", self.lower_jsx, xxhash_rust::xxh3::xxh3_128(options.as_bytes()))
+        format!("react-compiler@{COMPILER_PIN} jsx={} cache=typed {:032x}", self.lower_jsx, xxhash_rust::xxh3::xxh3_128(options.as_bytes()))
     }
 
     fn transform(&mut self, file: &TransformInput<'_>, types: &mut dyn NodeTypes) -> Option<String> {
@@ -139,7 +139,7 @@ impl SourceTransform for ReactTransform {
             code: file.text.to_owned(),
             tree: file.tree.clone(),
             types: FxHashMap::default(),
-            print: PrintOptions { lower_jsx: self.lower_jsx, ..PrintOptions::default() },
+            print: PrintOptions { lower_jsx: self.lower_jsx, typed_cache: true, ..PrintOptions::default() },
             functions: Vec::new(),
         };
         let mut answers = std::mem::take(&mut state.types);
@@ -179,17 +179,22 @@ impl SourceTransform for ReactTransform {
 
     fn revise(&mut self, path: &Utf8Path, errors: &[(u32, u32)]) -> Option<String> {
         let mut state = self.files.remove(path)?;
-        let failing: Vec<(u32, u32)> = state
+        let failing: Vec<&Function> = state
             .functions
             .iter()
             .filter(|f| f.state == FunctionState::Compiled && !state.print.as_written.contains(&f.span))
             .filter(|f| f.output.is_some_and(|(start, end)| errors.iter().any(|(at, _)| (start..end).contains(at))))
-            .map(|f| f.span)
             .collect();
-        let revised = if failing.is_empty() {
+        // A step at a time: a typed cache that does not typecheck gives way
+        // to the compiler's array, which keeps the memoization; only a
+        // function already on the array is given back as written.
+        let typed: Vec<(u32, u32)> = failing.iter().filter(|f| f.typed_cache).map(|f| f.span).collect();
+        let array: Vec<(u32, u32)> = failing.iter().filter(|f| !f.typed_cache).map(|f| f.span).collect();
+        let revised = if typed.is_empty() && array.is_empty() {
             None
         } else {
-            state.print.as_written.extend(failing);
+            state.print.array_cache.extend(typed);
+            state.print.as_written.extend(array);
             let answers = std::mem::take(&mut state.types);
             let outcome = self.print(path, &mut state, &mut Remembered(&answers));
             state.types = answers;
