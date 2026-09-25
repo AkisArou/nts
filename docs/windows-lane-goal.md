@@ -269,6 +269,13 @@ Application.Start(() => { new App(); });
   `ArrangeOverride(Size)` are forwarded on every layout pass, a `Size` passed
   as Win64 passes it: in an integer register. The control reading it from a
   float register gives the button no width (`styled=false`).
+- **An override answering a value**, as C# writes `MeasureOverride`: the
+  record it takes is the address of the adapter's copy, the record it answers
+  is written straight through the slot's result pointer, and a `boolean` is
+  stored as its byte. `PressButton.MeasureOverride` returns
+  `super.MeasureOverride(available)`, and every layout pass measures through
+  it (`measured=true`, `styled=true`). The control that leaves the result
+  pointer unwritten gives `styled=false`.
 - **`super.OnLaunched(args)`** calls the base's own implementation through
   its slot (`nts_com_base`), as C#'s `base.OnLaunched(args)` does. The
   control (the runtime answering the program's own face instead) recurses
@@ -276,8 +283,8 @@ Application.Start(() => { new App(); });
 - **Refused by name, for now:**
   - a slot that can't be forwarded yet: a result the binding spells as
     `out` fields;
-  - overriding a slot that answers a value (`MeasureOverride`), since
-    an override's result is not yet written through its pointer;
+  - an override answering an object or a string, whose reference the
+    caller would own;
   - a constructor of the class's own, and fields. Captured state works
     (a closure, a module variable);
   - a `new` with arguments; and an override returning a value.
@@ -294,8 +301,8 @@ Application.Start(() => { new App(); });
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
 2. **W2's rest** as listed above: awaitable operations once `await` honours
-   thenables. **W3:** overrides answering a value (`MeasureOverride`), then
-   fields on a composed class.
+   thenables. **W3:** fields on a composed class, and an override answering
+   an object or a string.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT.
 

@@ -182,22 +182,42 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
 /// One override's adapter, `i32 (ptr face, A...)`: the compiled method
 /// called with the instance and its arguments, and `S_OK`.
 fn adapter(out: &mut String, platform: Platform, name: &str, method: &ForeignMethod, compiled: &Func) -> Result<(), Diagnostic> {
+    let result = &*method.signature.result;
+    let record_out = matches!(result, Type::Record(_));
     // An override may take fewer parameters than its slot is called with, as
-    // TypeScript lets it: the rest are not passed on.
-    if compiled.params.len() > method.signature.parameters.len() {
+    // TypeScript lets it: the rest are not passed on. A record it answers is
+    // written through the address it takes after them.
+    let declared = compiled.params.len() - usize::from(record_out);
+    if declared > method.signature.parameters.len() {
         return Err(refuse(compiled, "an override taking more parameters than its slot is called with"));
     }
     let mut parameters = Vec::new();
     let mut arguments = Vec::new();
     let mut body = String::from("  call void @nts_callback_enter()\n");
     for (slot, foreign) in method.signature.parameters.iter().enumerate() {
-        if matches!(foreign, Type::Record(_)) {
-            return Err(refuse(compiled, "an override taking a record by value, which only the C backend's adapter receives"));
+        // A record by value, as Win64 passes it, to the address of a copy the
+        // method reads, as an Objective-C entry point passes one.
+        if let Type::Record(record) = foreign {
+            let passed = if let Some(bits) = win64_register(record, platform).map_err(|why| refuse(compiled, &why))? {
+                parameters.push(format!("i{bits} %a{slot}"));
+                let _ = writeln!(body, "  %p{slot} = alloca i{bits}, align 8\n  store i{bits} %a{slot}, ptr %p{slot}");
+                format!("ptr %p{slot}")
+            } else {
+                parameters.push(format!("ptr %a{slot}"));
+                format!("ptr %a{slot}")
+            };
+            if slot < declared {
+                arguments.push(passed);
+            }
+            continue;
         }
         let from = foreign.abi(platform.abi);
         let from_ty = ty_of(&from, compiled)?;
         parameters.push(format!("{} %a{slot}", abi_parameter(foreign)));
-        let Some(to) = compiled.params.get(slot).map(|param| param.ty.clone()) else { continue };
+        if slot >= declared {
+            continue;
+        }
+        let to = compiled.params[slot].ty.clone();
         let to_ty = ty_of(&to, compiled)?;
         if slot == 0 {
             let _ = writeln!(body, "  %p0 = call ptr @nts_com_outer_instance(ptr %a0)");
@@ -213,12 +233,56 @@ fn adapter(out: &mut String, platform: Platform, name: &str, method: &ForeignMet
             arguments.push(format!("{to_ty} %p{slot}"));
         }
     }
+    if *result != Type::Void {
+        parameters.push("ptr %out".to_owned());
+    }
+    if record_out {
+        arguments.push("ptr %out".to_owned());
+    }
     let _ = writeln!(out, "define internal i32 @{name}({}) nounwind {{", parameters.join(", "));
     out.push_str(&body);
-    let result = ty_of(&compiled.return_type, compiled)?;
-    let _ = writeln!(out, "  call {result} {}({})", symbol(&compiled.name), arguments.join(", "));
+    let have = compiled.return_type.clone();
+    let have_ty = ty_of(&have, compiled)?;
+    let call = format!("call {have_ty} {}({})", symbol(&compiled.name), arguments.join(", "));
+    if matches!(result, Type::Void | Type::Record(_)) {
+        let _ = writeln!(out, "  {call}");
+    } else {
+        // A number or a `boolean` the method answers, converted to the slot's
+        // type and stored where the caller asked; a `boolean` is a byte there.
+        let want = result.abi(platform.abi);
+        let _ = writeln!(out, "  %r = {call}");
+        let converted = if have == want {
+            "%r".to_owned()
+        } else if want == HirType::Bool {
+            let _ = writeln!(out, "  {}", is_not_zero("%c", &have, have_ty, "%r"));
+            "%c".to_owned()
+        } else {
+            let instruction = conversion(&have, &want, compiled)?;
+            let _ = writeln!(out, "  %c = {instruction} {have_ty} %r to {}", ty_of(&want, compiled)?);
+            "%c".to_owned()
+        };
+        if want == HirType::Bool {
+            let _ = writeln!(out, "  %byte = zext i1 {converted} to i8\n  store i8 %byte, ptr %out");
+        } else {
+            let _ = writeln!(out, "  store {} {converted}, ptr %out", ty_of(&want, compiled)?);
+        }
+    }
     let _ = writeln!(out, "  call void @nts_callback_leave()\n  ret i32 0\n}}");
     Ok(())
+}
+
+/// How Win64 passes a record by value: in an integer register of `Some(bits)`
+/// when it is 1, 2, 4 or 8 bytes, and otherwise (`None`) as the address of
+/// the caller's copy.
+fn win64_register(record: &nts_core::hir::native::Record, platform: Platform) -> Result<Option<u32>, String> {
+    if platform.abi != nts_core::hir::native::NativeAbi::Win64 {
+        return Err("a record by value in a Windows Runtime slot off Win64, where the Windows Runtime is not".to_owned());
+    }
+    match super::aggregate::extent_of(record, platform) {
+        Some((size @ (1 | 2 | 4 | 8), _)) => Ok(Some(size * 8)),
+        Some(_) => Ok(None),
+        None => Err(format!("a record, `{}`, whose layout this backend cannot place", record.name)),
+    }
 }
 
 /// A slot the class leaves to its base: the same slot of the base's own
@@ -235,16 +299,10 @@ fn forwarder(out: &mut String, platform: Platform, name: &str, forward: &nts_cor
     let mut spelled = Vec::new();
     for ty in &forward.signature.parameters {
         spelled.push(match ty {
-            Type::Record(record) => {
-                if platform.abi != nts_core::hir::native::NativeAbi::Win64 {
-                    return Err("a forwarded record by value off Win64, where the Windows Runtime is not".to_owned());
-                }
-                match super::aggregate::extent_of(record, platform) {
-                    Some((size @ (1 | 2 | 4 | 8), _)) => format!("i{}", size * 8),
-                    Some(_) => "ptr".to_owned(),
-                    None => return Err(format!("a forwarded record, `{}`, whose layout this backend cannot place", record.name)),
-                }
-            }
+            Type::Record(record) => match win64_register(record, platform)? {
+                Some(bits) => format!("i{bits}"),
+                None => "ptr".to_owned(),
+            },
             other => abi_parameter(other),
         });
     }

@@ -5819,6 +5819,14 @@ struct ObjcEntry {
     returns_record: bool,
 }
 
+/// An override of a composable Windows Runtime class, called through its
+/// adapter -- which, where the method answers a record by value, passes the
+/// slot's result pointer last to write it through (`record_out`).
+#[derive(Clone, Copy)]
+struct ComEntry {
+    returns_record: bool,
+}
+
 /// Swift's `@objc` selector for a method of `count` parameters: its name,
 /// with a colon for each (`pressed(sender)` is `pressed:`).
 fn objc_selector(name: &str, count: usize) -> String {
@@ -11678,6 +11686,9 @@ struct FuncBuilder<'a> {
     /// address its entry point passes, as the method's last parameter. A
     /// `return` copies the record there.
     record_out: Option<ValueId>,
+    /// While an override of a composable Windows Runtime class is lowered,
+    /// what its adapter passes it: see [`ComEntry`].
+    com_entry: Option<ComEntry>,
     /// Labels parameters taken as arguments, whose objects are made once
     /// every parameter is: a backend names parameters by position, so none
     /// may come after another value.
@@ -11938,6 +11949,7 @@ impl<'a> FuncBuilder<'a> {
             objc_construct: None,
             objc_entry: None,
             record_out: None,
+            com_entry: None,
             pending_labels: Vec::new(),
             hierarchy: Hierarchy::default(),
             base: None,
@@ -14015,7 +14027,10 @@ impl<'a> FuncBuilder<'a> {
             .cloned()
             .ok_or_else(|| self.unsupported(member, "an override whose binding declares no signature"))?;
         let adapter = super::native::override_signature(self.snapshot, &signature).map_err(|why| self.unsupported(member, &format!("an override's {why}")))?;
-        let func = self.lower_method_of(class, member, instance)?;
+        self.com_entry = Some(ComEntry { returns_record: matches!(*adapter.result, super::native::Type::Record(_)) });
+        let func = self.lower_method_of(class, member, instance);
+        self.com_entry = None;
+        let func = func?;
         let method = super::ForeignMethod {
             dispatch: super::Dispatch::Slot { iid, slot },
             function: func.name.clone(),
@@ -18882,7 +18897,7 @@ impl<'a> FuncBuilder<'a> {
     /// result is returned as it is. Then the labels objects are made, with
     /// every parameter in place.
     fn finish_params(&mut self, params: &mut Vec<Param>, return_type: HirType, origin: &Origin) -> Result<HirType, Diagnostic> {
-        let return_type = if self.objc_entry.is_some_and(|entry| entry.returns_record) {
+        let return_type = if self.objc_entry.is_some_and(|entry| entry.returns_record) || self.com_entry.is_some_and(|entry| entry.returns_record) {
             let index = u32::try_from(params.len()).unwrap_or(0);
             let out = self.push(OpKind::Param(index), return_type.clone(), origin.clone());
             params.push(Param { name: "returned".to_owned(), shape: ParamShape::Ordinary, ty: return_type, origin: origin.clone(), known: Facts::TOP });

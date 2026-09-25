@@ -23,19 +23,22 @@
 //   other 24 slots call `Button`'s own implementation, so when the timer
 //   focuses the button, XAML's `OnGotFocus` reaches `Button`'s through one of
 //   them, and `focused=true` says the focus moved.
-// - It overrides `OnApplyTemplate` too, calling `super.OnApplyTemplate()`
-//   first as C# does: `templated=1` says XAML applied the template through
-//   the override. The other slots of `IFrameworkElementOverrides` are
-//   `Button`'s, among them `MeasureOverride` and `ArrangeOverride`, which
-//   take and answer a `Size` by value on every layout pass that gives the
-//   button its width.
+// - It overrides `OnApplyTemplate` and `MeasureOverride` too, each calling
+//   `super` as C# does. `templated=1` says XAML applied the template through
+//   the override. Every layout pass measures through `MeasureOverride`,
+//   whose `Size` crosses by value four times -- into the override, into
+//   `Button`'s, back, and out through the slot's result pointer -- so
+//   `measured` counts them and `styled=true` says each arrived whole. The
+//   interface's other slots, `ArrangeOverride` among them, are `Button`'s.
 // - The button's `Click` handler is a TypeScript function counting into a
 //   captured `let`. The timer presses it the way an accessibility client does
 //   -- its automation peer's `IInvokeProvider.Invoke` -- so no person is
 //   needed, and `clicks` shows the handler ran once.
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
 import { report } from "c:report";
+import type { ByValue } from "c:types";
 import { PropertyValue } from "winrt:Windows.Foundation";
+import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
@@ -46,6 +49,7 @@ let launched = 0;
 let entered = 0;
 
 let templated = 0;
+let measured = 0;
 
 class PressButton extends Button {
   OnPointerEntered(_e: IPointerRoutedEventArgs | null): void {
@@ -54,6 +58,10 @@ class PressButton extends Button {
   OnApplyTemplate(): void {
     super.OnApplyTemplate();
     templated += 1;
+  }
+  MeasureOverride(available: ByValue<Size>): ByValue<Size> {
+    measured += 1;
+    return super.MeasureOverride(available);
   }
 }
 
@@ -76,7 +84,7 @@ class App extends Application {
       const focused = button.as_IUIElement().Focus(FocusState.Programmatic);
       ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
       const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
-      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(entered) + " templated=" + String(templated));
+      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(entered) + " templated=" + String(templated) + " measured=" + String(measured > 0));
       this.Exit();
     }, 1500);
   }

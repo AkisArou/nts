@@ -139,33 +139,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .iter()
                 .find(|func| func.name == method.function)
                 .ok_or_else(|| refuse("an override whose compiled function this program does not define"))?;
-            // An override may take fewer parameters than its slot is called
-            // with, as TypeScript lets it: the rest are not passed on.
-            if compiled.params.len() > method.signature.parameters.len() {
-                return Err(refuse("an override taking more parameters than its slot is called with"));
-            }
-            let mut parameters = Vec::new();
-            let mut arguments = Vec::new();
-            for (slot, ty) in method.signature.parameters.iter().enumerate() {
-                // An interface pointer as `void *`: a struct the compiled
-                // method never names would be declared by nothing, and each
-                // argument passed on is cast to what the method takes.
-                let spelled = if matches!(ty, nts_core::hir::native::Type::Pointer(_)) { std::borrow::Cow::Borrowed("void *") } else { ty.c_type() };
-                parameters.push(format!("{spelled} a{slot}"));
-                let Some(want) = compiled.params.get(slot) else { continue };
-                let value = if slot == 0 { "nts_com_outer_instance(a0)".to_owned() } else { format!("a{slot}") };
-                arguments.push(format!("({}){value}", c_type_of(program, &want.ty, &want.origin)?));
-            }
-            writer.line(
-                origin,
-                format!(
-                    "static int32_t {}({}) {{ nts_callback_enter(); {}({}); nts_callback_leave(); return 0; }}",
-                    adapter_symbol(&class.name, at),
-                    parameters.join(", "),
-                    c_identifier(&compiled.name),
-                    arguments.join(", ")
-                ),
-            );
+            adapter(writer, origin, program, &adapter_symbol(&class.name, at), method, compiled).map_err(|why| refuse(&why))?;
         }
         let Some(composition) = &class.composition else {
             return Err(refuse("a class written over a composable class with no factory"));
@@ -240,4 +214,66 @@ fn forwarder(writer: &mut CodeWriter, origin: &Origin, name: &str, forward: &nts
             arguments.join(", ")
         ),
     );
+}
+
+/// One override's adapter, called by COM's convention -- the interface
+/// pointer, the arguments, and where the method answers a value, the address
+/// to write it to -- and answering `S_OK`. The compiled method takes the
+/// instance, the arguments it declares (it may declare fewer than the slot
+/// passes, as TypeScript lets it), and for a record it answers, the address
+/// to write it to, last. A record argument is passed as the address of the
+/// adapter's copy, as an Objective-C entry point passes one.
+fn adapter(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    name: &str,
+    method: &nts_core::hir::ForeignMethod,
+    compiled: &nts_core::hir::Func,
+) -> Result<(), String> {
+    use nts_core::hir::native::Type;
+    let result = &*method.signature.result;
+    let record_out = matches!(result, Type::Record(_));
+    let declared = compiled.params.len() - usize::from(record_out);
+    if declared > method.signature.parameters.len() {
+        return Err("an override taking more parameters than its slot is called with".to_owned());
+    }
+    let cast = |at: usize| c_type_of(program, &compiled.params[at].ty, &compiled.params[at].origin).map_err(|d| d.message);
+    let mut parameters = Vec::new();
+    let mut arguments = Vec::new();
+    for (slot, ty) in method.signature.parameters.iter().enumerate() {
+        // An interface pointer as `void *`: a struct the compiled method never
+        // names would be declared by nothing, and each argument passed on is
+        // cast to what the method takes.
+        let spelled = if matches!(ty, Type::Pointer(_)) { std::borrow::Cow::Borrowed("void *") } else { ty.c_type() };
+        parameters.push(format!("{spelled} a{slot}"));
+        if slot >= declared {
+            continue;
+        }
+        let value = match ty {
+            _ if slot == 0 => "nts_com_outer_instance(a0)".to_owned(),
+            Type::Record(_) => format!("&a{slot}"),
+            _ => format!("a{slot}"),
+        };
+        arguments.push(format!("({}){value}", cast(slot)?));
+    }
+    let call = |arguments: &[String]| format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+    let body = match result {
+        Type::Void => format!("{};", call(&arguments)),
+        Type::Record(_) => {
+            parameters.push(format!("{} *out", result.c_type()));
+            let mut with_out = arguments.clone();
+            with_out.push(format!("({})out", cast(declared)?));
+            format!("{};", call(&with_out))
+        }
+        _ => {
+            parameters.push(format!("{} *out", result.c_type()));
+            format!("*out = ({}){};", result.c_type(), call(&arguments))
+        }
+    };
+    writer.line(
+        origin,
+        format!("static int32_t {name}({}) {{ nts_callback_enter(); {body} nts_callback_leave(); return 0; }}", parameters.join(", ")),
+    );
+    Ok(())
 }
