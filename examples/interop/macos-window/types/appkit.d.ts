@@ -983,12 +983,8 @@ declare module "objc:AppKit" {
     lowercasedWith(locale: NSLocale | null): string;
     /** @ntsSelector capitalizedStringWithLocale: */
     capitalizedWith(locale: NSLocale | null): string;
-    /** @ntsSelector getLineStart:end:contentsEnd:forRange: */
-    getLineStart(startPtr: UInt, labels: { end: UInt; contentsEnd: UInt; for: ByValue<NSRange> }): void;
     /** @ntsSelector lineRangeForRange: */
     lineRange(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
-    /** @ntsSelector getParagraphStart:end:contentsEnd:forRange: */
-    getParagraphStart(startPtr: UInt, labels: { end: UInt; contentsEnd: UInt; for: ByValue<NSRange> }): void;
     /** @ntsSelector paragraphRangeForRange: */
     paragraphRange(labels: { for: ByValue<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector dataUsingEncoding:allowLossyConversion: */
@@ -1076,6 +1072,8 @@ declare module "objc:AppKit" {
     //   @property availableStringEncodings: a `const NSStringEncoding *`
     //   @property fileSystemRepresentation: a `const char *`
     //   -getCharacters:range:: a `unichar *`
+    //   -getLineStart:end:contentsEnd:forRange:: a `NSUInteger *`
+    //   -getParagraphStart:end:contentsEnd:forRange:: a `NSUInteger *`
     //   -enumerateSubstringsInRange:options:usingBlock:: a `BOOL *`
     //   -enumerateLinesUsingBlock:: a `BOOL *`
     //   -cStringUsingEncoding:: a `const char *`
@@ -1452,8 +1450,6 @@ declare module "objc:AppKit" {
     viewWillStartLiveResize(): void;
     /** @ntsSelector viewDidEndLiveResize */
     viewDidEndLiveResize(): void;
-    /** @ntsSelector getRectsExposedDuringLiveResize:count: */
-    getRectsExposedDuringLiveResize(exposedRects: Ptr<CGRect>, labels: { count: Int }): void;
     /** @ntsSelector rectForSmartMagnificationAtPoint:inRect: */
     rectForSmartMagnification(labels: { at: ByValue<CGPoint>; in: ByValue<CGRect> }): ByValue<CGRect>;
     /** @ntsSelector prepareForReuse */
@@ -1480,10 +1476,6 @@ declare module "objc:AppKit" {
     printView(sender: NSObject | null): void;
     /** @ntsSelector knowsPageRange: */
     knowsPageRange(range: Ptr<NSRange>): boolean;
-    /** @ntsSelector adjustPageWidthNew:left:right:limit: */
-    adjustPageWidthNew(newRight: CGFloat, labels: { left: CGFloat; right: CGFloat; limit: CGFloat }): void;
-    /** @ntsSelector adjustPageHeightNew:top:bottom:limit: */
-    adjustPageHeightNew(newBottom: CGFloat, labels: { top: CGFloat; bottom: CGFloat; limit: CGFloat }): void;
     /** @ntsSelector rectForPage: */
     rectForPage(page: Int): ByValue<CGRect>;
     /** @ntsSelector locationOfPrintRect: */
@@ -1609,6 +1601,9 @@ declare module "objc:AppKit" {
     //   -lockFocusIfCanDrawInContext:: deprecated in macOS 10.13
     //   -scrollRect:by:: deprecated in macOS 10.14
     //   -addToolTipRect:owner:userData:: a `void *`
+    //   -getRectsExposedDuringLiveResize:count:: a `NSInteger *`
+    //   -adjustPageWidthNew:left:right:limit:: a `CGFloat *`
+    //   -adjustPageHeightNew:top:bottom:limit:: a `CGFloat *`
     //   -drawSheetBorderWithSize:: deprecated in macOS 10.14
     //   -enterFullScreenMode:withOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound
     //   -exitFullScreenModeWithOptions:: a collection, `NSDictionary`, which crosses as an object when it is bound

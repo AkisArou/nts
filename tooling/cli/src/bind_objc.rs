@@ -1219,7 +1219,12 @@ impl<'a> Model<'a> {
         if desugared == "id" || desugared.starts_with("id<") {
             return Ok(or_null(self.object("NSObject")));
         }
-        if let Some(number) = swift_number(&written, &desugared) {
+        // Not a pointer: `NSUInteger *` is written starting `NSUInteger`, and
+        // read as that number it passed an integer where the message writes
+        // through an address.
+        if !desugared.contains('*')
+            && let Some(number) = swift_number(&written, &desugared)
+        {
             self.import("objc:types", number);
             return Ok(number.to_owned());
         }
@@ -1956,6 +1961,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (Shape *)twinOfShape:(Shape *)other;
 - (void)measure:(Span *)span;
 - (void)linkFrom:(Shape *)start to:(Shape *)middle to:(Shape *)end;
+- (void)countInto:(NSUInteger *)count;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
@@ -2021,6 +2027,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)twinOfShape:", "swift.method", "twin(of:)", &["Shape", "twin(of:)"], ""),
             symbol("c:objc(cs)Shape(im)measure:", "swift.method", "measure(_:)", &["Shape", "measure(_:)"], ""),
             symbol("c:objc(cs)Shape(im)linkFrom:to:to:", "swift.method", "link(from:to:to:)", &["Shape", "link(from:to:to:)"], ""),
+            symbol("c:objc(cs)Shape(im)countInto:", "swift.method", "count(into:)", &["Shape", "count(into:)"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2136,6 +2143,9 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector measure: */\n    measure(span: Ptr<Span>): void;",
             // A label Swift repeats: the repeat keyed by its parameter's name.
             "    /** @ntsSelector linkFrom:to:to: */\n    link(labels: { from: Shape; to: Shape; end: Shape }): void;",
+            // A pointer to a number is not the number: `NSUInteger *` is
+            // skipped, not spelled `UInt`.
+            "-countInto:: a `NSUInteger *`",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",
