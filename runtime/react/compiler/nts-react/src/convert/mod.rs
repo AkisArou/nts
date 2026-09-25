@@ -9,6 +9,7 @@
 //! written, which is always correct, never guessed at.
 
 mod expr;
+pub use expr::SECOND_NODE;
 mod jsx;
 pub mod literal;
 mod pattern;

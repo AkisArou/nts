@@ -26,7 +26,7 @@ const FLAG_OPTIONAL_CHAIN: u32 = 1 << 5;
 /// A second Babel node made from one tsgo node -- the value beside the key of
 /// `{ a }` -- gets the tsgo id with this bit set, so no two Babel nodes share an
 /// id and either still leads back to its tsgo node.
-pub(super) const SECOND_NODE: u32 = 1 << 31;
+pub const SECOND_NODE: u32 = 1 << 31;
 
 /// What a function, an arrow and a method have in common.
 pub(super) struct FunctionParts {

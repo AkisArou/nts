@@ -5,6 +5,7 @@
 // types are stripped from each and the JavaScript is re-printed through one
 // printer, so formatting, comments and types never count -- only what runs.
 //
+// RC_OUTLINE=0 compiles both sides with function outlining off.
 // usage: node print-diff.cjs <our-out-dir> <mode-list>
 //   <mode-list> is lines of "<infer|all> <file>".
 //   PRINT_CONTROL=1 runs the control arm, which must differ.
@@ -42,7 +43,7 @@ for (const line of fs.readFileSync(modeList, "utf8").trim().split("\n")) {
     parserOpts: { plugins: syntax(file) },
     // The control arm: PRINT_CONTROL=1 compiles upstream's side in the other
     // mode, so a comparison that cannot see a change reports none.
-    plugins: [[plugin, { panicThreshold: "none", compilationMode: process.env.PRINT_CONTROL === "1" ? (mode === "all" ? "infer" : "all") : mode }]],
+    plugins: [[plugin, { panicThreshold: "none", compilationMode: process.env.PRINT_CONTROL === "1" ? (mode === "all" ? "infer" : "all") : mode, environment: { enableFunctionOutlining: process.env.RC_OUTLINE !== "0" } }]],
   }).code;
   const oursCode = fs.readFileSync(path.join(ours, mode, base), "utf8");
   try {

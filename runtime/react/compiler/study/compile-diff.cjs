@@ -10,6 +10,7 @@
 //     which bailed out, and why);
 //   - the compiled program, normalised as convert-diff.cjs normalises an AST.
 //
+// RC_OUTLINE=0 compiles both sides with function outlining off.
 // usage: node compile-diff.cjs <nts-react> <tsconfig.json> <work-dir> <mode-list>
 //   COMPILE_CONTROL=1 runs the control arm, which must differ.
 //   <mode-list> is lines of "<infer|all> <file>", the mode each file compiles in.
@@ -40,7 +41,7 @@ function upstream(file, mode) {
   babel.transformSync(fs.readFileSync(file, "utf8"), {
     filename: file, babelrc: false, configFile: false,
     parserOpts: { plugins: file.endsWith(".ts") ? ["typescript"] : ["typescript", "jsx"] },
-    plugins: [[plugin, { panicThreshold: "none", compilationMode: mode }]],
+    plugins: [[plugin, { panicThreshold: "none", compilationMode: mode, environment: { enableFunctionOutlining: process.env.RC_OUTLINE !== "0" } }]],
   });
   return captured;
 }

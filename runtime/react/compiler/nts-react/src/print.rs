@@ -33,24 +33,92 @@ use react_compiler_ast::statements::{
 };
 use react_compiler::entrypoint::BindingRenameInfo;
 use react_compiler_ast::scope::BindingId;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::convert::text::SourceText;
 
+/// The checker, for a compiler temporary's type: the type at the original
+/// node the temporary holds, printed as TypeScript written at that node.
+pub trait TypeOracle {
+    fn type_at(&mut self, node: u32) -> Option<String>;
+}
+
+/// No checker: nothing a temporary could be typed from.
+#[derive(Debug)]
+pub struct NoTypes;
+
+impl TypeOracle for NoTypes {
+    fn type_at(&mut self, _node: u32) -> Option<String> {
+        None
+    }
+}
+
 /// Prints `compiled`, the compiler's output for `original`, whose text is
-/// `source`, applying the compiler's `renames`.
+/// `source`, applying the compiler's `renames` and restoring the types its
+/// code generation dropped (see [`Printer`]'s restoration rules).
 #[must_use]
-pub fn print_file(source: &SourceText, original: &File, compiled: &File, renames: &[BindingRenameInfo]) -> String {
+pub fn print_file(source: &SourceText, original: &File, compiled: &File, renames: &[BindingRenameInfo], types: &mut dyn TypeOracle) -> String {
     let mut originals = FxHashMap::default();
+    let mut by_span = FxHashMap::default();
+    let mut definite = FxHashSet::default();
     if let Ok(value) = serde_json::to_value(original) {
         index_nodes(&value, &mut originals);
+        index_spans(&value, &mut by_span, &mut definite);
     }
     let (new_names, renamed_starts) = renamed_references(compiled, renames);
-    let mut printer = Printer { source, originals, renamed: new_names, renamed_starts, out: String::new(), indent: 0 };
+    let mut printer = Printer {
+        source,
+        originals,
+        by_span,
+        definite,
+        renamed: new_names,
+        renamed_starts,
+        types,
+        typed_locals: FxHashSet::default(),
+        restoring: None,
+        assigning: false,
+        out: String::new(),
+        indent: 0,
+    };
     printer.program(original, compiled);
     printer.out
+}
+
+/// Every node of the original program with a span, by that span, outermost
+/// first: the compiler's output keeps the spans of what it came from, which
+/// is how each of its nodes finds the syntax the user wrote.
+fn index_spans(value: &Value, into: &mut FxHashMap<(u32, u32), Vec<Value>>, definite: &mut FxHashSet<(u32, u32)>) {
+    match value {
+        Value::Object(map) => {
+            // `let x!: T`: the definite `!` sits on the declarator, and the
+            // output's declarator is found by its id's span.
+            if map.get("definite").and_then(Value::as_bool) == Some(true)
+                && let Some(span) = map.get("id").and_then(span_of)
+            {
+                definite.insert(span);
+            }
+            if let (Some(start), Some(end)) = (map.get("start").and_then(Value::as_u64), map.get("end").and_then(Value::as_u64))
+                && let (Ok(start), Ok(end)) = (u32::try_from(start), u32::try_from(end))
+            {
+                into.entry((start, end)).or_default().push(value.clone());
+            }
+            for (key, child) in map {
+                if key != "loc" {
+                    index_spans(child, into, definite);
+                }
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|item| index_spans(item, into, definite)),
+        _ => {}
+    }
+}
+
+fn span_of(value: &Value) -> Option<(u32, u32)> {
+    let start = u32::try_from(value.get("start")?.as_u64()?).ok()?;
+    let end = u32::try_from(value.get("end")?.as_u64()?).ok()?;
+    Some((start, end))
 }
 
 /// The identifiers a rename applies to: every one that resolves, in the
@@ -102,6 +170,20 @@ fn index_nodes(value: &Value, into: &mut FxHashMap<u64, Value>) {
 struct Printer<'a> {
     source: &'a SourceText,
     originals: FxHashMap<u64, Value>,
+    /// The original program's nodes by span.
+    by_span: FxHashMap<(u32, u32), Vec<Value>>,
+    /// The ids of the original's definite declarators (`let x!: T`), by span.
+    definite: FxHashSet<(u32, u32)>,
+    types: &'a mut dyn TypeOracle,
+    /// Locals declared with a type (restored or their own), whose cache
+    /// reads are cast to it.
+    typed_locals: FxHashSet<String>,
+    /// The operand whose restored `!` or type arguments are being printed by
+    /// its own wrapper, so they are not printed twice.
+    restoring: Option<(u32, u32)>,
+    /// Printing an assignment target, which declares nothing: its span still
+    /// names the original declaration, whose annotation must not follow it.
+    assigning: bool,
     /// Identifiers to print under a new name, by node address.
     renamed: FxHashMap<usize, String>,
     /// Where renamed identifiers sit: a copied node must not span one.
@@ -162,6 +244,96 @@ impl Printer<'_> {
         self.renamed.get(&crate::scope::address(base)).map_or(name, String::as_str)
     }
 
+    // ---- restoration ------------------------------------------------------
+    //
+    // The compiler's code generation drops type syntax attached to
+    // declarations and calls. Two kinds of rule put it back:
+    //   - what the user wrote is restored verbatim, from the original node the
+    //     output node's span names: annotations, `?`, type parameters, return
+    //     types and predicates, type arguments, `!`, local type declarations;
+    //   - what the compiler introduced -- a `let t1;` temporary -- gets the
+    //     checker's type of the original expression it holds.
+    // runtime/react/compiler/TYPED-OUTPUT.md measures both.
+
+    /// The original nodes spanning exactly `base`'s span.
+    fn originals_at(&self, base: &BaseNode) -> &[Value] {
+        span_of_base(base, self.source).and_then(|span| self.by_span.get(&span)).map_or(&[], Vec::as_slice)
+    }
+
+    /// The source text of `key` (an annotation, type parameters, a return
+    /// type) on the original node spanning `base`'s span, if it has one.
+    fn original_part(&self, base: &BaseNode, key: &str) -> Option<String> {
+        if self.assigning && key == "typeAnnotation" {
+            return None;
+        }
+        self.originals_at(base)
+            .iter()
+            .find_map(|node| node.get(key).and_then(span_of))
+            .map(|(start, end)| self.source.slice(start, end))
+    }
+
+    /// Whether the original binding spanning `base`'s span was optional (`a?`).
+    /// Only an identifier: an optional chain's link is `optional` too.
+    fn originally_optional(&self, base: &BaseNode) -> bool {
+        !self.assigning
+            && self.originals_at(base).iter().any(|node| {
+            node.get("type").and_then(Value::as_str).is_none_or(|kind| kind == "Identifier")
+                && node.get("name").is_some()
+                && node.get("optional").and_then(Value::as_bool) == Some(true)
+        })
+    }
+
+    /// The checker's type for a compiler-introduced binding: the type of the
+    /// original node its span names.
+    fn checker_type(&mut self, base: &BaseNode) -> Option<String> {
+        let node = self.originals_at(base).iter().find_map(|node| node.get("_nodeId").and_then(Value::as_u64))?;
+        let node = u32::try_from(node).ok()? & !crate::convert::SECOND_NODE;
+        self.types.type_at(node)
+    }
+
+    /// What the user wrote around an operand that the output dropped: a
+    /// non-null `!`, or an instantiation's type arguments.
+    fn dropped_wrapper(&self, base: &BaseNode) -> Option<String> {
+        let (start, end) = span_of_base(base, self.source)?;
+        if self.restoring == Some((start, end)) {
+            return None;
+        }
+        // The wrapper starts where its operand does and ends later.
+        self.by_span.iter().find_map(|((wrapper_start, wrapper_end), nodes)| {
+            if *wrapper_start != start || *wrapper_end <= end {
+                return None;
+            }
+            nodes.iter().find_map(|node| {
+                let operand = node.get("expression").and_then(span_of)?;
+                if operand != (start, end) {
+                    return None;
+                }
+                match node.get("type").and_then(Value::as_str)? {
+                    "TSNonNullExpression" => Some("!".to_owned()),
+                    "TSInstantiationExpression" => node.get("typeParameters").and_then(span_of).map(|(s, e)| self.source.slice(s, e)),
+                    _ => None,
+                }
+            })
+        })
+    }
+
+    /// The local `type` and `interface` declarations of the original function
+    /// spanning `base`'s span: code generation drops them from a compiled body,
+    /// and the body's annotations name them.
+    fn dropped_local_types(&self, base: &BaseNode) -> Vec<String> {
+        let Some(function) = self.originals_at(base).iter().find(|node| node.get("body").is_some()) else {
+            return Vec::new();
+        };
+        let statements = function.get("body").and_then(|body| body.get("body")).and_then(Value::as_array);
+        statements
+            .into_iter()
+            .flatten()
+            .filter(|statement| matches!(statement.get("type").and_then(Value::as_str), Some("TSTypeAliasDeclaration" | "TSInterfaceDeclaration")))
+            .filter_map(span_of)
+            .map(|(start, end)| self.source.slice(start, end))
+            .collect()
+    }
+
     fn write(&mut self, text: &str) {
         self.out.push_str(text);
     }
@@ -214,7 +386,14 @@ impl Printer<'_> {
     }
 
     fn block(&mut self, block: &BlockStatement) {
-        if let Some(text) = self.unchanged(block, &block.base) {
+        self.block_with(block, &[]);
+    }
+
+    /// A block, with `prelude` (restored local type declarations) first.
+    fn block_with(&mut self, block: &BlockStatement, prelude: &[String]) {
+        if prelude.is_empty()
+            && let Some(text) = self.unchanged(block, &block.base)
+        {
             self.write(&text);
             return;
         }
@@ -224,12 +403,22 @@ impl Printer<'_> {
             self.newline();
             let _ = write!(self.out, "\"{}\";", directive.value.value);
         }
+        for declaration in prelude {
+            self.newline();
+            self.write(declaration);
+        }
         self.statements(&block.body);
         self.indent -= 1;
-        if !block.body.is_empty() || !block.directives.is_empty() {
+        if !block.body.is_empty() || !block.directives.is_empty() || !prelude.is_empty() {
             self.newline();
         }
         self.write("}");
+    }
+
+    /// A compiled function's body, with the local types it lost restored.
+    fn function_body(&mut self, function: &BaseNode, body: &BlockStatement) {
+        let prelude = self.dropped_local_types(function);
+        self.block_with(body, &prelude);
     }
 
     // ---- statements ------------------------------------------------------
@@ -475,7 +664,13 @@ impl Printer<'_> {
         }
     }
 
+    /// A variable declaration. `head` is a `for…of` or `for…in` head, whose
+    /// bindings have no initialiser and are no temporaries.
     fn variable_declaration(&mut self, declaration: &VariableDeclaration, in_for: bool) {
+        self.variable_declaration_in(declaration, in_for, false);
+    }
+
+    fn variable_declaration_in(&mut self, declaration: &VariableDeclaration, in_for: bool, head: bool) {
         if let Some(text) = self.unchanged(declaration, &declaration.base) {
             // A copied declaration statement carries its own `;`.
             self.write(text.trim_end_matches(';'));
@@ -492,7 +687,39 @@ impl Printer<'_> {
             if at > 0 {
                 self.write(", ");
             }
-            self.pattern(&declarator.id);
+            if let PatternLike::Identifier(identifier) = &declarator.id
+                && (identifier.type_annotation.is_some() || self.original_part(&identifier.base, "typeAnnotation").is_some())
+            {
+                let name = self.name(&identifier.base, &identifier.name).to_owned();
+                self.typed_locals.insert(name);
+            }
+            if let PatternLike::Identifier(identifier) = &declarator.id
+                && span_of_base(&identifier.base, self.source).is_some_and(|span| self.definite.contains(&span))
+                && self.unchanged(identifier, &identifier.base).is_none()
+            {
+                // `let x!: T`, whose `!` the output dropped.
+                let name = self.name(&identifier.base, &identifier.name).to_owned();
+                self.write(&name);
+                self.write("!");
+                if let Some(text) = self.original_part(&identifier.base, "typeAnnotation") {
+                    self.write(&text);
+                }
+            } else {
+                self.pattern(&declarator.id);
+            }
+            // `let t1;`: a temporary the compiler introduced, whose type is the
+            // checker's type of the expression it holds.
+            if declarator.init.is_none()
+                && !head
+                && let PatternLike::Identifier(identifier) = &declarator.id
+                && identifier.type_annotation.is_none()
+                && self.original_part(&identifier.base, "typeAnnotation").is_none()
+                && let Some(text) = self.checker_type(&identifier.base)
+            {
+                let _ = write!(self.out, ": {text}");
+                let name = self.name(&identifier.base, &identifier.name).to_owned();
+                self.typed_locals.insert(name);
+            }
             if let Some(init) = &declarator.init {
                 self.write(" = ");
                 if in_for {
@@ -506,9 +733,17 @@ impl Printer<'_> {
 
     fn for_left(&mut self, left: &ForInOfLeft) {
         match left {
-            ForInOfLeft::VariableDeclaration(d) => self.variable_declaration(d, true),
-            ForInOfLeft::Pattern(p) => self.pattern(p),
+            ForInOfLeft::VariableDeclaration(d) => self.variable_declaration_in(d, true, true),
+            ForInOfLeft::Pattern(p) => self.assignment_target(p),
         }
+    }
+
+    /// The left of an assignment: a pattern that declares nothing, so no
+    /// annotation is restored on it.
+    fn assignment_target(&mut self, target: &PatternLike) {
+        let outer = std::mem::replace(&mut self.assigning, true);
+        self.pattern(target);
+        self.assigning = outer;
     }
 
     /// An expression where a bare `in` would read as a `for…in`.
@@ -608,14 +843,16 @@ impl Printer<'_> {
         if let Some(id) = &f.id {
             self.write(&id.name);
         }
-        self.function_rest(f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+        self.function_rest(&f.base, f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
         self.write(" ");
-        self.block(&f.body);
+        self.function_body(&f.base, &f.body);
     }
 
-    /// `<T>(params): R`, the part every function form shares.
-    fn function_rest(&mut self, type_parameters: Option<&RawNode>, params: &[PatternLike], return_type: Option<&RawNode>) {
-        if let Some(text) = type_parameters.and_then(|t| self.raw(t)) {
+    /// `<T>(params): R`, the part every function form shares. Type parameters
+    /// and a return type the output dropped come back from the original.
+    fn function_rest(&mut self, function: &BaseNode, type_parameters: Option<&RawNode>, params: &[PatternLike], return_type: Option<&RawNode>) {
+        let type_parameters = type_parameters.and_then(|t| self.raw(t)).or_else(|| self.original_part(function, "typeParameters"));
+        if let Some(text) = type_parameters {
             self.write(&text);
         }
         self.write("(");
@@ -623,12 +860,54 @@ impl Printer<'_> {
             if at > 0 {
                 self.write(", ");
             }
-            self.pattern(param);
+            self.parameter(param);
         }
         self.write(")");
-        if let Some(text) = return_type.and_then(|t| self.raw(t)) {
+        let return_type = return_type.and_then(|t| self.raw(t)).or_else(|| self.original_part(function, "returnType"));
+        if let Some(text) = return_type {
             self.write(&text);
         }
+    }
+
+    /// A parameter: a renamed one (`t0` for a destructured prop) is typed as
+    /// the original parameter it stands for.
+    fn parameter(&mut self, param: &PatternLike) {
+        // `(a: T = 1)` became `(t1)`, defaulted in the body: the parameter is
+        // optional, and typed as the original's left side.
+        if let PatternLike::Identifier(identifier) = param
+            && identifier.type_annotation.is_none()
+            && let Some(defaulted) = self.originals_at(&identifier.base).iter().find(|node| node.get("type").and_then(Value::as_str) == Some("AssignmentPattern"))
+        {
+            let annotation = defaulted.get("left").and_then(|left| left.get("typeAnnotation")).and_then(span_of).map(|(s, e)| self.source.slice(s, e));
+            let left = defaulted.get("left").and_then(|left| left.get("_nodeId")).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok());
+            let name = self.name(&identifier.base, &identifier.name).to_owned();
+            self.write(&name);
+            self.write("?");
+            if let Some(text) = annotation {
+                self.write(&text);
+            } else if let Some(text) = left.and_then(|node| self.types.type_at(node & !crate::convert::SECOND_NODE)) {
+                let _ = write!(self.out, ": {text}");
+            }
+            return;
+        }
+        if let PatternLike::Identifier(identifier) = param
+            && identifier.type_annotation.is_none()
+            && self.unchanged(identifier, &identifier.base).is_none()
+            && self.original_part(&identifier.base, "typeAnnotation").is_none()
+        {
+            // No annotation to copy: a contextually typed parameter takes the
+            // checker's type.
+            let name = self.name(&identifier.base, &identifier.name).to_owned();
+            self.write(&name);
+            if self.originally_optional(&identifier.base) {
+                self.write("?");
+            }
+            if let Some(text) = self.checker_type(&identifier.base) {
+                let _ = write!(self.out, ": {text}");
+            }
+            return;
+        }
+        self.pattern(param);
     }
 
     // ---- patterns --------------------------------------------------------
@@ -642,10 +921,13 @@ impl Printer<'_> {
     fn identifier_binding(&mut self, identifier: &Identifier) {
         let name = self.name(&identifier.base, &identifier.name).to_owned();
         self.write(&name);
-        if identifier.optional == Some(true) {
+        if identifier.optional == Some(true) || self.originally_optional(&identifier.base) {
             self.write("?");
         }
-        self.annotation(identifier.type_annotation.as_ref());
+        let annotation = identifier.type_annotation.as_ref().and_then(|a| self.raw(a)).or_else(|| self.original_part(&identifier.base, "typeAnnotation"));
+        if let Some(text) = annotation {
+            self.write(&text);
+        }
     }
 
     fn pattern(&mut self, pattern: &PatternLike) {
@@ -667,7 +949,6 @@ impl Printer<'_> {
                     self.write(if at == 0 { " " } else { ", " });
                     match property {
                         ObjectPatternProperty::ObjectProperty(p) => {
-                            // Shorthand only while the value still prints as the key's name.
                             // `{ a }` and `{ a = 1 }` stay shorthand only while the
                             // value still prints as the key's name.
                             let shorthand = p.shorthand
@@ -695,7 +976,10 @@ impl Printer<'_> {
                     }
                 }
                 self.write(if object.properties.is_empty() { "}" } else { " }" });
-                self.annotation(object.type_annotation.as_ref());
+                let annotation = object.type_annotation.as_ref().and_then(|a| self.raw(a)).or_else(|| self.original_part(&object.base, "typeAnnotation"));
+                if let Some(text) = annotation {
+                    self.write(&text);
+                }
             }
             PatternLike::ArrayPattern(array) => {
                 if let Some(text) = self.unchanged(array, &array.base) {
@@ -765,18 +1049,34 @@ impl Printer<'_> {
         }
     }
 
-    /// An expression, parenthesised if its precedence is below `min`.
-    #[allow(clippy::too_many_lines)]
+    /// An expression, parenthesised if its precedence is below `min`, with a
+    /// `!` or type arguments the output dropped restored after it.
     fn expression(&mut self, expression: &Expression, min: u8) {
-        let parenthesise = precedence(expression) < min;
+        let base = expression_base(expression);
+        let wrapper = self.dropped_wrapper(base);
+        // A restored `!` or `<T>` binds like a member access: an operand of
+        // lower precedence is parenthesised under it.
+        let parenthesise = precedence(expression) < min || (wrapper.is_some() && precedence(expression) < CALL);
         if parenthesise {
             self.write("(");
         }
+        // An expression inside an assignment target (a default value, a
+        // computed key) declares its own bindings again.
+        let assigning = std::mem::replace(&mut self.assigning, false);
+        self.expression_inner(expression, min);
+        self.assigning = assigning;
+        if parenthesise {
+            self.write(")");
+        }
+        if let Some(wrapper) = wrapper {
+            self.write(&wrapper);
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn expression_inner(&mut self, expression: &Expression, min: u8) {
         if let Some(text) = self.unchanged(expression, expression_base(expression)) {
             self.write(&text);
-            if parenthesise {
-                self.write(")");
-            }
             return;
         }
         match expression {
@@ -858,7 +1158,8 @@ impl Printer<'_> {
             }
             Expression::CallExpression(c) => {
                 self.member_object(&c.callee, false);
-                if let Some(text) = c.type_parameters.as_ref().and_then(|p| self.raw(p)) {
+                let arguments = c.type_parameters.as_ref().and_then(|p| self.raw(p)).or_else(|| self.original_part(&c.base, "typeParameters"));
+                if let Some(text) = arguments {
                     self.write(&text);
                 }
                 self.write("(");
@@ -870,7 +1171,8 @@ impl Printer<'_> {
                 if c.optional {
                     self.write("?.");
                 }
-                if let Some(text) = c.type_parameters.as_ref().and_then(|p| self.raw(p)) {
+                let arguments = c.type_parameters.as_ref().and_then(|p| self.raw(p)).or_else(|| self.original_part(&c.base, "typeParameters"));
+                if let Some(text) = arguments {
                     self.write(&text);
                 }
                 self.write("(");
@@ -888,7 +1190,8 @@ impl Printer<'_> {
                 } else {
                     self.expression(&n.callee, CALL);
                 }
-                if let Some(text) = n.type_parameters.as_ref().and_then(|p| self.raw(p)) {
+                let arguments = n.type_parameters.as_ref().and_then(|p| self.raw(p)).or_else(|| self.original_part(&n.base, "typeParameters"));
+                if let Some(text) = arguments {
                     self.write(&text);
                 }
                 self.write("(");
@@ -955,9 +1258,19 @@ impl Printer<'_> {
                 self.expression(&c.alternate, ASSIGN);
             }
             Expression::AssignmentExpression(a) => {
-                self.pattern(&a.left);
+                self.assignment_target(&a.left);
                 let _ = write!(self.out, " {} ", assignment_operator(&a.operator));
                 self.expression(&a.right, ASSIGN);
+                // `t1 = $[1]` reads an erased cache slot into a typed
+                // temporary. Until the cache is typed (M3.4), the read is cast.
+                if let (PatternLike::Identifier(target), Expression::MemberExpression(read)) = (a.left.as_ref(), a.right.as_ref())
+                    && matches!(read.object.as_ref(), Expression::Identifier(cache) if cache.name == "$")
+                {
+                    let name = self.name(&target.base, &target.name).to_owned();
+                    if self.typed_locals.contains(&name) {
+                        let _ = write!(self.out, " as typeof {name}");
+                    }
+                }
             }
             Expression::SequenceExpression(s) => {
                 for (at, item) in s.expressions.iter().enumerate() {
@@ -971,10 +1284,10 @@ impl Printer<'_> {
                 if f.is_async {
                     self.write("async ");
                 }
-                self.function_rest(f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+                self.function_rest(&f.base, f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
                 self.write(" => ");
                 match f.body.as_ref() {
-                    ArrowFunctionBody::BlockStatement(block) => self.block(block),
+                    ArrowFunctionBody::BlockStatement(block) => self.function_body(&f.base, block),
                     ArrowFunctionBody::Expression(body) => {
                         let parenthesise = starts_ambiguously(body, false);
                         if parenthesise {
@@ -995,9 +1308,9 @@ impl Printer<'_> {
                 if let Some(id) = &f.id {
                     let _ = write!(self.out, " {}", id.name);
                 }
-                self.function_rest(f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+                self.function_rest(&f.base, f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
                 self.write(" ");
-                self.block(&f.body);
+                self.function_body(&f.base, &f.body);
             }
             Expression::ClassExpression(c) => self.span(&c.base),
             Expression::ParenthesizedExpression(p) => {
@@ -1011,6 +1324,11 @@ impl Printer<'_> {
                 self.pattern(&p.left);
                 self.write(" = ");
                 self.expression(&p.right, ASSIGN);
+            }
+            // `t0 as const`: the literal moved into `t0`, whose restored type is
+            // already the const type, and `as const` on a name is not TypeScript.
+            Expression::TSAsExpression(e) if matches!(e.expression.as_ref(), Expression::Identifier(_)) && is_const_assertion(&e.type_annotation) => {
+                self.expression(&e.expression, min);
             }
             Expression::TSAsExpression(e) => {
                 self.expression(&e.expression, RELATIONAL);
@@ -1035,19 +1353,18 @@ impl Printer<'_> {
                 self.expression(&e.expression, UNARY);
             }
             Expression::TSNonNullExpression(e) => {
+                self.restoring = span_of_base(expression_base(&e.expression), self.source);
                 self.expression(&e.expression, CALL);
                 self.write("!");
             }
             Expression::TSInstantiationExpression(e) => {
+                self.restoring = span_of_base(expression_base(&e.expression), self.source);
                 self.expression(&e.expression, CALL);
                 if let Some(text) = self.raw(&e.type_parameters) {
                     self.write(&text);
                 }
             }
             Expression::TypeCastExpression(e) => self.expression(&e.expression, min),
-        }
-        if parenthesise {
-            self.write(")");
         }
     }
 
@@ -1104,9 +1421,9 @@ impl Printer<'_> {
                     self.write("*");
                 }
                 self.property_key(&m.key, m.computed);
-                self.function_rest(m.type_parameters.as_ref(), &m.params, m.return_type.as_ref());
+                self.function_rest(&m.base, m.type_parameters.as_ref(), &m.params, m.return_type.as_ref());
                 self.write(" ");
-                self.block(&m.body);
+                self.function_body(&m.base, &m.body);
             }
             ObjectExpressionProperty::SpreadElement(s) => {
                 self.write("...");
@@ -1570,4 +1887,23 @@ fn expression_base(expression: &Expression) -> &BaseNode {
         Expression::TSInstantiationExpression(e) => &e.base,
         Expression::TypeCastExpression(e) => &e.base,
     }
+}
+
+/// A node's span: its `start` and `end`, or -- on a node the compiler's code
+/// generation made, which keeps only `loc` -- its location's indices, or its
+/// lines and columns where it kept no index either.
+fn span_of_base(base: &BaseNode, source: &SourceText) -> Option<(u32, u32)> {
+    if let (Some(start), Some(end)) = (base.start, base.end) {
+        return Some((start, end));
+    }
+    let loc = base.loc.as_ref()?;
+    let at = |position: &react_compiler_ast::common::Position| position.index.or_else(|| source.offset(position.line, position.column));
+    Some((at(&loc.start)?, at(&loc.end)?))
+}
+
+/// `as const`: a type reference to `const`.
+fn is_const_assertion(annotation: &RawNode) -> bool {
+    let value = annotation.parse_value();
+    value.get("type").and_then(Value::as_str) == Some("TSTypeReference")
+        && value.get("typeName").and_then(|name| name.get("name")).and_then(Value::as_str) == Some("const")
 }

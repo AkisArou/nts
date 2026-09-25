@@ -102,6 +102,13 @@ impl SourceText {
         }
     }
 
+    /// The offset of a 1-based line and a 0-based UTF-16 column.
+    #[must_use]
+    pub fn offset(&self, line: u32, column: u32) -> Option<u32> {
+        let start = *self.line_starts.get(usize::try_from(line).ok()?.checked_sub(1)?)?;
+        Some(start + column)
+    }
+
     #[must_use]
     pub fn location(&self, start: u32, end: u32) -> SourceLocation {
         SourceLocation {

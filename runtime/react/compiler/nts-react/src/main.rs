@@ -112,12 +112,13 @@ fn compile(tsconfig: &str, options: &str, out: &str) -> Result<()> {
         // The compiler's renames apply even when it compiled nothing, as the
         // Babel plugin applies them: a function that bailed out may still
         // have had a shadowing binding renamed while it was being lowered.
+        let mut types = SessionTypes { session: &mut session, path: &path, tree: &tree };
         let printed = match &result {
             react_compiler::entrypoint::CompileResult::Success { ast: Some(compiled), renames, .. } => {
-                nts_react::print::print_file(&text, &original, compiled, renames)
+                nts_react::print::print_file(&text, &original, compiled, renames, &mut types)
             }
             react_compiler::entrypoint::CompileResult::Success { ast: None, renames, .. } if !renames.is_empty() => {
-                nts_react::print::print_file(&text, &original, &original, renames)
+                nts_react::print::print_file(&text, &original, &original, renames, &mut types)
             }
             _ => code_for_output(&text),
         };
@@ -130,4 +131,23 @@ fn compile(tsconfig: &str, options: &str, out: &str) -> Result<()> {
 
 fn code_for_output(text: &nts_react::convert::text::SourceText) -> String {
     text.slice(0, text.len())
+}
+
+/// The checker's types, from the session that checked the file being printed.
+struct SessionTypes<'s> {
+    session: &'s mut nts_react::project::Session,
+    path: &'s camino::Utf8Path,
+    tree: &'s nts_frontend_ts::tsgo::ast::EncodedSourceFile,
+}
+
+impl nts_react::print::TypeOracle for SessionTypes<'_> {
+    fn type_at(&mut self, node: u32) -> Option<String> {
+        match self.session.type_text(self.path, self.tree, nts_semantic_schema::NodeId(node)) {
+            Ok(text) => text,
+            Err(error) => {
+                eprintln!("nts-react: no type for node {node} of {}: {error:#}", self.path);
+                None
+            }
+        }
+    }
 }
