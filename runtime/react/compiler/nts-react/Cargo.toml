@@ -24,9 +24,11 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+indexmap = "2"
+rustc-hash = "2"
 camino = { version = "1", features = ["serde1"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 # nts's frontend, used as a library: the tsgo client and the snapshot it
 # decodes. Nothing under compiler/ is edited for this crate.
 nts-frontend-ts = { path = "../../../../compiler/frontend-ts" }

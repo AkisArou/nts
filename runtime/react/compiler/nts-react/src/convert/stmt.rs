@@ -208,8 +208,15 @@ impl Converter<'_> {
     }
 
     fn unknown_statement(&self, id: NodeId) -> Converted<Statement> {
-        let name = if self.kind(id) == k::IMPORT_EQUALS_DECLARATION { "TSImportEqualsDeclaration" } else { "TSNamespaceExportDeclaration" };
-        UnknownStatement::from_raw(self.raw(name, id)).map(Statement::Unknown).map_err(|why| self.unsupported(id, &why))
+        let raw = if self.kind(id) == k::IMPORT_EQUALS_DECLARATION {
+            // `import lib = require(…)` binds `lib`, which the scope builder
+            // reads from here: the one name inside a pass-through statement
+            // that code can use as a value.
+            self.raw_with_name("TSImportEqualsDeclaration", id, self.need(id, "name")?)
+        } else {
+            self.raw("TSNamespaceExportDeclaration", id)
+        };
+        UnknownStatement::from_raw(raw).map(Statement::Unknown).map_err(|why| self.unsupported(id, &why))
     }
 
     /// A declaration, wrapped as Babel wraps it when it carries `export` (and
@@ -238,7 +245,10 @@ impl Converter<'_> {
         if !exported {
             return Ok(declaration_statement(declaration));
         }
-        let base = self.base(id);
+        // The declaration keeps the tsgo node's id; the export around it is a
+        // second Babel node made from the same tsgo node.
+        let mut base = self.base(id);
+        base.node_id = Some(id.0 | super::expr::SECOND_NODE);
         if is_default {
             let declaration = match declaration {
                 Declaration::FunctionDeclaration(f) => ExportDefaultDecl::FunctionDeclaration(f),

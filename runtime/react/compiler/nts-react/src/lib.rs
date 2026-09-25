@@ -8,4 +8,5 @@
 pub mod babel;
 pub mod convert;
 pub mod project;
+pub mod scope;
 pub mod tsgo;

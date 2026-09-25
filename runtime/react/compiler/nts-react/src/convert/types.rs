@@ -27,6 +27,13 @@ impl Converter<'_> {
         self.raw_span(type_name, id, self.start(id), self.end(id))
     }
 
+    /// An opaque node with its declared name as an `id` identifier.
+    pub(super) fn raw_with_name(&self, type_name: &str, id: NodeId, name: NodeId) -> RawNode {
+        let mut node = self.raw_value(type_name, id, self.start(id), self.end(id));
+        node.insert("id".to_owned(), self.entity_name(name));
+        RawNode::from_value(&Value::Object(node))
+    }
+
     pub(super) fn raw_span(&self, type_name: &str, id: NodeId, start: u32, end: u32) -> RawNode {
         RawNode::from_value(&Value::Object(self.raw_value(type_name, id, start, end)))
     }

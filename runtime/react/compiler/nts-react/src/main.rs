@@ -12,8 +12,8 @@ USAGE
       AST and its scope information) and print the result as JSON
   nts-react convert <tsconfig.json> <out-dir>
       convert each of the project's own sources into the compiler's input
-      format, writing <out-dir>/<file>.ast.json, or <file>.unsupported.txt
-      naming the construct that stopped it";
+      format, writing <out-dir>/<file>.ast.json and <file>.scope.json, or
+      <file>.unsupported.txt naming the construct that stopped it";
 
 fn main() -> ExitCode {
     // Deeply nested programs recurse deeply in the compiler; upstream's addon
@@ -60,7 +60,9 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
         let name = source.path.file_name().unwrap_or("source");
         match nts_react::convert::convert_file(nodes, source.root, &text) {
             Ok(file) => {
+                let scope = nts_react::scope::build(&file);
                 std::fs::write(out.join(format!("{name}.ast.json")), serde_json::to_string(&file)?)?;
+                std::fs::write(out.join(format!("{name}.scope.json")), serde_json::to_string(&scope)?)?;
                 converted += 1;
             }
             Err(why) => {
