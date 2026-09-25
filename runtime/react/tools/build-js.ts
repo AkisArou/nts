@@ -10,7 +10,7 @@
 // scheduler a test has mocked) lives in exactly one module.
 
 import {build, type Plugin} from 'esbuild';
-import {mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -37,7 +37,9 @@ function sourceFor(target: ExportTarget, mode: string): string {
   return source;
 }
 
-const packages: Package[] = readdirSync(packagesDir).map(dir => {
+// A package is a directory with a manifest, as npm workspaces define it; a
+// design draft such as packages/react-gtk is not one yet.
+const packages: Package[] = readdirSync(packagesDir).filter(dir => existsSync(join(packagesDir, dir, 'package.json'))).map(dir => {
   const manifest = JSON.parse(readFileSync(join(packagesDir, dir, 'package.json'), 'utf8'));
   return {
     dir,
