@@ -17,6 +17,11 @@
 // - The `setTimeout` is libuv's, and fires from inside XAML's loop: the host
 //   posts its wake message to the thread's queue, which XAML dispatches like
 //   any other. It reads the title back through the window and exits.
+// - The button is a `PressButton`, a class over XAML's `Button` overriding
+//   one method of `IControlOverrides`, as C# overrides one. The interface's
+//   other 24 slots call `Button`'s own implementation, so when the timer
+//   focuses the button, XAML's `OnGotFocus` reaches `Button`'s through one of
+//   them, and `focused=true` says the focus moved.
 // - The button's `Click` handler is a TypeScript function counting into a
 //   captured `let`. The timer presses it the way an accessibility client does
 //   -- its automation peer's `IInvokeProvider.Invoke` -- so no person is
@@ -24,12 +29,20 @@
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
 import { report } from "c:report";
 import { PropertyValue } from "winrt:Windows.Foundation";
-import { Application, Window } from "winrt:Microsoft.UI.Xaml";
+import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
+import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { ButtonAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
 import { Button, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
 
 let launched = 0;
+let entered = 0;
+
+class PressButton extends Button {
+  OnPointerEntered(_e: IPointerRoutedEventArgs | null): void {
+    entered += 1;
+  }
+}
 
 class App extends Application {
   OnLaunched(_args: ILaunchActivatedEventArgs | null): void {
@@ -37,7 +50,7 @@ class App extends Application {
     this.get_Resources().get_MergedDictionaries().Append(XamlControlsResources.create().as_IResourceDictionary());
     const window = Window.CreateInstance();
     window.put_Title("nts");
-    const button = Button.CreateInstance();
+    const button = new PressButton();
     button.as_IContentControl().put_Content(PropertyValue.CreateString("Press"));
     let clicks = 0;
     button.as_IButtonBase().add_Click(() => {
@@ -46,9 +59,10 @@ class App extends Application {
     window.put_Content(button.as_IUIElement());
     window.Activate();
     setTimeout(() => {
+      const focused = button.as_IUIElement().Focus(FocusState.Programmatic);
       ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
       const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
-      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled));
+      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(entered));
       this.Exit();
     }, 1500);
   }

@@ -44,6 +44,14 @@ const BINDING: &str = r#"declare module "winrt:Test.Xaml" {
      * @ntsOverride 0B5ED9C1-0B2C-4B4C-8F5C-3D2A0F1E2D3C 7 Second
      */
     Second(value: CNumber<"int32">, flag: boolean): void;
+    /**
+     * @ntsOverride 7C2B8F0E-5A61-4D3B-9E47-1F0A2B3C4D5E 6 Third
+     */
+    Third(): { found: CNumber<"int32">; returnValue: boolean };
+    /**
+     * @ntsOverride 7C2B8F0E-5A61-4D3B-9E47-1F0A2B3C4D5E 7 Fourth
+     */
+    Fourth(): void;
   }
   export interface Application extends IApplication {}
 }
@@ -209,15 +217,54 @@ fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
     assert!(checked.status.success(), "{}", String::from_utf8_lossy(&checked.stderr));
 }
 
+/// A class overriding part of an interface, as C# lets it: each slot it
+/// leaves is a forwarder calling the same slot of the base's own
+/// implementation with the same arguments -- `Second`'s `int32` and `bool`
+/// passed through, not converted -- so the table has no gap.
+#[test]
+fn a_slot_the_class_leaves_is_forwarded_to_its_base() {
+    let source = "import { Application } from \"winrt:Test.Xaml\";\nclass App extends Application {\n  First(): void {}\n}\nexport function start(): void {\n  new App();\n}\n";
+    let Some((dir, prepared)) = prepare("forward", source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    let forward = text.lines().find(|line| line.starts_with("static int32_t nts_com_forward_App_0(")).unwrap_or_else(|| panic!("no forwarder:\n{text}"));
+    assert!(
+        forward.contains("(void * a0, int32_t a1, bool a2)")
+            && forward.contains("nts_com_outer_base(a0)")
+            && forward.contains("[7])(base, a1, a2);"),
+        "{forward}"
+    );
+    let table = text.lines().find(|line| line.starts_with("static const void *const nts_com_table_App_0[]")).unwrap();
+    assert!(table.ends_with("(const void *)nts_com_adapter_App_0, (const void *)nts_com_forward_App_0 };"), "{table}");
+    windows_syntax(&dir, &c);
+
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("define internal i32 @nts_com_forward_App_0(ptr %a0, i32 %a1, i1 zeroext %a2)"), "{}", llvm.text);
+    assert!(llvm.text.contains("call i32 %base.fn(ptr %base, i32 %a1, i1 zeroext %a2)"), "{}", llvm.text);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
 /// What a composed class cannot be yet, refused where it is written, naming
-/// it: an interface overridden in part (its other slots would have nothing to
-/// answer them), a constructor, and a field.
+/// it: an interface overridden in part whose other slot cannot be forwarded,
+/// a constructor, and a field.
 #[test]
 fn what_a_composed_class_cannot_hold_is_refused_by_name() {
     let head = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\n";
     let tail = "export function start(): void {\n  new App();\n}\n";
     for (name, body, refusal) in [
-        ("partial", "  OnLaunched(_args: IInspectable | null): void {}\n  First(): void {}\n", "Second"),
+        ("unforwardable", "  Fourth(): void {}\n", "`Third`, whose base's is forwarded to and cannot be: a result the binding spells as `out` parameters' fields"),
         ("constructor", "  constructor() {\n    super();\n  }\n  OnLaunched(_args: IInspectable | null): void {}\n", "constructor"),
         ("field", "  count = 0;\n  OnLaunched(_args: IInspectable | null): void {}\n", "field"),
     ] {

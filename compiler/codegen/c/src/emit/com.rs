@@ -125,7 +125,7 @@ fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried:
 /// the outer object's; the class's descriptor; and one constructor
 /// registering them all before `main`, as Objective-C classes are.
 pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
-    use nts_codegen_common::com::{adapter_symbol, class_symbol, interfaces, interfaces_symbol, table_symbol, OUTER_SLOTS};
+    use nts_codegen_common::com::{adapter_symbol, class_symbol, forward_symbol, interfaces, interfaces_symbol, table_symbol, Answer, OUTER_SLOTS};
     let classes = nts_codegen_common::com::classes(program);
     if classes.is_empty() {
         return Ok(());
@@ -167,23 +167,30 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 ),
             );
         }
+        let Some(composition) = &class.composition else {
+            return Err(refuse("a class written over a composable class with no factory"));
+        };
+        for (at, forward) in composition.forwarded.iter().enumerate() {
+            forwarder(writer, origin, &forward_symbol(&class.name, at), forward);
+        }
         let answered = interfaces(class);
         let mut rows = Vec::new();
         for (index, interface) in answered.iter().enumerate() {
             let mut slots: Vec<String> = OUTER_SLOTS.iter().map(|slot| format!("(const void *){slot}")).collect();
-            for (slot, at) in &interface.overrides {
+            for (slot, answer) in &interface.slots {
                 if *slot as usize != slots.len() {
                     return Err(refuse("an override table with a gap, which lowering refuses"));
                 }
-                slots.push(format!("(const void *){}", adapter_symbol(&class.name, *at)));
+                let symbol = match answer {
+                    Answer::Override(at) => adapter_symbol(&class.name, *at),
+                    Answer::Forward(at) => forward_symbol(&class.name, *at),
+                };
+                slots.push(format!("(const void *){symbol}"));
             }
             let table = table_symbol(&class.name, index);
             writer.line(origin, format!("static const void *const {table}[] = {{ {} }};", slots.join(", ")));
             rows.push(format!("{{ {}ull, {}ull, {table} }}", interface.low, interface.high));
         }
-        let Some(composition) = &class.composition else {
-            return Err(refuse("a class written over a composable class with no factory"));
-        };
         let (low, high) = nts_core::hir::native::iid_words(&composition.factory).unwrap_or_default();
         let interfaces_array = interfaces_symbol(&class.name);
         writer.line(origin, format!("static const NtsComInterface {interfaces_array}[] = {{ {} }};", rows.join(", ")));
@@ -206,4 +213,31 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     }
     writer.line(origin, "}");
     Ok(())
+}
+
+/// A slot the class leaves to its base: the same slot of the base's own
+/// implementation, called with the same arguments and answering its HRESULT.
+/// No TypeScript runs, so there is no callback to enter.
+fn forwarder(writer: &mut CodeWriter, origin: &Origin, name: &str, forward: &nts_core::hir::native::Forwarded) {
+    let types: Vec<String> = forward
+        .signature
+        .parameters
+        .iter()
+        .map(|ty| match ty {
+            nts_core::hir::native::Type::Pointer(_) => "void *".to_owned(),
+            other => other.c_type().into_owned(),
+        })
+        .collect();
+    let parameters: Vec<String> = types.iter().enumerate().map(|(at, ty)| format!("{ty} a{at}")).collect();
+    let arguments: Vec<String> = std::iter::once("base".to_owned()).chain((1..types.len()).map(|at| format!("a{at}"))).collect();
+    writer.line(
+        origin,
+        format!(
+            "static int32_t {name}({}) {{ void *base = nts_com_outer_base(a0); return ((int32_t (*)({}))(*(void ***)base)[{}])({}); }}",
+            parameters.join(", "),
+            types.join(", "),
+            forward.slot,
+            arguments.join(", ")
+        ),
+    );
 }

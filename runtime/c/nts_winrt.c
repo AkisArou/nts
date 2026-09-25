@@ -545,6 +545,9 @@ typedef struct NtsComOuter NtsComOuter;
 typedef struct {
   const void *const *table;
   NtsComOuter *outer;
+  /* The inner's own implementation of this face's interface, which a slot
+   * the class does not override forwards to: found on the first forward. */
+  void *volatile base;
 } NtsComFace;
 struct NtsComOuter {
   volatile LONG count;
@@ -563,6 +566,32 @@ static NtsComOuter *nts_com_outer_of(void *face) {
 
 void *nts_com_outer_instance(void *face) {
   return nts_com_outer_of(face)->instance;
+}
+
+void *nts_com_outer_base(void *face) {
+  NtsComFace *at = face;
+  if (at->base != 0) {
+    return at->base;
+  }
+  NtsComOuter *outer = at->outer;
+  const NtsComInterface *answered = &outer->cls->interfaces[at - outer->faces];
+  IID iid = nts_iid(answered->iid_low, answered->iid_high);
+  void *base = 0;
+  typedef HRESULT(STDMETHODCALLTYPE * Query)(void *, const IID *, void **);
+  HRESULT hr = ((Query)(*(void ***)outer->inner)[0])(outer->inner, &iid, &base);
+  if (FAILED(hr) || base == 0) {
+    fprintf(stderr,
+            "nts: %s's base does not implement an interface it overrides "
+            "(0x%08lx)\n",
+            outer->cls->name, (unsigned long)hr);
+    abort();
+  }
+  /* The reference the query took is this object's -- an aggregated
+   * interface counts on its outer object -- so it is given back at once, and
+   * the pointer lives as long as the inner, which this object holds. */
+  ((ULONG(STDMETHODCALLTYPE *)(void *))(*(void ***)base)[2])(base);
+  InterlockedCompareExchangePointer((void *volatile *)&at->base, base, 0);
+  return at->base;
 }
 
 /* {AF86E2E0-B12D-4C6A-9C5A-D7AA65101E90} and IXamlMetadataProvider's

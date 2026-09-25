@@ -418,8 +418,9 @@ fn refused_declaration(func: &Func) -> Option<String> {
             params.push("i32".to_owned());
             params.push("i64".to_owned());
         } else {
+            // A parameter's extension follows its type; a result's precedes.
             let ty = ty_of(&param.ty, func).ok()?;
-            params.push(format!("{}{ty}", extension(&param.ty)));
+            params.push(format!("{ty} {}", extension(&param.ty)).trim_end().to_owned());
         }
     }
     Some(format!(

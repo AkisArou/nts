@@ -389,6 +389,29 @@ fn aggregate_arguments_respect_register_exhaustion() {
 /// and the backend emits what is left rather than panicking over the absent
 /// first function it took a global's refusal context from. A native local at
 /// module scope is one: the global holding it is where its address escapes.
+/// A refused function is declared so the module still parses and the link
+/// names it. Its `boolean` parameter was declared `zeroext i1`, a result's
+/// order, which is not IR: the module failed to parse, the failure the
+/// declaration exists to prevent. An export taking a `bigint` is one this
+/// backend refuses on Win64.
+#[test]
+fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
+    let Some((dir, prepared)) = prepare("refused-boolean", r"
+        export function pick(flag: boolean, n: bigint): bigint {
+            return flag ? n : 0n;
+        }
+        export function first(): bigint {
+            return pick(true, 1n);
+        }
+    ") else { return };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    let declared = llvm.text.lines().find(|line| line.starts_with("declare") && line.contains("@pick(")).unwrap_or_else(|| panic!("`pick` was not refused and declared: {:?}", llvm.diagnostics));
+    assert!(declared.contains("(i1 zeroext, "), "{declared}");
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    clang(&dir, &["--target=x86_64-w64-windows-gnu", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"]);
+}
+
 #[test]
 fn a_program_with_every_function_refused_still_emits() {
     let Some((_, prepared)) = prepare("all-refused", r#"

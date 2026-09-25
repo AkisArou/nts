@@ -4,7 +4,8 @@
 use std::fmt::Write as _;
 
 use nts_codegen_common::com::{
-    adapter_symbol, class_symbol, delegate_hop_symbol, delegate_invoke_symbol, delegate_signatures, interfaces, interfaces_symbol, table_symbol, OUTER_SLOTS,
+    adapter_symbol, class_symbol, delegate_hop_symbol, delegate_invoke_symbol, delegate_signatures, forward_symbol, interfaces, interfaces_symbol, table_symbol,
+    Answer, OUTER_SLOTS,
 };
 use nts_codegen_common::objc::{Carried, hop_arguments};
 use nts_core::hir::native::{FnPointer, Type};
@@ -116,7 +117,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         return Ok((out, None));
     }
     super::declare_callbacks(&mut out, callbacks_declared);
-    out.push_str("declare void @nts_com_register(ptr)\ndeclare ptr @nts_com_outer_instance(ptr)\n");
+    out.push_str("declare void @nts_com_register(ptr)\ndeclare ptr @nts_com_outer_instance(ptr)\ndeclare ptr @nts_com_outer_base(ptr)\n");
     for slot in OUTER_SLOTS {
         let _ = writeln!(out, "declare void @{slot}()");
     }
@@ -130,24 +131,31 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
                 .ok_or_else(|| refuse(first, "an override whose compiled function this program does not define"))?;
             adapter(&mut out, platform, &adapter_symbol(&class.name, at), method, compiled)?;
         }
+        let Some(composition) = &class.composition else {
+            return Err(refuse(first, "a class written over a composable class with no factory"));
+        };
+        for (at, forward) in composition.forwarded.iter().enumerate() {
+            forwarder(&mut out, &forward_symbol(&class.name, at), forward);
+        }
         let answered = interfaces(class);
         let mut rows = Vec::new();
         for (index, interface) in answered.iter().enumerate() {
             let mut slots: Vec<String> = OUTER_SLOTS.iter().map(|slot| format!("ptr @{slot}")).collect();
-            for (slot, at) in &interface.overrides {
+            for (slot, answer) in &interface.slots {
                 if *slot as usize != slots.len() {
                     return Err(refuse(first, "an override table with a gap, which lowering refuses"));
                 }
-                slots.push(format!("ptr @{}", adapter_symbol(&class.name, *at)));
+                let symbol = match answer {
+                    Answer::Override(at) => adapter_symbol(&class.name, *at),
+                    Answer::Forward(at) => forward_symbol(&class.name, *at),
+                };
+                slots.push(format!("ptr @{symbol}"));
             }
             let table = table_symbol(&class.name, index);
             let _ = writeln!(out, "@{table} = internal constant [{} x ptr] [{}]", slots.len(), slots.join(", "));
             // An IID word's bits, which IR writes as a signed literal.
             rows.push(format!("{{ i64, i64, ptr }} {{ i64 {}, i64 {}, ptr @{table} }}", interface.low.cast_signed(), interface.high.cast_signed()));
         }
-        let Some(composition) = &class.composition else {
-            return Err(refuse(first, "a class written over a composable class with no factory"));
-        };
         let (low, high) = nts_core::hir::native::iid_words(&composition.factory).unwrap_or_default();
         let descriptor = class_symbol(&class.name);
         let array = interfaces_symbol(&class.name);
@@ -211,4 +219,22 @@ fn adapter(out: &mut String, platform: Platform, name: &str, method: &ForeignMet
     let _ = writeln!(out, "  call {result} {}({})", symbol(&compiled.name), arguments.join(", "));
     let _ = writeln!(out, "  call void @nts_callback_leave()\n  ret i32 0\n}}");
     Ok(())
+}
+
+/// A slot the class leaves to its base: the same slot of the base's own
+/// implementation, called with the same arguments and answering its HRESULT.
+/// No TypeScript runs, so there is no callback to enter.
+fn forwarder(out: &mut String, name: &str, forward: &nts_core::hir::native::Forwarded) {
+    let spelled: Vec<String> = forward.signature.parameters.iter().map(abi_parameter).collect();
+    let parameters: Vec<String> = spelled.iter().enumerate().map(|(at, ty)| format!("{ty} %a{at}")).collect();
+    let arguments: Vec<String> = std::iter::once("ptr %base".to_owned())
+        .chain(spelled.iter().enumerate().skip(1).map(|(at, ty)| format!("{ty} %a{at}")))
+        .collect();
+    let _ = writeln!(out, "define internal i32 @{name}({}) nounwind {{", parameters.join(", "));
+    let _ = writeln!(out, "  %base = call ptr @nts_com_outer_base(ptr %a0)");
+    let _ = writeln!(out, "  %table = load ptr, ptr %base");
+    let _ = writeln!(out, "  %slot = getelementptr inbounds ptr, ptr %table, i64 {}", forward.slot);
+    let _ = writeln!(out, "  %base.fn = load ptr, ptr %slot");
+    let _ = writeln!(out, "  %r = call i32 %base.fn({})", arguments.join(", "));
+    let _ = writeln!(out, "  ret i32 %r\n}}");
 }

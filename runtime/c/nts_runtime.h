@@ -1933,6 +1933,9 @@ void *nts_com_compose_named(const NtsString *name);
 /* The instance an override's adapter calls the compiled method with, from
  * the interface pointer the adapter was called through. Borrowed. */
 void *nts_com_outer_instance(void *face);
+/* The base class's own implementation of the interface `face` answers, which
+ * a slot the class does not override calls. Borrowed. */
+void *nts_com_outer_base(void *face);
 /* Slots 0 to 5 of every table an `NtsComClass` names: `IUnknown`'s and
  * `IInspectable`'s, answered by the outer object. */
 int32_t nts_com_outer_query(void *face, const void *iid, void **out);

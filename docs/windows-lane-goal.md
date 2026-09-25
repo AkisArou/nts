@@ -258,9 +258,17 @@ Application.Start(() => { new App(); });
   control with the metadata provider off ends with `the runtime class could
   not be constructed (0x80004005)`. The compiler before this change
   rejects the program (`TS2507`).
+- **Overriding part of an interface** works as it does in C#: each slot the
+  class leaves is a forwarder calling the same slot of the inner object's own
+  implementation, found by `QueryInterface` once and borrowed. The fixture's
+  `PressButton` overrides one of `IControlOverrides`' 25 methods, and
+  focusing it reaches `Button`'s `OnGotFocus` through a forwarder. The control
+  (`nts_com_outer_base` made to abort) ends the program there.
 - **Refused by name, for now:**
-  - an interface overridden in part; the other slots would need forwarders to
-    the inner object's implementation, which is the next step here;
+  - a slot that can't be forwarded yet: a record by value
+    (`MeasureOverride(Size)`), or a result the binding spells as `out`
+    fields. So `IFrameworkElementOverrides` can't be overridden in part;
+  - `super.OnX(...)`, calling the base's implementation from an override;
   - a constructor of the class's own, and fields. Captured state works
     (a closure, a module variable);
   - a `new` with arguments; and an override returning a value.
@@ -277,7 +285,8 @@ Application.Start(() => { new App(); });
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
 2. **W2's rest** as listed above: awaitable operations once `await` honours
-   thenables. **W3:** partial overrides, then fields on a composed class.
+   thenables. **W3:** `super` calls and records through forwarders, then
+   fields on a composed class.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT.
 

@@ -3500,6 +3500,18 @@ pub struct Composable {
     pub factory: String,
     pub slot: u32,
     pub xaml: bool,
+    /// The slots of the interfaces the class overrides that it leaves to its
+    /// base, as C# does: each calls the base's own implementation.
+    pub forwarded: Vec<Forwarded>,
+}
+
+/// A slot of an interface the class overrides in part, answered by calling
+/// the same slot of the base's implementation with the same arguments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Forwarded {
+    pub iid: String,
+    pub slot: u32,
+    pub signature: std::sync::Arc<FnPointer>,
 }
 
 /// The C signature a COM override's adapter is called with: the interface
@@ -3516,6 +3528,28 @@ pub(crate) fn override_signature(snapshot: &SemanticSnapshot, signature: &nts_se
             .filter(|ty| *ty != Type::Void)
             .ok_or_else(|| format!("parameter `{}`, whose type has no C type the runtime could pass", parameter.name))?;
         parameters.push(ty);
+    }
+    Ok(FnPointer::spell(parameters, Type::Scalar(Scalar::Int32)))
+}
+
+/// The C signature a forwarded slot is called with, and calls its base's
+/// with: the interface pointer, each argument, and a result's pointer last,
+/// answering an HRESULT. Nothing is converted, so a result of any type is one
+/// pointer; what is refused is what the binding does not spell as one
+/// argument (an `out` parameter's fields, a record by value).
+pub(crate) fn forward_signature(snapshot: &SemanticSnapshot, signature: &nts_semantic_schema::SignatureRecord) -> Result<FnPointer, String> {
+    let mut parameters = vec![Type::Pointer(Pointee::Void)];
+    for parameter in &signature.parameters {
+        match abi_type(snapshot, parameter.ty) {
+            Some(Type::Record(_)) => return Err(format!("parameter `{}`, a record by value", parameter.name)),
+            Some(ty) if ty != Type::Void => parameters.push(ty),
+            _ => return Err(format!("parameter `{}`, whose type has no C type", parameter.name)),
+        }
+    }
+    match abi_type(snapshot, signature.return_type) {
+        Some(Type::Void) => {}
+        Some(_) => parameters.push(Type::Pointer(Pointee::Void)),
+        None => return Err("a result the binding spells as `out` parameters' fields".to_owned()),
     }
     Ok(FnPointer::spell(parameters, Type::Scalar(Scalar::Int32)))
 }

@@ -6105,22 +6105,25 @@ fn refuses_an_unregistered_handle(snapshot: &SemanticSnapshot, class: NodeId, lo
 fn register_com_class(
     snapshot: &SemanticSnapshot,
     class: NodeId,
-    composition: super::native::Composable,
+    mut composition: super::native::Composable,
     methods: Vec<super::ForeignMethod>,
     lowered: &mut Lowered,
 ) {
     let probe = FuncBuilder::probe(snapshot);
     // An interface answered by the class's own table answers all of its
-    // methods there: one it does not override would need forwarding to the
-    // base, which is not built. Refused by name, not left a gap.
-    if let Some(missing) = probe.unoverridden(class, &methods) {
-        let diagnostic = probe.unsupported(
-            class,
-            &format!("a class written over a composable Windows Runtime class that overrides some of an interface's methods and not `{missing}`, which would be forwarded to its base"),
-        );
-        note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
-        lowered.diagnostics.push(diagnostic);
-        return;
+    // methods there: each one the class does not override is forwarded to the
+    // base's own, and one that cannot be is refused by name, not left a gap.
+    match probe.forwarded(class, &methods) {
+        Ok(forwarded) => composition.forwarded = forwarded,
+        Err((missing, why)) => {
+            let diagnostic = probe.unsupported(
+                class,
+                &format!("a class written over a composable Windows Runtime class that overrides some of an interface's methods and not `{missing}`, whose base's is forwarded to and cannot be: {why}"),
+            );
+            note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+            lowered.diagnostics.push(diagnostic);
+            return;
+        }
     }
     let Some(name) = probe
         .children(class)
@@ -14015,17 +14018,22 @@ impl<'a> FuncBuilder<'a> {
         Ok((func, method))
     }
 
-    /// A method of an interface the class overrides some of and not this one:
-    /// the base declares it overridable at the same IID, and no method of the
-    /// class answers its slot.
-    fn unoverridden(&self, class: NodeId, methods: &[super::ForeignMethod]) -> Option<String> {
-        let answered: Vec<(&str, u32)> = methods
+    /// The slots of the interfaces the class overrides some of that it does
+    /// not override, each with the signature it is called with: the base
+    /// declares it overridable at the same IID, and no method of the class
+    /// answers its slot. A binding lists an overridable interface on every
+    /// class deriving from its declarer, so a slot is taken once, nearest
+    /// base first. `Err` names the first that cannot be forwarded, and why.
+    fn forwarded(&self, class: NodeId, methods: &[super::ForeignMethod]) -> Result<Vec<super::native::Forwarded>, (String, String)> {
+        let mut answered: Vec<(String, u32)> = methods
             .iter()
             .filter_map(|method| match &method.dispatch {
-                super::Dispatch::Slot { iid, slot } => Some((iid.as_str(), *slot)),
+                super::Dispatch::Slot { iid, slot } => Some((iid.clone(), *slot)),
                 super::Dispatch::Selector(_) => None,
             })
             .collect();
+        let used: Vec<String> = answered.iter().map(|(iid, _)| iid.clone()).collect();
+        let mut forwarded = Vec::new();
         let mut at = super::native::superclass(self.snapshot, class);
         while let Some(base) = at {
             for member in self.children(base) {
@@ -14033,14 +14041,18 @@ impl<'a> FuncBuilder<'a> {
                 let words: Vec<&str> = tag.split_whitespace().collect();
                 let [iid, slot, name, ..] = words.as_slice() else { continue };
                 let Ok(slot) = slot.parse::<u32>() else { continue };
-                let interface_used = answered.iter().any(|(used, _)| used == iid);
-                if interface_used && !answered.contains(&(*iid, slot)) {
-                    return Some((*name).to_owned());
+                if !used.iter().any(|used| used == iid) || answered.iter().any(|(done, at)| done == iid && *at == slot) {
+                    continue;
                 }
+                let signature = super::generics::declared_signature(self.snapshot, member)
+                    .ok_or_else(|| ((*name).to_owned(), "its binding declares no signature".to_owned()))?;
+                let signature = super::native::forward_signature(self.snapshot, signature).map_err(|why| ((*name).to_owned(), why))?;
+                answered.push(((*iid).to_owned(), slot));
+                forwarded.push(super::native::Forwarded { iid: (*iid).to_owned(), slot, signature: std::sync::Arc::new(signature) });
             }
             at = super::native::superclass(self.snapshot, base);
         }
-        None
+        Ok(forwarded)
     }
 
     /// The interface and slot a base the program's class extends declares a

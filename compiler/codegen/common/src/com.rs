@@ -46,34 +46,57 @@ pub fn classes(program: &Program) -> Vec<&nts_core::hir::ForeignClass> {
 }
 
 /// One interface a composed class answers itself: its IID's two words and
-/// its overrides by slot, from 6 up -- `(slot, index into the class's
-/// methods)`. Lowering has checked that they are every method the base
-/// declares for the interface, so the slots run without a gap.
+/// what answers each slot from 6 up, in slot order. Lowering has checked that
+/// the slots are every method the base declares for the interface, each an
+/// override or forwarded, so they run without a gap.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Interface {
     pub iid: String,
     pub low: u64,
     pub high: u64,
-    pub overrides: Vec<(u32, usize)>,
+    pub slots: Vec<(u32, Answer)>,
+}
+
+/// What answers a slot: an override (an index into the class's methods), or
+/// the base's own implementation (into its composition's `forwarded`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Answer {
+    Override(usize),
+    Forward(usize),
 }
 
 /// A composed class's interfaces, in the order its methods first name them.
 #[must_use]
 pub fn interfaces(class: &nts_core::hir::ForeignClass) -> Vec<Interface> {
     let mut found: Vec<Interface> = Vec::new();
-    for (at, method) in class.methods.iter().enumerate() {
-        let nts_core::hir::Dispatch::Slot { iid, slot } = &method.dispatch else { continue };
+    let mut answer = |iid: &String, slot: u32, answer: Answer| {
         let index = found.iter().position(|interface| interface.iid == *iid).unwrap_or_else(|| {
             let (low, high) = nts_core::hir::native::iid_words(iid).unwrap_or_default();
-            found.push(Interface { iid: iid.clone(), low, high, overrides: Vec::new() });
+            found.push(Interface { iid: iid.clone(), low, high, slots: Vec::new() });
             found.len() - 1
         });
-        found[index].overrides.push((*slot, at));
+        found[index].slots.push((slot, answer));
+    };
+    for (at, method) in class.methods.iter().enumerate() {
+        if let nts_core::hir::Dispatch::Slot { iid, slot } = &method.dispatch {
+            answer(iid, *slot, Answer::Override(at));
+        }
+    }
+    let forwarded = class.composition.iter().flat_map(|composition| composition.forwarded.iter());
+    for (at, forward) in forwarded.enumerate() {
+        answer(&forward.iid, forward.slot, Answer::Forward(at));
     }
     for interface in &mut found {
-        interface.overrides.sort_unstable();
+        interface.slots.sort_unstable();
     }
     found
+}
+
+/// A forwarded slot's adapter, `nts_com_forward_App_0`: the base's
+/// implementation called with the same arguments.
+#[must_use]
+pub fn forward_symbol(class: &str, at: usize) -> String {
+    format!("nts_com_forward_{class}_{at}")
 }
 
 /// An override's adapter, `nts_com_adapter_App_0`: what the interface's

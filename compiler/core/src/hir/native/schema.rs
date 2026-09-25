@@ -261,6 +261,7 @@ pub(crate) fn composable_base(snapshot: &SemanticSnapshot, declaration: NodeId) 
                     factory: (*factory).to_owned(),
                     slot: slot.parse().ok()?,
                     xaml: rest == ["xaml"],
+                    forwarded: Vec::new(),
                 }),
                 _ => None,
             };
