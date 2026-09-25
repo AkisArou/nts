@@ -1,5 +1,5 @@
 // Swift's surface, timed: the same four loops as reference/bench.swift.
-import { NSMutableArray, NSNumber, NSOperation, NSString } from "objc:Foundation";
+import { NSMutableArray, NSNumber, NSObject, NSOperation, NSString } from "objc:Foundation";
 import { now_ns, report } from "c:support";
 
 // Milliseconds, from the clock Swift's `DispatchTime` reads.
@@ -11,6 +11,22 @@ function joined(prefix: string, count: number, separator: string): string {
   let text = "";
   for (let i = 0; i < count; i++) text += (i === 0 ? "" : separator) + prefix + i;
   return text;
+}
+
+// A field of a class the runtime makes, and the same field on a class of the
+// program's own: what reaching one through the ivar costs over a plain load.
+class Tally extends NSObject {
+  count = 0;
+  bump(): void {
+    this.count++;
+  }
+}
+
+class Plain {
+  count = 0;
+  bump(): void {
+    this.count++;
+  }
 }
 
 function time(label: string, count: number, body: () => number): void {
@@ -49,6 +65,16 @@ function main(): void {
     let total = 0;
     for (let i = 0; i < 100_000; i++) total += NSString.path({ withComponents: parts }).length;
     return total;
+  });
+  const tally = new Tally();
+  time("field", 10_000_000, () => {
+    for (let i = 0; i < 10_000_000; i++) tally.bump();
+    return tally.count;
+  });
+  const plain = new Plain();
+  time("plain-field", 10_000_000, () => {
+    for (let i = 0; i < 10_000_000; i++) plain.bump();
+    return plain.count;
   });
   const list = new NSMutableArray();
   time("objects-in", 100_000, () => {

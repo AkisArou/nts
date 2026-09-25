@@ -1293,7 +1293,7 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
     if !callbacks_declared {
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
-    out.push_str("declare void @nts_objc_register_class(ptr, ptr, ptr, i32)\n");
+    out.push_str("declare void @nts_objc_register_class(ptr, ptr, ptr, i32, ptr)\n");
     if classes.iter().any(|class| !class.protocols.is_empty()) {
         out.push_str("declare void @nts_objc_adopt(ptr, ptr)\n");
     }
@@ -1368,8 +1368,14 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
         let _ = writeln!(out, "@{table} = internal constant [{} x {{ ptr, ptr, ptr }}] [{}]", rows.len(), rows.join(", "));
         text(&mut out, &format!("{table}.name"), &class.name);
         text(&mut out, &format!("{table}.super"), &class.superclass);
+        let state = match state_maker(program, class, &mut out) {
+            Ok(Some(maker)) => format!("ptr @{maker}"),
+            Ok(None) => "ptr null".to_owned(),
+            Err(Some(refused)) => return Err(refused),
+            Err(None) => return Ok(String::new()),
+        };
         registrations.push(format!(
-            "  call void @nts_objc_register_class(ptr @{table}.name, ptr @{table}.super, ptr @{table}, i32 {})",
+            "  call void @nts_objc_register_class(ptr @{table}.name, ptr @{table}.super, ptr @{table}, i32 {}, {state})",
             class.methods.len()
         ));
         for (at, protocol) in class.protocols.iter().enumerate() {
@@ -1380,6 +1386,25 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: bool)
     let _ = writeln!(out, "define internal void @nts_objc_register_classes() {{\n{}\n  ret void\n}}", registrations.join("\n"));
     out.push_str("@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @nts_objc_register_classes, ptr null }]\n");
     Ok(out)
+}
+
+/// The fields' maker of `class`, where it has fields: the compiled
+/// `{Class}#state` entered as an entry point is, because the runtime calls it
+/// from the `init` it adds, on whatever stack sent `init`. `Err(None)` for a
+/// program with no function to name a refusal by.
+fn state_maker(program: &Program, class: &nts_core::hir::ObjcClass, out: &mut String) -> Result<Option<String>, Option<Diagnostic>> {
+    let Some(state) = &class.state else { return Ok(None) };
+    let Some(compiled) = program.funcs.iter().find(|func| &func.name == state) else {
+        let missing = "an Objective-C class whose fields' maker this program does not define";
+        return Err(program.funcs.first().map(|func| refuse(func, missing)));
+    };
+    let maker = nts_codegen_common::objc::state_symbol(&class.name);
+    let _ = writeln!(
+        out,
+        "define internal ptr @{maker}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
+        symbol(&compiled.name)
+    );
+    Ok(Some(maker))
 }
 
 /// The layout of the closure a bridge names.

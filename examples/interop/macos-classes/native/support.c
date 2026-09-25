@@ -10,6 +10,15 @@ id objc_loadWeakRetained(id *location);
 void objc_release(id value);
 SEL sel_registerName(const char *name);
 void objc_msgSend(void);
+size_t nts_live_count(void);
+void nts_collect_cycles(void);
+
+/* After a collection, as the gate's `rc` step counts: an object whose count
+ * reached zero while it was a cycle candidate is freed by the next one. */
+int live_objects(void) {
+  nts_collect_cycles();
+  return (int)nts_live_count();
+}
 
 void report(const char *line) {
   fputs(line, stdout);

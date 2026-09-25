@@ -1919,6 +1919,27 @@ pub const SYNTHETIC_CELLS: u32 = SYNTHETIC_TYPE_FLOOR;
 /// freed object. Boxed, the payload is an ordinary reference, and the handle
 /// is dropped by the box's descriptor like any counted field.
 pub const HANDLE_BOX_GOBJECT: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18) - 1;
+
+/// The upper half of the cells' band, below [`HANDLE_BOX_GOBJECT`], for the
+/// object holding the **fields of a class the program writes over an
+/// Objective-C class** (`class Controller extends NSObject { presses = 0 }`).
+///
+/// Such an instance is the runtime's object, a handle, and has no room for a
+/// TypeScript field; the fields live in an object of this type, held in one
+/// ivar (`nts_objc_state`). An id of its own rather than the class's, because
+/// the class's id already answers "a handle", and one id with two
+/// representations is two answers every pass would have to keep apart. Below
+/// the closures' band: `typeof` a state object, were anything to ask, is
+/// `"object"`.
+pub const SYNTHETIC_OBJC_STATES: u32 = SYNTHETIC_CELLS + (1 << 17);
+
+/// The state type of the `n`th Objective-C class with fields.
+#[must_use]
+pub fn objc_state_type(index: usize) -> TypeId {
+    let id = SYNTHETIC_OBJC_STATES + u32::try_from(index).unwrap_or(0);
+    debug_assert!(id < HANDLE_BOX_GOBJECT, "more Objective-C classes with fields than the band holds");
+    TypeId(id)
+}
 pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);
 pub const SYNTHETIC_CLOSURES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 19);
 
@@ -2116,6 +2137,9 @@ pub struct ObjcClass {
     /// The protocols it adopts (`implements NSWindowDelegate`), by the name
     /// the runtime knows each by, so `conformsToProtocol:` answers for them.
     pub protocols: Vec<String>,
+    /// For a class that declares fields, the function making the object that
+    /// holds them (`Controller#state`), which registration hands the runtime.
+    pub state: Option<String>,
 }
 
 /// One method of an [`ObjcClass`]: the selector the runtime dispatches on,

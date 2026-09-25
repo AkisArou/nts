@@ -460,6 +460,32 @@ correctness does not depend on arm64 running by luck.
      - Refused by name until the second half: a field (the runtime's object
        has no room for one yet), a constructor, a static member, an accessor,
        and `super` calls.
+   - **S6, fields landed (2026-09-25).** `class Tally extends NSObject {
+     count = 0; names: string[] = [] }` is Swift's stored properties.
+     - The instance is the runtime's object, so the fields live in an
+       object of their own. Its type sits in its own synthetic band
+       (`SYNTHETIC_OBJC_STATES`), not the class's id, which already
+       answers "a handle". That object is held in one ivar the host adds
+       (`nts_objc_register_class`'s `make_state`).
+     - The host adds an `init` that runs the superclass's and then the
+       fields' initialisers (`{Class}#state`), and a `dealloc` that gives
+       the fields back and then runs the superclass's. An instance that
+       came in another way (decoded, another initialiser) gets its fields on
+       first use.
+     - `recv.x` is `member_of`'s arm for this receiver kind
+       (`program_objc_instance_place`): `nts_objc_state(recv)`, which lends
+       the object as `own.rs`'s `RUNTIME_LENDS_A_SLOT` says, then the field.
+     - Refused by name: an initialiser that could run code (a call, a
+       `new`, a member read, `this`), since it runs inside `init` before
+       the ivar holds anything. Also refused: a constructor, and a static
+       member.
+     - `macos-classes` checks the values against the Objective-C oracle, the
+       instance deallocated, and the program's live objects back where they
+       were (the array the fields held included). Without the release in
+       `dealloc` it prints `held`.
+     - A closure in a field that captures `this` is a cycle the collector
+       cannot see through the foreign object, as it is in Swift. Nothing
+       breaks it.
    - **S6, protocols landed (2026-09-25).** `class Elements extends NSObject
      implements XMLParserDelegate` is Swift's `class Elements: NSObject,
      XMLParserDelegate`.
@@ -545,6 +571,17 @@ correctness does not depend on arm64 running by luck.
      | array-out (`components(separatedBy:)`, 64 strings) | 10.5 us | 12.3 us | 0.86 |
      | array-in (`path(withComponents:)`, 64 strings) | 2.68 us | 2.72 us | 0.98 |
      | objects-in (`addObjects(from:)`, 4 objects) | 120 ns | 329 ns | 0.36 |
+     | field (`this.count++` on an `NSObject` subclass) | 1.5 ns | 3.0 ns | 0.50 |
+     | plain-field (the same on a plain class) | 0.4 ns | 2.8 ns | 0.14 |
+
+     - The two field rows (2026-09-25) keep Swift's `bump` out of line
+       (`@inline(never)`); `swiftc -O` otherwise folds the loop to nothing.
+       Ours is a direct call, which clang inlines.
+     - What the Objective-C field costs is the difference between our two
+       rows, **about 1.1 ns an access**. That is one `nts_objc_state` call
+       (the class looked up from `self`, the last one remembered) where a
+       plain field is a load. It is the baseline for inlining the load,
+       which is a load at the ivar's offset and a null test.
 
      - The first measurement had string-get at 2.20 and array-in at 1.77.
        The bridging was a UTF-8 round trip and a message per element built

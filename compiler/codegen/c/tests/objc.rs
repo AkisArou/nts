@@ -631,7 +631,8 @@ fn a_class_extending_an_objective_c_class_is_registered_with_the_runtime() {
         "{ \"bump:\", (void (*)(void))nts_imp_Counter_0, \"d24@0:8d16\" }",
         // Registered before `main`, under its own name, over its superclass.
         "__attribute__((constructor)) static void nts_objc_register_classes(void)",
-        "nts_objc_register_class(\"Counter\", \"NSObject\", nts_objc_methods_Counter, 2u);",
+        // No fields, so nothing to make at `init`.
+        "nts_objc_register_class(\"Counter\", \"NSObject\", nts_objc_methods_Counter, 2u, 0);",
         // `new Counter()` is the runtime's class, found by that name.
         "objc_getRequiredClass(\"Counter\")",
     ] {
@@ -642,11 +643,12 @@ fn a_class_extending_an_objective_c_class_is_registered_with_the_runtime() {
     assert!(bump.split("\n}").next().unwrap_or_default().contains("Counter__twice(v0,"), "{text}");
 }
 
-/// What such a class cannot yet hold is refused by name: a field, which the
-/// object the runtime makes has no room for, and a constructor, where the
-/// superclass's initializers are inherited.
+/// Swift's stored properties: fields of such a class live in an object its
+/// ivar holds (`Held#state`), made by the `init` the runtime adds -- whose
+/// maker the registration hands over -- and every read and write goes
+/// through `nts_objc_state`.
 #[test]
-fn a_field_or_constructor_on_an_objective_c_subclass_is_refused_by_name() {
+fn the_fields_of_an_objective_c_subclass_live_in_its_state() {
     let binding = r#"declare module "objc:Foundation" {
   /** @ntsClass NSObject */
   export class NSObject {
@@ -656,12 +658,54 @@ fn a_field_or_constructor_on_an_objective_c_subclass_is_refused_by_name() {
 }
 "#;
     let source = "import { NSObject } from \"objc:Foundation\";\n\
-                  export class Held extends NSObject {\n  count = 0;\n  constructor() { super(); }\n  tick(): void {}\n}\n";
+                  class Held extends NSObject {\n  count = 1;\n  names: string[] = [];\n  tick(): number { this.count += 2; return this.count; }\n}\n\
+                  export function run(): number {\n  const held = new Held();\n  held.count = 5;\n  return held.tick();\n}\n";
+    let Some((_, prepared)) = prepare("objc-subclass-fields", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for expected in [
+        // The fields' object, and its maker running the initialisers.
+        "struct NtsObj_Held_state {",
+        "static NtsObj_Held_state * Held__state(void)",
+        // The maker, entered as a callback, handed to the registration.
+        "static void *nts_objc_state_Held(void) { nts_callback_enter();",
+        "nts_objc_register_class(\"Held\", \"NSObject\", nts_objc_methods_Held, 1u, nts_objc_state_Held);",
+        // Reads and writes, from a method and from outside, through the ivar.
+        "= nts_objc_state(",
+    ] {
+        assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+    }
+}
+
+/// What such a class cannot yet hold is refused by name: a constructor, where
+/// the superclass's initializers are inherited, and a field initialiser that
+/// could run code -- a call, or `this` -- inside `init`, before the instance
+/// holds its fields.
+#[test]
+fn a_constructor_or_a_reaching_initializer_on_an_objective_c_subclass_is_refused_by_name() {
+    let binding = r#"declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+  }
+}
+"#;
+    let source = "import { NSObject } from \"objc:Foundation\";\n\
+                  function start(): number { return 3; }\n\
+                  export class Held extends NSObject {\n  count = start();\n  constructor() { super(); }\n  tick(): void {}\n}\n\
+                  export class Selfish extends NSObject {\n  me = this;\n}\n";
     let Some((_, prepared)) = prepare("objc-subclass-refused", binding, source) else {
         eprintln!("skipped: no tsgo");
         return;
     };
     let messages: Vec<&str> = prepared.diagnostics.iter().map(|d| d.message.as_str()).collect();
-    assert!(messages.iter().any(|m| m.contains("a field of a class extending an Objective-C class")), "{messages:?}");
+    let reaching = "a field initialiser of a class extending an Objective-C class that calls, reads a member or reads `this`";
+    assert_eq!(messages.iter().filter(|m| m.contains(reaching)).count(), 2, "{messages:?}");
     assert!(messages.iter().any(|m| m.contains("a constructor of a class extending an Objective-C class")), "{messages:?}");
 }

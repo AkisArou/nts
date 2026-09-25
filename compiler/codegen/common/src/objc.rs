@@ -131,6 +131,13 @@ pub fn imp_symbol(class: &str, at: usize) -> String {
     format!("nts_imp_{}_{at}", mangle(class))
 }
 
+/// The entry point the runtime calls to make the object holding class
+/// `class`'s fields: the compiled `{class}#state`, entered as a callback.
+#[must_use]
+pub fn state_symbol(class: &str) -> String {
+    format!("nts_objc_state_{class}")
+}
+
 /// The table of class `class`'s methods, as `nts_objc_register_class` reads it.
 #[must_use]
 pub fn methods_symbol(class: &str) -> String {

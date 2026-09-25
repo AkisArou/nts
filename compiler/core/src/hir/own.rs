@@ -2503,6 +2503,9 @@ const RUNTIME_HANDS_BACK: &[&str] = &[
 /// shape there is. Invisible without RC, the cycle collector reaching the
 /// promise at a checkpoint, and the freed bytes reused.
 const RUNTIME_LENDS_A_SLOT: &[&str] = &[
+    // The object holding an Objective-C instance's fields, which its ivar
+    // holds: a slot of the receiver, and the receiver is an operand.
+    "nts_objc_state",
     "nts_promise_value",
     "nts_promise_reference",
     "nts_promise_reason",

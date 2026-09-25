@@ -1719,8 +1719,18 @@ typedef struct NtsObjcMethod {
   void (*implementation)(void);
   const char *types;
 } NtsObjcMethod;
+/* `make_state` is non-NULL for a class that declares fields: the program's
+ * function making the object that holds them, its initializers run. The class
+ * then has one ivar holding that object, made by `init` and given back by
+ * `dealloc`, which the host adds; `nts_objc_state` reads it. */
 void nts_objc_register_class(const char *name, const char *superclass,
-                             const NtsObjcMethod *methods, uint32_t count);
+                             const NtsObjcMethod *methods, uint32_t count,
+                             void *(*make_state)(void));
+/* The object holding the fields of `self`, an instance of a registered class
+ * with fields, lent for as long as `self` lives. Made here on first use for
+ * an instance that did not come through `init` -- one the platform decoded,
+ * or initialised another way. */
+void *nts_objc_state(void *self);
 /* That a registered class adopts `protocol` (`implements NSWindowDelegate`),
  * so `conformsToProtocol:` answers for it. A protocol no loaded image
  * mentions has no runtime object, and adopting it is skipped: nothing could

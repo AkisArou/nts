@@ -37,6 +37,25 @@ time("array-in", 100_000) {
   for _ in 0..<100_000 { total += NSString.path(withComponents: parts).utf16.count }
   return total
 }
+// A stored property of an Objective-C class, and of a plain one.
+final class Tally: NSObject {
+  var count = 0
+  @inline(never) func bump() { count += 1 }
+}
+final class Plain {
+  var count = 0
+  @inline(never) func bump() { count += 1 }
+}
+let tally = Tally()
+time("field", 10_000_000) {
+  for _ in 0..<10_000_000 { tally.bump() }
+  return tally.count
+}
+let plain = Plain()
+time("plain-field", 10_000_000) {
+  for _ in 0..<10_000_000 { plain.bump() }
+  return plain.count
+}
 let list = NSMutableArray()
 time("objects-in", 100_000) {
   let numbers = [NSNumber(value: 1), NSNumber(value: 2), NSNumber(value: 3), NSNumber(value: 4)]

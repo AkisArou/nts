@@ -370,6 +370,7 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
     // through the runtime, by selector, which no call in the IR names.
     for class in &program.objc_classes {
         names.extend(class.methods.iter().map(|method| method.function.as_str()));
+        names.extend(class.state.as_deref());
     }
     if !matches!(roots, Roots::Entry(_)) {
         for generator in &program.generators {

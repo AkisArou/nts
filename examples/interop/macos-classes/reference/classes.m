@@ -16,6 +16,42 @@ static __weak id watched;
   [self.names appendString:name];
 }
 @end
+/* Swift's `class Tally: NSObject { var count = 0 ... }`: stored properties,
+ * which `init` sets and ARC gives back with the object. */
+@interface Tally : NSObject
+@property NSInteger count;
+@property NSInteger step;
+@property NSString *label;
+@property NSMutableArray<NSString *> *names;
+@end
+@implementation Tally
+- (instancetype)init {
+  if ((self = [super init])) {
+    _count = 0;
+    _step = 2;
+    _label = @"tally";
+    _names = [[NSMutableArray alloc] init];
+  }
+  return self;
+}
+- (void)bump { self.count += self.step; }
+- (NSInteger)total { return self.count; }
+@end
+static __weak id tallyWatch;
+
+static NSString *tallied(void) {
+  Tally *tally = [[Tally alloc] init];
+  tallyWatch = tally;
+  [tally bump];
+  tally.step = 4;
+  [tally bump];
+  [tally.names addObject:@"x"];
+  [tally.names addObject:@"y"];
+  tally.label = @"total";
+  return [NSString stringWithFormat:@"%@ %ld %ld %@", tally.label, (long)[tally total], (long)tally.count,
+                                    [tally.names componentsJoinedByString:@","]];
+}
+
 static __weak id replaced;
 static __weak id held;
 
@@ -83,6 +119,10 @@ int main(void) {
     BOOL ok = [parser parse];
     printf("parsed %s %s %s\n", ok ? "true" : "false", elements.names.UTF8String,
            class_conformsToProtocol([Elements class], @protocol(NSXMLParserDelegate)) ? "adopted" : "not adopted");
+    @autoreleasepool {
+      printf("fields %s\n", tallied().UTF8String);
+    }
+    printf("fields %s released\n", tallyWatch ? "alive" : "gone");
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.
     [operation cancel];

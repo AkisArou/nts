@@ -252,8 +252,79 @@ void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array) {
   }
 }
 
+/* A registered class with fields: where its ivar is, and what makes the
+ * object that goes in it. Few enough that a scan beats anything cleverer; the
+ * last one found is remembered, since a program reads one class's fields in a
+ * row. */
+typedef struct NtsObjcStateful {
+  Class cls;
+  ptrdiff_t offset;
+  void *(*make)(void);
+} NtsObjcStateful;
+static NtsObjcStateful *nts_objc_stateful;
+static uint32_t nts_objc_stateful_count;
+static const NtsObjcStateful *nts_objc_stateful_last;
+
+/* The registered class `self` is an instance of, or of a subclass of: the
+ * platform may subclass it (KVO does, at run time). */
+static const NtsObjcStateful *nts_objc_stateful_of(id self) {
+  Class cls = object_getClass(self);
+  const NtsObjcStateful *last = nts_objc_stateful_last;
+  if (last && last->cls == cls) {
+    return last;
+  }
+  for (; cls; cls = class_getSuperclass(cls)) {
+    for (uint32_t at = 0; at < nts_objc_stateful_count; at++) {
+      if (nts_objc_stateful[at].cls == cls) {
+        nts_objc_stateful_last = &nts_objc_stateful[at];
+        return nts_objc_stateful_last;
+      }
+    }
+  }
+  fprintf(stderr, "nts: %s has no fields of a program's class to read\n",
+          class_getName(object_getClass(self)));
+  abort();
+}
+
+static void **nts_objc_state_slot(id self, const NtsObjcStateful *class) {
+  return (void **)((char *)self + class->offset);
+}
+
+void *nts_objc_state(void *self) {
+  const NtsObjcStateful *class = nts_objc_stateful_of((id)self);
+  void **slot = nts_objc_state_slot((id)self, class);
+  if (!*slot) {
+    *slot = class->make();
+  }
+  return *slot;
+}
+
+/* `init` for a class with fields: the superclass's, then the fields, so they
+ * hold their initial values by the time `new` returns, as JavaScript's do. */
+static id nts_objc_state_init(id self, SEL cmd) {
+  const NtsObjcStateful *class = nts_objc_stateful_of(self);
+  struct objc_super super = {self, class_getSuperclass(class->cls)};
+  self = ((id(*)(struct objc_super *, SEL))objc_msgSendSuper)(&super, cmd);
+  if (self) {
+    nts_objc_state(self);
+  }
+  return self;
+}
+
+/* `dealloc`: the fields given back, then the superclass's. */
+static void nts_objc_state_dealloc(id self, SEL cmd) {
+  const NtsObjcStateful *class = nts_objc_stateful_of(self);
+  void **slot = nts_objc_state_slot(self, class);
+  void *state = *slot;
+  *slot = NULL;
+  nts_release(state);
+  struct objc_super super = {self, class_getSuperclass(class->cls)};
+  ((void (*)(struct objc_super *, SEL))objc_msgSendSuper)(&super, cmd);
+}
+
 void nts_objc_register_class(const char *name, const char *superclass,
-                             const NtsObjcMethod *methods, uint32_t count) {
+                             const NtsObjcMethod *methods, uint32_t count,
+                             void *(*make_state)(void)) {
   Class base = objc_getClass(superclass);
   if (!base) {
     fprintf(stderr, "nts: no Objective-C class %s for %s to extend\n",
@@ -270,7 +341,28 @@ void nts_objc_register_class(const char *name, const char *superclass,
     class_addMethod(made, sel_registerName(methods[at].selector),
                     (IMP)methods[at].implementation, methods[at].types);
   }
+  if (!make_state) {
+    objc_registerClassPair(made);
+    return;
+  }
+  class_addIvar(made, "nts_state", sizeof(void *), sizeof(void *) == 8 ? 3 : 2,
+                "^v");
+  class_addMethod(made, sel_registerName("init"), (IMP)nts_objc_state_init,
+                  "@16@0:8");
+  class_addMethod(made, sel_registerName("dealloc"),
+                  (IMP)nts_objc_state_dealloc, "v16@0:8");
   objc_registerClassPair(made);
+  NtsObjcStateful *grown = realloc(
+      nts_objc_stateful, (nts_objc_stateful_count + 1) * sizeof *grown);
+  if (!grown) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  nts_objc_stateful = grown;
+  nts_objc_stateful_last = NULL;
+  nts_objc_stateful[nts_objc_stateful_count++] = (NtsObjcStateful){
+      made, ivar_getOffset(class_getInstanceVariable(made, "nts_state")),
+      make_state};
 }
 
 void nts_objc_adopt(const char *name, const char *protocol) {

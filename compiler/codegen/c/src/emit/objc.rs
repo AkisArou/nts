@@ -139,6 +139,24 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 nts_codegen_common::objc::method_encoding(&method.signature)
             ));
         }
+        // The fields' maker, which the runtime calls from the `init` it adds,
+        // on whatever stack sent `init` -- the platform's included -- so it
+        // enters and leaves as an entry point does.
+        if let Some(state) = &class.state {
+            let compiled = program
+                .funcs
+                .iter()
+                .find(|func| &func.name == state)
+                .ok_or_else(|| refuse("an Objective-C class whose fields' maker this program does not define"))?;
+            writer.line(
+                origin,
+                format!(
+                    "static void *{}(void) {{ nts_callback_enter(); void *made = (void *){}(); nts_callback_leave(); return made; }}",
+                    nts_codegen_common::objc::state_symbol(&class.name),
+                    c_identifier(&compiled.name)
+                ),
+            );
+        }
         let table = nts_codegen_common::objc::methods_symbol(&class.name);
         if rows.is_empty() {
             writer.line(origin, format!("static const NtsObjcMethod *const {table} = 0;"));
@@ -151,11 +169,12 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         writer.line(
             origin,
             format!(
-                "    nts_objc_register_class(\"{}\", \"{}\", {}, {}u);",
+                "    nts_objc_register_class(\"{}\", \"{}\", {}, {}u, {});",
                 class.name,
                 class.superclass,
                 nts_codegen_common::objc::methods_symbol(&class.name),
-                class.methods.len()
+                class.methods.len(),
+                class.state.as_ref().map_or_else(|| "0".to_owned(), |_| nts_codegen_common::objc::state_symbol(&class.name))
             ),
         );
         for protocol in &class.protocols {

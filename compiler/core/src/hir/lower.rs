@@ -213,6 +213,13 @@ struct Hierarchy {
     /// Beside `closure_slot` rather than reusing it. A frame is not a closure:
     /// `is_closure_type` decides `typeof`, and a generator answers `"object"`.
     generator_slot: Option<u32>,
+    /// The classes the program writes over an Objective-C class that declare
+    /// fields, by the name the runtime knows each by -- which is what a handle
+    /// to one carries -- with each one's index into
+    /// [`super::SYNTHETIC_OBJC_STATES`] and its own instance type. Numbered
+    /// here, once, so every builder that reads a field names the same state
+    /// type.
+    objc_states: rustc_hash::FxHashMap<String, (usize, TypeId)>,
 }
 
 /// Where a member's declaration was written, for the questions whose answer is
@@ -1128,6 +1135,20 @@ impl Carried {
     }
 }
 
+/// Number a class the program writes over an Objective-C class, if it
+/// declares fields: see [`Hierarchy::objc_states`].
+fn note_objc_state(snapshot: &SemanticSnapshot, probe: &FuncBuilder<'_>, class: NodeId, declared: TypeId, hierarchy: &mut Hierarchy) {
+    if super::native::extends_objc(snapshot, class)
+        && probe.children(class).into_iter().any(|member| {
+            probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION) && !is_static_member(snapshot, member)
+        })
+        && let Some(name) = super::native::objc_name(snapshot, class)
+    {
+        let index = hierarchy.objc_states.len();
+        hierarchy.objc_states.insert(name, (index, declared));
+    }
+}
+
 /// Read every class declaration's name, base and own methods.
 fn collect_hierarchy(
     snapshot: &SemanticSnapshot,
@@ -1154,6 +1175,7 @@ fn collect_hierarchy(
         let Some(declared) = instance_type_of(snapshot, id) else {
             continue;
         };
+        note_objc_state(snapshot, &probe, id, declared, &mut hierarchy);
         // A generic class's facts belong to each *instantiation*, because that
         // is the type a `new` and a method call name. The declaration's own type
         // is never constructed and never laid out.
@@ -1636,10 +1658,19 @@ fn boxed_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
 /// Synthetic like a closure's, and from the *bottom* of the synthetic band
 /// rather than the top: closures count down from `u32::MAX` and the suspension
 /// machine takes the half above `FLOOR + 2^19`, so this is the space left.
+/// The handle a pointer to an opaque object is, `const` or not.
+fn opaque_handle(pointee: &super::native::Pointee) -> Option<&super::native::Handle> {
+    match pointee {
+        super::native::Pointee::Opaque(handle) => Some(handle),
+        super::native::Pointee::Const(inner) => opaque_handle(inner),
+        _ => None,
+    }
+}
+
 fn cell_type(index: usize) -> TypeId {
     let id = super::SYNTHETIC_CELLS + u32::try_from(index).unwrap_or(0);
     debug_assert!(
-        id < super::SYNTHETIC_FRAMES,
+        id < super::SYNTHETIC_OBJC_STATES,
         "more captured-by-reference variables than the synthetic id space holds"
     );
     TypeId(id)
@@ -5724,16 +5755,10 @@ fn register_objc_class(
     snapshot: &SemanticSnapshot,
     class: NodeId,
     methods: Vec<super::ObjcMethod>,
+    state: Option<String>,
     lowered: &mut Lowered,
 ) {
     let probe = FuncBuilder::probe(snapshot);
-    for member in probe.children(class) {
-        if probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION) && !is_static_member(snapshot, member) {
-            let diagnostic = probe.unsupported(member, "a field of a class extending an Objective-C class, whose objects the runtime makes without room for one");
-            note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
-            lowered.diagnostics.push(diagnostic);
-        }
-    }
     let (Some(name), Some(superclass)) = (
         super::native::objc_name(snapshot, class),
         super::native::superclass(snapshot, class).and_then(|base| super::native::objc_name(snapshot, base)),
@@ -5753,7 +5778,7 @@ fn register_objc_class(
             })
         })
         .collect();
-    lowered.program.objc_classes.push(super::ObjcClass { name, superclass, methods, protocols });
+    lowered.program.objc_classes.push(super::ObjcClass { name, superclass, methods, protocols, state });
 }
 
 fn lower_class(
@@ -5847,7 +5872,36 @@ fn lower_class(
         }
     }
     if super::native::extends_objc(snapshot, class) {
-        register_objc_class(snapshot, class, objc_methods, lowered);
+        let state = objc_state_function(snapshot, foreign, class, shared, lowered);
+        register_objc_class(snapshot, class, objc_methods, state, lowered);
+    }
+}
+
+/// For a class the program writes over an Objective-C class and gives
+/// fields, the function making the object that holds them; `None` for one
+/// without fields, or whose function is refused (and reported).
+fn objc_state_function(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    class: NodeId,
+    shared: &Shared,
+    lowered: &mut Lowered,
+) -> Option<String> {
+    let name = super::native::objc_name(snapshot, class)?;
+    let &(index, class_ty) = shared.hierarchy.objc_states.get(&name)?;
+    let mut builder = shared.builder(snapshot, foreign, Copy::default());
+    match builder.lower_objc_state(class, &name, index, class_ty) {
+        Ok(func) => {
+            let made = func.name.clone();
+            lowered.program.funcs.push(func);
+            collect_layouts(&mut lowered.program, builder.layouts);
+            Some(made)
+        }
+        Err(diagnostic) => {
+            note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+            lowered.diagnostics.push(diagnostic);
+            None
+        }
     }
 }
 
@@ -13392,6 +13446,123 @@ impl<'a> FuncBuilder<'a> {
         let func = self.lower_method_of(class, member, instance)?;
         let method = super::ObjcMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
         Ok((func, method))
+    }
+
+    /// `{Class}#state`: a new object holding the fields of `class`, a class
+    /// the program writes over an Objective-C class, with its initialisers
+    /// run in declaration order. The runtime calls it from the `init` it adds
+    /// to the class, so the fields hold their initial values once `new`
+    /// returns, as JavaScript's do. An initialiser has no `this` here -- the
+    /// instance is still the superclass's `init`'s -- and one reading it is
+    /// refused by the ordinary rule for a `this` there is none of.
+    fn lower_objc_state(&mut self, class: NodeId, name: &str, index: usize, class_ty: TypeId) -> Result<Func, Diagnostic> {
+        self.refuse_reaching_initializers(class)?;
+        let layout = self.objc_state_layout(class, index, class_ty)?;
+        let ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
+        let origin = self.origin(class);
+        self.this = None;
+        self.returns = ty.clone();
+        let state = self.push(OpKind::ObjectNew { frame: false }, ty.clone(), origin.clone());
+        self.initialize_declared_fields(class, state, &[class_ty], &layout)?;
+        self.terminate(Terminator::Return(Some(state)));
+        Ok(self.finish(format!("{name}#state"), Vec::new(), ty, origin, false))
+    }
+
+    /// Refuse a field initialiser that could run code: a call, a `new`, a
+    /// member read (a getter, or a message), `this`. It runs inside `init`,
+    /// before the instance's ivar holds its fields, and code it reaches could
+    /// send the half-made instance a message that reads one -- a crash whose
+    /// stack points nowhere near the initialiser. A function the initialiser
+    /// *makes* is not run by it, so its body is not looked at.
+    fn refuse_reaching_initializers(&self, class: NodeId) -> Result<(), Diagnostic> {
+        for member in self.children(class) {
+            if self.kind_of(member) != Some(syntax::PROPERTY_DECLARATION) || is_static_member(self.snapshot, member) {
+                continue;
+            }
+            let Some([_, _, _, _, Some(initializer)]) = self.child_slots::<5>(member) else { continue };
+            let mut pending = vec![initializer];
+            while let Some(node) = pending.pop() {
+                match self.kind_of(node) {
+                    Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {}
+                    Some(
+                        syntax::CALL_EXPRESSION
+                        | syntax::NEW_EXPRESSION
+                        | syntax::TAGGED_TEMPLATE_EXPRESSION
+                        | syntax::PROPERTY_ACCESS_EXPRESSION
+                        | syntax::ELEMENT_ACCESS_EXPRESSION
+                        | syntax::THIS_KEYWORD
+                        | syntax::AWAIT_EXPRESSION
+                        | syntax::YIELD_EXPRESSION
+                        | syntax::DELETE_EXPRESSION,
+                    ) => {
+                        return Err(self.unsupported(
+                            node,
+                            "a field initialiser of a class extending an Objective-C class that calls, reads a member or reads `this`: it runs inside `init`, before the instance holds its fields, so anything it reaches could message the half-made instance",
+                        ));
+                    }
+                    _ => pending.extend(self.children(node)),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether `name` is a field of the class the program writes over an
+    /// Objective-C class that `pointee` points at: one it declares itself and
+    /// stores, as the checker records it.
+    fn is_program_objc_field(&self, pointee: &super::native::Pointee, name: &str) -> bool {
+        let Some(handle) = opaque_handle(pointee) else { return false };
+        let Some(&(_, class_ty)) = self.hierarchy.objc_states.get(&handle.tag) else { return false };
+        matches!(
+            self.snapshot.types.get(class_ty.0 as usize).map(|record| &record.kind),
+            Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.own && p.name == name && p.kind.is_stored())
+        )
+    }
+
+    /// The layout of the object holding the fields of the `index`th
+    /// Objective-C class with fields: the fields the class declares itself,
+    /// typed as any class's are (`fields_of`), and nothing it inherits -- its
+    /// superclass's members are the runtime's, reached by message.
+    fn objc_state_layout(&mut self, id: NodeId, index: usize, class_ty: TypeId) -> Result<Layout, Diagnostic> {
+        let ty = super::objc_state_type(index);
+        if let Some(known) = self.layouts.iter().find(|layout| layout.types.contains(&ty)) {
+            return Ok(known.clone());
+        }
+        let Some(TypeKind::Object { properties }) = self.snapshot.types.get(class_ty.0 as usize).map(|record| &record.kind) else {
+            return Err(self.unsupported(id, "the fields of an Objective-C class the checker did not decompose"));
+        };
+        let own: Vec<_> = properties.iter().filter(|property| property.own).cloned().collect();
+        let fields = self.fields_of(id, class_ty, &own)?;
+        let name = self.hierarchy.name.get(&class_ty).map_or_else(|| format!("ObjcState{index}"), |name| format!("{name}_state"));
+        let layout = Layout {
+            types: vec![ty],
+            name,
+            interfaces: Vec::new(),
+            fields,
+            methods: vec![None; self.hierarchy.table_size()],
+            // Not a class of this program's: nothing dispatches on it.
+            base: None,
+        };
+        self.layouts.push(layout.clone());
+        Ok(layout)
+    }
+
+    /// The receiver kind **an instance of a class the program writes over an
+    /// Objective-C class**: `recv.x`, where `x` is one of the class's fields,
+    /// is that field of the object its ivar holds, which `nts_objc_state`
+    /// lends for as long as `recv` lives. `None` for any other receiver, or a
+    /// member that is not a field -- a property or a method is the runtime's,
+    /// and the arms after this one answer it.
+    fn program_objc_instance_place(&mut self, id: NodeId, receiver: ValueId, member: &str) -> Result<Option<Place>, Diagnostic> {
+        let HirType::NativePointer(pointee) = &self.values[receiver.0 as usize].ty else { return Ok(None) };
+        let Some(handle) = opaque_handle(pointee) else { return Ok(None) };
+        let Some(&(index, class_ty)) = self.hierarchy.objc_states.get(&handle.tag) else { return Ok(None) };
+        let layout = self.objc_state_layout(id, index, class_ty)?;
+        let Some(field) = layout.index_of(member) else { return Ok(None) };
+        let ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
+        let origin = self.origin(id);
+        let object = self.runtime_call("nts_objc_state", vec![receiver], ty, origin);
+        Ok(Some(Place::Field { object, field }))
     }
 
     /// The Objective-C protocols a class the program writes adopts: each
@@ -26782,6 +26953,11 @@ impl<'a> FuncBuilder<'a> {
             if let Some(place) = self.array_length_place(object, *member) {
                 return Ok(place);
             }
+            if let Some(name) = self.literal_name(*member)
+                && let Some(place) = self.program_objc_instance_place(target, object, &name)?
+            {
+                return Ok(place);
+            }
             if matches!(self.values[object.0 as usize].ty, HirType::NativePointer(_)) {
                 return self.native_member_place(target, object);
             }
@@ -34693,7 +34869,11 @@ impl<'a> FuncBuilder<'a> {
             let accessor = accessor
                 || self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
                     && children.first().zip(children.last()).is_some_and(|(object, member)| self.objc_property(*object, *member).is_some());
-            if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field || accessor) {
+            // A field of a class the program writes over an Objective-C class,
+            // which `program_objc_instance_place` reads from its ivar's object.
+            let field = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+                && children.last().and_then(|member| self.literal_name(*member)).is_some_and(|name| self.is_program_objc_field(&pointee, &name));
+            if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field || accessor || field) {
                 return Err(self.unsupported(id, "a property read through a native pointer"));
             }
         }
@@ -35908,6 +36088,9 @@ impl<'a> FuncBuilder<'a> {
         // The other half of the iterator-result decision, and the half that
         // makes the first one honest. See `refuse_unguarded_iterator_value`.
         self.refuse_unguarded_iterator_value(id, value, member_name)?;
+        if let Some(place) = self.program_objc_instance_place(id, value, member_name)? {
+            return self.read_place(id, &place);
+        }
         if matches!(self.values[value.0 as usize].ty, HirType::NativePointer(_)) {
             let place = self.native_member_place(id, value)?;
             return self.read_place(id, &place);

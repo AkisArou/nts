@@ -13,7 +13,7 @@ import {
   XMLParser,
   type NSXMLParserDelegate,
 } from "objc:Foundation";
-import { report, weak_alive, weak_watch } from "c:support";
+import { live_objects, report, weak_alive, weak_watch } from "c:support";
 import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
 import type { c_int } from "c:types";
 
@@ -53,6 +53,39 @@ function arrays(): void {
   objects[0] = new NSObject();
   report(`replaced ${weak_alive(replaced) ? "alive" : "gone"}`);
   held = weak_watch(objects[0]);
+}
+
+// Swift's `class Tally: NSObject { var count = 0 ... }`: fields on a class the
+// runtime makes. They live in an object its ivar holds, made by `init` with the
+// initialisers run and given back by `dealloc` -- a managed array among them,
+// which the object owns a count of.
+class Tally extends NSObject {
+  count = 0;
+  step = 2;
+  label = "tally";
+  names: string[] = [];
+
+  bump(): void {
+    this.count += this.step;
+  }
+
+  total(): number {
+    return this.count;
+  }
+}
+
+let tallyWatch = 0 as c_int;
+
+function tallied(): string {
+  const tally = new Tally();
+  tallyWatch = weak_watch(tally);
+  tally.bump();
+  tally.step = 4;
+  tally.bump();
+  tally.names.push("x");
+  tally.names.push("y");
+  tally.label = "total";
+  return `${tally.label} ${tally.total()} ${tally.count} ${tally.names.join(",")}`;
 }
 
 let elements = "";
@@ -136,6 +169,13 @@ function main(): void {
   }
 
   report(`parsed ${parsed()}`);
+  // `dealloc` gave the fields back: as many of the program's objects are
+  // alive after as before, the array the fields held included.
+  const before = live_objects();
+  report(`fields ${tallied()}`);
+  // Counted before the line reporting it is built, which is itself an object.
+  const after = live_objects();
+  report(`fields ${weak_alive(tallyWatch) ? "alive" : "gone"} ${after === before ? "released" : "held"}`);
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.

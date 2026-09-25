@@ -11,5 +11,7 @@ void report(const char *line);
 void report_string(const char *label, struct NSString *text);
 int weak_watch(struct NSObject *object);
 bool weak_alive(int watch);
+/* How many objects of the program's own are alive, after a collection. */
+int live_objects(void);
 
 #endif
