@@ -220,6 +220,10 @@ struct Hierarchy {
     /// here, once, so every builder that reads a field names the same state
     /// type.
     objc_states: rustc_hash::FxHashMap<String, (usize, TypeId)>,
+    /// Each Windows Runtime interface's IID by its handle tag, as the
+    /// bindings' `@ntsQuery` methods pair them: what a handle upcast to that
+    /// interface asks its object for (`coerce_to_native_pointer`).
+    com_iids: rustc_hash::FxHashMap<String, String>,
     /// For each class in [`Self::objc_states`], by its instance type, the
     /// classes whose fields its state holds, root first: the program's
     /// classes it descends from, then itself. One object per instance, laid
@@ -1145,6 +1149,24 @@ impl Carried {
     }
 }
 
+/// Each Windows Runtime interface's IID by its handle tag: the IID of every
+/// `@ntsQuery` method, keyed by the tag of the interface it answers. The
+/// bindings' one statement of an interface's IID beside its type.
+fn com_interface_ids(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<String, String> {
+    let mut ids = rustc_hash::FxHashMap::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        let Some(iid) = node.native.as_ref().and_then(|native| native.query.clone()) else { continue };
+        let declaration = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(signature) = super::generics::declared_signature(snapshot, declaration) else { continue };
+        if let Some(super::native::Pointee::Opaque(handle)) = super::native::pointer(snapshot, signature.return_type)
+            && handle.family == super::native::Family::Com
+        {
+            ids.entry(handle.tag.clone()).or_insert(iid);
+        }
+    }
+    ids
+}
+
 /// Note a class the program writes over an Objective-C class
 /// ([`Hierarchy::objc_classes`]), and number it if it declares fields: see
 /// [`Hierarchy::objc_states`].
@@ -1383,6 +1405,7 @@ fn collect_hierarchy(
     if !generator_indices(snapshot).is_empty() {
         hierarchy.generator_slot = Some(u32::try_from(hierarchy.table_size()).unwrap_or(u32::MAX));
     }
+    hierarchy.com_iids = com_interface_ids(snapshot);
     hierarchy
 }
 
@@ -16310,6 +16333,20 @@ impl<'a> FuncBuilder<'a> {
             && from.converts_to(to)
         {
             let origin = self.origin(id);
+            // A Windows Runtime object as another of its interfaces is a
+            // different pointer, which the object answers `QueryInterface`
+            // for -- not the address relabelled, which reads the wrong table.
+            if let (super::native::Pointee::Opaque(from), super::native::Pointee::Opaque(to)) = (from, to)
+                && from.family == super::native::Family::Com
+                && to.family == super::native::Family::Com
+                && from.tag != to.tag
+            {
+                let Some(iid) = self.hierarchy.com_iids.get(&to.tag).cloned() else {
+                    return Some(Err(self.unsupported(id, &format!("a Windows Runtime object as `{}`, an interface no binding asks for by IID", to.tag))));
+                };
+                let [low, high] = self.iid_arguments(&iid, &origin);
+                return Some(Ok(self.runtime_call("nts_com_query", vec![value, low, high], want.clone(), origin)));
+            }
             return Some(Ok(self.push(OpKind::Convert(value), want.clone(), origin)));
         }
         // A record's fields held in an object, where C takes the record by

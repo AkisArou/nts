@@ -716,3 +716,52 @@ fn what_a_composed_class_cannot_hold_is_refused_by_name() {
         );
     }
 }
+
+/// A button and its base, as `bind-winmd` writes a default interface over a
+/// base class's: the derived type carries the base's tag in its chain, and an
+/// `@ntsQuery` names the base interface's IID.
+const UPCAST: &str = r#"declare module "winrt:Test.Upcast" {
+  import type { ComClass } from "winrt:types";
+  export type IElement = ComClass<"Test_IElement"> & IElementMethods;
+  export type IButton = ComClass<"Test_IButton", IElement> & IButtonMethods & IElementMethods;
+  export type IWindow = ComClass<"Test_IWindow"> & IWindowMethods;
+  export interface IElementMethods {}
+  export interface IButtonMethods {
+    /**
+     * @ntsQuery 0B0B0B0B-1111-2222-3333-444444444444
+     */
+    as_IElement(this: IButton): IElement;
+  }
+  export interface IWindowMethods {
+    /**
+     * @ntsVtable 6 put_Content
+     * @ntsHresult
+     */
+    put_Content(this: IWindow, value: IElement | null): void;
+  }
+}
+"#;
+
+/// A derived class's handle where its base's is expected (`window.content =
+/// button`) is asked for the base's interface (`nts_com_query`) -- a COM
+/// object's interfaces are different pointers, so relabelling the one it has
+/// would call the base's slots through the button's table.
+#[test]
+fn a_handle_passed_as_its_base_is_asked_for_the_base_interface() {
+    let source = "import type { IButton, IWindow } from \"winrt:Test.Upcast\";\nexport function show(w: IWindow, b: IButton): void {\n  w.put_Content(b);\n}\n";
+    let Some((dir, prepared)) = prepare_with("upcast", UPCAST, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    // The IID's first word, `Data1 | Data2 << 32 | Data3 << 48`.
+    let first = 0x0B0B_0B0B_u64 | (0x1111 << 32) | (0x2222 << 48);
+    assert!(text.contains("nts_com_query(") && text.contains(&first.to_string()), "not asked for the base's IID:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("nts_com_query"), "the IR does not ask:\n{}", llvm.text);
+}

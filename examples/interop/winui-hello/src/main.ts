@@ -130,7 +130,7 @@ class App extends Application {
     button.as_IButtonBase().add_Click(() => {
       this.clicks += 1;
     });
-    window.content = button.as_IUIElement();
+    window.content = button;
     window.activate();
     setTimeout(() => this.whenLaidOut(window, button), 200);
   }
@@ -153,7 +153,7 @@ class App extends Application {
     const focused = button.focus(FocusState.Programmatic);
     button.as_IFrameworkElementOverrides().GoToElementStateCore("Custom", false);
     ButtonAutomationPeer.createInstanceWithOwner(button).as_IInvokeProvider().Invoke();
-    const peer = FrameworkElementAutomationPeer.createPeerForElement(button.as_IUIElement()).getClassName();
+    const peer = FrameworkElementAutomationPeer.createPeerForElement(button).getClassName();
     const styled = button.actualWidth > 0;
     // A record written as its fields, where the call takes one by value.
     button.measure({ Width: 1000, Height: 1000 });

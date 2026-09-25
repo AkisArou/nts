@@ -459,6 +459,13 @@ fn composable_classes_are_constructed_as_themselves() {
     assert!(button_surface.contains("     * @ntsVia 09108F87-DF6C-4180-9B3A-E60845825811\n     */\n    get flyout(): FlyoutBase;"), "{button_surface}");
     assert!(!button_surface.contains("content"), "a base's member is repeated on the class:\n{button_surface}");
     assert!(module.contains("export interface Button extends IButton, ButtonInterfaces, ButtonMembers {}"), "the class does not carry its surface");
+    // A default interface is its class's base's in the chain, so a button
+    // goes where a content control is taken, and carries the base classes'
+    // methods as one flat list, not their types.
+    assert!(
+        module.contains("export type IButton = ComClass<\"Windows_UI_Xaml_Controls_IButton\", IButtonBase> & IButtonMethods & IButtonBaseMethods & IContentControlMethods & IControlMethods & IFrameworkElementMethods & IUIElementMethods & IDependencyObjectMethods;"),
+        "IButton is not in its base's chain"
+    );
     // A static beside its ABI name, one slot.
     assert!(module.contains("     * @ntsFactory Windows.UI.Xaml.Controls.Button 80A13C19-843A-451C-8CF5-44C701B0E216\n     */\n    function createInstance(): Button;"), "no camelCase static");
     let _ = std::fs::remove_dir_all(&out);

@@ -241,6 +241,8 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
         specialized: std::collections::BTreeMap::new(),
         refused: Vec::new(),
         methods: 0,
+        bases: default_interface_bases(index, namespace),
+        other_bases: BTreeMap::new(),
     };
     let mut body = String::new();
     let mut interfaces = 0;
@@ -325,6 +327,12 @@ struct Writer<'a> {
     index: &'a Index,
     namespace: &'a str,
     brands: BTreeSet<&'static str>,
+    /// Each class's default interface in this namespace, by name, and its base
+    /// class's default interface, `(namespace, name)`: the interface it
+    /// extends, as the class extends its base (`IButton`, `IButtonBase`).
+    bases: BTreeMap<String, (String, String)>,
+    /// The same for other namespaces, read once each as a chain reaches them.
+    other_bases: BTreeMap<String, BTreeMap<String, (String, String)>>,
     references: std::collections::BTreeMap<String, BTreeSet<String>>,
     /// How this module spells each type another namespace declares: its own
     /// name, or -- where that name is also declared here or imported from a
@@ -366,6 +374,22 @@ impl Writer<'_> {
             self.refuse(name, "an interface with no GuidAttribute");
             return false;
         };
+        // A class's default interface extends its base class's: `IButton` is
+        // an `IButtonBase`, whose methods it has and whose place it takes --
+        // the compiler asks the object for that interface where it does.
+        let base = self.bases.get(name).cloned().map(|(namespace, interface)| self.named(&namespace, &interface));
+        // Its base interfaces' methods, flat -- `IButtonBaseMethods &
+        // IContentControlMethods & ...` -- rather than the base types, whose
+        // chains would intersect and cost the checker a nested intersection
+        // per class.
+        let mut inherited = Vec::new();
+        let mut at = self.bases.get(name).cloned();
+        let mut depth = 0;
+        while let Some((namespace, interface)) = at.take().filter(|_| depth < 32) {
+            inherited.push(self.named(&namespace, &format!("{interface}Methods")));
+            at = self.base_of(&namespace, &interface);
+            depth += 1;
+        }
         let mut methods = String::new();
         for (index, method) in def.methods().enumerate() {
             let slot = 6 + index;
@@ -392,7 +416,18 @@ impl Writer<'_> {
         // The tag is the C struct a handle points at, so a C identifier: the
         // namespace kept, since two namespaces may name an interface alike.
         let tag = format!("{}_{name}", self.namespace.replace('.', "_"));
-        let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\"> & {name}Methods{parameters};");
+        match &base {
+            Some(base) => {
+                let _ = write!(body, "  export type {this} = ComClass<\"{tag}\", {base}> & {name}Methods{parameters}");
+                for methods in &inherited {
+                    let _ = write!(body, " & {methods}");
+                }
+                let _ = writeln!(body, ";");
+            }
+            None => {
+                let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\"> & {name}Methods{parameters};");
+            }
+        }
         self.generics.clear();
         true
     }
@@ -429,6 +464,16 @@ impl Writer<'_> {
 
     /// `JsonValue`: its default interface, and its statics in a namespace of
     /// the same name.
+    /// The base default interface of the default interface `interface` in
+    /// `namespace`: one step of the chain [`Self::bases`] holds the first of.
+    fn base_of(&mut self, namespace: &str, interface: &str) -> Option<(String, String)> {
+        if namespace == self.namespace {
+            return self.bases.get(interface).cloned();
+        }
+        let index = self.index;
+        self.other_bases.entry(namespace.to_owned()).or_insert_with(|| default_interface_bases(index, namespace)).get(interface).cloned()
+    }
+
     /// A static of a class, and its idiomatic name beside it:
     /// `StorageFolder.GetFolderFromPathAsync` and
     /// `StorageFolder.getFolderFromPathAsync`, one slot.
@@ -1528,6 +1573,34 @@ enum Receiver<'a> {
 
 /// The name the metadata gives a method's slot: its `OverloadAttribute` where
 /// it has one, which is unique within the interface, and otherwise its name.
+/// For each class in `namespace`, its default interface and its base
+/// class's: see `Writer::bases`. A base outside the metadata read, or one with
+/// no default interface, gives none.
+fn default_interface_bases(index: &Index, namespace: &str) -> BTreeMap<String, (String, String)> {
+    let default_of = |class: TypeDef| {
+        class.interface_impls().find(|implemented| implemented.has_attribute("DefaultAttribute")).and_then(|implemented| match implemented.interface(&[]) {
+            Type::ClassName(named) if named.generics.is_empty() => Some((named.namespace.clone(), named.name.clone())),
+            _ => None,
+        })
+    };
+    let mut bases = BTreeMap::new();
+    for class in index.types().filter(|def| def.namespace() == namespace && def.category() == TypeCategory::Class) {
+        let Some((own_namespace, own)) = default_of(class) else { continue };
+        if own_namespace != namespace {
+            continue;
+        }
+        let base = class
+            .extends()
+            .and_then(|base| index.get(base.namespace(), base.name()).next())
+            .filter(|base| base.category() == TypeCategory::Class)
+            .and_then(default_of);
+        if let Some(base) = base {
+            bases.insert(own, base);
+        }
+    }
+    bases
+}
+
 /// The tags a method's receiver adds: how its HRESULT is read, and the
 /// factory a static is called on.
 fn receiver_tags(text: &mut String, receiver: Receiver<'_>, outs: bool) {
