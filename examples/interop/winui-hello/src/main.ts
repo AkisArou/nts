@@ -132,22 +132,38 @@ class App extends Application {
     });
     window.put_Content(button.as_IUIElement());
     window.Activate();
-    setTimeout(() => {
-      const focused = button.as_IUIElement().Focus(FocusState.Programmatic);
-      button.as_IFrameworkElementOverrides().GoToElementStateCore("Custom", false);
-      ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
-      const peer = FrameworkElementAutomationPeer.CreatePeerForElement(button.as_IUIElement()).GetClassName();
-      const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
-      // A record written as its fields, where the call takes one by value.
-      button.as_IUIElement().Measure({ Width: 1000, Height: 1000 });
-      const desired = button.as_IUIElement().get_DesiredSize().Width > 0;
-      report(
-        "title=" + window.get_Title() + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
-          " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-          " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired),
-      );
-      this.Exit();
-    }, 1500);
+    setTimeout(() => this.whenLaidOut(window, button), 200);
+  }
+
+  // The checks wait for XAML to have templated, measured and arranged the
+  // button, polling rather than sampling once: a desktop busy with another
+  // program lays a window out later, and a single sample read that as a
+  // failure.
+  polls = 0;
+  whenLaidOut(window: Window, button: PressButton): void {
+    this.polls += 1;
+    const laidOut = button.templated > 0 && button.measured > 0 && button.as_IFrameworkElement().get_ActualWidth() > 0;
+    if (!laidOut && this.polls < 75) {
+      setTimeout(() => this.whenLaidOut(window, button), 200);
+      return;
+    }
+    // Focus goes to the active window: made so again, since another
+    // program may have taken the desktop's focus meanwhile.
+    window.Activate();
+    const focused = button.as_IUIElement().Focus(FocusState.Programmatic);
+    button.as_IFrameworkElementOverrides().GoToElementStateCore("Custom", false);
+    ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
+    const peer = FrameworkElementAutomationPeer.CreatePeerForElement(button.as_IUIElement()).GetClassName();
+    const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
+    // A record written as its fields, where the call takes one by value.
+    button.as_IUIElement().Measure({ Width: 1000, Height: 1000 });
+    const desired = button.as_IUIElement().get_DesiredSize().Width > 0;
+    report(
+      "title=" + window.get_Title() + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
+        " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired),
+    );
+    this.Exit();
   }
 }
 

@@ -71,6 +71,13 @@ if [[ $interactive == 0 ]]; then
   ssh "${ssh_opts[@]}" "$dest" "cd $remote && .\\$name$quoted"
   exit
 fi
+# One interactive program at a time, whichever session or gate starts it:
+# they share one desktop, and two windows take focus from each other -- a
+# program that asserts it was focused, laid out or pressed then fails for a
+# reason nothing in it explains. Held on this machine, where every run is
+# started, until the program has ended.
+exec {desktop}>"${NTS_WINDOWS_ROOT:-$HOME/.cache/nts/windows}/interactive.lock"
+flock "$desktop"
 # The task runs a script beside the program, which records the status last,
 # so its presence says the program has ended.
 task="nts-run-$$"
