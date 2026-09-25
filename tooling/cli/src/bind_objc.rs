@@ -1529,6 +1529,14 @@ impl<'a> Model<'a> {
             self.import("objc:types", "CString");
             return Ok("CString".to_owned());
         }
+        // Swift's `UnsafePointer<CChar>` result -- `utf8String`,
+        // `fileSystemRepresentation` -- which a Swift program reads with
+        // `String(cString:)`: the text, copied when the message answers, so an
+        // inner pointer (`NS_RETURNS_INNER_POINTER`) is read while it holds.
+        if position == Position::Result && pointee == "const char" {
+            self.import("objc:types", "CString");
+            return Ok(or_null("CString".to_owned()));
+        }
         // Swift's `UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>`, a
         // `char **` such as `UIApplicationMain`'s `argv`: an address, as
         // Swift has it. Not a `CStrings`, which says C gives the array back
@@ -1579,6 +1587,14 @@ impl<'a> Model<'a> {
         if pointee.trim_start_matches("const ") == "void" && position != Position::Block {
             self.import("c:types", "Ptr");
             return Ok(or_null("Ptr<unknown>".to_owned()));
+        }
+        // `struct CGColor *`, the pointer a Core Foundation class's `Ref`
+        // typedef names: a class Swift imports, which this binding binds
+        // only when asked to.
+        if let Some(tag) = desugared.strip_prefix("struct ").and_then(|rest| rest.strip_suffix(" *"))
+            && self.typedefs.get(&format!("{tag}Ref")).is_some_and(|aliased| aliased.trim_start_matches("const ") == desugared)
+        {
+            return Err(format!("`{tag}`, a Core Foundation class this binding does not bind (`--class {tag}`)"));
         }
         Err(format!("a `{desugared}`"))
     }
@@ -1636,7 +1652,9 @@ impl<'a> Model<'a> {
         for piece in pieces.iter().map(|p| p.trim()).filter(|p| !p.is_empty() && *p != "void") {
             spelled.push(self.spell(class, &block_part(piece, &self.typedefs), Position::Block)?);
         }
-        let result = match result.trim() {
+        // `NS_SWIFT_UI_ACTOR void (^)(BOOL)`: an attribute of the block, not
+        // part of its result's type.
+        let result = match strip_availability(result).as_str() {
             "void" => "void".to_owned(),
             result => self.spell(class, &block_part(result, &self.typedefs), Position::Block)?,
         };
@@ -2077,7 +2095,18 @@ enum Position {
 /// type; the annotation says nothing about how it crosses.
 fn strip_availability(written: &str) -> String {
     let mut text = written.trim().to_owned();
-    while text.starts_with("API_") {
+    // Swift's attributes, which name no type: `NS_SWIFT_UI_ACTOR`,
+    // `NS_SWIFT_SENDABLE`, `NS_REFINED_FOR_SWIFT`, each with no arguments.
+    let bare = |text: &str| {
+        let word = text.split(|c: char| c.is_whitespace() || c == '(').next().unwrap_or_default();
+        (word.starts_with("NS_SWIFT_") || word == "NS_REFINED_FOR_SWIFT") && !text[word.len()..].trim_start().starts_with('(')
+    };
+    while bare(&text) || text.starts_with("API_") || text.starts_with("NS_SWIFT_") {
+        if bare(&text) {
+            let word = text.split_whitespace().next().unwrap_or_default().len();
+            text = text[word..].trim().to_owned();
+            continue;
+        }
         let Some(open) = text.find('(') else { break };
         let mut depth = 0usize;
         let mut end = None;
@@ -2850,5 +2879,8 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
     fn an_availability_annotation_is_not_part_of_the_type() {
         assert_eq!(strip_availability("API_AVAILABLE(macos(11.0)) NSString *"), "NSString *");
         assert_eq!(strip_availability("NSString * _Nonnull"), "NSString * _Nonnull");
+        assert_eq!(strip_availability("NS_SWIFT_UI_ACTOR void"), "void");
+        assert_eq!(strip_availability("NS_SWIFT_NAME(x) API_AVAILABLE(ios(2.0)) BOOL"), "BOOL");
+        assert_eq!(strip_availability("BOOL"), "BOOL");
     }
 }

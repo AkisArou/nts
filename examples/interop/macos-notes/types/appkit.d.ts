@@ -1102,6 +1102,8 @@ declare module "objc:AppKit" {
     get localizedLowercase(): string;
     /** @ntsSelector localizedCapitalizedString */
     get localizedCapitalized(): string;
+    /** @ntsSelector UTF8String */
+    get utf8String(): CString | null;
     get fastestEncoding(): UInt;
     get smallestEncoding(): UInt;
     static get defaultCStringEncoding(): UInt;
@@ -1127,6 +1129,7 @@ declare module "objc:AppKit" {
     get standardizingPath(): string;
     /** @ntsSelector stringByResolvingSymlinksInPath */
     get resolvingSymlinksInPath(): string;
+    get fileSystemRepresentation(): CString;
     /** @ntsSelector stringByRemovingPercentEncoding */
     get removingPercentEncoding(): string | null;
     /** @ntsSelector characterAtIndex: */
@@ -1241,6 +1244,8 @@ declare module "objc:AppKit" {
     data(labels: { using: UInt }): NSData | null;
     /** @ntsSelector canBeConvertedToEncoding: */
     canBeConverted(labels: { to: UInt }): boolean;
+    /** @ntsSelector cStringUsingEncoding: */
+    cString(labels: { using: UInt }): CString | null;
     /** @ntsSelector getCString:maxLength:encoding: */
     getCString(buffer: CString, labels: { maxLength: UInt; encoding: UInt }): boolean;
     /** @ntsSelector getBytes:maxLength:usedLength:encoding:options:range:remainingRange: */
@@ -1314,11 +1319,8 @@ declare module "objc:AppKit" {
     /** @ntsSelector self */
     self(): NSString;
     // Not bound, each for the reason given:
-    //   @property UTF8String: a `const char *`
     //   @property availableStringEncodings: a `const NSStringEncoding *`
-    //   @property fileSystemRepresentation: a `const char *`
     //   -getCharacters:range:: a `unichar *`
-    //   -cStringUsingEncoding:: a `const char *`
     //   -initWithCharactersNoCopy:length:freeWhenDone:: a `unichar *`
     //   -initWithCharactersNoCopy:length:deallocator:: a `unichar *`
     //   -initWithCharacters:length:: a `const unichar *`

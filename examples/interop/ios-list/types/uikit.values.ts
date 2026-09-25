@@ -3,7 +3,7 @@
 // Swift's `async` imports: each method taking a completion handler, as a
 // function returning a promise the handler settles, which the binding's
 // `@ntsCall` overload names.
-import { NSError, UIApplication, UIView } from "objc:UIKit";
+import { NSError, NSObject, NSURL, UIApplication, UIView } from "objc:UIKit";
 import { nts_pending_begin, nts_pending_end } from "c:pending";
 import type { CEnum } from "c:types";
 import type { TimeInterval, UInt } from "objc:types";
@@ -12,6 +12,16 @@ export function nts_async_UIView_animateKeyframes(labels: { withDuration: TimeIn
   return new Promise((resolve) => {
     nts_pending_begin();
     UIView.animateKeyframes(labels, (value: boolean) => {
+      nts_pending_end();
+      resolve(value);
+    });
+  });
+}
+
+export function nts_async_UIApplication_open(self: UIApplication, url: NSURL, labels: { options: Map<string, NSObject> }): Promise<boolean> {
+  return new Promise((resolve) => {
+    nts_pending_begin();
+    self.open(url, labels, (value: boolean) => {
       nts_pending_end();
       resolve(value);
     });

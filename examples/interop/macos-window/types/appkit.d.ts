@@ -1120,6 +1120,8 @@ declare module "objc:AppKit" {
     get localizedLowercase(): string;
     /** @ntsSelector localizedCapitalizedString */
     get localizedCapitalized(): string;
+    /** @ntsSelector UTF8String */
+    get utf8String(): CString | null;
     get fastestEncoding(): UInt;
     get smallestEncoding(): UInt;
     static get defaultCStringEncoding(): UInt;
@@ -1145,6 +1147,7 @@ declare module "objc:AppKit" {
     get standardizingPath(): string;
     /** @ntsSelector stringByResolvingSymlinksInPath */
     get resolvingSymlinksInPath(): string;
+    get fileSystemRepresentation(): CString;
     /** @ntsSelector stringByRemovingPercentEncoding */
     get removingPercentEncoding(): string | null;
     /** @ntsSelector characterAtIndex: */
@@ -1259,6 +1262,8 @@ declare module "objc:AppKit" {
     data(labels: { using: UInt }): NSData | null;
     /** @ntsSelector canBeConvertedToEncoding: */
     canBeConverted(labels: { to: UInt }): boolean;
+    /** @ntsSelector cStringUsingEncoding: */
+    cString(labels: { using: UInt }): CString | null;
     /** @ntsSelector getCString:maxLength:encoding: */
     getCString(buffer: CString, labels: { maxLength: UInt; encoding: UInt }): boolean;
     /** @ntsSelector getBytes:maxLength:usedLength:encoding:options:range:remainingRange: */
@@ -1332,11 +1337,8 @@ declare module "objc:AppKit" {
     /** @ntsSelector self */
     self(): NSString;
     // Not bound, each for the reason given:
-    //   @property UTF8String: a `const char *`
     //   @property availableStringEncodings: a `const NSStringEncoding *`
-    //   @property fileSystemRepresentation: a `const char *`
     //   -getCharacters:range:: a `unichar *`
-    //   -cStringUsingEncoding:: a `const char *`
     //   -initWithCharactersNoCopy:length:freeWhenDone:: a `unichar *`
     //   -initWithCharactersNoCopy:length:deallocator:: a `unichar *`
     //   -initWithCharacters:length:: a `const unichar *`
@@ -2918,7 +2920,7 @@ declare module "objc:AppKit" {
     //   @property quaternarySystemFillColor: introduced in macOS 14.0
     //   @property quinarySystemFillColor: introduced in macOS 14.0
     //   @property linearExposure: introduced in macOS 26.0
-    //   @property CGColor: a `struct CGColor *`
+    //   @property CGColor: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
     //   @property controlHighlightColor: deprecated in macOS 11.0
     //   @property controlLightHighlightColor: deprecated in macOS 11.0
     //   @property controlShadowColor: deprecated in macOS 11.0
@@ -2937,7 +2939,7 @@ declare module "objc:AppKit" {
     //   +colorWithRed:green:blue:alpha:linearExposure:: introduced in macOS 26.0
     //   -colorByApplyingContentHeadroom:: introduced in macOS 26.0
     //   +colorForControlTint:: deprecated in macOS 11.0
-    //   +colorWithCGColor:: a `struct CGColor *`
+    //   +colorWithCGColor:: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
     //   -colorUsingColorSpaceName:device:: deprecated in macOS 10.14
     //   -colorUsingColorSpaceName:: deprecated in macOS 10.14
   }
@@ -3296,7 +3298,7 @@ declare module "objc:AppKit" {
     //   +imageUnfilteredPasteboardTypes: deprecated in macOS 10.10
     //   +imageFileTypes: deprecated in macOS 10.10
     //   +imagePasteboardTypes: deprecated in macOS 10.10
-    //   -CGImageForProposedRect:context:hints:: a `struct CGImage *`
+    //   -CGImageForProposedRect:context:hints:: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
   }
 
   /** @ntsClass NSBitmapImageRep */
@@ -3373,11 +3375,11 @@ declare module "objc:AppKit" {
     self(): NSBitmapImageRep;
     // Not bound, each for the reason given:
     //   @property bitmapData: a `unsigned char *`
-    //   @property CGImage: a `struct CGImage *`
+    //   @property CGImage: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
     //   -initWithFocusedViewRect:: deprecated in macOS 10.14
     //   -initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:bitsPerPixel:: a `unsigned char * _Nullable *`
     //   -initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:: a `unsigned char * _Nullable *`
-    //   -initWithCGImage:: a `struct CGImage *`
+    //   -initWithCGImage:: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
     //   -getBitmapDataPlanes:: a `unsigned char * _Nullable *`
     //   -getCompression:factor:: a `NSTIFFCompression *`
     //   +getTIFFCompressionTypes:count:: a `const NSTIFFCompression * _Nullable *`
@@ -3786,28 +3788,28 @@ declare module "objc:AppKit" {
     //   CGPDFContextBeginPage: a `const struct __CFDictionary *`
     //   CGContextBeginTransparencyLayer: a `const struct __CFDictionary *`
     //   CGContextBeginTransparencyLayerWithRect: a `const struct __CFDictionary *`
-    //   CGContextClipToMask: a `struct CGImage *`
-    //   CGBitmapContextGetColorSpace: a `struct CGColorSpace *`
-    //   CGContextDrawLinearGradient: a `struct CGGradient *`
-    //   CGContextDrawPDFPage: a `struct CGPDFPage *`
-    //   CGContextDrawRadialGradient: a `struct CGGradient *`
-    //   CGContextDrawShading: a `struct CGShading *`
+    //   CGContextClipToMask: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
+    //   CGBitmapContextGetColorSpace: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
+    //   CGContextDrawLinearGradient: `CGGradient`, a Core Foundation class this binding does not bind (`--class CGGradient`)
+    //   CGContextDrawPDFPage: `CGPDFPage`, a Core Foundation class this binding does not bind (`--class CGPDFPage`)
+    //   CGContextDrawRadialGradient: `CGGradient`, a Core Foundation class this binding does not bind (`--class CGGradient`)
+    //   CGContextDrawShading: `CGShading`, a Core Foundation class this binding does not bind (`--class CGShading`)
     //   CGPDFContextCreateWithURL: a `const struct __CFURL *`
-    //   CGPDFContextCreate: a `struct CGDataConsumer *`
-    //   CGBitmapContextCreate: a `struct CGColorSpace *`
-    //   CGBitmapContextCreateWithData: a `struct CGColorSpace *`
-    //   CGBitmapContextCreateImage: a `struct CGImage *`
+    //   CGPDFContextCreate: `CGDataConsumer`, a Core Foundation class this binding does not bind (`--class CGDataConsumer`)
+    //   CGBitmapContextCreate: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
+    //   CGBitmapContextCreateWithData: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
+    //   CGBitmapContextCreateImage: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
     //   CGContextCopyPath: a `const struct CGPath *`
     //   CGPDFContextSetDestinationForRect: a `const struct __CFString *`
     //   CGContextSetEDRTargetHeadroom: introduced in macOS 15.0
-    //   CGContextSetFillColorWithColor: a `struct CGColor *`
-    //   CGContextSetFillColorSpace: a `struct CGColorSpace *`
-    //   CGContextSetFillPattern: a `struct CGPattern *`
-    //   CGContextSetFont: a `struct CGFont *`
-    //   CGContextSetShadowWithColor: a `struct CGColor *`
-    //   CGContextSetStrokeColorWithColor: a `struct CGColor *`
-    //   CGContextSetStrokeColorSpace: a `struct CGColorSpace *`
-    //   CGContextSetStrokePattern: a `struct CGPattern *`
+    //   CGContextSetFillColorWithColor: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
+    //   CGContextSetFillColorSpace: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
+    //   CGContextSetFillPattern: `CGPattern`, a Core Foundation class this binding does not bind (`--class CGPattern`)
+    //   CGContextSetFont: `CGFont`, a Core Foundation class this binding does not bind (`--class CGFont`)
+    //   CGContextSetShadowWithColor: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
+    //   CGContextSetStrokeColorWithColor: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
+    //   CGContextSetStrokeColorSpace: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
+    //   CGContextSetStrokePattern: `CGPattern`, a Core Foundation class this binding does not bind (`--class CGPattern`)
     //   CGPDFContextSetURLForRect: a `const struct __CFURL *`
     //   CGContextSynchronizeAttributes: introduced in macOS 26.0
     //   CGContextGetTypeID: a `swift.type.property`, which is not bound yet

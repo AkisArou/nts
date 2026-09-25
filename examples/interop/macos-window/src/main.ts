@@ -19,6 +19,7 @@ import {
   NSButton,
   NSEvent,
   NSObject,
+  NSString,
   NSView,
   NSWindow,
   Timer,
@@ -251,6 +252,10 @@ function main(): void {
   // Which the program is: a bare executable has no bundle identifier, and an
   // application has the one its `Info.plist` gives it.
   report(`bundle ${Bundle.main.bundleIdentifier ?? "none"}`);
+  // Swift's `String(cString: text.utf8String!)`: a `const char *` result,
+  // copied when the message answers. ASCII has no `é`, so that one is nil.
+  const text = new NSString({ string: "héllo wörld" });
+  report(`utf8 ${text.utf8String ?? "none"} ${text.cString({ using: 1 }) ?? "none"}`);
   const canvas = new Canvas({ frame: { size: { width: 40, height: 30 } } });
   window.contentView?.addSubview(canvas);
   // AppKit asks each subview, so the override is called now, synchronously.

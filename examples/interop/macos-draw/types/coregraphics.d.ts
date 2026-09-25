@@ -148,8 +148,8 @@ declare module "objc:CoreGraphics" {
     //   CGColorGetContentHeadroom: introduced in macOS 26.0
     //   CGColorCreateCopyByMatchingToColorSpace: a `const struct __CFDictionary *`
     //   CGColorCreateWithContentHeadroom: introduced in macOS 26.0
-    //   CGColorCreateWithPattern: a `struct CGPattern *`
-    //   CGColorGetPattern: a `struct CGPattern *`
+    //   CGColorCreateWithPattern: `CGPattern`, a Core Foundation class this binding does not bind (`--class CGPattern`)
+    //   CGColorGetPattern: `CGPattern`, a Core Foundation class this binding does not bind (`--class CGPattern`)
     //   CGColorGetTypeID: a `swift.type.property`, which is not bound yet
   }
   export type CGColor = ObjcClass<"CGColor"> & CGColorOwnMethods;
@@ -194,7 +194,7 @@ declare module "objc:CoreGraphics" {
     // Not bound, each for the reason given:
     //   CGColorSpaceCopyICCData: a `const struct __CFData *`
     //   CGColorSpaceCopyICCProfile: deprecated in macOS 10.13
-    //   CGColorSpaceCreateICCBased: a `struct CGDataProvider *`
+    //   CGColorSpaceCreateICCBased: `CGDataProvider`, a Core Foundation class this binding does not bind (`--class CGDataProvider`)
     //   CGColorSpaceCreateWithICCProfile: deprecated in macOS 10.13
     //   CGColorSpaceCreateWithName: a `const struct __CFString *`
     //   CGColorSpaceCreateWithPlatformColorSpace: deprecated in macOS 12.0
@@ -431,21 +431,21 @@ declare module "objc:CoreGraphics" {
     //   CGPDFContextBeginPage: a `const struct __CFDictionary *`
     //   CGContextBeginTransparencyLayer: a `const struct __CFDictionary *`
     //   CGContextBeginTransparencyLayerWithRect: a `const struct __CFDictionary *`
-    //   CGContextClipToMask: a `struct CGImage *`
-    //   CGContextDrawLinearGradient: a `struct CGGradient *`
-    //   CGContextDrawPDFPage: a `struct CGPDFPage *`
-    //   CGContextDrawRadialGradient: a `struct CGGradient *`
-    //   CGContextDrawShading: a `struct CGShading *`
+    //   CGContextClipToMask: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
+    //   CGContextDrawLinearGradient: `CGGradient`, a Core Foundation class this binding does not bind (`--class CGGradient`)
+    //   CGContextDrawPDFPage: `CGPDFPage`, a Core Foundation class this binding does not bind (`--class CGPDFPage`)
+    //   CGContextDrawRadialGradient: `CGGradient`, a Core Foundation class this binding does not bind (`--class CGGradient`)
+    //   CGContextDrawShading: `CGShading`, a Core Foundation class this binding does not bind (`--class CGShading`)
     //   CGPDFContextCreateWithURL: a `const struct __CFURL *`
-    //   CGPDFContextCreate: a `struct CGDataConsumer *`
+    //   CGPDFContextCreate: `CGDataConsumer`, a Core Foundation class this binding does not bind (`--class CGDataConsumer`)
     //   CGBitmapContextCreateWithData: a `void (*)(void * _Nullable, void * _Nullable)`
-    //   CGBitmapContextCreateImage: a `struct CGImage *`
+    //   CGBitmapContextCreateImage: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
     //   CGContextCopyPath: a `const struct CGPath *`
     //   CGPDFContextSetDestinationForRect: a `const struct __CFString *`
     //   CGContextSetEDRTargetHeadroom: introduced in macOS 15.0
-    //   CGContextSetFillPattern: a `struct CGPattern *`
-    //   CGContextSetFont: a `struct CGFont *`
-    //   CGContextSetStrokePattern: a `struct CGPattern *`
+    //   CGContextSetFillPattern: `CGPattern`, a Core Foundation class this binding does not bind (`--class CGPattern`)
+    //   CGContextSetFont: `CGFont`, a Core Foundation class this binding does not bind (`--class CGFont`)
+    //   CGContextSetStrokePattern: `CGPattern`, a Core Foundation class this binding does not bind (`--class CGPattern`)
     //   CGPDFContextSetURLForRect: a `const struct __CFURL *`
     //   CGContextSynchronizeAttributes: introduced in macOS 26.0
     //   CGContextGetTypeID: a `swift.type.property`, which is not bound yet

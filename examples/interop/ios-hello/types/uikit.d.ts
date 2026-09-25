@@ -688,8 +688,8 @@ declare module "objc:UIKit" {
     /** @ntsSelector self */
     self(): UIColor;
     // Not bound, each for the reason given:
-    //   @property CGColor: a `struct CGColor *`
-    //   -initWithCGColor:: a `struct CGColor *`
+    //   @property CGColor: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
+    //   -initWithCGColor:: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
   }
 
   /** @ntsClass UIResponder */
@@ -1538,12 +1538,20 @@ declare module "objc:UIKit" {
     openURL(url: NSURL): boolean;
     /** @ntsSelector canOpenURL: */
     canOpenURL(url: NSURL): boolean;
+    /** @ntsSelector openURL:options:completionHandler: */
+    open(url: NSURL, labels: { options: Map<string, NSObject> }, completion: (arg0: boolean) => void): void;
+    /** @ntsCall nts_async_UIApplication_open */
+    open(url: NSURL, labels: { options: Map<string, NSObject> }): Promise<boolean>;
     /** @ntsSelector sendEvent: */
     sendEvent(event: UIEvent): void;
     /** @ntsSelector sendAction:to:from:forEvent: */
     sendAction(action: Selector, labels: { to: NSObject | null; from: NSObject | null; for: UIEvent | null }): boolean;
     /** @ntsSelector supportedInterfaceOrientationsForWindow: */
     supportedInterfaceOrientations(labels: { for: UIWindow | null }): CEnum<UIInterfaceOrientationMask | 0, UInt>;
+    /** @ntsSelector beginBackgroundTaskWithExpirationHandler: */
+    beginBackgroundTask(handler: () => void): UInt;
+    /** @ntsSelector beginBackgroundTaskWithName:expirationHandler: */
+    beginBackgroundTask(labels: { withName: string | null }, handler: () => void): UInt;
     /** @ntsSelector endBackgroundTask: */
     endBackgroundTask(identifier: UInt): void;
     /** @ntsSelector setMinimumBackgroundFetchInterval: */
@@ -1604,10 +1612,6 @@ declare module "objc:UIKit" {
     constructor();
     /** @ntsSelector self */
     self(): UIApplication;
-    // Not bound, each for the reason given:
-    //   -openURL:options:completionHandler:: a `NS_SWIFT_UI_ACTOR void`
-    //   -beginBackgroundTaskWithExpirationHandler:: a `NS_SWIFT_UI_ACTOR void`
-    //   -beginBackgroundTaskWithName:expirationHandler:: a `NS_SWIFT_UI_ACTOR void`
   }
 
   /** @ntsClass UIControl */
