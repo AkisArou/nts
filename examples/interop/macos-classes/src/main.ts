@@ -33,6 +33,37 @@ function made(): void {
 
 let replaced = 0 as c_int;
 let held = 0 as c_int;
+let mapped = 0 as c_int;
+
+// A weak watch on a map's entry, in a function of its own: a counted handle a
+// function reads is held to the end of its block, and this one's ends here.
+function watchEntry(map: Map<string, NSObject>, key: string): c_int {
+  return weak_watch(map.get(key)!);
+}
+
+// Swift's `[String: NSObject]`: a map holds each object in a box of its
+// family, whose count it gives back when the entry is overwritten or deleted,
+// or the map goes. Overwriting an entry with itself keeps it.
+function maps(): void {
+  const map = new Map<string, NSObject>();
+  const kept = new NSObject();
+  mapped = weak_watch(kept);
+  map.set("kept", kept);
+  map.set("dropped", new NSObject());
+  const dropped = watchEntry(map, "dropped");
+  map.set("kept", map.get("kept")!);
+  map.delete("dropped");
+  const missing = map.get("missing");
+  report(`maps ${map.size} ${map.has("kept")} ${missing === undefined} ${weak_alive(dropped) ? "alive" : "gone"}`);
+  let count = 0;
+  for (const [key, value] of map) {
+    if (key === "kept" && value.isEqual(kept)) count++;
+  }
+  map.forEach((value) => {
+    if (value.isEqual(kept)) count++;
+  });
+  report(`maps iterated ${count}`);
+}
 
 // An object only the caller will hold, watched on the way out.
 function watched(): NSObject {
@@ -264,6 +295,8 @@ function main(): void {
 
   arrays();
   report(`array ${weak_alive(held) ? "alive" : "gone"}`);
+  maps();
+  report(`mapped ${weak_alive(mapped) ? "alive" : "gone"}`);
 
   made();
   report(`object ${weak_alive(watch) ? "alive" : "gone"}`);

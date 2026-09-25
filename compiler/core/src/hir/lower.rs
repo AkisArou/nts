@@ -10004,7 +10004,15 @@ fn representation_within(
         // A promise has a slot of its own for a C handle
         // (`nts_promise_fulfill_pointer`), outside its value; a set has none.
         HirType::Managed(ManagedType::Set(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
-        HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => !matches!(key.as_ref(), HirType::NativePointer(_)) && !matches!(value.as_ref(), HirType::NativePointer(_)),
+        // A map's *value* may be a counted foreign object -- Swift's
+        // `[String: NSObject]` -- held in a box of its family, as a promise
+        // holds one (`erased_for_table`). A key may not: a box has an
+        // identity of its own, not the object's.
+        HirType::Managed(ManagedType::Map(key, value)) => {
+            !matches!(key.as_ref(), HirType::NativePointer(_))
+                && !matches!(value.as_ref(), HirType::NativePointer(pointee) if pointee.counting().is_none())
+        }
+        HirType::Managed(ManagedType::Table(key, value)) => !matches!(key.as_ref(), HirType::NativePointer(_)) && !matches!(value.as_ref(), HirType::NativePointer(_)),
         _ => true,
     })
 }
@@ -14437,6 +14445,13 @@ impl<'a> FuncBuilder<'a> {
     /// [`FuncBuilder::present_of`] is the one read-back that does *not* come
     /// from here, because its licence is different -- see it for why.
     fn narrowed(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        // A counted handle a map holds in its box.
+        if let Some(want) = self.type_of(id)
+            && matches!(&want, HirType::NativePointer(pointee) if pointee.counting().is_some())
+            && self.values[value.0 as usize].ty == HirType::Erased
+        {
+            return self.unboxed(id, value, &want);
+        }
         if let Some(want @ HirType::NativePointer(_)) = self.type_of(id)
             && self.values[value.0 as usize].ty != want
         {
@@ -17091,23 +17106,72 @@ impl<'a> FuncBuilder<'a> {
     /// ([`super::native::handle_box`]): stored as the family's root, whose
     /// release the box's descriptor calls when the box dies.
     fn box_handle(&mut self, id: NodeId, value: ValueId, pointee: &super::native::Pointee) -> Result<(ValueId, TypeId), Diagnostic> {
-        let Some((ty, root, name)) = pointee.family().and_then(super::native::handle_box) else {
-            return Err(self.unsupported(id, "a promise settling with a counted handle of a family with no box"));
-        };
         let origin = self.origin(id);
-        let root = HirType::NativePointer(root);
-        let handle = self.push(OpKind::Convert(value), root.clone(), origin.clone());
-        self.layouts.push(Layout {
-            types: vec![ty],
-            name: name.to_owned(),
-            interfaces: Vec::new(),
-            fields: vec![Field { name: "handle".to_owned(), ty: root, readonly: true, declared_by: None }],
-            methods: vec![None; self.hierarchy.table_size()],
-            base: None,
-        });
-        let boxed = self.push(OpKind::ObjectNew { frame: false }, HirType::Managed(ManagedType::Object(ty)), origin.clone());
-        self.field_set(boxed, 0, handle, &origin);
+        let boxed = self
+            .boxed(value, pointee, &origin)
+            .ok_or_else(|| self.unsupported(id, "a promise settling with a counted handle of a family with no box"))?;
+        let HirType::Managed(ManagedType::Object(ty)) = self.values[boxed.0 as usize].ty else {
+            return Err(self.unsupported(id, "a handle box that is not an object"));
+        };
         Ok((boxed, ty))
+    }
+
+    /// A counted handle in a new box of its family's, which holds the count.
+    fn boxed(&mut self, value: ValueId, pointee: &super::native::Pointee, origin: &Origin) -> Option<ValueId> {
+        let (ty, root) = self.handle_box_layout(pointee)?;
+        let handle = self.push(OpKind::Convert(value), HirType::NativePointer(root), origin.clone());
+        let boxed = self.push(OpKind::ObjectNew { frame: false }, HirType::Managed(ManagedType::Object(ty)), origin.clone());
+        self.field_set(boxed, 0, handle, origin);
+        Some(boxed)
+    }
+
+    /// The box of a handle's family: its type, with its layout recorded, and
+    /// the family's root the box's one field is typed as.
+    fn handle_box_layout(&mut self, pointee: &super::native::Pointee) -> Option<(TypeId, super::native::Pointee)> {
+        let (ty, root, name) = pointee.family().and_then(super::native::handle_box)?;
+        if !self.layouts.iter().any(|layout| layout.types.contains(&ty)) {
+            self.layouts.push(Layout {
+                types: vec![ty],
+                name: name.to_owned(),
+                interfaces: Vec::new(),
+                fields: vec![Field { name: "handle".to_owned(), ty: HirType::NativePointer(root.clone()), readonly: true, declared_by: None }],
+                methods: vec![None; self.hierarchy.table_size()],
+                base: None,
+            });
+        }
+        Some((ty, root))
+    }
+
+    /// An erased value a map gave back, as the counted handle its box holds:
+    /// the box's field, or null where the map had nothing (`get` of an absent
+    /// key is `undefined`, whose reference is null).
+    fn unboxed(&mut self, id: NodeId, value: ValueId, want: &HirType) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        self.unboxed_at(value, want, &origin).ok_or_else(|| self.unsupported(id, "a handle of a family with no box"))
+    }
+
+    /// [`Self::unboxed`] where there is only an origin: `None` for a handle
+    /// of a family with no box.
+    fn unboxed_at(&mut self, value: ValueId, want: &HirType, origin: &Origin) -> Option<ValueId> {
+        let HirType::NativePointer(pointee) = want else { return None };
+        let (ty, root) = self.handle_box_layout(pointee)?;
+        let origin = origin.clone();
+        let boxed_ty = HirType::Managed(ManagedType::Object(ty));
+        let boxed = self.push(OpKind::Unerase { value }, boxed_ty.clone(), origin.clone());
+        let null = self.push(OpKind::ConstNull, boxed_ty, origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: boxed, rhs: null }, HirType::Bool, origin.clone());
+        let (none_block, some_block, merge) = (self.new_block(), self.new_block(), self.new_block());
+        let result = self.push_block_param(merge, want.clone(), origin.clone());
+        self.terminate(Terminator::Branch { cond: absent, then_target: none_block, then_args: Vec::new(), else_target: some_block, else_args: Vec::new() });
+        self.switch_to(none_block);
+        let none = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+        self.terminate(Terminator::Jump { target: merge, args: vec![none] });
+        self.switch_to(some_block);
+        let handle = self.push(OpKind::FieldGet { object: boxed, field: 0 }, HirType::NativePointer(root), origin.clone());
+        let handle = self.push(OpKind::Convert(handle), want.clone(), origin.clone());
+        self.terminate(Terminator::Jump { target: merge, args: vec![handle] });
+        self.switch_to(merge);
+        Some(result)
     }
 
     /// The one-field object a captured-and-written variable lives in.
@@ -23792,6 +23856,12 @@ impl<'a> FuncBuilder<'a> {
         let unerased = |lower: &mut Self, slot: ValueId, want: &HirType| {
             if *want == HirType::Erased {
                 slot
+            } else if let HirType::NativePointer(pointee) = want
+                && pointee.counting().is_some()
+                && let Some(handle) = lower.unboxed_at(slot, want, origin)
+            {
+                // A counted handle a map holds in its box.
+                handle
             } else {
                 lower.push(
                     OpKind::Unerase { value: slot },
@@ -23852,6 +23922,11 @@ impl<'a> FuncBuilder<'a> {
                 // `Socket` rather than sixteen bytes it has to unpack itself.
                 if *element == HirType::Erased {
                     slot
+                } else if let HirType::NativePointer(pointee) = element
+                    && pointee.counting().is_some()
+                    && let Some(handle) = self.unboxed_at(slot, element, origin)
+                {
+                    handle
                 } else {
                     self.push(
                         OpKind::Unerase { value: slot },
@@ -46714,6 +46789,15 @@ impl<'a> FuncBuilder<'a> {
         if self.values[value.0 as usize].ty == HirType::Erased {
             return value;
         }
+        // A counted foreign object, boxed: the map holds the box, and the box
+        // the object's count, given back when the entry is overwritten or
+        // deleted or the map goes.
+        if let HirType::NativePointer(pointee) = self.values[value.0 as usize].ty.clone()
+            && pointee.counting().is_some()
+            && let Some(boxed) = self.boxed(value, &pointee, origin)
+        {
+            return self.push(OpKind::Erase { value: boxed, absent: Absent::Impossible }, HirType::Erased, origin.clone());
+        }
         self.push(OpKind::Erase { value, absent: Absent::Impossible }, HirType::Erased, origin.clone())
     }
 
@@ -49603,6 +49687,27 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// `None` leaves it to the caller: a pointer asked about the absence it
     /// does carry is a real test and not a constant.
+    /// The type of the value a name is bound to, where the checker's type for
+    /// it has no representation of its own -- `NSObject | undefined` is held
+    /// as the pointer whose null is the `undefined`.
+    fn bound_type(&self, node: NodeId) -> Option<HirType> {
+        if self.kind_of(node) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
+        let symbol = self.node(node).symbol?;
+        self.bindings.get(&symbol.0).map(|value| self.values[value.0 as usize].ty.clone())
+    }
+
+    /// `pointer === undefined` (or `null`, `!==`, `==`) where the pointer's
+    /// type carries that absence as its null.
+    fn pointer_absence_test(&mut self, id: NodeId, operator: u16, value: NodeId, ty: HirType) -> Result<ValueId, Diagnostic> {
+        let value = self.lower_expression(value)?;
+        let origin = self.origin(id);
+        let null = self.push(OpKind::ConstNull, ty, origin.clone());
+        let op = if matches!(operator, syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN) { BinOp::Ne } else { BinOp::Eq };
+        Ok(self.push(OpKind::Binary { op, lhs: value, rhs: null }, HirType::Bool, origin))
+    }
+
     fn absence_the_type_decides(
         &mut self,
         id: NodeId,
@@ -49631,7 +49736,16 @@ impl<'a> FuncBuilder<'a> {
             // A pointer asked about the absence it does carry: a real test.
             None
         };
-        let equal = equal?;
+        let Some(equal) = equal else {
+            // A pointer asked about the absence it carries -- `NSObject |
+            // undefined`, what `map.get(k)` answers, against `undefined` --
+            // has room for that one absence only, as null: the test is its
+            // null.
+            if let Some(ty @ HirType::NativePointer(_)) = self.type_of(value).or_else(|| self.bound_type(value)) {
+                return Some(self.pointer_absence_test(id, operator, value, ty));
+            }
+            return None;
+        };
         // The answer is known; the operand is still evaluated. Folding it away
         // made `next() === undefined` skip the call to `next`, which node
         // makes -- a constant is what the *comparison* is, not what the
@@ -49909,7 +50023,10 @@ impl<'a> FuncBuilder<'a> {
             (None, Some(tag)) => (rhs, tag),
             (None, None) => return None,
         };
-        if self.type_of(value) != Some(HirType::Erased) {
+        // Erased by its type, or -- where the checker's type has no
+        // representation, as `NSObject | undefined` from a map's `get` has
+        // none -- by what the name is bound to.
+        if self.type_of(value).or_else(|| self.bound_type(value)) != Some(HirType::Erased) {
             return self.absence_the_type_decides(id, operator, value, written);
         }
         Some((|| {

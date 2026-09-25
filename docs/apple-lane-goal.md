@@ -680,6 +680,26 @@ correctness does not depend on arm64 running by luck.
        program's alone: a global and a function, as any class's is, and not a
        class method the runtime is told of. `Ledger` counts the ledgers its
        constructor opens.
+   - **`Map<string, NSObject>`, Swift's `[String: NSObject]` (2026-09-25).**
+     A map's value may be a counted foreign object, held in a box of its
+     family (`handle_box`, as a promise holds one).
+     - `set` boxes the value, and `get`, `for...of` and `forEach` read the
+       box's handle, a missing key reading as `undefined`. The box holds the
+       object's count and gives it back when the entry is overwritten or
+       deleted, or when the map goes.
+     - A key may not be a handle: a box has an identity of its own, not the
+       object's.
+     - A pointer typed `NSObject | undefined` compares with `undefined` as
+       its null.
+     - Cost: one box per entry, a 24-byte header and an 8-byte handle, so 32
+       bytes and one allocation beside the entry's two 16-byte values. This is
+       computed from the structs, not measured. The JVM lane stores the
+       reference and has no box.
+     - `macos-classes` checks set, overwrite-with-itself, delete, iteration
+       and the map's own death against an `NSMutableDictionary` under ARC, on
+       both backends, and the NoGc control sees exactly the two lifetime
+       lines differ.
+     - Next: `NSDictionary` crossing a message as this map.
    - **An application, end to end (2026-09-25).** `macos-notes` is a notes
      app as Swift writes one: a window with a text field, an Add button and
      an `NSTableView`, and a controller that is the button's target and the

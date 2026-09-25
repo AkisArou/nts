@@ -93,6 +93,33 @@ static __weak id replaced;
 static __weak id held;
 
 /* Swift's `[NSNumber]`: the same operations on an NSMutableArray under ARC. */
+static __weak id mapped;
+
+/* Swift's `[String: NSObject]`, as an NSMutableDictionary under ARC. */
+static void maps(void) {
+  NSMutableDictionary<NSString *, NSObject *> *map = [NSMutableDictionary new];
+  NSObject *kept = [NSObject new];
+  mapped = kept;
+  map[@"kept"] = kept;
+  map[@"dropped"] = [NSObject new];
+  __weak id dropped = map[@"dropped"];
+  map[@"kept"] = map[@"kept"];
+  [map removeObjectForKey:@"dropped"];
+  NSObject *missing = map[@"missing"];
+  printf("maps %lu %s %s %s\n", (unsigned long)map.count, map[@"kept"] ? "true" : "false", missing == nil ? "true" : "false",
+         dropped ? "alive" : "gone");
+  __block int count = 0;
+  for (NSString *key in map) {
+    if ([key isEqualToString:@"kept"] && [map[key] isEqual:kept]) count++;
+  }
+  [map enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSObject *value, BOOL *stop) {
+    (void)key;
+    (void)stop;
+    if ([value isEqual:kept]) count++;
+  }];
+  printf("maps iterated %d\n", count);
+}
+
 static void arrays(void) {
   NSMutableArray<NSNumber *> *numbers = [@[ [NSNumber numberWithInt:1], [NSNumber numberWithInt:2] ] mutableCopy];
   [numbers addObject:[NSNumber numberWithInt:3]];
@@ -191,6 +218,10 @@ int main(void) {
     arrays();
   }
   printf("array %s\n", held ? "alive" : "gone");
+  @autoreleasepool {
+    maps();
+  }
+  printf("mapped %s\n", mapped ? "alive" : "gone");
   @autoreleasepool {
     made();
   }
