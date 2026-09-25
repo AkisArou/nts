@@ -36,6 +36,9 @@ void complete_later(int ms, void *block);
 // gives it back and drains the pool: the watch says whether anything else
 // still counts it.
 int made_by_block(void *block);
+// Calls `block`, a `void (^)(BOOL, short)`, with (YES, 7) and then (NO, -3):
+// arguments narrower than an int, which the platform widens.
+void call_with_flags(void *block);
 // Whether `BLOCKS_OFF_THREAD` is set.
 bool off_thread_arm(void);
 // `BLOCKS_CONSOLE`: 0 unset, 1 "held", 2 "unheld".

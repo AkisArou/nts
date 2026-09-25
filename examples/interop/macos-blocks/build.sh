@@ -86,8 +86,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 9 ] ||
-  { echo "macos-blocks: the oracle printed $(wc -l <"$out/expected.txt") lines, not 9" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 10 ] ||
+  { echo "macos-blocks: the oracle printed $(wc -l <"$out/expected.txt") lines, not 10" >&2; exit 1; }
 
 run_quietly "$out/blocks/macos-13-x86_64/blocks" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"

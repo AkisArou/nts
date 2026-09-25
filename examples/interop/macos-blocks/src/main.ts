@@ -21,6 +21,7 @@ import {
   complete_off_thread,
   complete_pair_off_thread,
   complete_later,
+  call_with_flags,
   made_by_block,
   console_arm,
   off_thread_arm,
@@ -63,6 +64,13 @@ function enumerate(): void {
   // lives only as long as the caller counts it.
   const madeWatch = made_by_block(() => newObject());
   report("returned " + state(madeWatch));
+  // A block taking a `BOOL` and a `short`, called from C: arguments the
+  // platform widens, which the adapter's parameters must say.
+  let flags = "";
+  call_with_flags((flag, n) => {
+    flags += `${flag ? "yes" : "no"}:${n} `;
+  });
+  report("flags " + flags.trim());
 }
 
 function cancelled(): c_int {

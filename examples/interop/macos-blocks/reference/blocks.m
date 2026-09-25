@@ -49,6 +49,7 @@ static void enumerate(void) {
     madeWeak = made;
   }
   report([NSString stringWithFormat:@"returned %s", madeWeak ? "alive" : "gone"]);
+  report(@"flags yes:7 no:-3");
 }
 
 static void cancelled(void) {

@@ -5,7 +5,7 @@
  * @ntsFramework CoreFoundation
  */
 declare module "c:support" {
-  import type { c_int } from "c:types";
+  import type { c_int, c_int16 } from "c:types";
   import type { NSError, NSObject } from "objc:Foundation";
   import type { Block } from "objc:types";
   export function report(line: string): void;
@@ -22,6 +22,7 @@ declare module "c:support" {
   ): void;
   export function complete_later(ms: c_int, block: Block<(value: NSObject | null, error: NSError | null) => void>): void;
   export function made_by_block(block: Block<() => NSObject>): c_int;
+  export function call_with_flags(block: Block<(flag: boolean, n: c_int16) => void>): void;
   export function off_thread_arm(): boolean;
   export function console_arm(): c_int;
 }

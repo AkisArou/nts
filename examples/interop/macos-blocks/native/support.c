@@ -62,6 +62,12 @@ static void *call_held(void *unused) {
   return NULL;
 }
 
+void call_with_flags(void *block) {
+  void (^handler)(BOOL, short) = block;
+  handler(YES, 7);
+  handler(NO, -3);
+}
+
 bool off_thread_arm(void) { return getenv("BLOCKS_OFF_THREAD") != NULL; }
 
 int console_arm(void) {
