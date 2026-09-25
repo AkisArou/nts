@@ -36943,29 +36943,8 @@ impl<'a> FuncBuilder<'a> {
     /// whatever *it* calls fixed first. The sentences are deliberately not
     /// prefixes of one another, so a census matching on text has to pick one.
     fn why_no_raising_copy(&self, call: NodeId) -> String {
-        let Some(declaration) = self
-            .snapshot
-            .call_targets
-            .get(&call)
-            .and_then(|target| target.callee)
-        else {
-            // No declaration to copy: the callee arrived as a value. Every
-            // component and every effect in a React render is one of these.
-            return "through a function value, which has no raising copy to call".to_owned();
-        };
-        match self.kind_of(declaration) {
-            Some(syntax::METHOD_DECLARATION) => {
-                "a method, and a raising copy is made of plain functions only".to_owned()
-            },
-            Some(syntax::CONSTRUCTOR) => {
-                "a constructor, and a raising copy is made of plain functions only".to_owned()
-            },
-            Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => {
-                "an accessor, and a raising copy is made of plain functions only".to_owned()
-            },
-            Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {
-                "a function written as a value, which has no raising copy to call".to_owned()
-            },
+        match self.reason_without_a_leaf(call) {
+            Some(local) => local.to_owned(),
             // A plain function that was eligible and lost the fixpoint: it calls
             // something that can raise and cannot be copied. The repair is that
             // callee's, not this call's, which is why the sentence points down
@@ -36975,7 +36954,16 @@ impl<'a> FuncBuilder<'a> {
             // lane had 12 of 14 blockers saying "something further down", which
             // is the sentence they had already derived by reading source. With
             // it, a census classifies itself.
-            _ => match self.the_leaf_that_cannot_be_carried(declaration, 0) {
+            None => match self
+                .snapshot
+                .call_targets
+                .get(&call)
+                .and_then(|target| target.callee)
+                .and_then(|declaration| {
+                    let mut seen = rustc_hash::FxHashSet::default();
+                    self.the_leaf_that_cannot_be_carried(declaration, 0, &mut seen)
+                })
+            {
                 Some((name, why)) => format!(
                     "a function that itself calls something whose `throw` cannot be carried: \
                      `{name}`, {why}"
@@ -36983,6 +36971,51 @@ impl<'a> FuncBuilder<'a> {
                 None => "a function that itself calls something whose `throw` cannot be carried"
                     .to_owned(),
             },
+        }
+    }
+
+    /// Why this call has no raising copy, **without looking down the chain**.
+    ///
+    /// `None` is the transitive case: a plain function that was eligible and lost
+    /// the fixpoint. Split out because the leaf walk has to ask this question of
+    /// every call it passes, and asking [`Self::why_no_raising_copy`] instead is
+    /// mutual recursion with the bound on the wrong edge -- which is exactly what
+    /// it was, and it overflowed the stack on the React lane's reconciler at
+    /// about 38,760 frames. The depth counter was incremented on the walk's own
+    /// recursive call and reset to zero every time the sentence was rebuilt, so
+    /// a cyclic call graph -- `commitRoot` and `flushPendingEffects` call each
+    /// other -- never reached the limit.
+    ///
+    /// A bound has to sit on every edge of the cycle it bounds, and the cheapest
+    /// way to be sure of that is for the walk to have one entry point.
+    fn reason_without_a_leaf(&self, call: NodeId) -> Option<&'static str> {
+        let Some(declaration) = self
+            .snapshot
+            .call_targets
+            .get(&call)
+            .and_then(|target| target.callee)
+        else {
+            // No declaration to copy: the callee arrived as a value. Every
+            // component and every effect in a React render is one of these.
+            return Some("through a function value, which has no raising copy to call");
+        };
+        match self.kind_of(declaration) {
+            Some(syntax::METHOD_DECLARATION) => {
+                Some("a method, and a raising copy is made of plain functions only")
+            },
+            Some(syntax::CONSTRUCTOR) => {
+                Some("a constructor, and a raising copy is made of plain functions only")
+            },
+            Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => {
+                Some("an accessor, and a raising copy is made of plain functions only")
+            },
+            Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {
+                Some("a function written as a value, which has no raising copy to call")
+            },
+            // A plain function that was eligible and lost the fixpoint: the
+            // repair is its callee's, not this call's. `None`, so the caller
+            // walks down and names the leaf.
+            _ => None,
         }
     }
 
@@ -36994,38 +37027,53 @@ impl<'a> FuncBuilder<'a> {
     /// a reader would find by following the chain by hand. The first
     /// non-transitive answer wins, which is the one that names a piece of work.
     ///
-    /// Bounded at eight steps. A cycle here is a program this compiler cannot
-    /// have built, and looping on one is worse than naming nothing -- the same
-    /// trade `walk::denoted`'s bound makes.
+    /// **Bounded twice, and the two bounds do different jobs.** The visited set
+    /// is what makes it terminate: a real call graph has cycles --
+    /// `commitRoot` and `flushPendingEffects` call each other, and a scheduled
+    /// closure reaches back to `performWorkOnRoot` -- and with it the recursion
+    /// is bounded by the number of distinct functions. The depth is only about
+    /// stack frames, so it is **sixty-four** and not eight: React's reconciler
+    /// reaches its `try` through nine frames and a leaf below that, and at eight
+    /// the walk gave up and named nothing on every one of its blockers. Sixty-four
+    /// Rust frames is nothing against the 38,760 the unbounded version reached.
+    ///
+    /// The first version had the depth counter and overflowed the stack anyway,
+    /// at about 38,760 frames on the React lane's reconciler: it asked
+    /// `why_no_raising_copy` for each call, and that rebuilt the sentence by
+    /// calling *back* into this walk with `depth` reset to zero. A bound has to
+    /// sit on every edge of the cycle it bounds. Hence
+    /// [`Self::reason_without_a_leaf`], which never recurses, and one entry
+    /// point here.
     fn the_leaf_that_cannot_be_carried(
         &self,
         declaration: NodeId,
         depth: u32,
+        seen: &mut rustc_hash::FxHashSet<NodeId>,
     ) -> Option<(String, String)> {
-        if depth >= 8 {
+        if depth >= 64 || !seen.insert(declaration) {
             return None;
         }
         for call in calls_in_the_body_of(self, declaration) {
             if self.has_a_raising_copy(call) || !self.calls_compiled_code(call) {
                 continue;
             }
-            let why = self.why_no_raising_copy(call);
-            let next = self
-                .snapshot
-                .call_targets
-                .get(&call)
-                .and_then(|target| target.callee);
-            // Transitive again: keep going down rather than naming a frame the
-            // reader would have to walk through anyway.
-            if why.starts_with("a function that itself calls") {
-                if let Some(next) = next
-                    && let Some(found) = self.the_leaf_that_cannot_be_carried(next, depth + 1)
-                {
-                    return Some(found);
-                }
-                continue;
+            match self.reason_without_a_leaf(call) {
+                Some(why) => return Some((self.spelled_callee(call), why.to_owned())),
+                // Transitive again: keep going down rather than naming a frame
+                // the reader would have to walk through anyway.
+                None => {
+                    if let Some(next) = self
+                        .snapshot
+                        .call_targets
+                        .get(&call)
+                        .and_then(|target| target.callee)
+                        && let Some(found) =
+                            self.the_leaf_that_cannot_be_carried(next, depth + 1, seen)
+                    {
+                        return Some(found);
+                    }
+                },
             }
-            return Some((self.spelled_callee(call), why));
         }
         None
     }
