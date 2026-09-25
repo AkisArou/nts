@@ -5538,6 +5538,7 @@ fn function_copies(
                 // A copy of a generic *function*: its own parameters are
                 // bound, and there is no enclosing class copy to answer for.
                 instance: None,
+                declaration: Some(id),
                 raises: false,
             })
             .collect();
@@ -5596,6 +5597,11 @@ struct Copy {
     /// in each copy of the class around it, and that is the key those answers
     /// are held under. See `generics::GenericFunctions::at_call_in`.
     instance: Option<TypeId>,
+    /// And the declaration this is a copy of, where it is a generic
+    /// *function*'s -- which with [`Self::suffix`] is what identifies the copy,
+    /// since a function instantiation is not a type and has no id of its own.
+    /// See `generics::GenericFunctions::at_call_in_copy`.
+    declaration: Option<NodeId>,
     /// A copy whose unhandled `throw` records and returns rather than ending
     /// the program. See [`FuncBuilder::raises`].
     raises: bool,
@@ -6433,6 +6439,9 @@ impl Shared {
         // argument is a parameter this copy re-typed names a different callee
         // copy than it does in the original, and every other call names the
         // same one. See `Structural::at_call`.
+        // Which copy of a generic function this is, if it is one -- read below,
+        // and taken before `copy.suffix` is moved into the contexts.
+        let within = copy.declaration.map(|of| (of, copy.suffix.clone()));
         let contexts = [String::new(), copy.suffix].into_iter();
         for calls in contexts.filter_map(|context| self.structural.at_call.get(&context)) {
             for (call, (suffix, bindings)) in calls {
@@ -6448,6 +6457,16 @@ impl Shared {
         // structural ones are: a call with nothing deferred names the same
         // copy everywhere, and one that deferred names this copy's.
         if let Some(calls) = copy.instance.and_then(|at| self.generics.at_call_in.get(&at)) {
+            for (call, suffix) in calls {
+                builder.generic_calls.insert(*call, suffix.clone());
+            }
+        }
+        // And the calls this copy of a generic *function* makes, which is the
+        // same sentence with the copy identified by its name instead of by a
+        // type: `inner(initial)` written in `outer` names `inner<f64>` in
+        // `outer<f64>` and `inner<i32>` in `outer<i32>`, and the program-wide
+        // answer for that call is neither.
+        if let Some(calls) = within.and_then(|at| self.generics.at_call_in_copy.get(&at)) {
             for (call, suffix) in calls {
                 builder.generic_calls.insert(*call, suffix.clone());
             }

@@ -217,6 +217,18 @@ impl<'a> Templates<'a> {
         }
     }
 
+    /// Which generic declares `parameter`.
+    ///
+    /// Asked by the caller of [`Self::bindings_of`], which answers for a class
+    /// and deliberately not for a function: the two are found in different
+    /// places -- a class's instantiations are types and a function's are copies
+    /// keyed by a suffix -- and the caller has to know which question it is
+    /// asking before it asks.
+    #[must_use]
+    pub fn owner_of(&self, parameter: TypeId) -> Option<Owner> {
+        self.owners.get(&parameter).copied()
+    }
+
     /// Every instantiation of the generic that declares `parameter`, with what
     /// that parameter is bound to in each.
     ///

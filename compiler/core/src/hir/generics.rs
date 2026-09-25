@@ -261,6 +261,20 @@ fn is_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// an array representation does not carry.
 pub type Sources = FxHashMap<TypeId, TypeId>;
 
+/// What each call written inside one copy of a generic function names, by the
+/// copy it is written in: that function's declaration node and the copy's own
+/// suffix.
+///
+/// Keyed that way because a function instantiation has no `TypeId`. A call node
+/// belongs to exactly one body, so the declaration half is redundant for
+/// lookup and is kept anyway -- a map whose key does not say what it identifies
+/// is read wrongly by the next person, and the cost is one `String` clone per
+/// copy emitted.
+pub type CallsInCopy = FxHashMap<
+    (nts_semantic_schema::NodeId, String),
+    FxHashMap<nts_semantic_schema::NodeId, String>,
+>;
+
 /// One instantiation of one generic *function*.
 #[derive(Debug, Clone)]
 pub struct FunctionInstance {
@@ -288,6 +302,13 @@ pub struct GenericFunctions {
     /// copy and `extract<u8>` in another -- exactly what `Structural::at_call`
     /// carries for a re-typed argument, one mechanism along.
     pub at_call_in: FxHashMap<TypeId, FxHashMap<nts_semantic_schema::NodeId, String>>,
+    /// And the suffix a call names inside one copy of a generic *function*.
+    ///
+    /// The same fact as [`Self::at_call_in`], one map along, and a second map
+    /// rather than a second entry in that one because **a function
+    /// instantiation is not a type**: `Link<f64>` is a `TypeId` and
+    /// `outer<f64>` is a `(declaration, suffix)` pair. See [`CallsInCopy`].
+    pub at_call_in_copy: CallsInCopy,
     /// Generic declarations a call *reached* and could not pin down, and the
     /// type parameters that stayed unbound.
     ///
@@ -329,6 +350,52 @@ pub struct GenericFunctions {
 pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions {
     let mut found = GenericFunctions::default();
     let templates = Templates::new(snapshot);
+    // **Until it stops growing, bounded.** A call written inside a generic
+    // function's body makes its callee's copies out of the copies of the
+    // function *around* it, so a copy discovered by one pass is what lets the
+    // next pass expand the calls written in it: `direct` pins `outer<f64>`, and
+    // only then can `outer`'s body name `inner<f64>`. Three functions deep needs
+    // three passes.
+    //
+    // Bounded because `f<T>(x: T) { f<T[]>([x]); }` is legal TypeScript and
+    // instantiates without end. The bound is on nesting depth, not on program
+    // size, and a program past it keeps the refusal it has today.
+    for _ in 0..PASSES {
+        let before = copies_made(&found);
+        // An answer rather than an accumulation: a parameter this pass pins down
+        // must not still be recorded as loose by the last one. Every other map
+        // here is keyed by a call or a copy and re-answers identically.
+        found.unpinned.clear();
+        one_pass(snapshot, &templates, &mut found);
+        if copies_made(&found) == before {
+            break;
+        }
+    }
+    // Sorted, so one compiler on one input emits its copies in one order.
+    for copies in found.copies.values_mut() {
+        copies.sort_by(|a, b| a.suffix.cmp(&b.suffix));
+    }
+    found
+}
+
+/// How many passes the fixpoint runs; each one expands the calls written inside
+/// whatever the last one made a copy of, so this bounds how deeply generic
+/// functions may call one another.
+const PASSES: usize = 8;
+
+/// Every copy made so far, which is what the fixpoint watches.
+fn copies_made(found: &GenericFunctions) -> usize {
+    found.copies.values().map(Vec::len).sum()
+}
+
+/// One sweep over every call, adding the copies it implies to what is already
+/// found. Idempotent: a call answers the same suffix every pass, and a copy is
+/// pushed only if no copy of that name is there.
+fn one_pass(
+    snapshot: &SemanticSnapshot,
+    templates: &Templates,
+    found: &mut GenericFunctions,
+) {
     for (call, target) in &snapshot.call_targets {
         let Some(declaration) = target.callee else {
             continue;
@@ -367,8 +434,8 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
         {
             expand_within_a_generic(
                 snapshot,
-                &templates,
-                &mut found,
+                templates,
+                found,
                 &Deferred {
                     call: *call,
                     declaration,
@@ -417,7 +484,7 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
         if !copies.iter().any(|copy| copy.suffix == suffix) {
             let sigma: Sigma = sources.iter().map(|(k, v)| (*k, *v)).collect();
             let substitution =
-                substitution.with_instances(&templates, Owner::Function(declaration), &sigma);
+                substitution.with_instances(templates, Owner::Function(declaration), &sigma);
             copies.push(FunctionInstance {
                 substitution,
                 sources,
@@ -425,11 +492,6 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
             });
         }
     }
-    // Sorted, so one compiler on one input emits its copies in one order.
-    for copies in found.copies.values_mut() {
-        copies.sort_by(|a, b| a.suffix.cmp(&b.suffix));
-    }
-    found
 }
 
 /// The signature a function declaration declares, if it is one.
@@ -800,54 +862,162 @@ fn expand_within_a_generic(
     found: &mut GenericFunctions,
     call: &Deferred<'_>,
 ) {
-    // The instantiations of whatever declares the first deferred parameter,
-    // which is the copy every other one must be bound by too.
+    // Whatever declares the first deferred parameter, which is the generic
+    // every other one must be bound by too.
     let mut deferred: Vec<(TypeId, TypeId)> =
         call.bound_to.iter().map(|(k, v)| (*k, *v)).collect();
     deferred.sort();
     let Some((_, first)) = deferred.first().copied() else {
         return;
     };
+    // **Two questions, not one.** A class's instantiations are types the
+    // checker already wrote down, and a generic function's are copies *this
+    // pass* is in the middle of making -- so one is a lookup and the other is a
+    // read of the answer so far, which is what makes the fixpoint in
+    // `function_instantiations` necessary rather than decorative.
+    match templates.owner_of(first) {
+        Some(Owner::Type(_)) => within_a_class(snapshot, templates, found, call, &deferred),
+        Some(Owner::Function(of)) => {
+            within_a_function(snapshot, templates, found, call, &deferred, of);
+        }
+        None => {}
+    }
+}
+
+/// The callee's copies, one per instantiation of the *class* around the call.
+fn within_a_class(
+    snapshot: &SemanticSnapshot,
+    templates: &Templates,
+    found: &mut GenericFunctions,
+    call: &Deferred<'_>,
+    deferred: &[(TypeId, TypeId)],
+) {
+    let Some((_, first)) = deferred.first().copied() else {
+        return;
+    };
     for (instance, _) in templates.bindings_of(first) {
-        let mut substitution = call.substitution.clone();
-        let mut sources = call.sources.clone();
-        let mut bound = true;
-        for (parameter, within) in &deferred {
-            let Some((_, what)) = templates
+        let mut bound = Bindings::new(call);
+        for (parameter, within) in deferred {
+            let what = templates
                 .bindings_of(*within)
                 .into_iter()
                 .find(|(at, _)| *at == instance)
-            else {
-                bound = false;
+                .map(|(_, what)| what);
+            if !bound.pin(snapshot, *parameter, what) {
                 break;
-            };
-            let Some(representation) = representation(snapshot, what) else {
-                bound = false;
+            }
+        }
+        if let Some(suffix) = bound.finish(snapshot, templates, found, call) {
+            found
+                .at_call_in
+                .entry(instance)
+                .or_default()
+                .insert(call.call, suffix);
+        }
+    }
+}
+
+/// The callee's copies, one per copy of the generic *function* around the call.
+///
+/// The half `Templates::bindings_of` deliberately does not answer: the enclosing
+/// function's parameter is bound by that function's own call sites, so what it
+/// stands for here is read off the copies made for it -- `outer<f64>`'s `sources`
+/// say `S := f64`, which is what `inner`'s deferred `S` is in that copy and in no
+/// other.
+fn within_a_function(
+    snapshot: &SemanticSnapshot,
+    templates: &Templates,
+    found: &mut GenericFunctions,
+    call: &Deferred<'_>,
+    deferred: &[(TypeId, TypeId)],
+    of: nts_semantic_schema::NodeId,
+) {
+    // Cloned because the loop pushes copies of the *callee*, which is this same
+    // list when a generic function calls itself.
+    let Some(around) = found.copies.get(&of).cloned() else {
+        return;
+    };
+    for enclosing in &around {
+        let mut bound = Bindings::new(call);
+        for (parameter, within) in deferred {
+            if !bound.pin(snapshot, *parameter, enclosing.sources.get(within).copied()) {
                 break;
-            };
-            substitution.insert(*parameter, representation);
-            sources.insert(*parameter, what);
+            }
         }
-        if !bound {
-            continue;
+        if let Some(suffix) = bound.finish(snapshot, templates, found, call) {
+            found
+                .at_call_in_copy
+                .entry((of, enclosing.suffix.clone()))
+                .or_default()
+                .insert(call.call, suffix);
         }
-        let suffix = suffix_of(snapshot, call.parameters, &substitution, &sources);
-        found
-            .at_call_in
-            .entry(instance)
-            .or_default()
-            .insert(call.call, suffix.clone());
-        let sigma: Sigma = sources.iter().map(|(k, v)| (*k, *v)).collect();
+    }
+}
+
+/// One candidate copy of the callee, as its deferred parameters are pinned.
+///
+/// Shared by the class and function halves so the two cannot drift: what a
+/// deferred parameter is bound *to* is found differently, and everything after
+/// that -- the representation, the suffix, the copy, the refusal to make one --
+/// is the same question and is answered here once.
+struct Bindings {
+    substitution: Substitution,
+    sources: Sources,
+    /// Every deferred parameter so far has a concrete type behind it. One that
+    /// does not leaves the call exactly as unpinned as it was.
+    bound: bool,
+}
+
+impl Bindings {
+    fn new(call: &Deferred<'_>) -> Self {
+        Self {
+            substitution: call.substitution.clone(),
+            sources: call.sources.clone(),
+            bound: true,
+        }
+    }
+
+    /// Bind one deferred parameter to `what`. `false` once anything is unbound,
+    /// so the caller stops asking.
+    fn pin(&mut self, snapshot: &SemanticSnapshot, parameter: TypeId, what: Option<TypeId>) -> bool {
+        let Some(representation) = what.and_then(|what| {
+            representation(snapshot, what).map(|representation| (what, representation))
+        }) else {
+            self.bound = false;
+            return false;
+        };
+        let (what, representation) = representation;
+        self.substitution.insert(parameter, representation);
+        self.sources.insert(parameter, what);
+        true
+    }
+
+    /// The copy this binding makes, and the suffix naming it -- which the caller
+    /// records under whatever identifies the copy the call is *in*.
+    fn finish(
+        self,
+        snapshot: &SemanticSnapshot,
+        templates: &Templates,
+        found: &mut GenericFunctions,
+        call: &Deferred<'_>,
+    ) -> Option<String> {
+        if !self.bound {
+            return None;
+        }
+        let suffix = suffix_of(snapshot, call.parameters, &self.substitution, &self.sources);
+        let sigma: Sigma = self.sources.iter().map(|(k, v)| (*k, *v)).collect();
         let substitution =
-            substitution.with_instances(templates, Owner::Function(call.declaration), &sigma);
+            self.substitution
+                .with_instances(templates, Owner::Function(call.declaration), &sigma);
         let copies = found.copies.entry(call.declaration).or_default();
         if !copies.iter().any(|copy| copy.suffix == suffix) {
             copies.push(FunctionInstance {
                 substitution,
-                sources,
-                suffix,
+                sources: self.sources,
+                suffix: suffix.clone(),
             });
         }
+        Some(suffix)
     }
 }
 
