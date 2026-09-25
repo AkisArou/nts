@@ -123,6 +123,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_collection_epoch", returns: "i64", params: &[], attributes: &[] },
     Signature { name: "nts_com_addref", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_com_answer", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_com_answer_string", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_com_base", returns: "ptr", params: &["ptr", "i64", "i64"], attributes: &[] },
     Signature { name: "nts_com_carry", returns: "void", params: &["ptr", "ptr", "i64", "ptr", "i32", "ptr"], attributes: &[] },
     Signature { name: "nts_com_compose_named", returns: "ptr", params: &["ptr"], attributes: &[] },

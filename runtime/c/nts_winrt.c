@@ -615,6 +615,45 @@ void *nts_com_answer(void *object) {
 #endif
 }
 
+void *nts_com_answer_string(NtsString *s) {
+  HSTRING answered = 0;
+  if (s != 0 && s->length > 0) {
+    const uint16_t *units = 0;
+    uint16_t *widened = 0;
+    if (s->flags & NTS_TWO_BYTE) {
+      units = NTS_ELEMENTS(s, uint16_t);
+    } else {
+      if ((widened = malloc((size_t)s->length * 2u)) == 0) {
+        fprintf(stderr, "nts: out of memory\n");
+        abort();
+      }
+      const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
+      for (uint32_t at = 0; at < s->length; at++) {
+        widened[at] = bytes[at];
+      }
+      units = widened;
+    }
+    /* A string of its own, not a reference to the program's: the caller
+     * keeps it after this returns. */
+    HRESULT hr =
+        WindowsCreateString((const wchar_t *)units, s->length, &answered);
+    free(widened);
+    if (FAILED(hr)) {
+      fprintf(stderr,
+              "nts: an override's string could not be answered (0x%08lx)\n",
+              (unsigned long)hr);
+      abort();
+    }
+  }
+#ifdef NTS_PROVIDER_RC
+  /* The method answered the caller's reference to its string. */
+  if (s != 0) {
+    nts_release((NtsHeader *)s);
+  }
+#endif
+  return answered;
+}
+
 void *nts_com_state(void *instance) {
   /* `IUnknown` is the object's identity, which an aggregated interface asks
    * its outer object for: this runtime's identity face. */

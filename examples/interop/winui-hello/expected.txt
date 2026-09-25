@@ -1,2 +1,2 @@
-title=nts launched=1 clicks=1 styled=true focused=true entered=0 templated=1 measured=true states=Custom label=Press peer=Button peers=1
+title=nts launched=1 clicks=1 styled=true focused=true entered=0 templated=1 measured=true states=Custom label=Press peer=PressPeer peers=1
 after

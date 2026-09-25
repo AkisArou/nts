@@ -274,6 +274,11 @@ fn adapter(
     let call = |arguments: &[String]| format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
     let body = match result {
         Type::Void => format!("{};", call(&arguments)),
+        // A string: an `HSTRING` of its own, which the caller owns.
+        Type::Managed(nts_core::hir::ManagedType::String) => {
+            parameters.push("void **out".to_owned());
+            format!("*out = nts_com_answer_string((NtsString *){});", call(&arguments))
+        }
         // An object: a reference the caller owns, whichever the provider.
         Type::Pointer(_) => {
             parameters.push("void **out".to_owned());

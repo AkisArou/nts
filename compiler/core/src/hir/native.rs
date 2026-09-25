@@ -3580,12 +3580,20 @@ pub struct Forwarded {
 /// was reached through, each argument, and the value it answers. The
 /// emitters call it by COM's convention -- an HRESULT, the value written
 /// through a pointer after the arguments -- so a `Void` result is a method
-/// answering only its HRESULT. A number, a `boolean`, a record by value or an
-/// object (a reference the caller owns, `nts_com_answer`) is answered; a
-/// string is refused by name.
+/// answering only its HRESULT. A number, a `boolean`, a record by value, an
+/// object (a reference the caller owns, `nts_com_answer`) or a string (an
+/// `HSTRING` of its own, `nts_com_answer_string`) is answered.
 pub(crate) fn override_signature(snapshot: &SemanticSnapshot, signature: &nts_semantic_schema::SignatureRecord) -> Result<FnPointer, String> {
+    // A string answered is the slot's `HSTRING`, made from the method's string
+    // where the adapter writes it (`nts_com_answer_string`).
     if is_hstring(snapshot, signature.return_type) {
-        return Err("a string result, which the slot would answer as an `HSTRING` the caller owns".to_owned());
+        let mut parameters = vec![Type::Pointer(Pointee::Void)];
+        for parameter in &signature.parameters {
+            let ty = slot_parameter(snapshot, parameter.ty)
+                .ok_or_else(|| format!("parameter `{}`, whose type has no C type the runtime could pass", parameter.name))?;
+            parameters.push(ty);
+        }
+        return Ok(FnPointer::spell(parameters, Type::Managed(ManagedType::String)));
     }
     let Some(result @ (Type::Void | Type::Bool | Type::Scalar(_) | Type::Record(_) | Type::Pointer(_))) = abi_type(snapshot, signature.return_type) else {
         return Err("a result with no C type the slot could answer".to_owned());

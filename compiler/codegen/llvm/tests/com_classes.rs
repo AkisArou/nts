@@ -222,6 +222,10 @@ const LAYOUT: &str = r#"declare module "winrt:Test.Layout" {
      * @ntsOverride 2B7E1A55-8C3F-4D21-A6E9-0F4B8D2C7E13 7 Peer
      */
     Peer(): IInspectable | null;
+    /**
+     * @ntsOverride 2B7E1A55-8C3F-4D21-A6E9-0F4B8D2C7E13 8 Name
+     */
+    Name(): HString;
   }
   export type IElement = ComClass<"IElement">;
   export interface Element extends IElement {}
@@ -414,6 +418,36 @@ fn an_override_answers_an_object_the_caller_owns() {
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(llvm.text.contains("%answered = call ptr @nts_com_answer(ptr %r)"), "{}", llvm.text);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
+/// An override answering a string: the slot writes an `HSTRING` of its own,
+/// which the caller owns -- made from the method's string, and not a
+/// reference to it (`nts_com_answer_string`, not `nts_string_to_hstring`,
+/// whose fast-pass header lives in the caller's frame).
+#[test]
+fn an_override_answers_a_string_as_an_hstring_of_its_own() {
+    let source = "import { Element } from \"winrt:Test.Layout\";\nclass Panel extends Element {\n  Name(): string {\n    return \"panel\";\n  }\n}\nexport function start(): void {\n  new Panel();\n}\n";
+    let Some((dir, prepared)) = prepare_with("string-result", LAYOUT, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0(")).unwrap_or_else(|| panic!("{text}"));
+    assert!(adapter.contains("(void * a0, void **out)") && adapter.contains("*out = nts_com_answer_string((NtsString *)"), "{adapter}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("%answered = call ptr @nts_com_answer_string(ptr %r)"), "{}", llvm.text);
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)

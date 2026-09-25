@@ -1973,6 +1973,9 @@ void *nts_com_state(void *instance);
 /* The object an override answers, as its slot writes it: a reference the
  * caller owns, whichever provider the program was built with. */
 void *nts_com_answer(void *object);
+/* The string an override answers, as its slot writes it: an `HSTRING` of
+ * its own, which the caller owns. */
+void *nts_com_answer_string(NtsString *s);
 /* `super.OnGotFocus(e)`: the base class's own implementation of the
  * interface the IID names, on the object `instance` is. The caller's (+1). */
 void *nts_com_base(void *instance, uint64_t iid_low, uint64_t iid_high);

@@ -31,8 +31,9 @@
 //   `measured` counts them and `styled=true` says each arrived whole. The
 //   interface's other slots, `ArrangeOverride` among them, are `Button`'s.
 // - Asked for its automation peer, XAML calls `PressButton`'s
-//   `OnCreateAutomationPeer`, and the peer it answers -- a reference the
-//   framework now owns -- names its class (`peer=Button`).
+//   `OnCreateAutomationPeer`, which answers a `PressPeer` -- a reference the
+//   framework now owns -- and the peer's class name is `PressPeer`'s override
+//   answering a string (`peer=PressPeer`).
 // - `PressButton`'s constructor takes its label, as a C# control's would:
 //   `super()` composes it, and the body sets its content with `this`.
 // - Each class keeps its counters in fields, as C#'s do. The runtime holds
@@ -50,8 +51,7 @@ import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
-import { ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
-import type { AutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
+import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
 import { Button, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
 
 // The overridable interface, as XAML reaches an override: bindings keep it
@@ -64,6 +64,20 @@ declare module "winrt:Microsoft.UI.Xaml.Controls" {
      * @ntsQuery FFC6FD98-F38C-5904-9CE4-97A3427CF4BA
      */
     as_IFrameworkElementOverrides(this: Button): IFrameworkElementOverrides;
+  }
+}
+
+// A peer of the program's own, as a C# control writes one: it overrides one
+// of `IAutomationPeerOverrides`' methods and leaves the rest to
+// `AutomationPeer`.
+class PressPeer extends AutomationPeer {
+  // `AutomationPeer`'s constructor is protected, as in C#: a peer is only
+  // ever a subclass, which makes its own public.
+  constructor() {
+    super();
+  }
+  GetClassNameCore(): string {
+    return "PressPeer";
   }
 }
 
@@ -94,8 +108,7 @@ class PressButton extends Button {
   }
   OnCreateAutomationPeer(): AutomationPeer {
     this.peers += 1;
-    // `AutomationPeer`'s instances are its default interface.
-    return ButtonAutomationPeer.CreateInstanceWithOwner(this).as_IAutomationPeer() as AutomationPeer;
+    return new PressPeer();
   }
   MeasureOverride(available: ByValue<Size>): ByValue<Size> {
     this.measured += 1;

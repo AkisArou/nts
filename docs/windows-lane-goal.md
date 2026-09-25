@@ -299,6 +299,12 @@ Application.Start(() => { new App(); });
   (`nts_com_answer`: the method's own under `--rc`, one more under nogc).
   Asked for the button's peer, XAML calls the override, and the peer it
   answered names its class (`peer=Button peers=1`).
+- **An override answering a string**, as `GetClassNameCore` does: the slot
+  gets an `HSTRING` of its own, made from the method's string
+  (`nts_com_answer_string`). The fixture's `PressPeer extends AutomationPeer`
+  overrides that one method of `IAutomationPeerOverrides`' ~40 and forwards
+  the rest; XAML asks the button's peer its class name (`peer=PressPeer`). The
+  control without the override answers `AutomationPeer`'s own, empty.
 - **`super.OnLaunched(args)`** calls the base's own implementation through
   its slot (`nts_com_base`), as C#'s `base.OnLaunched(args)` does. The
   control (the runtime answering the program's own face instead) recurses
@@ -306,8 +312,6 @@ Application.Start(() => { new App(); });
 - **Refused by name, for now:**
   - a slot that can't be forwarded yet: a result the binding spells as
     `out` fields;
-  - an override answering a string, which the slot would answer as an
-    `HSTRING` the caller owns;
   - a field initialiser that calls, reads a member or reads `this`, since
     it runs as the instance is made;
   - a `new` with arguments; and an override returning a value.
@@ -324,7 +328,7 @@ Application.Start(() => { new App(); });
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
 2. **W2's rest** as listed above: awaitable operations once `await` honours
-   thenables. **W3:** an override answering a string; then W4.
+   thenables. **W3** is complete for the fixture's needs; next is **W4**.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT.
 
