@@ -167,6 +167,7 @@ dependencies = [
  "nts-semantic-schema",
  "react_compiler",
  "react_compiler_ast",
+ "react_compiler_diagnostics",
  "serde",
  "serde_json",
 ]

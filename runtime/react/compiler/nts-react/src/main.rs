@@ -9,7 +9,11 @@ nts-react -- the React lane's compiler stage
 USAGE
   nts-react compile-json <ast.json> <scope.json> <options.json>
       compile a program given in the compiler's own input format (a Babel
-      AST and its scope information) and print the result as JSON";
+      AST and its scope information) and print the result as JSON
+  nts-react convert <tsconfig.json> <out-dir>
+      convert each of the project's own sources into the compiler's input
+      format, writing <out-dir>/<file>.ast.json, or <file>.unsupported.txt
+      naming the construct that stopped it";
 
 fn main() -> ExitCode {
     // Deeply nested programs recurse deeply in the compiler; upstream's addon
@@ -37,6 +41,34 @@ fn run() -> Result<()> {
             println!("{result}");
             Ok(())
         }
+        [command, tsconfig, out] if command == "convert" => convert(tsconfig, out),
         _ => bail!("{USAGE}"),
     }
+}
+
+fn convert(tsconfig: &str, out: &str) -> Result<()> {
+    let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
+    let project = tsconfig.parent().context("a tsconfig path has a directory")?.to_owned();
+    let out = camino::Utf8PathBuf::from(out);
+    std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
+    let snapshot = nts_react::project::snapshot(&tsconfig)?;
+    let nodes = nts_react::tsgo::Nodes::new(&snapshot);
+    let (mut converted, mut unsupported) = (0, 0);
+    for source in nts_react::project::own_sources(&snapshot, &project) {
+        let text = std::fs::read_to_string(&source.path).with_context(|| format!("cannot read {}", source.path))?;
+        let text = nts_react::convert::text::SourceText::new(&text);
+        let name = source.path.file_name().unwrap_or("source");
+        match nts_react::convert::convert_file(nodes, source.root, &text) {
+            Ok(file) => {
+                std::fs::write(out.join(format!("{name}.ast.json")), serde_json::to_string(&file)?)?;
+                converted += 1;
+            }
+            Err(why) => {
+                std::fs::write(out.join(format!("{name}.unsupported.txt")), format!("node {}: {}\n", why.node.0, why.what))?;
+                unsupported += 1;
+            }
+        }
+    }
+    eprintln!("converted {converted}, unsupported {unsupported}");
+    Ok(())
 }

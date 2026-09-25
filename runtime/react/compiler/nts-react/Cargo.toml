@@ -37,6 +37,7 @@ nts-semantic-schema = { path = "../../../../compiler/semantic-schema" }
 # move is safe.
 react_compiler = { git = "https://github.com/facebook/react", rev = "1d34f91dfde6bba84d08b683aaba164c7194dacb" }
 react_compiler_ast = { git = "https://github.com/facebook/react", rev = "1d34f91dfde6bba84d08b683aaba164c7194dacb" }
+react_compiler_diagnostics = { git = "https://github.com/facebook/react", rev = "1d34f91dfde6bba84d08b683aaba164c7194dacb" }
 
 # The repository's lints, copied: a separate workspace cannot inherit them.
 [workspace.lints.rust]
