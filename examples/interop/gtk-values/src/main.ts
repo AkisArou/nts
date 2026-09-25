@@ -16,6 +16,8 @@
 //   kept ac 3     a map written, overwritten, deleted from and cleared, with one
 //                 button under two keys, and an array emptied: the button a map
 //                 key still held survives all of it, and so do both buttons
+//   walked ...    the map walked by `for...of`, its entries and its values: each
+//                 value read back as the button it is
 import { GtkButton, GtkLabel, gtk_init } from "c:Gtk-4.0";
 import { sub_log } from "c:sub";
 
@@ -66,6 +68,11 @@ function main(): void {
     ].join("|"),
   );
   sub_log(churn());
+  // Walked, entry by entry: each value read back as the button it is.
+  let walked = "";
+  for (const [name, button] of byName) walked += name + "=" + (button.label ?? "") + " ";
+  for (const button of byName.values()) walked += button === b ? "same " : "other ";
+  sub_log("walked " + walked.trim());
 }
 
 main();

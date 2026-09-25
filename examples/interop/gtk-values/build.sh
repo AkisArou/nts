@@ -19,7 +19,7 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   echo "SKIP gtk-values: no Gtk-4.0.gir"
   exit 0
 fi
-expected="button b|button b|number|label|object|true|true|true|b kept ac 3 "
+expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same "
 for mode in plain rc; do
   flag=""
   [ "$mode" = rc ] && flag="--rc"

@@ -25150,9 +25150,11 @@ impl<'a> FuncBuilder<'a> {
                 slot
             } else if let HirType::NativePointer(pointee) = want
                 && pointee.counting().is_some()
+                && super::tags::erased_handle_tag(pointee).is_none()
                 && let Some(handle) = lower.unboxed_at(slot, want, origin)
             {
-                // A counted handle a map holds in its box.
+                // A counted handle a map holds in its box -- an Objective-C one;
+                // every other family's is its tag, which `Unerase` checks.
                 handle
             } else {
                 lower.push(
