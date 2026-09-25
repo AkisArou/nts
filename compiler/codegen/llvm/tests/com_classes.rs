@@ -457,6 +457,26 @@ fn an_override_answers_a_string_as_an_hstring_of_its_own() {
     assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
 }
 
+/// A method that overrides nothing is the program's own: a function taking
+/// the instance, called directly -- through `this` in an override, and on an
+/// instance from outside -- where it was refused as overriding nothing.
+#[test]
+fn a_composed_class_has_methods_of_its_own() {
+    let source = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\nclass App extends Application {\n  count = 0;\n  bump(by: number): number {\n    this.count += by;\n    return this.count;\n  }\n  OnLaunched(_args: IInspectable | null): void {\n    this.bump(1);\n  }\n}\nexport function start(): number {\n  return new App().bump(2);\n}\n";
+    let Some((dir, prepared)) = prepare("own-method", source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.matches("App__bump(").count() >= 3, "the method is not defined and called twice:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+}
+
 /// `super.OnLaunched(args)` in an override is the base's own implementation
 /// of the interface, from the runtime (`nts_com_base`, which answers the
 /// program's reference), called through the override's slot with its

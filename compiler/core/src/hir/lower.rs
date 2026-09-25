@@ -14174,9 +14174,11 @@ impl<'a> FuncBuilder<'a> {
             _ => return Err(self.unsupported(member, "a member of a class written over a composable Windows Runtime class that is not a method")),
         }
         let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
-        let (iid, slot, overridden) = self.overridden_slot(class, &name).ok_or_else(|| {
-            self.unsupported(member, "a method of a class written over a composable Windows Runtime class that overrides nothing its base declares")
-        })?;
+        // A method that overrides nothing is the program's own, called with
+        // the instance as any class's method is; no table answers it.
+        let Some((iid, slot, overridden)) = self.overridden_slot(class, &name) else {
+            return Ok((self.lower_method_of(class, member, instance)?, None));
+        };
         // The table's slot is called as the binding declares it -- an
         // `int32` is an `int32` however the override spells its parameter --
         // and the adapter converts to what the compiled method takes.
@@ -41349,7 +41351,7 @@ impl<'a> FuncBuilder<'a> {
         {
             return chain;
         }
-        if let Some(call) = self.gobject_method_call(id, receiver, &held, arguments) {
+        if let Some(call) = self.registered_class_method_call(id, receiver, &held, arguments) {
             return call;
         }
         let HirType::Managed(ManagedType::Object(type_id)) = held else {
@@ -41358,13 +41360,14 @@ impl<'a> FuncBuilder<'a> {
         self.lower_object_method(id, receiver, type_id, member, arguments)
     }
 
-    /// A method of a class the program writes over a `GObject` class, called on
-    /// one of its instances -- a handle, which has no method table: the
-    /// compiled method itself, with the handle as `this`. Static, which is
-    /// right while nothing can extend such a class (a class extending one is
-    /// not a `GObject` subclass the program can write yet, so no override of
-    /// this method exists to dispatch to). `None` for any other call.
-    fn gobject_method_call(
+    /// A method of a class the program writes over a `GObject` class or a
+    /// composable Windows Runtime class, called on one of its instances -- a
+    /// handle, which has no method table: the compiled method itself, with
+    /// the handle as `this`. Static, which is right while no class of the
+    /// program's overrides another's own method; an override of the runtime
+    /// class's is dispatched by the runtime, not here. `None` for any other
+    /// call.
+    fn registered_class_method_call(
         &mut self,
         id: NodeId,
         receiver: ValueId,
@@ -41383,7 +41386,9 @@ impl<'a> FuncBuilder<'a> {
         let class = std::iter::successors(self.node(declaration).parent, |at| self.node(*at).parent)
             .take(3)
             .find(|at| self.kind_of(*at) == Some(syntax::CLASS_DECLARATION))?;
-        super::native::gobject_parent(self.snapshot, class)?;
+        if super::native::gobject_parent(self.snapshot, class).is_none() && !super::native::extends_com(self.snapshot, class) {
+            return None;
+        }
         let owner = self.children(class).into_iter().find_map(|child| {
             (self.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| self.node(child).text.clone()).flatten()
         })?;
