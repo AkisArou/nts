@@ -263,7 +263,7 @@ fn winrt_structs_cross_by_value() {
         imaging.contains("export type BitmapBounds = Struct<{ X: c_uint32; Y: c_uint32; Width: c_uint32; Height: c_uint32 }, \"Windows_Graphics_Imaging_BitmapBounds\">;"),
         "{imaging}"
     );
-    assert!(imaging.contains("put_Bounds(this: IBitmapTransform, value: ByValue<BitmapBounds>): void;"), "{imaging}");
+    assert!(imaging.contains("put_Bounds(this: IBitmapTransform, value: ByValue<BitmapBounds> | Fields<BitmapBounds>): void;"), "{imaging}");
     assert!(imaging.contains("get_Bounds(this: IBitmapTransform): ByValue<BitmapBounds>;"), "{imaging}");
     assert!(foundation.contains("export type DateTime = Struct<{ UniversalTime: c_int64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
     // `System.Guid`, which no `.winmd` defines, is `winrt:types`' struct; a
@@ -274,7 +274,7 @@ fn winrt_structs_cross_by_value() {
             && foundation.contains("function Equals(target: ConstPtr<Guid>, value: ConstPtr<Guid>): boolean;"),
         "{foundation}"
     );
-    assert!(globalization.contains("SetDateTime(this: ICalendar, value: ByValue<DateTime>): void;"), "{globalization}");
+    assert!(globalization.contains("SetDateTime(this: ICalendar, value: ByValue<DateTime> | Fields<DateTime>): void;"), "{globalization}");
     // A class whose default interface is an instantiation is bound as it,
     // and named where a method answers it.
     assert!(imaging.contains("export type BitmapPropertySet = IMap<HString, IBitmapTypedValue> & BitmapPropertySetInterfaces;"), "{imaging}");
@@ -425,6 +425,12 @@ fn composable_classes_are_constructed_as_themselves() {
     assert!(control.contains("export class Control {\n    protected constructor();"), "{control}");
     assert!(control.contains("@ntsOverride A09691DF-9824-41FE-B530-B0D8990E64C1 6 OnPointerEntered"), "{control}");
     assert!(module.contains("export interface Button extends IButton, ButtonInterfaces {}"), "the class form does not carry its instances' methods");
+    // A record a call takes by value may be written as its fields; an
+    // override's stays the record, since its adapter reads the ABI type from
+    // the declaration.
+    let xaml = std::fs::read_to_string(out.join("Windows.UI.Xaml.d.ts")).unwrap();
+    assert!(xaml.contains("    Measure(this: IUIElement, availableSize: ByValue<Size> | Fields<Size>): void;"), "Measure does not take its fields");
+    assert!(module.contains("    MeasureOverride(availableSize: ByValue<Size>): ByValue<Size>;"), "an override's record is spelled with its fields");
     let _ = std::fs::remove_dir_all(&out);
 }
 

@@ -330,7 +330,10 @@ Application.Start(() => { new App(); });
 2. **W2's rest** as listed above: awaitable operations once `await` honours
    thenables. **W3** is complete for the fixture's needs; next is **W4**.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
-   C#/CsWinRT and C++/WinRT.
+   C#/CsWinRT and C++/WinRT. Started: a record a call takes by value may be
+   written as its fields, `Measure({ Width: 1000, Height: 1000 })`
+   (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
+   record stays `ByValue<T>`.
 
 ## Rules this lane keeps
 

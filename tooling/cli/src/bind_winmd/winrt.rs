@@ -286,7 +286,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     let _ = writeln!(text, "// as the metadata names that slot; the compiler refuses the two disagreeing.");
     let _ = writeln!(text, "declare module \"winrt:{namespace}\" {{");
     let c_types: Vec<&str> =
-        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber" | "Struct" | "ByValue" | "Counted" | "CBytes" | "ConstPtr")).collect();
+        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber" | "Struct" | "ByValue" | "Fields" | "Counted" | "CBytes" | "ConstPtr")).collect();
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
@@ -767,7 +767,7 @@ impl Writer<'_> {
             } else if !outs.is_empty() {
                 return Err("an `in` parameter after an `out` one".to_owned());
             } else {
-                parameters.push(format!("{name}: {}", self.spell(ty, true)?));
+                parameters.push(format!("{name}: {}", self.parameter(ty, &receiver)?));
                 // `ref const T` is a pointer to the caller's storage, lent
                 // for the call as an array is.
                 if matches!(ty, Type::RefConst(_)) {
@@ -929,6 +929,29 @@ impl Writer<'_> {
 }
 
 impl Writer<'_> {
+    /// An `[in]` parameter as a method of `receiver` declares it: see
+    /// [`Self::or_fields`].
+    fn parameter(&mut self, ty: &Type, receiver: &Receiver<'_>) -> Result<String, String> {
+        let spelled = self.spell(ty, true)?;
+        Ok(if matches!(receiver, Receiver::Override { .. }) { spelled } else { self.or_fields(spelled) })
+    }
+
+    /// A record a call takes by value, which the program may also write as
+    /// its fields -- `{ Width: 100, Height: 50 }`, `ByValue<Size> |
+    /// Fields<Size>` -- as bind-objc spells one. Not an override's, whose slot
+    /// is called with the record and whose declaration its adapter reads the
+    /// ABI type from, and not a `Guid`, which nobody writes as its four
+    /// fields. Any other type is itself.
+    fn or_fields(&mut self, spelled: String) -> String {
+        match spelled.strip_prefix("ByValue<").and_then(|rest| rest.strip_suffix('>')) {
+            Some(record) if record != "Guid" => {
+                self.brands.insert("Fields");
+                format!("{spelled} | Fields<{record}>")
+            }
+            _ => spelled,
+        }
+    }
+
     /// A value type by name: an enum as its 32-bit underlying type, a struct
     /// by value, or an `EventRegistrationToken`.
     fn spell_value(&mut self, name: &windows_metadata::TypeName) -> Result<String, String> {
