@@ -177,6 +177,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_gobject_boxed_copy", returns: "ptr", params: &["ptr", "i64"], attributes: &[] },
     Signature { name: "nts_gobject_boxed_new", returns: "ptr", params: &["i64", "i64"], attributes: &[] },
     Signature { name: "nts_gobject_state", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_handle_family_register", returns: "void", params: &["i32", "ptr", "ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_has_pending_work", returns: "zeroext i1", params: &[], attributes: &[] },
     Signature { name: "nts_host_install", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_in_callback", returns: "zeroext i1", params: &[], attributes: &[] },

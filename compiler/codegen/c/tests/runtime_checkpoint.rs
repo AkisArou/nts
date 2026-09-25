@@ -97,6 +97,16 @@ fn checks(report: &str) -> usize {
         .count()
 }
 
+/// A C library's object in an erased value (`runtime/c/tests/handles.c`): the
+/// tag block 8..15 is a pointer and never managed, counts through what its
+/// family registered, answers `typeof` "object", and aborts in its own words
+/// for every way it can go wrong -- before anything produces one.
+#[test]
+fn a_handle_value_counts_through_its_family() {
+    let report = run_suite("handles", &["-DNTS_PROVIDER_RC"]);
+    assert!(report.contains("all handle checks passed"), "{report}");
+}
+
 #[test]
 fn the_checkpoint_orders_ticks_microtasks_and_macrotasks_as_node_does() {
     let report = run_suite("checkpoint", &[]);

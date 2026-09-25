@@ -254,4 +254,8 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// arguments and results reach, and `nts_gobject_boxed`,
 /// `nts_gobject_boxed_copy` and `nts_gobject_boxed_new`, which the `GObject`
 /// support file defines: GTK, and native calls again.
-const REFUSED_FLOOR: usize = 107;
+///
+/// 108 for `nts_handle_family_register`, which only a family's C support file
+/// calls, from a load-time constructor: the JVM holds no C handles, so nothing
+/// here registers a family.
+const REFUSED_FLOOR: usize = 108;

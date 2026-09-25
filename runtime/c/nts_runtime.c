@@ -914,6 +914,12 @@ bool nts_value_strict_eq(NtsValue a, NtsValue b) {
   case NTS_TAG_STRING:
     return nts_string_eq((const NtsString *)a.as.reference,
                          (const NtsString *)b.as.reference);
+  /* One C object is itself: the same tag, so the same family, and the same
+   * address. */
+  case NTS_TAG_HANDLE_GOBJECT:
+  case NTS_TAG_HANDLE_OBJC:
+  case NTS_TAG_HANDLE_COM:
+    return a.as.native == b.as.native;
   default:
     return a.as.reference == b.as.reference;
   }
@@ -1021,16 +1027,82 @@ __int128 nts_bigint_shr(__int128 value, __int128 count) {
                       : nts_bigint_down(value, (unsigned)count);
 }
 
+/* How each family of the handle block counts its handles, indexed by
+ * `NTS_HANDLE_FAMILY`: filled by the family's support file, empty until then.
+ */
+typedef struct NtsHandleCounting {
+  void (*retain)(void *);
+  void (*release)(void *);
+  const char *name;
+} NtsHandleCounting;
+
+static NtsHandleCounting nts_handle_families[NTS_HANDLE_FAMILIES];
+
+/* Whether a handle has been counted yet. A family registered after that is
+ * *too late* -- a registration that runs in the wrong place, where a family
+ * never registered is a support file not linked -- and the two aborts say
+ * different things. Set on the handle path only, so a value that is not a
+ * handle pays nothing for it. */
+static bool nts_handles_counted;
+
+void nts_handle_family_register(uint32_t tag, void (*retain)(void *),
+                                void (*release)(void *), const char *name) {
+  if (!NTS_TAG_IS_HANDLE(tag) || !retain || !release) {
+    fprintf(stderr,
+            "nts: handle family %s registered at tag %u, which is not "
+            "one of the handle block's\n",
+            name, tag);
+    abort();
+  }
+  NtsHandleCounting *slot = &nts_handle_families[NTS_HANDLE_FAMILY(tag)];
+  if (slot->retain) {
+    fprintf(stderr, "nts: handle family %s registered twice\n", name);
+    abort();
+  }
+  if (nts_handles_counted) {
+    fprintf(stderr,
+            "nts: handle family %s registered too late, after values were "
+            "already counted; register it from a load-time constructor\n",
+            name);
+    abort();
+  }
+  *slot = (NtsHandleCounting){retain, release, name};
+}
+
+/* How a handle value is counted, or an abort naming the tag nothing
+ * registered. Never a no-op: a release that did nothing would leak, and a
+ * retain that did nothing would let the handle be freed under its holder. */
+static const NtsHandleCounting *nts_handle_counting(uint32_t tag) {
+  nts_handles_counted = true;
+  const NtsHandleCounting *counting =
+      &nts_handle_families[NTS_HANDLE_FAMILY(tag)];
+  if (!counting->retain) {
+    fprintf(stderr,
+            "nts: a handle value with tag %u, and no family registered how to "
+            "count it -- its support file registers it from a load-time "
+            "constructor, so this one is not linked\n",
+            tag);
+    abort();
+  }
+  return counting;
+}
+
 /* Claim and give up what an erased value holds. */
 void nts_value_retain(NtsValue value) {
-  if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) && nts_value_reference(value)) {
+  uint32_t tag = nts_value_tag(value);
+  if (NTS_TAG_IS_MANAGED(tag) && nts_value_reference(value)) {
     nts_retain(nts_value_reference(value));
+  } else if (NTS_TAG_IS_HANDLE(tag) && value.as.native) {
+    nts_handle_counting(tag)->retain(value.as.native);
   }
 }
 
 void nts_value_release(NtsValue value) {
-  if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) && nts_value_reference(value)) {
+  uint32_t tag = nts_value_tag(value);
+  if (NTS_TAG_IS_MANAGED(tag) && nts_value_reference(value)) {
     nts_release(nts_value_reference(value));
+  } else if (NTS_TAG_IS_HANDLE(tag) && value.as.native) {
+    nts_handle_counting(tag)->release(value.as.native);
   }
 }
 
@@ -4495,12 +4567,15 @@ nts_number_to_string_into(NtsHeader *into, double x) {
  * through here, and why `NtsTag`'s values are the spellings rather than an
  * arbitrary numbering: the fold is then a table lookup at compile time.
  *
- * An unrecognised tag answers "undefined" rather than aborting. A tag this
- * function does not know is a compiler bug, and a program that prints the wrong
- * word is a better place to find one than a program that dies without saying
- * which value it died on. */
+ * An unrecognised tag **aborts, naming it**. It answered "undefined" once, on
+ * the argument that a wrong word is easier to find than a death -- but it is
+ * also easier not to find: a tag added without an arm here would print
+ * `typeof handle` as "undefined" for as long as nobody looked, and a death
+ * that names the tag says which value it died on. */
 NtsString *nts_tag_name(uint32_t tag) {
   switch (tag) {
+  case NTS_TAG_UNDEFINED:
+    return nts_string_from_utf8("undefined", 9);
   case NTS_TAG_BOOLEAN:
     return nts_string_from_utf8("boolean", 7);
   case NTS_TAG_NUMBER:
@@ -4515,9 +4590,15 @@ NtsString *nts_tag_name(uint32_t tag) {
   /* `typeof null` is `"object"`. A famous wart, and the specification's, so
    * the two tags answer with one spelling. */
   case NTS_TAG_NULL:
+  /* A C library's object, as GJS answers for a `GObject`. */
+  case NTS_TAG_HANDLE_GOBJECT:
+  case NTS_TAG_HANDLE_OBJC:
+  case NTS_TAG_HANDLE_COM:
     return nts_string_from_utf8("object", 6);
   default:
-    return nts_string_from_utf8("undefined", 9);
+    fprintf(stderr, "nts: `typeof` of a value with tag %u, which is not one\n",
+            tag);
+    abort();
   }
 }
 

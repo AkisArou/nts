@@ -377,6 +377,17 @@ void *nts_gobject_parent_slot(size_t parent, size_t offset) {
   return slot;
 }
 
+/* How a `GObject` held by an erased value is counted: a value that holds one
+ * owns one reference, as it does a managed object. Registered before any
+ * program code runs, since a constructor runs at load. */
+static void nts_gobject_value_retain(void *object) { g_object_ref(object); }
+static void nts_gobject_value_release(void *object) { g_object_unref(object); }
+
+__attribute__((constructor)) static void nts_gobject_register_family(void) {
+  nts_handle_family_register(NTS_TAG_HANDLE_GOBJECT, nts_gobject_value_retain,
+                             nts_gobject_value_release, "GObject");
+}
+
 void *nts_gobject_new(size_t type) {
   GObject *made = g_object_new((GType)type, NULL);
   if (g_object_is_floating(made)) {

@@ -578,8 +578,25 @@ typedef enum NtsTag {
   NTS_TAG_FUNCTION = 4,
   NTS_TAG_SYMBOL = 5,
   NTS_TAG_OBJECT = 6,
-  NTS_TAG_NULL = 7
+  NTS_TAG_NULL = 7,
+  /* A C library's object -- a `GObject *`, an Objective-C `id`, a COM
+   * interface -- whose tag *is* its object system: 8 to 15 are reserved for
+   * them, each family one tag, so a tag and a family cannot disagree and no
+   * `switch` on a tag needs a mask. A pointer (`NTS_TAG_IS_POINTER`) and never
+   * managed: it has no `NtsHeader`, so the tracer skips it, and
+   * `nts_value_retain`/`release` count it through what its family registered
+   * (`nts_handle_family_register`). `typeof` answers "object", as GJS does:
+   * the block sits above `OBJECT`. */
+  NTS_TAG_HANDLE_GOBJECT = 8,
+  NTS_TAG_HANDLE_OBJC = 9,
+  NTS_TAG_HANDLE_COM = 10
 } NtsTag;
+
+/* Whether a tag is one of the handle block's, 8 to 15, and which family of
+ * the block it is: the one place either fact is spelled. */
+#define NTS_TAG_IS_HANDLE(tag) (((tag) & ~7u) == 8u)
+#define NTS_HANDLE_FAMILY(tag) ((tag) - 8u)
+#define NTS_HANDLE_FAMILIES 8u
 
 /* The representation is *behind accessors*, and every reader in the runtime,
  * the emitter and the tests goes through them.
@@ -701,6 +718,11 @@ static inline bool nts_value_truthy(NtsValue value) {
   case NTS_TAG_STRING:
     return value.as.reference != 0 &&
            ((NtsString *)value.as.reference)->length != 0;
+  /* A C library's object is an object: present is enough. */
+  case NTS_TAG_HANDLE_GOBJECT:
+  case NTS_TAG_HANDLE_OBJC:
+  case NTS_TAG_HANDLE_COM:
+    return value.as.native != 0;
   default:
     /* An object, an array: present is enough. A reference tag with a null
      * payload is not a value this compiler produces, and testing for it
@@ -752,14 +774,14 @@ NtsString *nts_tag_name(uint32_t tag);
  * and the kind tests (`nts_is_array`, `nts_is_promise`, ...) read its
  * descriptor.
  *
- * Today they answer alike: every pointer a value can hold is a managed object.
- * They are two macros so that each use says which fact it rests on. A payload
- * that is an address *without* one of these headers -- a C library's object,
- * a `GObject *` -- belongs to the first and never to the second, and every
- * site that reads a header asks the second. Widening one range for such a
- * payload would have sent it to every reader of a header. */
+ * They differ by the handle block (`NTS_TAG_IS_HANDLE`): a C library's
+ * object is an address *without* one of these headers, so it belongs to the
+ * first and never to the second, and every site that reads a header asks the
+ * second. Widening one range for such a payload would have sent it to every
+ * reader of a header. */
 #define NTS_TAG_IS_POINTER(tag)                                                \
-  ((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT)
+  (((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT) ||                     \
+   NTS_TAG_IS_HANDLE(tag))
 #define NTS_TAG_IS_MANAGED(tag)                                                \
   ((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT)
 
@@ -878,6 +900,14 @@ bool nts_value_strict_eq(NtsValue a, NtsValue b);
  * is what specializing a site by its reaching representations removes. */
 void nts_value_retain(NtsValue value);
 void nts_value_release(NtsValue value);
+
+/* How the handles one tag of the handle block names are counted, registered by
+ * the family's own support file from a load-time constructor -- before any
+ * program code runs, so a handle stored into a value always finds its family.
+ * `name` is what an abort says. Registering a tag twice, a tag outside the
+ * block, or after values have been counted, aborts, each in its own words. */
+void nts_handle_family_register(uint32_t tag, void (*retain)(void *),
+                                void (*release)(void *), const char *name);
 
 /* The inline elements of a string. */
 #define NTS_ELEMENTS(a, T) ((T *)((unsigned char *)(a) + sizeof(NtsHeader)))

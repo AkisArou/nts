@@ -71,6 +71,9 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
         ("NTS_TAG_SYMBOL", tags::SYMBOL),
         ("NTS_TAG_OBJECT", tags::OBJECT),
         ("NTS_TAG_NULL", tags::NULL),
+        ("NTS_TAG_HANDLE_GOBJECT", tags::HANDLE_GOBJECT),
+        ("NTS_TAG_HANDLE_OBJC", tags::HANDLE_OBJC),
+        ("NTS_TAG_HANDLE_COM", tags::HANDLE_COM),
     ];
 
     for (name, value) in &mine {
@@ -120,6 +123,13 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
 /// Asserted over the **header's** parsed enum rather than over the list above,
 /// so that a tag someone adds to both tables is caught by this file rather than
 /// by a program answering the wrong thing.
+///
+/// **One named exception: the handle block, 8..15.** A C library's object
+/// *should* answer `typeof === "object"` -- GJS answers it for a `GObject` --
+/// and the worry above, something reading it as an `NtsHeader`, is now
+/// `NTS_TAG_IS_MANAGED`'s to answer, which the block is outside by
+/// construction (`runtime/c/tests/handles.c` checks it). So a tag above `NULL`
+/// is allowed exactly when it is a `NTS_TAG_HANDLE_*` inside the block.
 #[test]
 fn no_tag_sits_above_null_because_typeof_object_is_a_range() {
     let header = header_tags();
@@ -128,8 +138,10 @@ fn no_tag_sits_above_null_because_typeof_object_is_a_range() {
         "the header's tag enum was not parsed: {header:?}"
     );
     for (name, value) in &header {
+        let a_handle = name.starts_with("NTS_TAG_HANDLE_")
+            && (tags::HANDLE_BLOCK..tags::HANDLE_BLOCK + tags::HANDLE_BLOCK_SIZE).contains(value);
         assert!(
-            *value <= tags::NULL,
+            *value <= tags::NULL || a_handle,
             "`{name}` is {value} and `NTS_TAG_NULL` is {}: `typeof x === \"object\"` is \
              `tag >= NTS_TAG_OBJECT`, so a tag above NULL answers \"object\" whatever it \
              holds. A payload that is not a reference needs somewhere other than the tag \

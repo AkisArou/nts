@@ -34,6 +34,22 @@ pub const OBJECT: u32 = 6;
 /// comparison `tag >= OBJECT` instead of becoming a pair.
 pub const NULL: u32 = 7;
 
+/// A C library's object in an erased value, one tag per object system in the
+/// block 8..15 (`NTS_TAG_IS_HANDLE`): a pointer the runtime counts through
+/// what the family registered, and never a managed object. `typeof` answers
+/// "object" for one, as GJS does -- the block is above [`OBJECT`] -- which is
+/// why it sits above [`NULL`] rather than beside the references.
+pub const HANDLE_GOBJECT: u32 = 8;
+pub const HANDLE_OBJC: u32 = 9;
+pub const HANDLE_COM: u32 = 10;
+/// The first tag of the handle block and the block's size.
+pub const HANDLE_BLOCK: u32 = 8;
+pub const HANDLE_BLOCK_SIZE: u32 = 8;
+const _: () = assert!(
+    HANDLE_BLOCK == NULL + 1 && HANDLE_GOBJECT == HANDLE_BLOCK && HANDLE_COM < HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
+    "the handle block follows NULL, and every handle tag is inside it"
+);
+
 /// The orderings the numbering above rests on, checked where it is written.
 ///
 /// Both are prose in `nts_runtime.h` and both are load-bearing, and a
