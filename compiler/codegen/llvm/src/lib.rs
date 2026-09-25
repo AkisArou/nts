@@ -1350,7 +1350,7 @@ fn text_constant(out: &mut String, name: &str, value: &str) {
 /// -- `self`, `_cmd`, then the method's, a record by value by the platform's
 /// convention -- converted to the compiled method's, and its result back.
 /// Returns the method table's row for it.
-fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nts_core::hir::ObjcMethod, compiled: &Func) -> Result<String, Diagnostic> {
+fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nts_core::hir::ForeignMethod, compiled: &Func) -> Result<String, Diagnostic> {
     // A record result is written through an address the entry point passes
     // the compiled method last.
     let record_out = matches!(*method.signature.result, nts_core::hir::native::Type::Record(_));
@@ -1454,7 +1454,7 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
 /// `{Class}#state` entered as an entry point is, because the runtime calls it
 /// from the `init` it adds, on whatever stack sent `init`. `Err(None)` for a
 /// program with no function to name a refusal by.
-fn state_maker(program: &Program, class: &nts_core::hir::ObjcClass, out: &mut String) -> Result<Option<String>, Option<Diagnostic>> {
+fn state_maker(program: &Program, class: &nts_core::hir::ForeignClass, out: &mut String) -> Result<Option<String>, Option<Diagnostic>> {
     let Some(state) = &class.state else { return Ok(None) };
     let Some(compiled) = program.funcs.iter().find(|func| &func.name == state) else {
         let missing = "an Objective-C class whose fields' maker this program does not define";

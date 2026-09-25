@@ -366,9 +366,10 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
             .map(|func| func.name.as_str())
             .collect(),
     };
-    // A method of an Objective-C class the program registers is reached
-    // through the runtime, by selector, which no call in the IR names.
-    for class in &program.objc_classes {
+    // A method of a class the program writes over a foreign one is reached
+    // through that runtime -- by selector, or through a table -- which no call
+    // in the IR names.
+    for class in &program.foreign_classes {
         names.extend(class.methods.iter().map(|method| method.function.as_str()));
         names.extend(class.state.as_deref());
     }

@@ -2135,14 +2135,18 @@ pub const fn is_constructor_token(ty: TypeId) -> bool {
     ty.0 >= CONSTRUCTOR_TOKENS
 }
 
-/// An Objective-C class the program declares (see [`Program::objc_classes`]).
+/// A class the program writes over a foreign one -- `class Controller extends
+/// NSObject` -- which the foreign runtime registers or composes (see
+/// [`Program::foreign_classes`]). `family` says whose: each backend's emitter
+/// for a family walks only that family's classes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ObjcClass {
+pub struct ForeignClass {
+    pub family: native::Family,
     /// The runtime's name for it: the TypeScript class name.
     pub name: String,
     /// The runtime's name for the class it extends.
     pub superclass: String,
-    pub methods: Vec<ObjcMethod>,
+    pub methods: Vec<ForeignMethod>,
     /// The protocols it adopts (`implements NSWindowDelegate`), by the name
     /// the runtime knows each by, so `conformsToProtocol:` answers for them.
     pub protocols: Vec<String>,
@@ -2151,11 +2155,11 @@ pub struct ObjcClass {
     pub state: Option<String>,
 }
 
-/// One method of an [`ObjcClass`]: the selector the runtime dispatches on,
+/// One method of a [`ForeignClass`]: the selector the runtime dispatches on,
 /// the compiled function that is its body, and the C signature the runtime
 /// calls it with -- `self`, `_cmd`, then the arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ObjcMethod {
+pub struct ForeignMethod {
     pub selector: String,
     pub function: String,
     pub signature: std::sync::Arc<native::FnPointer>,
@@ -2223,7 +2227,7 @@ pub struct Program {
     /// Swift registers its own. Each method's implementation is an entry point
     /// the backend builds over the compiled function, taking `self` and
     /// `_cmd` as the runtime passes them.
-    pub objc_classes: Vec<ObjcClass>,
+    pub foreign_classes: Vec<ForeignClass>,
     /// The distinct classes the program declares, and the types of each.
     ///
     /// **A layout is a shape and a class is an identity, and one field cannot

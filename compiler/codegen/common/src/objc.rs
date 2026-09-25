@@ -150,16 +150,18 @@ pub fn methods_symbol(class: &str) -> String {
     format!("nts_objc_methods_{}", mangle(class))
 }
 
-/// The program's Objective-C classes, each after the class it extends where
-/// that is one of them too, as the runtime must register them.
+/// The program's Objective-C classes -- the foreign classes of that family --
+/// each after the class it extends where that is one of them too, as the
+/// runtime must register them.
 #[must_use]
-pub fn classes_in_order(program: &Program) -> Vec<&nts_core::hir::ObjcClass> {
-    let mut ordered: Vec<&nts_core::hir::ObjcClass> = Vec::new();
-    let mut pending: Vec<&nts_core::hir::ObjcClass> = program.objc_classes.iter().collect();
+pub fn classes_in_order(program: &Program) -> Vec<&nts_core::hir::ForeignClass> {
+    let objc = || program.foreign_classes.iter().filter(|class| class.family == nts_core::hir::native::Family::Objc);
+    let mut ordered: Vec<&nts_core::hir::ForeignClass> = Vec::new();
+    let mut pending: Vec<&nts_core::hir::ForeignClass> = objc().collect();
     while !pending.is_empty() {
         let before = pending.len();
         pending.retain(|class| {
-            let waits = program.objc_classes.iter().any(|other| other.name == class.superclass)
+            let waits = objc().any(|other| other.name == class.superclass)
                 && !ordered.iter().any(|done| done.name == class.superclass);
             if !waits {
                 ordered.push(class);

@@ -131,12 +131,12 @@ pub fn emit(program: &Program) -> Emitted {
     emit_into(types::DEFAULT_PACKAGE, program)
 }
 
-/// An Objective-C class the program declares is registered with the
-/// Objective-C runtime when the program loads, which a JVM has none of: each
-/// refused by name, at its first method.
-fn objc_classes_refused(program: &Program) -> Vec<Diagnostic> {
+/// A class the program writes over a foreign one is registered with, or
+/// composed by, that foreign runtime (Objective-C's, the Windows Runtime's),
+/// which a JVM has none of: each refused by name, at its first method.
+fn foreign_classes_refused(program: &Program) -> Vec<Diagnostic> {
     program
-        .objc_classes
+        .foreign_classes
         .iter()
         .filter_map(|class| {
             let at = class
@@ -157,7 +157,7 @@ fn objc_classes_refused(program: &Program) -> Vec<Diagnostic> {
 #[must_use]
 pub fn emit_into(package: &str, program: &Program) -> Emitted {
     let mut pool = Pool::new();
-    let mut diagnostics = objc_classes_refused(program);
+    let mut diagnostics = foreign_classes_refused(program);
     // An array that grows is a wrapper rather than a bare `double[]`, chosen
     // whole-program because `hir::arrays_can_grow` is: one `push` anywhere and
     // every array in the program needs a length beside its storage.

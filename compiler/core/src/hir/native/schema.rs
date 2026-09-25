@@ -123,7 +123,7 @@ pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::s
 ///
 /// A class the *program* declares over one of these is one too: an
 /// Objective-C class of its own, registered under its own name when the
-/// program loads (`Program::objc_classes`), as Swift registers one.
+/// program loads (`Program::foreign_classes`), as Swift registers one.
 fn objc_class(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     let record = snapshot.types.get(ty.0 as usize)?;
     if !matches!(record.kind, TypeKind::Object { .. }) {

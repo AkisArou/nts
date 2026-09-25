@@ -5793,12 +5793,13 @@ fn objc_selector(name: &str, count: usize) -> String {
 }
 
 /// A class the program writes over an Objective-C class, recorded as the
-/// runtime will register it (`Program::objc_classes`), and its fields refused:
-/// a subclass's state is not yet stored in the object the runtime makes.
+/// runtime will register it (`Program::foreign_classes`). Its fields live in a
+/// state object the runtime keeps in the instance's `nts_state` ivar
+/// (`nts_objc_state`).
 fn register_objc_class(
     snapshot: &SemanticSnapshot,
     class: NodeId,
-    methods: Vec<super::ObjcMethod>,
+    methods: Vec<super::ForeignMethod>,
     state: Option<String>,
     lowered: &mut Lowered,
 ) {
@@ -5822,7 +5823,14 @@ fn register_objc_class(
             })
         })
         .collect();
-    lowered.program.objc_classes.push(super::ObjcClass { name, superclass, methods, protocols, state });
+    lowered.program.foreign_classes.push(super::ForeignClass {
+        family: super::native::Family::Objc,
+        name,
+        superclass,
+        methods,
+        protocols,
+        state,
+    });
 }
 
 fn lower_class(
@@ -10486,7 +10494,7 @@ enum Decided {
 /// counted by ARC, whatever TypeScript calls the class. A class the *program*
 /// writes over one is one too, not a second representation on the same chain:
 /// an Objective-C class of its own, registered as Swift registers one
-/// (`Program::objc_classes`).
+/// (`Program::foreign_classes`).
 fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Decided> {
     if let Some(brand) = super::native::scalar(snapshot, ty) {
         // What the program holds is what TypeScript says it is: a `number`
@@ -13670,7 +13678,7 @@ impl<'a> FuncBuilder<'a> {
         class: NodeId,
         member: NodeId,
         instance: Option<TypeId>,
-    ) -> Result<(Func, super::ObjcMethod), Diagnostic> {
+    ) -> Result<(Func, super::ForeignMethod), Diagnostic> {
         // An accessor's is its property's getter or setter: the value out, or
         // the value in.
         let signature = match self.kind_of(member) {
@@ -13717,7 +13725,7 @@ impl<'a> FuncBuilder<'a> {
         };
         self.objc_entry = Some(ObjcEntry { returns_record: matches!(*imp.result, super::native::Type::Record(_)) });
         let func = self.lower_method_of(class, member, instance)?;
-        let method = super::ObjcMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
+        let method = super::ForeignMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
         Ok((func, method))
     }
 
@@ -42003,7 +42011,7 @@ impl<'a> FuncBuilder<'a> {
     /// method: the receiver is the function's first argument, converted to
     /// its type, and the rest are the method's.
     /// The method a call reaches, where it is a method of an Objective-C
-    /// class the program writes (`Program::objc_classes`).
+    /// class the program writes (`Program::foreign_classes`).
     fn program_objc_method(&self, id: NodeId) -> Option<NodeId> {
         let declaration = self.snapshot.call_targets.get(&id)?.callee?;
         if self.kind_of(declaration) != Some(syntax::METHOD_DECLARATION) || is_static_member(self.snapshot, declaration) {
