@@ -122,7 +122,7 @@ fi
 cat >"$out/expected.txt" <<'EXPECTED'
 window 320 button 100x32 views 1
 bundle none
-hit 10
+hit 10 the canvas
 drawn 40x30
 pressed 1
 micro 1

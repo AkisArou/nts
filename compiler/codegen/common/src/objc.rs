@@ -20,6 +20,8 @@ pub struct Lookups<'p> {
     /// Whether any send returns a record by value, which on `x86_64` may have
     /// to go through `objc_msgSend_stret` instead.
     pub returns_records: bool,
+    /// Whether any send is `[super m]` (`objc_msgSendSuper`).
+    pub supers: bool,
 }
 
 #[must_use]
@@ -32,6 +34,8 @@ pub fn lookups(program: &Program) -> Lookups<'_> {
             {
                 found.selectors.push(send.selector.as_str());
                 found.classes.extend(send.class.as_deref());
+                found.classes.extend(send.super_of.as_deref());
+                found.supers |= send.super_of.is_some();
                 found.returns_records |= target.destination().is_some();
             }
             if let OpKind::ObjcClass { name, .. } = &op.kind {

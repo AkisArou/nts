@@ -42,6 +42,13 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
     // promised was an object. The required form ends the process, naming it.
     writer.line(origin, "extern struct objc_class *objc_getRequiredClass(const char *name);");
     writer.line(origin, "extern void objc_msgSend(void);");
+    if found.supers {
+        // `[super m]`: the receiver, and the class whose implementation the
+        // runtime starts looking from, `struct objc_super`'s two words.
+        writer.line(origin, "struct nts_objc_super { const void *receiver; struct objc_class *super_class; };");
+        writer.line(origin, "extern void objc_msgSendSuper(void);");
+        writer.line(origin, "extern struct objc_class *class_getSuperclass(struct objc_class *cls);");
+    }
     if found.returns_records {
         // x86_64 returns a record in memory -- larger than 16 bytes, since
         // nothing packed crosses by value -- through a hidden pointer, and the
@@ -349,11 +356,24 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
         ),
     };
     let skip = usize::from(send.class.is_none());
+    let result = result(&target.result);
+    // `[super m]`: from the superclass of the program's class, the receiver
+    // unchanged. A record result would need `objc_msgSendSuper_stret`, which
+    // the lowering does not ask for: it is refused there.
+    if let Some(class) = &send.super_of {
+        let mut types = vec!["struct nts_objc_super *".to_owned(), "struct objc_selector *".to_owned()];
+        types.extend(target.parameters.iter().skip(skip).map(parameter));
+        let mut values = vec![
+            format!("&(struct nts_objc_super){{ {receiver}, class_getSuperclass({}()) }}", class_symbol(class)),
+            format!("{}()", selector_symbol(&send.selector)),
+        ];
+        values.extend(rest.iter().cloned());
+        return format!("(({result} (*)({}))objc_msgSendSuper)({})", types.join(", "), values.join(", "));
+    }
     let mut types = vec![receiver_type, "struct objc_selector *".to_owned()];
     types.extend(target.parameters.iter().skip(skip).map(parameter));
     let mut values = vec![receiver, format!("{}()", selector_symbol(&send.selector))];
     values.extend(rest.iter().cloned());
-    let result = result(&target.result);
     let entry = match target.result {
         Type::Record(_) => format!("(NTS_OBJC_SEND_FOR(sizeof({result})))"),
         _ => "objc_msgSend".to_owned(),

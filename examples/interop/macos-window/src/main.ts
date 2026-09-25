@@ -82,11 +82,16 @@ class Canvas extends NSView {
   draw(dirtyRect: ByValue<CGRect>): void {
     drawnWidth = dirtyRect.size.width;
     drawnHeight = dirtyRect.size.height;
+    // `NSView`'s own, which draws nothing: a record by value through a super
+    // message.
+    super.draw(dirtyRect);
   }
 
+  // `[super hitTest:]` answers this view for a point inside it: the message
+  // sent past this override, from `NSView`'s implementation.
   hitTest(point: ByValue<CGPoint>): NSView | null {
     hitX = point.x;
-    return null;
+    return super.hitTest(point);
   }
 }
 
@@ -184,7 +189,9 @@ function main(): void {
   point.x = 10;
   point.y = 12;
   window.contentView?.hitTest(point);
-  report(`hit ${hitX}`);
+  const content = window.contentView;
+  const found = content === null ? null : content.hitTest(point);
+  report(`hit ${hitX} ${found === canvas ? "the canvas" : "something else"}`);
   // `drawRect:` sent with a rectangle whose size is known: AppKit's own
   // draws pass what it chooses, which since macOS 14 may exceed the bounds.
   send_draw_rect(canvas, 1 as c_double, 2 as c_double, 40 as c_double, 30 as c_double);

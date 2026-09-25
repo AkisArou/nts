@@ -11448,6 +11448,10 @@ struct FuncBuilder<'a> {
     /// been tested and found present, each with that receiver
     /// ([`Self::lower_chain`]): lowered as the plain link it is in that arm.
     chain_present: rustc_hash::FxHashMap<NodeId, ValueId>,
+    /// While a `super.m()` to an Objective-C superclass is lowered, the
+    /// program's class it is written in: the message it builds goes to the
+    /// superclass's implementation (`native::Send::super_of`).
+    super_send: Option<String>,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -11659,6 +11663,7 @@ impl<'a> FuncBuilder<'a> {
             labels_pending: rustc_hash::FxHashSet::default(),
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
+            super_send: None,
         }
     }
 
@@ -42879,7 +42884,7 @@ impl<'a> FuncBuilder<'a> {
             "isKindOfClass:",
             vec![super::native::Type::Pointer(pointee), super::native::Type::Pointer(class_pointee)],
             super::native::Type::Bool,
-            Some(super::native::Send { selector: "isKindOfClass:".to_owned(), class: None }),
+            Some(super::native::Send { selector: "isKindOfClass:".to_owned(), class: None, super_of: None }),
             Vec::new(),
         );
         let origin = self.origin(id);
@@ -43009,7 +43014,7 @@ impl<'a> FuncBuilder<'a> {
                 &format!("`{selector}` sent to an Objective-C object the program counts, which ARC reserves: the compiler retains and releases it"),
             ));
         }
-        Ok(super::native::Send { selector, class })
+        Ok(super::native::Send { selector, class, super_of: self.super_send.clone() })
     }
 
     /// A lowered call, at the type its result actually has.
@@ -46944,6 +46949,16 @@ impl<'a> FuncBuilder<'a> {
             .this
             .ok_or_else(|| self.unsupported(id, "`super` outside a method"))?;
 
+        // A superclass a binding declares, an Objective-C class: `[super m]`,
+        // the message sent past this class's own implementation.
+        if member != "constructor"
+            && let Some(target) = self.snapshot.call_targets.get(&id).copied()
+            && let Some(declaration) = target.callee
+            && self.objc_class_member(declaration).is_some()
+        {
+            return self.lower_objc_super(id, receiver, (declaration, target.signature), arguments);
+        }
+
         // A base that is a typed array. `Buffer extends Uint8Array` and
         // declares no storage, so `this` inside `Buffer#fill` is already a
         // `view<u8>` -- and there is no compiled `Uint8Array#fill` for the name
@@ -47109,6 +47124,34 @@ impl<'a> FuncBuilder<'a> {
             return Ok(());
         };
         self.initialize_fields(id, receiver, class, &[class])
+    }
+
+    /// `super.m(args)` in a method of a class the program writes over an
+    /// Objective-C class: the superclass's method, sent as a message from the
+    /// superclass (`objc_msgSendSuper`), since the method is the runtime's
+    /// and not one of the program's own to call directly.
+    fn lower_objc_super(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        method: (NodeId, nts_semantic_schema::SignatureId),
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let [object, member] = self.children(self.children(id).first().copied().unwrap_or(id))[..] else {
+            return Err(self.unsupported(id, "a `super` call of unexpected shape"));
+        };
+        let returned = self.snapshot.signatures[method.1 .0 as usize].return_type;
+        if matches!(super::native::abi_type(self.snapshot, returned), Some(super::native::Type::Record(_))) {
+            return Err(self.unsupported(id, "a `super` message returning a record by value, which x86_64 sends through `objc_msgSendSuper_stret`, not built yet"));
+        }
+        let class = self
+            .enclosing_class(id)
+            .and_then(|class| super::native::objc_name(self.snapshot, class))
+            .ok_or_else(|| self.unsupported(id, "`super` outside a class the program writes over an Objective-C class"))?;
+        self.super_send = Some(class);
+        let sent = self.lower_native_method_call(id, (receiver, object), method, member, arguments);
+        self.super_send = None;
+        sent
     }
 
     /// The name of the class a class extends.
@@ -50110,7 +50153,7 @@ fn bridge_send(
     parameters: Vec<super::native::Type>,
     result: super::native::Type,
 ) -> super::native::Function {
-    let send = super::native::Send { selector: selector.to_owned(), class: class.map(str::to_owned) };
+    let send = super::native::Send { selector: selector.to_owned(), class: class.map(str::to_owned), super_of: None };
     let pointer = matches!(result, super::native::Type::Pointer(_));
     let mut message = synthesized(selector, parameters, result, Some(send), vec!["Foundation".to_owned()]);
     message.returns_owned = pointer && super::native::Send::returns_owned(selector);

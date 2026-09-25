@@ -184,6 +184,11 @@ pub struct Send {
     /// object, looked up by name, and is not a parameter. `None` for an
     /// instance method: `parameters[0]` is the receiver (`this`).
     pub class: Option<String>,
+    /// `Some("Canvas")` for `super.draw(r)` in a method of `Canvas`, a class
+    /// the program writes: sent to the receiver past `Canvas`'s own
+    /// implementation, from its superclass (`objc_msgSendSuper`), as
+    /// `[super drawRect:r]` is.
+    pub super_of: Option<String>,
 }
 
 /// The selectors ARC reserves to itself. On an object the program counts,
@@ -1546,7 +1551,7 @@ impl Type {
 /// same question about a *member*: a function-typed member is a C function
 /// pointer for exactly the reason a function-typed parameter is, and two
 /// answers to that would be two places to keep in agreement.
-    fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+    pub(crate) fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
         if let Some(scalar) = int_bool(snapshot, ty) {
             return Some(Type::Scalar(scalar));
         }

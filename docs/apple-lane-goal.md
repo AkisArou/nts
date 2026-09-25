@@ -532,6 +532,13 @@ correctness does not depend on arm64 running by luck.
        rectangle (in memory), on both backends. With the override rule
        disabled, `drawn 40x30` reads `0x0`. AppKit's own draws are not the
        check: since macOS 14 they may pass a rect larger than the bounds.
+     - `super.m(args)` in such a method is `[super m:args]`: the superclass's
+       method, sent through `objc_msgSendSuper` from the superclass of the
+       program's class, since the method is the runtime's and not a function
+       of the program's to call. `Canvas.hitTest` returns
+       `super.hitTest(point)`, and the content view's hit test answers the
+       canvas, on both backends. A super message returning a record by value
+       (`_stret` on x86_64) is refused by name.
      - An optional chain as a statement (`window.contentView?.hitTest(p);`)
        compiles. Its value, `T | null | undefined`, has no representation,
        and nothing reads it, so each absent link jumps past the rest.

@@ -73,6 +73,16 @@ pub(super) fn module(program: &Program) -> String {
     // A record result in memory comes back through `objc_msgSend_stret` on
     // x86_64; arm64 has none, and an unused declaration costs nothing. See
     // `send`.
+    if found.supers {
+        for (symbol, declaration) in [
+            ("objc_msgSendSuper", "declare void @objc_msgSendSuper()"),
+            ("class_getSuperclass", "declare ptr @class_getSuperclass(ptr)"),
+        ] {
+            if !bound(program, symbol) {
+                let _ = writeln!(text, "{declaration}");
+            }
+        }
+    }
     if found.returns_records && !bound(program, "objc_msgSend_stret") {
         let _ = writeln!(text, "declare void @objc_msgSend_stret()");
     }
@@ -117,6 +127,22 @@ pub(super) fn send(
         }
         None => name(args[0]),
     };
+    // `[super m]`: the receiver and the superclass of the program's class, in
+    // `struct objc_super`'s two words, and `objc_msgSendSuper` takes it where
+    // the receiver goes.
+    let (receiver, entry) = match &send.super_of {
+        Some(class) => {
+            let at = format!("{out}.super");
+            before.push(format!("{at} = alloca {{ ptr, ptr }}"));
+            before.push(format!("store ptr {receiver}, ptr {at}"));
+            before.push(format!("{at}.class = call ptr @{}()", class_symbol(class)));
+            before.push(format!("{at}.base = call ptr @class_getSuperclass(ptr {at}.class)"));
+            before.push(format!("{at}.slot = getelementptr inbounds {{ ptr, ptr }}, ptr {at}, i32 0, i32 1"));
+            before.push(format!("store ptr {at}.base, ptr {at}.slot"));
+            (at, "objc_msgSendSuper")
+        }
+        None => (receiver, "objc_msgSend"),
+    };
     let selector = format!("{out}.selector");
     before.push(format!("{selector} = call ptr @{}()", selector_symbol(&send.selector)));
     let mut types = Vec::new();
@@ -156,8 +182,8 @@ pub(super) fn send(
             // arm64 has no `_stret`: `objc_msgSend` itself takes the `sret`
             // pointer, in `x8`.
             Passing::Memory { .. } if platform.arch == crate::Arch::X86_64 => ("objc_msgSend_stret", String::new()),
-            Passing::Memory { .. } => ("objc_msgSend", String::new()),
-            Passing::Registers(_) | Passing::Homogeneous { .. } => ("objc_msgSend", format!("{returned} = ")),
+            Passing::Memory { .. } => (entry, String::new()),
+            Passing::Registers(_) | Passing::Homogeneous { .. } => (entry, format!("{returned} = ")),
         };
         let spelled = aggregate::result_type(passing);
         before.push(format!(
@@ -170,7 +196,7 @@ pub(super) fn send(
     }
     let prefix = if *result == HirType::Void { String::new() } else { format!("{out} = ") };
     before.push(format!(
-        "{prefix}call {}{} ({}) @objc_msgSend({})",
+        "{prefix}call {}{} ({}) @{entry}({})",
         extension(result),
         ty_of(result, func)?,
         types.join(", "),
