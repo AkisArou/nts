@@ -686,6 +686,10 @@ correctness does not depend on arm64 running by luck.
      table's data source.
      - The controller takes the notes and the views in its constructor, as
        parameter properties.
+     - It is laid out with Auto Layout anchors, as Swift writes it:
+       `field.leadingAnchor.constraint({ equalTo: content.leadingAnchor,
+       constant: 20 }).isActive = true`. Each overload is chosen by its
+       labels, and the frames Auto Layout computes are reported.
      - Notes are read with a throwing `NSString(contentsOfFile:encoding:)`
        and written back with `write(toFile:atomically:encoding:)`.
      - It drives itself and quits, and runs four times on one file: C twice,

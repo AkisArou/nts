@@ -9,6 +9,8 @@
 // The log, in order:
 //   loaded N   notes read through `NSString(contentsOfFile:encoding:)`, which
 //              throws on the first run, when there is no file
+//   layout W X H  the field's width, the button's x and the list's height,
+//              as Auto Layout placed them from the anchors' constraints
 //   added T    each note typed into the field and added by the button's
 //              action, which reads the field's `stringValue` and clears it
 //   rows N     the table's `numberOfRows`, which asks the data source
@@ -23,6 +25,7 @@ import {
   NSTableColumn,
   NSTableView,
   NSTextField,
+  NSView,
   NSWindow,
   Timer,
   type CGPoint,
@@ -106,28 +109,42 @@ function main(): void {
   });
   window.title = "Notes";
 
-  const fieldFrame = local<CGRect>();
-  setRect(fieldFrame, 20, 260, 240, 24);
-  const field = new NSTextField({ frame: fieldFrame });
-  const buttonFrame = local<CGRect>();
-  setRect(buttonFrame, 270, 256, 70, 32);
-  const button = new NSButton({ frame: buttonFrame });
+  // Placed by Auto Layout, as Swift writes it with anchors: the field and the
+  // button on one row, the list filling the rest.
+  const field = new NSTextField();
+  const button = new NSButton();
   button.title = "Add";
-  const listFrame = local<CGRect>();
-  setRect(listFrame, 20, 20, 320, 220);
-  const scroll = new NSScrollView({ frame: listFrame });
-  const table = new NSTableView({ frame: listFrame });
+  const scroll = new NSScrollView();
+  const table = new NSTableView();
   table.addTableColumn(new NSTableColumn({ identifier: "note" }));
   scroll.documentView = table;
-  window.contentView?.addSubview(field);
-  window.contentView?.addSubview(button);
-  window.contentView?.addSubview(scroll);
+  const content = window.contentView;
+  if (content === null) {
+    return;
+  }
+  const views: NSView[] = [field, button, scroll];
+  for (const view of views) {
+    view.translatesAutoresizingMaskIntoConstraints = false;
+    content.addSubview(view);
+  }
+  field.leadingAnchor.constraint({ equalTo: content.leadingAnchor, constant: 20 }).isActive = true;
+  field.topAnchor.constraint({ equalTo: content.topAnchor, constant: 16 }).isActive = true;
+  field.trailingAnchor.constraint({ equalTo: button.leadingAnchor, constant: -10 }).isActive = true;
+  button.trailingAnchor.constraint({ equalTo: content.trailingAnchor, constant: -20 }).isActive = true;
+  button.centerYAnchor.constraint({ equalTo: field.centerYAnchor }).isActive = true;
+  button.widthAnchor.constraint({ equalToConstant: 70 }).isActive = true;
+  scroll.leadingAnchor.constraint({ equalTo: content.leadingAnchor, constant: 20 }).isActive = true;
+  scroll.trailingAnchor.constraint({ equalTo: content.trailingAnchor, constant: -20 }).isActive = true;
+  scroll.topAnchor.constraint({ equalTo: field.bottomAnchor, constant: 16 }).isActive = true;
+  scroll.bottomAnchor.constraint({ equalTo: content.bottomAnchor, constant: -20 }).isActive = true;
 
   const loaded = load();
   // The controller keeps this array and adds to it, so its length is read
   // now, before any note is.
   const initially = loaded.length;
   report(`loaded ${initially}`);
+  content.layoutSubtreeIfNeeded();
+  report(`layout ${field.frame.size.width} ${button.frame.origin.x} ${scroll.frame.size.height}`);
   const notes = new Notes(loaded, field, table);
   table.dataSource = notes;
   button.target = notes;
