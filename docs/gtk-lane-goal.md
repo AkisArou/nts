@@ -650,10 +650,24 @@ How, and where it differs from the design below:
   registers (a subclass of such a subclass among them) is now refused, and
   so is its `new`.
 
-Still refused, each by name: a constructor of such a class; instance fields,
-which have no state storage yet; a direct call of a `vfunc_` method, which
-is chaining up (`super.vfunc_clicked()`); a slot taking a record by value;
-and extending a subclass the program wrote.
+**Fields** (`count = 0` on a class over `GtkButton`) live in an object of
+the program's own that the instance holds, as an Objective-C subclass's do,
+with the same maker contract. Registration grows the instance by one pointer
+past the parent's; `instance_init` stores the fields' object there and
+`finalize` gives it back, then chains to the parent's; and `this.count` or
+`counter.count` is a field of the object `nts_gobject_state` lends. A
+subclass's instance carries its parent's tag, so its fields are found by the
+receiver's type, not by the handle's tag. Checked on both backends in both
+modes, and under valgrind with no invalid access. A plain `GObject` subclass
+made and dropped 100 times leaves one state behind at exit, which is the
+candidate the cycle collector has not reached yet, not a leak per instance.
+
+Still refused, each by name: a constructor of such a class; an override of
+`vfunc_finalize` (the registration's gives the fields back); a direct call
+of a `vfunc_` method, which is chaining up (`super.vfunc_clicked()`); a slot
+taking a record by value; and extending a subclass the program wrote. A
+field initialiser that calls or reads anything is refused as Apple's is,
+since it runs inside `instance_init`.
 
 The design as reviewed:
 

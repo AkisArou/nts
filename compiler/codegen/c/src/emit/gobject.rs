@@ -38,7 +38,10 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         };
         if !wrote {
             writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
-            writer.line(origin, "size_t nts_gobject_register(size_t parent, const char *name, const void *slots, size_t count);");
+            writer.line(
+                origin,
+                "size_t nts_gobject_register(size_t parent, const char *name, const void *slots, size_t count, void *(*make_state)(void));",
+            );
             writer.line(origin, "void *nts_gobject_new(size_t type);");
             writer.line(origin, "struct nts_gobject_slot { size_t offset; void (*entry)(void); };");
             wrote = true;
@@ -85,13 +88,34 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             writer.line(origin, format!("static const struct nts_gobject_slot nts_gobject_slots_{name}[] = {{ {} }};", slots.join(", ")));
             format!("nts_gobject_slots_{name}")
         };
+        // The fields' maker, which `instance_init` calls wherever GTK makes
+        // one -- a builder file's included -- so it enters and leaves as an
+        // entry point does.
+        let make_state = match &class.state {
+            Some(state) => {
+                let compiled = program
+                    .funcs
+                    .iter()
+                    .find(|func| &func.name == state)
+                    .ok_or_else(|| refuse("a GObject class whose fields' maker this program does not define"))?;
+                writer.line(
+                    origin,
+                    format!(
+                        "static void *nts_gobject_state_maker_{name}(void) {{ nts_callback_enter(); void *made = (void *){}(); nts_callback_leave(); return made; }}",
+                        c_identifier(&compiled.name)
+                    ),
+                );
+                format!("nts_gobject_state_maker_{name}")
+            }
+            None => "0".to_owned(),
+        };
         let parent = &class.superclass;
         writer.line(origin, format!("size_t {parent}(void);"));
         writer.line(
             origin,
             format!(
                 "static size_t nts_gobject_type_{name}(void) {{ static size_t type = 0; if (type == 0) \
-                 type = nts_gobject_register({parent}(), \"Nts_{name}\", {table}, {}u); return type; }}",
+                 type = nts_gobject_register({parent}(), \"Nts_{name}\", {table}, {}u, {make_state}); return type; }}",
                 slots.len()
             ),
         );

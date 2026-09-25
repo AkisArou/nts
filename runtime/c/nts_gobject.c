@@ -208,21 +208,76 @@ typedef struct NtsGObjectSlot {
   void (*entry)(void);
 } NtsGObjectSlot;
 
+/* A class the program registered: its slots for `class_init`, and for one
+ * with fields, where the instance holds them and who makes them. */
 typedef struct NtsGObjectClassData {
+  GType type;
   const NtsGObjectSlot *slots;
   size_t count;
+  void *(*make_state)(void);
+  size_t state_offset;
+  void (*parent_finalize)(GObject *object);
 } NtsGObjectClassData;
 
+/* Every class the program registered, few enough to search in order: one per
+ * `class X extends ...` it constructs. */
+static NtsGObjectClassData **nts_gobject_classes;
+static size_t nts_gobject_class_count;
+
+/* The registered class `type` is, or descends from. */
+static NtsGObjectClassData *nts_gobject_class_of(GType type) {
+  for (; type != 0; type = g_type_parent(type)) {
+    for (size_t at = 0; at < nts_gobject_class_count; at++) {
+      if (nts_gobject_classes[at]->type == type) {
+        return nts_gobject_classes[at];
+      }
+    }
+  }
+  return NULL;
+}
+
+static void **nts_gobject_state_slot(void *instance,
+                                     const NtsGObjectClassData *class) {
+  return (void **)((char *)instance + class->state_offset);
+}
+
+/* `finalize` for a class with fields: the fields given back, then the
+ * parent's. */
+static void nts_gobject_finalize(GObject *object) {
+  NtsGObjectClassData *class = nts_gobject_class_of(G_OBJECT_TYPE(object));
+  void **slot = nts_gobject_state_slot(object, class);
+  void *state = *slot;
+  *slot = NULL;
+  if (state) {
+    nts_release(state);
+  }
+  class->parent_finalize(object);
+}
+
 static void nts_gobject_class_init(gpointer klass, gpointer data) {
-  const NtsGObjectClassData *table = data;
+  NtsGObjectClassData *table = data;
   for (size_t at = 0; at < table->count; at++) {
     memcpy((char *)klass + table->slots[at].offset, &table->slots[at].entry,
            sizeof table->slots[at].entry);
   }
+  if (table->make_state) {
+    GObjectClass *object_class = G_OBJECT_CLASS(klass);
+    table->parent_finalize =
+        G_OBJECT_CLASS(g_type_class_peek_parent(klass))->finalize;
+    object_class->finalize = nts_gobject_finalize;
+  }
+}
+
+/* `instance_init` for a class with fields: they hold their initial values by
+ * the time `new` returns, as JavaScript's do. */
+static void nts_gobject_instance_init(GTypeInstance *instance,
+                                      gpointer g_class) {
+  NtsGObjectClassData *class = nts_gobject_class_of(G_TYPE_FROM_CLASS(g_class));
+  *nts_gobject_state_slot(instance, class) = class->make_state();
 }
 
 size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
-                            size_t count) {
+                            size_t count, void *(*make_state)(void)) {
   GTypeQuery query;
   g_type_query((GType)parent, &query);
   if (query.type == 0) {
@@ -230,15 +285,37 @@ size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
     abort();
   }
   /* Lives as long as the type, which is as long as the program. */
-  NtsGObjectClassData *data = g_new(NtsGObjectClassData, 1);
+  NtsGObjectClassData *data = g_new0(NtsGObjectClassData, 1);
   data->slots = slots;
   data->count = count;
+  data->make_state = make_state;
   GTypeInfo info = {0};
   info.class_size = (guint16)query.class_size;
   info.class_init = nts_gobject_class_init;
   info.class_data = data;
   info.instance_size = (guint16)query.instance_size;
-  return (size_t)g_type_register_static((GType)parent, name, &info, 0);
+  if (make_state) {
+    size_t align = sizeof(void *);
+    data->state_offset = (query.instance_size + align - 1) / align * align;
+    info.instance_size = (guint16)(data->state_offset + sizeof(void *));
+    info.instance_init = nts_gobject_instance_init;
+  }
+  data->type = g_type_register_static((GType)parent, name, &info, 0);
+  nts_gobject_classes = g_renew(NtsGObjectClassData *, nts_gobject_classes,
+                                nts_gobject_class_count + 1);
+  nts_gobject_classes[nts_gobject_class_count++] = data;
+  return (size_t)data->type;
+}
+
+void *nts_gobject_state(void *instance) {
+  NtsGObjectClassData *class =
+      nts_gobject_class_of(G_TYPE_FROM_INSTANCE(instance));
+  if (!class || !class->make_state) {
+    fprintf(stderr, "nts: %s has no fields of a program's class to read\n",
+            G_OBJECT_TYPE_NAME(instance));
+    abort();
+  }
+  return *nts_gobject_state_slot(instance, class);
 }
 
 void *nts_gobject_new(size_t type) {

@@ -26,7 +26,7 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 
-expected="clicked 0! clicked 0!! type Nts_Counter plain p measure 42 17 square Nts_Square "
+expected="clicked 0! clicked 0!! type Nts_Counter count 2 seen 0|0! plain p measure 42 17 square Nts_Square "
 for mode in plain rc; do
   flag=""
   [ "$mode" = rc ] && flag="--rc"

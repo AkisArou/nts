@@ -1770,6 +1770,12 @@ void nts_objc_register_class(const char *name, const char *superclass,
  * an instance that did not come through `init` -- one the platform decoded,
  * or initialised another way. */
 void *nts_objc_state(void *self);
+/* The object holding the fields of `instance`, an instance of a class the
+ * program wrote over a GObject class and gave fields, lent for as long as
+ * `instance` lives. Defined by the GObject support file (`nts_gobject.c`),
+ * which only a program registering such a class links, and declared here for
+ * the one table every backend reads, as `nts_objc_state` is. */
+void *nts_gobject_state(void *instance);
 /* That a registered class adopts `protocol` (`implements NSWindowDelegate`),
  * so `conformsToProtocol:` answers for it. A protocol no loaded image
  * mentions has no runtime object, and adopting it is skipped: nothing could

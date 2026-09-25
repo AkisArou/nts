@@ -171,6 +171,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_environment_install_platform", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_environment_leave", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_environment_platform", returns: "ptr", params: &[], attributes: &[] },
+    Signature { name: "nts_gobject_state", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_has_pending_work", returns: "zeroext i1", params: &[], attributes: &[] },
     Signature { name: "nts_host_install", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_in_callback", returns: "zeroext i1", params: &[], attributes: &[] },

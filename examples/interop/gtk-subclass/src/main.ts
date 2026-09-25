@@ -8,6 +8,8 @@
 //                 `clicked` signal: `this` is the button, and it calls one of
 //                 its class's own methods (`suffix`)
 //   type Nts_Counter  the instance is of the class's own GType
+//   count 2 seen 0|0!  its fields, which the override wrote, read from
+//                 outside the class: they live in an object the instance holds
 //   plain p       a `GtkButton` made beside it keeps GTK's `clicked`: the
 //                 override is the subclass's, not the parent's
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
@@ -28,11 +30,18 @@ import { local } from "c:memory";
 import { sub_emit, sub_log } from "c:sub";
 
 class Counter extends GtkButton {
+  // Fields: an object of the program's own that the instance holds, made by
+  // `instance_init` and given back by `finalize`.
+  count = 0;
+  readonly seen: string[] = [];
+
   suffix(): string {
     return "!";
   }
 
   vfunc_clicked(): void {
+    this.count++;
+    this.seen.push(this.label ?? "");
     this.set_label((this.label ?? "") + this.suffix());
     sub_log("clicked " + (this.label ?? ""));
   }
@@ -62,6 +71,7 @@ function main(): void {
   sub_emit(counter, "clicked");
   sub_emit(counter, "clicked");
   sub_log("type " + g_type_name_from_instance(counter));
+  sub_log("count " + String(counter.count) + " seen " + counter.seen.join("|"));
   const plain = new GtkButton({ label: "p" });
   sub_emit(plain, "clicked");
   sub_log("plain " + (plain.label ?? ""));

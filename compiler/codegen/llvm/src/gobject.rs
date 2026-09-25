@@ -45,7 +45,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     if !callbacks_declared {
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
-    out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64)\ndeclare ptr @nts_gobject_new(i64)\n");
+    out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
     for class in classes {
         let name = &class.name;
         let mut slots = Vec::new();
@@ -73,6 +73,26 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             format!("@nts_gobject_slots_{name}")
         };
         text_constant(&mut out, &format!("nts_gobject_name_{name}"), &format!("Nts_{name}"));
+        // The fields' maker, entered and left as an entry point is:
+        // `instance_init` runs wherever GTK makes one.
+        let make_state = match &class.state {
+            Some(state) => {
+                let Some(compiled) = program.funcs.iter().find(|func| &func.name == state) else {
+                    let missing = "a GObject class whose fields' maker this program does not define";
+                    return match program.funcs.first() {
+                        Some(func) => Err(refuse(func, missing)),
+                        None => Ok(String::new()),
+                    };
+                };
+                let _ = writeln!(
+                    out,
+                    "define internal ptr @nts_gobject_state_maker_{name}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
+                    symbol(&compiled.name)
+                );
+                format!("@nts_gobject_state_maker_{name}")
+            }
+            None => "null".to_owned(),
+        };
         let parent = &class.superclass;
         if !called(program, parent) {
             let _ = writeln!(out, "declare i64 @{parent}()");
@@ -84,7 +104,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
              entry:\n  %cached = load i64, ptr @nts_gobject_type_{name}.cache\n  %none = icmp eq i64 %cached, 0\n\
              \x20 br i1 %none, label %register, label %done\n\
              register:\n  %parent = call i64 @{parent}()\n\
-             \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @nts_gobject_name_{name}, ptr {table}, i64 {})\n\
+             \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @nts_gobject_name_{name}, ptr {table}, i64 {}, ptr {make_state})\n\
              \x20 store i64 %made, ptr @nts_gobject_type_{name}.cache\n  br label %done\n\
              done:\n  %type = phi i64 [ %cached, %entry ], [ %made, %register ]\n  ret i64 %type\n}}",
             slots.len()

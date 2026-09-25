@@ -1138,13 +1138,36 @@ impl Carried {
 /// Number a class the program writes over an Objective-C class, if it
 /// declares fields: see [`Hierarchy::objc_states`].
 fn note_objc_state(snapshot: &SemanticSnapshot, probe: &FuncBuilder<'_>, class: NodeId, declared: TypeId, hierarchy: &mut Hierarchy) {
-    if super::native::extends_objc(snapshot, class)
-        && probe.declares_instance_fields(class)
-        && let Some(name) = super::native::objc_name(snapshot, class)
+    if probe.declares_instance_fields(class)
+        && let Some(name) = foreign_class_name(snapshot, class)
     {
         let index = hierarchy.objc_states.len();
         hierarchy.objc_states.insert(name, (index, declared));
     }
+}
+
+/// Whether a class type declares `name` itself and stores it, as the checker
+/// records it: a field of the object holding a foreign class's state.
+fn declares_stored(snapshot: &SemanticSnapshot, class_ty: TypeId, name: &str) -> bool {
+    matches!(
+        snapshot.types.get(class_ty.0 as usize).map(|record| &record.kind),
+        Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.own && p.name == name && p.kind.is_stored())
+    )
+}
+
+/// The name a foreign runtime knows a class the program writes over one of
+/// its classes by: the Objective-C class's, or -- for one over a `GObject`
+/// class -- the class's own, which its registration and state are keyed by.
+/// `None` for a class of the program's own.
+fn foreign_class_name(snapshot: &SemanticSnapshot, class: NodeId) -> Option<String> {
+    if super::native::extends_objc(snapshot, class) {
+        return super::native::objc_name(snapshot, class);
+    }
+    super::native::gobject_parent(snapshot, class)?;
+    snapshot.nodes.get(class.0 as usize)?.children.iter().find_map(|child| {
+        let node = snapshot.nodes.get(child.0 as usize)?;
+        matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER)).then(|| node.text.clone()).flatten()
+    })
 }
 
 /// Read every class declaration's name, base and own methods.
@@ -6020,7 +6043,8 @@ fn lower_class(
         register_objc_class(snapshot, class, objc_methods, state, lowered);
     }
     if let Some(parent) = gobject {
-        register_gobject_class(snapshot, class, parent, gobject_methods, lowered);
+        let state = objc_state_function(snapshot, foreign, class, shared, lowered);
+        register_gobject_class(snapshot, class, parent, gobject_methods, state, lowered);
     }
     if let Some(composition) = super::native::composable_base(snapshot, class) {
         register_com_class(snapshot, class, composition, com_methods, lowered);
@@ -6029,38 +6053,25 @@ fn lower_class(
 
 /// A class the program writes over a `GObject` class, recorded as the backend
 /// will register it (`Program::foreign_classes`): its own name, the function
-/// answering its parent's `GType`, and the class struct slot each override
-/// fills. A class with fields is refused whole, since its state has nowhere
-/// to live yet -- a `GObject`'s instance struct is its parent's.
+/// answering its parent's `GType`, the class struct slot each override fills,
+/// and the maker of the object holding its fields (`{Class}#state`), which
+/// the support file's `instance_init` calls and `finalize` releases.
 fn register_gobject_class(
     snapshot: &SemanticSnapshot,
     class: NodeId,
     parent: String,
     methods: Vec<super::ForeignMethod>,
+    state: Option<String>,
     lowered: &mut Lowered,
 ) {
-    let probe = FuncBuilder::probe(snapshot);
-    let Some(name) = probe.children(class).into_iter().find_map(|child| {
-        (probe.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| probe.node(child).text.clone()).flatten()
-    }) else {
-        return;
-    };
-    if probe.declares_instance_fields(class) {
-        let diagnostic = probe.unsupported(
-            class,
-            &format!("fields of `{name}`, a class extending a GObject class, whose state has nowhere to live yet"),
-        );
-        note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
-        lowered.diagnostics.push(diagnostic);
-        return;
-    }
+    let Some(name) = foreign_class_name(snapshot, class) else { return };
     lowered.program.foreign_classes.push(super::ForeignClass {
         family: super::native::Family::GObject,
         name,
         superclass: parent,
         methods,
         protocols: Vec::new(),
-        state: None,
+        state,
         composition: None,
     });
 }
@@ -6167,7 +6178,7 @@ fn objc_state_function(
     shared: &Shared,
     lowered: &mut Lowered,
 ) -> Option<String> {
-    let name = super::native::objc_name(snapshot, class)?;
+    let name = foreign_class_name(snapshot, class)?;
     let &(index, class_ty) = shared.hierarchy.objc_states.get(&name)?;
     let mut builder = shared.builder(snapshot, foreign, Copy::default());
     match builder.lower_objc_state(class, &name, index, class_ty) {
@@ -13946,6 +13957,13 @@ impl<'a> FuncBuilder<'a> {
         if !name.starts_with("vfunc_") {
             return Ok((self.lower_method_of(class, member, instance)?, None));
         }
+        // `finalize` is where a class's fields are given back, and the
+        // registration installs its own for a class with fields; an override
+        // would be written over, and one without chaining up would leak the
+        // parent's. `dispose` is the one to override.
+        if name == "vfunc_finalize" {
+            return Err(self.unsupported(member, "an override of `vfunc_finalize`, which gives the class's fields back; override `vfunc_dispose`"));
+        }
         let receiver = instance
             .or_else(|| instance_type_of(self.snapshot, class))
             .and_then(|ty| super::native::pointer(self.snapshot, ty));
@@ -14351,7 +14369,7 @@ impl<'a> FuncBuilder<'a> {
                     ) => {
                         return Err(self.unsupported(
                             node,
-                            "a field initialiser of a class extending an Objective-C class that calls, reads a member or reads `this`: it runs inside `init`, before the instance holds its fields, so anything it reaches could message the half-made instance",
+                            "a field initialiser of a class extending an Objective-C or `GObject` class that calls, reads a member or reads `this`: it runs inside `init` (or `instance_init`), before the instance holds its fields, so anything it reaches could reach the half-made instance",
                         ));
                     }
                     _ => pending.extend(self.children(node)),
@@ -14367,10 +14385,7 @@ impl<'a> FuncBuilder<'a> {
     fn is_program_objc_field(&self, pointee: &super::native::Pointee, name: &str) -> bool {
         let Some(handle) = opaque_handle(pointee) else { return false };
         let Some(&(_, class_ty)) = self.hierarchy.objc_states.get(&handle.tag) else { return false };
-        matches!(
-            self.snapshot.types.get(class_ty.0 as usize).map(|record| &record.kind),
-            Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.own && p.name == name && p.kind.is_stored())
-        )
+        declares_stored(self.snapshot, class_ty, name)
     }
 
     /// The layout of the object holding the fields of the `index`th
@@ -14410,13 +14425,39 @@ impl<'a> FuncBuilder<'a> {
     fn program_objc_instance_place(&mut self, id: NodeId, receiver: ValueId, member: &str) -> Result<Option<Place>, Diagnostic> {
         let HirType::NativePointer(pointee) = &self.values[receiver.0 as usize].ty else { return Ok(None) };
         let Some(handle) = opaque_handle(pointee) else { return Ok(None) };
-        let Some(&(index, class_ty)) = self.hierarchy.objc_states.get(&handle.tag) else { return Ok(None) };
+        // An Objective-C class's instances carry its own name as their tag; a
+        // `GObject` subclass's carry the parent's struct, which says nothing
+        // of which class this is, so its fields are found by the receiver's
+        // type (`gobject_state_of`) and read through `nts_gobject_state`.
+        let (index, class_ty, reader) = if let Some(&(index, class_ty)) = self.hierarchy.objc_states.get(&handle.tag) {
+            (index, class_ty, "nts_objc_state")
+        } else if let Some((index, class_ty)) = self.gobject_state_of(id) {
+            (index, class_ty, "nts_gobject_state")
+        } else {
+            return Ok(None);
+        };
         let layout = self.objc_state_layout(id, index, class_ty)?;
         let Some(field) = layout.index_of(member) else { return Ok(None) };
         let ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
         let origin = self.origin(id);
-        let object = self.runtime_call("nts_objc_state", vec![receiver], ty, origin);
+        let object = self.runtime_call(reader, vec![receiver], ty, origin);
         Ok(Some(Place::Field { object, field }))
+    }
+
+    /// The state of the `GObject` subclass the program writes that the
+    /// receiver of `access` (`this.count`, `counter.count`) is an instance
+    /// of, by the receiver's type: its index and class type, as
+    /// `note_objc_state` numbered it. `None` for any other receiver.
+    fn gobject_state_of(&self, access: NodeId) -> Option<(usize, TypeId)> {
+        let receiver = *self.children(access).first()?;
+        let ty = self.class_behind(*self.snapshot.node_types.get(&receiver)?);
+        let symbol = self.snapshot.types.get(ty.0 as usize)?.symbol?;
+        let class = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().copied().find(|d| {
+            self.kind_of(*d) == Some(syntax::CLASS_DECLARATION)
+        })?;
+        super::native::gobject_parent(self.snapshot, class)?;
+        let name = foreign_class_name(self.snapshot, class)?;
+        self.hierarchy.objc_states.get(&name).copied()
     }
 
     /// The Objective-C protocols a class the program writes adopts: each
@@ -36317,7 +36358,10 @@ impl<'a> FuncBuilder<'a> {
             // A field of a class the program writes over an Objective-C class,
             // which `program_objc_instance_place` reads from its ivar's object.
             let field = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
-                && children.last().and_then(|member| self.literal_name(*member)).is_some_and(|name| self.is_program_objc_field(&pointee, &name));
+                && children.last().and_then(|member| self.literal_name(*member)).is_some_and(|name| {
+                    self.is_program_objc_field(&pointee, &name)
+                        || self.gobject_state_of(id).is_some_and(|(_, class_ty)| declares_stored(self.snapshot, class_ty, &name))
+                });
             if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field || accessor || field) {
                 return Err(self.unsupported(id, "a property read through a native pointer"));
             }

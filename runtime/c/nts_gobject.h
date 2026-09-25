@@ -31,9 +31,15 @@ gulong nts_gobject_connect(gpointer instance, const gchar *detailed_signal,
  * `offsetof` of the slot, which the binding recorded and its witness checked
  * -- and the entry point written there, and must live as long as the program:
  * a type is never unregistered. Plain `size_t` for `GType`, which is `gsize`,
- * so that `program.c` can declare this without GLib's headers. */
+ * so that `program.c` can declare this without GLib's headers.
+ *
+ * `make_state` is non-NULL for a class that declares fields: the program's
+ * function making the object that holds them, its initialisers run. The
+ * instance is then one pointer larger than the parent's, holding that object,
+ * made by `instance_init` and given back by `finalize` -- which chains to the
+ * parent's -- and `nts_gobject_state` (in `nts_runtime.h`) reads it. */
 size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
-                            size_t count);
+                            size_t count, void *(*make_state)(void));
 
 /* One instance of `type`, and one reference to it the caller owns: a floating
  * reference -- a widget's -- is sunk here, so the program counts the same
