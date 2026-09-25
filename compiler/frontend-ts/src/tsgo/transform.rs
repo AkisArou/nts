@@ -36,6 +36,24 @@ pub trait SourceTransform: std::fmt::Debug {
     /// text, or `None` to keep it. Each revision must undo some of the
     /// rewrite, so that revising ends.
     fn revise(&mut self, path: &Utf8Path, errors: &[(u32, u32)]) -> Option<String>;
+
+    /// What the transform has to say about `path` once it has settled -- a
+    /// part of the rewrite it gave back, a file it could not take -- which
+    /// the snapshot records beside tsgo's diagnostics, so a build served from
+    /// the snapshot cache reports it too.
+    fn diagnostics(&self, path: &Utf8Path) -> Vec<Reported> {
+        let _ = path;
+        Vec::new()
+    }
+}
+
+/// A transform's diagnostic on a file, as a whole.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reported {
+    pub severity: nts_diagnostics::Severity,
+    /// Stable, greppable: `NTS0004`.
+    pub code: &'static str,
+    pub message: String,
 }
 
 /// A file offered to a transform.

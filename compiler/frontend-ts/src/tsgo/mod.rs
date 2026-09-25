@@ -1278,6 +1278,44 @@ impl TsgoApi {
         let (opened, rewritten) = transform::apply(transform, &mut client, opened, root)?;
         Ok((client, opened, rewritten))
     }
+
+    /// The snapshot's diagnostics: tsgo's, then the source transform's.
+    fn diagnose(
+        &self,
+        client: &mut Client,
+        snapshot: &mut SemanticSnapshot,
+        opened: &UpdateSnapshotResponse,
+        rewritten: &[String],
+    ) -> Result<(), TsgoError> {
+        collect_diagnostics(client, snapshot, opened)?;
+        self.record_transform(snapshot, rewritten);
+        Ok(())
+    }
+
+    /// What the source transform did, in the snapshot: which files it
+    /// rewrote, and what it has to say about each of them.
+    fn record_transform(&self, snapshot: &mut SemanticSnapshot, rewritten: &[String]) {
+        let Some(transform) = &self.transform else { return };
+        let identity = transform.identity();
+        for (index, source) in snapshot.sources.iter_mut().enumerate() {
+            if rewritten.iter().any(|path| path.as_str() == source.display_path.as_str()) {
+                source.rewritten_by = Some(identity.clone());
+            }
+            let file = SourceId(u32::try_from(index).unwrap_or(u32::MAX));
+            snapshot.diagnostics.extend(transform.diagnostics(&source.display_path).into_iter().map(|reported| {
+                nts_diagnostics::Diagnostic {
+                    severity: reported.severity,
+                    code: reported.code.to_owned(),
+                    message: reported.message,
+                    // The file as a whole: a function the transform gave back
+                    // is named in the message, and its span in the rewritten
+                    // text would point at nothing on disk.
+                    primary: nts_diagnostics::Location { file, span: nts_diagnostics::Span::new(0, 0) },
+                    labels: Vec::new(),
+                }
+            }));
+        }
+    }
 }
 
 impl SemanticSource for TsgoApi {
@@ -1363,7 +1401,7 @@ impl SemanticSource for TsgoApi {
                     // answer to a question that has one.
                     digest: Digest(decoded.content_hash),
                     display_path: path.to_owned(),
-                    rewritten_by: rewritten.iter().any(|done| done == path.as_str()).then(|| self.identity()),
+                    rewritten_by: None,
                 });
             }
         }
@@ -1374,7 +1412,7 @@ impl SemanticSource for TsgoApi {
         // point at.
         link_modules(&mut snapshot);
 
-        collect_diagnostics(&mut client, &mut snapshot, &opened)?;
+        self.diagnose(&mut client, &mut snapshot, &opened, &rewritten)?;
 
         let DeepStats {
             decomposed,

@@ -13,7 +13,8 @@ use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_frontend_ts::tsgo::ast::EncodedSourceFile;
-use nts_frontend_ts::tsgo::transform::{NodeTypes, SourceTransform, TransformInput};
+use nts_diagnostics::Severity;
+use nts_frontend_ts::tsgo::transform::{NodeTypes, Reported, SourceTransform, TransformInput};
 use nts_semantic_schema::NodeId;
 use rustc_hash::FxHashMap;
 use serde_json::Value;
@@ -114,6 +115,19 @@ impl TypeOracle for Remembered<'_> {
     }
 }
 
+/// A function as a reader finds it in their own file on disk -- not in the
+/// rewritten text, which no disk holds: its name where the compiler knows
+/// it, and where it is.
+fn described(function: &Function, path: &Utf8Path, code: &str) -> String {
+    let units: Vec<u16> = code.encode_utf16().collect();
+    let before = String::from_utf16_lossy(&units[..(function.span.0 as usize).min(units.len())]);
+    let line = before.matches('\n').count() + 1;
+    match &function.name {
+        Some(name) => format!("`{name}` ({path}:{line})"),
+        None => format!("the function at {path}:{line}"),
+    }
+}
+
 impl SourceTransform for ReactTransform {
     fn identity(&self) -> String {
         let options = serde_json::to_string(&self.options).unwrap_or_default();
@@ -137,6 +151,30 @@ impl SourceTransform for ReactTransform {
         let rewritten = outcome.changed.then_some(outcome.text);
         self.files.insert(file.path.to_owned(), state);
         rewritten
+    }
+
+    fn diagnostics(&self, path: &Utf8Path) -> Vec<Reported> {
+        let warning = |code, message| Reported { severity: Severity::Warning, code, message };
+        let mut reported = Vec::new();
+        if let Some(why) = self.report.lock().ok().and_then(|report| report.get(path).and_then(|r| r.refused.clone())) {
+            reported.push(warning("NTS0006", format!("the React stage could not take {path}, so it is read as written: {why}")));
+        }
+        let Some(state) = self.files.get(path) else { return reported };
+        for function in &state.functions {
+            let message = if state.print.as_written.contains(&function.span) {
+                format!(
+                    "{} is built as written: the React Compiler's form of it did not typecheck, so it is not memoized",
+                    described(function, path, &state.code)
+                )
+            } else if let FunctionState::Failed(reason) = &function.state {
+                format!("the React Compiler left {} as written: {reason}", described(function, path, &state.code))
+            } else {
+                continue;
+            };
+            let code = if state.print.as_written.contains(&function.span) { "NTS0004" } else { "NTS0005" };
+            reported.push(warning(code, message));
+        }
+        reported
     }
 
     fn revise(&mut self, path: &Utf8Path, errors: &[(u32, u32)]) -> Option<String> {

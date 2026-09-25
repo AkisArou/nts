@@ -37,6 +37,13 @@ fn nts_reads_the_project_compiled_and_without_jsx() {
     let snapshot = TsgoApi::new(&tsgo).with_transform(Box::new(transform)).snapshot(&fixtures()).unwrap();
     assert!(!snapshot.nodes.iter().any(|n| matches!(n.kind, NodeKind::Syntax(kind) if is_jsx(kind))), "every file nts read had its JSX lowered");
 
+    // The compiler's bailout on `Conditional` is a warning in the snapshot,
+    // on the file, naming the function by its line.
+    let bailout = snapshot.diagnostics.iter().find(|d| d.code == "NTS0005").expect("the bailout is reported");
+    assert_eq!(snapshot.sources[bailout.primary.file.0 as usize].display_path.file_name(), Some("bailout.tsx"));
+    assert!(bailout.message.contains("left the function at ") && bailout.message.contains("/fixtures/jsx-lowering/bailout.tsx:5 as written") && bailout.message.contains("Hooks"), "{}", bailout.message);
+    assert_eq!(snapshot.diagnostics.iter().filter(|d| d.code == "NTS0005").count(), 1, "and nothing else bailed out");
+
     let report = report.lock().unwrap();
     let keys = report.iter().find(|(path, _)| path.file_name() == Some("keys.tsx")).map(|(_, r)| r).expect("keys.tsx was offered");
     let component = keys.functions.iter().find(|f| f.name.as_deref() == Some("Keys")).expect("Keys is reported");
@@ -64,6 +71,7 @@ fn an_error_inside_a_compiled_function_gives_it_back_as_written() {
     let code = std::fs::read_to_string(&path).unwrap();
 
     let (mut transform, report) = ReactTransform::new(stage::default_options());
+    assert!(transform.diagnostics(&path).is_empty(), "nothing to say before the file is offered");
     let compiled = transform.transform(&TransformInput { path: &path, text: &code, tree: &tree }, &mut NoTypes).expect("keys.tsx is rewritten");
     let keys = report.lock().unwrap()[&path].functions.iter().find(|f| f.name.as_deref() == Some("Keys")).cloned().unwrap();
     let (start, end) = keys.output.expect("compiled");
@@ -81,6 +89,10 @@ fn an_error_inside_a_compiled_function_gives_it_back_as_written() {
     let head = keys_as_written.split('<').next().unwrap();
     assert!(revised.contains(head) && !revised.contains("$[0]"), "Keys as the user wrote it");
     assert_eq!(report.lock().unwrap()[&path].fell_back, vec![keys.span]);
+    let said: Vec<_> = transform.diagnostics(&path).into_iter().map(|d| (d.code, d.message)).collect();
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert_eq!(said[0].0, "NTS0004");
+    assert!(said[0].1.starts_with(&format!("`Keys` ({path}:6) is built as written")), "{}", said[0].1);
     // Nothing more to give back.
     assert_eq!(transform.revise(&path, &[(start + 1, start + 2)]), None);
 }
