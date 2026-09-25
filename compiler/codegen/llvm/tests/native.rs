@@ -4131,6 +4131,28 @@ int thing_record(struct _Thing *t) { return t->record; }
 }
 
 /// A C function a binding declares as a static member of a value -- GJS's
+/// A virtual function (`@ntsVfunc`) is a class struct's slot a subclass
+/// overrides and has no C symbol: a direct call is refused by name, not
+/// lowered to a call of a symbol named after the method.
+#[test]
+fn a_direct_call_of_a_virtual_function_is_refused_by_name() {
+    let Some((_, prepared)) = prepare("vfunc-direct", r#"
+import type { GObjectClass } from "c:types";
+type Knob = GObjectClass<"_Knob"> & {
+    /**
+     * @ntsVfunc KnobClass turned
+     */
+    vfunc_turned(this: Knob): void;
+};
+declare function knob_new(): Knob;
+export function run(): void {
+    knob_new().vfunc_turned();
+}
+"#) else { return; };
+    let text = format!("{:?}", prepared.diagnostics);
+    assert!(text.contains("a direct call of a GObject virtual function (`KnobClass turned`)"), "{text}");
+}
+
 /// `stringFrom(p)`: a `char *` read out of a slot into a program string, on
 /// both backends -- the UTF-8 decoded (`é` is one unit, 233), an ill-formed
 /// byte one U+FFFD (65533) and not dropped, and NULL `null`.

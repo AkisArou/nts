@@ -3984,6 +3984,9 @@ const DEMO_HEADER: &str = "#ifndef DEMO_H\n#define DEMO_H\n#include <stddef.h>\n
          int demo_count_args(int argc, char **argv);\n\
          char **demo_split(const char *text);\n\
          int demo_checksum(const uint8_t *data, size_t length);\n\
+         typedef struct _DemoWidget { int size; } DemoWidget;\n\
+         typedef struct _DemoWidgetClass { int (*measure)(DemoWidget *widget, int for_size); long (*wrong)(DemoWidget *widget); } DemoWidgetClass;\n\
+         unsigned long demo_widget_get_type(void);\n\
          #endif\n";
 
 /// The C behind [`DEMO_HEADER`].
@@ -4000,11 +4003,33 @@ const DEMO_SOURCE: &str = "#include <demo.h>\n#include <stdlib.h>\n#include <str
          void demo_thing_name(const DemoThing *thing, char **name) { (void)thing; *name = demo_name; }\n\
          int demo_count_args(int argc, char **argv) { return argv == NULL ? -1 : argc; }\n\
          char **demo_split(const char *text) { (void)text; return NULL; }\n\
-         int demo_checksum(const uint8_t *data, size_t length) { int sum = 0; for (size_t i = 0; i < length; i++) sum += data[i]; return sum; }\n";
+         int demo_checksum(const uint8_t *data, size_t length) { int sum = 0; for (size_t i = 0; i < length; i++) sum += data[i]; return sum; }\n\
+         unsigned long demo_widget_get_type(void) { return 1; }\n";
+
+/// A class with a class struct, for [`demo_gir`]: two virtual functions, one
+/// whose GIR agrees with the header and one, `wrong`, whose GIR does not.
+const DEMO_WIDGET_GIR: &str = r#"    <class name="Widget" c:type="DemoWidget" glib:type-name="DemoWidget" glib:get-type="demo_widget_get_type" glib:type-struct="WidgetClass">
+      <virtual-method name="measure">
+        <return-value><type name="gint" c:type="int"/></return-value>
+        <parameters>
+          <instance-parameter name="widget"><type name="Widget" c:type="DemoWidget*"/></instance-parameter>
+          <parameter name="for_size"><type name="gint" c:type="int"/></parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="wrong">
+        <return-value><type name="gint" c:type="gint"/></return-value>
+        <parameters>
+          <instance-parameter name="widget"><type name="Widget" c:type="DemoWidget*"/></instance-parameter>
+        </parameters>
+      </virtual-method>
+    </class>
+    <record name="WidgetClass" c:type="DemoWidgetClass" glib:is-gtype-struct-for="Widget"/>
+"#;
 
 /// The Demo library's GIR, for [`gir_library`]: `high` is the flags' high
 /// member as GIR writes it.
 fn demo_gir(high: &str) -> String {
+    let widget = DEMO_WIDGET_GIR;
     format!(
         r#"<?xml version="1.0"?>
 <repository version="1.2" xmlns="http://www.gtk.org/introspection/core/1.0"
@@ -4047,7 +4072,7 @@ fn demo_gir(high: &str) -> String {
         </parameters>
       </method>
     </record>
-    <callback name="Tick" c:type="DemoTick">
+{widget}    <callback name="Tick" c:type="DemoTick">
       <return-value><type name="none" c:type="void"/></return-value>
       <parameters>
         <parameter name="thing"><type name="Thing" c:type="DemoThing*"/></parameter>
@@ -4214,6 +4239,18 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         "no values wrapper for `demo_thing_size`:\n{values}"
     );
     assert!(!values.contains("demo_thing_count_values"), "a method with no out parameter has a values form:\n{values}");
+    // A virtual function: its class struct's member, with no symbol,
+    // written as the `vfunc_` method a subclass overrides -- and checked
+    // against the member's type in the header as a function is against its
+    // prototype, so GIR's `gint` for a `long` member is refused.
+    assert!(
+        binding.contains(
+            "     * @ntsVfunc DemoWidgetClass measure\n     */\n    vfunc_measure(this: DemoWidget, for_size: CNumber<\"int\">): CNumber<\"int\">;"
+        ),
+        "no `vfunc_measure`:\n{binding}"
+    );
+    assert!(!binding.contains("vfunc_wrong"), "a virtual function the header contradicts was kept:\n{binding}");
+    assert!(!binding.contains("export function DemoWidgetClass_"), "a virtual function was exported as a function:\n{binding}");
     assert!(!binding.contains("demo_wrong"), "a declaration the header contradicts was kept:\n{binding}");
     let refused = std::fs::read_to_string(out.join("Demo-1.0.refused.txt")).expect("the report");
     assert!(
@@ -4224,6 +4261,10 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     assert!(
         refused.lines().any(|line| line == "demo_missing\tdeclared by none of the headers GIR names"),
         "demo_missing was not reported as undeclared:\n{refused}"
+    );
+    assert!(
+        refused.lines().any(|line| line.starts_with("DemoWidgetClass_wrong\t") && line.contains("the header disagrees")),
+        "the contradicted virtual function was not reported as one:\n{refused}"
     );
     assert!(
         refused.lines().any(|line| line == "demo_thing_name\ta string out parameter"),

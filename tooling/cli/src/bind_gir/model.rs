@@ -61,6 +61,12 @@ pub(crate) struct Class {
     /// is how `GObject` sits on `GTypeInstance` with no GIR parent to say so.
     pub(crate) first_field: Option<TypeRef>,
     pub(crate) callables: Vec<Callable>,
+    /// `glib:type-struct`: the record that is this class's class struct
+    /// (`ButtonClass`), whose members are its virtual functions.
+    pub(crate) type_struct: Option<String>,
+    /// `<virtual-method>`: the class struct's function members, each named
+    /// as its member is, which a subclass overrides.
+    pub(crate) vfuncs: Vec<Callable>,
     /// `<property>`: each with the methods GIR says read and write it.
     pub(crate) properties: Vec<Property>,
 }
@@ -125,7 +131,7 @@ pub(crate) enum CallableKind {
     Constructor,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Callable {
     pub(crate) name: String,
     /// The C symbol. Absent on a virtual method, which has none.
@@ -142,7 +148,7 @@ pub(crate) struct Callable {
     pub(crate) finish: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Signature {
     pub(crate) instance: Option<Param>,
     pub(crate) parameters: Vec<Param>,

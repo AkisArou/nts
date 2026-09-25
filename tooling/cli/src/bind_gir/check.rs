@@ -128,10 +128,19 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
         };
         let result = function.result.c.c_type_expanded();
         let symbol = &function.symbol;
-        let _ = writeln!(
-            out,
-            "_Static_assert(__builtin_types_compatible_p(__typeof__(&({symbol})), {result} (*)({parameters})), \"{symbol}\");"
-        );
+        // A virtual function is its class struct's member, whose type is the
+        // pointer this compares against.
+        if let Some((class_struct, member)) = &function.vfunc {
+            let _ = writeln!(
+                out,
+                "_Static_assert(__builtin_types_compatible_p(__typeof__((({class_struct} *)0)->{member}), {result} (*)({parameters})), \"{symbol}\");"
+            );
+        } else {
+            let _ = writeln!(
+                out,
+                "_Static_assert(__builtin_types_compatible_p(__typeof__(&({symbol})), {result} (*)({parameters})), \"{symbol}\");"
+            );
+        }
         line += 1;
         lines.insert(line, (function.name.clone(), format!("{result} {symbol}({parameters})")));
     }

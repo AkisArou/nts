@@ -90,7 +90,7 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
         match node.tag_name().name() {
             kind @ ("class" | "interface") => namespace.classes.push(Class {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
-                c_type: c_attribute(node, "type").map(str::to_owned),
+                c_type: class_c_type(node),
                 // An interface has no parent, and its first prerequisite is what
                 // every instance of it also is -- `GObject` for `GFile` -- so it
                 // is the parent a handle upcasts to.
@@ -106,14 +106,7 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                     .map(str::to_owned)
                     .collect(),
                 symbol_prefix: c_attribute(node, "symbol-prefix").map(str::to_owned),
-                signals: node
-                    .children()
-                    .filter(|n| n.tag_name().namespace() == Some(GLIB) && n.tag_name().name() == "signal")
-                    .map(|signal| Signal {
-                        name: attribute(signal, "name").unwrap_or_default().to_owned(),
-                        signature: signature(signal),
-                    })
-                    .collect(),
+                signals: signals(node),
                 properties: properties(node),
                 get_type: node.attribute((GLIB, "get-type")).map(str::to_owned),
                 first_field: node.children().find(|n| is(*n, "field")).and_then(|field| {
@@ -124,6 +117,8 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                     })
                 }),
                 callables: callables(node),
+                type_struct: node.attribute((GLIB, "type-struct")).map(str::to_owned),
+                vfuncs: vfuncs(node),
             }),
             "record" => namespace.records.push(Record {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
@@ -156,6 +151,28 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
         }
     }
     Ok(namespace)
+}
+
+/// A class's `<glib:signal>` elements.
+fn signals(class: Node<'_, '_>) -> Vec<Signal> {
+    class
+        .children()
+        .filter(|n| n.tag_name().namespace() == Some(GLIB) && n.tag_name().name() == "signal")
+        .map(|signal| Signal { name: attribute(signal, "name").unwrap_or_default().to_owned(), signature: signature(signal) })
+        .collect()
+}
+
+/// A class's C type. `GtkSnapshot` has no `c:type`: C declares it a typedef
+/// of `GdkSnapshot`, and GIR leaves the attribute out. Its `glib:type-name`
+/// is the same spelling, and the header says what struct is behind it.
+fn class_c_type(class: Node<'_, '_>) -> Option<String> {
+    c_attribute(class, "type").or_else(|| class.attribute((GLIB, "type-name"))).map(str::to_owned)
+}
+
+/// A class's `<virtual-method>` elements: its class struct's function
+/// members, each named as its member is.
+fn vfuncs(class: Node<'_, '_>) -> Vec<Callable> {
+    class.children().filter(|n| is(*n, "virtual-method")).map(|n| callable(n, CallableKind::Method)).collect()
 }
 
 /// A class's `<property>` elements, each with the methods GIR says read and

@@ -150,6 +150,10 @@ pub(crate) struct Function {
     /// a class rather than a method: a static member of the class's value,
     /// `GtkStringObject.new("x")`, as GJS has it.
     pub(crate) statics: Option<(String, String)>,
+    /// `(class struct, member)` for a virtual function (`@ntsVfunc`): a slot
+    /// a subclass overrides, with no symbol of its own. Written only as a
+    /// method, `vfunc_clicked`, as GJS names an override.
+    pub(crate) vfunc: Option<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -422,6 +426,7 @@ pub(crate) fn bind<'a>(
             Err(reason) => mapper.binding.refused.push((name, reason)),
         }
     }
+    vfuncs(&mut mapper, namespace);
     for class in &namespace.classes {
         for signal in &class.signals {
             let label = format!("{}::{}", class.c_type.as_deref().unwrap_or(&class.name), signal.name);
@@ -446,6 +451,49 @@ pub(crate) fn bind<'a>(
     // names of their own, which is what this compares.
     mapper.binding.functions.dedup_by(|a, b| a.name == b.name);
     mapper.binding
+}
+
+/// Each class's virtual functions, as `vfunc_*` methods naming their class
+/// struct's member. Named after the member (`GtkButtonClass_clicked`) since
+/// they have no symbol, and a name is what tells two apart.
+fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
+    for class in &namespace.classes {
+        let Some(class_struct) = class
+            .type_struct
+            .as_ref()
+            .and_then(|name| namespace.records.iter().find(|record| &record.name == name))
+            .and_then(|record| record.c_type.clone())
+        else {
+            continue;
+        };
+        for vfunc in &class.vfuncs {
+            let label = format!("{class_struct}.{}", vfunc.name);
+            // Mapped as the method it is, under the name it gets here, since
+            // there is no C identifier to map it under.
+            let named = Callable { c_identifier: Some(format!("{class_struct}_{}", vfunc.name)), ..vfunc.clone() };
+            match mapper.function(&named, Some(class)) {
+                Ok(function) => {
+                    let Some((class, _)) = function.method.clone() else {
+                        mapper.binding.refused.push((label, Reason::OutParameter));
+                        continue;
+                    };
+                    let name = format!("{class_struct}_{}", vfunc.name);
+                    mapper.binding.functions.push(Function {
+                        name: name.clone(),
+                        symbol: name,
+                        method: Some((class, format!("vfunc_{}", identifier(&vfunc.name)))),
+                        method_only: true,
+                        statics: None,
+                        finish: None,
+                        vfunc: Some((class_struct.clone(), vfunc.name.clone())),
+                        ..function
+                    });
+                }
+                Err(Reason::Shadowed) => {}
+                Err(reason) => mapper.binding.refused.push((label, reason)),
+            }
+        }
+    }
 }
 
 /// A method of the class its instance is: `this` on that class's methods.
@@ -563,6 +611,7 @@ impl<'a> Mapper<'a> {
                     omissible: BTreeMap::new(),
                     method_only: false,
                     statics: None,
+                    vfunc: None,
                 });
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
@@ -835,6 +884,7 @@ impl<'a> Mapper<'a> {
             omissible,
             method_only: false,
             statics,
+            vfunc: None,
         })
     }
 
@@ -1320,6 +1370,7 @@ impl<'a> Mapper<'a> {
             omissible: BTreeMap::from([("connect_flags".to_owned(), "0")]),
             method_only: true,
             statics: None,
+            vfunc: None,
         })
     }
 
@@ -1527,6 +1578,7 @@ impl<'a> Mapper<'a> {
             ]),
             method_only: false,
             statics: None,
+            vfunc: None,
         })
     }
 

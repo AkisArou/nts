@@ -801,6 +801,17 @@ pub struct NativeAttributes {
     /// runtime class's default constructor, answering its default interface.
     #[serde(default)]
     pub activate: Option<String>,
+    /// `@ntsVfunc GtkButtonClass clicked`: a `GObject` virtual function -- the
+    /// member `clicked` of the class struct `GtkButtonClass` -- declared as
+    /// `vfunc_clicked(this: GtkButton)`, which a subclass the program writes
+    /// overrides. It has no C symbol.
+    #[serde(default)]
+    pub vfunc: Option<String>,
+    /// `@ntsGType gtk_button_get_type`, on the construct signature of a value
+    /// a binding declares beside a `GObject` class: the function answering the
+    /// class's `GType`, which a subclass the program writes registers under.
+    #[serde(default)]
+    pub gtype: Option<String>,
 }
 
 /// Why a snapshot was rejected.

@@ -42042,7 +42042,7 @@ impl<'a> FuncBuilder<'a> {
             .node(declaration)
             .native
             .as_ref()
-            .is_some_and(|n| n.symbol.is_some() || n.selector.is_some() || n.vtable.is_some() || n.query.is_some());
+            .is_some_and(|n| n.symbol.is_some() || n.selector.is_some() || n.vtable.is_some() || n.query.is_some() || n.vfunc.is_some());
         // Or a method of an Objective-C class a binding declares, whose
         // receiver is the object it is called on, or the class when `static`.
         let objc_member = self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
@@ -43217,6 +43217,15 @@ impl<'a> FuncBuilder<'a> {
         // it, so a program carries the headers it reaches rather than every one
         // in the snapshot.
         native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
+        // A virtual function is a class struct's slot, overridden by a
+        // subclass and reached through the class; it has no symbol, so a
+        // direct call would link one that does not exist.
+        if let Some(slot) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.vfunc.as_deref()) {
+            return Err(self.unsupported(
+                call,
+                &format!("a direct call of a GObject virtual function (`{slot}`), which a subclass overrides and nothing calls by name"),
+            ));
+        }
         if let Some(decl) = declaration {
             native.frameworks = self.declared_names(call, decl, LinkTag::FRAMEWORK)?;
             native.libraries = self.declared_names(call, decl, LinkTag::LIBRARY)?;

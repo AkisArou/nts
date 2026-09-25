@@ -97,7 +97,12 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods;");
                     let _ = writeln!(out, "  export type {name} = {class}<\"{tag}\"> & {name}Methods;");
                 }
-                construction(&mut out, binding, &own, name, parent.as_ref().map(|(_, parent)| parent.as_str()), implements);
+                // A GObject class a program may subclass: its `GType`'s
+                // function, which the subclass registers under.
+                let gtype = (*counted && !*interface)
+                    .then(|| binding.casts.iter().find(|cast| cast.class == *name).map(|cast| cast.get_type.as_str()))
+                    .flatten();
+                construction(&mut out, binding, &own, name, parent.as_ref().map(|(_, parent)| parent.as_str()), implements, gtype);
             }
         }
     }
@@ -207,6 +212,7 @@ fn construction(
     name: &str,
     parent: Option<&str>,
     implements: &[(String, String)],
+    gtype: Option<&str>,
 ) {
     // The parent's, and each implemented interface's: `new GtkBox({
     // orientation })` sets `GtkOrientable`'s.
@@ -264,10 +270,22 @@ fn construction(
         .iter()
         .filter(|f| f.statics.as_ref().is_some_and(|(class, _)| class == name))
         .collect();
-    if construct.is_none() && statics.is_empty() {
+    if construct.is_none() && statics.is_empty() && gtype.is_none() {
         return;
     }
-    let _ = writeln!(out, "  export const {name}: {{");
+    // `class Counter extends GtkButton`: the value names the class's `GType`
+    // (`@ntsGType`), and a class with no construct signature of its own --
+    // `GtkWidget`, abstract -- gets an abstract one, so it can be extended and
+    // still not constructed.
+    if let Some(gtype) = gtype {
+        let _ = writeln!(out, "  /**\n   * @ntsGType {gtype}\n   */");
+    }
+    let abstract_construct = if construct.is_none() && gtype.is_some() {
+        format!("(abstract new (props?: {name}Props) => {name}) & ")
+    } else {
+        String::new()
+    };
+    let _ = writeln!(out, "  export const {name}: {abstract_construct}{{");
     out.push_str(construct.as_deref().unwrap_or_default());
     for function in statics {
         static_member(out, function);
@@ -309,6 +327,7 @@ pub(crate) fn promise_forms(binding: &Binding) -> Vec<(&Function, &Function)> {
     binding
         .functions
         .iter()
+        .filter(|start| start.vfunc.is_none())
         .filter_map(|start| {
             let (class, _) = start.method.as_ref()?;
             let finish_name = start.finish.as_ref()?;
@@ -336,6 +355,7 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
         .iter()
         .filter(|function| {
             function.method.is_some()
+                && function.vfunc.is_none()
                 && function.parameters.iter().any(|(_, mapped)| matches!(mapped.shape, Shape::Out { .. }))
                 && function.parameters.iter().all(|(name, mapped)| {
                     function.throws.as_deref() == Some(name.as_str())
@@ -523,7 +543,10 @@ fn notes(out: &mut String, function: &Function, symbol: bool, defaulted: &[(&str
     for name in &function.no_escape {
         notes.push(format!("@ntsNoEscape {name}"));
     }
-    if symbol {
+    // A virtual function names its slot, and has no symbol to name.
+    if let Some((class_struct, member)) = &function.vfunc {
+        notes.push(format!("@ntsVfunc {class_struct} {member}"));
+    } else if symbol {
         notes.push(format!("@ntsSymbol {}", function.symbol));
     }
     if let Some(slot) = &function.throws {
