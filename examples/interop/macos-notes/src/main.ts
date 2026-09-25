@@ -92,11 +92,18 @@ class Notes extends NSObject implements NSTableViewDataSource {
   }
 }
 
+// What the application does once it has launched, set before `run`.
+let started: (() => void) | null = null;
+
 // Swift's `class AppDelegate: NSObject, NSApplicationDelegate`: AppKit tells
-// it the application has finished launching, once `run` has started it.
+// it the application has finished launching, once `run` has started it, and
+// what the application does from then on starts there.
 class AppDelegate extends NSObject implements NSApplicationDelegate {
   applicationDidFinishLaunching(notification: NSNotification): void {
     report("launched");
+    if (started !== null) {
+      started();
+    }
   }
 }
 
@@ -158,13 +165,12 @@ function main(): void {
   item.target = notes;
   menu.addItem(item);
   app.mainMenu = menu;
-  const delegate = new AppDelegate();
-  app.delegate = delegate;
   window.makeKeyAndOrderFront(null);
 
-  // Typed and pressed from a timer, as a person would, then saved and quit.
+  // Typed and pressed from a timer, as a person would, once the application
+  // has launched; then saved and quit.
   let typed = 0;
-  Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, (timer) => {
+  const type = (timer: Timer): void => {
     typed++;
     if (typed <= 3) {
       field.stringValue = `note ${typed} of ${initially + typed}`;
@@ -196,7 +202,12 @@ function main(): void {
     if (wake !== null) {
       app.postEvent(wake, { atStart: true });
     }
-  });
+  };
+  started = () => {
+    Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, type);
+  };
+  const delegate = new AppDelegate();
+  app.delegate = delegate;
   app.run();
 }
 

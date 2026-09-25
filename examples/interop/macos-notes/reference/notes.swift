@@ -60,8 +60,16 @@ class Notes: NSObject, NSTableViewDataSource {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+  private let started: () -> Void
+
+  init(started: @escaping () -> Void) {
+    self.started = started
+    super.init()
+  }
+
   func applicationDidFinishLaunching(_ notification: Notification) {
     report("launched")
+    started()
   }
 }
 
@@ -113,12 +121,10 @@ func main() {
   item.target = notes
   menu.addItem(item)
   app.mainMenu = menu
-  let delegate = AppDelegate()
-  app.delegate = delegate
   window.makeKeyAndOrderFront(nil)
 
   var typed = 0
-  Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+  let type = { (timer: Timer) in
     typed += 1
     if typed <= 3 {
       field.stringValue = "note \(typed) of \(initially + typed)"
@@ -148,6 +154,10 @@ func main() {
       app.postEvent(wake, atStart: true)
     }
   }
+  let delegate = AppDelegate {
+    Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true, block: type)
+  }
+  app.delegate = delegate
   app.run()
 }
 
