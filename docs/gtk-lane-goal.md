@@ -612,6 +612,18 @@ static globals, which C re-reads after every call; written with locals, as
 nts holds them, C is 4.0. The notes application is
 `examples/interop/gtk-notes` against `gjs/notes.js`, line for line.
 
+**Where the notes row's time goes** (`perf record -e cycles:u`, the `--rc`
+build, 1000 seeded notes, 654 samples): the dynamic loader 36%, libgtk 18%,
+GLib 10%, libc 9%, fontconfig 5.5%, and the rest in expat, the GL driver,
+GObject, HarfBuzz and Pango. **nts's own code is 0.24%**, all of it
+`nts_collect_cycles`. The row measures GTK starting, laying out and
+rendering 1000 labels, which is the same work on both sides, so a few
+milliseconds either way between runs is noise and not a finding. For nts to
+be visible, a case has to spend its time in the program: the micro rows do,
+and so would a larger app with real logic per row. The binary binds lazily,
+where gjs is linked `BIND_NOW`, so the loader's share is GTK's dependency
+closure and not symbol resolution the program asked for.
+
 **Next in M4:** the application larger -- a `GtkListView` over a
 `GListStore`, a file chooser -- and a profile of where its time goes beside
 GJS's.
