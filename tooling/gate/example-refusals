@@ -51,6 +51,17 @@ mathops-unsupported 4 the constructs the name promises
 # take, so a count of 2 here means the refusal has grown a case it should not
 # have -- which it did twice while being written.
 a-throw-that-stays-in-its-function 1 a method callee, which has no raising copy
+# The sibling above, one indirection out: the `try` is around a call whose
+# *callee* reaches the method. Its four arms are the cycle this walk used to
+# overflow the stack on, and the one refusal is the fixture's subject -- the
+# message has to name `shared.lifecycle`, the leaf, rather than the function the
+# `try` encloses.
+#
+# **Missing here from the commit that added the example until 2026-09-25**, which
+# is the same hazard the `array-from-unsupported` note above describes from the
+# other direction: the gate run that cleared that commit was taken before the
+# example was in the tree, and this step is the only one that would have said so.
+a-try-around-a-cycle-of-calls 1 `shared.lifecycle`, a method reached through a plain callee, which has no raising copy
 
 # Incidental: an example written for something else that happens to contain a
 # construct the compiler refuses. Each is a real gap and each is somebody's next

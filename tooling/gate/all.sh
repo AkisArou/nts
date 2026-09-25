@@ -1232,7 +1232,17 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # their element kind from past their own end (zero, "unknown", a refusal).
   # `an-array-literal-at-the-slots-element`, `an-out-of-range-read-the-program-
   # handles`, `dynamic-element` and `optional-access` now compare every case.
-  backend_examples 306 "through the LLVM backend, counting" "" 10 ); }
+  #
+  # **306 -> 318, 2026-09-25, and the raise is the point rather than the
+  # bookkeeping.** A floor thirteen below its own corpus absorbs a regression
+  # silently: `a-narrowed-module-scope-global` disagreed with node on 54 cases
+  # for a day -- `let zero: number | undefined = 0; zero ??= 5` settling on 5,
+  # and `false ??= true` on true, on this lane only -- and every run printed the
+  # name under a floor that passed. The example was written for exactly that
+  # ("these two are here so that fixing a narrowing cannot quietly change which
+  # operator is being run"); the instrument was what failed. 318 of 319, with
+  # `this-in-a-field-initializer` the one this run names.
+  backend_examples 318 "through the LLVM backend, counting" "" 10 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1264,7 +1274,15 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # Partial ceiling 14 -> 10 on 2026-09-24, for the same four examples and the
   # same fix as `llvm_rc` above.
-  backend_examples 308 "through the LLVM backend" "" 10 ); }
+  #
+  # **308 -> 319, 2026-09-25**: every example agrees here now. Eleven of slack
+  # is what hid `a-narrowed-module-scope-global`'s 54 wrong answers for a day --
+  # see the note on `llvm_rc` above, which carries the diagnosis. A floor equal
+  # to the corpus cannot ratchet, only hold -- which is the right instrument the
+  # moment nothing is known to fail, and `exact` is available here now that the
+  # two numbers are equal. Left ratcheting, because whether this lane wants the
+  # stricter instrument is that lane's call and not a side effect of a raise.
+  backend_examples 319 "through the LLVM backend" "" 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1524,7 +1542,15 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   status=$?
   printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
-  backend_examples 308 "through the JVM backend" exact 10 ); }
+  #
+  # **308 -> 319, 2026-09-25**, from the same run as the two LLVM floors, and
+  # this one is bookkeeping rather than a fix. `exact` enforces `passed` equal to
+  # `total` (line ~1157), *not* the floor equal to the corpus -- so this step was
+  # already failing on any example that did not agree, whatever the floor said,
+  # and it is the one backend step the slack was not hiding anything under. The
+  # number is brought up to the corpus so that the two readings agree when
+  # someone compares the three floors.
+  backend_examples 319 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
