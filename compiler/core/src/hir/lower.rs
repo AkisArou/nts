@@ -46641,13 +46641,84 @@ impl<'a> FuncBuilder<'a> {
     /// a value in this frame *is* that value, whatever the checker resolved the
     /// name to elsewhere, and calling it is a dispatch rather than a static
     /// call.
+    ///
+    /// **And not ahead of a module-scope variable whose initializer chose**,
+    /// which is the same sentence one scope out and was a *silent wrong answer*
+    /// until 2026-09-26:
+    ///
+    /// ```ts
+    /// function first(x: number): number { return x + 1; }
+    /// function second(x: number): number { return x * 2; }
+    /// export const pick = true ? second : first;   // must be `second`
+    /// export function use(x: number): number { return pick(x); }
+    /// ```
+    ///
+    /// `use` called **`first`** -- the first-declared, whichever arm the
+    /// condition picks -- and 27 of 29 cases disagreed with node. It is React's
+    /// `export const jsx = __DEV__ ? jsxDEV : jsxProd`, so a compiled React ran
+    /// whichever of the two was written first.
+    ///
+    /// `CallTarget::callee` is the checker's `getResolvedSignature().declaration`,
+    /// and two functions of one shape are **one type**: the checker keeps one
+    /// candidate and naming it is a guess. It is a callee only when the callee
+    /// *expression* names it, and `locally_bound` was the only place that said
+    /// so -- module scope has no `bindings` entry, so nothing objected.
+    ///
+    /// **Narrow on purpose: a variable whose initializer is a plain identifier
+    /// is still trusted.** `const pick = fast` has exactly one candidate and
+    /// resolving to it is right, which is why that form compiles today and keeps
+    /// doing so. What is distrusted is an initializer that *chose* -- a
+    /// conditional, a call, anything but a single name -- and the shape is
+    /// checked rather than the arity of candidates because the candidates are
+    /// exactly what the checker has already collapsed.
+    ///
+    /// An **import** is untouched: its symbol is declared by an import
+    /// specifier, not by a variable declaration, so a cross-module call keeps
+    /// its direct callee. That was the hazard in the first formulation of this
+    /// guard, which asked "does the name declare the callee" and would have made
+    /// every imported call indirect.
+    ///
+    /// A distrusted call falls through to the value path, where a module-scope
+    /// name holding a function is already refused by name (`storable`). So this
+    /// turns a wrong answer into the refusal its annotated spelling already had
+    /// -- the honest sibling it should have had all along.
     fn direct_callee(&self, resolved: Option<NodeId>, callee_node: NodeId) -> Option<NodeId> {
-        let locally_bound = self
-            .node(callee_node)
-            .symbol
-            .is_some_and(|symbol| self.bindings.contains_key(&symbol.0));
+        let symbol = self.node(callee_node).symbol;
+        let locally_bound = symbol.is_some_and(|symbol| self.bindings.contains_key(&symbol.0));
+        let initializer_chose = symbol.is_some_and(|symbol| self.initializer_chose(symbol.0));
         resolved.filter(|declaration| {
-            !locally_bound && self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)
+            !locally_bound
+                && !initializer_chose
+                && self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)
+        })
+    }
+
+    /// Whether a name is declared by a variable whose initializer *chose* among
+    /// values rather than naming one.
+    ///
+    /// The test is the initializer's **shape**, not how many functions it could
+    /// have meant: by the time a signature reaches here the checker has already
+    /// collapsed identical candidates into one type, so counting them here would
+    /// count one. A single identifier names exactly what it names; a conditional,
+    /// a call, or anything else is a choice made at run time, and a declaration
+    /// the checker kept is not the answer to it.
+    ///
+    /// See [`Self::direct_callee`] for what this costs and why it is shaped this
+    /// way.
+    fn initializer_chose(&self, symbol: u32) -> bool {
+        let Some(record) = self.snapshot.symbols.get(symbol as usize) else {
+            return false;
+        };
+        record.declarations.iter().any(|at| {
+            self.kind_of(*at) == Some(syntax::VARIABLE_DECLARATION)
+                && self
+                    .children(*at)
+                    .into_iter()
+                    .skip(1)
+                    .rfind(|child| self.kind_of(*child) != Some(syntax::QUESTION_TOKEN))
+                    .is_some_and(|initializer| {
+                        self.kind_of(initializer) != Some(syntax::IDENTIFIER)
+                    })
         })
     }
 
