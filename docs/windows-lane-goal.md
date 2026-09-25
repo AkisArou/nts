@@ -169,6 +169,23 @@ the same vtable calls on the VM measured the behaviour first.
   the compiler emits (`iid_words`). `as_IVector().get_Size()` in a loop, the
   query, the call and the release, is 18 ns an iteration (three runs, 18
   each), from about 450.
+- **What a crossing costs**, against C making the same calls through the
+  same slots in the same apartment (the floor), on the VM, one row per
+  process, medians of three to five runs; nts's four builds (C and LLVM
+  backends, no-GC and `--rc`) agree within noise:
+
+  | row | floor | nts |
+  |---|---|---|
+  | a vtable call answering a scalar | 11.4 ns | 12 ns |
+  | `QueryInterface`, the call, the release | 22 ns | 23.5 ns (`--rc`) |
+  | a `string` argument | 19.7 ns | 22 ns (was 64-74) |
+  | an HSTRING result | 10.2 ns | 17.5-18 ns |
+  | a static on its factory, making an object | 118-124 ns | 129-137 ns (`--rc`; was 175-230) |
+
+  An HSTRING result's remainder is the copy into a string the program owns,
+  which the floor never makes. The benchmark and its oracle are in
+  `~/.cache/nts/windows/benches/winrt-crossings`; C# (CsWinRT) is not
+  measured yet: the VM has no .NET SDK.
 - **Not yet:**
   - `IAsyncOperation` as a Promise, which needs a decision about whether a
     console program's loop pumps messages (the user's to make).
