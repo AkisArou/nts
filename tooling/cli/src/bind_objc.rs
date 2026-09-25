@@ -742,6 +742,12 @@ struct Promise {
     value: String,
     /// How many values the handler is given before any error.
     arity: usize,
+    /// Each parameter of the handler, as the block's type spells it. The
+    /// closure the function passes declares them, so that of a method's
+    /// overloads with a handler each -- `NSDocument`'s `lock` taking a
+    /// `(Bool) -> Void` beside one taking an `(Error?) -> Void` --
+    /// TypeScript picks the one this is the promise of.
+    given: Vec<String>,
     /// Whether the handler is also given an `NSError`, which rejects the
     /// promise when it is set, as Swift's `async throws` throws it; and
     /// whether the value is spelled nullable, which it is not once the error
@@ -1162,6 +1168,7 @@ impl<'a> Model<'a> {
             names,
             value,
             arity,
+            given,
             throws,
             nullable,
         });
@@ -2055,16 +2062,19 @@ fn render_values(request: &Request, model: &Model) -> String {
         // handler's first statement, so a program with nothing else to do
         // waits for it (`c:pending`). The message itself cannot throw: a
         // method taking a completion handler reports through the handler.
+        let mut handler = names.clone();
+        if promise.throws {
+            handler.push("error".to_owned());
+        }
+        let typed: Vec<String> = handler.iter().zip(&promise.given).map(|(name, ty)| format!("{name}: {ty}")).collect();
         let executor = if promise.throws {
-            let mut given = names.clone();
-            given.push("error".to_owned());
             arguments.push(format!(
                 "({}) => {{\n      nts_pending_end();\n      if (error !== null) {{\n        reject(new Error(error.localizedDescription));\n      }} else {{\n        resolve({settled});\n      }}\n    }}",
-                given.join(", ")
+                typed.join(", ")
             ));
             "(resolve, reject)"
         } else {
-            arguments.push(format!("({}) => {{\n      nts_pending_end();\n      resolve({settled});\n    }}", names.join(", ")));
+            arguments.push(format!("({}) => {{\n      nts_pending_end();\n      resolve({settled});\n    }}", typed.join(", ")));
             "(resolve)"
         };
         // An instance method's function takes the receiver first; a class
@@ -2529,19 +2539,19 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             assert!(text.contains(expected), "no `{expected}` in:\n{text}");
         }
         for expected in [
-            "import { NSString, Shape } from \"objc:Fake\";",
+            "import { NSError, NSString, Shape } from \"objc:Fake\";",
             "import type { Int } from \"objc:types\";",
             "import { nts_pending_begin, nts_pending_end } from \"c:pending\";",
             // Outstanding from before the message until the handler's first
             // statement, so a program with nothing else to do waits for it.
             "export function nts_async_Shape_settle(self: Shape, labels: { with: Shape }): Promise<Int> {\n  \
              return new Promise((resolve) => {\n    nts_pending_begin();\n    \
-             self.settle(labels, (value) => {\n      nts_pending_end();\n      resolve(value);\n    });\n  });\n}",
+             self.settle(labels, (value: Int) => {\n      nts_pending_end();\n      resolve(value);\n    });\n  });\n}",
             // Swift's `async throws`: the error rejects, with its description,
             // and the value, not optional once there is no error, resolves.
             "export function nts_async_Shape_fetch(self: Shape, labels: { named: string }): Promise<Shape> {\n  \
              return new Promise((resolve, reject) => {\n    nts_pending_begin();\n    \
-             self.fetch(labels, (value, error) => {\n      nts_pending_end();\n      \
+             self.fetch(labels, (value: Shape | null, error: NSError | null) => {\n      nts_pending_end();\n      \
              if (error !== null) {\n        reject(new Error(error.localizedDescription));\n      \
              } else {\n        resolve(value!);\n      }\n    });\n  });\n}",
             // Sent to the class, which the wrapper names, having no `self`.

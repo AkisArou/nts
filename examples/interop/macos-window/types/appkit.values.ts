@@ -10,7 +10,7 @@ import type { Int } from "objc:types";
 export function nts_async_NSWindow_beginSheet(self: NSWindow, sheetWindow: NSWindow): Promise<Int> {
   return new Promise((resolve) => {
     nts_pending_begin();
-    self.beginSheet(sheetWindow, (value) => {
+    self.beginSheet(sheetWindow, (value: Int) => {
       nts_pending_end();
       resolve(value);
     });
@@ -20,7 +20,7 @@ export function nts_async_NSWindow_beginSheet(self: NSWindow, sheetWindow: NSWin
 export function nts_async_NSWindow_beginCriticalSheet(self: NSWindow, sheetWindow: NSWindow): Promise<Int> {
   return new Promise((resolve) => {
     nts_pending_begin();
-    self.beginCriticalSheet(sheetWindow, (value) => {
+    self.beginCriticalSheet(sheetWindow, (value: Int) => {
       nts_pending_end();
       resolve(value);
     });
