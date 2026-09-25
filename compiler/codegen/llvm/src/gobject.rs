@@ -46,6 +46,9 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
     out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
+    // A parent's `get_type`, declared once however many classes extend it:
+    // LLVM, unlike C, refuses a second declaration.
+    let mut parents = std::collections::BTreeSet::new();
     for class in classes {
         let name = &class.name;
         let mut slots = Vec::new();
@@ -94,7 +97,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             None => "null".to_owned(),
         };
         let parent = &class.superclass;
-        if !called(program, parent) {
+        if !called(program, parent) && parents.insert(parent.as_str()) {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
         let _ = writeln!(

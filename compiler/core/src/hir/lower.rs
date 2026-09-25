@@ -11709,6 +11709,9 @@ struct FuncBuilder<'a> {
     /// class: the class, which its `super(...)` makes an instance of, and
     /// whether it has fields to make with it.
     objc_construct: Option<ObjcConstruct>,
+    /// The name of the class over a `GObject` class whose constructor is
+    /// being lowered: its `super(...)` makes the instance (`gobject_super`).
+    gobject_construct: Option<String>,
     /// Lowering a method the runtime calls through an entry point of its own:
     /// see [`ObjcEntry`].
     objc_entry: Option<ObjcEntry>,
@@ -11977,6 +11980,7 @@ impl<'a> FuncBuilder<'a> {
             retyped_symbols: std::collections::BTreeMap::new(),
             in_constructor: false,
             objc_construct: None,
+            gobject_construct: None,
             objc_entry: None,
             record_out: None,
             com_entry: None,
@@ -13951,7 +13955,7 @@ impl<'a> FuncBuilder<'a> {
         instance: Option<TypeId>,
     ) -> Result<(Func, Option<super::ForeignMethod>), Diagnostic> {
         if self.kind_of(member) == Some(syntax::CONSTRUCTOR) {
-            return Err(self.unsupported(member, "a constructor of a class extending a GObject class; `new` sets the properties it is given"));
+            return Ok((self.lower_gobject_constructor(class, member, instance)?, None));
         }
         let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
         if !name.starts_with("vfunc_") {
@@ -14195,6 +14199,77 @@ impl<'a> FuncBuilder<'a> {
         Ok((func, method))
     }
 
+    /// Whether a constructor body opens with its `super(...)`: `this` is one
+    /// object for the whole body, and one made in a branch is not.
+    fn opens_with_super(&self, body: NodeId) -> bool {
+        self.children(body).first().is_some_and(|first| {
+            self.kind_of(*first) == Some(syntax::EXPRESSION_STATEMENT)
+                && self.children(*first).first().is_some_and(|call| {
+                    self.kind_of(*call) == Some(syntax::CALL_EXPRESSION)
+                        && self.children(*call).first().is_some_and(|callee| self.kind_of(*callee) == Some(syntax::SUPER_KEYWORD))
+                })
+        })
+    }
+
+    /// A constructor of a class the program writes over a `GObject` class, as
+    /// the function `new` calls: `{Class}#new`, taking the constructor's
+    /// parameters and answering the instance (one reference, the caller's).
+    /// Its `super({ ... })` makes the instance of the class's own `GType` and
+    /// sets the literal's properties (`gobject_super`); the fields are the
+    /// instance's already, made by `instance_init`. An instance GTK makes
+    /// itself -- a builder file -- runs `instance_init` and none of this, as
+    /// an Objective-C instance a nib makes runs its superclass's `init`.
+    fn lower_gobject_constructor(&mut self, class: NodeId, member: NodeId, instance: Option<TypeId>) -> Result<Func, Diagnostic> {
+        let name = foreign_class_name(self.snapshot, class).ok_or_else(|| self.unsupported(member, "a constructor of a class with no name"))?;
+        let instance = instance
+            .or_else(|| instance_type_of(self.snapshot, class))
+            .ok_or_else(|| self.unsupported(member, "a constructor of a GObject class with no instance type"))?;
+        let Some(ty @ HirType::NativePointer(_)) = self.represent(instance) else {
+            return Err(self.unsupported(member, "a constructor of a GObject class whose instances are not a handle"));
+        };
+        let body = self.method_body(member, false)?.ok_or_else(|| self.unsupported(member, "a GObject constructor with no body"))?;
+        if !self.opens_with_super(body) {
+            return Err(self.unsupported(member, "a constructor of a class extending a GObject class that does not open with its `super(...)`"));
+        }
+        let origin = self.origin(member);
+        self.this = None;
+        self.in_constructor = true;
+        let mut params = Vec::new();
+        for child in self.children(member) {
+            if self.kind_of(child) != Some(syntax::PARAMETER) {
+                continue;
+            }
+            if self.declares_a_field(child) {
+                return Err(self.unsupported(child, "a constructor parameter that declares a field of a class extending a GObject class"));
+            }
+            let index = u32::try_from(params.len()).unwrap_or(0);
+            params.extend(self.lower_param(child, index)?);
+        }
+        self.gobject_construct = Some(name.clone());
+        self.returns = ty.clone();
+        self.lower_block(body)?;
+        if !self.is_terminated() {
+            let made = self.this.ok_or_else(|| self.unsupported(member, "a GObject constructor that made no instance"))?;
+            self.terminate(Terminator::Return(Some(made)));
+        }
+        Ok(self.finish(format!("{name}#new"), params, ty, origin, false))
+    }
+
+    /// `super({ label })` in such a constructor: the instance, made as `new`
+    /// without a constructor makes one -- its own `GType`, then a setter per
+    /// property of the literal -- and `this` from here on. The properties are
+    /// a literal's, which is what lets them be set without building an
+    /// object; a `props` passed through is refused by name.
+    fn gobject_super(&mut self, id: NodeId, name: &str) -> Result<ValueId, Diagnostic> {
+        if self.this.is_some() {
+            return Err(self.unsupported(id, "a second `super(...)`"));
+        }
+        let instance = self.this_instance_type(id)?;
+        let made = self.lower_gobject_made(id, name, instance)?;
+        self.this = Some(made);
+        Ok(made)
+    }
+
     /// A constructor of a class the program writes over an Objective-C class,
     /// as the function `new` calls: `{Class}#new`, taking the constructor's
     /// parameters and answering the instance (+1). Its `super(...)` is where
@@ -14213,14 +14288,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(member, "a constructor of an Objective-C class that is not a handle"));
         };
         let body = self.method_body(member, false)?.ok_or_else(|| self.unsupported(member, "an Objective-C constructor with no body"))?;
-        let opens_with_super = self.children(body).first().is_some_and(|first| {
-            self.kind_of(*first) == Some(syntax::EXPRESSION_STATEMENT)
-                && self.children(*first).first().is_some_and(|call| {
-                    self.kind_of(*call) == Some(syntax::CALL_EXPRESSION)
-                        && self.children(*call).first().is_some_and(|callee| self.kind_of(*callee) == Some(syntax::SUPER_KEYWORD))
-                })
-        });
-        if !opens_with_super {
+        if !self.opens_with_super(body) {
             return Err(self.unsupported(member, "a constructor of a class extending an Objective-C class that does not open with its `super(...)`"));
         }
         let fields = self.declares_instance_fields(class);
@@ -27760,14 +27828,25 @@ impl<'a> FuncBuilder<'a> {
             return (!registered && matches!(handle, Some(HirType::NativePointer(_))))
                 .then(|| Err(self.unsupported(id, "`new` of a class extending a C handle's class that nothing registers")));
         }
-        let name = self.children(class).into_iter().find_map(|child| {
-            (self.kind_of(child) == Some(syntax::IDENTIFIER)).then(|| self.node(child).text.clone()).flatten()
-        })?;
-        Some(self.lower_gobject_new(id, &name))
+        let name = foreign_class_name(self.snapshot, class)?;
+        // A class with a constructor is made by it: `{Class}#new`, whose
+        // `super(...)` makes the instance.
+        if let Some(constructor) = self.children(class).into_iter().find(|member| self.kind_of(*member) == Some(syntax::CONSTRUCTOR)) {
+            let callee = Callee::Direct(format!("{name}#new"));
+            let arguments = self.arguments_of(id);
+            return Some(self.lower_call_arguments(id, &callee, &arguments, None).and_then(|(args, lent)| {
+                self.finish_call(id, callee, args, lent, Some(constructor))
+            }));
+        }
+        let ty = self.snapshot.node_types.get(&id).copied()?;
+        Some(self.lower_gobject_made(id, &name, ty))
     }
 
-    fn lower_gobject_new(&mut self, id: NodeId, name: &str) -> Result<ValueId, Diagnostic> {
-        let ty = self.snapshot.node_types.get(&id).copied().ok_or_else(|| self.unsupported(id, "a constructed handle with no type"))?;
+    /// An instance of the class `name`, a class the program writes over a
+    /// `GObject` class, typed `ty`, with the properties the call at `id`
+    /// writes in its literal: `nts_gobject_new_{name}` -- one owned reference
+    /// -- then a setter for each. The literal's values first, in its order.
+    fn lower_gobject_made(&mut self, id: NodeId, name: &str, ty: TypeId) -> Result<ValueId, Diagnostic> {
         let Some(HirType::NativePointer(pointee @ super::native::Pointee::Opaque(_))) = self.represent(ty) else {
             return Err(self.unsupported(id, "an instance of a class extending a GObject class that is not a handle"));
         };
@@ -48939,6 +49018,11 @@ impl<'a> FuncBuilder<'a> {
         // `super(...)` makes the instance.
         if member == "constructor" && self.objc_construct.is_some() {
             return self.lower_objc_super_init(id, arguments);
+        }
+        if member == "constructor"
+            && let Some(name) = self.gobject_construct.clone()
+        {
+            return self.gobject_super(id, &name);
         }
         let base = self
             .base

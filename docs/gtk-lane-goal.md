@@ -662,7 +662,17 @@ modes, and under valgrind with no invalid access. A plain `GObject` subclass
 made and dropped 100 times leaves one state behind at exit, which is the
 candidate the cycle collector has not reached yet, not a leak per instance.
 
-Still refused, each by name: a constructor of such a class; an override of
+**Constructors**, GJS's shape: `constructor(name: string) { super({ label:
+"hi " + name }); ... }` is `{Class}#new`, whose `super({ ... })` makes the
+instance of the class's own `GType` with the literal's properties and binds
+`this`; the body then runs with it (a field set, a handler connected that
+captures `this`). It must open with `super(...)`, as Apple's must. An
+instance GTK makes itself (a builder file) runs `instance_init`, so it has
+its fields, but not the constructor, the same rule as a nib's.
+
+Still refused, each by name: `super(props)` passing a props object through,
+which needs a presence-checked setter per property rather than a literal's;
+a constructor parameter that declares a field; an override of
 `vfunc_finalize` (the registration's gives the fields back); a direct call
 of a `vfunc_` method, which is chaining up (`super.vfunc_clicked()`); a slot
 taking a record by value; and extending a subclass the program wrote. A

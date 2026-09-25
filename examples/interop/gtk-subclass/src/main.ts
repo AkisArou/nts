@@ -12,6 +12,10 @@
 //                 outside the class: they live in an object the instance holds
 //   plain p       a `GtkButton` made beside it keeps GTK's `clicked`: the
 //                 override is the subclass's, not the parent's
+//   hello ada from hi ada  `Greeter`'s constructor: `super({ label })` made
+//                 it, the body set a field and connected a handler that reads
+//                 it through `this`
+//   greeter Nts_Greeter
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
@@ -47,6 +51,20 @@ class Counter extends GtkButton {
   }
 }
 
+class Greeter extends GtkButton {
+  greeting = "";
+
+  // GJS's constructor: `super(...)` makes the instance -- this class's own
+  // GType, the literal's properties set -- and the body runs with `this`.
+  constructor(name: string) {
+    super({ label: "hi " + name });
+    this.greeting = "hello " + name;
+    this.connect("clicked", () => {
+      sub_log(this.greeting + " from " + (this.label ?? ""));
+    });
+  }
+}
+
 class Square extends GtkWidget {
   vfunc_measure(
     orientation: CEnum<GtkOrientation, c_uint>,
@@ -75,6 +93,10 @@ function main(): void {
   const plain = new GtkButton({ label: "p" });
   sub_emit(plain, "clicked");
   sub_log("plain " + (plain.label ?? ""));
+
+  const greeter = new Greeter("ada");
+  sub_emit(greeter, "clicked");
+  sub_log("greeter " + g_type_name_from_instance(greeter));
 
   const square = new Square({});
   const width = local<CNumber<"int">>();
