@@ -57,6 +57,22 @@ export function emptied(n: number): number {
   return xs.length * 1000 + xs[0] * 100 + xs[3];
 }
 
+// And one that *adds* to the array: the sort sorts the elements it read
+// before comparing anything and writes them back to the front, and what the
+// comparator pushed stays after them, in the order it was pushed.
+export function grownWhileSorting(n: number): string {
+  const xs = [n, 3, 1, 2];
+  let pushed = 0;
+  xs.sort((a, b) => {
+    if (pushed < 2) {
+      pushed++;
+      xs.push(100 + pushed);
+    }
+    return a - b;
+  });
+  return xs.join(",");
+}
+
 // Numbers descending, strings, a named function, a capturing arrow.
 export function descending(n: number): string {
   const xs = [n, 8, 1, 9, 3];
