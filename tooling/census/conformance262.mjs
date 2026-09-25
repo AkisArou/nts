@@ -86,7 +86,7 @@
 // front of another the compiler has not reached yet.
 
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
@@ -134,6 +134,13 @@ if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
 
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
+
+// **Every temporary under the scratch, none under `/tmp`.** `cc`, tsgo and the
+// test programs all honour `TMPDIR`, and `/tmp` here is a tmpfs shared with
+// every lane that runs out of inodes before bytes. Set on this process so the
+// workers and everything they spawn inherit it, and removed with the scratch.
+process.env.TMPDIR = join(SCRATCH, "tmp");
+mkdirSync(process.env.TMPDIR, { recursive: true });
 // Per-case address-space cap; `attempt262.mjs`'s `capped` carries why it exists
 // and why 6 GB. `NTS_CENSUS_MEMORY_CAP_KB=0` removes it.
 const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);

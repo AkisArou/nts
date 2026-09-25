@@ -48,7 +48,7 @@
 //   3. The harness is a stand-in, not the harness.
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -94,6 +94,11 @@ if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bo
 // though `target/release/nts` is the path everyone builds into. `pinCompiler`
 // carries why.
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
+
+// Temporaries under the scratch rather than the shared `/tmp` tmpfs; see
+// `conformance262.mjs`, which does the same.
+process.env.TMPDIR = join(SCRATCH, "tmp");
+mkdirSync(process.env.TMPDIR, { recursive: true });
 
 // --- the selection --------------------------------------------------------
 
