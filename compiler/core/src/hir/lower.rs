@@ -11584,6 +11584,9 @@ enum Lent {
     /// The slot a composable factory wrote its inner object to, released
     /// after the call when it was written: nothing of the program holds it.
     Inner { slot: ValueId },
+    /// That inner object, taken from its slot in the call's own block
+    /// (`finish_hresult_call`) and released on both paths after it.
+    Taken { object: ValueId },
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -40894,6 +40897,30 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let status_type = HirType::Int { bits: 32, signed: true };
         let status = self.push_call(id, callee, args, declaration, Some(status_type.clone()))?;
+        // **Every slot is read here, in the call's own block, before the
+        // branch** -- so each is a local used in one block, which the storage
+        // check accepts inside a loop, and neither path below touches it. A
+        // failed call left its slots zeroed: the result reads as null, 0 or
+        // the empty string, and the failing path drops it unread. Read after
+        // the branch, the slot was used in two blocks, and every Windows
+        // Runtime call in a loop was refused.
+        let written = lent.iter().find_map(|lent| match lent {
+            Lent::Result { slot, written } => Some((*slot, *written)),
+            _ => None,
+        });
+        let value = match written {
+            None => self.push(OpKind::ConstUndefined, typed.unwrap_or(HirType::Void), origin.clone()),
+            Some((slot, written)) => self.read_written(id, slot, written, &origin)?,
+        };
+        let lent: Vec<Lent> = lent
+            .into_iter()
+            .map(|lent| match lent {
+                Lent::Inner { slot } => Lent::Taken {
+                    object: self.runtime_call("nts_com_take", vec![slot], HirType::NativePointer(super::native::Pointee::Void), origin.clone()),
+                },
+                other => other,
+            })
+            .collect();
         let zero = self.push(OpKind::ConstInt(0), status_type, origin.clone());
         let failed = self.push(OpKind::Binary { op: BinOp::Lt, lhs: status, rhs: zero }, HirType::Bool, origin.clone());
         let raise = self.new_block();
@@ -40911,53 +40938,50 @@ impl<'a> FuncBuilder<'a> {
         let message = self.runtime_call("nts_hresult_message", vec![status], char_pointer.representation(), origin.clone());
         self.throw_c_message(id, message, &origin)?;
         self.switch_to(after);
-        let written = lent.iter().find_map(|lent| match lent {
-            Lent::Result { slot, written } => Some((*slot, *written)),
-            _ => None,
-        });
-        let value = match written {
-            None => self.push(OpKind::ConstUndefined, typed.unwrap_or(HirType::Void), origin.clone()),
-            Some((slot, super::native::Written::HString)) => {
-                let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-                let hstring = self.push(OpKind::NativeLoad { pointer: slot, index: first }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
+        self.give_back(id, lent);
+        Ok(value)
+    }
+
+    /// What an `@ntsHresult` call wrote to its result slot, as the program
+    /// holds it. See `finish_hresult_call` for where this is read.
+    fn read_written(&mut self, id: NodeId, slot: ValueId, written: super::native::Written, origin: &Origin) -> Result<ValueId, Diagnostic> {
+        let first = |this: &mut Self| this.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        Ok(match written {
+            super::native::Written::HString => {
+                let index = first(self);
+                let hstring = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
                 self.runtime_call("nts_string_from_hstring", vec![hstring], HirType::Managed(ManagedType::String), origin.clone())
             }
-            // The slot is the record's storage, and so the value.
-            Some((slot, super::native::Written::Record)) => slot,
-            Some((slot, super::native::Written::Bool)) => {
-                let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            // The slot is the record's storage, and so the value -- which is
+            // why a record result is still refused in a loop, as a C
+            // function's is.
+            super::native::Written::Record => slot,
+            super::native::Written::Bool => {
+                let index = first(self);
                 let byte_type = HirType::Int { bits: 8, signed: false };
-                let byte = self.push(OpKind::NativeLoad { pointer: slot, index: first }, byte_type.clone(), origin.clone());
+                let byte = self.push(OpKind::NativeLoad { pointer: slot, index }, byte_type.clone(), origin.clone());
                 let zero = self.push(OpKind::ConstInt(0), byte_type, origin.clone());
                 self.push(OpKind::Binary { op: BinOp::Ne, lhs: byte, rhs: zero }, HirType::Bool, origin.clone())
             }
-            Some((slot, super::native::Written::Value)) => {
-                let HirType::NativePointer(super::native::Pointee::Pointer(held)) = self.values[slot.0 as usize].ty.clone() else {
-                    let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-                    let HirType::NativePointer(super::native::Pointee::Scalar(scalar)) = self.values[slot.0 as usize].ty.clone() else {
-                        return Err(self.unsupported(id, "an @ntsHresult result slot that holds neither a pointer nor a C scalar"));
-                    };
-                    let value = self.push(
-                        OpKind::NativeLoad { pointer: slot, index: first },
-                        super::native::Type::Scalar(scalar).representation(),
-                        origin.clone(),
-                    );
-                    self.give_back(id, lent);
-                    return Ok(value);
-                };
-                let handle = super::native::Type::Pointer((*held).clone());
-                if held.counting().is_some() {
-                    // A runtime call, which the ownership pass reads as
-                    // producing its result: the `+1` the object came with.
-                    self.runtime_call("nts_com_take", vec![slot], handle.representation(), origin.clone())
-                } else {
-                    let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-                    self.push(OpKind::NativeLoad { pointer: slot, index: first }, handle.representation(), origin.clone())
+            super::native::Written::Value => match self.values[slot.0 as usize].ty.clone() {
+                HirType::NativePointer(super::native::Pointee::Pointer(held)) => {
+                    let handle = super::native::Type::Pointer((*held).clone());
+                    if held.counting().is_some() {
+                        // A runtime call, which the ownership pass reads as
+                        // producing its result: the `+1` the object came with.
+                        self.runtime_call("nts_com_take", vec![slot], handle.representation(), origin.clone())
+                    } else {
+                        let index = first(self);
+                        self.push(OpKind::NativeLoad { pointer: slot, index }, handle.representation(), origin.clone())
+                    }
                 }
-            }
-        };
-        self.give_back(id, lent);
-        Ok(value)
+                HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => {
+                    let index = first(self);
+                    self.push(OpKind::NativeLoad { pointer: slot, index }, super::native::Type::Scalar(scalar).representation(), origin.clone())
+                }
+                _ => return Err(self.unsupported(id, "an @ntsHresult result slot that holds neither a pointer nor a C scalar")),
+            },
+        })
     }
 
     /// Throw an `Error` whose message is a `malloc`'d C string, which is
@@ -41495,7 +41519,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
-                Lent::Delegate { object } => {
+                // A reference the call was handed, or the inner object a
+                // composable factory answered: the program's, given back.
+                Lent::Delegate { object } | Lent::Taken { object } => {
                     self.runtime_call("nts_com_release", vec![object], HirType::Void, origin.clone());
                 }
                 Lent::Inner { slot } => {
