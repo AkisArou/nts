@@ -12638,6 +12638,18 @@ impl<'a> FuncBuilder<'a> {
             };
         }
         if is(SymbolFlags::MODULE) {
+            // `Reflect` arrives here rather than at the global-member arm below,
+            // because the library declares it as a *namespace* and not as a
+            // variable of an interface type -- so "a namespace" was its whole
+            // refusal and the category sentence never reached it. The fixture
+            // `prototype-and-descriptor-reflection` is what found that: its
+            // `Reflect.ownKeys` arm read `` `Reflect`, a namespace `` while the
+            // three `Object` arms beside it named the boundary.
+            if let Some(member) = self.member_read_from(id)
+                && let Some(why) = Self::reflection_of_a_layout(&record.name, &member)
+            {
+                return why;
+            }
             return format!("`{}`, a namespace", record.name);
         }
         if is(SymbolFlags::ENUM) {
@@ -12694,6 +12706,33 @@ impl<'a> FuncBuilder<'a> {
                         .to_owned(),
                     _ => format!("`Date.{member}`, a global member with no definition here"),
                 };
+            }
+            // **`Object` and `Reflect` are a boundary, and the generic line
+            // below made them read as a to-do list.** 817 occurrences over 47
+            // sites in `runtime/node` and `runtime/web-platform` said "a global
+            // member with no definition here", which reads as *add this member
+            // and it works* -- and for this family that is false in a way no
+            // census could see: 456 of those occurrences are `Object
+            // .getOwnPropertyNames`, and the loop every one of them is in
+            // continues into `getOwnPropertyDescriptor` and `defineProperty` on
+            // `this.prototype`. Adding the member moves the refusal one line
+            // down, twice, and ends at redefining a property on an object that
+            // does not exist.
+            //
+            // So the refusal names the *category*, which is the honest unit: a
+            // fixed layout has no prototype object to hold a property and no
+            // descriptor to redefine one with. The same sentence covers
+            // `Reflect`, whose members are the same question asked through a
+            // different global.
+            //
+            // Three sentences rather than one, on the `Date.now` / `Date.UTC`
+            // precedent above: what is impossible and what is merely absent are
+            // different answers, and grouping them is how a buildable member
+            // comes to read as refused on principle.
+            if let Some(member) = self.member_read_from(id)
+                && let Some(why) = Self::reflection_of_a_layout(&record.name, &member)
+            {
+                return why;
             }
             // With the member, when one is being read. `Object` was 44
             // refusals that could not be told apart, and they are not one
@@ -12912,6 +12951,78 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The member being read, when this name is the target of a property access.
+    /// Why a member of `Object` or `Reflect` cannot be built, where the reason
+    /// is the representation rather than the calendar.
+    ///
+    /// `None` for the members that are simply not written yet -- `freeze`,
+    /// `fromEntries` -- which keep the generic sentence, because for those it is
+    /// true: they are absent and a fixed layout can answer them.
+    ///
+    /// # Why this is a category and not a list of members
+    ///
+    /// Every name here fails for **one** reason: a value's shape is fixed when
+    /// it is laid out, so there is no prototype object to hold a property, no
+    /// descriptor object to describe one, and no way to give a value a different
+    /// shape at run time. A census that sees thirteen member names sees thirteen
+    /// items of work; a census that sees one sentence sees a boundary, and the
+    /// boundary is what is true.
+    fn reflection_of_a_layout(global: &str, member: &str) -> Option<String> {
+        // `Reflect`'s whole surface is this question. `apply` and `construct`
+        // are a call through a value rather than a shape question, and they are
+        // here anyway: both take their arguments as an array, which is a spread
+        // at every call, and neither is nearer than the rest of the family.
+        let reflecting = global == "Reflect"
+            || matches!(
+                member,
+                "defineProperty"
+                    | "defineProperties"
+                    | "getOwnPropertyDescriptor"
+                    | "getOwnPropertyDescriptors"
+                    | "getPrototypeOf"
+                    | "setPrototypeOf"
+                    | "prototype"
+                    | "seal"
+                    | "isSealed"
+                    | "preventExtensions"
+                    | "isExtensible"
+            );
+        if reflecting {
+            return Some(format!(
+                "`{global}.{member}`, which is prototype and descriptor reflection: a value's \
+                 shape is fixed when it is laid out, so there is no prototype object to hold a \
+                 property, no descriptor to redefine one with, and nothing that can be given a \
+                 different shape at run time"
+            ));
+        }
+        // **Absent, not impossible, and saying so is what keeps it findable.**
+        // A layout knows its own names -- `Object.keys` answers from them
+        // already -- and these two differ from `keys` only by the
+        // non-enumerable and symbol-keyed properties a fixed layout does not
+        // have. The reason to name it separately is the opposite of the usual
+        // one: this is the *largest* item in the family by occurrences and
+        // building it clears nothing, because every occurrence is the first line
+        // of a descriptor loop that cannot work whatever it returns.
+        if matches!(member, "getOwnPropertyNames" | "getOwnPropertySymbols") {
+            return Some(format!(
+                "`{global}.{member}`, a list of a layout's own names -- which `Object.keys` \
+                 answers already, so this is absent rather than impossible, and every use of it \
+                 in this corpus is the first line of a prototype-descriptor loop that cannot \
+                 work whatever it returns"
+            ));
+        }
+        // `Object.create(null)` is a **dictionary**, which this compiler has a
+        // representation for and builds for an index signature. Grouped with
+        // the reflection above it would read as impossible, and it is one of
+        // the two spellings of a thing that already works.
+        if member == "create" {
+            return Some(format!(
+                "`{global}.create`, whose prototype argument a fixed layout has nowhere to put -- \
+                 `Object.create(null)` is a dictionary and is a different, buildable thing"
+            ));
+        }
+        None
+    }
+
     fn member_read_from(&self, id: NodeId) -> Option<String> {
         let parent = self.node(id).parent?;
         if self.kind_of(parent) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
