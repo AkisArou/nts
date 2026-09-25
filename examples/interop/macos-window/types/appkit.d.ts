@@ -663,7 +663,7 @@ declare module "objc:AppKit" {
   /** @ntsClass NSObject */
   export class NSObject {
     get hash(): UInt;
-    get superclass(): ClassObject;
+    get superclass(): ClassObject | null;
     get description(): string;
     get debugDescription(): string;
     /** @ntsSelector load */
@@ -683,7 +683,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector doesNotRecognizeSelector: */
     doesNotRecognizeSelector(aSelector: Selector): void;
     /** @ntsSelector forwardingTargetForSelector: */
-    forwardingTarget(labels: { for: Selector }): NSObject;
+    forwardingTarget(labels: { for: Selector }): NSObject | null;
     /** @ntsSelector isSubclassOfClass: */
     static isSubclass(labels: { of: ClassObject }): boolean;
     /** @ntsSelector resolveClassMethod: */
@@ -693,7 +693,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector hash */
     static hash(): UInt;
     /** @ntsSelector superclass */
-    static superclass(): ClassObject;
+    static superclass(): ClassObject | null;
     /** @ntsSelector description */
     static description(): string;
     /** @ntsSelector debugDescription */
@@ -731,10 +731,10 @@ declare module "objc:AppKit" {
     get menu(): NSMenu | null;
     set menu(value: NSMenu | null);
     get undoManager(): UndoManager | null;
-    get userActivity(): NSUserActivity;
-    set userActivity(value: NSUserActivity);
-    get touchBar(): NSTouchBar;
-    set touchBar(value: NSTouchBar);
+    get userActivity(): NSUserActivity | null;
+    set userActivity(value: NSUserActivity | null);
+    get touchBar(): NSTouchBar | null;
+    set touchBar(value: NSTouchBar | null);
     static get restorableStateKeyPaths(): string[];
     /** @ntsSelector init */
     constructor();
@@ -1193,12 +1193,12 @@ declare module "objc:AppKit" {
     set layerUsesCoreImageFilters(value: boolean);
     get backgroundFilters(): CIFilter[];
     set backgroundFilters(value: CIFilter[]);
-    get compositingFilter(): CIFilter;
-    set compositingFilter(value: CIFilter);
+    get compositingFilter(): CIFilter | null;
+    set compositingFilter(value: CIFilter | null);
     get contentFilters(): CIFilter[];
     set contentFilters(value: CIFilter[]);
-    get shadow(): NSShadow;
-    set shadow(value: NSShadow);
+    get shadow(): NSShadow | null;
+    set shadow(value: NSShadow | null);
     get clipsToBounds(): boolean;
     set clipsToBounds(value: boolean);
     get postsBoundsChangedNotifications(): boolean;
@@ -1210,7 +1210,7 @@ declare module "objc:AppKit" {
     get inLiveResize(): boolean;
     get preservesContentDuringLiveResize(): boolean;
     get rectPreservedDuringLiveResize(): ByValue<CGRect>;
-    get inputContext(): NSTextInputContext;
+    get inputContext(): NSTextInputContext | null;
     get userInterfaceLayoutDirection(): CEnum<NSUserInterfaceLayoutDirection, Int>;
     set userInterfaceLayoutDirection(value: CEnum<NSUserInterfaceLayoutDirection, Int>);
     static get isCompatibleWithResponsiveScrolling(): boolean;
@@ -1245,8 +1245,8 @@ declare module "objc:AppKit" {
     get safeAreaRect(): ByValue<CGRect>;
     get layoutMarginsGuide(): NSLayoutGuide;
     get trackingAreas(): NSTrackingArea[];
-    get enclosingMenuItem(): NSMenuItem;
-    get candidateListTouchBarItem(): NSCandidateListTouchBarItem;
+    get enclosingMenuItem(): NSMenuItem | null;
+    get candidateListTouchBarItem(): NSCandidateListTouchBarItem | null;
     get leadingAnchor(): NSLayoutXAxisAnchor;
     get trailingAnchor(): NSLayoutXAxisAnchor;
     get leftAnchor(): NSLayoutXAxisAnchor;
@@ -1279,8 +1279,8 @@ declare module "objc:AppKit" {
     get fittingSize(): ByValue<CGSize>;
     get hasAmbiguousLayout(): boolean;
     get layoutGuides(): NSLayoutGuide[];
-    get pressureConfiguration(): NSPressureConfiguration;
-    set pressureConfiguration(value: NSPressureConfiguration);
+    get pressureConfiguration(): NSPressureConfiguration | null;
+    set pressureConfiguration(value: NSPressureConfiguration | null);
     /** @ntsSelector initWithFrame: */
     constructor(labels: { frame: ByValue<CGRect> });
     /** @ntsSelector initWithCoder: */
@@ -1630,7 +1630,7 @@ declare module "objc:AppKit" {
     get toolbarStyle(): CEnum<NSWindow.ToolbarStyle, Int>;
     set toolbarStyle(value: CEnum<NSWindow.ToolbarStyle, Int>);
     get contentLayoutRect(): ByValue<CGRect>;
-    get contentLayoutGuide(): NSObject;
+    get contentLayoutGuide(): NSObject | null;
     get titlebarAccessoryViewControllers(): NSTitlebarAccessoryViewController[];
     set titlebarAccessoryViewControllers(value: NSTitlebarAccessoryViewController[]);
     get representedURL(): NSURL;
@@ -1683,7 +1683,7 @@ declare module "objc:AppKit" {
     get miniwindowImage(): NSImage | null;
     set miniwindowImage(value: NSImage | null);
     get miniwindowTitle(): string;
-    set miniwindowTitle(value: string);
+    set miniwindowTitle(value: string | null);
     get dockTile(): NSDockTile;
     get isDocumentEdited(): boolean;
     /** @ntsSet setDocumentEdited: */
@@ -1750,20 +1750,20 @@ declare module "objc:AppKit" {
     get sheets(): NSWindow[];
     get attachedSheet(): NSWindow | null;
     get isSheet(): boolean;
-    get sheetParent(): NSWindow;
+    get sheetParent(): NSWindow | null;
     /** @ntsSelector parentWindow */
     get parent(): NSWindow | null;
     /** @ntsSet setParentWindow: */
     set parent(value: NSWindow | null);
     get appearanceSource(): NSObject;
-    set appearanceSource(value: NSObject);
-    get colorSpace(): NSColorSpace;
-    set colorSpace(value: NSColorSpace);
+    set appearanceSource(value: NSObject | null);
+    get colorSpace(): NSColorSpace | null;
+    set colorSpace(value: NSColorSpace | null);
     get occlusionState(): CEnum<NSWindow.OcclusionState | 0, UInt>;
     get titlebarSeparatorStyle(): CEnum<NSTitlebarSeparatorStyle, Int>;
     set titlebarSeparatorStyle(value: CEnum<NSTitlebarSeparatorStyle, Int>);
-    get contentViewController(): NSViewController;
-    set contentViewController(value: NSViewController);
+    get contentViewController(): NSViewController | null;
+    set contentViewController(value: NSViewController | null);
     get initialFirstResponder(): NSView | null;
     set initialFirstResponder(value: NSView | null);
     get keyViewSelectionDirection(): CEnum<NSWindow.SelectionDirection, UInt>;
@@ -1784,7 +1784,7 @@ declare module "objc:AppKit" {
     set tabbingIdentifier(value: string);
     get tabbedWindows(): NSWindow[];
     get tab(): NSWindowTab;
-    get tabGroup(): NSWindowTabGroup;
+    get tabGroup(): NSWindowTabGroup | null;
     get windowTitlebarLayoutDirection(): CEnum<NSUserInterfaceLayoutDirection, Int>;
     get currentEvent(): NSEvent | null;
     get acceptsMouseMovedEvents(): boolean;
@@ -1807,8 +1807,8 @@ declare module "objc:AppKit" {
     get isRestorable(): boolean;
     /** @ntsSet setRestorable: */
     set isRestorable(value: boolean);
-    get restorationClass(): ClassObject;
-    set restorationClass(value: ClassObject);
+    get restorationClass(): ClassObject | null;
+    set restorationClass(value: ClassObject | null);
     /** @ntsSelector frameRectForContentRect:styleMask: */
     static frameRect(labels: { forContentRect: ByValue<CGRect>; styleMask: CEnum<NSWindow.StyleMask | 0, UInt> }): ByValue<CGRect>;
     /** @ntsSelector contentRectForFrameRect:styleMask: */
@@ -2129,8 +2129,8 @@ declare module "objc:AppKit" {
     get currentSystemPresentationOptions(): CEnum<NSApplication.PresentationOptions | 0, UInt>;
     get occlusionState(): CEnum<NSApplication.OcclusionState | 0, UInt>;
     get isProtectedDataAvailable(): boolean;
-    get appearance(): NSAppearance;
-    set appearance(value: NSAppearance);
+    get appearance(): NSAppearance | null;
+    set appearance(value: NSAppearance | null);
     get effectiveAppearance(): NSAppearance;
     get currentEvent(): NSEvent | null;
     get windowsMenu(): NSMenu | null;
@@ -2393,8 +2393,8 @@ declare module "objc:AppKit" {
   export class NSControl extends NSView {
     get target(): NSObject | null;
     set target(value: NSObject | null);
-    get action(): Selector;
-    set action(value: Selector);
+    get action(): Selector | null;
+    set action(value: Selector | null);
     get tag(): Int;
     set tag(value: Int);
     get ignoresMultiClick(): boolean;
@@ -2540,7 +2540,7 @@ declare module "objc:AppKit" {
     get isARepeat(): boolean;
     get keyCode(): UInt16;
     get trackingNumber(): Int;
-    get trackingArea(): NSTrackingArea;
+    get trackingArea(): NSTrackingArea | null;
     get subtype(): CEnum<NSEvent.EventSubtype, Int16>;
     get data1(): Int;
     get data2(): Int;
@@ -2659,8 +2659,8 @@ declare module "objc:AppKit" {
     set imageScaling(value: CEnum<NSImageScaling, UInt>);
     get imageHugsTitle(): boolean;
     set imageHugsTitle(value: boolean);
-    get symbolConfiguration(): NSImage.SymbolConfiguration;
-    set symbolConfiguration(value: NSImage.SymbolConfiguration);
+    get symbolConfiguration(): NSImage.SymbolConfiguration | null;
+    set symbolConfiguration(value: NSImage.SymbolConfiguration | null);
     get state(): Int;
     set state(value: Int);
     get allowsMixedState(): boolean;

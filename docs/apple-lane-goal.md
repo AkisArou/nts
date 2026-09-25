@@ -516,6 +516,22 @@ correctness does not depend on arm64 running by luck.
      - Refused by name until the second half: a field (the runtime's object
        has no room for one yet), a constructor, a static member, an accessor,
        and `super` calls.
+   - **Whole frameworks, measured (2026-09-25).** S4 left open whether a
+     binding should be a class list or a whole framework. All of AppKit's
+     306 classes generate in 2.35 s, as 16,004 lines (725 KB). A program
+     importing one class typechecks against them in 3.65 s cold and 0.07 s
+     warm, against 0.44 s cold for `macos-window`'s eight classes. So a
+     whole framework is affordable.
+     - It did not typecheck at first: 33 subclasses conflicted with their
+       bases. Clang's printed type drops `_Nullable` behind an availability
+       macro (`API_UNAVAILABLE(watchos) __kindof NSTextElement *`), so a
+       base read as non-null where its subclass did not.
+     - Swift's declaration is now the nullability's truth for a property
+       and a method's result: `T?` is nullable, and `T!` (a
+       `null_resettable` property) reads non-null and is written nullable.
+       With that, the whole of AppKit typechecks.
+     - Next: generate the binding a program's `objc:` import names, into
+       the build cache, rather than a class list checked into each fixture.
    - **S6, overrides landed (2026-09-25).** `class Canvas extends NSView {
      draw(dirtyRect) {...} }` is Swift's `override func draw(_:)`.
      - An override takes the selector of the method it overrides, from the

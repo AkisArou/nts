@@ -470,6 +470,14 @@ struct Symbol {
     fragments: Vec<Fragment>,
 }
 
+/// See [`Symbol::optionality`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Optionality {
+    Optional,
+    Unwrapped,
+    Neither,
+}
+
 /// One piece of Swift's declaration of a symbol, as its graph spells it.
 #[derive(serde::Deserialize, Clone)]
 struct Fragment {
@@ -477,6 +485,28 @@ struct Fragment {
 }
 
 impl Symbol {
+    /// How Swift's declaration gives the value -- a property's type, or a
+    /// method's result: optional (`T?`), implicitly unwrapped (`T!`, a
+    /// `null_resettable` property, read never nil and written nil to reset),
+    /// or neither. Clang's printed type drops `_Nullable` behind an
+    /// availability macro (`API_UNAVAILABLE(watchos) __kindof NSTextElement
+    /// *`), and a weak property is optional in Swift whatever its header says.
+    fn optionality(&self) -> Optionality {
+        let text: String = self.fragments.iter().map(|fragment| fragment.spelling.as_str()).collect();
+        let value = match text.rsplit_once("->") {
+            Some((_, result)) => result,
+            None => text.split_once(':').map_or("", |(_, ty)| ty),
+        };
+        let value = value.split('{').next().unwrap_or_default().trim();
+        if value.ends_with('?') {
+            Optionality::Optional
+        } else if value.ends_with('!') {
+            Optionality::Unwrapped
+        } else {
+            Optionality::Neither
+        }
+    }
+
     /// Whether this is Swift's `async` import of a method: the one Swift makes
     /// from a completion handler, beside the one taking it, under one USR.
     fn is_async(&self) -> bool {
@@ -990,7 +1020,7 @@ impl<'a> Model<'a> {
         let result = match self.spell(class, result, Position::Result)? {
             _ if throws && written(result).starts_with("BOOL") => "void".to_owned(),
             spelled if throws => spelled.trim_end_matches(" | null").to_owned(),
-            spelled => spelled,
+            spelled => optional_as_swift(spelled, symbol.optionality() == Optionality::Optional),
         };
         Ok(format!("{doc}    {modifier}{}({arguments}): {result};", quoted(&base)))
     }
@@ -1096,7 +1126,11 @@ impl<'a> Model<'a> {
     /// to override an accessor, and refuses it to override a field.
     fn property(&mut self, class: &Class, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
         let name = named(decl).unwrap_or_default();
-        let spelled = self.spell(class, decl.get("type").ok_or("no type")?, Position::Result)?;
+        let clang = self.spell(class, decl.get("type").ok_or("no type")?, Position::Result)?;
+        let spelled = optional_as_swift(clang.clone(), symbol.optionality() == Optionality::Optional);
+        // What the setter takes: `null` too for a `null_resettable` property,
+        // which Swift writes `T!`.
+        let written = optional_as_swift(spelled.clone(), symbol.optionality() != Optionality::Neither);
         let readonly = decl.get("readonly").and_then(Value::as_bool) == Some(true);
         let swift_name = symbol.names.title.clone();
         let getter = decl.get("getter").and_then(named).unwrap_or_else(|| name.clone());
@@ -1113,7 +1147,7 @@ impl<'a> Model<'a> {
             if setter != format!("set{}:", capitalized(&swift_name)) {
                 let _ = writeln!(text, "    /** @ntsSet {setter} */");
             }
-            let _ = write!(text, "    {is_static}set {key}(value: {spelled});");
+            let _ = write!(text, "    {is_static}set {key}(value: {written});");
         }
         Ok(text)
     }
@@ -1332,6 +1366,19 @@ impl<'a> Model<'a> {
 
 /// The messages a bound declaration sends: a method's selector, or a
 /// property's getter and, unless it is read-only, its setter.
+/// A value's spelling, made nullable where Swift's declaration is optional
+/// and clang's printed type lost it. Only an object or a string, which is
+/// what can be nil; a number Swift makes optional is another matter.
+fn optional_as_swift(spelled: String, optional: bool) -> String {
+    let object = !matches!(spelled.as_str(), "boolean" | "void") && !spelled.starts_with("CEnum<") && !spelled.starts_with("ByValue<");
+    let numeric = spelled.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && spelled.len() <= 7 && !spelled.contains('<');
+    if object && !numeric && !spelled.ends_with(" | null") && !spelled.ends_with("[]") && optional {
+        format!("{spelled} | null")
+    } else {
+        spelled
+    }
+}
+
 /// A method declaration's parameters, in order.
 fn parameters_of(decl: &Value) -> Vec<&Value> {
     decl.get("inner")
@@ -1797,6 +1844,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
 @property (class, readonly) Shape *unit;
+@property (readonly, weak) Shape *owner;
+@property (null_resettable, copy) NSString *label;
 @end
 @interface Shape (Named)
 - (void)renameTo:(Shape *)other count:(NSInteger)count;
@@ -1853,6 +1902,10 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
             symbol("c:objc(cs)Shape(cpy)unit", "swift.type.property", "unit", &["Shape", "unit"], ""),
+            // What Swift makes of two properties clang's printed type does not
+            // say: a weak one is optional, a `null_resettable` one unwrapped.
+            r#"{"identifier":{"precise":"c:objc(cs)Shape(py)owner","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"owner"},"pathComponents":["Shape","owner"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"weak var owner: Shape? { get }"}]}"#.to_owned(),
+            r#"{"identifier":{"precise":"c:objc(cs)Shape(py)label","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"label"},"pathComponents":["Shape","label"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"var label: String! { get set }"}]}"#.to_owned(),
             symbol("c:@E@Mode", "swift.enum", "Shape.Mode", &["Shape", "Mode"], ""),
             symbol("c:@E@Mode@ModeA", "swift.enum.case", "Shape.Mode.a", &["Shape", "Mode", "a"], ""),
             symbol("c:@E@Mode@ModeB", "swift.enum.case", "Shape.Mode.b", &["Shape", "Mode", "b"], ""),
@@ -1929,6 +1982,10 @@ NS_ASSUME_NONNULL_END
             "    get origin(): ByValue<CGPoint>;",
             "    get isHidden(): boolean;\n    /** @ntsSet setHidden: */\n    set isHidden(value: boolean);",
             "    static get unit(): Shape;",
+            // Nullable as Swift makes them: a weak property both ways, and a
+            // `null_resettable` one only when written.
+            "    get owner(): Shape | null;",
+            "    get label(): string;\n    set label(value: string | null);",
             // Swift's overloads across the hierarchy: a class declaring
             // `isEqual` repeats its ancestor's, or it is not their subtype.
             "    /** @ntsSelector isEqualToShape: */\n    isEqual(labels: { to: Shape }): boolean;",
