@@ -269,6 +269,36 @@ export function run(): string {
     windows_syntax(&dir, &emitted);
 }
 
+/// A runtime class's static taking bytes: the factory is C parameter 0, which
+/// the declaration does not spell, so every index recorded before it was
+/// prepended moves up one -- the count's array, and the parameter
+/// `@ntsNoEscape` names. Left where they were, the count pointed at itself and
+/// was never passed, and the no-escape marked the factory.
+#[test]
+fn a_static_taking_bytes_passes_the_count_before_them() {
+    let function = "  /**\n   * @ntsVtable 9 FromBytes\n   * @ntsNoEscape value\n   * @ntsHresult\n   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C\n   */\n  export function FromBytes(value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): IJsonValue;";
+    let binding = binding("", function).replace(
+        "import type { c_double } from \"c:types\";",
+        "import type { c_double, CBytes, CNumber, Counted } from \"c:types\";",
+    );
+    let source = "import { FromBytes } from \"winrt:Windows.Data.Json\";\nexport function run(): string {\n  return FromBytes(new Uint8Array([1, 2, 3])).Stringify();\n}\n";
+    let Some((dir, prepared)) = prepare("bytes", &binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    // The factory, the count, the bytes, the result slot.
+    let call = text.find("[9])(").unwrap_or_else(|| panic!("no call through slot 9:\n{text}")) + "[9])(".len();
+    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(arguments, 4, "FromBytes is not called with the factory, the count, the bytes and the slot:\n{text}");
+    assert!(text.contains("nts_view_bytes("), "the bytes are not lent in place:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
 /// Two tags on one line are one tag with the second's text in it: the reader
 /// takes a tag to the end of its line. The case `windows-winrt` was first
 /// written with, refused rather than read as a three-word slot.

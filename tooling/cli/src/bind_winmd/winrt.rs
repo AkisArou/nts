@@ -284,7 +284,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     let _ = writeln!(text, "// as the metadata names that slot; the compiler refuses the two disagreeing.");
     let _ = writeln!(text, "declare module \"winrt:{namespace}\" {{");
     let c_types: Vec<&str> =
-        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber" | "Struct" | "ByValue")).collect();
+        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber" | "Struct" | "ByValue" | "Counted" | "CBytes")).collect();
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
@@ -687,9 +687,30 @@ impl Writer<'_> {
         // answers `{ result: JsonValue; returnValue: boolean }`. They follow
         // every `[in]` one, which is where C takes them too.
         let mut outs: Vec<String> = Vec::new();
+        // Arrays lent for the call, which the Windows Runtime's ABI forbids
+        // the callee to keep: it copies what it needs before it returns.
+        let mut lent: Vec<String> = Vec::new();
         for (at, ty) in signature.types.iter().enumerate().take(declared) {
             let row = named.params().get(at).copied().flatten();
             let name = row.map_or_else(|| format!("param{at}"), |row| safe(row.name()));
+            // Bytes: a `Uint8Array` borrowed in place, its length the
+            // `UINT32` C takes before it. An `[in]` array is read (`const`); an
+            // `[out]` one the caller allocates, and the callee fills it where
+            // it is -- so it is an argument too, the program's buffer.
+            if let Type::Array(element) = ty
+                && matches!(**element, Type::U8)
+            {
+                if !outs.is_empty() {
+                    return Err("an `in` parameter after an `out` one".to_owned());
+                }
+                for brand in ["Counted", "CBytes", "CNumber"] {
+                    self.brands.insert(brand);
+                }
+                let pointee = if out(at) { "uint8_t" } else { "const uint8_t" };
+                parameters.push(format!("{name}: Counted<CBytes<\"{pointee}\">, CNumber<\"uint32\">, \"before\">"));
+                lent.push(name);
+                continue;
+            }
             if out(at) {
                 let written = match ty {
                     Type::RefMut(written) => written,
@@ -729,6 +750,9 @@ impl Writer<'_> {
         let mut text = String::new();
         let _ = writeln!(text, "    /**");
         let _ = writeln!(text, "     * @ntsVtable {slot} {}", method_name(method));
+        for name in &lent {
+            let _ = writeln!(text, "     * @ntsNoEscape {name}");
+        }
         match receiver {
             Receiver::Composable { class, iid } => {
                 let _ = writeln!(text, "     * @ntsHresult composable");

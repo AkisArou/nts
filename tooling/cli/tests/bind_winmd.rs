@@ -276,6 +276,42 @@ fn winrt_structs_cross_by_value() {
 /// A composable class is constructed as itself: its public factory's methods
 /// without the outer and inner objects, tagged for the compiler to supply
 /// them. A protected factory, which only a subclass calls, is not bound.
+/// Bytes: a `Uint8Array` borrowed in place, its `UINT32` length before it, and
+/// `@ntsNoEscape` because the Windows Runtime's ABI forbids a callee to keep
+/// an array it is lent. An `[in]` array is `const`; an `[out]` one the caller
+/// allocates and the callee fills, so it is an argument too. One the callee
+/// allocates (`CopyToByteArray`) is refused.
+#[test]
+fn winrt_byte_arrays_are_lent_in_place() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-bytes-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Storage.Streams", "Windows.Security.Cryptography", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let streams = std::fs::read_to_string(out.join("Windows.Storage.Streams.d.ts")).unwrap();
+    let crypto = std::fs::read_to_string(out.join("Windows.Security.Cryptography.d.ts")).unwrap();
+    let refused = std::fs::read_to_string(out.join("Windows.Security.Cryptography.refused.txt")).unwrap();
+    assert!(
+        streams.contains("@ntsNoEscape value\n     * @ntsHresult\n     */\n    WriteBytes(this: IDataWriter, value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): void;"),
+        "{streams}"
+    );
+    assert!(
+        streams.contains("@ntsNoEscape value\n     * @ntsHresult\n     */\n    ReadBytes(this: IDataReader, value: Counted<CBytes<\"uint8_t\">, CNumber<\"uint32\">, \"before\">): void;"),
+        "{streams}"
+    );
+    assert!(crypto.contains("function CreateFromByteArray(value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): IBuffer;"), "{crypto}");
+    assert!(refused.contains("CryptographicBuffer.CopyToByteArray\tan array"), "{refused}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
 #[test]
 fn composable_classes_are_constructed_as_themselves() {
     let Some(metadata) = winrt_metadata() else {

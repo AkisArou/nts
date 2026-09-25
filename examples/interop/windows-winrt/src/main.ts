@@ -25,6 +25,7 @@
 // - `closed`: an event, a TypeScript function as a delegate (see `events`).
 // - `structs`: records by value, both sizes Win64 passes (see `structs`).
 // - `outs`: `[out]` parameters, as fields of the result (see `outs`).
+// - `bytes`: byte arrays both ways (see `bytes`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
 //   call that was handed it -- and 19 under `--rc`, those two and one for
@@ -51,6 +52,8 @@ import { MemoryBuffer } from "winrt:Windows.Foundation";
 import type { DateTime } from "winrt:Windows.Foundation";
 import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
 import { BitmapTransform } from "winrt:Windows.Graphics.Imaging";
+import { CryptographicBuffer } from "winrt:Windows.Security.Cryptography";
+import { DataReader } from "winrt:Windows.Storage.Streams";
 import type { BitmapBounds } from "winrt:Windows.Graphics.Imaging";
 
 // Structs, which cross by value and which the program holds as storage. A
@@ -97,6 +100,18 @@ function outs(): string {
   const missing = vector.IndexOf(JsonValue.CreateNumberValue(2));
   return String(good.returnValue) + ":" + parsed + "," + String(bad.returnValue) + ":" + (bad.result === null ? "none" : bad.result.Stringify()) +
     ",index=" + String(found.returnValue) + ":" + String(found.index) + "," + String(missing.returnValue);
+}
+
+// Byte arrays, a `Uint8Array` borrowed in place with its length before it: a
+// buffer made from three bytes (an `[in]` array, which Windows copies) shown
+// as hex, which needs the count and the pointer in that order; and the bytes
+// read back out of it into a `Uint8Array` of the program's (an `[out]` array
+// the caller allocates, which Windows fills where it is).
+function bytes(): string {
+  const buffer = CryptographicBuffer.CreateFromByteArray(new Uint8Array([1, 2, 255]));
+  const back = new Uint8Array(3);
+  DataReader.FromBuffer(buffer).ReadBytes(back);
+  return CryptographicBuffer.EncodeToHexString(buffer) + ",read=" + String(back[0]) + ":" + String(back[1]) + ":" + String(back[2]);
 }
 
 // An event: two TypeScript functions handed to `add_Closed` as delegates, one
@@ -170,7 +185,7 @@ function run(): string {
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
-    " closed=" + events() + " structs=" + structs() + " outs=" + outs();
+    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes();
 }
 
 if (asked("throw")) {

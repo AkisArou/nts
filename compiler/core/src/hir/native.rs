@@ -424,6 +424,10 @@ pub enum Role {
     /// `field` is the property of the call's value it is read into, for an
     /// `@ntsHresult out` method; otherwise the slot's value is the call's.
     Result { written: Written, field: Option<std::sync::Arc<str>> },
+    /// The object a call is made on that the declaration does not spell: a
+    /// runtime class's static is called on its activation factory, which the
+    /// call supplies. Hidden from TypeScript, and fed by the call site.
+    Receiver,
     /// A composable factory's outer object: NULL, since the class is made as
     /// itself and not as the base of an object of the program's. Hidden from
     /// TypeScript.
@@ -521,6 +525,30 @@ fn no_abi_type(function: &str, parameter: Option<&str>) -> String {
 }
 
 impl Function {
+    /// A receiver the call supplies, as C parameter 0 (`Role::Receiver`): a
+    /// runtime class's static, called on its factory. No argument feeds it,
+    /// so a declared parameter's argument index is its index in the
+    /// declaration at every caller of [`Function::c_index`]. **Every C index
+    /// already recorded moves up one** -- a count's array, a default, a
+    /// consumed parameter. A count left pointing at its old index found itself
+    /// rather than the bytes, and the call passed no count at all.
+    pub fn prepend_receiver(&mut self, receiver: Type) {
+        self.parameters.insert(0, receiver);
+        self.roles.insert(0, Role::Receiver);
+        self.retention.insert(0, Retention::Unknown);
+        for role in &mut self.roles {
+            if let Role::Length { array, .. } = role {
+                *array += 1;
+            }
+        }
+        for (at, _) in &mut self.defaults {
+            *at += 1;
+        }
+        for at in &mut self.consumes {
+            *at += 1;
+        }
+    }
+
     /// Every C parameter in order: its role, and the TypeScript argument that
     /// feeds it -- `None` for the context slots no declaration spells.
     ///
@@ -532,7 +560,13 @@ impl Function {
         let mut ts = 0;
         self.roles.iter().enumerate().map(move |(at, role)| {
             let fed = match role {
-                Role::ClosureData | Role::ClosureNotify | Role::Length { .. } | Role::Result { .. } | Role::Outer | Role::Inner => None,
+                Role::ClosureData
+                | Role::ClosureNotify
+                | Role::Length { .. }
+                | Role::Result { .. }
+                | Role::Receiver
+                | Role::Outer
+                | Role::Inner => None,
                 Role::Plain
                 | Role::NSString
                 | Role::NSArray(_)

@@ -42138,12 +42138,42 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => None,
         };
+        // Whether the receiver is an argument the declaration spells (`this`),
+        // which moves every written argument up one, or a `Role::Receiver`
+        // slot fed directly, which moves nothing.
+        let spelled = receiver.is_some()
+            && !matches!(callee, Callee::Native(target) if target.roles.first() == Some(&super::native::Role::Receiver));
         if let Callee::Native(target) = callee {
-            self.mark_labels(target, arguments, receiver.is_some());
+            self.mark_labels(target, arguments, spelled);
         }
-        let args = self.lower_written_arguments(id, callee, arguments, receiver.is_some(), tail.as_ref())?;
+        let args = self.lower_written_arguments(id, callee, arguments, spelled, tail.as_ref())?;
         let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
         self.native_arguments(id, &target.clone(), args, arguments.len(), receiver)
+    }
+
+    /// A C method's receiver, at the type its first parameter declares: the
+    /// first argument when the declaration spells it (`this`), or -- for a
+    /// `Role::Receiver`, which no argument feeds -- the slot's own value,
+    /// returned for the caller to pass there.
+    fn place_receiver(
+        &mut self,
+        id: NodeId,
+        target: &super::native::Function,
+        args: &mut Vec<ValueId>,
+        receiver: Option<ValueId>,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(receiver) = receiver else { return Ok(None) };
+        let want = target
+            .parameters
+            .first()
+            .map(super::native::Type::representation)
+            .ok_or_else(|| self.unsupported(id, "a C method whose function takes no instance"))?;
+        let receiver = self.coerce(receiver, &want, id)?;
+        if target.roles.first() == Some(&super::native::Role::Receiver) {
+            return Ok(Some(receiver));
+        }
+        args.insert(0, receiver);
+        Ok(None)
     }
 
     /// Mark each argument a native call passes as an object literal of
@@ -42236,14 +42266,8 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<(Vec<ValueId>, Vec<Lent>), Diagnostic> {
         let target = target.clone();
         let origin = self.origin(id);
-        // A C method's receiver: its first argument, at the `this` type the
-        // method declares.
-        if let Some(receiver) = receiver {
-            let want = target.parameters.first().map(super::native::Type::representation).ok_or_else(|| {
-                self.unsupported(id, "a C method whose function takes no instance")
-            })?;
-            args.insert(0, self.coerce(receiver, &want, id)?);
-        }
+        let fed_receiver = target.roles.first() == Some(&super::native::Role::Receiver);
+        let receiver_value = self.place_receiver(id, &target, &mut args, receiver)?;
         let mut lent = Vec::new();
         let mut c_args = Vec::with_capacity(target.parameters.len());
         // The closure the context slots that follow a closure slot belong to.
@@ -42253,6 +42277,7 @@ impl<'a> FuncBuilder<'a> {
             let argument = fed.and_then(|ts| args.get(ts).copied());
             match role {
                 Role::Plain => c_args.extend(argument),
+                Role::Receiver => c_args.extend(receiver_value),
                 // A label crosses as its own role says, with the value the
                 // literal gave that property.
                 Role::Label { key, inner, .. } => {
@@ -42264,7 +42289,7 @@ impl<'a> FuncBuilder<'a> {
                 Role::ErrorSlot { converter } => {
                     // `fed` counts a method's receiver, which `written` --
                     // the arguments the program wrote after the dot -- does not.
-                    let written = fed.is_some_and(|ts| ts < written + usize::from(receiver.is_some()));
+                    let written = fed.is_some_and(|ts| ts < written + usize::from(receiver.is_some() && !fed_receiver));
                     let ty = target.parameters[at].representation();
                     c_args.push(self.error_slot(argument.filter(|_| written), ty, converter, &mut lent, &origin));
                 }
@@ -42704,9 +42729,7 @@ impl<'a> FuncBuilder<'a> {
             (Some(_), true) => return Err(self.unsupported(call, "@ntsFactory on a method, whose instance is already its receiver")),
             // The factory is the receiver: a first parameter the call supplies.
             (Some(_), false) => {
-                native.parameters.insert(0, super::native::Type::Pointer(super::native::Pointee::Void));
-                native.roles.insert(0, super::native::Role::Plain);
-                native.retention.insert(0, super::native::Retention::Unknown);
+                native.prepend_receiver(super::native::Type::Pointer(super::native::Pointee::Void));
             }
             (None, true) => {}
         }

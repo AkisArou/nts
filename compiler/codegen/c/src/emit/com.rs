@@ -7,9 +7,12 @@ use nts_core::hir::native::{Function, Type, Vtable};
 
 /// A pointer is `void *` in the cast, the receiver first: every COM method
 /// takes its instance as `This`, and one it writes through -- a result slot --
-/// is not `const`.
+/// is not `const`. One C only reads keeps its `const` (`const void *`): a
+/// byte array lent as `const uint8_t *` passed to a plain `void *` discards
+/// the qualifier, which `-Werror` refuses.
 fn spelled(ty: &Type) -> String {
     match ty {
+        Type::Pointer(_) if ty.c_type().starts_with("const ") => "const void *".to_owned(),
         Type::Pointer(_) => "void *".to_owned(),
         other => other.c_type().into_owned(),
     }
