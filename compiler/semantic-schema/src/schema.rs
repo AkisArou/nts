@@ -40,7 +40,7 @@ use crate::origin::Origin;
 /// landed at 26 without one, and two lanes' bumps met on a rebase as the
 /// same line and merged into none: whoever lands second takes the next
 /// number, and checks that it did.
-pub const SCHEMA_VERSION: u32 = 28;
+pub const SCHEMA_VERSION: u32 = 29;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

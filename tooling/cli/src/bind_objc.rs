@@ -965,7 +965,7 @@ impl<'a> Model<'a> {
         let modifier = if instance { "" } else { "static " };
         if kind.ends_with("property") {
             let spelled = self.spell(class, result, Position::Result)?;
-            return Ok(format!("    /** @ntsSelector {selector} */\n    {modifier}readonly {}: {spelled};", quoted_key(&base)));
+            return Ok(format!("    /** @ntsSelector {selector} */\n    {modifier}get {}(): {spelled};", quoted_key(&base)));
         }
         // Swift took an argument away: the `NSError **` it throws instead of
         // passing, which the call leaves out and the compiler supplies.
@@ -1087,9 +1087,13 @@ impl<'a> Model<'a> {
         Ok((positional.join(", "), names))
     }
 
-    /// A property, under Swift's name, with the getter and setter tagged
-    /// where they are not the ones that name implies: `isHidden` is read with
-    /// `isHidden` and written with `setHidden:`.
+    /// A property, under Swift's name, as the accessors an Objective-C
+    /// property is: `get title(): string` and `set title(value: string)`,
+    /// each tagged where its selector is not the one the name implies --
+    /// `isHidden` is read with `isHidden` and written with `setHidden:`.
+    /// Accessors and not a field, so a subclass the program writes overrides
+    /// one (`override var isFlipped: Bool`) as TypeScript allows an accessor
+    /// to override an accessor, and refuses it to override a field.
     fn property(&mut self, class: &Class, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
         let name = named(decl).unwrap_or_default();
         let spelled = self.spell(class, decl.get("type").ok_or("no type")?, Position::Result)?;
@@ -1097,25 +1101,20 @@ impl<'a> Model<'a> {
         let swift_name = symbol.names.title.clone();
         let getter = decl.get("getter").and_then(named).unwrap_or_else(|| name.clone());
         let setter = decl.get("setter").and_then(named).unwrap_or_else(|| format!("set{}:", capitalized(&name)));
-        let mut tags = Vec::new();
-        if getter != swift_name {
-            tags.push(format!("@ntsSelector {getter}"));
-        }
-        if !readonly && setter != format!("set{}:", capitalized(&swift_name)) {
-            tags.push(format!("@ntsSet {setter}"));
-        }
+        let is_static = if decl.get("class").and_then(Value::as_bool) == Some(true) { "static " } else { "" };
+        let key = quoted_key(&swift_name);
         let mut text = String::new();
-        if !tags.is_empty() {
-            let _ = writeln!(text, "    /** {} */", tags.join(" "));
+        if getter != swift_name {
+            let _ = writeln!(text, "    /** @ntsSelector {getter} */");
         }
-        let is_static = decl.get("class").and_then(Value::as_bool) == Some(true);
-        let _ = write!(
-            text,
-            "    {}{}{}: {spelled};",
-            if is_static { "static " } else { "" },
-            if readonly { "readonly " } else { "" },
-            quoted_key(&swift_name)
-        );
+        let _ = write!(text, "    {is_static}get {key}(): {spelled};");
+        if !readonly {
+            let _ = writeln!(text);
+            if setter != format!("set{}:", capitalized(&swift_name)) {
+                let _ = writeln!(text, "    /** @ntsSet {setter} */");
+            }
+            let _ = write!(text, "    {is_static}set {key}(value: {spelled});");
+        }
         Ok(text)
     }
 
@@ -1922,12 +1921,14 @@ NS_ASSUME_NONNULL_END
             // A category is found by the class it extends; labels by Swift.
             "    /** @ntsSelector renameTo:count: */\n    rename(labels: { to: Shape; count: Int }): void;",
             // A getter Swift imports as a property is one.
-            "    /** @ntsSelector describe */\n    readonly describe: string;",
+            "    /** @ntsSelector describe */\n    get describe(): string;",
             // Properties: read-only, a Swift name whose setter is not implied,
             // and a class property as a static.
-            "    readonly origin: ByValue<CGPoint>;",
-            "    /** @ntsSet setHidden: */\n    isHidden: boolean;",
-            "    static readonly unit: Shape;",
+            // As the accessors an Objective-C property is, so a subclass can
+            // override one.
+            "    get origin(): ByValue<CGPoint>;",
+            "    get isHidden(): boolean;\n    /** @ntsSet setHidden: */\n    set isHidden(value: boolean);",
+            "    static get unit(): Shape;",
             // Swift's overloads across the hierarchy: a class declaring
             // `isEqual` repeats its ancestor's, or it is not their subtype.
             "    /** @ntsSelector isEqualToShape: */\n    isEqual(labels: { to: Shape }): boolean;",

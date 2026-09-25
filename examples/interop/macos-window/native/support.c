@@ -19,6 +19,10 @@ typedef struct NtsRect {
 struct objc_selector *sel_registerName(const char *name);
 void objc_msgSend(void);
 
+bool view_is_flipped(struct NSView *view) {
+  return ((signed char (*)(struct NSView *, struct objc_selector *))objc_msgSend)(view, sel_registerName("isFlipped")) != 0;
+}
+
 void send_draw_rect(struct NSView *view, double x, double y, double width, double height) {
   NtsRect rect = {x, y, width, height};
   ((void (*)(struct NSView *, struct objc_selector *, NtsRect))objc_msgSend)(view, sel_registerName("drawRect:"), rect);

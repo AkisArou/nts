@@ -124,6 +124,7 @@ window 320 button 100x32 views 1
 bundle none
 hit 10 the canvas
 drawn 40x30
+flipped true true false
 pressed 1
 micro 1
 timeout 1

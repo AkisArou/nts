@@ -4,6 +4,8 @@
 #ifndef NTS_MACOS_WINDOW_SUPPORT_H
 #define NTS_MACOS_WINDOW_SUPPORT_H
 
+#include <stdbool.h>
+
 struct objc_imp;
 
 void report(const char *line);
@@ -17,6 +19,8 @@ struct NSView;
 // does: a rectangle by value, which the override receives by the platform's
 // convention -- in memory on x86_64.
 void send_draw_rect(struct NSView *view, double x, double y, double width, double height);
+// Sends `view` `isFlipped`, as AppKit asks it.
+bool view_is_flipped(struct NSView *view);
 // libobjc's, declared by <objc/runtime.h> only with blocks enabled.
 struct objc_imp *imp_implementationWithBlock(void *block);
 

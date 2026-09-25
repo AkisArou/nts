@@ -14,6 +14,8 @@ declare module "c:support" {
   export function window_control(): void;
   /** Under `WINDOW_NESTED=1`, a nested run loop inside the callback. */
   export function nested_while_readable(): void;
+  /** Sends `view` `isFlipped`, as AppKit asks it. */
+  export function view_is_flipped(view: NSView): boolean;
   /** Sends `view` `drawRect:` with a rectangle, as AppKit does. */
   export function send_draw_rect(view: NSView, x: c_double, y: c_double, width: c_double, height: c_double): void;
   /**

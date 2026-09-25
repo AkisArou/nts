@@ -532,6 +532,18 @@ correctness does not depend on arm64 running by luck.
        rectangle (in memory), on both backends. With the override rule
        disabled, `drawn 40x30` reads `0x0`. AppKit's own draws are not the
        check: since macOS 14 they may pass a rect larger than the bounds.
+     - **Property overrides (Swift's `override var isFlipped: Bool`).**
+       `bind-objc` declares a property as the accessors an Objective-C
+       property is: `get title(): string` and `set title(value: string)`.
+       TypeScript refuses an accessor that overrides a field (TS2611), and
+       lets one override an accessor. So `get isFlipped() { return true }` on
+       a subclass is the getter AppKit sends, and it registers under the
+       overridden property's getter selector, or its setter's. A read or
+       write of such an accessor from TypeScript calls the compiled accessor
+       directly, as a method of the class is called. `macos-window`'s canvas
+       answers `isFlipped` true when asked through `objc_msgSend`, and a
+       plain view answers false. Schema 29: the frontend reads native tags on
+       accessors.
      - `super.m(args)` in such a method is `[super m:args]`: the superclass's
        method, sent through `objc_msgSendSuper` from the superclass of the
        program's class, since the method is the runtime's and not a function

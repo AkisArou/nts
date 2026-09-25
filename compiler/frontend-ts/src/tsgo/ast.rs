@@ -398,25 +398,11 @@ fn decode_nodes(
             //
             // And a class and its members, which is how a binding declares an
             // Objective-C class as TypeScript sees it: `@ntsClass NSTimer` on
-            // `class Timer`, and each member's `@ntsSelector`. And an
+            // `class Timer`, and each member's `@ntsSelector` -- a property's on
+            // its accessors, `get title()` and `set title(value)`. And an
             // interface, an Objective-C protocol: `@ntsProtocol
             // NSXMLParserDelegate` on `interface XMLParserDelegate`.
-            native: if matches!(
-                kind,
-                NodeKind::Syntax(
-                    nts_semantic_schema::syntax::FUNCTION_DECLARATION
-                        | nts_semantic_schema::syntax::METHOD_SIGNATURE
-                        | nts_semantic_schema::syntax::PROPERTY_SIGNATURE
-                        | nts_semantic_schema::syntax::CONSTRUCT_SIGNATURE
-                        | nts_semantic_schema::syntax::CLASS_DECLARATION
-                        | nts_semantic_schema::syntax::INTERFACE_DECLARATION
-                        | nts_semantic_schema::syntax::METHOD_DECLARATION
-                        | nts_semantic_schema::syntax::PROPERTY_DECLARATION
-                        | nts_semantic_schema::syntax::CONSTRUCTOR
-                        | nts_semantic_schema::syntax::MODULE_DECLARATION
-                        | nts_semantic_schema::syntax::SOURCE_FILE
-                )
-            ) {
+            native: if carries_native_attributes(kind) {
                 strings.source(raw.pos, raw.end).and_then(native_attributes)
             } else { None },
             data,
@@ -425,6 +411,29 @@ fn decode_nodes(
     }
 
     Ok(nodes)
+}
+
+/// The declarations a native tag can sit on: see the comment where
+/// `native` is read.
+fn carries_native_attributes(kind: NodeKind) -> bool {
+    matches!(
+        kind,
+        NodeKind::Syntax(
+            nts_semantic_schema::syntax::FUNCTION_DECLARATION
+                | nts_semantic_schema::syntax::METHOD_SIGNATURE
+                | nts_semantic_schema::syntax::PROPERTY_SIGNATURE
+                | nts_semantic_schema::syntax::CONSTRUCT_SIGNATURE
+                | nts_semantic_schema::syntax::CLASS_DECLARATION
+                | nts_semantic_schema::syntax::INTERFACE_DECLARATION
+                | nts_semantic_schema::syntax::METHOD_DECLARATION
+                | nts_semantic_schema::syntax::PROPERTY_DECLARATION
+                | nts_semantic_schema::syntax::GET_ACCESSOR
+                | nts_semantic_schema::syntax::SET_ACCESSOR
+                | nts_semantic_schema::syntax::CONSTRUCTOR
+                | nts_semantic_schema::syntax::MODULE_DECLARATION
+                | nts_semantic_schema::syntax::SOURCE_FILE
+        )
+    )
 }
 
 /// Only a tag in a leading documentation comment belongs to the declaration.

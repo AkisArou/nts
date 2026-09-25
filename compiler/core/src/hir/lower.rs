@@ -1658,6 +1658,13 @@ fn boxed_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
 /// Synthetic like a closure's, and from the *bottom* of the synthetic band
 /// rather than the top: closures count down from `u32::MAX` and the suspension
 /// machine takes the half above `FLOOR + 2^19`, so this is the space left.
+/// The setter a property's name implies: `setTitle:` for `title`.
+fn default_setter(name: &str) -> String {
+    let mut letters = name.chars();
+    let first = letters.next().map(|c| c.to_ascii_uppercase()).into_iter();
+    format!("set{}:", first.chain(letters).collect::<String>())
+}
+
 /// The handle a pointer to an opaque object is, `const` or not.
 fn opaque_handle(pointee: &super::native::Pointee) -> Option<&super::native::Handle> {
     match pointee {
@@ -13481,24 +13488,34 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         instance: Option<TypeId>,
     ) -> Result<(Func, super::ObjcMethod), Diagnostic> {
-        match self.kind_of(member) {
-            Some(syntax::CONSTRUCTOR) => {
-                return Err(self.unsupported(
-                    member,
-                    "a constructor of a class extending an Objective-C class, which inherits its superclass's initializers",
-                ));
-            }
-            Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => {
-                return Err(self.unsupported(member, "an accessor of a class extending an Objective-C class"));
-            }
-            _ => {}
+        if self.kind_of(member) == Some(syntax::CONSTRUCTOR) {
+            return Err(self.unsupported(
+                member,
+                "a constructor of a class extending an Objective-C class, which inherits its superclass's initializers",
+            ));
         }
         if is_static_member(self.snapshot, member) {
             return Err(self.unsupported(member, "a static member of a class extending an Objective-C class"));
         }
-        let signature = super::generics::declared_signature(self.snapshot, member)
-            .cloned()
-            .ok_or_else(|| self.unsupported(member, "an Objective-C method with no signature"))?;
+        // An accessor's is its property's getter or setter: the value out, or
+        // the value in.
+        let signature = match self.kind_of(member) {
+            Some(syntax::GET_ACCESSOR) => self
+                .snapshot
+                .node_types
+                .get(&member)
+                .map(|value| accessor_signature(None, None, *value)),
+            Some(syntax::SET_ACCESSOR) => {
+                let value = self
+                    .children(member)
+                    .into_iter()
+                    .find(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+                    .and_then(|parameter| self.snapshot.node_types.get(&parameter).copied());
+                value.map(|value| self.void_type().map(|void| accessor_signature(None, Some(value), void))).transpose()?
+            }
+            _ => super::generics::declared_signature(self.snapshot, member).cloned(),
+        }
+        .ok_or_else(|| self.unsupported(member, "an Objective-C method with no signature"))?;
         let receiver = instance
             .or_else(|| instance_type_of(self.snapshot, class))
             .and_then(|ty| super::native::pointer(self.snapshot, ty))
@@ -13509,15 +13526,21 @@ impl<'a> FuncBuilder<'a> {
         // The selector: the one `@ntsSelector` gives the method, else the one
         // a protocol the class adopts declares for a member of its name, else
         // the one of the superclass's method it overrides -- `draw(_:)` is
-        // `drawRect:` -- else Swift's `@objc` rule for its name.
-        let selector = self
-            .node(member)
-            .native
-            .as_ref()
-            .and_then(|native| native.selector.clone())
-            .or_else(|| self.protocol_selector(class, &name))
-            .or_else(|| self.overridden_selector(class, &name, signature.parameters.len()))
-            .unwrap_or_else(|| objc_selector(&name, signature.parameters.len()));
+        // `drawRect:` -- else Swift's `@objc` rule for its name. An accessor
+        // is its property's getter or setter: `get isFlipped()` is sent
+        // `isFlipped`.
+        let selector = match self.kind_of(member) {
+            Some(syntax::GET_ACCESSOR) => self.property_selectors(member, &name).0,
+            Some(syntax::SET_ACCESSOR) => self.property_selectors(member, &name).1.unwrap_or_else(|| default_setter(&name)),
+            _ => self
+                .node(member)
+                .native
+                .as_ref()
+                .and_then(|native| native.selector.clone())
+                .or_else(|| self.protocol_selector(class, &name))
+                .or_else(|| self.overridden_selector(class, &name, signature.parameters.len()))
+                .unwrap_or_else(|| objc_selector(&name, signature.parameters.len())),
+        };
         let func = self.lower_method_of(class, member, instance)?;
         let method = super::ObjcMethod { selector, function: func.name.clone(), signature: std::sync::Arc::new(imp) };
         Ok((func, method))
@@ -42726,6 +42749,12 @@ impl<'a> FuncBuilder<'a> {
         let objc = |declaration: &NodeId| match self.kind_of(*declaration) {
             Some(syntax::PROPERTY_SIGNATURE) => self.in_objc_module(*declaration),
             Some(syntax::PROPERTY_DECLARATION) => self.objc_class_member(*declaration).is_some(),
+            // A binding's property, as the accessors an Objective-C property
+            // is; or an accessor of a class the program writes over one,
+            // which is sent as the runtime would send it, to its own entry.
+            Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => {
+                self.objc_class_member(*declaration).is_some() || self.program_objc_accessor(*declaration)
+            }
             _ => false,
         };
         let name = self.node(member).text.clone()?;
@@ -42756,17 +42785,94 @@ impl<'a> FuncBuilder<'a> {
                 properties.iter().find(|p| p.name == name).and_then(|p| p.declaration).filter(objc)
             })?;
         let is_static = self.objc_class_member(declaration).is_some_and(|member| member.is_static);
-        let getter = self.node(declaration).native.as_ref().and_then(|n| n.selector.clone()).unwrap_or_else(|| name.clone());
-        let set = self.node(declaration).native.as_ref().and_then(|n| n.set.clone());
-        let setter = (!self.node(declaration).modifiers.contains(nts_semantic_schema::DeclarationModifiers::READONLY)).then(|| {
-            if let Some(set) = set {
-                return set;
-            }
-            let mut letters = name.chars();
-            let first = letters.next().map(|c| c.to_ascii_uppercase()).into_iter();
-            format!("set{}:", first.chain(letters).collect::<String>())
-        });
+        let (getter, setter) = self.property_selectors(declaration, &name);
         Some(ObjcProperty { declaration, is_static, getter, setter })
+    }
+
+    /// A property's getter and setter selectors, the setter `None` when it is
+    /// read-only: a field declared `readonly`, or accessors with no `set`.
+    /// Each is its tag where the binding gave one, else the name's -- `title`
+    /// and `setTitle:`. An accessor of a class the program writes over an
+    /// Objective-C class answers the selectors of the property it overrides,
+    /// so `get isFlipped()` is sent `isFlipped`, as `AppKit` sends it.
+    fn property_selectors(&self, declaration: NodeId, name: &str) -> (String, Option<String>) {
+        if self.program_objc_accessor(declaration)
+            && let Some(overridden) = self.overridden_property(declaration, name)
+        {
+            return self.property_selectors(overridden, name);
+        }
+        let tag = |node: NodeId, pick: fn(&nts_semantic_schema::NativeAttributes) -> Option<String>| {
+            self.node(node).native.as_ref().and_then(|native| pick(native))
+        };
+        if self.kind_of(declaration) == Some(syntax::PROPERTY_DECLARATION)
+            || self.kind_of(declaration) == Some(syntax::PROPERTY_SIGNATURE)
+        {
+            let getter = tag(declaration, |n| n.selector.clone()).unwrap_or_else(|| name.to_owned());
+            let setter = (!self.node(declaration).modifiers.contains(nts_semantic_schema::DeclarationModifiers::READONLY))
+                .then(|| tag(declaration, |n| n.set.clone()).unwrap_or_else(|| default_setter(name)));
+            return (getter, setter);
+        }
+        // Accessors: the pair declared beside this one, in the same class.
+        let pair: Vec<NodeId> = self
+            .node(declaration)
+            .parent
+            .map(|list| self.children(list))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|member| {
+                matches!(self.kind_of(*member), Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR))
+                    && self.member_name(*member).as_deref() == Some(name)
+            })
+            .collect();
+        let get = pair.iter().copied().find(|m| self.kind_of(*m) == Some(syntax::GET_ACCESSOR));
+        let set = pair.iter().copied().find(|m| self.kind_of(*m) == Some(syntax::SET_ACCESSOR));
+        let getter = get.and_then(|g| tag(g, |n| n.selector.clone())).unwrap_or_else(|| name.to_owned());
+        let setter = set.map(|s| tag(s, |n| n.set.clone()).unwrap_or_else(|| default_setter(name)));
+        (getter, setter)
+    }
+
+    /// A read or write, from TypeScript, of an accessor of a class the
+    /// program writes over an Objective-C class: the compiled accessor,
+    /// called directly, as a method of it is (`lower_program_objc_call`).
+    fn call_program_accessor(&mut self, id: NodeId, declaration: NodeId, kind: &str, args: Vec<ValueId>) -> Result<ValueId, Diagnostic> {
+        let class = self.enclosing_class(declaration).ok_or_else(|| self.unsupported(id, "an accessor outside a class"))?;
+        let name = self.member_name(declaration).ok_or_else(|| self.unsupported(id, "an accessor whose name the program computes"))?;
+        let owner = self.class_name_for(class, None, false)?;
+        let ty = if kind == "set" { HirType::Void } else { self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a property"))? };
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::Call { callee: Callee::Direct(format!("{owner}#{kind} {name}")), args, frame: None },
+            ty,
+            origin,
+        ))
+    }
+
+    /// Whether `declaration` is an accessor of a class the program writes over
+    /// an Objective-C class.
+    fn program_objc_accessor(&self, declaration: NodeId) -> bool {
+        matches!(self.kind_of(declaration), Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR))
+            && self.enclosing_class(declaration).is_some_and(|class| super::native::extends_objc(self.snapshot, class))
+    }
+
+    /// The property of a superclass a binding declares that an accessor of
+    /// the program's class overrides: its accessor, or its field.
+    fn overridden_property(&self, declaration: NodeId, name: &str) -> Option<NodeId> {
+        let class = self.enclosing_class(declaration)?;
+        let mut base = super::native::superclass(self.snapshot, class);
+        for _ in 0..64 {
+            let here = base?;
+            if let Some(found) = self.children(here).into_iter().find(|member| {
+                matches!(
+                    self.kind_of(*member),
+                    Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR | syntax::PROPERTY_DECLARATION)
+                ) && self.objc_class_member(*member).is_some()
+                    && self.member_name(*member).as_deref() == Some(name)
+            }) {
+                return Some(found);
+            }
+            base = super::native::superclass(self.snapshot, here);
+        }
+        None
     }
 
     /// `object.property` as a message: the getter, sent to the object.
@@ -42787,6 +42893,10 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Ok(None);
         };
+        if self.program_objc_accessor(property.declaration) {
+            let receiver = receiver.ok_or_else(|| self.unsupported(id, "a static accessor of a class extending an Objective-C class"))?;
+            return self.call_program_accessor(id, property.declaration, "get", vec![receiver]).map(Some);
+        }
         let chained = self.without_chain_absence(id, ty);
         let signature = accessor_signature(receiver.map(|_| receiver_ty), None, chained);
         let callee = self.native_callee_sending(id, property.declaration, &property.getter, &signature)?;
@@ -42820,6 +42930,13 @@ impl<'a> FuncBuilder<'a> {
             return Ok(None);
         };
         let receiver = if property.is_static { None } else { Some(self.lower_expression(object)?) };
+        if self.program_objc_accessor(property.declaration) {
+            let receiver = receiver.ok_or_else(|| self.unsupported(id, "a static accessor of a class extending an Objective-C class"))?;
+            let value_ty = self.type_of(target).ok_or_else(|| self.unrepresentable(target, "a property"))?;
+            let value = self.lower_expecting(source, &value_ty)?;
+            self.call_program_accessor(id, property.declaration, "set", vec![receiver, value])?;
+            return Ok(Some(value));
+        }
         let signature = accessor_signature(receiver.map(|_| receiver_ty), Some(ty), self.void_type()?);
         let callee = self.native_callee_sending(id, property.declaration, &setter, &signature)?;
         let (args, lent) = self.lower_call_arguments(id, &callee, &[source], receiver)?;

@@ -25,7 +25,7 @@ import {
   type NSNotification,
   type NSWindowDelegate,
 } from "objc:AppKit";
-import { nested_while_readable, report, send_draw_rect, window_control } from "c:support";
+import { nested_while_readable, report, send_draw_rect, view_is_flipped, window_control } from "c:support";
 import { sel_registerName } from "objc:runtime";
 import { local } from "c:memory";
 import type { ByValue, Ptr, c_double } from "c:types";
@@ -79,6 +79,12 @@ let drawnHeight = 0;
 let hitX = 0;
 
 class Canvas extends NSView {
+  // Swift's `override var isFlipped: Bool { true }`: the getter of the
+  // property it overrides, `isFlipped`, which AppKit sends to lay out.
+  get isFlipped(): boolean {
+    return true;
+  }
+
   draw(dirtyRect: ByValue<CGRect>): void {
     drawnWidth = dirtyRect.size.width;
     drawnHeight = dirtyRect.size.height;
@@ -196,6 +202,8 @@ function main(): void {
   // draws pass what it chooses, which since macOS 14 may exceed the bounds.
   send_draw_rect(canvas, 1 as c_double, 2 as c_double, 40 as c_double, 30 as c_double);
   report(`drawn ${drawnWidth}x${drawnHeight}`);
+  // And a plain view, which is not: the override is the canvas's alone.
+  report(`flipped ${canvas.isFlipped} ${view_is_flipped(canvas)} ${content === null ? "none" : view_is_flipped(content)}`);
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
   // the closure a block the timer keeps, and calls from the run loop.
