@@ -86,6 +86,9 @@ pub(super) fn module(program: &Program) -> String {
     if found.returns_records && !bound(program, "objc_msgSend_stret") {
         let _ = writeln!(text, "declare void @objc_msgSend_stret()");
     }
+    if found.returns_records && found.supers && !bound(program, "objc_msgSendSuper_stret") {
+        let _ = writeln!(text, "declare void @objc_msgSendSuper_stret()");
+    }
     for selector in found.selectors {
         lookup(&mut text, &selector_symbol(selector), "sel_registerName", selector);
     }
@@ -181,7 +184,9 @@ pub(super) fn send(
         let (entry, prefix) = match passing {
             // arm64 has no `_stret`: `objc_msgSend` itself takes the `sret`
             // pointer, in `x8`.
-            Passing::Memory { .. } if platform.arch == crate::Arch::X86_64 => ("objc_msgSend_stret", String::new()),
+            Passing::Memory { .. } if platform.arch == crate::Arch::X86_64 => {
+                (if send.super_of.is_some() { "objc_msgSendSuper_stret" } else { "objc_msgSend_stret" }, String::new())
+            }
             Passing::Memory { .. } => (entry, String::new()),
             Passing::Registers(_) | Passing::Homogeneous { .. } => (entry, format!("{returned} = ")),
         };

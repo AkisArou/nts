@@ -58,9 +58,12 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
         // each slice keeps one of the two.
         writer.line(origin, "#if defined(__x86_64__)");
         writer.line(origin, "extern void objc_msgSend_stret(void);");
+        writer.line(origin, "extern void objc_msgSendSuper_stret(void);");
         writer.line(origin, "#define NTS_OBJC_SEND_FOR(size) ((size) > 16 ? objc_msgSend_stret : objc_msgSend)");
+        writer.line(origin, "#define NTS_OBJC_SUPER_FOR(size) ((size) > 16 ? objc_msgSendSuper_stret : objc_msgSendSuper)");
         writer.line(origin, "#else");
         writer.line(origin, "#define NTS_OBJC_SEND_FOR(size) objc_msgSend");
+        writer.line(origin, "#define NTS_OBJC_SUPER_FOR(size) objc_msgSendSuper");
         writer.line(origin, "#endif");
     }
     for selector in found.selectors {
@@ -358,8 +361,8 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
     let skip = usize::from(send.class.is_none());
     let result = result(&target.result);
     // `[super m]`: from the superclass of the program's class, the receiver
-    // unchanged. A record result would need `objc_msgSendSuper_stret`, which
-    // the lowering does not ask for: it is refused there.
+    // unchanged -- and a record returned in memory on x86_64 through
+    // `objc_msgSendSuper_stret`, as `objc_msgSend_stret` is for any receiver.
     if let Some(class) = &send.super_of {
         let mut types = vec!["struct nts_objc_super *".to_owned(), "struct objc_selector *".to_owned()];
         types.extend(target.parameters.iter().skip(skip).map(parameter));
@@ -368,7 +371,11 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
             format!("{}()", selector_symbol(&send.selector)),
         ];
         values.extend(rest.iter().cloned());
-        return format!("(({result} (*)({}))objc_msgSendSuper)({})", types.join(", "), values.join(", "));
+        let entry = match target.result {
+            Type::Record(_) => format!("(NTS_OBJC_SUPER_FOR(sizeof({result})))"),
+            _ => "objc_msgSendSuper".to_owned(),
+        };
+        return format!("(({result} (*)({})){entry})({})", types.join(", "), values.join(", "));
     }
     let mut types = vec![receiver_type, "struct objc_selector *".to_owned()];
     types.extend(target.parameters.iter().skip(skip).map(parameter));

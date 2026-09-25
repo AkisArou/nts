@@ -125,6 +125,7 @@ bundle none
 hit 10 the canvas
 drawn 40x30
 flipped true true false
+scanned 41 41
 pressed 1
 micro 1
 timeout 1

@@ -99,6 +99,15 @@ class Canvas extends NSView {
     hitX = point.x;
     return super.hitTest(point);
   }
+
+  // `super.centerScanRect(_:)`: a rectangle in and one out, 32 bytes that
+  // x86_64 returns in memory -- so the answer comes through
+  // `objc_msgSendSuper_stret`, and arm64's through `objc_msgSendSuper`.
+  scannedWidth(width: number): number {
+    const rect = local<CGRect>();
+    setRect(rect, 0.25, 0, width, 30);
+    return super.centerScanRect(rect).size.width;
+  }
 }
 
 // A sheet on the window, ended as soon as it is begun, for `sheet` below.
@@ -204,6 +213,11 @@ function main(): void {
   report(`drawn ${drawnWidth}x${drawnHeight}`);
   // And a plain view, which is not: the override is the canvas's alone.
   report(`flipped ${canvas.isFlipped} ${view_is_flipped(canvas)} ${content === null ? "none" : view_is_flipped(content)}`);
+  // Scanned to whole pixels, through `super` and through an ordinary send,
+  // which the canvas does not override: the same NSView implementation.
+  const plain = local<CGRect>();
+  setRect(plain, 0.25, 0, 40.6, 30);
+  report(`scanned ${canvas.scannedWidth(40.6)} ${canvas.centerScanRect(plain).size.width}`);
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
   // the closure a block the timer keeps, and calls from the run loop.

@@ -47947,10 +47947,6 @@ impl<'a> FuncBuilder<'a> {
         let [object, member] = self.children(self.children(id).first().copied().unwrap_or(id))[..] else {
             return Err(self.unsupported(id, "a `super` call of unexpected shape"));
         };
-        let returned = self.snapshot.signatures[method.1 .0 as usize].return_type;
-        if matches!(super::native::abi_type(self.snapshot, returned), Some(super::native::Type::Record(_))) {
-            return Err(self.unsupported(id, "a `super` message returning a record by value, which x86_64 sends through `objc_msgSendSuper_stret`, not built yet"));
-        }
         let class = self
             .enclosing_class(id)
             .and_then(|class| super::native::objc_name(self.snapshot, class))

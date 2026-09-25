@@ -589,8 +589,17 @@ correctness does not depend on arm64 running by luck.
        program's class, since the method is the runtime's and not a function
        of the program's to call. `Canvas.hitTest` returns
        `super.hitTest(point)`, and the content view's hit test answers the
-       canvas, on both backends. A super message returning a record by value
-       (`_stret` on x86_64) is refused by name.
+       canvas, on both backends.
+     - A super message returning a record by value goes through
+       `objc_msgSendSuper_stret` on x86_64 when the record comes back in
+       memory, and through `objc_msgSendSuper` otherwise and on arm64.
+       `Canvas.scannedWidth` sends `super.centerScanRect(_:)` and answers what
+       an ordinary send of it answers, 41 for a width of 40.6, on both
+       backends.
+     - Not yet: a program method overriding a selector whose Swift form takes
+       labels (its IMP would build the labels object from its arguments), and
+       one returning a record by value, whose result is refused as an
+       escaping local.
      - An optional chain as a statement (`window.contentView?.hitTest(p);`)
        compiles. Its value, `T | null | undefined`, has no representation,
        and nothing reads it, so each absent link jumps past the rest.
