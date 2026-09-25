@@ -571,6 +571,45 @@ check behind it, and needs one.
   and values.
 - Cycles through a GObject (below).
 
+### libadwaita, and what a props type says
+
+Adw-1 binds from GIR like any other namespace (12,342 functions), and
+`examples/interop/adw-hello` is an `AdwApplication` with an
+`AdwToolbarView`, an `AdwHeaderBar` and an `AdwStatusPage`. It passes plain
+and `--rc`, on C and LLVM.
+
+It typechecks because a **props type folds `| null` into absent**.
+`AdwPreferencesPage` redeclares `name` as nullable, where `GtkWidget`'s is
+not, and a subclass's props must extend its parent's (TS2430 otherwise). The
+binder of one namespace cannot see another's types to reconcile the two. For
+construction a nullable property is given or not, and absent is the NULL the
+object starts from, so the props type says `name?: string`. Each folded
+property carries `@ntsNullable` and the sentence naming what is lost: a props
+object cannot clear a property to NULL, because it is for construction only.
+The folded set can be counted, so undoing it is a sweep.
+
+**`super(props)`, a props object passed through, is parked.** An optional
+property's slot is erased whatever its type. Reading a handle back out of
+one needs handles in `NtsValue`, which the C backend refuses (NTS2008). The
+work toward that has started: `NTS_TAG_IS_REFERENCE` is now
+`NTS_TAG_IS_POINTER` and `NTS_TAG_IS_MANAGED`, each of its 24 runtime uses
+decided on its own, and a handle tag will join the first and never the
+second.
+
+### Lifetimes nts does not keep, witnessed
+
+`examples/interop/gtk-iter-lifetime` has two arms that fail under `--rc`, on
+purpose, and its `build.sh` requires them to fail:
+
+- a `GtkTextIter` read after its buffer's last use, which a release at that
+  last use frees. Releasing foreign handles at block end is what closes it;
+- an iterator returned out of the function that owns its buffer, which no
+  release placement closes.
+
+GTK's contract is that the caller keeps the buffer alive. Plain passes both.
+Either `--rc` arm passing fails the script, so the fix that closes the first
+changes its expectation in the same commit.
+
 ### Cycles through a GObject: design
 
 **The defect, measured.** Under `--rc`, `button.connect("clicked", () =>
