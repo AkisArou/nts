@@ -39777,6 +39777,29 @@ impl<'a> FuncBuilder<'a> {
     /// A bound has to sit on every edge of the cycle it bounds, and the cheapest
     /// way to be sure of that is for the walk to have one entry point.
     fn reason_without_a_leaf(&self, call: NodeId) -> Option<&'static str> {
+        // **A parameter's callee has a declaration and it is not a body.** The
+        // checker resolves `fn()` where `fn: () => void` to that *type*'s
+        // signature, whose declaration is the function-type annotation -- a node
+        // no arm below matches, so the sentence fell through to the transitive
+        // one and said "something whose `throw` cannot be carried" with no leaf
+        // to name. Asked of the callee expression instead, which is where the
+        // fact is: a name declaring a parameter is a value, whatever the checker
+        // found for its type. See `calls_compiled_code`, which draws the same
+        // line for the same reason.
+        if self
+            .children(call)
+            .first()
+            .and_then(|callee| self.node(*callee).symbol)
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .is_some_and(|record| {
+                record
+                    .declarations
+                    .iter()
+                    .any(|at| self.kind_of(*at) == Some(syntax::PARAMETER))
+            })
+        {
+            return Some("through a function value, which has no raising copy to call");
+        }
         let Some(declaration) = self
             .snapshot
             .call_targets
@@ -40033,6 +40056,55 @@ impl<'a> FuncBuilder<'a> {
         // arrived as a value and what it reaches "is exactly what cannot be known
         // here" -- which is the sentence the arm above already gives for the
         // no-symbol spelling, now given for both.
+        // **A parameter is not a function, and asking a symbol's membership said
+        // it could not raise.** `throwing` holds symbols whose *declarations*
+        // contain a body that throws; a parameter's symbol has no such
+        // declaration, so `fn()` inside `try { fn() } catch` answered "cannot
+        // raise", the `try` compiled, and a throw raised by whatever was passed
+        // in **escaped the handler with no diagnostic anywhere**:
+        //
+        //     function call(fn: () => void): number {
+        //       try { fn(); } catch (e) { return 1; }
+        //       return 0;
+        //     }
+        //     call(() => { throw new TypeError("x"); })   // node: 1. this: aborts
+        //
+        // The comment above this line described the fix -- *"if nothing this
+        // symbol declares is a function, the callee arrived as a value"* -- and
+        // the code asked `!declarations.is_empty()` instead, which is true of a
+        // parameter. A sentence describing a repair that is not there is worse
+        // than no sentence: it is why this went unfound through the React lane's
+        // report of the *same shape* one spelling over.
+        //
+        // **A parameter only**, deliberately, and the narrowness is what makes it
+        // safe. An *imported* function's local symbol declares an import
+        // specifier rather than a function and is nevertheless in `throwing`, so
+        // a cross-module `try` keeps working -- verified, 29 of 29 against node.
+        // A plain non-throwing function keeps compiling, which is
+        // `examples/array-buffer`'s shape and the reason the membership test is
+        // still asked below. What remains uncovered is a callee held in a
+        // *variable* (`const h = cb; try { h() }`), which has the same hole and
+        // no witness yet.
+        //
+        // Found by the conformance lane: it is what `assert.throws` is, so 3,601
+        // of test262's 15,078 positive `test/language` cases were going to read
+        // as wrong answers with this one bug as the cause.
+        //
+        // **Unless it is a promise settler**, which is a parameter and is *not a
+        // call*: `lower_settler_call` inlines `resolve(v)` into the executor, so
+        // there is no callee and nothing to raise. Without this exclusion the
+        // refusal took out **246 functions** in `examples/interop/gtk-gir` -- every
+        // generated `*_promise` wrapper, whose body is a `try` around the settler
+        // it was handed. The gate's interop step is what said so; the corpus
+        // census did not, because the GIR bindings are not in it.
+        if record
+            .declarations
+            .iter()
+            .any(|at| self.kind_of(*at) == Some(syntax::PARAMETER))
+            && !self.settlers.contains_key(&symbol.0)
+        {
+            return true;
+        }
         // Not merely "compiled", but **can raise**. `bounded(n)` inside a `try`
         // is a compiled call and a pure one, and refusing it would take a
         // working example away to fix a defect it does not have --
@@ -51433,8 +51505,35 @@ impl<'a> FuncBuilder<'a> {
         // Declared at module scope. A constant is its value; a variable is a
         // load.
         let origin = self.origin(id);
-        if let Some(constant) = self.module.constants.get(&symbol.0) {
-            return Ok(self.push(OpKind::ConstFloat(*constant), HirType::NUMBER, origin));
+        if let Some(constant) = self.module.constants.get(&symbol.0).copied() {
+            // **At the name's own representation, and it was always a float.**
+            // `constant_value` folds `true` to `1.0` -- correct, since "a
+            // boolean's storage is its truth value" -- and the *global* path
+            // keeps the type beside it in `Global::ty`. This path lost it, so
+            //
+            //     const flag = true;
+            //     function pick(p: boolean): number { return p ? 1 : 2; }
+            //     pick(flag);
+            //
+            // lowered `const 1 : f64` into a `bool` parameter and the program
+            // did not verify at all:
+            // `CallArgumentType { callee: "pick", at: 0, expected: Bool, found:
+            // Float }`. `pick(true)` verifies, which is the control that says the
+            // fold rather than the boolean is at fault.
+            //
+            // Reported by the React lane, where it stopped their native probe
+            // emitting anything: **invalid HIR costs the whole program**, so one
+            // folded flag took out every function beside it.
+            //
+            // `Bool` alone, because `constant_value` folds only numbers, booleans
+            // and arithmetic over them -- and an integer-typed name keeps the
+            // float it had, which every coercion already expects.
+            let kind = if matches!(self.type_of(id), Some(HirType::Bool)) {
+                return Ok(self.push(OpKind::ConstBool(constant != 0.0), HirType::Bool, origin));
+            } else {
+                OpKind::ConstFloat(constant)
+            };
+            return Ok(self.push(kind, HirType::NUMBER, origin));
         }
         // Declared at module scope and not usable. Saying which is worth more
         // than "a name declared outside this function", and it is only said for
