@@ -3835,8 +3835,6 @@ double nts_array_push_value(NtsArray *a, NtsValue value) {
   return (double)a->header.length;
 }
 
-
-
 /* `xs.concat(ys)`, one argument.
  *
  * Uninitialized, like `slice` and `splice` beside it: every slot of the result
@@ -7699,7 +7697,8 @@ NtsMap *nts_map_copy(const NtsMap *map) {
 NtsMap *nts_map_extend(NtsMap *target, const NtsMap *source) {
   for (double at = nts_map_next(source, 0); at >= 0;
        at = nts_map_next(source, at + 1)) {
-    nts_map_set(target, nts_map_key_at(source, at), nts_map_value_at(source, at));
+    nts_map_set(target, nts_map_key_at(source, at),
+                nts_map_value_at(source, at));
   }
   return target;
 }

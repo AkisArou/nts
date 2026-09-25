@@ -305,7 +305,7 @@ void *nts_objc_state(void *self) {
 static id nts_objc_state_init(id self, SEL cmd) {
   const NtsObjcStateful *class = nts_objc_stateful_of(self);
   struct objc_super super = {self, class_getSuperclass(class->cls)};
-  self = ((id(*)(struct objc_super *, SEL))objc_msgSendSuper)(&super, cmd);
+  self = ((id (*)(struct objc_super *, SEL))objc_msgSendSuper)(&super, cmd);
   if (self) {
     nts_objc_state(self);
   }
@@ -353,8 +353,8 @@ void nts_objc_register_class(const char *name, const char *superclass,
   class_addMethod(made, sel_registerName("dealloc"),
                   (IMP)nts_objc_state_dealloc, "v16@0:8");
   objc_registerClassPair(made);
-  NtsObjcStateful *grown = realloc(
-      nts_objc_stateful, (nts_objc_stateful_count + 1) * sizeof *grown);
+  NtsObjcStateful *grown =
+      realloc(nts_objc_stateful, (nts_objc_stateful_count + 1) * sizeof *grown);
   if (!grown) {
     fprintf(stderr, "nts: out of memory\n");
     abort();
