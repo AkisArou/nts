@@ -59,6 +59,7 @@ import {
   gtk_window_set_child,
   Orientation,
   GtkButton,
+  gtk_button_get_type,
   GtkEntry,
   GtkEntryBuffer,
   GtkLabel,
@@ -88,6 +89,7 @@ import {
   KeyFileFlags,
   type GError,
 } from "c:GLib-2.0";
+import { g_signal_group_new } from "c:GObject-2.0";
 import type { CNumber } from "c:types";
 import { local } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
@@ -212,6 +214,14 @@ function main(): void {
     // property the literal writes, in its order.
     const button = new GtkButton({ label: "press", has_frame: false });
     gir_log("made " + String(button.label) + " " + String(button.has_frame));
+    // A `gpointer` result the caller owns that is a GObject
+    // (`Owned<Erased<GObject>>`): adopted rather than referenced again, and
+    // released once -- `fatal-criticals` under `--rc` would abort on a count
+    // taken from a reference nobody gave.
+    const group = g_signal_group_new(gtk_button_get_type());
+    group.set_target(button);
+    const target = group.dup_target();
+    gir_log("dup-target " + String(target === button));
     // Not floating: the program's own reference, which `--rc` releases once.
     const buffer = new GtkEntryBuffer({ max_length: 2 });
     buffer.set_text("abc", -1);

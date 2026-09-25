@@ -2594,7 +2594,14 @@ fn consumed(snapshot: &SemanticSnapshot, name: &str, parameter: &nts_semantic_sc
 /// that nothing would ever drop.
 fn owned_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<bool, String> {
     let owned = branded(snapshot, ty, "___c_owned");
-    if owned && pointer(snapshot, ty).is_none_or(|pointee| pointee.counting().is_none()) {
+    // `Owned<Erased<GObject>>`, a `gpointer` the caller owns: C's type is
+    // `void *`, and the value is read back as the handle, so the handle's
+    // family is what counts it.
+    let counted = |pointee: &Pointee| pointee.counting().is_some();
+    if owned
+        && !pointer(snapshot, ty).is_some_and(|pointee| counted(&pointee))
+        && !schema::erased_handle(snapshot, ty).is_some_and(|pointee| counted(&pointee))
+    {
         return Err(format!(
             "foreign function `{name}` hands back a reference the caller owns, as a handle the program does not count; declare its class with `GObjectClass`, not `Class`"
         ));
