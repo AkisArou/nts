@@ -7,6 +7,9 @@
 # - **First run:** no file, so the throwing read gives an empty list. Three
 #   notes are typed and added by the button's action, the table's data source
 #   answers three rows, and the file is written.
+# - **Swift:** `reference/notes.swift`, the same application in Swift, line for
+#   line, compiled with `swiftc` on the Mac: its first run prints what the
+#   TypeScript program's first run printed.
 # - **Second run:** the three notes read back, three more added, six rows and
 #   six saved -- what the first run wrote is what the second finds.
 # - **LLVM:** the second run's program from the LLVM backend, a third run on
@@ -102,6 +105,17 @@ run() {
 }
 run ./notes first 0
 echo "first run: no file, three notes added through the button, three rows from the data source, three saved"
+
+# The oracle: `reference/notes.swift`, the same application written in Swift,
+# compiled with `swiftc` on the Mac. Its first run says, line for line, what
+# the TypeScript program's first run said.
+dest=${NTS_APPLE_SSH:-nts-mac}
+scp -q -o BatchMode=yes "$source/reference/notes.swift" "$dest:/tmp/nts-notes.swift"
+ssh -o BatchMode=yes "$dest" 'cd /tmp && rm -f /tmp/nts-macos-notes-swift.txt && swiftc -O -target x86_64-apple-macos13 nts-notes.swift -o nts-notes-swift && ./nts-notes-swift' \
+  >"$out/swift.txt" 2>"$out/swift.err" || { cat "$out/swift.txt" "$out/swift.err" >&2; exit 1; }
+diff -u "$out/swift.txt" "$out/notes-first.txt" ||
+  { echo "macos-notes: the TypeScript program's first run did not say what the Swift one does" >&2; exit 1; }
+echo "swift: the same application in Swift says the same, line for line"
 run ./notes second 3
 echo "second run: the three read back, three more added, six rows and six saved"
 run ./notesLlvm third 6

@@ -962,6 +962,15 @@ correctness does not depend on arm64 running by luck.
        drawing in C, on both backends. The colours are released (an
        Objective-C weak reference goes nil), and under NoGc that line alone
        differs.
+   - **The notes app against Swift (2026-09-25).** `macos-notes` has
+     `reference/notes.swift`, the same application in Swift, line for line:
+     the window, the anchors, the data source, `#selector(Notes.add(_:))`
+     where the TypeScript says `selector(Notes, "add")`, and the timer that
+     types three notes. `swiftc` builds it on the Mac. Its first run prints
+     what the TypeScript program's first run prints, and the fixture diffs
+     the two. This is S4's Swift oracle, on the fixture that is an
+     application. `macos-window`'s job and timeout lines are JavaScript's
+     event loop, which Swift has no twin of.
    - **Swift's `#selector` (2026-09-25).** `button.action =
      selector(Notes, "add")`, from `objc:runtime`. It used to be
      `sel_registerName("add:")`, which is where a missing colon hid.
