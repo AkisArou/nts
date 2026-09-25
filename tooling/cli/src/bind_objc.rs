@@ -671,6 +671,11 @@ struct Origin<'v> {
 struct Model<'a> {
     swift: &'a Swift,
     headers: &'a Dumped,
+    /// The headers' typedefs, and each generic class's type parameters as
+    /// what they stand for: `ItemIdentifierType` in
+    /// `NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>`
+    /// is an `id`, so an object.
+    typedefs: BTreeMap<String, String>,
     bound: &'a BTreeSet<String>,
     /// The deployment target: a member Swift marks as introduced after it, or
     /// deprecated by it, is not bound.
@@ -736,9 +741,19 @@ struct Reading<'v> {
 
 impl<'a> Model<'a> {
     fn read(swift: &'a Swift, headers: &'a Dumped, bodies: &'a Dumped, bound: &'a BTreeSet<String>, target: Version) -> Self {
+        let mut typedefs = headers.typedefs.clone();
+        for decl in bodies.bodies.values().flatten() {
+            if decl.get("kind").and_then(Value::as_str) == Some("ObjCTypeParamDecl")
+                && let Some(name) = named(decl)
+            {
+                let bound = decl.get("type").and_then(desugared).unwrap_or_else(|| "id".to_owned());
+                typedefs.entry(name).or_insert(bound);
+            }
+        }
         let mut model = Model {
             swift,
             headers,
+            typedefs,
             bound,
             target,
             classes: Vec::new(),
@@ -1319,20 +1334,20 @@ impl<'a> Model<'a> {
             // a record read in place -- as the address a program passes:
             // `local<NSRange>()`.
             if position == Position::Parameter
-                && let Some(name) = struct_through_typedefs(&self.headers.typedefs, pointee.trim_start_matches("const "))
+                && let Some(name) = struct_through_typedefs(&self.typedefs, pointee.trim_start_matches("const "))
                 && self.headers.records.contains_key(&name)
             {
                 let name = name.as_str();
                 self.record(name)?;
                 self.import("c:types", "Ptr");
-                return Ok(or_null(format!("Ptr<{}>", record_name(&self.headers.typedefs, name))));
+                return Ok(or_null(format!("Ptr<{}>", record_name(&self.typedefs, name))));
             }
             return Err(format!("a `{desugared}`"));
         }
         if let Some(name) = desugared.strip_prefix("struct ").filter(|name| !name.ends_with('*')) {
             self.record(name)?;
             self.import("c:types", "ByValue");
-            return Ok(format!("ByValue<{}>", record_name(&self.headers.typedefs, name)));
+            return Ok(format!("ByValue<{}>", record_name(&self.typedefs, name)));
         }
         Err(format!("a `{desugared}`"))
     }
@@ -1369,11 +1384,11 @@ impl<'a> Model<'a> {
         }
         pieces.push(&parameters[start..]);
         for piece in pieces.iter().map(|p| p.trim()).filter(|p| !p.is_empty() && *p != "void") {
-            spelled.push(self.spell(class, &block_part(piece, &self.headers.typedefs), Position::Block)?);
+            spelled.push(self.spell(class, &block_part(piece, &self.typedefs), Position::Block)?);
         }
         let result = match result.trim() {
             "void" => "void".to_owned(),
-            result => self.spell(class, &block_part(result, &self.headers.typedefs), Position::Block)?,
+            result => self.spell(class, &block_part(result, &self.typedefs), Position::Block)?,
         };
         Ok((spelled, result))
     }
@@ -1391,7 +1406,7 @@ impl<'a> Model<'a> {
         };
         let key = key.trim().trim_end_matches('*').trim();
         let key_is_string = key == "NSString"
-            || self.headers.typedefs.get(key).is_some_and(|aliased| aliased.trim().trim_end_matches('*').trim() == "NSString");
+            || self.typedefs.get(key).is_some_and(|aliased| aliased.trim().trim_end_matches('*').trim() == "NSString");
         if !key_is_string {
             return Err(format!("a dictionary keyed by `{key}`, which a map of strings cannot be"));
         }
@@ -1424,7 +1439,7 @@ impl<'a> Model<'a> {
         let class = class.split_once('<').map_or(class, |(class, _)| class.trim());
         // `NSPasteboardType`, a typedef of `NSString *` Swift wraps as a
         // struct of statics: a string here, as it is outside an array.
-        if let Some(aliased) = self.headers.typedefs.get(class).cloned()
+        if let Some(aliased) = self.typedefs.get(class).cloned()
             && aliased.trim_end_matches('*').trim() != class
         {
             return self.array_element(&format!("NSArray<{aliased}>"));
@@ -1799,7 +1814,7 @@ fn render(request: &Request, model: &Model) -> String {
     }
     for name in &model.records {
         let fields = model.headers.records.get(name).map(Vec::as_slice).unwrap_or_default();
-        let typedefs = &model.headers.typedefs;
+        let typedefs = &model.typedefs;
         let members: Vec<String> = fields
             .iter()
             .map(|(field, ty)| {
@@ -1932,7 +1947,7 @@ fn render_values(request: &Request, model: &Model) -> String {
     for enumeration in model.enums.values() {
         own.extend(enumeration.path.first().cloned());
     }
-    own.extend(model.records.iter().map(|name| record_name(&model.headers.typedefs, name)));
+    own.extend(model.records.iter().map(|name| record_name(&model.typedefs, name)));
     for name in model.mentioned.keys() {
         own.extend(model.swift.class(name).split('.').next().map(str::to_owned));
     }
@@ -2038,7 +2053,7 @@ typedef NSString *ShapeKind;
 @class Shape;
 typedef Shape * _Nonnull (^ShapeMaker)(NSInteger count);
 NS_ASSUME_NONNULL_BEGIN
-@interface Shape : Root
+@interface Shape<TagType> : Root
 - (instancetype)initWithOrigin:(CGPoint)origin mode:(Mode)mode;
 - (nullable Shape *)next;
 - (void)each:(void (^)(Shape *))block;
@@ -2060,6 +2075,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)placeShapes:(NSDictionary<ShapeKind, Shape *> *)shapes;
 - (NSDictionary<NSString *, NSString *> *)labels;
 - (void)fillWith:(ShapeMaker)maker;
+- (NSArray<TagType> *)tags;
 @property (readonly) Shape *twin;
 @property (readonly) CGPoint origin;
 @property (getter=isHidden) BOOL hidden;
@@ -2132,6 +2148,7 @@ NS_ASSUME_NONNULL_END
             symbol("c:objc(cs)Shape(im)labels", "swift.method", "labels()", &["Shape", "labels()"], ""),
             symbol("c:objc(cs)Shape(im)fillWith:", "swift.method", "fill(with:)", &["Shape", "fill(with:)"], ""),
             symbol("c:objc(cs)Shape(py)onChange", "swift.property", "onChange", &["Shape", "onChange"], ""),
+            symbol("c:objc(cs)Shape(im)tags", "swift.method", "tags()", &["Shape", "tags()"], ""),
             symbol("c:objc(cs)Shape(py)twin", "swift.property", "twin", &["Shape", "twin"], ""),
             symbol("c:objc(cs)Shape(py)origin", "swift.property", "origin", &["Shape", "origin"], ""),
             symbol("c:objc(cs)Shape(py)hidden", "swift.property", "isHidden", &["Shape", "isHidden"], ""),
@@ -2259,6 +2276,8 @@ NS_ASSUME_NONNULL_END
             "    /** @ntsSelector fillWith: */\n    fill(maker: (arg0: Int) => Shape): void;",
             // A block property: its setter alone, a closure or `null`.
             "    set onChange(value: ((arg0: Shape) => void) | null);",
+            // A generic class's type parameter is what it stands for: `id`.
+            "    /** @ntsSelector tags */\n    tags(): NSObject[];",
             // `NSError`, not bound but named by a throwing handler: what the
             // promise rejects with is its description, which its stub reads.
             "   * @ntsClass NSError */\n  export class NSError extends Root {\n    get localizedDescription(): string;\n  }",

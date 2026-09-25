@@ -403,6 +403,10 @@ correctness does not depend on arm64 running by luck.
          as a parameter (`fileExists(atPath:isDirectory:)`) and as a block's
          `stop`, which the closure writes. `macos-blocks` ends an enumeration
          after its second element, as clang's does.
+       - A generic class's type parameter stands for what it is declared
+         as, `id`, so an object: `NSDiffableDataSourceSnapshot<SectionIdentifierType,
+         ItemIdentifierType>`'s `itemIdentifiers` is `NSObject[]`, and the
+         collection view's item provider binds.
        - An element through a typedef of `NSString *`, such as
          `[NSPasteboard.PasteboardType]`, is a `string`. A class qualified by a
          protocol, such as `NSView<NSCollectionViewElement>`, is the class.
