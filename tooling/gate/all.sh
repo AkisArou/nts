@@ -1248,7 +1248,9 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   #
   # 319 -> 321 on 2026-09-25: `a-generic-pinned-through-a-union` and one other
   # example landed while this was measured; both agree under counting.
-  backend_examples 321 "through the LLVM backend, counting" "" 10 ); }
+  #
+  # 321 -> 322 on 2026-09-25 for `a-tuple-element-that-holds-a-function`.
+  backend_examples 322 "through the LLVM backend, counting" "" 10 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1292,7 +1294,9 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # 319 -> 320 on 2026-09-25 for `a-method-through-a-union-of-classes`.
   #
   # 320 -> 322 on 2026-09-25, the same two examples.
-  backend_examples 322 "through the LLVM backend" "" 10 ); }
+  #
+  # 322 -> 323, the same example.
+  backend_examples 323 "through the LLVM backend" "" 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1567,7 +1571,9 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   #
   # 320 -> 322 on 2026-09-25, the same two examples. `exact` means each had to
   # agree here on the day it landed.
-  backend_examples 322 "through the JVM backend" exact 10 ); }
+  #
+  # 322 -> 323, the same example.
+  backend_examples 323 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

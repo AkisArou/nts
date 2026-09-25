@@ -37273,6 +37273,39 @@ impl<'a> FuncBuilder<'a> {
             && !may_be_a_finished_iterator_result(self.snapshot, narrowed)
     }
 
+    /// The field a member name reads, by every spelling a layout answers to.
+    ///
+    /// Three, and they are asked in this order:
+    ///
+    /// - **a tuple's position.** `pair[0]` arrives as a member named `0`, and the
+    ///   layout spells its fields `_0`, `_1` -- because `v->1` is not C -- so the
+    ///   number is turned back into the position it always was rather than looked
+    ///   up as a name nobody wrote. Bounded here rather than at the indexing,
+    ///   which would read past the layout: a tuple's length is part of its type,
+    ///   so an index outside it is a program the checker should have rejected, and
+    ///   one that arrives anyway is refused by name rather than answered with
+    ///   whatever is adjacent in memory.
+    /// - the **name**, which is every ordinary member.
+    /// - a **symbol key**, whose spelling is not a name a program writes.
+    ///
+    /// **Extracted because two paths need it and only one had it.** This lived
+    /// inside [`Self::member_of`], so a *read* of `t[1]` resolved and a **call**
+    /// of `t[1]()` did not: `lower_object_method` asked the hierarchy for a method
+    /// named `1`, found none, and refused with "a method `1` with no declaration
+    /// in the hierarchy" -- for a tuple element holding a closure, which is what
+    /// `[state, setState]` is. Two derivations of "which field is this name" would
+    /// have differed on exactly the spelling neither author writes by hand.
+    fn field_named(&mut self, type_id: TypeId, layout: &Layout, member_name: &str) -> Option<u32> {
+        member_name
+            .parse::<usize>()
+            .ok()
+            .filter(|_| self.is_tuple(type_id))
+            .filter(|at| *at < layout.fields.len())
+            .and_then(|at| u32::try_from(at).ok())
+            .or_else(|| layout.index_of(member_name))
+            .or_else(|| Self::symbol_keyed(layout, member_name))
+    }
+
     fn member_of(
         &mut self,
         id: NodeId,
@@ -37307,26 +37340,7 @@ impl<'a> FuncBuilder<'a> {
             self.values[value.0 as usize].ty.clone()
         {
             let layout = self.layout_of(id, type_id)?;
-            // A tuple is indexed by position, and `pair[0]` arrives here as a
-            // member named `0`. Its layout spells the fields `_0`, `_1` --
-            // because `v->1` is not C -- so the number is turned back into the
-            // position it always was rather than looked up as a name nobody
-            // wrote.
-            let positional = member_name
-                .parse::<usize>()
-                .ok()
-                .filter(|_| self.is_tuple(type_id))
-                // Bounded here rather than at the indexing below, which would
-                // read past the layout. A tuple's length is part of its type,
-                // so an index outside it is a program the checker should have
-                // rejected -- and if one arrives anyway it is refused by name
-                // rather than answered with whatever is adjacent in memory.
-                .filter(|at| *at < layout.fields.len())
-                .and_then(|at| u32::try_from(at).ok());
-            let Some(field) = positional
-                .or_else(|| layout.index_of(member_name))
-                .or_else(|| Self::symbol_keyed(&layout, member_name))
-            else {
+            let Some(field) = self.field_named(type_id, &layout, member_name) else {
                 return self.member_that_is_not_a_field(id, value, type_id, member_name);
             };
             self.no_aggregate_errors_read(id, type_id, &layout, field, member_name)?;
@@ -48295,8 +48309,15 @@ impl<'a> FuncBuilder<'a> {
         //
         // Asked before the hierarchy, because a name cannot be both: a method
         // is not in the layout and a field is not in the dispatch table.
+        // Through [`Self::field_named`], so a **tuple position** resolves here as
+        // it does for a read: `t[1]()` arrives as a member named `1` where the
+        // layout spells the field `_1`, and asking `index_of` alone found nothing
+        // and refused with "a method `1` with no declaration in the hierarchy" --
+        // for a tuple element holding a closure, which is what `[state, setState]`
+        // is, and so what `useState`, `useReducer`, `useTransition` and
+        // `useActionState` return.
         if let Some(layout) = self.layout_of(id, type_id).ok()
-            && let Some(field) = layout.index_of(&member_name)
+            && let Some(field) = self.field_named(type_id, &layout, &member_name)
             && let Some(declared) = layout.fields.get(field as usize)
             && matches!(declared.ty, HirType::Managed(ManagedType::Object(_)))
         {
