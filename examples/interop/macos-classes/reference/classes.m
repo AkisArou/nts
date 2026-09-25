@@ -58,10 +58,13 @@ static NSString *tallied(void) {
 @property NSInteger entries;
 - (instancetype)initWithOwner:(NSString *)owner opening:(NSInteger)opening;
 - (void)record:(NSInteger)amount;
++ (NSString *)described;
 @end
+static NSInteger ledgersOpened;
 @implementation Ledger
 - (instancetype)initWithOwner:(NSString *)owner opening:(NSInteger)opening {
   if ((self = [super init])) {
+    ledgersOpened++;
     _owner = owner;
     _balance = 0;
     _entries = 0;
@@ -72,6 +75,9 @@ static NSString *tallied(void) {
 - (void)record:(NSInteger)amount {
   self.balance += amount;
   self.entries++;
+}
++ (NSString *)described {
+  return [NSString stringWithFormat:@"%ld opened", (long)ledgersOpened];
 }
 @end
 static __weak id ledgerWatch;
@@ -165,6 +171,7 @@ int main(void) {
       printf("constructed %s\n", ledgered().UTF8String);
     }
     printf("constructed %s\n", ledgerWatch ? "alive" : "gone");
+    printf("ledgers %s\n", [Ledger described].UTF8String);
     // Swift's `operation?.cancel()`, and the chain on nil, which Swift and
     // JavaScript both answer without a message.
     [operation cancel];

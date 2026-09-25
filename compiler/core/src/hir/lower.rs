@@ -5867,7 +5867,10 @@ fn lower_class(
                 collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
             }
-            if super::native::extends_objc(snapshot, class) {
+            // A `static` member is the program's alone -- a function and a
+            // global, as any class's is -- and not a class method the runtime
+            // is told of: nothing but the program calls it.
+            if super::native::extends_objc(snapshot, class) && !is_static_member(snapshot, member) {
                 match builder.lower_objc_method(class, member, instance) {
                     Ok((func, method)) => {
                         lowered.program.funcs.push(func);
@@ -13637,9 +13640,6 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         instance: Option<TypeId>,
     ) -> Result<(Func, super::ObjcMethod), Diagnostic> {
-        if is_static_member(self.snapshot, member) {
-            return Err(self.unsupported(member, "a static member of a class extending an Objective-C class"));
-        }
         // An accessor's is its property's getter or setter: the value out, or
         // the value in.
         let signature = match self.kind_of(member) {

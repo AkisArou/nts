@@ -636,6 +636,10 @@ correctness does not depend on arm64 running by luck.
        a `new` of a class that inherits a program class's constructor.
      - An instance Objective-C makes itself (`[Ledger new]`, a nib) runs its
        superclass's `init` and not the constructor.
+     - A `static` member (Swift's `static var`, `static func`) is the
+       program's alone: a global and a function, as any class's is, and not a
+       class method the runtime is told of. `Ledger` counts the ledgers its
+       constructor opens.
    - **S6, protocols landed (2026-09-25).** `class Elements extends NSObject
      implements XMLParserDelegate` is Swift's `class Elements: NSObject,
      XMLParserDelegate`.

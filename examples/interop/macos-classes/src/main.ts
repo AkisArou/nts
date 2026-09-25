@@ -93,12 +93,19 @@ function tallied(): string {
 // taking arguments, whose `super()` makes the instance and whose body then
 // sets a field and sends the instance a message of its own.
 class Ledger extends NSObject {
+  // Swift's `static var` and `static func`: the program's alone.
+  static opened = 0;
+  static described(): string {
+    return `${Ledger.opened} opened`;
+  }
+
   owner: string;
   balance = 0;
   entries = 0;
 
   constructor(owner: string, opening: number) {
     super();
+    Ledger.opened++;
     this.owner = owner;
     this.record(opening);
   }
@@ -222,6 +229,7 @@ function main(): void {
   report(`fields ${weak_alive(tallyWatch) ? "alive" : "gone"} ${after === before ? "released" : "held"}`);
   report(`constructed ${ledgered()}`);
   report(`constructed ${weak_alive(ledgerWatch) ? "alive" : "gone"}`);
+  report(`ledgers ${Ledger.described()}`);
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.
