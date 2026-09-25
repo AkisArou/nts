@@ -822,15 +822,14 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
     const NtsMap *map = (const NtsMap *)object;
     for (uint32_t at = 0; at < map->used; at++) {
       NtsValue key = map->keys[at];
-      if (NTS_TAG_IS_REFERENCE(nts_value_tag(key)) &&
-          nts_value_reference(key)) {
+      if (NTS_TAG_IS_MANAGED(nts_value_tag(key)) && nts_value_reference(key)) {
         visit(nts_value_reference(key));
       }
       if (!map->values) {
         continue;
       }
       NtsValue value = map->values[at];
-      if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
+      if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) &&
           nts_value_reference(value)) {
         visit(nts_value_reference(value));
       }
@@ -843,7 +842,7 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
     if (descriptor->erased) {
       NtsValue *slots = NTS_ITEMS((const NtsArray *)object, NtsValue);
       for (uint32_t index = 0; index < object->length; index++) {
-        if (NTS_TAG_IS_REFERENCE(nts_value_tag(slots[index])) &&
+        if (NTS_TAG_IS_MANAGED(nts_value_tag(slots[index])) &&
             nts_value_reference(slots[index])) {
           visit(nts_value_reference(slots[index]));
         }
@@ -877,7 +876,7 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
     unsigned char *slot =
         (unsigned char *)object + descriptor->erased_offsets[index];
     NtsValue value = *(const NtsValue *)slot;
-    if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
+    if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) &&
         nts_value_reference(value)) {
       visit(nts_value_reference(value));
     }
@@ -892,7 +891,7 @@ bool nts_value_eq_string(NtsValue value, const NtsString *text) {
 }
 
 bool nts_value_eq_reference(NtsValue value, const NtsHeader *reference) {
-  return NTS_TAG_IS_REFERENCE(value.tag) && value.as.reference == reference;
+  return NTS_TAG_IS_POINTER(value.tag) && value.as.reference == reference;
 }
 
 /* Both sides erased. Different tags are unequal without further question --
@@ -1024,15 +1023,13 @@ __int128 nts_bigint_shr(__int128 value, __int128 count) {
 
 /* Claim and give up what an erased value holds. */
 void nts_value_retain(NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
-      nts_value_reference(value)) {
+  if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) && nts_value_reference(value)) {
     nts_retain(nts_value_reference(value));
   }
 }
 
 void nts_value_release(NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
-      nts_value_reference(value)) {
+  if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) && nts_value_reference(value)) {
     nts_release(nts_value_reference(value));
   }
 }
@@ -1490,7 +1487,7 @@ NtsValue nts_raise_take(void) {
 }
 
 const char *nts_thrown_class(NtsValue value) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return NULL;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -1556,7 +1553,7 @@ _Noreturn void nts_no_arm(const char *member) {
 
 _Noreturn void nts_no_arm_of(NtsValue subject, const NtsString *member) {
   const char *name = "a value with no descriptor";
-  if (NTS_TAG_IS_REFERENCE(nts_value_tag(subject))) {
+  if (NTS_TAG_IS_MANAGED(nts_value_tag(subject))) {
     const NtsHeader *header = (const NtsHeader *)nts_value_reference(subject);
     if (header != 0 && header->descriptor != 0 &&
         header->descriptor->name != 0) {
@@ -1665,7 +1662,7 @@ _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
 }
 
 bool nts_is_class(NtsValue value, const NtsDescriptor *klass) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -1677,7 +1674,7 @@ double nts_promise_state(const NtsPromise *promise) {
 }
 
 bool nts_is_buffer(NtsValue value) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -1686,7 +1683,7 @@ bool nts_is_buffer(NtsValue value) {
 }
 
 bool nts_is_array(NtsValue value) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -1906,7 +1903,7 @@ NtsValue nts_array_element(NtsValue array, double index) {
   switch (descriptor->element) {
   case NTS_ARRAY_VALUE: {
     NtsValue element = NTS_ITEMS(object, NtsValue)[at];
-    if (NTS_TAG_IS_REFERENCE(nts_value_tag(element)) &&
+    if (NTS_TAG_IS_MANAGED(nts_value_tag(element)) &&
         nts_value_reference(element)) {
       nts_retain(nts_value_reference(element));
     }
@@ -3244,7 +3241,7 @@ int32_t nts_to_int32_fn(double x) { return nts_to_int32(x); }
  * caller pairs this with an `instanceof`, so a non-reference reaching here is
  * the arm that already answered false. */
 bool nts_presence_has_value(NtsValue value, uint32_t index) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -3985,7 +3982,7 @@ NtsArray *nts_array_concat_value(const NtsArray *a, const NtsArray *b) {
     into[a->header.length + at] = second[at];
   }
   for (uint32_t at = 0; at < total; at++) {
-    if (NTS_TAG_IS_REFERENCE(nts_value_tag(into[at])) &&
+    if (NTS_TAG_IS_MANAGED(nts_value_tag(into[at])) &&
         nts_value_reference(into[at])) {
       nts_retain(nts_value_reference(into[at]));
     }
@@ -6050,7 +6047,7 @@ int nts_string_cmp(const NtsString *a, const NtsString *b) {
  *
  * Not `undefined`, because `map.set(undefined, 1)` is legal JavaScript and the
  * hole has to be a value no key can be. This tag is produced nowhere else and
- * leaves the runtime nowhere: `NTS_TAG_IS_REFERENCE` is false for it, so the
+ * leaves the runtime nowhere: `NTS_TAG_IS_MANAGED` is false for it, so the
  * collector walks straight past a hole without being taught about holes. */
 #define NTS_TAG_HOLE 0xFFFFFFFFu
 
@@ -6817,7 +6814,7 @@ static const NtsDescriptor nts_desc_view = {
  * "any" and inventing one would put a value in the `kind` field that no view
  * has. */
 bool nts_value_is_view(NtsValue value) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -6851,7 +6848,7 @@ bool nts_value_is_view(NtsValue value) {
  * `newSet` both returned a bare `NtsMap` and dropped the kind they were handed,
  * so a Set was a Map and nothing had ever asked which. */
 static bool nts_is_map_like(NtsValue value, bool holds_values) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -6867,7 +6864,7 @@ bool nts_is_map(NtsValue value) { return nts_is_map_like(value, true); }
 bool nts_is_set(NtsValue value) { return nts_is_map_like(value, false); }
 
 bool nts_is_date(NtsValue value) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -6875,7 +6872,7 @@ bool nts_is_date(NtsValue value) {
 }
 
 bool nts_is_data_view(NtsValue value) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -6883,7 +6880,7 @@ bool nts_is_data_view(NtsValue value) {
 }
 
 bool nts_is_view_kind(NtsValue value, double kind) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -8439,7 +8436,7 @@ static const NtsDescriptor nts_desc_promise = {NTS_KIND_OBJECT,
                                                NULL};
 
 bool nts_is_promise(NtsValue value) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
@@ -8521,8 +8518,7 @@ uint32_t nts_tag_of_reference(const NtsHeader *object) {
  * know at compile time, and `nts_promise_fulfill_value` is the one that does
  * not know it and is told. */
 static void nts_promise_fulfill(NtsPromise *promise, NtsValue value) {
-  if (NTS_TAG_IS_REFERENCE(nts_value_tag(value)) &&
-      nts_value_reference(value)) {
+  if (NTS_TAG_IS_MANAGED(nts_value_tag(value)) && nts_value_reference(value)) {
     nts_retain(nts_value_reference(value));
   }
   promise->value = value;
@@ -8647,7 +8643,7 @@ void *nts_promise_pointer(const NtsPromise *promise) {
 
 NtsHeader *nts_promise_reference(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_FULFILLED ||
-      !NTS_TAG_IS_REFERENCE(nts_value_tag(promise->value))) {
+      !NTS_TAG_IS_MANAGED(nts_value_tag(promise->value))) {
     fprintf(stderr,
             "nts: read a reference from a promise holding something else\n");
     abort();
@@ -8694,7 +8690,7 @@ bool nts_promise_is_rejected(const NtsPromise *promise) {
  * "a managed reference of unknown class" would be a type-system change bought
  * for one argument that is immediately passed back. */
 void nts_promise_reject_value(NtsPromise *promise, NtsValue reason) {
-  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(reason))) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(reason))) {
     nts_promise_reject(promise, 0);
     return;
   }

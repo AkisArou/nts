@@ -861,7 +861,7 @@ const HARNESS_PRELUDE: &str =
          \x20       return;\n\
          \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
-         \x20       && NTS_TAG_IS_REFERENCE(nts_value_tag(p->value))) {\n\
+         \x20       && NTS_TAG_IS_MANAGED(nts_value_tag(p->value))) {\n\
          \x20       nts_check_show_string(name, at,\n\
          \x20                   (const NtsString *)nts_value_reference(p->value));\n\
          \x20       return;\n\

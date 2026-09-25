@@ -112,7 +112,7 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
 ///
 /// Not hypothetical. On 2026-09-24 the GTK lane proposed `NTS_TAG_NATIVE = 8` to
 /// carry a raw C pointer in a promise payload, reasoning correctly that 8 falls
-/// outside `NTS_TAG_IS_REFERENCE`'s range so retain, release and the tracer skip
+/// outside `NTS_TAG_IS_REFERENCE`'s range (now `NTS_TAG_IS_MANAGED`'s) so retain, release and the tracer skip
 /// it. It does, and it would also have made a `GFileInfo *` answer
 /// `typeof === "object"` -- and then something would have read it as an
 /// `NtsHeader`. A separate slot on `NtsPromise` was taken instead.

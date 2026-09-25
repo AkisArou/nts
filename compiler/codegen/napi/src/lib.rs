@@ -2658,7 +2658,7 @@ fn marshal(
             );
             if release_result {
                 text.push_str(
-                    "    if (NTS_TAG_IS_REFERENCE(nts_value_tag(result)) && nts_value_reference(result) != NULL) nts_release(nts_value_reference(result));\n",
+                    "    if (NTS_TAG_IS_MANAGED(nts_value_tag(result)) && nts_value_reference(result) != NULL) nts_release(nts_value_reference(result));\n",
                 );
             }
             text.push_str(

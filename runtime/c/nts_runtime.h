@@ -742,11 +742,25 @@ static inline NtsValue nts_value_of_reference(NtsHeader *object, uint32_t tag) {
  * Correct first. */
 NtsString *nts_tag_name(uint32_t tag);
 
-/* Whether a tag means the payload is a reference.
+/* Two facts about a tag's payload, which one predicate used to answer for both.
  *
- * The one place that knows, so that the tracer, retain, release and the
- * emitter cannot disagree about it. */
-#define NTS_TAG_IS_REFERENCE(tag)                                              \
+ * `NTS_TAG_IS_POINTER`: the payload is an address. Identity, equality and
+ * truthiness can be answered from the address alone.
+ *
+ * `NTS_TAG_IS_MANAGED`: the payload is an object of this runtime's, with an
+ * `NtsHeader`. The tracer walks it, `nts_retain` and `nts_release` count it,
+ * and the kind tests (`nts_is_array`, `nts_is_promise`, ...) read its
+ * descriptor.
+ *
+ * Today they answer alike: every pointer a value can hold is a managed object.
+ * They are two macros so that each use says which fact it rests on. A payload
+ * that is an address *without* one of these headers -- a C library's object,
+ * a `GObject *` -- belongs to the first and never to the second, and every
+ * site that reads a header asks the second. Widening one range for such a
+ * payload would have sent it to every reader of a header. */
+#define NTS_TAG_IS_POINTER(tag)                                                \
+  ((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT)
+#define NTS_TAG_IS_MANAGED(tag)                                                \
   ((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT)
 
 /* A `Map`, and a `Set`, which is one that stores no values.

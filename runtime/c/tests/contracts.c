@@ -104,8 +104,8 @@ static void a_clear_empties_the_slots_it_keeps(void) {
 
   int stale = 0;
   for (uint32_t at = 0; at < map->used; at++) {
-    if (NTS_TAG_IS_REFERENCE(nts_value_tag(map->keys[at])) ||
-        (map->values && NTS_TAG_IS_REFERENCE(nts_value_tag(map->values[at])))) {
+    if (NTS_TAG_IS_MANAGED(nts_value_tag(map->keys[at])) ||
+        (map->values && NTS_TAG_IS_MANAGED(nts_value_tag(map->values[at])))) {
       stale = 1;
     }
   }

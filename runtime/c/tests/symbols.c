@@ -53,7 +53,7 @@ static void a_fresh_symbol_is_its_own_identity(void) {
      says(nts_tag_name(NTS_TAG_SYMBOL), "symbol"));
   /* The tag is inside the reference range, so the tracer, retain and release
    * all reach a symbol without knowing what one is. */
-  ok("a symbol is a reference", NTS_TAG_IS_REFERENCE(NTS_TAG_SYMBOL));
+  ok("a symbol is a managed object", NTS_TAG_IS_MANAGED(NTS_TAG_SYMBOL));
   /* And outside the object range, or `typeof sym` would answer "object". */
   ok("a symbol is not an object", NTS_TAG_SYMBOL < NTS_TAG_OBJECT);
   /* A value that arrives without a tag gets one from what it is, and a symbol

@@ -55,8 +55,10 @@ const _: () = assert!(
     "a closure answers \"function\", so it is a reference below the object range"
 );
 /// Every reference tag inside `STRING ..= OBJECT`, which is what
-/// `NTS_TAG_IS_REFERENCE` tests and what the tracer, retain, release and both
-/// emitters read.
+/// `NTS_TAG_IS_POINTER` and `NTS_TAG_IS_MANAGED` test and what the tracer,
+/// retain, release and both emitters read. The two answer alike today; a
+/// payload that is an address without an `NtsHeader` is a pointer and not
+/// managed (see the header).
 const _: () = assert!(
     STRING < FUNCTION && FUNCTION < SYMBOL && SYMBOL < OBJECT,
     "the reference tags are the contiguous range STRING ..= OBJECT"
