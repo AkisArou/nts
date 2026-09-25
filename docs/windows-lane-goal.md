@@ -120,15 +120,28 @@ the same vtable calls on the VM measured the behaviour first.
 
 - **Calls:** `@ntsVtable`, `@ntsHresult`, `@ntsFactory`, `Family::Com`,
   HSTRING both ways, and a failed HRESULT thrown with the system's text.
-  (Landing now; the first three commits.)
 - **bind-winmd for WinRT:**
   - interfaces slot for slot;
   - generics, with instantiation IIDs computed by the pinterface SHA-1;
   - `QueryInterface` by `as_X`, for a class's own interfaces and every base
     class's;
   - default constructors;
-  - structs by value;
-  - composable classes constructed as themselves.
+  - structs by value, `Guid` among them (`winrt:types` declares it, since
+    no `.winmd` does), and `ref const` structs as a lent `ConstPtr`;
+  - composable classes constructed as themselves;
+  - a class whose default interface is an instantiation, as that
+    instantiation: `UIElementCollection`, a panel's `Children`, is
+    `IVector<IUIElement>`;
+  - byte arrays, `[in]` and caller-allocated `[out]`, as a `Uint8Array`
+    lent in place with its length before it (`WriteBytes`, `ReadBytes`).
+- **What is left refused**, across 23 common namespaces (`Windows.Storage`,
+  `Windows.Web.Http`, WinUI's `Microsoft.UI.Xaml.*` and 20 more), measured:
+  397 items, 203 of them a factory interface's composable `CreateInstance`,
+  which is its class's constructor and bound as that. Of the other 194: 44
+  arrays that are not bytes or that the callee allocates, 29 structs with a
+  string field (`TypeName`, which XAML navigation takes), 22 struct `[out]`
+  parameters, 21 structs holding an `IReference`, 17 delegates that return
+  a value or are answered.
 - **Delegates and events:**
   - A TypeScript function is a COM delegate object whose `Invoke` is a
     per-signature adapter. The closure is lent until the object's count
@@ -159,8 +172,8 @@ the same vtable calls on the VM measured the behaviour first.
 - **Not yet:**
   - `IAsyncOperation` as a Promise, which needs a decision about whether a
     console program's loop pumps messages (the user's to make).
-  - Arrays: `GetMany`'s caller-filled buffer, `ReplaceAll`, and the
-    `Get*Array` methods.
+  - Arrays of anything but bytes, and arrays the callee allocates
+    (`CopyToByteArray`, the `Get*Array` methods).
   - Generic delegates whose IID depends on the interface's own parameters
     (`IObservableMap<K, V>.MapChanged`).
 
