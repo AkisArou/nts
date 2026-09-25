@@ -63,6 +63,10 @@ pub struct Function {
     /// program reads as a `Map<string, V>`: the values' kind, and the call
     /// site copies the entries into a map, as Swift's `[String: V]`.
     pub returns_dictionary: Option<Bridged>,
+    /// Set when an Objective-C message returns an `NSSet *` the program reads
+    /// as a `Set<T>`, as Swift's `Set<T>`: the elements' kind, and the call
+    /// site copies them into a set.
+    pub returns_set: Option<Bridged>,
     /// Set when the declaration is an Objective-C message (`@ntsSelector`)
     /// rather than a C symbol. `name` is then the TypeScript name, which no
     /// backend links against. The call is `objc_msgSend` cast to exactly this
@@ -428,6 +432,11 @@ pub enum Role {
     /// `NSString` and each value the object its box holds, or an `NSString`
     /// made of a string.
     NSDictionary(Bridged),
+    /// A `Set<T>` where an Objective-C message takes an `NSSet *`, as Swift's
+    /// `Set<T>` crosses: a set made of the elements for the call (+1,
+    /// released after), each the object its box holds, or an `NSString` made
+    /// of a string.
+    NSSet(Bridged),
     /// Where C writes the call's declared result, returning a status instead
     /// (`@ntsHresult`): a slot of the compiler's, read after the call once the
     /// status says it succeeded, as `written` says. Hidden from TypeScript.
@@ -581,6 +590,7 @@ impl Function {
                 | Role::NSString
                 | Role::NSArray(_)
                 | Role::NSDictionary(_)
+                | Role::NSSet(_)
                 | Role::String(_)
                 | Role::Closure { .. }
                 | Role::Block { .. }
@@ -1850,6 +1860,7 @@ impl Function {
             returns_string: returned.string,
             returns_array: returned.array,
             returns_dictionary: returned.dictionary,
+            returns_set: returned.set,
             send: None,
             returns_owned: returned.owned,
             consumes,
@@ -2434,7 +2445,7 @@ fn hresult_result(
     shape: Hresult,
     (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>),
 ) -> Result<Returned, String> {
-    let status = Returned { result: Type::Scalar(Scalar::Int32), array: None, dictionary: None, string: None, owned: false, program: None };
+    let status = Returned { result: Type::Scalar(Scalar::Int32), array: None, dictionary: None, set: None, string: None, owned: false, program: None };
     if shape == Hresult::Out {
         let fields = labels_of(snapshot, ty).ok_or_else(|| {
             format!("foreign function `{name}` is `@ntsHresult out` and its result is not an object type literal of required fields")
@@ -2523,6 +2534,8 @@ struct Returned {
     array: Option<Bridged>,
     /// An `NSDictionary` read back as a `Map<string, V>`.
     dictionary: Option<Bridged>,
+    /// An `NSSet` read back as a `Set<T>`.
+    set: Option<Bridged>,
     /// A string, or a `NULL`-terminated array of them, copied at the call.
     string: Option<ReturnedString>,
     /// `Owned<T>`: the reference comes with the handle.
@@ -2553,6 +2566,20 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
             result: Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))),
             array: None,
             dictionary: Some(dictionary),
+            set: None,
+            string: None,
+            owned: false,
+            program: None,
+        });
+    }
+    if abi.is_none()
+        && let Some(element) = bridged_set(snapshot, ty)
+    {
+        return Ok(Returned {
+            result: Type::Pointer(Pointee::Opaque(Handle::objc("NSSet"))),
+            array: None,
+            dictionary: None,
+            set: Some(element),
             string: None,
             owned: false,
             program: None,
@@ -2563,6 +2590,7 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
             result: Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))),
             array: bridged,
             dictionary: None,
+            set: None,
             string: None,
             owned: false,
             program: None,
@@ -2578,6 +2606,7 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
         result,
         array: None,
         dictionary: None,
+        set: None,
         string: array.map(|nullable| ReturnedString { nullable, free: None, array: true }).or(string),
         owned: owned_result(snapshot, name, ty)?,
         // A `CBool`'s integer, read back as a boolean.
@@ -2821,6 +2850,8 @@ fn c_parameter(
                 // would: an array Swift bridges, a string, or its C type.
                 let (ty, inner) = if let Some(value) = bridged_dictionary(snapshot, *ty) {
                     (Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))), Role::NSDictionary(value))
+                } else if let Some(element) = bridged_set(snapshot, *ty) {
+                    (Type::Pointer(Pointee::Opaque(Handle::objc("NSSet"))), Role::NSSet(element))
                 } else if let Some(element) = bridged_array(snapshot, *ty) {
                     (Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))), Role::NSArray(element))
                 } else if let Some(encoding) = string_encoding(snapshot, *ty) {
@@ -2838,6 +2869,9 @@ fn c_parameter(
     }
     if let Some(value) = bridged_dictionary(snapshot, parameter.ty) {
         return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))), Role::NSDictionary(value))]));
+    }
+    if let Some(element) = bridged_set(snapshot, parameter.ty) {
+        return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSSet"))), Role::NSSet(element))]));
     }
     if let Some(element) = bridged_array(snapshot, parameter.ty) {
         return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))), Role::NSArray(element))]));
@@ -2860,6 +2894,32 @@ fn c_parameter(
     }
 }
 
+
+/// A set Swift bridges as `Set<T>` (`Role::NSSet`): a `Set<T>` of objects
+/// of a class a binding declares, or of strings. `null` is a nil set.
+fn bridged_set(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let ty = match kind(ty)? {
+        TypeKind::Union(members) => match members.as_slice() {
+            [a, b] if matches!(kind(*a), Some(TypeKind::Null)) => *b,
+            [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
+            _ => return None,
+        },
+        _ => ty,
+    };
+    let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
+    if !matches!(snapshot.symbols.get(symbol.0 as usize)?.name.as_str(), "Set" | "ReadonlySet") {
+        return None;
+    }
+    let element = *snapshot.type_arguments.get(&ty)?.first()?;
+    if matches!(kind(element)?, TypeKind::String) {
+        return Some(Bridged::String);
+    }
+    match pointer(snapshot, element)? {
+        Pointee::Opaque(handle) if handle.family == Family::Objc => Some(Bridged::Object(Pointee::Opaque(handle))),
+        _ => None,
+    }
+}
 
 /// A dictionary Swift bridges as `[String: V]` (`Role::NSDictionary`): a
 /// `Map<string, V>` whose values are objects of a class a binding declares,

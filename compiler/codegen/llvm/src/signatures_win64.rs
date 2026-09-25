@@ -255,6 +255,8 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_nsarray_of_strings", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_nsdictionary_of_objects", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_nsdictionary_of_strings", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_nsset_of_objects", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_nsset_of_strings", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_nsstring_of", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_number_to_fixed", returns: "ptr", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_number_to_string", returns: "ptr", params: &["double"], attributes: &[] },

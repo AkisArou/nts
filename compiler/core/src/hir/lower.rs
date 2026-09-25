@@ -9881,6 +9881,11 @@ fn named_or(snapshot: &SemanticSnapshot, record: &TypeRecord, fallback: &str) ->
         )
 }
 
+/// Whether a pointer is to an Objective-C object the program counts.
+fn is_objc_object(pointee: &super::native::Pointee) -> bool {
+    matches!(pointee.viewed(), super::native::Pointee::Opaque(handle) if handle.family == super::native::Family::Objc)
+}
+
 /// Which hash and comparison a table of these keys is built with.
 ///
 /// The whole of what a `Map`'s key type costs at run time: a `Map<string, V>`
@@ -9893,6 +9898,8 @@ fn named_or(snapshot: &SemanticSnapshot, record: &TypeRecord, fallback: &str) ->
 fn key_kind_of(key: &HirType) -> u32 {
     match key {
         HirType::Managed(ManagedType::String) => 1,
+        // An Objective-C object, in its box: `-hash` and `-isEqual:`.
+        HirType::NativePointer(pointee) if is_objc_object(pointee) => 4,
         HirType::Float { .. } | HirType::Int { .. } => 2,
         // Every other managed value is a pointer, and identity is what
         // JavaScript compares objects by, so one entry serves them all.
@@ -10275,7 +10282,13 @@ fn representation_within(
         },
         // A promise has a slot of its own for a C handle
         // (`nts_promise_fulfill_pointer`), outside its value; a set has none.
-        HirType::Managed(ManagedType::Set(element)) => !matches!(element.as_ref(), HirType::NativePointer(_)),
+        // Except an Objective-C object's, Swift's `Set<NSObject>`: held in
+        // its family's box, and hashed and compared by the object's own
+        // `-hash` and `-isEqual:` (`NTS_KEY_OBJC`), not by the box's identity.
+        HirType::Managed(ManagedType::Set(element)) => match element.as_ref() {
+            HirType::NativePointer(pointee) => is_objc_object(pointee),
+            _ => true,
+        },
         // A map's *value* may be a counted foreign object -- Swift's
         // `[String: NSObject]` -- held in a box of its family, as a promise
         // holds one (`erased_for_table`). A key may not: a box has an
@@ -28212,6 +28225,7 @@ impl<'a> FuncBuilder<'a> {
             returns_string: None,
             returns_array: None,
             returns_dictionary: None,
+            returns_set: None,
             send: None,
             returns_owned: true,
             consumes: Vec::new(),
@@ -42761,11 +42775,15 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => (None, None),
         };
-        // And a bridged dictionary's, which becomes a map.
+        // And a bridged dictionary's, which becomes a map; and a set's.
         let (dictionary, sent) = match &callee {
             Callee::Native(target) if target.returns_dictionary.is_some() => {
                 (target.returns_dictionary.clone(), Some(target.result.representation()))
             }
+            _ => (None, sent),
+        };
+        let (returned_set, sent) = match &callee {
+            Callee::Native(target) if target.returns_set.is_some() => (target.returns_set.clone(), Some(target.result.representation())),
             _ => (None, sent),
         };
         let result_as = match &callee {
@@ -42818,6 +42836,10 @@ impl<'a> FuncBuilder<'a> {
             self.throw_if_reported(id, slot, &converter, &lent)?;
         }
         let value = match (returned, result_as) {
+            _ if returned_set.is_some() => {
+                let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned set"))?;
+                self.read_ns_set(id, call, returned_set.as_ref().unwrap_or(&super::native::Bridged::String), ty)?
+            }
             _ if dictionary.is_some() => {
                 let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned dictionary"))?;
                 self.read_ns_dictionary(id, call, dictionary.as_ref().unwrap_or(&super::native::Bridged::String), ty)?
@@ -43076,6 +43098,7 @@ impl<'a> FuncBuilder<'a> {
             returns_string: None,
             returns_array: None,
             returns_dictionary: None,
+            returns_set: None,
             send: None,
             returns_owned: false,
             consumes: Vec::new(),
@@ -43466,6 +43489,80 @@ impl<'a> FuncBuilder<'a> {
     /// key a string, each value an object the array counts or a string --
     /// then set into a new map a pair at a time, each object boxed as any
     /// map holds one.
+    /// A TypeScript collection as the Foundation one a message takes, as
+    /// Swift's `[T]`, `[String: V]` and `Set<T>` cross.
+    fn foundation_collection(&mut self, id: NodeId, value: ValueId, role: &super::native::Role, origin: &Origin) -> Result<ValueId, Diagnostic> {
+        use super::native::Role;
+        match role {
+            Role::NSArray(element) => self.ns_array_of(id, value, element, origin),
+            Role::NSDictionary(kind) => self.ns_dictionary_of(id, value, kind, origin),
+            Role::NSSet(element) => self.ns_set_of(id, value, element, origin),
+            _ => Err(self.unsupported(id, "a collection a message takes that is not an array, a dictionary or a set")),
+        }
+    }
+
+    /// A `Set<T>` as the `NSSet` a message takes, as Swift's `Set<T>` crosses:
+    /// made of the elements (`nts_nsset_of_*`), +1, released after the call.
+    fn ns_set_of(&mut self, id: NodeId, set: ValueId, element: &super::native::Bridged, origin: &Origin) -> Result<ValueId, Diagnostic> {
+        use super::native::{Bridged, Handle, Pointee, Type};
+        if !matches!(self.values[set.0 as usize].ty, HirType::Managed(ManagedType::Set(_))) {
+            return Err(self.unsupported(id, "an `NSSet` argument that is not a set"));
+        }
+        let helper = match element {
+            Bridged::Object(_) => "nts_nsset_of_objects",
+            Bridged::String => "nts_nsset_of_strings",
+        };
+        let made = Type::Pointer(Pointee::Opaque(Handle::objc("NSSet")));
+        Ok(self.runtime_call(helper, vec![set], made.representation(), origin.clone()))
+    }
+
+    /// An `NSSet` a message returns, read as a `Set<T>`: its `allObjects`,
+    /// read as an array is, then each added -- an object in its family's
+    /// box, which the set hashes and compares by `-hash` and `-isEqual:`. A
+    /// nil set is `null`.
+    fn read_ns_set(&mut self, id: NodeId, returned: ValueId, element: &super::native::Bridged, ty: HirType) -> Result<ValueId, Diagnostic> {
+        use super::native::{Handle, Pointee, Type};
+        let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Set(element_ty)) = ty.clone() else {
+            return Err(self.unsupported(id, "an `NSSet` result the program does not read as a set"));
+        };
+        let nil = self.push(OpKind::ConstNull, self.values[returned.0 as usize].ty.clone(), origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: returned, rhs: nil }, HirType::Bool, origin.clone());
+        let (none_block, some_block, merge) = (self.new_block(), self.new_block(), self.new_block());
+        let result = self.push_block_param(merge, ty.clone(), origin.clone());
+        self.terminate(Terminator::Branch { cond: absent, then_target: none_block, then_args: Vec::new(), else_target: some_block, else_args: Vec::new() });
+        self.switch_to(none_block);
+        let none = self.push(OpKind::ConstNull, ty.clone(), origin.clone());
+        self.terminate(Terminator::Jump { target: merge, args: vec![none] });
+        self.switch_to(some_block);
+        let set_type = Type::Pointer(Pointee::Opaque(Handle::objc("NSSet")));
+        let array_type = Type::Pointer(Pointee::Opaque(Handle::objc("NSArray")));
+        let all = self.send_bridge(bridge_send("allObjects", None, vec![set_type], array_type), vec![returned], &origin);
+        let items = self.read_ns_array(id, all, element, HirType::Managed(ManagedType::Array(element_ty.clone())))?;
+        let kind = self.push(OpKind::ConstFloat(f64::from(key_kind_of(&element_ty))), HirType::NUMBER, origin.clone());
+        let set = self.runtime_call("nts_set_new", vec![kind], ty.clone(), origin.clone());
+        // `for (const item of items) set.add(item)`.
+        let length = self.push(OpKind::Length(items), HirType::NUMBER, origin.clone());
+        let (head, body, done) = (self.new_block(), self.new_block(), self.new_block());
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Jump { target: head, args: vec![zero] });
+        self.switch_to(head);
+        let at = self.push_block_param(head, HirType::NUMBER, origin.clone());
+        let more = self.push(OpKind::Binary { op: BinOp::Lt, lhs: at, rhs: length }, HirType::Bool, origin.clone());
+        self.terminate(Terminator::Branch { cond: more, then_target: body, then_args: Vec::new(), else_target: done, else_args: Vec::new() });
+        self.switch_to(body);
+        let item = self.push(OpKind::ArrayGet { array: items, index: at, checked: false }, (*element_ty).clone(), origin.clone());
+        let key = self.erased_for_table(item, &origin);
+        self.runtime_call("nts_set_add", vec![set, key], ty, origin.clone());
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let next = self.push(OpKind::Binary { op: BinOp::Add, lhs: at, rhs: one }, HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Jump { target: head, args: vec![next] });
+        self.switch_to(done);
+        self.terminate(Terminator::Jump { target: merge, args: vec![set] });
+        self.switch_to(merge);
+        Ok(result)
+    }
+
     fn read_ns_dictionary(&mut self, id: NodeId, returned: ValueId, value: &super::native::Bridged, ty: HirType) -> Result<ValueId, Diagnostic> {
         use super::native::{Bridged, Handle, Pointee, Scalar, Type};
         let origin = self.origin(id);
@@ -43539,8 +43636,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         Ok(match inner {
             Role::NSString => self.ns_string_of(value, &origin),
-            Role::NSArray(element) => self.ns_array_of(id, value, element, &origin)?,
-            Role::NSDictionary(value_kind) => self.ns_dictionary_of(id, value, value_kind, &origin)?,
+            Role::NSArray(_) | Role::NSDictionary(_) | Role::NSSet(_) => self.foundation_collection(id, value, inner, &origin)?,
             Role::Block { bridge, signature } => self
                 .lend_block(id, Some(value), (bridge.clone(), signature.clone()), slot.representation(), lent, &origin)?
                 .ok_or_else(|| self.unsupported(id, "a block label with no function"))?,
@@ -43630,6 +43726,7 @@ impl<'a> FuncBuilder<'a> {
                 returns_string: None,
                 returns_array: None,
             returns_dictionary: None,
+            returns_set: None,
                 send: None,
                 returns_owned: false,
                 consumes: Vec::new(),
@@ -44138,13 +44235,9 @@ impl<'a> FuncBuilder<'a> {
                     c_args.push(count);
                 }
                 Role::NSString => c_args.extend(argument.map(|string| self.ns_string_of(string, &origin))),
-                Role::NSArray(element) => {
-                    let Some(array) = argument else { continue };
-                    c_args.push(self.ns_array_of(id, array, &element, &origin)?);
-                }
-                Role::NSDictionary(value) => {
-                    let Some(map) = argument else { continue };
-                    c_args.push(self.ns_dictionary_of(id, map, &value, &origin)?);
+                Role::NSArray(_) | Role::NSDictionary(_) | Role::NSSet(_) => {
+                    let Some(collection) = argument else { continue };
+                    c_args.push(self.foundation_collection(id, collection, &role, &origin)?);
                 }
                 Role::Result { .. } | Role::Outer | Role::Inner => {
                     c_args.push(self.hresult_slot(&role, target.parameters[at].representation(), &mut lent, &origin));
@@ -44770,11 +44863,13 @@ impl<'a> FuncBuilder<'a> {
     fn refuse_unbridged(&self, call: NodeId, native: &super::native::Function) -> Result<(), Diagnostic> {
         let bridged = native.returns_array.is_some()
             || native.returns_dictionary.is_some()
+            || native.returns_set.is_some()
             || native.roles.iter().any(|role| match role {
-                super::native::Role::NSArray(_) | super::native::Role::NSDictionary(_) => true,
-                super::native::Role::Label { inner, .. } => {
-                    matches!(**inner, super::native::Role::NSArray(_) | super::native::Role::NSDictionary(_))
-                }
+                super::native::Role::NSArray(_) | super::native::Role::NSDictionary(_) | super::native::Role::NSSet(_) => true,
+                super::native::Role::Label { inner, .. } => matches!(
+                    **inner,
+                    super::native::Role::NSArray(_) | super::native::Role::NSDictionary(_) | super::native::Role::NSSet(_)
+                ),
                 _ => false,
             });
         if native.send.is_none() && bridged {
@@ -45285,6 +45380,7 @@ impl<'a> FuncBuilder<'a> {
                     | super::native::Role::NSString
                     | super::native::Role::NSArray(_)
                     | super::native::Role::NSDictionary(_)
+                    | super::native::Role::NSSet(_)
                     | super::native::Role::ErrorSlot { .. }
             )
         }) {
@@ -52710,6 +52806,7 @@ fn synthesized(
         returns_string: None,
         returns_array: None,
             returns_dictionary: None,
+            returns_set: None,
         send,
         returns_owned: false,
         consumes: Vec::new(),

@@ -12,7 +12,9 @@ import {
   NSPredicate,
   type NSRange,
   NSProcessInfo,
+  NSSet,
   NSString,
+  NSStringSet,
   XMLParser,
   type NSXMLParserDelegate,
 } from "objc:Foundation";
@@ -322,6 +324,16 @@ function main(): void {
   const byDash = { separatedBy: "-" };
   const split = (text: string, labels: { separatedBy: string }) => new NSString(text).components(labels);
   report(`labelled ${split("x-y-z", byDash).length} ${new NSString("p-q").components(byDash).join("+")}`);
+  // Swift's `Set<NSObject>` and `Set<String>`. An equal string is one
+  // element, as `-isEqual:` says, and the `Set` read back finds an equal one
+  // it was not given; the `Set` passed is an `NSSet` made of it.
+  const pair = new NSSet([new NSString("a"), new NSString("b"), new NSString("a")]);
+  const grown = pair.setByAdding(new NSString("c"));
+  const strings = new NSStringSet(["x", "y", "x"]);
+  const added = strings.setByAdding("z");
+  report(
+    `sets ${pair.count} ${grown.size} ${grown.has(new NSString("c"))} ${pair.isSubset({ of: grown })} ${strings.count} ${added.size} ${added.has("z")}`,
+  );
 
   report(`parsed ${parsed()}`);
   // `dealloc` gave the fields back: as many of the program's objects are

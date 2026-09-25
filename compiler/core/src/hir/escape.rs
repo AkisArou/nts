@@ -1493,6 +1493,7 @@ mod foreign_contracts {
             returns_string: None,
             returns_array: None,
             returns_dictionary: None,
+            returns_set: None,
             send: None,
             returns_owned: false,
             consumes: Vec::new(),

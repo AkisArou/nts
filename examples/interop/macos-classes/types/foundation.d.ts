@@ -115,6 +115,36 @@ declare module "objc:Foundation" {
     fileExists(labels: { atPath: string; isDirectory: Ptr<ObjCBool> | null }): boolean;
   }
 
+  /**
+   * Swift's `Set<NSObject>`: an `NSSet` read back is a `Set` whose elements
+   * are hashed and compared by `-hash` and `-isEqual:`, as Swift's are, and
+   * a `Set` passed is an `NSSet` made of it.
+   * @ntsClass NSSet
+   */
+  export class NSSet extends NSObject {
+    /** @ntsSelector initWithArray: */
+    constructor(array: NSObject[]);
+    /** @ntsSelector count */
+    get count(): UInt;
+    /** @ntsSelector setByAddingObject: */
+    setByAdding(object: NSObject): Set<NSObject>;
+    /** @ntsSelector isSubsetOfSet: */
+    isSubset(labels: { of: Set<NSObject> }): boolean;
+  }
+
+  /**
+   * The same class, as Swift's `Set<String>`: its elements strings.
+   * @ntsClass NSSet
+   */
+  export class NSStringSet extends NSObject {
+    /** @ntsSelector initWithArray: */
+    constructor(array: string[]);
+    /** @ntsSelector count */
+    get count(): UInt;
+    /** @ntsSelector setByAddingObject: */
+    setByAdding(object: string): Set<string>;
+  }
+
   /** @ntsClass NSAttributedString */
   export class NSAttributedString extends NSObject {
     /** @ntsSelector initWithString: */

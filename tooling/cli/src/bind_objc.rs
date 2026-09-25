@@ -1352,6 +1352,12 @@ impl<'a> Model<'a> {
             if base == "NSDictionary" && position != Position::Block {
                 return self.dictionary(pointee).map(&or_null);
             }
+            // Swift's `Set<T>`: copied into a TypeScript `Set` and out of one,
+            // its elements objects -- hashed and compared by `-hash` and
+            // `-isEqual:`, as Swift's are -- or strings.
+            if base == "NSSet" && position != Position::Block {
+                return self.array_element(pointee).map(|element| or_null(format!("Set<{element}>")));
+            }
             if position != Position::Block
                 && matches!(base, "NSMutableArray" | "NSDictionary" | "NSMutableDictionary" | "NSSet" | "NSMutableSet" | "NSOrderedSet")
             {
@@ -2200,6 +2206,8 @@ struct Opaque;
 @end
 @interface NSDictionary<KeyType, ObjectType> : Root
 @end
+@interface NSSet<ObjectType> : Root
+@end
 typedef NSString *ShapeKind;
 @protocol ShapeDelegate;
 @interface Root (Continued)
@@ -2246,6 +2254,7 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 @interface Shape (Named)
 - (void)renameTo:(Shape *)other count:(NSInteger)count;
+- (NSSet<Shape *> *)neighboursNamed:(NSSet<NSString *> *)names;
 @end
 typedef NSInteger Response;
 @interface Shape (Async)
@@ -2300,6 +2309,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             symbol("c:objc(cs)Shape(im)isEqualToShape:", "swift.method", "isEqual(to:)", &["Shape", "isEqual(to:)"], ""),
             symbol("c:objc(cs)Shape(im)describe", "swift.property", "describe", &["Shape", "describe"], ""),
             symbol("c:objc(cs)Shape(im)renameTo:count:", "swift.method", "rename(to:count:)", &["Shape", "rename(to:count:)"], ""),
+            symbol("c:objc(cs)Shape(im)neighboursNamed:", "swift.method", "neighbours(named:)", &["Shape", "neighbours(named:)"], ""),
             symbol("c:objc(cs)Shape(im)names", "swift.method", "names()", &["Shape", "names()"], ""),
             symbol("c:objc(cs)Shape(im)maybe", "swift.method", "maybe()", &["Shape", "maybe()"], ""),
             symbol("c:objc(cs)Shape(im)adopt:", "swift.method", "adopt(_:)", &["Shape", "adopt(_:)"], ""),
@@ -2406,6 +2416,8 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             "    /** @ntsSelector next */\n    next(): Shape | null;",
             // A category is found by the class it extends; labels by Swift.
             "    /** @ntsSelector renameTo:count: */\n    rename(labels: { to: Shape; count: Int }): void;",
+            // Swift's `Set<T>`, of objects and of strings.
+            "    /** @ntsSelector neighboursNamed: */\n    neighbours(labels: { named: Set<string> }): Set<Shape>;",
             // A getter Swift imports as a property is one.
             "    /** @ntsSelector describe */\n    get describe(): string;",
             // Properties: read-only, a Swift name whose setter is not implied,

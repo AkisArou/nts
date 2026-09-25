@@ -365,6 +365,63 @@ void *nts_nsdictionary_of_strings(const NtsMap *map) {
   return nts_nsdictionary_of(map, true);
 }
 
+static void *nts_nsset_of(const NtsMap *set, bool strings) {
+  if (!set) {
+    return NULL;
+  }
+  CFMutableSetRef made = CFSetCreateMutable(NULL, 0, &kCFTypeSetCallBacks);
+  for (double at = nts_map_next(set, 0); at >= 0;
+       at = nts_map_next(set, at + 1)) {
+    /* Comes back owned, and is given back once read. */
+    NtsValue key = nts_map_key_at(set, at);
+    if (strings) {
+      void *text = nts_nsstring_of((const NtsString *)nts_value_reference(key));
+      if (text) {
+        CFSetAddValue(made, text);
+        CFRelease(text);
+      }
+    } else {
+      const void *object = nts_boxed_handle(key);
+      if (object) {
+        CFSetAddValue(made, object);
+      }
+    }
+    nts_value_release(key);
+  }
+  return (void *)made;
+}
+
+void *nts_nsset_of_objects(const NtsMap *set) {
+  return nts_nsset_of(set, false);
+}
+
+void *nts_nsset_of_strings(const NtsMap *set) {
+  return nts_nsset_of(set, true);
+}
+
+/* An Objective-C object as a key (`NTS_KEY_OBJC`): hashed and compared as
+ * `NSSet` does, and as Swift's `Set` of objects does. */
+static uint64_t nts_objc_hash(const void *object) {
+  static SEL hash;
+  if (!hash) {
+    hash = sel_registerName("hash");
+  }
+  return ((uintptr_t (*)(id, SEL))objc_msgSend)((id)object, hash);
+}
+
+static bool nts_objc_equal(const void *a, const void *b) {
+  static SEL is_equal;
+  if (!is_equal) {
+    is_equal = sel_registerName("isEqual:");
+  }
+  return ((BOOL (*)(id, SEL, id))objc_msgSend)((id)a, is_equal, (id)b);
+}
+
+__attribute__((constructor)) static void nts_objc_keys_install(void) {
+  nts_objc_key_hash = nts_objc_hash;
+  nts_objc_key_equal = nts_objc_equal;
+}
+
 /* A registered class with fields: where its ivar is, and what makes the
  * object that goes in it. Few enough that a scan beats anything cleverer; the
  * last one found is remembered, since a program reads one class's fields in a

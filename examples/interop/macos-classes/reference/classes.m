@@ -240,6 +240,13 @@ int main(void) {
     printf("exists %s %s\n", exists ? "true" : "false", directory ? "true" : "false");
     printf("labelled %lu %s\n", (unsigned long)[@"x-y-z" componentsSeparatedByString:@"-"].count,
            [[@"p-q" componentsSeparatedByString:@"-"] componentsJoinedByString:@"+"].UTF8String);
+    NSSet *pair = [[NSSet alloc] initWithArray:@[ [@"a" mutableCopy], @"b", [@"a" mutableCopy] ]];
+    NSSet *grown = [pair setByAddingObject:@"c"];
+    NSSet<NSString *> *strings = [[NSSet alloc] initWithArray:@[ @"x", @"y", @"x" ]];
+    NSSet<NSString *> *added = [strings setByAddingObject:@"z"];
+    printf("sets %lu %lu %s %s %lu %lu %s\n", (unsigned long)pair.count, (unsigned long)grown.count,
+           [grown containsObject:[@"c" mutableCopy]] ? "true" : "false", [pair isSubsetOfSet:grown] ? "true" : "false",
+           (unsigned long)strings.count, (unsigned long)added.count, [added containsObject:@"z"] ? "true" : "false");
     NSXMLParser *parser = [[NSXMLParser alloc] initWithData:[@"<a><b/><c><d/></c></a>" dataUsingEncoding:NSUTF8StringEncoding]];
     Elements *elements = [[Elements alloc] init];
     parser.delegate = elements;

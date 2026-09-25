@@ -55,6 +55,7 @@ committed copy.
 | `window.contentView?.addSubview(b)` | `window.contentView?.addSubview(b)` |
 | `let views: [NSView]` | `const views: NSView[]` |
 | `[String: NSObject]` | `Map<string, NSObject>` |
+| `Set<IndexPath>`, `Set<String>` | `Set<NSIndexPath>`, `Set<string>` (objects compared by `-isEqual:`) |
 | `NSRect(x: 0, y: 0, width: 320, height: 200)` | `{ origin: { x: 0, y: 0 }, size: { width: 320, height: 200 } }` |
 | `Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { t in ... }` | `Timer.scheduledTimer({ withTimeInterval: 1, repeats: true }, (t) => { ... })` |
 | `try NSString(contentsOfFile: p, encoding: e)` | `new NSString({ contentsOfFile: p, encoding: e })`, which throws an `Error` |
@@ -168,7 +169,6 @@ Each target picks `x86_64` or `aarch64`, and the `c` or `llvm` backend.
 
 ## Not yet
 
-- **`Set<T>`.** Swift's `Set<IndexPath>` is skipped, with its reason.
 - **Out-parameters of objects.** `NSString **` and
   `AutoreleasingUnsafeMutablePointer` are skipped, with their reason.
 - **Swift-only API.** Swift's overlay adds functions with no C or

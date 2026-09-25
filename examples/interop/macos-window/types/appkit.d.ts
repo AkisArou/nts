@@ -3105,6 +3105,12 @@ declare module "objc:AppKit" {
     constructor(labels: { eventRef: Ptr<unknown> });
     /** @ntsSelector init */
     constructor();
+    /** @ntsSelector touchesMatchingPhase:inView: */
+    touches(labels: { matching: CEnum<NSTouch.Phase | 0, UInt>; in: NSView | null }): Set<NSTouch>;
+    /** @ntsSelector touchesForView: */
+    touches(labels: { for: NSView }): Set<NSTouch>;
+    /** @ntsSelector allTouches */
+    allTouches(): Set<NSTouch>;
     /** @ntsSelector coalescedTouchesForTouch: */
     coalescedTouches(labels: { for: NSTouch }): NSTouch[];
     /** @ntsSelector trackSwipeEventWithOptions:dampenAmountThresholdMin:max:usingHandler: */
@@ -3133,9 +3139,6 @@ declare module "objc:AppKit" {
     //   @property context: deprecated in macOS 10.12
     //   @property CGEvent: a `struct __CGEvent *`
     //   +eventWithCGEvent:: a `struct __CGEvent *`
-    //   -touchesMatchingPhase:inView:: a collection, `NSSet`, which crosses as an object when it is bound
-    //   -allTouches: a collection, `NSSet`, which crosses as an object when it is bound
-    //   -touchesForView:: a collection, `NSSet`, which crosses as an object when it is bound
   }
 
   /** @ntsClass NSGraphicsContext */

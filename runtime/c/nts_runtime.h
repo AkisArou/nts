@@ -789,6 +789,12 @@ typedef struct NtsMap {
 #define NTS_KEY_STRING 1u
 #define NTS_KEY_NUMBER 2u
 #define NTS_KEY_REFERENCE 3u
+/* An Objective-C object, held in its family's box, compared as `NSSet` and
+ * Swift's `Set` compare one: `-hash` and `-isEqual:`, not identity. The CF
+ * host installs the two, and nothing else makes a table of this kind. */
+#define NTS_KEY_OBJC 4u
+extern uint64_t (*nts_objc_key_hash)(const void *object);
+extern bool (*nts_objc_key_equal)(const void *a, const void *b);
 
 /* `BigInt.asIntN(bits, v)` and `BigInt.asUintN(bits, v)`: the value wrapped to
  * `bits` of two's complement, signed or not.
@@ -1811,6 +1817,11 @@ void nts_array_fill_from_nsarray(NtsArray *into, const void *array);
 void nts_array_fill_strings_from_nsarray(NtsArray *into, const void *array);
 void *nts_nsdictionary_of_objects(const NtsMap *map);
 void *nts_nsdictionary_of_strings(const NtsMap *map);
+/* An `NSSet` of a `Set<T>`'s elements, as Swift's `Set<T>` crosses: each the
+ * object its box holds, or an `NSString` made of a string. +1, and a set
+ * does not keep what it was made of. */
+void *nts_nsset_of_objects(const NtsMap *set);
+void *nts_nsset_of_strings(const NtsMap *set);
 void nts_dictionary_fill_from_nsdictionary(NtsArray *keys, NtsArray *values,
                                            const void *dictionary);
 void nts_dictionary_fill_strings_from_nsdictionary(NtsArray *keys,

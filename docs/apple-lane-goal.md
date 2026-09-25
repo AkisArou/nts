@@ -962,6 +962,27 @@ correctness does not depend on arm64 running by luck.
        drawing in C, on both backends. The colours are released (an
        Objective-C weak reference goes nil), and under NoGc that line alone
        differs.
+   - **Swift's `Set<T>` (2026-09-25).** `NSSet<T *> *` crosses as
+     `Set<T>` both ways: a set of objects, or of strings.
+     - A set of Objective-C objects compares as Swift's and `NSSet` do,
+       with `-hash` and `-isEqual:`, not by identity. Two equal
+       `NSIndexPath`s are one element. The runtime has a key kind for it,
+       `NTS_KEY_OBJC`: the key is the object's box, and its hash and
+       equality are hooks the CF host installs at load. Lowering allows a
+       `Set` of counted Objective-C handles and picks that kind for it.
+       Boxing on the way in and unboxing on the way out are the map-value
+       arms.
+     - A `Set` passed is an `NSSet` made of it (`nts_nsset_of_*`, +1). One
+       returned is read through its `allObjects`, as an array is, then
+       added, so the elements are counted as an array's are.
+     - The 30 `NSSet` skips across AppKit are bound: the collection view's
+       index paths, touches, identifiers. The whole binding still
+       typechecks and lowers.
+     - `macos-classes` makes an `NSSet` with an equal string twice, reads
+       back a grown one, finds an equal string in it, passes it back to
+       `isSubsetOfSet:`, and does the same with `Set<String>`. It agrees
+       with the Objective-C oracle on both backends. A bind-objc test spells
+       both.
    - **The notes app against Swift (2026-09-25).** `macos-notes` has
      `reference/notes.swift`, the same application in Swift, line for line:
      the window, the anchors, the data source, `#selector(Notes.add(_:))`
