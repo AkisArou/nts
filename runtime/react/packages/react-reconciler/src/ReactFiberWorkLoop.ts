@@ -1163,7 +1163,11 @@ export function queueRecoverableErrors(errors: CapturedValue[]): void {
   if (workInProgressRootRecoverableErrors === null) {
     workInProgressRootRecoverableErrors = errors;
   } else {
-    workInProgressRootRecoverableErrors.push(...errors);
+    // A loop, not `push(...errors)`: the same order, with no limit on how
+    // many arguments one call may take.
+    for (const error of errors) {
+      workInProgressRootRecoverableErrors.push(error);
+    }
   }
 }
 

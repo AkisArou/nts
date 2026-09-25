@@ -2358,7 +2358,9 @@ function commitAfterMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot,
         } else {
           // Merge with parent set.
           if (viewTransitionCancelableChildren !== null) {
-            prevCancelableChildren.push(...viewTransitionCancelableChildren);
+            for (const child of viewTransitionCancelableChildren) {
+              prevCancelableChildren.push(child);
+            }
           }
           popViewTransitionCancelableScope(prevCancelableChildren);
         }
