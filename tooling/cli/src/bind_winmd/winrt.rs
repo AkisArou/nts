@@ -284,11 +284,11 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     let _ = writeln!(text, "// as the metadata names that slot; the compiler refuses the two disagreeing.");
     let _ = writeln!(text, "declare module \"winrt:{namespace}\" {{");
     let c_types: Vec<&str> =
-        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber" | "Struct" | "ByValue" | "Counted" | "CBytes")).collect();
+        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber" | "Struct" | "ByValue" | "Counted" | "CBytes" | "ConstPtr")).collect();
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
-    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable" | "Delegate" | "EventRegistrationToken")).collect();
+    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable" | "Delegate" | "EventRegistrationToken" | "Guid")).collect();
     if !winrt.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
     }
@@ -574,6 +574,7 @@ impl Writer<'_> {
             let ty = field.ty();
             let why = match &ty {
                 Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 => None,
+                Type::ValueName(named) if is_guid(named) => None,
                 Type::ValueName(named) => match self.find(&named.namespace, &named.name) {
                     Ok(inner) if inner.category() == TypeCategory::Enum => None,
                     // A struct holds its structs, so the graph has no cycle;
@@ -611,6 +612,10 @@ impl Writer<'_> {
             Type::U64 => brand("c_uint64", self),
             Type::F32 => brand("c_float", self),
             Type::F64 => brand("c_double", self),
+            Type::ValueName(named) if is_guid(named) => {
+                self.brands.insert("Guid");
+                Ok("Guid".to_owned())
+            }
             Type::ValueName(named) => {
                 let def = self.find(&named.namespace, &named.name).map_err(|_| format!("`{}`, not in the metadata read", named.name))?;
                 match def.category() {
@@ -695,8 +700,9 @@ impl Writer<'_> {
         // answers `{ result: JsonValue; returnValue: boolean }`. They follow
         // every `[in]` one, which is where C takes them too.
         let mut outs: Vec<String> = Vec::new();
-        // Arrays lent for the call, which the Windows Runtime's ABI forbids
-        // the callee to keep: it copies what it needs before it returns.
+        // Arrays and `ref const` structs lent for the call, which the Windows
+        // Runtime's ABI forbids the callee to keep: it copies what it needs
+        // before it returns.
         let mut lent: Vec<String> = Vec::new();
         for (at, ty) in signature.types.iter().enumerate().take(declared) {
             let row = named.params().get(at).copied().flatten();
@@ -728,7 +734,7 @@ impl Writer<'_> {
                     _ => return Err("an `out` parameter not written through a pointer".to_owned()),
                 };
                 if let Type::ValueName(value) = &**written
-                    && self.index.get(&value.namespace, &value.name).next().is_some_and(|def| def.category() == TypeCategory::Struct)
+                    && (is_guid(value) || self.index.get(&value.namespace, &value.name).next().is_some_and(|def| def.category() == TypeCategory::Struct))
                 {
                     return Err("a struct `out` parameter".to_owned());
                 }
@@ -747,6 +753,11 @@ impl Writer<'_> {
                 return Err("an `in` parameter after an `out` one".to_owned());
             } else {
                 parameters.push(format!("{name}: {}", self.spell(ty, true)?));
+                // `ref const T` is a pointer to the caller's storage, lent
+                // for the call as an array is.
+                if matches!(ty, Type::RefConst(_)) {
+                    lent.push(name);
+                }
             }
         }
         let result = match &signature.return_type {
@@ -862,37 +873,22 @@ impl Writer<'_> {
                 // projections all allow; a result is what C wrote.
                 Ok(if argument { format!("{spelled} | null") } else { spelled })
             }
-            Type::ValueName(name) => {
-                let Some(def) = self.index.get(&name.namespace, &name.name).next() else {
-                    return Err(format!("`{}`, not in the metadata read", name.name));
-                };
-                // One `int64`, passed as the integer is (`winrt:types`).
-                if name.namespace == "Windows.Foundation" && name.name == "EventRegistrationToken" {
-                    self.brands.insert("EventRegistrationToken");
-                    return Ok("EventRegistrationToken".to_owned());
-                }
-                // A struct crosses by value: the program holds its storage, a
-                // `Ptr` to it, and C copies it in or writes it out.
-                if def.category() == TypeCategory::Struct {
-                    if let Some(why) = self.struct_refusal(def, 0) {
-                        return Err(format!("`{}`, {why}", name.name));
-                    }
-                    let record = self.named(&name.namespace, &name.name);
-                    self.brands.insert("ByValue");
-                    return Ok(format!("ByValue<{record}>"));
-                }
-                if def.category() != TypeCategory::Enum {
-                    return Err(format!("`{}`, a {:?}", name.name, def.category()));
-                }
-                let enumeration = self.named(&name.namespace, &name.name);
-                let underlying = match def.underlying_type() {
-                    Some(Type::U32) => "c_uint32",
-                    _ => "c_int32",
-                };
-                self.brands.insert("CEnum");
-                self.brands.insert(underlying);
-                Ok(format!("CEnum<{enumeration}, {underlying}>"))
+            Type::ValueName(name) if is_guid(name) => {
+                self.brands.insert("Guid");
+                self.brands.insert("ByValue");
+                Ok("ByValue<Guid>".to_owned())
             }
+            // `ref const T`: a struct passed as a pointer to the caller's
+            // storage, `const T *`, which C reads and does not keep.
+            Type::RefConst(inner) if argument && matches!(&**inner, Type::ValueName(_)) => {
+                let by_value = self.spell(inner, true)?;
+                let Some(record) = by_value.strip_prefix("ByValue<").and_then(|rest| rest.strip_suffix('>')) else {
+                    return Err(format!("{ty:?}, a reference to something other than a struct"));
+                };
+                self.brands.insert("ConstPtr");
+                Ok(format!("ConstPtr<{record}>"))
+            }
+            Type::ValueName(name) => self.spell_value(name),
             // Any object: `IInspectable`, which is what the ABI passes.
             Type::Object => {
                 self.brands.insert("IInspectable");
@@ -906,6 +902,40 @@ impl Writer<'_> {
 }
 
 impl Writer<'_> {
+    /// A value type by name: an enum as its 32-bit underlying type, a struct
+    /// by value, or an `EventRegistrationToken`.
+    fn spell_value(&mut self, name: &windows_metadata::TypeName) -> Result<String, String> {
+        let Some(def) = self.index.get(&name.namespace, &name.name).next() else {
+            return Err(format!("`{}`, not in the metadata read", name.name));
+        };
+        // One `int64`, passed as the integer is (`winrt:types`).
+        if name.namespace == "Windows.Foundation" && name.name == "EventRegistrationToken" {
+            self.brands.insert("EventRegistrationToken");
+            return Ok("EventRegistrationToken".to_owned());
+        }
+        // A struct crosses by value: the program holds its storage, a
+        // `Ptr` to it, and C copies it in or writes it out.
+        if def.category() == TypeCategory::Struct {
+            if let Some(why) = self.struct_refusal(def, 0) {
+                return Err(format!("`{}`, {why}", name.name));
+            }
+            let record = self.named(&name.namespace, &name.name);
+            self.brands.insert("ByValue");
+            return Ok(format!("ByValue<{record}>"));
+        }
+        if def.category() != TypeCategory::Enum {
+            return Err(format!("`{}`, a {:?}", name.name, def.category()));
+        }
+        let enumeration = self.named(&name.namespace, &name.name);
+        let underlying = match def.underlying_type() {
+            Some(Type::U32) => "c_uint32",
+            _ => "c_int32",
+        };
+        self.brands.insert("CEnum");
+        self.brands.insert(underlying);
+        Ok(format!("CEnum<{enumeration}, {underlying}>"))
+    }
+
     /// A delegate where a method takes one: `Delegate<(sender: S, args: A) =>
     /// void, "IID">`, the function its `Invoke` calls and the interface the
     /// object is -- an instantiation's computed, as an interface's is.
@@ -1051,6 +1081,12 @@ impl Writer<'_> {
         self.spelled.insert(key, spelled.clone());
         spelled
     }
+}
+
+/// `System.Guid`, which the metadata names and no `.winmd` defines:
+/// `winrt:types` declares it.
+fn is_guid(name: &windows_metadata::TypeName) -> bool {
+    name.namespace == "System" && name.name == "Guid"
 }
 
 /// ``IVectorView`1`` as TypeScript names it: `IVectorView`.

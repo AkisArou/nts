@@ -249,7 +249,7 @@ fn winrt_structs_cross_by_value() {
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-structs-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.Graphics.Imaging", "Windows.Globalization", "--out"])
+        .args(["bind-winmd", "Windows.Graphics.Imaging", "Windows.Globalization", "Windows.Foundation", "--out"])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
@@ -266,6 +266,14 @@ fn winrt_structs_cross_by_value() {
     assert!(imaging.contains("put_Bounds(this: IBitmapTransform, value: ByValue<BitmapBounds>): void;"), "{imaging}");
     assert!(imaging.contains("get_Bounds(this: IBitmapTransform): ByValue<BitmapBounds>;"), "{imaging}");
     assert!(foundation.contains("export type DateTime = Struct<{ UniversalTime: c_int64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
+    // `System.Guid`, which no `.winmd` defines, is `winrt:types`' struct; a
+    // `ref const` struct is a `ConstPtr` to the caller's storage, lent.
+    assert!(foundation.contains("function CreateNewGuid(): ByValue<Guid>;"), "{foundation}");
+    assert!(
+        foundation.contains("@ntsVtable 8 Equals\n     * @ntsNoEscape target\n     * @ntsNoEscape value\n")
+            && foundation.contains("function Equals(target: ConstPtr<Guid>, value: ConstPtr<Guid>): boolean;"),
+        "{foundation}"
+    );
     assert!(globalization.contains("SetDateTime(this: ICalendar, value: ByValue<DateTime>): void;"), "{globalization}");
     // A class whose default interface is an instantiation is bound as it,
     // and named where a method answers it.

@@ -31,7 +31,7 @@
 // One tag to a line. The slot and the method name are both the metadata's, and the compiler
 // refuses a declaration whose name is not the method its slot is said to be.
 declare module "winrt:types" {
-  import type { Class, ClassChain, c_int64 } from "c:types";
+  import type { CArray, Class, ClassChain, c_int64, c_uint8, c_uint16, c_uint32, Struct } from "c:types";
 
   export type ComClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
     readonly __com: true;
@@ -64,4 +64,9 @@ declare module "winrt:types" {
   // What an event's `add_` answers and its `remove_` takes: a struct of one
   // `int64`, which both calling conventions pass exactly as the integer.
   export type EventRegistrationToken = c_int64;
+
+  // `System.Guid`, which the metadata names and no `.winmd` defines: a
+  // struct, crossing as the others do (`ByValue<Guid>`), laid out as C's
+  // `GUID`.
+  export type Guid = Struct<{ Data1: c_uint32; Data2: c_uint16; Data3: c_uint16; Data4: CArray<c_uint8, 8> }, "System_Guid">;
 }

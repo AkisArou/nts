@@ -27,6 +27,7 @@
 // - `outs`: `[out]` parameters, as fields of the result (see `outs`).
 // - `bytes`: byte arrays both ways (see `bytes`).
 // - `map`: a class whose default interface is an instantiation (see `map`).
+// - `guids`: `Guid` by value and by reference (see `guids`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
 //   call that was handed it -- and 19 under `--rc`, those two and one for
@@ -49,7 +50,7 @@ import { activations, asked, delegates, releases, report } from "c:report";
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import { local } from "c:memory";
 import type { c_int64, c_uint32 } from "c:types";
-import { MemoryBuffer } from "winrt:Windows.Foundation";
+import { GuidHelper, MemoryBuffer } from "winrt:Windows.Foundation";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
 import type { DateTime } from "winrt:Windows.Foundation";
 import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
@@ -129,6 +130,21 @@ function map(): string {
   return String(map.get_Size()) + ":" + map.Lookup("a") + ":" + String(replaced) + ":" + String(map.HasKey("c"));
 }
 
+// `Guid`, which `winrt:types` declares and no metadata defines: a new one,
+// which is version 4 with RFC 4122's variant -- the variant read out of
+// `Data4`, the struct's array field -- the empty one, all zeros, and
+// `Equals`, which takes both by reference (`ref const Guid`, a `ConstPtr`
+// to the program's storage): a guid equals itself and not the empty one.
+function guids(): string {
+  const fresh = GuidHelper.CreateNewGuid();
+  const empty = GuidHelper.get_Empty();
+  const version = fresh[0].Data3 >> 12;
+  const variant = (fresh[0].Data4[0] & 0xc0) === 0x80 ? "rfc" : "other";
+  const zeros = empty[0].Data1 + empty[0].Data2 + empty[0].Data3 + empty[0].Data4[7];
+  return "v" + String(version) + ":" + variant + ",empty=" + String(zeros) + ",equals=" +
+    String(GuidHelper.Equals(fresh, fresh)) + ":" + String(GuidHelper.Equals(fresh, empty));
+}
+
 // An event: two TypeScript functions handed to `add_Closed` as delegates, one
 // removed again, then the reference closed, which raises `Closed` on it before
 // the call returns (closing the *buffer* does not: measured with a C oracle
@@ -200,7 +216,7 @@ function run(): string {
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
-    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " map=" + map();
+    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " map=" + map() + " guids=" + guids();
 }
 
 if (asked("throw")) {
