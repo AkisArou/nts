@@ -324,6 +324,22 @@ static bool nts_uv_run_foreign(void) {
   return ran;
 }
 
+/* Operations the program awaits: while any is outstanding, the cross-thread
+ * handle is referenced, so `uv_run` waits for the completion that will come
+ * through it instead of returning with nothing registered. */
+static uint32_t nts_uv_pending;
+
+static void nts_uv_pending_change(void *state, int delta) {
+  (void)state;
+  uint32_t before = nts_uv_pending;
+  nts_uv_pending = (uint32_t)((int)nts_uv_pending + delta);
+  if (before == 0 && nts_uv_pending > 0) {
+    uv_ref((uv_handle_t *)&nts_uv_async);
+  } else if (before > 0 && nts_uv_pending == 0) {
+    uv_unref((uv_handle_t *)&nts_uv_async);
+  }
+}
+
 static void nts_uv_drain_foreign(uv_async_t *async) {
   (void)async;
   (void)nts_uv_run_foreign();
@@ -373,6 +389,7 @@ void nts_uv_host_install(uv_loop_t *loop) {
   nts_uv_loop = loop;
   nts_uv_owner = uv_thread_self();
   nts_uv_dropped = 0;
+  nts_uv_pending = 0;
 
   if (uv_mutex_init(&nts_uv_foreign_lock) != 0) {
     nts_uv_fail("could not create the foreign-post lock");
@@ -399,6 +416,7 @@ void nts_uv_host_install(uv_loop_t *loop) {
        * supplies one. */
       .enqueue_microtask = 0,
       .pump_one = nts_uv_pump_one,
+      .pending = nts_uv_pending_change,
       .state = 0,
   };
   nts_host_install(&host);

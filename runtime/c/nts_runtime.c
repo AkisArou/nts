@@ -211,6 +211,8 @@ struct NtsEnvironment {
   /* -- host, scheduling and interning -- */
   NtsHost host;
   bool host_installed;
+  /* Operations the program awaits that are outstanding (`nts_pending_*`). */
+  uint32_t pending;
   uint32_t depth;
   bool checkpoint_active;
   bool join_active;
@@ -8040,6 +8042,34 @@ void nts_task_run(NtsTask task) {
   task.run(task.state);
   nts_leave();
 }
+
+void nts_pending_begin(void) {
+  if (!nts_is_owner_thread()) {
+    fprintf(stderr, "nts: an operation began off the owning thread\n");
+    abort();
+  }
+  nts_env->pending++;
+  if (nts_env->host_installed && nts_env->host.pending) {
+    nts_env->host.pending(nts_env->host.state, 1);
+  }
+}
+
+void nts_pending_end(void) {
+  if (!nts_is_owner_thread()) {
+    fprintf(stderr, "nts: an operation ended off the owning thread\n");
+    abort();
+  }
+  if (nts_env->pending == 0) {
+    fprintf(stderr, "nts: an operation ended that never began\n");
+    abort();
+  }
+  nts_env->pending--;
+  if (nts_env->host_installed && nts_env->host.pending) {
+    nts_env->host.pending(nts_env->host.state, -1);
+  }
+}
+
+uint32_t nts_pending_count(void) { return nts_env->pending; }
 
 bool nts_is_owner_thread(void) {
   return !nts_env->host_installed || !nts_env->host.is_owner_thread ||

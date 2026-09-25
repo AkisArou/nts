@@ -3004,6 +3004,16 @@ typedef struct NtsHost {
    * microtasks must checkpoint them before returning from a turn. */
   NtsHostPumpResult (*pump_one)(void *state);
 
+  /* `delta` operations the program awaits began (+1) or ended (-1): a host
+   * whose loop ends when it runs out of registered work keeps running while
+   * any is outstanding, since the completion that settles it is still to
+   * come -- from another thread, through `post_from_any_thread`, which is
+   * not registered work. Called on the owner thread. NULL only for a host
+   * whose loop outlives the program anyway, and a host says so where it
+   * fills this in: a host that leaves it out has a console program exit
+   * with an answer still on its way, and nothing says why. */
+  void (*pending)(void *state, int delta);
+
   void *state;
 } NtsHost;
 
@@ -3110,6 +3120,18 @@ NtsTimerId nts_post_delayed(NtsTask task, double delay_ms, bool repeating);
 void nts_cancel_delayed(NtsTimerId id);
 void nts_post_from_any_thread(NtsTask task);
 bool nts_is_owner_thread(void);
+/* An operation the program is waiting on is outstanding: begun with
+ * `nts_pending_begin` once it has started, ended with `nts_pending_end` once
+ * its result has been delivered -- or once it failed to start, which is the
+ * path a caller forgets. While any is outstanding the host keeps the program
+ * alive (`NtsHost.pending`), as node keeps it alive for an fs request or a
+ * fetch: anything whose result the program can observe. Precondition: the
+ * owner thread, for both -- the count is the environment's, and a
+ * completion on another thread ends it after it is carried home. An end with
+ * nothing outstanding ends the process by name. */
+void nts_pending_begin(void);
+void nts_pending_end(void);
+uint32_t nts_pending_count(void);
 
 /* The two queues. */
 void nts_enqueue_microtask(NtsTask task);

@@ -119,6 +119,17 @@ fn promise_join_stops_at_settlement_on_libuv() {
     assert!(checks(&report) >= 21, "{report}");
 }
 
+/// An operation the program awaits holds the libuv loop until its completion
+/// arrives from another thread (`nts_pending_begin`): a console program whose
+/// only work left is a Windows Runtime operation's or a `URLSession` task's
+/// completion exited before it came. The control arm begins nothing, and the
+/// loop returns before the completion.
+#[test]
+fn an_outstanding_operation_holds_the_libuv_loop() {
+    let report = run_suite_with("pending_uv", &["-DNTS_PROVIDER_RC"], &["nts_uv_host.c"], &["-luv"]);
+    assert!(checks(&report) >= 4, "{report}");
+}
+
 /// An erased needle against an array of strings answers, rather than aborting.
 ///
 /// `validateOneOf(value: unknown, name: string, oneOf: Choices)` is one of

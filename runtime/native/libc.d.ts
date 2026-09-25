@@ -507,6 +507,19 @@ declare module "c:memory" {
 // record to lay out, so a header would add an include and give the witness
 // nothing to compare. `c:stdlib` and `c:math` keep theirs, because they
 // declare real C functions whose prototypes the witness checks.
+declare module "c:pending" {
+  // An operation the program awaits is outstanding, and then is not: while
+  // any is, the program keeps running, as node keeps it running for an fs
+  // request -- a completion that comes from another thread is not work the
+  // loop can see. A binding's Promise over a foreign async operation calls
+  // both, on the owning thread: the end on the completion, and on a start
+  // that failed.
+  /** @ntsAbi intrinsic */
+  export function nts_pending_begin(): void;
+  /** @ntsAbi intrinsic */
+  export function nts_pending_end(): void;
+}
+
 declare module "c:stdint" {
   // Hand-written fixed-width C integer aliases. JavaScript number precision applies.
   export type {

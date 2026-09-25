@@ -104,6 +104,9 @@ void nts_test_host_install(void) {
   host.is_owner_thread = nts_test_is_owner;
   host.enqueue_microtask = 0; /* we are not Blink; the runtime checkpoints */
   host.pump_one = nts_test_pump_one;
+  /* NULL: the test host's loop is the test, which steps it and asks the
+   * runtime's own count (`nts_pending_count`) what is outstanding. */
+  host.pending = 0;
   host.state = 0;
   nts_host_install(&host);
 }
