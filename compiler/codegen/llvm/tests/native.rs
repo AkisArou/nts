@@ -2370,6 +2370,42 @@ export function fired(): void { fire_all(); }
     }
 }
 
+/// A closure that reaches C through a parameter of a bare function type:
+/// `ready` is whatever the caller passed, so which body C's callback runs is
+/// the lent closure's own, read from its table, and not one the bridge could
+/// name. Two closures with different bodies go through the one parameter, so
+/// a bridge that called either by name would get one of them wrong -- and the
+/// type's own `call`, which is a stub, is what it named before.
+#[test]
+fn a_function_value_reaches_c_through_its_table_on_both_backends() {
+    let source = r"
+import type { OnceClosure, c_int } from 'c:types';
+declare function start_async(value: c_int, ready: OnceClosure<(result: c_int) => void>): void;
+declare function fire_all(): void;
+let total = 0;
+function start(k: number, ready: (result: c_int) => void): void {
+    start_async(k as c_int, ready);
+}
+export function run(): number {
+    total = 0;
+    const scale = 100;
+    start(1, (result) => { total += result; });
+    start(2, (result) => { total += result * scale; });
+    fire_all();
+    return total;
+}
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f owed=%zu", run(), nts_closures_owed());"#, "run();");
+        let Some((text, outputs)) = run_on_both_backends("dispatched", source, provider, ASYNC_LIBRARY, &caller) else { return; };
+        assert!(text.contains("->header.descriptor->methods["), "the bridge does not dispatch through the closure's table");
+        // 1 * 2 from the first body, 2 * 2 * 100 from the second.
+        for output in outputs {
+            assert_eq!(output, expect("402 owed=0", provider), "{provider:?}");
+        }
+    }
+}
+
 /// A small class hierarchy in C, with functions taking an instance first.
 const METHODS_LIBRARY: &str = r#"
 #include <stdlib.h>

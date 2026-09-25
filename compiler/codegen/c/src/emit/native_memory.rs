@@ -1,6 +1,6 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
-use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, native_function_type, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, Spelling};
+use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, native_function_type, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, virtual_signature, Spelling};
 use nts_core::hir::Callee;
 use nts_codegen_common::symbols::bridge_name;
 use nts_core::hir::native::{NativeAbi, Pointee, Type};
@@ -694,7 +694,7 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     // The receiver: the static closure's name, or `None` when it arrives as
     // the context parameter.
     #[allow(clippy::type_complexity)]
-    let mut wanted: std::collections::BTreeMap<String, (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>, bool)> =
+    let mut wanted: std::collections::BTreeMap<String, (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>, bool, Option<u32>)> =
         std::collections::BTreeMap::new();
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
@@ -724,16 +724,20 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
                 return Err(refuse("a callback bridge whose foreign signature and compiled function disagree about arity"));
             }
+            let dispatched = nts_core::hir::bridged_through_table(program, layout);
+            if dispatched.is_some() && !*context {
+                return Err(refuse("a callback bridge with no context whose closure is not known here"));
+            }
             wanted.insert(
                 bridge_name(target, signature, *once),
-                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout)), *once),
+                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout)), *once, dispatched),
             );
         }
     }
     if wanted.is_empty() {
         return Ok(false);
     }
-    for (name, (signature, compiled, receiver, once)) in &wanted {
+    for (name, (signature, compiled, receiver, once, dispatched)) in &wanted {
         let mut parameters = Vec::new();
         // The receiver is the static closure itself -- one immortal object per
         // closure with no captured state -- or, for a bridge with a context,
@@ -765,7 +769,15 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             arguments.push(format!("({want}){slot}"));
         }
         let parameters = if parameters.is_empty() { "void".to_owned() } else { parameters.join(", ") };
-        let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+        let call = match dispatched {
+            Some(slot) => format!(
+                "(({})({})->header.descriptor->methods[{slot}])({})",
+                virtual_signature(program, &compiled.name, origin)?,
+                arguments[0],
+                arguments.join(", ")
+            ),
+            None => format!("{}({})", c_identifier(&compiled.name), arguments.join(", ")),
+        };
         let result = signature.result.c_type();
         // `nts_callback_enter` around the call, so a `throw` inside it stops
         // here instead of jumping past the C frames that called us. They belong

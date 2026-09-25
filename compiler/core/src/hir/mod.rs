@@ -2873,6 +2873,19 @@ pub fn closure_call_slot(program: &Program) -> u32 {
         .unwrap_or(0)
 }
 
+/// The slot a callback bridge reads its closure's body from, when the body is
+/// not known where the bridge is made.
+///
+/// An arrow or function expression passed to C has a layout of its own, whose
+/// `call` the bridge names. A value of a bare function type -- a parameter
+/// passed on -- has the type's layout, whose `call` is a stub: which body runs
+/// is the lent closure's, read from its table as any call through a function
+/// value reads it. One answer for both backends' bridges.
+#[must_use]
+pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> {
+    (!layout.types.iter().copied().any(has_a_closure_body)).then(|| closure_call_slot(program))
+}
+
 /// Values carried through boxing and control-flow joins. These operations
 /// preserve reference identity; escape, callback reachability and exposure
 /// follow the same graph. Visited values make loop-carried joins terminate.

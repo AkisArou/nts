@@ -2375,7 +2375,7 @@ fn closure_signature(
 }
 
 /// A function-pointer type for calling one implementation of a virtual method.
-fn virtual_signature(
+pub(super) fn virtual_signature(
     program: &Program,
     target: &str,
     origin: &Origin,

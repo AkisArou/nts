@@ -1140,6 +1140,18 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
     })
 }
 
+/// What a bridge calls: the compiled function by name, or the one in the
+/// receiver's table at `dispatched`, whose loads go on the end of `body`.
+fn bridge_callee(compiled: &Func, dispatched: Option<u32>, receiver: &str, body: &mut String) -> String {
+    let Some(slot) = dispatched else { return symbol(&compiled.name) };
+    let mut loads = Vec::new();
+    let pointer = method_pointer("%d", receiver, slot, &mut loads);
+    for load in loads {
+        let _ = writeln!(body, "  {load}");
+    }
+    pointer
+}
+
 /// The one instance of a closure class that captures nothing.
 /// The callback bridges this program needs, as LLVM definitions.
 ///
@@ -1186,6 +1198,10 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             let foreign = signature.parameters.len() - usize::from(*context);
             if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
                 return Err(refuse(func, "a callback bridge whose foreign signature and compiled function disagree about arity"));
+            }
+            let dispatched = nts_core::hir::bridged_through_table(program, layout);
+            if dispatched.is_some() && !*context {
+                return Err(refuse(func, "a callback bridge with no context whose closure is not known here"));
             }
             let last = signature.parameters.len().saturating_sub(1);
             let mut parameters = Vec::new();
@@ -1237,7 +1253,8 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             } else {
                 "  call void @nts_callback_leave()".to_owned()
             };
-            let call = format!("call {} {}({})", return_ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
+            let callee = bridge_callee(compiled, dispatched, &format!("%a{last}"), &mut body);
+            let call = format!("call {} {callee}({})", return_ty_of(&have, compiled)?, arguments.join(", "));
             let parameters = parameters.join(", ");
             if want == HirType::Void {
                 let _ = writeln!(out, "define internal void @{name}({parameters}) nounwind {{");
@@ -3231,10 +3248,12 @@ fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result
 /// `args[0]` is the receiver and its descriptor is where the table lives, so
 /// this is the descriptor, then the table, then the slot. The table stores
 /// untyped pointers, which is why the call spells its own signature.
-fn method_pointer(out: &str, args: &[ValueId], slot: u32, before: &mut Vec<String>) -> String {
-    let receiver = args
-        .first()
-        .map_or_else(|| "null".to_owned(), |value| name(*value));
+/// A call's receiver, `args[0]`.
+fn receiver_name(args: &[ValueId]) -> String {
+    args.first().map_or_else(|| "null".to_owned(), |value| name(*value))
+}
+
+fn method_pointer(out: &str, receiver: &str, slot: u32, before: &mut Vec<String>) -> String {
     before.push(format!(
         "{out}.desc = load ptr, ptr {receiver}{}",
         tbaa("ptr")
@@ -3491,7 +3510,7 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
             // the table lives.
             let callable = match dispatched {
                 None => symbol(&called),
-                Some(slot) => method_pointer(&out, args, slot, &mut before),
+                Some(slot) => method_pointer(&out, &receiver_name(args), slot, &mut before),
             };
             // A runtime helper is called at its declared result (`declared_result`).
             let declared = if into_c { signatures::signature_on(&called, platform) } else { None };

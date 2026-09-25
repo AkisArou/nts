@@ -43179,9 +43179,10 @@ impl<'a> FuncBuilder<'a> {
         want: HirType,
         origin: &Origin,
     ) -> Result<ValueId, Diagnostic> {
-        // Dispatched statically, through the closure's own layout, which an
-        // arrow or function expression has and a value of a bare function
-        // type does not.
+        // Dispatched statically through the closure's own layout where an
+        // arrow or function expression gives it one, and through its table
+        // where the value is of a bare function type. Anything else is not
+        // a closure at all.
         if !matches!(self.values[closure.0 as usize].ty, HirType::Managed(ManagedType::Object(_))) {
             return Err(self.unsupported(
                 id,
