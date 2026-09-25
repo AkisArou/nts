@@ -108,3 +108,7 @@ was confirmed on a reduced case. Ported code must follow them.
 - **Development-only code sits behind `if (isDevelopment)`.** The native
   `Build.native.ts` binds that name to the literal `false`, and nts drops the
   branch.
+- **A constant that gates code keeps its literal type.** nts folds a branch on
+  its condition's type, so `export const enableX = false` folds and
+  `export const enableX: boolean = false` compiles the whole branch into the
+  native build. That includes every feature flag.

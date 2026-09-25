@@ -3,81 +3,86 @@
 // development build, as upstream builds it. Ported code keeps upstream's
 // `if (enableX)` shape so that each file stays diffable against upstream at
 // the next pin; the constants fold away at build time.
+//
+// Leave each flag's type literal (`= false`, never `: boolean = false`).
+// esbuild folds on the value, but nts folds a branch on its condition's
+// *type*: a widened flag compiles every branch it gates into the native
+// build, refusals and all.
 
 import { isProfiling } from "shared/Build.ts";
 
 const __EXPERIMENTAL__ = false;
 const __PROFILE__ = isProfiling;
 
-export const enableBrowserAPI: boolean = true;
-export const disableSchedulerTimeoutInWorkLoop: boolean = false;
-export const enableSuspenseCallback: boolean = false;
-export const enableScopeAPI: boolean = false;
-export const enableCreateEventHandleAPI: boolean = false;
-export const enableLegacyFBSupport: boolean = false;
-export const enableYieldingBeforePassive: boolean = false;
-export const enableThrottledScheduling: boolean = false;
+export const enableBrowserAPI = true;
+export const disableSchedulerTimeoutInWorkLoop = false;
+export const enableSuspenseCallback = false;
+export const enableScopeAPI = false;
+export const enableCreateEventHandleAPI = false;
+export const enableLegacyFBSupport = false;
+export const enableYieldingBeforePassive = false;
+export const enableThrottledScheduling = false;
 export const enableLegacyCache = __EXPERIMENTAL__;
 export const enableAsyncIterableChildren = __EXPERIMENTAL__;
 export const enableFlightWeakThenables = __EXPERIMENTAL__;
 export const enableTaint = __EXPERIMENTAL__;
-export const enableViewTransition: boolean = true;
+export const enableViewTransition = true;
 export const enableViewTransitionParentEnterExit = __EXPERIMENTAL__;
-export const enableViewTransitionForPersistenceMode: boolean = false;
+export const enableViewTransitionForPersistenceMode = false;
 export const enableGestureTransition = __EXPERIMENTAL__;
 export const enableScrollEndPolyfill = __EXPERIMENTAL__;
-export const enableSuspenseyImages: boolean = false;
+export const enableSuspenseyImages = false;
 export const enableFizzBlockingRender = __EXPERIMENTAL__; // rel="expect"
 
 export const enableSrcObject = __EXPERIMENTAL__;
 export const enableHydrationChangeEvent = __EXPERIMENTAL__;
 export const enableDefaultTransitionIndicator = __EXPERIMENTAL__;
 export const enableOptimisticKey = __EXPERIMENTAL__;
-export const enableObjectFiber: boolean = false;
-export const enableTransitionTracing: boolean = false;
-export const enableLegacyHidden: boolean = false;
-export const enableSuspenseAvoidThisFallback: boolean = false;
+export const enableObjectFiber = false;
+export const enableTransitionTracing = false;
+export const enableLegacyHidden = false;
+export const enableSuspenseAvoidThisFallback = false;
 export const enableCPUSuspense = __EXPERIMENTAL__;
-export const enableNoCloningMemoCache: boolean = false;
+export const enableNoCloningMemoCache = false;
 export const enableFizzExternalRuntime = __EXPERIMENTAL__;
-export const alwaysThrottleRetries: boolean = true;
-export const enableEffectEventMutationPhase: boolean = true;
-export const passChildrenWhenCloningPersistedNodes: boolean = false;
-export const enableRetryLaneExpiration: boolean = false;
+export const alwaysThrottleRetries = true;
+export const enableEffectEventMutationPhase = true;
+export const passChildrenWhenCloningPersistedNodes = false;
+export const enableRetryLaneExpiration = false;
 export const retryLaneExpirationMs = 5000;
 export const syncLaneExpirationMs = 250;
 export const transitionLaneExpirationMs = 5000;
-export const enableInfiniteRenderLoopDetection: boolean = false;
-export const enableInfiniteRenderLoopDetectionForceThrow: boolean = false;
-export const enableConditionalUseWarning: boolean = true;
-export const enableFragmentRefs: boolean = true;
-export const enableFragmentRefsScrollIntoView: boolean = true;
-export const enableFragmentRefsInstanceHandles: boolean = true;
-export const enableFragmentRefsTextNodes: boolean = true;
-export const enableInternalInstanceMap: boolean = false;
-export const disableLegacyContext: boolean = true;
-export const disableLegacyContextForFunctionComponents: boolean = true;
-export const enableMoveBefore: boolean = false;
-export const disableClientCache: boolean = true;
-export const enableReactTestRendererWarning: boolean = true;
-export const disableLegacyMode: boolean = true;
-export const disableCommentsAsDOMContainers: boolean = true;
-export const enableTrustedTypesIntegration: boolean = true;
-export const disableInputAttributeSyncing: boolean = false;
-export const disableTextareaChildren: boolean = false;
-export const enableParallelTransitions: boolean = true;
+export const enableInfiniteRenderLoopDetection = false;
+export const enableInfiniteRenderLoopDetectionForceThrow = false;
+export const enableConditionalUseWarning = true;
+export const enableFragmentRefs = true;
+export const enableFragmentRefsScrollIntoView = true;
+export const enableFragmentRefsInstanceHandles = true;
+export const enableFragmentRefsTextNodes = true;
+export const enableInternalInstanceMap = false;
+export const disableLegacyContext = true;
+export const disableLegacyContextForFunctionComponents = true;
+export const enableMoveBefore = false;
+export const disableClientCache = true;
+export const enableReactTestRendererWarning = true;
+export const disableLegacyMode = true;
+export const disableCommentsAsDOMContainers = true;
+export const enableTrustedTypesIntegration = true;
+export const disableInputAttributeSyncing = false;
+export const disableTextareaChildren = false;
+export const enableParallelTransitions = true;
 export const enableProfilerTimer = __PROFILE__;
-export const enableComponentPerformanceTrack: boolean = true;
-export const enablePerformanceIssueReporting: boolean = false;
-export const enableSchedulingProfiler: boolean =
+export const enableComponentPerformanceTrack = true;
+export const enablePerformanceIssueReporting = false;
+export const enableSchedulingProfiler =
   !enableComponentPerformanceTrack && __PROFILE__;
 export const enableProfilerCommitHooks = __PROFILE__;
 export const enableProfilerNestedUpdatePhase = __PROFILE__;
-export const enableAsyncDebugInfo: boolean = true;
+export const enableAsyncDebugInfo = true;
 export const enableUpdaterTracking = __PROFILE__;
 export const ownerStackLimit = 1e4;
-export const eprh_enableUseKeyedStateCompilerLint: boolean = false;
-export const eprh_enableVerboseNoSetStateInEffectCompilerLint: boolean = false;
+export const eprh_enableUseKeyedStateCompilerLint = false;
+export const eprh_enableVerboseNoSetStateInEffectCompilerLint = false;
 export const eprh_enableExhaustiveEffectDependenciesCompilerLint:
   | "off"
   | "all"
