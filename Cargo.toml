@@ -19,7 +19,6 @@ members = [
     "tooling/bench",
     "tooling/differential",
     "tooling/suite",
-    "runtime/react/compiler/nts-react",
 ]
 
 [workspace.package]

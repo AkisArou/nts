@@ -95,10 +95,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "indexmap"
-version = "2.14.0"
+name = "hmac-sha256"
+version = "1.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
+checksum = "ec9d92d097f4749b64e8cc33d924d9f40a2d4eb91402b458014b781f5733d60f"
+
+[[package]]
+name = "indexmap"
+version = "2.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
  "hashbrown",
@@ -128,177 +134,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "nts-bench"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "camino",
- "nts-codegen-c",
- "nts-codegen-jvm",
- "nts-codegen-llvm",
- "nts-core",
- "nts-frontend-ts",
-]
-
-[[package]]
-name = "nts-build"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "camino",
- "nts-diagnostics",
- "nts-semantic-schema",
- "rustc-hash",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "nts-cli"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "camino",
- "nts-build",
- "nts-codegen-c",
- "nts-codegen-jvm",
- "nts-codegen-llvm",
- "nts-codegen-napi",
- "nts-core",
- "nts-debug-lowering",
- "nts-deps",
- "nts-diagnostics",
- "nts-differential",
- "nts-frontend-ts",
- "nts-jvm-emitter",
- "nts-memory-lowering",
- "nts-semantic-schema",
- "roxmltree",
- "rustc-hash",
- "serde",
- "serde_json",
- "windows-metadata",
-]
-
-[[package]]
-name = "nts-codegen-c"
-version = "0.0.0"
-dependencies = [
- "camino",
- "nts-codegen-common",
- "nts-core",
- "nts-debug-lowering",
- "nts-diagnostics",
- "nts-frontend-ts",
- "nts-memory-lowering",
- "nts-semantic-schema",
- "rustc-hash",
-]
-
-[[package]]
-name = "nts-codegen-common"
-version = "0.0.0"
-dependencies = [
- "nts-core",
- "nts-diagnostics",
- "nts-semantic-schema",
- "rustc-hash",
-]
-
-[[package]]
-name = "nts-codegen-jvm"
-version = "0.0.0"
-dependencies = [
- "camino",
- "nts-build",
- "nts-codegen-common",
- "nts-core",
- "nts-diagnostics",
- "nts-frontend-ts",
- "nts-jvm-emitter",
- "nts-semantic-schema",
- "rustc-hash",
-]
-
-[[package]]
-name = "nts-codegen-llvm"
-version = "0.0.0"
-dependencies = [
- "camino",
- "nts-codegen-c",
- "nts-codegen-common",
- "nts-core",
- "nts-diagnostics",
- "nts-frontend-ts",
-]
-
-[[package]]
-name = "nts-codegen-napi"
-version = "0.0.0"
-dependencies = [
- "nts-codegen-c",
- "nts-core",
- "rustc-hash",
-]
-
-[[package]]
-name = "nts-core"
-version = "0.0.0"
-dependencies = [
- "camino",
- "indexmap",
- "nts-diagnostics",
- "nts-frontend-ts",
- "nts-semantic-schema",
- "rustc-hash",
- "serde",
-]
-
-[[package]]
-name = "nts-debug-lowering"
-version = "0.0.0"
-dependencies = [
- "indexmap",
- "nts-core",
- "nts-diagnostics",
- "nts-semantic-schema",
- "serde",
-]
-
-[[package]]
-name = "nts-deps"
-version = "0.0.0"
-dependencies = [
- "camino",
- "rustc-hash",
- "serde",
- "serde_json",
- "thiserror",
- "xxhash-rust",
-]
-
-[[package]]
 name = "nts-diagnostics"
 version = "0.0.0"
 dependencies = [
  "camino",
  "serde",
  "thiserror",
-]
-
-[[package]]
-name = "nts-differential"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "camino",
- "nts-codegen-c",
- "nts-codegen-common",
- "nts-codegen-jvm",
- "nts-codegen-llvm",
- "nts-core",
- "nts-frontend-ts",
- "nts-semantic-schema",
 ]
 
 [[package]]
@@ -317,21 +158,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "nts-jvm-emitter"
+name = "nts-react"
 version = "0.0.0"
 dependencies = [
- "nts-diagnostics",
+ "anyhow",
+ "camino",
+ "nts-frontend-ts",
  "nts-semantic-schema",
- "rustc-hash",
-]
-
-[[package]]
-name = "nts-memory-lowering"
-version = "0.0.0"
-dependencies = [
- "nts-core",
- "nts-diagnostics",
- "rustc-hash",
+ "react_compiler",
+ "react_compiler_ast",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -344,22 +181,6 @@ dependencies = [
  "postcard",
  "rustc-hash",
  "serde",
- "thiserror",
- "xxhash-rust",
-]
-
-[[package]]
-name = "nts-suite"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "camino",
- "nts-core",
- "nts-differential",
- "nts-frontend-ts",
- "rustc-hash",
- "serde",
- "serde_json",
  "thiserror",
  "xxhash-rust",
 ]
@@ -396,12 +217,155 @@ dependencies = [
 ]
 
 [[package]]
-name = "roxmltree"
-version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1964b10c76125c36f8afe190065a4bf9a87bf324842c05701330bba9f1cacbb"
+name = "react_compiler"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
 dependencies = [
- "memchr",
+ "indexmap",
+ "react_compiler_ast",
+ "react_compiler_diagnostics",
+ "react_compiler_hir",
+ "react_compiler_inference",
+ "react_compiler_lowering",
+ "react_compiler_optimization",
+ "react_compiler_reactive_scopes",
+ "react_compiler_ssa",
+ "react_compiler_typeinference",
+ "react_compiler_validation",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "react_compiler_ast"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "indexmap",
+ "react_compiler_diagnostics",
+ "rustc-hash",
+ "serde",
+ "serde-transcode",
+ "serde_json",
+]
+
+[[package]]
+name = "react_compiler_diagnostics"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "rustc-hash",
+ "serde",
+]
+
+[[package]]
+name = "react_compiler_hir"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "indexmap",
+ "react_compiler_diagnostics",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "react_compiler_inference"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "indexmap",
+ "react_compiler_diagnostics",
+ "react_compiler_hir",
+ "react_compiler_lowering",
+ "react_compiler_optimization",
+ "react_compiler_ssa",
+ "react_compiler_utils",
+ "rustc-hash",
+]
+
+[[package]]
+name = "react_compiler_lowering"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "indexmap",
+ "react_compiler_ast",
+ "react_compiler_diagnostics",
+ "react_compiler_hir",
+ "rustc-hash",
+ "serde_json",
+]
+
+[[package]]
+name = "react_compiler_optimization"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "indexmap",
+ "react_compiler_diagnostics",
+ "react_compiler_hir",
+ "react_compiler_lowering",
+ "react_compiler_ssa",
+ "rustc-hash",
+]
+
+[[package]]
+name = "react_compiler_reactive_scopes"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "hmac-sha256",
+ "indexmap",
+ "react_compiler_ast",
+ "react_compiler_diagnostics",
+ "react_compiler_hir",
+ "rustc-hash",
+ "serde_json",
+]
+
+[[package]]
+name = "react_compiler_ssa"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "indexmap",
+ "react_compiler_diagnostics",
+ "react_compiler_hir",
+ "rustc-hash",
+]
+
+[[package]]
+name = "react_compiler_typeinference"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "react_compiler_diagnostics",
+ "react_compiler_hir",
+ "react_compiler_ssa",
+ "rustc-hash",
+]
+
+[[package]]
+name = "react_compiler_utils"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "indexmap",
+ "rustc-hash",
+]
+
+[[package]]
+name = "react_compiler_validation"
+version = "0.0.1-oidc.0"
+source = "git+https://github.com/facebook/react?rev=1d34f91dfde6bba84d08b683aaba164c7194dacb#1d34f91dfde6bba84d08b683aaba164c7194dacb"
+dependencies = [
+ "indexmap",
+ "react_compiler_diagnostics",
+ "react_compiler_hir",
+ "rustc-hash",
 ]
 
 [[package]]
@@ -439,6 +403,15 @@ checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
  "serde_core",
  "serde_derive",
+]
+
+[[package]]
+name = "serde-transcode"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "590c0e25c2a5bb6e85bf5c1bce768ceb86b316e7a01bdf07d2cb4ec2271990e2"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -491,9 +464,9 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "syn"
-version = "3.0.4"
+version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6275cddf4610d1775e6d1fe9469b2e77d0f39fd98fb7450901b821e0c53649f"
+checksum = "8593e8e72159ed2257d083c7a454a85cbf854f37a0966d8d483aff8c8a3ebcee"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -522,15 +495,9 @@ dependencies = [
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.24"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
-
-[[package]]
-name = "windows-metadata"
-version = "0.100.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d3a758dc1da4ae61aa7f93afbb505d564c72dd6431e513ed581377857896a72"
+checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
 
 [[package]]
 name = "xxhash-rust"
