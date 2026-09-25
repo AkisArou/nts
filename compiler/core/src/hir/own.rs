@@ -700,9 +700,10 @@ fn control_flow(func: &Func) -> (Vec<Option<usize>>, Vec<rustc_hash::FxHashSet<u
 /// **Counted**: an uncounted handle has no release to place.
 ///
 /// **Nothing else may be holding it.** A handle stored into a field or an array,
-/// or handed to a *runtime* helper, belongs to that container, which gives it up
-/// when it is overwritten or freed -- so stretching the temporary would make an
-/// object outlive the only thing holding it. `examples/interop/macos-classes`
+/// or handed to a *runtime* helper that may keep it ([`super::runtime::keeps`]),
+/// belongs to that container, which gives it up when it is overwritten or freed
+/// -- so stretching the temporary would make an object outlive the only thing
+/// holding it. `examples/interop/macos-classes`
 /// asserts that through a weak watch: `objects[0] = new NSObject()` replaces the
 /// one `watched()` made, and it must read `gone`. A **native** call is not a
 /// holder -- C borrows its arguments for the call, and that unrecorded borrow is
@@ -793,6 +794,19 @@ fn held_to_the_end(func: &Func) -> Vec<ValueId> {
                     .iter()
                     .filter_map(|at| args.get(*at).copied())
                     .collect(),
+                // A runtime helper holds what `runtime::keeps` says it may
+                // keep past the call -- every argument, where it says
+                // nothing, which fails late rather than early. One it only
+                // reads is no holder: `nts_com_query(button, iid)` answers a
+                // reference of its own and keeps none of the button's, and
+                // taking it for a holder released every COM object a function
+                // asked for another interface at that read. winui-hello's
+                // `rebuilt` arm is the witness: the button went before its
+                // automation peer, which holds it weakly, could press it.
+                super::Callee::External(name) => match super::runtime::keeps(name) {
+                    Some(kept) => kept.iter().filter_map(|at| args.get(*at).copied()).collect(),
+                    None => args.clone(),
+                },
                 _ => args.clone(),
             },
             _ => Vec::new(),

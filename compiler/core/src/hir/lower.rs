@@ -11884,18 +11884,6 @@ struct Edge {
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
 }
 
-/// A Windows Runtime call whose shape the lowering knows and no declaration
-/// states. Either way the callee answers an HRESULT.
-enum Forced {
-    /// A call through a slot no `@ntsVtable` names, with its method's name:
-    /// `super.m()` in a class over a composable class (`m` in its
-    /// overridable interface, on the base's implementation), or a property's
-    /// getter or setter (`@ntsGet 6 get_Content`).
-    Slot(u32, String),
-    /// A runtime function answering an HRESULT: `nts_winrt_listen`.
-    Hresult,
-}
-
 struct FuncBuilder<'a> {
     snapshot: &'a SemanticSnapshot,
     /// Bound foreign members, keyed by `(source, span end)` of the declaration.
@@ -12093,9 +12081,12 @@ struct FuncBuilder<'a> {
     /// program's class it is written in: the message it builds goes to the
     /// superclass's implementation (`native::Send::super_of`).
     super_send: Option<String>,
-    /// What a Windows Runtime call being lowered is, where no declaration
-    /// says so: see [`Forced`].
-    forced: Option<Forced>,
+    /// While a call through a Windows Runtime slot no `@ntsVtable` names is
+    /// lowered, that slot and its method's name: `super.m()` in a class over a
+    /// composable class (`m` in its overridable interface, on the base's
+    /// implementation), or a property's getter or setter (`@ntsGet 6
+    /// get_Content`).
+    forced_slot: Option<(u32, String)>,
     /// The type a bare `null` should take, where the caller knows it.
     ///
     /// `contextual_type` recovers this from the tree for the shapes the tree
@@ -12322,7 +12313,7 @@ impl<'a> FuncBuilder<'a> {
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
             super_send: None,
-            forced: None,
+            forced_slot: None,
         }
     }
 
@@ -28850,9 +28841,9 @@ impl<'a> FuncBuilder<'a> {
             this_type: Some(this),
         };
         with_this.parameters.insert(0, nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false });
-        self.forced = Some(Forced::Slot(slot, name.to_owned()));
+        self.forced_slot = Some((slot, name.to_owned()));
         let callee = self.native_callee(id, Some(declaration), name.to_owned(), &with_this);
-        self.forced = None;
+        self.forced_slot = None;
         let callee = callee?;
         let Callee::Native(target) = &callee else {
             return Err(self.unsupported(id, "a Windows Runtime property whose slot is not a native call"));
@@ -43589,6 +43580,31 @@ impl<'a> FuncBuilder<'a> {
         Ok(value)
     }
 
+    /// A negative HRESULT `status` thrown, as an `Error` carrying the
+    /// system's text for it, with what the call was lent given back on both
+    /// paths.
+    fn throw_on_failure(&mut self, id: NodeId, status: ValueId, lent: Vec<Lent>, origin: &Origin) -> Result<(), Diagnostic> {
+        let zero = self.push(OpKind::ConstInt(0), HirType::Int { bits: 32, signed: true }, origin.clone());
+        let failed = self.push(OpKind::Binary { op: BinOp::Lt, lhs: status, rhs: zero }, HirType::Bool, origin.clone());
+        let raise = self.new_block();
+        let after = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: failed,
+            then_target: raise,
+            then_args: Vec::new(),
+            else_target: after,
+            else_args: Vec::new(),
+        });
+        self.switch_to(raise);
+        self.give_back(id, lent.clone());
+        let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
+        let message = self.runtime_call("nts_hresult_message", vec![status], char_pointer.representation(), origin.clone());
+        self.throw_c_message(id, message, origin)?;
+        self.switch_to(after);
+        self.give_back(id, lent);
+        Ok(())
+    }
+
     /// An `@ntsHresult` call: the HRESULT checked -- a negative one gives back
     /// what was lent and throws an `Error` carrying the system's text for it --
     /// and then the result read out of the slot C wrote it to.
@@ -43610,8 +43626,7 @@ impl<'a> FuncBuilder<'a> {
         typed: Option<HirType>,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
-        let status_type = HirType::Int { bits: 32, signed: true };
-        let status = self.push_call(id, callee, args, declaration, Some(status_type.clone()))?;
+        let status = self.push_call(id, callee, args, declaration, Some(HirType::Int { bits: 32, signed: true }))?;
         // **Every slot is read here, in the call's own block, before the
         // branch** -- so each is a local used in one block, which the storage
         // check accepts inside a loop, and neither path below touches it. A
@@ -43644,24 +43659,7 @@ impl<'a> FuncBuilder<'a> {
                 other => other,
             })
             .collect();
-        let zero = self.push(OpKind::ConstInt(0), status_type, origin.clone());
-        let failed = self.push(OpKind::Binary { op: BinOp::Lt, lhs: status, rhs: zero }, HirType::Bool, origin.clone());
-        let raise = self.new_block();
-        let after = self.new_block();
-        self.terminate(Terminator::Branch {
-            cond: failed,
-            then_target: raise,
-            then_args: Vec::new(),
-            else_target: after,
-            else_args: Vec::new(),
-        });
-        self.switch_to(raise);
-        self.give_back(id, lent.clone());
-        let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
-        let message = self.runtime_call("nts_hresult_message", vec![status], char_pointer.representation(), origin.clone());
-        self.throw_c_message(id, message, &origin)?;
-        self.switch_to(after);
-        self.give_back(id, lent);
+        self.throw_on_failure(id, status, lent, &origin)?;
         if fields.is_empty() {
             return Ok(match value {
                 Some(value) => value,
@@ -44297,7 +44295,7 @@ impl<'a> FuncBuilder<'a> {
         // `button.addEventListener("click", f)`: the runtime's, over the
         // event the listener's type names.
         if let Some(direction) = self.node(declaration).native.as_ref().and_then(|n| n.listener.clone()) {
-            return self.lower_event_listener(id, (receiver, receiver_node), &direction, with_this, arguments);
+            return self.lower_event_listener(id, receiver, &direction, &with_this, arguments);
         }
         // A class method is sent to the class, which the send looks up
         // itself: the receiver the program wrote is the class, as a value.
@@ -44334,58 +44332,63 @@ impl<'a> FuncBuilder<'a> {
 
     /// `addEventListener(type, listener)` or `removeEventListener`, which a
     /// Windows Runtime class declares over its events (`@ntsListener add` or
-    /// `remove`): `nts_winrt_listen(object, event, delegate)`, or
-    /// `nts_winrt_unlisten`, where `event` is what the listener's
-    /// `Event<F, IID, Slots>` names -- the interface and its `add_` and
-    /// `remove_` slots, which every event calls alike -- and the delegate is
-    /// the function, made one as any `Delegate` argument is. The runtime asks
-    /// the object for the interface, and keeps the token `add_` answers by
-    /// object and function, which is what the removal looks up. `type` names
-    /// the same event to the checker and is not needed again.
+    /// `remove`): the runtime's `nts_winrt_listen(object, iid, add, delegate)`
+    /// or `nts_winrt_unlisten(object, iid, add, remove, listener)`, over the
+    /// event the listener's `Event<F, IID, Slots>` names -- the interface
+    /// declaring it and its `add_` and `remove_` slots, which every event
+    /// calls alike. The runtime asks the object for the interface and keeps
+    /// the token `add_` answers by object, event and function, which is what
+    /// the removal looks up; so a removal passes the function, and makes no
+    /// delegate. Either answers an HRESULT, thrown when it failed.
     fn lower_event_listener(
         &mut self,
         id: NodeId,
-        (receiver, receiver_node): (ValueId, NodeId),
+        receiver: ValueId,
         direction: &str,
-        mut signature: nts_semantic_schema::SignatureRecord,
+        signature: &nts_semantic_schema::SignatureRecord,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
-        let symbol = match direction.trim() {
-            "add" => "nts_winrt_listen",
-            "remove" => "nts_winrt_unlisten",
+        let adding = match direction.trim() {
+            "add" => true,
+            "remove" => false,
             _ => return Err(self.unsupported(id, "@ntsListener is `add` or `remove`")),
         };
         let [event, listener] = arguments else {
             return Err(self.unsupported(id, "an event listener call that is not `(type, listener)`"));
         };
-        let listens = signature.parameters.get(1).map(|parameter| parameter.ty);
-        let Some((iid, add, remove)) = listens.and_then(|ty| super::native::event_slots(self.snapshot, ty)) else {
+        let listens = signature
+            .parameters
+            .get(1)
+            .map(|parameter| parameter.ty)
+            .ok_or_else(|| self.unsupported(id, "an event listener call that is not `(type, listener)`"))?;
+        let Some((iid, add, remove)) = super::native::event_slots(self.snapshot, listens) else {
             return Err(self.unsupported(id, "an event listener whose type names no event (`Event<F, IID, Slots>`)"));
         };
-        let this = self
-            .snapshot
-            .node_types
-            .get(&receiver_node)
-            .map(|ty| self.class_behind(*ty))
-            .ok_or_else(|| self.unsupported(id, "an event listener on a receiver with no type"))?;
-        signature.parameters[0].ty = self.string_type()?;
-        signature.parameters.insert(0, nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false });
-        signature.this_type = Some(this);
-        self.forced = Some(Forced::Hresult);
-        let callee = self.native_callee(id, None, symbol.to_owned(), &signature);
-        self.forced = None;
-        let callee = via_callee(callee?, true);
-        let Callee::Native(target) = &callee else {
-            return Err(self.unsupported(id, "an event listener that is not a native call"));
-        };
-        let target = target.clone();
-        // The type's own value is evaluated, as it is written, and the event
-        // the runtime is handed is the one its type names.
-        let mut args = self.lower_arguments(id, &[*event, *listener])?;
+        // `type` is evaluated, as it is written; the event is the one the
+        // listener's type names.
+        let values = self.lower_arguments(id, &[*event, *listener])?;
+        let function = values[1];
         let origin = self.origin(id);
-        args[0] = self.push(OpKind::ConstString(format!("{iid} {add} {remove}")), HirType::Managed(ManagedType::String), origin);
-        let (args, lent) = self.native_arguments(id, &target, args, arguments.len(), Some(receiver))?;
-        self.finish_call(id, callee, args, lent, None)
+        let [low, high] = self.iid_arguments(&iid, &origin);
+        let slot = HirType::Int { bits: 32, signed: false };
+        let add = self.push(OpKind::ConstInt(i128::from(add)), slot.clone(), origin.clone());
+        let status_type = HirType::Int { bits: 32, signed: true };
+        let mut lent = Vec::new();
+        let status = if adding {
+            let super::native::Role::Delegate { bridge, signature, iid } =
+                super::native::listener_delegate(self.snapshot, listens).map_err(|why| self.unsupported(id, &why))?
+            else {
+                return Err(self.unsupported(id, "an event listener whose type is not a delegate (`Event<F, IID, Slots>`)"));
+            };
+            let pointer = HirType::NativePointer(super::native::Pointee::Void);
+            let delegate = self.delegate(id, function, (bridge, signature, &iid), pointer, &mut lent, &origin)?;
+            self.runtime_call("nts_winrt_listen", vec![receiver, low, high, add, delegate], status_type, origin.clone())
+        } else {
+            let remove = self.push(OpKind::ConstInt(i128::from(remove)), slot, origin.clone());
+            self.runtime_call("nts_winrt_unlisten", vec![receiver, low, high, add, remove, function], status_type, origin.clone())
+        };
+        self.throw_on_failure(id, status, lent, &origin)?;
+        Ok(self.push(OpKind::ConstUndefined, HirType::Void, origin))
     }
 
     /// The receiver a member tagged `@ntsVia <IID>` is called on: the object
@@ -44902,7 +44905,7 @@ impl<'a> FuncBuilder<'a> {
     fn hresult_shape(&self, call: NodeId, declaration: Option<NodeId>) -> Result<Option<super::native::Hresult>, Diagnostic> {
         // An overridable method answers an HRESULT as every slot does, and
         // its binding says so only by being `@ntsOverride`.
-        if self.forced.is_some() {
+        if self.forced_slot.is_some() {
             return Ok(Some(super::native::Hresult::Plain));
         }
         let Some(shape) = declaration.and_then(|decl| self.node(decl).native.as_ref()).and_then(|n| n.hresult.as_deref()) else {
@@ -45559,9 +45562,9 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decl) = declaration {
             native.frameworks = self.declared_names(call, decl, LinkTag::FRAMEWORK)?;
             native.libraries = self.declared_names(call, decl, LinkTag::LIBRARY)?;
-            native.vtable = match &self.forced {
-                Some(Forced::Slot(slot, method)) => Some(super::native::Vtable { slot: *slot, method: method.clone(), factory: None }),
-                _ => self.vtable_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?,
+            native.vtable = match &self.forced_slot {
+                Some((slot, method)) => Some(super::native::Vtable { slot: *slot, method: method.clone(), factory: None }),
+                None => self.vtable_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?,
             };
         }
         self.make_call(call, declaration, &mut native, signature, (selector, class_send))?;
@@ -46166,17 +46169,6 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
         Ok(Some(self.push(OpKind::Convert(written), want, origin)))
-    }
-
-    /// The checker's `string`, which every program's library declares.
-    fn string_type(&self) -> Result<TypeId, Diagnostic> {
-        self.snapshot
-            .types
-            .iter()
-            .position(|record| matches!(record.kind, TypeKind::String))
-            .and_then(|at| u32::try_from(at).ok())
-            .map(TypeId)
-            .ok_or_else(|| Diagnostic::error("NTS1001", "a program the checker gave no `string`", self.origin(NodeId(0)).location))
     }
 
     /// The checker's `void`, which a setter's signature returns. Any program
@@ -51325,9 +51317,9 @@ impl<'a> FuncBuilder<'a> {
         let [low, high] = self.iid_arguments(iid, &origin);
         let ty = self.values[receiver.0 as usize].ty.clone();
         let base = self.runtime_call("nts_com_base", vec![receiver, low, high], ty, origin);
-        self.forced = Some(Forced::Slot(slot, (*name).to_owned()));
+        self.forced_slot = Some((slot, (*name).to_owned()));
         let called = self.lower_native_method_call(id, (base, object), method, member, arguments);
-        self.forced = None;
+        self.forced_slot = None;
         called
     }
 

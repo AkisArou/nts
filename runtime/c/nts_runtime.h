@@ -1973,6 +1973,17 @@ void *nts_winrt_factory(const NtsString *class_name, uint64_t iid_low,
 void *nts_winrt_activate(const NtsString *class_name, uint64_t iid_low,
                          uint64_t iid_high);
 uint32_t nts_winrt_activations(void);
+/* `addEventListener` on a Windows Runtime object: `delegate` registered with
+ * the event whose interface is `iid` and whose `add_` is slot `add`, unless
+ * the same function already is, and the token kept by object, event and
+ * function. `nts_winrt_unlisten` gives the token of `listener`, the
+ * function -- a key, never read -- back to the event's `remove_`; one never
+ * added is not there to remove. Each answers the HRESULT of the call it made,
+ * or S_OK. */
+int32_t nts_winrt_listen(void *object, uint64_t iid_low, uint64_t iid_high,
+                         uint32_t add, void *delegate);
+int32_t nts_winrt_unlisten(void *object, uint64_t iid_low, uint64_t iid_high,
+                           uint32_t add, uint32_t remove, void *listener);
 char *nts_hresult_message(int32_t hr);
 /* A TypeScript function as a Windows Runtime delegate: a COM object whose
  * table is `IUnknown` and then `invoke`, the compiler's adapter for the

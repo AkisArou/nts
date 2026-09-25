@@ -282,6 +282,8 @@ static SIGNATURES: &[Declared] = &[
     ("nts_view_unlend", &[None], None),
     ("nts_winrt_activate", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_winrt_factory", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    ("nts_winrt_listen", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
+    ("nts_winrt_unlisten", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
 ];
 
 #[must_use]
@@ -481,9 +483,15 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // measure. The helpers are `static inline` in C, so the call the
         // analysis was reasoning about is not even emitted there.
         name if name.starts_with("nts_presence_") => Some(&[]),
-        // Reads the result slot an `@ntsHresult` call wrote, which is the
-        // caller's local, and keeps nothing of it.
-        "nts_com_take" => Some(&[]),
+        // `nts_com_take` reads the result slot an `@ntsHresult` call wrote,
+        // which is the caller's local, and keeps nothing of it. A COM object
+        // asked for another of its interfaces (`nts_com_query`) answers a
+        // reference of its own and keeps none of the object's; an event's
+        // listener table keeps the object uncounted (a weak reference) and the
+        // delegate through the source, never the program's reference.
+        // `own::held_to_the_end` reads these as borrows, so the object keeps
+        // its anchor.
+        "nts_com_take" | "nts_com_query" | "nts_winrt_listen" | "nts_winrt_unlisten" => Some(&[]),
         _ => None,
     }
 }

@@ -261,4 +261,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 109 for `nts_handle_check`, which reads a C handle back out of an erased
 /// value: the JVM holds no C handles in its values.
-const REFUSED_FLOOR: usize = 109;
+///
+/// 111 for `nts_winrt_listen` and `nts_winrt_unlisten`, a Windows Runtime
+/// class's `addEventListener`: Windows, and native calls again.
+const REFUSED_FLOOR: usize = 111;

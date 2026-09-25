@@ -1970,6 +1970,20 @@ fn retention_of(roles: &[Role]) -> Vec<Retention> {
         .collect()
 }
 
+/// A listener as the delegate `addEventListener` registers: the bridge into
+/// the function, the delegate's signature and its interface, read from its
+/// `Event<F, IID, Slots>` as any `Delegate<F, IID>` parameter's are.
+/// A `Role::Delegate`, as a parameter taking one has.
+pub(crate) fn listener_delegate(snapshot: &SemanticSnapshot, ty: TypeId) -> Result<Role, String> {
+    let Some((function, kind @ ClosureKind::Delegate(_))) = closure(snapshot, ty) else {
+        return Err("an event listener whose type is not a delegate (`Event<F, IID, Slots>`)".to_owned());
+    };
+    match closure_slots(snapshot, "addEventListener", "listener", function, kind)?.pop() {
+        Some((_, role @ Role::Delegate { .. })) => Ok(role),
+        _ => Err("an event listener whose type is not a delegate (`Event<F, IID, Slots>`)".to_owned()),
+    }
+}
+
 /// The C parameters one `Closure<F>` or `ScopedClosure<F>` becomes: the
 /// callback with the context as its last parameter, the context, and for a
 /// retained closure the function that releases it.

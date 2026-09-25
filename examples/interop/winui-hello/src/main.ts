@@ -147,6 +147,24 @@ class App extends Application {
     setTimeout(() => this.whenLaidOut(window, button), 200);
   }
 
+  // Buttons made and dropped one after another, each given the same listener
+  // and pressed. Under a counting provider each is freed when `pressOnce`
+  // returns, and the next may be made where it was: its listener must still
+  // be added, not taken for the entry the one before left. One a call,
+  // rather than one an iteration: a handle made in a loop body is released
+  // at its last use, and an automation peer holds its owner weakly, so the
+  // button would end before its press.
+  presses = 0;
+  rebuilt(): number {
+    const pressed = (): void => {
+      this.presses += 1;
+    };
+    for (let made = 0; made < 20; made++) {
+      pressOnce(pressed);
+    }
+    return this.presses;
+  }
+
   // The checks wait for XAML to have templated, measured and arranged the
   // button, polling rather than sampling once: a desktop busy with another
   // program lays a window out later, and a single sample read that as a
@@ -173,10 +191,16 @@ class App extends Application {
     report(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired),
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " rebuilt=" + String(this.rebuilt()),
     );
     this.exit();
   }
+}
+
+function pressOnce(listener: () => void): void {
+  const button = new Button();
+  button.addEventListener("click", listener);
+  ButtonAutomationPeer.createInstanceWithOwner(button).as_IInvokeProvider().Invoke();
 }
 
 Application.start(() => {

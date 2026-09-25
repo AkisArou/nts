@@ -383,138 +383,178 @@ void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high) {
  * takes back. Keyed as the DOM keys a listener -- the object by its
  * `IUnknown`, the one pointer every interface of it answers; the event by its
  * interface and `add_` slot; the function by its closure, the delegate's
- * context, which is one object however many times the program names it -- so
- * a function added twice is registered once, and removing one that was never
- * added does nothing.
+ * context -- so a function added twice is registered once, and removing one
+ * that was never added does nothing.
  *
- * The object is not counted: the source keeps each delegate, and the table
- * keeps only what the removal needs. An object that ends with a listener
- * still added leaves its entry, which an object later made at the same
- * address, with a listener whose closure is at the same address, would
- * match. */
-typedef struct {
+ * Neither the object nor the function is counted: the source keeps each
+ * delegate, and the delegate its closure, for as long as the listener is
+ * added. An entry keeps a weak reference to its object instead, so that
+ * one whose object has ended is known for what it is -- a new object at the
+ * same address would otherwise find its own listener registered already --
+ * and dropped where it is found. An object with no weak reference (no
+ * `IWeakReferenceSource`) is keyed by its address alone. */
+typedef struct NtsListening {
   void *object;
+  void *weak;
   IID iid;
   uint32_t add;
   void *listener;
   int64_t token;
+  struct NtsListening *next;
 } NtsListening;
 
-static NtsListening *listenings;
+/* A table of lists by key, a power of two long, grown at one entry a list. */
+static NtsListening **listenings;
+static size_t listening_buckets;
 static size_t listening_count;
-static size_t listening_capacity;
 
-/* The event `nts_winrt_listen` is handed: `<IID> <add> <remove>`, as the
- * compiler writes it from the listener's `Event<F, IID, Slots>`. */
-typedef struct {
-  IID iid;
-  uint32_t add;
-  uint32_t remove;
-} NtsEvent;
+/* {00000038-0000-0000-C000-000000000046}: `IWeakReferenceSource`, whose
+ * `GetWeakReference` answers the `IWeakReference` an entry keeps. */
+static const IID nts_iid_weak_source = {
+    0x00000038, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
 
-static int nts_hex(const char **at, unsigned digits, uint64_t *out) {
-  uint64_t value = 0;
-  for (unsigned i = 0; i < digits; i++, (*at)++) {
-    char c = **at;
-    unsigned digit;
-    if (c >= '0' && c <= '9') {
-      digit = (unsigned)(c - '0');
-    } else if (c >= 'a' && c <= 'f') {
-      digit = (unsigned)(c - 'a' + 10);
-    } else if (c >= 'A' && c <= 'F') {
-      digit = (unsigned)(c - 'A' + 10);
-    } else {
-      return 0;
-    }
-    value = value << 4 | digit;
+static size_t nts_listening_bucket(const void *object, const void *listener,
+                                   uint32_t add) {
+  uint64_t key = (uint64_t)(uintptr_t)object * 0x9E3779B97F4A7C15ull ^
+                 (uint64_t)(uintptr_t)listener * 0xC2B2AE3D27D4EB4Full ^ add;
+  key ^= key >> 29;
+  return (size_t)key & (listening_buckets - 1);
+}
+
+/* A weak reference to `identity`, or NULL for an object that gives none. */
+static void *nts_weak_of(void *identity) {
+  void *source = 0;
+  if (FAILED((*(const NtsUnknownTable **)identity)
+                 ->query_interface(identity, &nts_iid_weak_source, &source)) ||
+      source == 0) {
+    return 0;
   }
-  *out = value;
+  void *weak = 0;
+  HRESULT hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, void **))(
+      *(void ***)source)[3])(source, &weak);
+  nts_unknown_release(source);
+  return SUCCEEDED(hr) ? weak : 0;
+}
+
+/* Whether the object an entry was made for is still the one alive. */
+static int nts_listening_alive(const NtsListening *entry) {
+  if (entry->weak == 0) {
+    return 1;
+  }
+  void *resolved = 0;
+  HRESULT hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, const IID *, void **))(
+      *(void ***)entry->weak)[3])(entry->weak, &nts_iid_unknown, &resolved);
+  if (FAILED(hr) || resolved == 0) {
+    return 0;
+  }
+  nts_unknown_release(resolved);
   return 1;
 }
 
-static NtsEvent nts_event(const char *text) {
-  NtsEvent event;
-  const char *at = text;
-  uint64_t part;
-  int ok = nts_hex(&at, 8, &part) && *at++ == '-';
-  event.iid.Data1 = (unsigned long)part;
-  ok = ok && nts_hex(&at, 4, &part) && *at++ == '-';
-  event.iid.Data2 = (unsigned short)part;
-  ok = ok && nts_hex(&at, 4, &part) && *at++ == '-';
-  event.iid.Data3 = (unsigned short)part;
-  for (unsigned i = 0; ok && i < 8; i++) {
-    ok = (i != 2 || *at++ == '-') && nts_hex(&at, 2, &part);
-    event.iid.Data4[i] = (unsigned char)part;
+static void nts_listening_free(NtsListening *entry) {
+  if (entry->weak != 0) {
+    nts_unknown_release(entry->weak);
   }
-  char *end = 0;
-  event.add = ok ? (uint32_t)strtoul(at, &end, 10) : 0;
-  ok = ok && end != at;
-  at = end;
-  event.remove = ok ? (uint32_t)strtoul(at, &end, 10) : 0;
-  if (!ok || end == at || *end != '\0') {
-    fprintf(stderr, "nts: an event the compiler wrote unreadably: %s\n", text);
+  free(entry);
+  listening_count--;
+}
+
+/* The link holding the entry for this object, event and function, or the
+ * list's end: an entry whose object has ended is dropped on the way. */
+static NtsListening **nts_listening(void *object, const IID *iid, uint32_t add,
+                                    void *listener) {
+  if (listening_buckets == 0) {
+    return 0;
+  }
+  NtsListening **link =
+      &listenings[nts_listening_bucket(object, listener, add)];
+  while (*link != 0) {
+    NtsListening *entry = *link;
+    if (entry->object == object && entry->listener == listener &&
+        entry->add == add && memcmp(&entry->iid, iid, sizeof *iid) == 0) {
+      if (nts_listening_alive(entry)) {
+        return link;
+      }
+      *link = entry->next;
+      nts_listening_free(entry);
+      continue;
+    }
+    link = &entry->next;
+  }
+  return link;
+}
+
+static void nts_listening_grow(void) {
+  size_t buckets = listening_buckets == 0 ? 16 : listening_buckets * 2;
+  NtsListening **grown = calloc(buckets, sizeof *grown);
+  if (grown == 0) {
+    fprintf(stderr, "nts: out of memory adding an event listener\n");
     abort();
   }
-  return event;
-}
-
-static size_t nts_listening(void *object, const NtsEvent *event,
-                            void *listener) {
-  for (size_t at = 0; at < listening_count; at++) {
-    const NtsListening *entry = &listenings[at];
-    if (entry->object == object && entry->listener == listener &&
-        entry->add == event->add &&
-        memcmp(&entry->iid, &event->iid, sizeof entry->iid) == 0) {
-      return at;
+  NtsListening **old = listenings;
+  size_t old_buckets = listening_buckets;
+  listenings = grown;
+  listening_buckets = buckets;
+  for (size_t at = 0; at < old_buckets; at++) {
+    for (NtsListening *entry = old[at], *next; entry != 0; entry = next) {
+      next = entry->next;
+      NtsListening **head = &listenings[nts_listening_bucket(
+          entry->object, entry->listener, entry->add)];
+      entry->next = *head;
+      *head = entry;
     }
   }
-  return listening_count;
+  free(old);
 }
 
-int32_t nts_winrt_listen(void *object, const char *text, void *delegate) {
-  NtsEvent event = nts_event(text);
+int32_t nts_winrt_listen(void *object, uint64_t iid_low, uint64_t iid_high,
+                         uint32_t add, void *delegate) {
+  IID iid = nts_iid(iid_low, iid_high);
   void *identity = nts_query(object, &nts_iid_unknown);
   void *listener = ((NtsComDelegate *)delegate)->context;
+  if (listening_count >= listening_buckets) {
+    nts_listening_grow();
+  }
+  NtsListening **link = nts_listening(identity, &iid, add, listener);
   HRESULT hr = S_OK;
-  if (nts_listening(identity, &event, listener) == listening_count) {
-    if (listening_count == listening_capacity) {
-      size_t capacity = listening_capacity == 0 ? 8 : listening_capacity * 2;
-      NtsListening *grown = realloc(listenings, capacity * sizeof *listenings);
-      if (grown == 0) {
+  if (*link == 0) {
+    void *face = nts_query(object, &iid);
+    int64_t token = 0;
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, void *, int64_t *))(
+        *(void ***)face)[add])(face, delegate, &token);
+    nts_unknown_release(face);
+    if (SUCCEEDED(hr)) {
+      NtsListening *entry = malloc(sizeof *entry);
+      if (entry == 0) {
         fprintf(stderr, "nts: out of memory adding an event listener\n");
         abort();
       }
-      listenings = grown;
-      listening_capacity = capacity;
-    }
-    void *face = nts_query(object, &event.iid);
-    int64_t token = 0;
-    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, void *, int64_t *))(
-        *(void ***)face)[event.add])(face, delegate, &token);
-    nts_unknown_release(face);
-    if (SUCCEEDED(hr)) {
-      listenings[listening_count++] =
-          (NtsListening){identity, event.iid, event.add, listener, token};
+      *entry = (NtsListening){
+          identity, nts_weak_of(identity), iid, add, listener, token, 0};
+      *link = entry;
+      listening_count++;
     }
   }
   nts_unknown_release(identity);
   return hr;
 }
 
-int32_t nts_winrt_unlisten(void *object, const char *text, void *delegate) {
-  NtsEvent event = nts_event(text);
+int32_t nts_winrt_unlisten(void *object, uint64_t iid_low, uint64_t iid_high,
+                           uint32_t add, uint32_t remove, void *listener) {
+  IID iid = nts_iid(iid_low, iid_high);
   void *identity = nts_query(object, &nts_iid_unknown);
-  size_t at =
-      nts_listening(identity, &event, ((NtsComDelegate *)delegate)->context);
+  NtsListening **link = nts_listening(identity, &iid, add, listener);
   nts_unknown_release(identity);
-  if (at == listening_count) {
+  if (link == 0 || *link == 0) {
     return S_OK;
   }
-  int64_t token = listenings[at].token;
-  listenings[at] = listenings[--listening_count];
-  void *face = nts_query(object, &event.iid);
+  NtsListening *entry = *link;
+  *link = entry->next;
+  int64_t token = entry->token;
+  nts_listening_free(entry);
+  void *face = nts_query(object, &iid);
   HRESULT hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, int64_t))(
-      *(void ***)face)[event.remove])(face, token);
+      *(void ***)face)[remove])(face, token);
   nts_unknown_release(face);
   return hr;
 }

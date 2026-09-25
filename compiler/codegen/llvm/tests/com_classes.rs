@@ -792,8 +792,8 @@ const EVENTS: &str = r#"declare module "winrt:Test.Events" {
 /// `addEventListener("click", f)`: the runtime's `nts_winrt_listen`, handed
 /// the event the listener's type names -- the interface and its slots -- and
 /// `f` made a delegate of the event's IID; `removeEventListener` the
-/// runtime's `nts_winrt_unlisten`, over the same. Each answers an HRESULT,
-/// which is thrown when it fails.
+/// runtime's `nts_winrt_unlisten`, over the same event and `f` itself. Each
+/// answers an HRESULT, which is thrown when it fails.
 #[test]
 fn an_event_listener_is_added_and_removed_by_the_runtime() {
     let source = "import type { Button } from \"winrt:Test.Events\";\nlet clicks = 0;\nconst onClick = (): void => {\n  clicks += 1;\n};\nexport function wire(b: Button): number {\n  b.addEventListener(\"click\", onClick);\n  b.removeEventListener(\"click\", onClick);\n  return clicks;\n}\n";
@@ -806,10 +806,12 @@ fn an_event_listener_is_added_and_removed_by_the_runtime() {
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(text.contains("nts_winrt_listen(") && text.contains("nts_winrt_unlisten("), "not the runtime's:\n{text}");
-    // A string constant is its bytes.
-    let event = "0B0B0B0B-1111-2222-3333-444444444444 14 15".bytes().map(|byte| byte.to_string()).collect::<Vec<_>>().join(", ");
-    assert!(text.contains(&format!("{{ {event}, 0 }}")), "not the event the type names:\n{text}");
-    assert!(text.contains("int32_t nts_winrt_listen(void *, const char *, void *);"), "not the runtime's signature:\n{text}");
+    // The event's interface as two words, the first `Data1 | Data2 << 32 |
+    // Data3 << 48`.
+    let first = 0x0B0B_0B0B_u64 | (0x1111 << 32) | (0x2222 << 48);
+    assert!(text.contains(&first.to_string()), "not the event the type names:\n{text}");
+    // One delegate, the addition's: a removal passes the function.
+    assert_eq!(text.matches("nts_com_delegate(").count(), 1, "a removal made a delegate:\n{text}");
     assert!(text.contains("nts_com_delegate("), "the listener is not made a delegate:\n{text}");
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
