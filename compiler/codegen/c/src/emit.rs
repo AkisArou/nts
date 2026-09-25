@@ -554,8 +554,10 @@ impl Emitted {
         // The header wherever a binding names it, which the witness then
         // includes; the source only where a signal is connected, since that is
         // what brings libgobject into the link.
-        // Or registers a class of its own over one (`emit/gobject.rs`).
-        let connects = self.writer.text().contains("nts_gobject_connect(") || self.writer.text().contains("nts_gobject_register(");
+        // Or registers a class of its own over one (`emit/gobject.rs`), or
+        // holds a boxed record (`nts_gobject_boxed`, `_copy`, `_new`).
+        let text = self.writer.text();
+        let connects = text.contains("nts_gobject_connect(") || text.contains("nts_gobject_register(") || text.contains("nts_gobject_boxed");
         if connects || self.witness.contains(GOBJECT_HEADER_NAME) {
             files.push(Support { name: GOBJECT_HEADER_NAME, contents: GOBJECT_HEADER, compiled: false });
         }
@@ -2810,6 +2812,19 @@ fn emit_object_types(
                     ),
                 );
             }
+        }
+        // The box a boxed record lives in is laid out twice -- here, from the
+        // compiler's field list, and by the runtime as `NtsBoxed`, which makes
+        // and frees every one -- and the program reads `boxed` at the
+        // compiler's offset. Compared where both are visible.
+        if layout.types.iter().any(|ty| ty.0 == nts_core::hir::BOXED_RECORD) {
+            writer.line(
+                origin,
+                format!(
+                    "_Static_assert(sizeof({name}) == sizeof(NtsBoxed) && offsetof({name}, {}) == offsetof(NtsBoxed, boxed), \"the compiler's box is not the runtime's NtsBoxed\");",
+                    c_member_at(layout, 0)
+                ),
+            );
         }
         writer.blank(origin);
     }

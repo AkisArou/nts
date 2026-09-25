@@ -1929,6 +1929,16 @@ pub const HANDLE_BOX_OBJC: u32 = HANDLE_BOX_GOBJECT - 1;
 /// beginning with `IUnknown`'s -- released through its table when it dies.
 pub const HANDLE_BOX_COM: u32 = HANDLE_BOX_OBJC - 1;
 
+/// The box a **`GLib` boxed record** the program holds lives in -- a
+/// `GtkTextIter`, a `GdkRGBA`: the runtime's `NtsBoxed`, `{ boxed, free,
+/// data }` after the header, laid out as a class here so that `boxed`, the C
+/// struct, is read as its first field. One for every boxed type, since what
+/// differs between them -- how the record is given back -- is the box's own
+/// `free` and `data`, not its shape; the runtime makes every one
+/// (`nts_boxed_new`) with its own descriptor, and the C backend asserts this
+/// layout against `NtsBoxed`.
+pub const BOXED_RECORD: u32 = HANDLE_BOX_COM - 1;
+
 /// The upper half of the cells' band, below [`HANDLE_BOX_GOBJECT`], for the
 /// object holding the **fields of a class the program writes over an
 /// Objective-C class** (`class Controller extends NSObject { presses = 0 }`).
@@ -1946,7 +1956,7 @@ pub const SYNTHETIC_OBJC_STATES: u32 = SYNTHETIC_CELLS + (1 << 17);
 #[must_use]
 pub fn objc_state_type(index: usize) -> TypeId {
     let id = SYNTHETIC_OBJC_STATES + u32::try_from(index).unwrap_or(0);
-    debug_assert!(id < HANDLE_BOX_COM, "more Objective-C classes with fields than the band holds");
+    debug_assert!(id < BOXED_RECORD, "more Objective-C classes with fields than the band holds");
     TypeId(id)
 }
 pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);

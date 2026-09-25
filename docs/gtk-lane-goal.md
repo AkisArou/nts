@@ -233,12 +233,15 @@ Two binder fixes it needed:
 
 **Still refused, ranked by count:**
 
-- 643: GIR marks the function not introspectable.
-- 290: arrays -- arrays of handles and records, and buffers C fills and
+- 655: GIR marks the function not introspectable.
+- 324: arrays -- arrays of handles and records, and buffers C fills and
   returns, are what is left.
-- 300: out parameters the caller allocates (a struct the callee fills in).
-- 153: `gpointer` results and `gconstpointer` parameters.
+- 158: `gpointer` results and `gconstpointer` parameters.
+- 68: out parameters the caller allocates that are not a boxed record with a
+  complete struct (300 before boxed records; see below).
 - 50: string out parameters.
+
+(Counts are for the Gtk-4.0 closure; the 643 above was an older count.)
 
 The binder's `*.refused.txt` is the queue.
 
@@ -254,6 +257,45 @@ the harness's own (a `gpointer` bound as `object` forwarded through a
 managed parameter), and **0** that are the bindings'. The first run found
 four -- `Owned<Erased<GObject>>` results -- and a binary from before their
 fix still reports them.
+
+### Boxed records
+
+`GtkTextIter`, `GdkRGBA`, `PangoFontDescription`: a GIR record with a
+`glib:get-type` is a *boxed type*, which `GLib` copies and frees by its
+`GType`. The binder writes one as `Boxed<"_GtkTextIter", "gtk_text_iter_get_type", 80>`
+(`runtime/native/libc.d.ts`), and the program holds it in a box of its own:
+`NtsBoxed` (`runtime/c/nts_runtime.h`), a managed object of kind
+`NTS_KIND_BOXED` holding the struct's pointer and the function that frees
+it. The box's last release frees the struct, so the program never calls
+`*_free`.
+
+- **Results.** Transfer-full results go into the box as they are
+  (`nts_gobject_boxed`). Transfer-none results are copied first
+  (`nts_gobject_boxed_copy`, `g_boxed_copy`), because the pointer is the
+  callee's and can go stale.
+- **Construction.** `new GtkTextIter()` makes zeroed storage
+  (`nts_gobject_boxed_new`, `g_malloc0` of the size the headers give), freed
+  by `g_boxed_free` like any other box.
+- **Out parameters the caller allocates.** `buffer.get_bounds(start, end)` is
+  passed the boxes' structs. This is where most of the 300 caller-allocated
+  refusals went: a boxed record whose struct the headers complete maps like
+  that. An opaque one (`GBytes`) has no size, and nothing allocates it.
+- **Arguments.** C is passed the struct's pointer, and the box is lent for
+  the call.
+- **Cost.** 48 bytes per box: the header, the pointer, the free function and
+  its one word of data. The box holds no copy function: nothing copies a
+  box, and sharing one is the program's own reference.
+- **Checks.** A `_Static_assert` in every emitted program compares the HIR's
+  layout of the box with `NtsBoxed`. `gtk-gir`'s `boxedRecords` arm runs
+  plain and `--rc`, on C and on LLVM.
+
+Still missing: GJS returns a caller-allocated out as a value
+(`const [start, end] = buffer.get_bounds()`); here the caller makes it and
+passes it in. Also, under `--rc` an iterator can outlive its buffer's last
+use. `GtkTextIter` points into the buffer without counting it, so releasing
+the buffer at its last use frees the storage the iterator reads. Foreign
+handles are to be released at block end instead, against the fixture
+`examples/interop/gtk-iter-lifetime`.
 
 ## M3, the idiomatic layer: where it stands
 

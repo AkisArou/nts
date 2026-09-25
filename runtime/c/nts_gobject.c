@@ -318,6 +318,30 @@ void *nts_gobject_state(void *instance) {
   return *nts_gobject_state_slot(instance, class);
 }
 
+/* A boxed record given back as GLib gives any back: by its `GType`, which the
+ * box keeps as its opaque word. */
+static void nts_gobject_boxed_free(void *boxed, size_t type) {
+  g_boxed_free((GType)type, boxed);
+}
+
+void *nts_gobject_boxed(void *boxed, size_t type) {
+  return nts_boxed_new(boxed, nts_gobject_boxed_free, type);
+}
+
+void *nts_gobject_boxed_copy(const void *boxed, size_t type) {
+  if (boxed == NULL) {
+    return NULL;
+  }
+  return nts_boxed_new(g_boxed_copy((GType)type, boxed), nts_gobject_boxed_free,
+                       type);
+}
+
+/* `g_malloc0`, which is what `g_boxed_free` gives back for the records C
+ * lets a caller allocate: since GLib 2.76 `g_slice` is `g_malloc`. */
+void *nts_gobject_boxed_new(size_t type, size_t size) {
+  return nts_boxed_new(g_malloc0(size), nts_gobject_boxed_free, type);
+}
+
 void *nts_gobject_parent_slot(size_t parent, size_t offset) {
   gpointer klass = g_type_class_peek((GType)parent);
   if (klass == NULL) {

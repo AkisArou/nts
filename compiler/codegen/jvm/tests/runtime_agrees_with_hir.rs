@@ -248,4 +248,10 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// composable Windows Runtime class, which only a Windows runtime composes.
 ///
 /// 102 for `nts_com_base`, `super.OnGotFocus(e)` in such a class.
-const REFUSED_FLOOR: usize = 102;
+///
+/// 107 for a `GLib` boxed record held by the program (`GtkTextIter`):
+/// `nts_boxed_new` and `nts_boxed_unlend`, which only a native call's
+/// arguments and results reach, and `nts_gobject_boxed`,
+/// `nts_gobject_boxed_copy` and `nts_gobject_boxed_new`, which the `GObject`
+/// support file defines: GTK, and native calls again.
+const REFUSED_FLOOR: usize = 107;

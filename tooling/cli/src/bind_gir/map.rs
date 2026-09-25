@@ -106,6 +106,9 @@ pub(crate) enum TypeDecl {
         counted: bool,
         interface: bool,
         implements: Vec<(String, String)>,
+        /// For a `GLib` boxed record, its `GType` function and its size (0
+        /// where the headers keep it opaque): `Boxed<Tag, GetType, Size>`.
+        boxed: Option<(String, u64)>,
     },
 }
 
@@ -212,6 +215,9 @@ pub(crate) enum Reason {
     OutParameter,
     /// A virtual function whose class struct member the headers do not place.
     NoSlot,
+    /// A boxed record a parameter hands over (`transfer full`): the box the
+    /// program holds it in would free it too.
+    BoxedTakenOver,
     StringOut,
     CallerAllocates,
     Array,
@@ -246,6 +252,7 @@ impl fmt::Display for Reason {
             Self::WritableBuffer => write!(f, "a `char *` buffer the callee may write into, which GIR calls a string"),
             Self::OutParameter => write!(f, "an out parameter of a type written through no slot here"),
             Self::NoSlot => write!(f, "a virtual function whose class struct member the headers do not place"),
+            Self::BoxedTakenOver => write!(f, "a boxed record a parameter hands over, which the program's box would also free"),
             Self::StringOut => write!(f, "a string out parameter"),
             Self::CallerAllocates => write!(f, "an out parameter whose storage the caller allocates"),
             Self::Array => write!(f, "an array"),
@@ -603,24 +610,7 @@ impl<'a> Mapper<'a> {
                 && !class.interface
                 && self.reaches_type_instance(class)
             {
-                self.binding.functions.push(Function {
-                    name: get_type.clone(),
-                    symbol: get_type.clone(),
-                    parameters: Vec::new(),
-                    result: Mapped { shape: Shape::Other, ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) },
-                    c_parameters: Vec::new(),
-                    deprecated: false,
-                    free: None,
-                    no_escape: Vec::new(),
-                    returns: None,
-                    method: None,
-                    throws: None,
-                    finish: None,
-                    omissible: BTreeMap::new(),
-                    method_only: false,
-                    statics: None,
-                    vfunc: None,
-                });
+                self.binding.functions.push(get_type_function(get_type));
                 self.binding.brands.insert("c_size_t");
                 self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
                 // A class `new GtkLabel({ … })` can make by its `GType`; its
@@ -660,7 +650,7 @@ impl<'a> Mapper<'a> {
             if interface {
                 self.binding.brands.insert("GObjectInterface");
             }
-            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag, parent, counted, interface, implements });
+            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag, parent, counted, interface, implements, boxed: None });
         }
         // Records are roots: nothing derives from one by GIR's account, and a
         // root `Class` is an opaque handle that can also anchor a chain, which
@@ -669,6 +659,13 @@ impl<'a> Mapper<'a> {
             let Some(c_type) = &record.c_type else { continue };
             let Some(tag) = self.facts.tags.get(c_type) else { continue };
             self.binding.brands.insert("Class");
+            let boxed = self.boxed_record(c_type);
+            // A boxed record's `GType`, which the compiler boxes and copies it
+            // by (`nts_gobject_boxed`), and which `new` of one allocates by.
+            if let Some((get_type, _)) = &boxed {
+                self.binding.brands.extend(["Boxed", "c_size_t"]);
+                self.binding.functions.push(get_type_function(get_type));
+            }
             self.binding.types.push(TypeDecl::Class {
                 name: c_type.clone(),
                 tag: tag.clone(),
@@ -676,6 +673,7 @@ impl<'a> Mapper<'a> {
                 counted: false,
                 interface: false,
                 implements: Vec::new(),
+                boxed,
             });
         }
     }
@@ -961,7 +959,7 @@ impl<'a> Mapper<'a> {
     /// zeroes it. `optional` is whether the caller may pass no slot at all.
     fn out(&mut self, param: &Param) -> Result<Mapped, Reason> {
         if param.caller_allocates {
-            return Err(Reason::CallerAllocates);
+            return self.caller_allocated(param);
         }
         let TypeRef::Named { name, c_type } = &param.ty else {
             return Err(if matches!(param.ty, TypeRef::Array(_)) { Reason::Array } else { Reason::OutParameter });
@@ -1007,6 +1005,24 @@ impl<'a> Mapper<'a> {
         let ts = format!("Ptr<{slot}>");
         let ts = if param.optional { format!("{ts} | null") } else { ts };
         Ok(Mapped { shape, ts, c: Type::Pointer(pointee) })
+    }
+
+    /// An out parameter whose storage the caller allocates: for a boxed
+    /// record the headers size, the record itself, which the program makes
+    /// with `new GtkTextIter()` and C fills -- GJS returns it instead, through
+    /// a values form. Anything else is refused.
+    fn caller_allocated(&mut self, param: &Param) -> Result<Mapped, Reason> {
+        if !matches!(param.ty, TypeRef::Named { .. }) {
+            return Err(Reason::CallerAllocates);
+        }
+        // A storage the caller may leave out is `null` when it does:
+        // `gdk_rectangle_intersect(a, b)` asks only whether they meet.
+        let value = Param { direction: Direction::In, nullable: param.optional || param.nullable, optional: false, ..param.clone() };
+        let mapped = self.typed(&value)?;
+        match &mapped.shape {
+            Shape::Handle { class, .. } if self.boxed_record(class).is_some_and(|(_, size)| size > 0) => Ok(mapped),
+            _ => Err(Reason::CallerAllocates),
+        }
     }
 
     /// An array the callee reads (or fills) during the call: strings as
@@ -1442,6 +1458,14 @@ impl<'a> Mapper<'a> {
     fn plain(&mut self, param: &Param) -> Result<(Mapped, Option<&'static str>), Reason> {
         let value = self.value(param)?;
         let value = self.truth(param, value);
+        // A boxed record C takes over would be freed twice: by C, and by the
+        // box the program holds it in.
+        if param.transfer == Transfer::Full
+            && let Shape::Handle { class, .. } = &value.shape
+            && self.boxed_record(class).is_some()
+        {
+            return Err(Reason::BoxedTakenOver);
+        }
         Ok((self.handed_over(value, param.transfer == Transfer::Full), self.omissible(param)))
     }
 
@@ -1459,7 +1483,11 @@ impl<'a> Mapper<'a> {
 
     fn branded(&mut self, mapped: Mapped, full: bool, brand: &'static str) -> Mapped {
         let Shape::Handle { class, nullable } = &mapped.shape else { return mapped };
-        if !full || matches!(mapped.c, Type::Pointer(Pointee::Const(_))) || !self.counted_c_type(class) {
+        // A boxed record handed over is the box's to free: `Owned`, as a
+        // counted handle is. (A boxed record C takes over is refused before
+        // here, in `plain`.)
+        let boxed = brand == "Owned" && self.boxed_record(class).is_some();
+        if !full || matches!(mapped.c, Type::Pointer(Pointee::Const(_))) || !(self.counted_c_type(class) || boxed) {
             return mapped;
         }
         let inner = mapped.ts.strip_suffix(" | null").unwrap_or(&mapped.ts);
@@ -1506,6 +1534,18 @@ impl<'a> Mapper<'a> {
     }
 
     /// [`Self::counted`] for a handle named by its C type, from any namespace.
+    /// A `GLib` boxed record's `GType` function and size (0 where the headers
+    /// keep the struct opaque), by its C type, from whichever namespace
+    /// declares it. `None` for anything else.
+    fn boxed_record(&self, c_type: &str) -> Option<(String, u64)> {
+        let namespace = self.c_types.get(c_type).copied()?;
+        let record = namespace.records.iter().find(|r| !r.class_struct && r.c_type.as_deref() == Some(c_type))?;
+        // `intern` is GIR's word for a type GLib registers itself, with no
+        // function to name.
+        let get_type = record.get_type.clone().filter(|name| name != "intern" && self.facts.declared.contains(name))?;
+        Some((get_type, self.facts.sizes.get(c_type).copied().unwrap_or(0)))
+    }
+
     fn counted_c_type(&self, c_type: &str) -> bool {
         let Some(namespace) = self.c_types.get(c_type).copied() else { return false };
         namespace.classes.iter().find(|class| class.c_type.as_deref() == Some(c_type)).is_some_and(|class| self.counted(namespace, class))
@@ -1524,7 +1564,7 @@ impl<'a> Mapper<'a> {
     ///
     /// ```text
     /// GtkLabel_construct(object_type: c_size_t, n_properties?: c_uint,
-    ///     names?: Ptr<ConstPtr<c_char>> | null, values?: Const<GValue> | null): Declared<GtkLabel, GObject>
+    ///     names?: Ptr<ConstPtr<c_char>> | null, values?: Const<GValue> | null): Declared<GtkLabel, `GObject`>
     /// ```
     ///
     /// Called with the class's `GType` and nothing else, it makes an instance
@@ -1746,6 +1786,29 @@ fn identifier(name: &str) -> String {
         format!("{name}_")
     } else {
         name.to_owned()
+    }
+}
+
+/// A class's or boxed record's `GType` function, `gtk_text_iter_get_type()`,
+/// declared as the C function it is.
+fn get_type_function(get_type: &str) -> Function {
+    Function {
+        name: get_type.to_owned(),
+        symbol: get_type.to_owned(),
+        parameters: Vec::new(),
+        result: Mapped { shape: Shape::Other, ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) },
+        c_parameters: Vec::new(),
+        deprecated: false,
+        free: None,
+        no_escape: Vec::new(),
+        returns: None,
+        method: None,
+        throws: None,
+        finish: None,
+        omissible: BTreeMap::new(),
+        method_only: false,
+        statics: None,
+        vfunc: None,
     }
 }
 

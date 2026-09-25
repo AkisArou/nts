@@ -95,6 +95,50 @@ pub(crate) fn erased_handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<P
     handle(snapshot, ty)
 }
 
+/// A `GLib` boxed record (`Boxed<Tag, GetType, Size>`): its `GType` function
+/// and its size, 0 where the headers keep the struct opaque.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BoxedRecord {
+    pub(crate) get_type: String,
+    pub(crate) size: u64,
+}
+
+/// `Boxed<Tag, GetType, Size>`, or that `| null`: a record the program holds
+/// in a box (`BOXED_RECORD`). `None` for any other type.
+pub(crate) fn boxed(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<BoxedRecord> {
+    let ty = match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Union(parts) => match parts.as_slice() {
+            [a, b] if matches!(snapshot.types[a.0 as usize].kind, TypeKind::Null) => *b,
+            [a, b] if matches!(snapshot.types[b.0 as usize].kind, TypeKind::Null) => *a,
+            _ => return None,
+        },
+        _ => ty,
+    };
+    let get_type = property(snapshot, ty, "___c_boxed").filter(|p| p.optional && p.readonly)?;
+    let get_type = optional_text(snapshot, get_type.ty)?.to_owned();
+    let size = property(snapshot, ty, "___c_size")
+        .filter(|p| p.optional && p.readonly)
+        .and_then(|p| optional_number(snapshot, p.ty))
+        .unwrap_or(0);
+    Some(BoxedRecord { get_type, size })
+}
+
+/// An optional property's number literal, through the `undefined`
+/// optionality adds.
+fn optional_number(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<u64> {
+    let number = |id: TypeId| match &snapshot.types.get(id.0 as usize)?.kind {
+        TypeKind::Literal(LiteralValue::Number(value)) if *value >= 0.0 && value.fract() == 0.0 => {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            Some(*value as u64)
+        }
+        _ => None,
+    };
+    match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Union(parts) => parts.iter().find_map(|part| number(*part)),
+        _ => number(ty),
+    }
+}
+
 /// `ByValue<T>`: the record `T` itself, where C takes or returns one by value.
 ///
 /// `Ptr<T> & { readonly __c_by_value?: true }`. The pointer is what TypeScript

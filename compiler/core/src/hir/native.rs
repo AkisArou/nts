@@ -2639,9 +2639,11 @@ fn owned_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<b
     // `void *`, and the value is read back as the handle, so the handle's
     // family is what counts it.
     let counted = |pointee: &Pointee| pointee.counting().is_some();
+    // And a boxed record the caller owns, which its box frees.
     if owned
         && !pointer(snapshot, ty).is_some_and(|pointee| counted(&pointee))
         && !schema::erased_handle(snapshot, ty).is_some_and(|pointee| counted(&pointee))
+        && schema::boxed(snapshot, ty).is_none()
     {
         return Err(format!(
             "foreign function `{name}` hands back a reference the caller owns, as a handle the program does not count; declare its class with `GObjectClass`, not `Class`"

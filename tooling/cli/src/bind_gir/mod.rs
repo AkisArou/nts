@@ -158,6 +158,49 @@ pub(crate) fn run(request: &Request) -> Result<()> {
     bind(&request.root, &request.search, &request.out, true).map(|_| ())
 }
 
+/// What one namespace's headers say: one clang run over them.
+fn namespace_facts(repository: &model::Repository, namespace: &model::Namespace) -> Result<facts::Facts> {
+    let structs: Vec<&str> = namespace
+        .classes
+        .iter()
+        .filter_map(|c| c.c_type.as_deref())
+        .chain(
+            namespace.records.iter().filter(|r| !r.class_struct).filter_map(|r| r.c_type.as_deref()),
+        )
+        .collect();
+    let enums: Vec<&str> = namespace.enums.iter().filter_map(|e| e.c_type.as_deref()).collect();
+    let slots = vfunc_slots(namespace);
+    // Each boxed record, for its size.
+    let sized: Vec<&str> = namespace
+        .records
+        .iter()
+        .filter(|r| r.get_type.is_some() && !r.class_struct)
+        .filter_map(|r| r.c_type.as_deref())
+        .collect();
+    // And each boxed record's `get_type`, for whether the
+    // namespace's own headers declare it.
+    let functions: Vec<&str> = namespace
+        .records
+        .iter()
+        .filter(|r| !r.class_struct)
+        .filter_map(|r| r.get_type.as_deref())
+        .filter(|name| *name != "intern")
+        .collect();
+    let flags = pkg_config(repository, namespace, "--cflags");
+    let mut facts = facts::resolve(&namespace.headers, &structs, &enums, &slots, &sized, &functions, &flags)?;
+    // The interfaces GIR gives no prerequisite, which the
+    // type system is asked about instead.
+    let interfaces: Vec<(&str, &str)> = namespace
+        .classes
+        .iter()
+        .filter(|c| c.interface && c.parent.is_none())
+        .filter_map(|c| Some((c.c_type.as_deref()?, c.get_type.as_deref()?)))
+        .collect();
+    let libs = pkg_config(repository, namespace, "--libs");
+    facts.prerequisites = prerequisites::resolve(&namespace.headers, &interfaces, &flags, &libs);
+    Ok(facts)
+}
+
 /// Bind `root` and its closure into `out`, returning the GIR files read. The
 /// summary is printed in full when asked for, and in one line otherwise.
 fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) -> Result<Vec<Utf8PathBuf>> {
@@ -182,41 +225,13 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
             .iter()
             .map(|namespace| {
                 let repository = &repository;
-                scope.spawn(move || {
-                    let structs: Vec<&str> = namespace
-                        .classes
-                        .iter()
-                        .filter_map(|c| c.c_type.as_deref())
-                        .chain(
-                            namespace.records.iter().filter(|r| !r.class_struct).filter_map(|r| r.c_type.as_deref()),
-                        )
-                        .collect();
-                    let enums: Vec<&str> = namespace.enums.iter().filter_map(|e| e.c_type.as_deref()).collect();
-                    let slots = vfunc_slots(namespace);
-                    let flags = pkg_config(repository, namespace, "--cflags");
-                    let mut facts = facts::resolve(&namespace.headers, &structs, &enums, &slots, &flags)?;
-                    // The interfaces GIR gives no prerequisite, which the
-                    // type system is asked about instead.
-                    let interfaces: Vec<(&str, &str)> = namespace
-                        .classes
-                        .iter()
-                        .filter(|c| c.interface && c.parent.is_none())
-                        .filter_map(|c| Some((c.c_type.as_deref()?, c.get_type.as_deref()?)))
-                        .collect();
-                    let libs = pkg_config(repository, namespace, "--libs");
-                    facts.prerequisites = prerequisites::resolve(&namespace.headers, &interfaces, &flags, &libs);
-                    Ok::<_, anyhow::Error>(facts)
-                })
+                scope.spawn(move || namespace_facts(repository, namespace))
             })
             .collect();
         let mut all = facts::Facts::default();
         for run in runs {
             let one = run.join().map_err(|_| anyhow::anyhow!("a thread reading the headers panicked"))??;
-            all.tags.extend(one.tags);
-            all.signed.extend(one.signed);
-            all.offsets.extend(one.offsets);
-            all.unsigned.extend(one.unsigned);
-            all.prerequisites.extend(one.prerequisites);
+            all.merge(one);
         }
         Ok::<_, anyhow::Error>(all)
     })?;

@@ -131,6 +131,13 @@
  * A homogeneous tuple is not this: `[number, number]` is laid out as an array
  * and carries `NTS_KIND_ARRAY`, which already answers `true`. */
 #define NTS_KIND_TUPLE 6u
+/* A boxed record: a C struct the program holds by reference -- GLib's
+ * `GtkTextIter`, `GdkRGBA` -- in an `NtsBoxed`, whose own function gives the
+ * struct back when the box dies. Its own kind because `nts_free_storage`
+ * recognises by kind what hangs off an object, as it does a buffer's bytes;
+ * every other site that reads a kind tests for MAP, BUFFER, ARRAY or TUPLE and
+ * treats this as the object it is. */
+#define NTS_KIND_BOXED 7u
 
 /* How a foreign object system counts its objects: its retain and its release,
  * each safe on NULL. One per family the program uses, emitted by the compiler
@@ -1996,6 +2003,52 @@ NtsArray *nts_strings_from_cstrings(const char *const *c, bool required);
  * and C does not allow that of a `void` function, which the LLVM table
  * mirrors. */
 void nts_view_unlend(const NtsView *view);
+
+/* A boxed record the program holds (`NTS_KIND_BOXED`): `boxed` is the C
+ * struct, and `free(boxed, data)` gives it back when the box dies.
+ *
+ * `data` is `size_t` rather than a `GType` because the runtime core cannot
+ * name GLib's types: the owner's word is opaque here, and the owner -- the
+ * GObject support file, `nts_gobject.c`, which makes every box through
+ * `nts_boxed_new` -- is the only thing that knows what it means (a `GType`,
+ * which `g_boxed_free` takes).
+ *
+ * 48 bytes on a 64-bit target and one allocation per record the program
+ * holds: the header's 24, then these three. The compiler lays out the same
+ * struct as a class of its own and reads `boxed` as its first field, so the
+ * two are compared where both are visible -- the asserts below pin this
+ * side, and the C backend asserts its layout against this one. */
+typedef struct NtsBoxed {
+  NtsHeader header;
+  void *boxed;
+  void (*free)(void *boxed, size_t data);
+  size_t data;
+} NtsBoxed;
+_Static_assert(offsetof(NtsBoxed, boxed) == sizeof(NtsHeader),
+               "a boxed record's pointer is its box's first field");
+_Static_assert(sizeof(NtsBoxed) == sizeof(NtsHeader) + 3 * sizeof(void *),
+               "a box is its header and three words");
+/* A box holding `boxed`, whose `free(boxed, data)` gives it back: one
+ * reference, the caller's. NULL for a NULL `boxed` -- a borrowed getter
+ * answering NULL is ordinary, and it is `null` to the program. A NULL `free`
+ * ends the process: a box that could never give its record back is a leak
+ * that looks like a box. */
+NtsHeader *nts_boxed_new(void *boxed, void (*free)(void *boxed, size_t data),
+                         size_t data);
+/* The end of a box's loan to a C function, called after the call returns:
+ * nothing, and that is the point -- it is the box's last use, so reference
+ * counting cannot give the record back while C holds its pointer. A real call,
+ * as `nts_view_unlend` is and for the same reason. */
+void nts_boxed_unlend(const void *box);
+/* The GObject support file's (`nts_gobject.c`), declared here for the one
+ * table every backend reads, as `nts_gobject_state` is: a box for a record a
+ * C function handed over (`transfer full`), for a copy of one it lent
+ * (`transfer none`, copied by `g_boxed_copy`), and for a zeroed one of `size`
+ * bytes for C to fill (a caller-allocated out parameter). NULL is `null` for
+ * the first two. `type` is the record's `GType`. */
+void *nts_gobject_boxed(void *boxed, size_t type);
+void *nts_gobject_boxed_copy(const void *boxed, size_t type);
+void *nts_gobject_boxed_new(size_t type, size_t size);
 /* A C string a foreign function returned, as a string: the copy is the
  * program's, and C's pointer is not kept. NULL is `null` -- for a binding
  * declared `string | null`. */

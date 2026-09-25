@@ -95,6 +95,16 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
     // leaves out, and `asGSettingsBackend` would import a name nothing binds.
     let bound: BTreeSet<&str> = binding.functions.iter().map(|f| f.symbol.as_str()).collect();
     binding.casts.retain(|cast| bound.contains(cast.get_type.as_str()));
+    // And a boxed record is boxed by its `GType`: one whose `get_type` the
+    // headers do not declare -- `g_date_time_get_type` is GObject's, not
+    // GLib's -- is the plain handle it was before, which the program cannot
+    // hold in a box.
+    for decl in &mut binding.types {
+        let super::map::TypeDecl::Class { boxed, .. } = decl;
+        if boxed.as_ref().is_some_and(|(get_type, _)| !bound.contains(get_type.as_str())) {
+            *boxed = None;
+        }
+    }
     binding.refused.extend(rejected);
     Ok(())
 }

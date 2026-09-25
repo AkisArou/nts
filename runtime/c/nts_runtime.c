@@ -623,6 +623,21 @@ static void nts_free_storage(NtsHeader *object) {
     }
     return;
   }
+  /* A boxed record, given back through its box's own function -- never NULL,
+   * which `nts_boxed_new` refuses, and refused here too for a box made some
+   * other way. */
+  if (object->descriptor->kind == NTS_KIND_BOXED) {
+    NtsBoxed *box = (NtsBoxed *)object;
+    if (box->free == NULL) {
+      fprintf(stderr, "nts: a boxed record with no function to free it\n");
+      abort();
+    }
+    if (box->boxed) {
+      box->free(box->boxed, box->data);
+      box->boxed = 0;
+    }
+    return;
+  }
   if (object->descriptor->kind != NTS_KIND_ARRAY) {
     return;
   }
@@ -4799,6 +4814,42 @@ char **nts_strings_to_cstrings(const NtsArray *array) {
 void nts_cstrings_release(char **c) { free((void *)c); }
 
 void nts_view_unlend(const NtsView *view) { (void)view; }
+
+void nts_boxed_unlend(const void *box) { (void)box; }
+
+/* One descriptor for every boxed record: the box holds no reference -- a
+ * GLib boxed record is plain C data, and a record whose fields held a
+ * `GObject *` would be the first reason to revisit this `cyclic` of 0 -- so
+ * the collector never looks inside one, and `nts_free_storage` gives the
+ * record back through the box's own `free`. */
+static const NtsDescriptor nts_desc_boxed = {NTS_KIND_BOXED,
+                                             (uint32_t)sizeof(NtsBoxed),
+                                             0u,
+                                             0u,
+                                             0,
+                                             0,
+                                             "boxed record",
+                                             0u,
+                                             0,
+                                             NTS_ARRAY_UNKNOWN,
+                                             0u,
+                                             NULL};
+
+NtsHeader *nts_boxed_new(void *boxed, void (*free)(void *boxed, size_t data),
+                         size_t data) {
+  if (free == NULL) {
+    fprintf(stderr, "nts: a boxed record with no function to free it\n");
+    abort();
+  }
+  if (boxed == NULL) {
+    return NULL;
+  }
+  NtsBoxed *box = (NtsBoxed *)nts_object_new(&nts_desc_boxed);
+  box->boxed = boxed;
+  box->free = free;
+  box->data = data;
+  return (NtsHeader *)box;
+}
 
 NtsArray *nts_strings_from_cstrings(const char *const *c, bool required) {
   if (c == NULL) {

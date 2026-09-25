@@ -125,6 +125,7 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                 c_type: c_attribute(node, "type").map(str::to_owned),
                 class_struct: node.attribute((GLIB, "is-gtype-struct-for")).is_some(),
                 callables: callables(node),
+                get_type: node.attribute((GLIB, "get-type")).map(str::to_owned),
             }),
             kind @ ("enumeration" | "bitfield") => namespace.enums.push(Enum {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),

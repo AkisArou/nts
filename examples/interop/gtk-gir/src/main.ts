@@ -11,6 +11,13 @@
 //                 GJS returns out parameters, through a generated wrapper
 //   markup=bold x|none  `pango_parse_markup`'s text out parameter, a
 //                 `char *` read with `stringFrom` and freed; `null` is `null`
+//   iter hello world|orld 7 6 11  boxed records: `new GtkTextIter()` filled by
+//                 `get_bounds`, moved in place by `forward_chars` through another
+//                 name for it, and `copy()`, a record of its own the next move
+//                 leaves behind
+//   rgba true rgb(255,128,0)  a `GdkRGBA` the program made, filled by `parse`
+//   font Sans     a record a function hands over, set on a context, and the
+//                 one the context's getter lends back, copied into a box
 //   keyfile true 5 no-error
 //                 a key file loaded -- its `gboolean` answer a boolean -- and
 //                 read, and the `GError **` slot beside each call left null
@@ -61,6 +68,8 @@ import {
   gtk_window_set_child,
   Orientation,
   GtkButton,
+  GtkTextBuffer,
+  GtkTextIter,
   gtk_button_get_type,
   GtkEntry,
   GtkEntryBuffer,
@@ -93,7 +102,8 @@ import {
   type GError,
 } from "c:GLib-2.0";
 import { g_signal_group_new } from "c:GObject-2.0";
-import { pango_parse_markup } from "c:Pango-1.0";
+import { GdkRGBA } from "c:Gdk-4.0";
+import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { CNumber, Ptr, c_char } from "c:types";
 import { local, stringFrom } from "c:memory";
 import { gir_emit, gir_log } from "c:gir-shim";
@@ -104,6 +114,37 @@ const PRIORITY_DEFAULT = 0;
 
 // Out parameters, `GError **` among them: slots on this function's stack that
 // C writes through during the call, read once it returns.
+// GLib boxed records, held by reference as GJS holds them: a `GtkTextIter`
+// the program makes and C fills, moved in place by a method, copied into one
+// of its own, and a record a getter only lends, copied into a box.
+function boxedRecords(): void {
+  const buffer = new GtkTextBuffer({});
+  buffer.set_text("hello world", -1);
+  const start = new GtkTextIter();
+  const end = new GtkTextIter();
+  buffer.get_bounds(start, end);
+  const all = buffer.get_text(start, end, false);
+  const moved = start;
+  moved.forward_chars(6);
+  const copy = start.copy();
+  start.forward_char();
+  // `buffer` named again after its iterators' last use: an iterator points
+  // into its buffer without counting it, and under `--rc` a buffer released
+  // at its last use is gone before the offsets are read (docs/gtk-lane-goal.md).
+  gir_log(
+    "iter " + all + "|" + buffer.get_text(start, end, false) + " " + String(start.get_offset()) + " " + String(copy.get_offset()) + " " + String(buffer.get_char_count()),
+  );
+  const rgba = new GdkRGBA();
+  const parsed = rgba.parse("#ff8000");
+  gir_log("rgba " + String(parsed) + " " + rgba.to_string());
+  // One handed over, and one a getter lends back, which the program copies.
+  const given = pango_font_description_from_string("Sans 12");
+  const context = pango_context_new();
+  context.set_font_description(given);
+  const lent = context.get_font_description();
+  gir_log("font " + (lent === null ? "none" : lent.get_family() ?? "none"));
+}
+
 function outParameters(): void {
   const when = g_date_time_new_utc(2026, 9, 24, 0, 0, 0);
   if (when === null) {
@@ -210,6 +251,7 @@ async function learnKind(): Promise<void> {
 
 function main(): void {
   outParameters();
+  boxedRecords();
   void learnKind();
   void directories("/tmp/nts-gtk-gir-directory");
   const application = gtk_application_new("dev.nts.GtkGir", ApplicationFlags.NON_UNIQUE);

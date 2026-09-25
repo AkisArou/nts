@@ -99,6 +99,9 @@ pub(crate) struct Record {
     /// binding never needs a handle to.
     pub(crate) class_struct: bool,
     pub(crate) callables: Vec<Callable>,
+    /// `glib:get-type`: the record is a boxed type, which `GLib` copies and
+    /// frees by this `GType` (`g_boxed_copy`, `g_boxed_free`).
+    pub(crate) get_type: Option<String>,
 }
 
 #[derive(Debug)]

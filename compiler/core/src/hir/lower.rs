@@ -10757,6 +10757,12 @@ fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Dec
         }
         return Some(Decided::As(brand_representation(brand)));
     }
+    // A GLib boxed record, `Boxed<Tag, GetType, Size>`: a C struct the
+    // program holds in a box of its own (`BOXED_RECORD`), whose pointer
+    // crosses to C and whose box frees it. Before the handle it also is.
+    if super::native::schema::boxed(snapshot, ty).is_some() {
+        return Some(Decided::As(HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD)))));
+    }
     // `Erased<H>` is `void *` to C and an `H` to the program: what it holds
     // is the handle, counted, and C's spelling is the boundary's.
     if let Some(handle) = super::native::schema::erased_handle(snapshot, ty) {
@@ -11788,6 +11794,10 @@ struct FuncBuilder<'a> {
     /// arguments are lowered: each is lowered a property at a time and never
     /// built (`Role::Label`).
     labels_pending: rustc_hash::FxHashSet<NodeId>,
+    /// Each boxed record's pointer `coerce` read out of a box for a C
+    /// argument, and the box: the call that passes the pointer lends the box
+    /// (`Lent::Boxed`), so it lives until C is done with it.
+    unboxed: rustc_hash::FxHashMap<ValueId, ValueId>,
     /// What each labels literal lowered to, by the placeholder that stood for
     /// it among the arguments: each property's value, by key.
     labels_lowered: rustc_hash::FxHashMap<ValueId, Vec<(String, ValueId)>>,
@@ -11930,6 +11940,9 @@ enum Lent {
     Error { slot: ValueId, converter: String },
     /// A closure's context, for a `ScopedClosure`.
     Closure { context: ValueId },
+    /// A boxed record whose pointer C reads during the call: the box must
+    /// outlive it (`nts_boxed_unlend`), as a view lent in place does.
+    Boxed { boxed: ValueId },
     /// A delegate object the call was passed: the *caller's* reference, given
     /// back after the call. That ends the delegate only if the callee kept no
     /// reference of its own. An event's `add_` keeps one, so the delegate
@@ -12022,6 +12035,7 @@ impl<'a> FuncBuilder<'a> {
             sources: super::generics::Sources::default(),
             omitting_for: None,
             labels_pending: rustc_hash::FxHashSet::default(),
+            unboxed: rustc_hash::FxHashMap::default(),
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
             super_send: None,
@@ -15850,6 +15864,13 @@ impl<'a> FuncBuilder<'a> {
         if have == *want {
             return Ok(value);
         }
+        // A boxed record where C takes the struct's pointer: the box's.
+        if have == HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD)))
+            && matches!(want, HirType::NativePointer(_))
+        {
+            let origin = self.origin(id);
+            return Ok(self.unbox_record(value, want, &origin));
+        }
         if matches!(want, HirType::NativePointer(_))
             && matches!(self.values[value.0 as usize].kind, OpKind::ConstNull)
         {
@@ -17778,6 +17799,102 @@ impl<'a> FuncBuilder<'a> {
             });
         }
         Some((ty, root))
+    }
+
+    /// The return type a function or method declaration declares, as the
+    /// checker's type.
+    fn declared_result_type(&self, declaration: NodeId) -> Option<TypeId> {
+        let ty = std::iter::once(declaration)
+            .chain(self.children(declaration))
+            .find_map(|node| self.snapshot.node_types.get(&node).copied())?;
+        match self.snapshot.types.get(ty.0 as usize).map(|t| &t.kind) {
+            Some(TypeKind::Function(signature)) => Some(self.snapshot.signatures[signature.0 as usize].return_type),
+            _ => None,
+        }
+    }
+
+    /// The layout of the box a `GLib` boxed record lives in (`BOXED_RECORD`):
+    /// the runtime's `NtsBoxed`, `{ boxed, free, data }` after the header,
+    /// which the runtime makes and frees (`nts_boxed_new`, `NTS_KIND_BOXED`),
+    /// and whose first field the program reads. The C backend asserts it
+    /// against `NtsBoxed`.
+    fn boxed_record_layout(&mut self) -> TypeId {
+        let ty = TypeId(super::BOXED_RECORD);
+        if !self.layouts.iter().any(|layout| layout.types.contains(&ty)) {
+            let field = |name: &str, ty: HirType| Field { name: name.to_owned(), ty, readonly: true, declared_by: None };
+            let pointer = HirType::NativePointer(super::native::Pointee::Void);
+            self.layouts.push(Layout {
+                types: vec![ty],
+                name: "BoxedRecord".to_owned(),
+                interfaces: Vec::new(),
+                fields: vec![
+                    field("boxed", pointer.clone()),
+                    field("free", pointer),
+                    field("data", HirType::Int { bits: 64, signed: false }),
+                ],
+                methods: vec![None; self.hierarchy.table_size()],
+                base: None,
+            });
+        }
+        ty
+    }
+
+    /// A plain argument as C takes it: a boxed record's box where C takes the
+    /// struct's pointer -- lent for the call, since a box whose pointer is
+    /// passed must live until C is done with it -- and anything else as it is.
+    fn unboxed_argument(&mut self, value: ValueId, parameter: &super::native::Type, origin: &Origin) -> ValueId {
+        if self.values[value.0 as usize].ty != HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD))) {
+            return value;
+        }
+        self.unbox_record(value, &parameter.representation(), origin)
+    }
+
+    /// The struct a boxed record's box holds, as the C pointer `want` a
+    /// function takes: its first field, or NULL for a null box. Recorded
+    /// against the box, so the call passing it lends the box.
+    fn unbox_record(&mut self, boxed: ValueId, want: &HirType, origin: &Origin) -> ValueId {
+        self.boxed_record_layout();
+        let box_ty = self.values[boxed.0 as usize].ty.clone();
+        let null = self.push(OpKind::ConstNull, box_ty, origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: boxed, rhs: null }, HirType::Bool, origin.clone());
+        let (none_block, some_block, merge) = (self.new_block(), self.new_block(), self.new_block());
+        let result = self.push_block_param(merge, want.clone(), origin.clone());
+        self.terminate(Terminator::Branch { cond: absent, then_target: none_block, then_args: Vec::new(), else_target: some_block, else_args: Vec::new() });
+        self.switch_to(none_block);
+        let none = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+        self.terminate(Terminator::Jump { target: merge, args: vec![none] });
+        self.switch_to(some_block);
+        let raw = self.push(OpKind::FieldGet { object: boxed, field: 0 }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
+        let pointer = self.push(OpKind::Convert(raw), want.clone(), origin.clone());
+        self.terminate(Terminator::Jump { target: merge, args: vec![pointer] });
+        self.switch_to(merge);
+        self.unboxed.insert(result, boxed);
+        result
+    }
+
+    /// A boxed record a C function returned, in a box of the program's: as
+    /// it is where the function handed it over (`Owned`), or a copy of it
+    /// where the function lent it -- the box frees what it holds -- by the
+    /// record's `GType`. A NULL result is `null`.
+    fn box_record(&mut self, id: NodeId, pointer: ValueId, record: &super::native::schema::BoxedRecord, owned: bool) -> Result<ValueId, Diagnostic> {
+        let ty = HirType::Managed(ManagedType::Object(self.boxed_record_layout()));
+        let gtype = self.call_foreign_named(id, &record.get_type, Vec::new())?;
+        let origin = self.origin(id);
+        let helper = if owned { "nts_gobject_boxed" } else { "nts_gobject_boxed_copy" };
+        Ok(self.runtime_call(helper, vec![pointer, gtype], ty, origin))
+    }
+
+    /// `new GtkTextIter()`: a zeroed boxed record of the size the headers
+    /// give it, for C to fill, in a box of the program's.
+    fn new_boxed_record(&mut self, id: NodeId, record: &super::native::schema::BoxedRecord) -> Result<ValueId, Diagnostic> {
+        if record.size == 0 {
+            return Err(self.unsupported(id, "`new` of a boxed record whose struct the headers keep opaque"));
+        }
+        let ty = HirType::Managed(ManagedType::Object(self.boxed_record_layout()));
+        let gtype = self.call_foreign_named(id, &record.get_type, Vec::new())?;
+        let origin = self.origin(id);
+        let size = self.push(OpKind::ConstInt(i128::from(record.size)), HirType::Int { bits: 64, signed: false }, origin.clone());
+        Ok(self.runtime_call("nts_gobject_boxed_new", vec![gtype, size], ty, origin))
     }
 
     /// An erased value a map gave back, as the counted handle its box holds:
@@ -27835,6 +27952,9 @@ impl<'a> FuncBuilder<'a> {
         if self.kind_of(declaration) != Some(syntax::CONSTRUCT_SIGNATURE) {
             return None;
         }
+        if let Some(record) = self.snapshot.node_types.get(&id).and_then(|ty| super::native::schema::boxed(self.snapshot, *ty)) {
+            return Some(self.new_boxed_record(id, &record));
+        }
         let construct = self.node(declaration).native.as_ref()?.construct.clone()?;
         Some(self.lower_native_construct(id, &construct))
     }
@@ -33570,6 +33690,12 @@ impl<'a> FuncBuilder<'a> {
         // three lines down.
         if let Some(provided) = self.provided_iterator_layout(id, ty) {
             return provided;
+        }
+        // The box a GLib boxed record lives in: a synthetic type, laid out
+        // here rather than read from the snapshot.
+        if ty == TypeId(super::BOXED_RECORD) {
+            self.boxed_record_layout();
+            return self.layout_of(id, ty);
         }
         let record =
             self.snapshot.types.get(ty.0 as usize).ok_or_else(|| {
@@ -40789,9 +40915,10 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
-        // A method a binding declares on a C handle: the C function itself,
-        // or one of the program's own functions that `@ntsCall` names.
-        if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_)) {
+        // A method a binding declares on a C handle -- a boxed record's box
+        // among them: the C function itself, or one of the program's own
+        // functions that `@ntsCall` names.
+        if matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_) | HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD)))) {
             if let Some(method) = self.native_method(id) {
                 return self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments);
             }
@@ -42535,7 +42662,24 @@ impl<'a> FuncBuilder<'a> {
         if hresult {
             return self.finish_hresult_call(id, callee, args, lent, declaration, typed);
         }
-        let call = self.push_call(id, callee, args, declaration, sent.or(ty))?;
+        // A boxed record the function returns: the call is C's pointer, and
+        // the program's value is the box made of it below.
+        // Asked of the declaration called, not of the call node's target: a
+        // call the lowering makes itself at the same node -- the record's
+        // `get_type`, below -- has a declaration of its own.
+        let boxed = match &callee {
+            Callee::Native(target) => declaration
+                .and_then(|declaration| self.declared_result_type(declaration))
+                .and_then(|returned| super::native::schema::boxed(self.snapshot, returned))
+                .map(|record| (record, target.returns_owned, target.result.representation())),
+            _ => None,
+        };
+        let pointer_ty = boxed.as_ref().map(|(_, _, pointer)| pointer.clone());
+        let call = self.push_call(id, callee, args, declaration, pointer_ty.or(sent).or(ty))?;
+        let call = match &boxed {
+            Some((record, owned, _)) => self.box_record(id, call, record, *owned)?,
+            None => call,
+        };
         // A failure is checked *before* the result is read: a function that
         // reports one returns nothing meaningful -- GLib returns NULL where it
         // promised a string -- and reading that would end the process rather
@@ -43406,6 +43550,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
+                Lent::Boxed { boxed } => {
+                    self.runtime_call("nts_boxed_unlend", vec![boxed], HirType::Void, origin.clone());
+                }
                 // A reference the call was handed, or the inner object a
                 // composable factory answered: the program's, given back.
                 Lent::Delegate { object } | Lent::Taken { object } => {
@@ -43814,7 +43961,7 @@ impl<'a> FuncBuilder<'a> {
             use super::native::Role;
             let argument = fed.and_then(|ts| args.get(ts).copied());
             match role {
-                Role::Plain => c_args.extend(argument),
+                Role::Plain => c_args.extend(argument.map(|value| self.unboxed_argument(value, &target.parameters[at], &origin))),
                 Role::Receiver => c_args.extend(receiver_value),
                 // A label crosses as its own role says, with the value the
                 // literal gave that property.
@@ -43915,6 +44062,7 @@ impl<'a> FuncBuilder<'a> {
         c_args.extend(args.iter().skip(declared).copied());
         c_args.extend(self.record_destination(&target, &origin));
         self.bridge_callback_arguments(id, &target, &mut c_args)?;
+        lent.extend(c_args.iter().filter_map(|arg| self.unboxed.get(arg)).map(|&boxed| Lent::Boxed { boxed }));
         Ok((c_args, lent))
     }
 

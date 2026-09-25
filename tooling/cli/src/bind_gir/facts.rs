@@ -46,6 +46,29 @@ pub(crate) struct Facts {
     /// is, which a subclass's registration writes an entry point at. C's
     /// `offsetof`, so no struct's layout is worked out here.
     pub(crate) offsets: BTreeMap<(String, String), u64>,
+    /// `C type -> sizeof` for each boxed record whose struct the headers
+    /// complete: the storage a caller allocates for C to fill. A record the
+    /// headers keep opaque (`GBytes`) has none, and nothing allocates one.
+    pub(crate) sizes: BTreeMap<String, u64>,
+    /// The functions asked about that the namespace's own headers declare: a
+    /// boxed record's `get_type`, without which the program cannot box it.
+    /// `GLib`'s records name functions only `GObject`'s headers declare
+    /// (`g_date_time_get_type`), so GIR's word is not enough.
+    pub(crate) declared: BTreeSet<String>,
+}
+
+impl Facts {
+    /// Another namespace's facts added to these: each is keyed by C name, and
+    /// no two namespaces define one.
+    pub(crate) fn merge(&mut self, other: Facts) {
+        self.tags.extend(other.tags);
+        self.signed.extend(other.signed);
+        self.unsigned.extend(other.unsigned);
+        self.prerequisites.extend(other.prerequisites);
+        self.offsets.extend(other.offsets);
+        self.sizes.extend(other.sizes);
+        self.declared.extend(other.declared);
+    }
 }
 
 /// Ask the headers about `structs` and `enums`, which are C type names.
@@ -54,9 +77,11 @@ pub(crate) fn resolve(
     structs: &[&str],
     enums: &[&str],
     slots: &[(String, String)],
+    sized: &[&str],
+    functions: &[&str],
     cflags: &[String],
 ) -> Result<Facts> {
-    if structs.is_empty() && enums.is_empty() && slots.is_empty() {
+    if structs.is_empty() && enums.is_empty() && slots.is_empty() && sized.is_empty() && functions.is_empty() {
         return Ok(Facts::default());
     }
     let mut probe = String::new();
@@ -66,6 +91,12 @@ pub(crate) fn resolve(
     probe.push_str("#include <stddef.h>\n");
     for (at, (class_struct, member)) in slots.iter().enumerate() {
         let _ = writeln!(probe, "enum {{ {PREFIX}offset_{at} = (int)offsetof({class_struct}, {member}) }};");
+    }
+    for (at, c_type) in sized.iter().enumerate() {
+        let _ = writeln!(probe, "enum {{ {PREFIX}size_{at} = (int)sizeof({c_type}) }};");
+    }
+    for (at, function) in functions.iter().enumerate() {
+        let _ = writeln!(probe, "enum {{ {PREFIX}declared_{at} = (int)sizeof(&{function}) }};");
     }
     for (at, c_type) in structs.iter().enumerate() {
         let _ = writeln!(probe, "extern {c_type} {PREFIX}tag_{at};");
@@ -82,14 +113,18 @@ pub(crate) fn resolve(
     // Errors are expected and harmless here: a name the headers do not
     // declare is an invalid declaration, and is simply absent from the answer.
     let output = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
-        .args(["-std=c11", "-fsyntax-only", "-w", "-fno-color-diagnostics", "-ferror-limit=0"])
+        // No spelling correction: clang recovers from an undeclared name by
+        // using the one it guesses was meant -- `g_date_time_get_type` became
+        // `g_date_time_get_ymd` -- and the enumerator asking about it then
+        // reads as valid, answering for a function the headers never declare.
+        .args(["-std=c11", "-fsyntax-only", "-w", "-fno-color-diagnostics", "-ferror-limit=0", "-fno-spell-checking"])
         .args(cflags)
         .args(["-Xclang", "-ast-dump", "-Xclang", "-ast-dump-filter", "-Xclang", PREFIX])
         .arg(&path)
         .output()
         .context("running clang to read what the headers define")?;
     let _ = std::fs::remove_dir_all(&dir);
-    Ok(parse(&String::from_utf8_lossy(&output.stdout), structs, enums, slots))
+    Ok(parse(&String::from_utf8_lossy(&output.stdout), &Asked { structs, enums, slots, sized, functions }))
 }
 
 /// Read the dump back: `VarDecl ... <prefix>tag_<n> '<T>':'struct <tag>'`,
@@ -97,7 +132,18 @@ pub(crate) fn resolve(
 /// `ConstantExpr`. The test's dump is clang's own output, copied: the first
 /// version of it put the value on the next line, which is where this parser
 /// looked, and clang does not.
-fn parse(dump: &str, structs: &[&str], enums: &[&str], slots: &[(String, String)]) -> Facts {
+/// What one probe asked the headers, by kind: each answer's index is into
+/// the list of its kind.
+struct Asked<'a> {
+    structs: &'a [&'a str],
+    enums: &'a [&'a str],
+    slots: &'a [(String, String)],
+    sized: &'a [&'a str],
+    functions: &'a [&'a str],
+}
+
+fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
+    let Asked { structs, enums, slots, sized, functions } = *asked;
     let mut facts = Facts::default();
     let mut lines = dump.lines().peekable();
     while let Some(line) = lines.next() {
@@ -120,6 +166,20 @@ fn parse(dump: &str, structs: &[&str], enums: &[&str], slots: &[(String, String)
             if let Some(slot) = index("offset").and_then(|n| slots.get(n)) {
                 if let Some(offset) = enumerator_value(&mut lines).and_then(|v| v.parse().ok()) {
                     facts.offsets.insert(slot.clone(), offset);
+                }
+                continue;
+            }
+            // Declared only where the `sizeof` evaluated: after an error clang
+            // can still dump the enumerator, unmarked, with no value.
+            if let Some(function) = index("declared").and_then(|n| functions.get(n)) {
+                if enumerator_value(&mut lines).is_some_and(|v| v != "0") {
+                    facts.declared.insert((*function).to_owned());
+                }
+                continue;
+            }
+            if let Some(c_type) = index("size").and_then(|n| sized.get(n)) {
+                if let Some(size) = enumerator_value(&mut lines).and_then(|v| v.parse().ok()) {
+                    facts.sizes.insert((*c_type).to_owned(), size);
                 }
                 continue;
             }
@@ -174,6 +234,15 @@ EnumConstantDecl 0xa <t.c:8:8, col:60> col:8 ntsbindgir_offset_0 'int'
   |-value: Int 424
   `-CStyleCastExpr 0xc <col:28, col:60> 'int' <IntegralCast>
 EnumConstantDecl 0xd <t.c:9:8, col:60> col:8 invalid ntsbindgir_offset_1 'int'
+EnumConstantDecl 0xe <t.c:10:8, col:50> col:8 ntsbindgir_size_0 'int'
+`-ConstantExpr 0xf <col:28, col:50> 'int'
+  |-value: Int 80
+EnumConstantDecl 0x10 <t.c:11:8, col:50> col:8 invalid ntsbindgir_size_1 'int'
+EnumConstantDecl 0x11 <t.c:12:8, col:50> col:8 ntsbindgir_declared_0 'int'
+`-ConstantExpr 0x12 <col:28, col:50> 'int'
+  |-value: Int 8
+EnumConstantDecl 0x13 <t.c:13:8, col:50> col:8 ntsbindgir_declared_1 'int'
+`-RecoveryExpr 0x14 <col:28, col:50> 'int' contains-errors
 ";
         let slots = [
             ("GtkButtonClass".to_owned(), "clicked".to_owned()),
@@ -181,10 +250,18 @@ EnumConstantDecl 0xd <t.c:9:8, col:60> col:8 invalid ntsbindgir_offset_1 'int'
         ];
         let facts = super::parse(
             dump,
-            &["GtkWidget", "GdkRectangle", "struct _Plain", "NoSuchType"],
-            &["GParamFlags", "GtkAlign"],
-            &slots,
+            &super::Asked {
+                structs: &["GtkWidget", "GdkRectangle", "struct _Plain", "NoSuchType"],
+                enums: &["GParamFlags", "GtkAlign"],
+                slots: &slots,
+                sized: &["GtkTextIter", "GBytes"],
+                functions: &["gtk_text_iter_get_type", "g_date_time_get_type"],
+            },
         );
+        assert!(facts.declared.contains("gtk_text_iter_get_type"));
+        assert!(!facts.declared.contains("g_date_time_get_type"), "an undeclared function was answered");
+        assert_eq!(facts.sizes["GtkTextIter"], 80);
+        assert!(!facts.sizes.contains_key("GBytes"), "an opaque record was given a size");
         assert_eq!(facts.offsets[&slots[0]], 424);
         assert!(!facts.offsets.contains_key(&slots[1]), "an invalid offsetof answered");
         assert_eq!(facts.tags["GtkWidget"], "_GtkWidget");

@@ -186,6 +186,21 @@ declare module "c:types" {
   // parameter: the caller hands its reference over instead of dropping it
   // after the call, taking one first if it has only a borrowed handle.
   export type Consumed<T extends ClassChain> = T & { readonly __c_consumed?: true };
+  // A GLib boxed record -- a C struct GLib copies and frees by its `GType`
+  // (`g_boxed_copy`, `g_boxed_free`): `GtkTextIter`, `GdkRGBA`. The program
+  // holds one by reference, as JavaScript holds any object, in a box of its
+  // own that gives the struct back when the program's last reference goes:
+  // `iter.forward_char()` moves the one iterator every name for it sees.
+  //
+  // `GetType` names the record's `GType` function; `Size` is its `sizeof`,
+  // for a record C lets its caller allocate, and 0 where the headers keep the
+  // struct opaque. A record a function hands over (`Owned<...>`) is boxed as
+  // it is; one it lends is copied first, since the box will free what it
+  // holds.
+  export type Boxed<Tag extends string, GetType extends string, Size extends number = 0> = Class<Tag> & {
+    readonly __c_boxed?: GetType;
+    readonly __c_size?: Size;
+  };
   // What a `Class` is, for the constraint above; not a type to write.
   export type ClassChain = { readonly __c_chain: readonly string[] };
   // A parent's tags, without the rest element that keeps the chain open.
