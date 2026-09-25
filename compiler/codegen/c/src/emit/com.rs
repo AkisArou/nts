@@ -168,10 +168,24 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         let (low, high) = nts_core::hir::native::iid_words(&composition.factory).unwrap_or_default();
         let interfaces_array = interfaces_symbol(&class.name);
         writer.line(origin, format!("static const NtsComInterface {interfaces_array}[] = {{ {} }};", rows.join(", ")));
+        // The fields' maker, entered as an entry point is: the runtime calls
+        // it from whatever stack is composing the instance.
+        let maker = match &class.state {
+            Some(state) => {
+                let compiled = program.funcs.iter().find(|func| func.name == *state).ok_or_else(|| refuse("a class whose fields' maker this program does not define"))?;
+                let maker = format!("nts_com_state_{}", class.name);
+                writer.line(
+                    origin,
+                    format!("static void *{maker}(void) {{ nts_callback_enter(); void *made = (void *){}(); nts_callback_leave(); return made; }}", c_identifier(&compiled.name)),
+                );
+                maker
+            }
+            None => "0".to_owned(),
+        };
         writer.line(
             origin,
             format!(
-                "static NtsComClass {} = {{ \"{}\", \"{}\", {low}ull, {high}ull, {}u, {interfaces_array}, {}u, {}, 0 }};",
+                "static NtsComClass {} = {{ \"{}\", \"{}\", {low}ull, {high}ull, {}u, {interfaces_array}, {}u, {}, 0, {maker} }};",
                 class_symbol(&class.name),
                 class.name,
                 composition.class,

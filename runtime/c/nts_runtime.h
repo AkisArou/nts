@@ -1930,6 +1930,9 @@ typedef struct NtsComClass {
   bool xaml_metadata;
   /* The factory, found on the first composition and kept. */
   void *factory;
+  /* For a class with fields, what makes the object holding them (+1), kept
+   * by each instance's outer object; null for one without. */
+  void *(*make_state)(void);
 } NtsComClass;
 /* A new instance of `cls`: an outer object of the runtime's aggregating the
  * base class, answered as the base's default interface on the aggregate
@@ -1946,6 +1949,9 @@ void *nts_com_outer_instance(void *face);
 /* The base class's own implementation of the interface `face` answers, which
  * a slot the class does not override calls. Borrowed. */
 void *nts_com_outer_base(void *face);
+/* The object holding the fields of the composed instance `instance` is an
+ * interface of, lent for as long as the instance lives. */
+void *nts_com_state(void *instance);
 /* `super.OnGotFocus(e)`: the base class's own implementation of the
  * interface the IID names, on the object `instance` is. The caller's (+1). */
 void *nts_com_base(void *instance, uint64_t iid_low, uint64_t iid_high);

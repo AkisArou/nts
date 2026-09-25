@@ -560,6 +560,9 @@ struct NtsComOuter {
   void *inner;
   void *instance;
   void *provider;
+  /* The object holding the class's fields, made with the instance and given
+   * back with it; null for a class without. */
+  void *state;
   NtsComClass *cls;
   NtsComFace identity;
   NtsComFace metadata;
@@ -598,6 +601,26 @@ void *nts_com_outer_base(void *face) {
   ((ULONG(STDMETHODCALLTYPE *)(void *))(*(void ***)base)[2])(base);
   InterlockedCompareExchangePointer((void *volatile *)&at->base, base, 0);
   return at->base;
+}
+
+void *nts_com_state(void *instance) {
+  /* `IUnknown` is the object's identity, which an aggregated interface asks
+   * its outer object for: this runtime's identity face. */
+  static const IID unknown = {0, 0, 0, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
+  void *identity = 0;
+  typedef HRESULT(STDMETHODCALLTYPE * Query)(void *, const IID *, void **);
+  HRESULT hr = ((Query)(*(void ***)instance)[0])(instance, &unknown, &identity);
+  if (FAILED(hr) || identity == 0 ||
+      (*(void ***)identity)[0] != (void *)nts_com_outer_query) {
+    fprintf(stderr, "nts: a field read of an object this program did not "
+                    "compose\n");
+    abort();
+  }
+  NtsComOuter *outer = nts_com_outer_of(identity);
+  /* Lent: the instance holds the outer object, and the query's reference is
+   * given back at once. */
+  InterlockedDecrement(&outer->count);
+  return outer->state;
 }
 
 void *nts_com_base(void *instance, uint64_t iid_low, uint64_t iid_high) {
@@ -681,6 +704,9 @@ uint32_t nts_com_outer_release(void *face) {
       nts_unknown_release(outer->provider);
     }
     nts_unknown_release(outer->inner);
+    if (outer->state != 0) {
+      nts_release((NtsHeader *)outer->state);
+    }
     free(outer);
   }
   return (uint32_t)left;
@@ -781,6 +807,12 @@ void *nts_com_compose(NtsComClass *cls) {
   outer->metadata = (NtsComFace){nts_com_metadata_table, outer};
   for (uint32_t at = 0; at < cls->count; at++) {
     outer->faces[at] = (NtsComFace){cls->interfaces[at].table, outer};
+  }
+  /* The fields hold their initial values before the base is made, so an
+   * override the base calls while it composes reads them as JavaScript's
+   * would. */
+  if (cls->make_state != 0) {
+    outer->state = cls->make_state();
   }
   if (cls->xaml_metadata) {
     outer->provider = nts_com_activate_named(

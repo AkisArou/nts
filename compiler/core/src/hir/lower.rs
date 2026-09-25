@@ -1157,13 +1157,16 @@ fn declares_stored(snapshot: &SemanticSnapshot, class_ty: TypeId, name: &str) ->
 
 /// The name a foreign runtime knows a class the program writes over one of
 /// its classes by: the Objective-C class's, or -- for one over a `GObject`
-/// class -- the class's own, which its registration and state are keyed by.
-/// `None` for a class of the program's own.
+/// class or a composable Windows Runtime class -- the class's own, which its
+/// registration and state are keyed by. `None` for a class of the program's
+/// own.
 fn foreign_class_name(snapshot: &SemanticSnapshot, class: NodeId) -> Option<String> {
     if super::native::extends_objc(snapshot, class) {
         return super::native::objc_name(snapshot, class);
     }
-    super::native::gobject_parent(snapshot, class)?;
+    if super::native::gobject_parent(snapshot, class).is_none() && !super::native::extends_com(snapshot, class) {
+        return None;
+    }
     snapshot.nodes.get(class.0 as usize)?.children.iter().find_map(|child| {
         let node = snapshot.nodes.get(child.0 as usize)?;
         matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER)).then(|| node.text.clone()).flatten()
@@ -5651,17 +5654,14 @@ fn members_of(
         return Vec::new();
     }
     let probe = FuncBuilder::probe(snapshot);
-    // A field of a class written over a composable one has nowhere to live --
-    // the runtime makes its object -- so it comes through to be refused by
-    // name, where any other class's is its constructor's to initialize.
-    let composed = super::native::extends_com(snapshot, id);
     probe
         .children(id)
         .into_iter()
-        .filter(|child| match probe.kind_of(*child) {
-            Some(syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => true,
-            Some(syntax::PROPERTY_DECLARATION) => composed && !is_static_member(snapshot, *child),
-            _ => false,
+        .filter(|child| {
+            matches!(
+                probe.kind_of(*child),
+                Some(syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)
+            )
         })
         // **A bound foreign member contributes no function.** Its body is in a
         // jar; there is nothing of ours to emit, and `callee_for` turns a call
@@ -6051,7 +6051,8 @@ fn lower_class(
         register_gobject_class(snapshot, class, parent, gobject_methods, state, lowered);
     }
     if let Some(composition) = super::native::composable_base(snapshot, class) {
-        register_com_class(snapshot, class, composition, com_methods, lowered);
+        let state = objc_state_function(snapshot, foreign, class, shared, lowered);
+        register_com_class(snapshot, class, composition, com_methods, state, lowered);
     }
 }
 
@@ -6136,6 +6137,7 @@ fn register_com_class(
     class: NodeId,
     mut composition: super::native::Composable,
     methods: Vec<super::ForeignMethod>,
+    state: Option<String>,
     lowered: &mut Lowered,
 ) {
     let probe = FuncBuilder::probe(snapshot);
@@ -6167,7 +6169,7 @@ fn register_com_class(
         superclass: composition.class.clone(),
         methods,
         protocols: Vec::new(),
-        state: None,
+        state,
         composition: Some(composition),
     });
 }
@@ -14066,9 +14068,6 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::CONSTRUCTOR) => {
                 return Err(self.unsupported(member, "a constructor of a class written over a composable Windows Runtime class, which the runtime composes"));
             }
-            Some(syntax::PROPERTY_DECLARATION) => {
-                return Err(self.unsupported(member, "a field of a class written over a composable Windows Runtime class, whose object the runtime makes"));
-            }
             _ => return Err(self.unsupported(member, "a member of a class written over a composable Windows Runtime class that is not a method")),
         }
         let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
@@ -14517,7 +14516,7 @@ impl<'a> FuncBuilder<'a> {
                     ) => {
                         return Err(self.unsupported(
                             node,
-                            "a field initialiser of a class extending an Objective-C or `GObject` class that calls, reads a member or reads `this`: it runs inside `init` (or `instance_init`), before the instance holds its fields, so anything it reaches could reach the half-made instance",
+                            "a field initialiser of a class extending a foreign class (Objective-C, `GObject` or a composable Windows Runtime class) that calls, reads a member or reads `this`: it runs as the runtime makes the instance, before the instance holds its fields, so anything it reaches could reach the half-made instance",
                         ));
                     }
                     _ => pending.extend(self.children(node)),
@@ -14576,11 +14575,11 @@ impl<'a> FuncBuilder<'a> {
         // An Objective-C class's instances carry its own name as their tag; a
         // `GObject` subclass's carry the parent's struct, which says nothing
         // of which class this is, so its fields are found by the receiver's
-        // type (`gobject_state_of`) and read through `nts_gobject_state`.
+        // type (`state_by_type`), as a composed Windows Runtime class's are.
         let (index, class_ty, reader) = if let Some(&(index, class_ty)) = self.hierarchy.objc_states.get(&handle.tag) {
             (index, class_ty, "nts_objc_state")
-        } else if let Some((index, class_ty)) = self.gobject_state_of(id) {
-            (index, class_ty, "nts_gobject_state")
+        } else if let Some((index, class_ty, reader)) = self.state_by_type(id) {
+            (index, class_ty, reader)
         } else {
             return Ok(None);
         };
@@ -14592,20 +14591,30 @@ impl<'a> FuncBuilder<'a> {
         Ok(Some(Place::Field { object, field }))
     }
 
-    /// The state of the `GObject` subclass the program writes that the
-    /// receiver of `access` (`this.count`, `counter.count`) is an instance
-    /// of, by the receiver's type: its index and class type, as
-    /// `note_objc_state` numbered it. `None` for any other receiver.
-    fn gobject_state_of(&self, access: NodeId) -> Option<(usize, TypeId)> {
+    /// The state of the class the program writes that the receiver of
+    /// `access` (`this.count`, `counter.count`) is an instance of, found by
+    /// the receiver's type -- for a `GObject` subclass or a composed Windows
+    /// Runtime class, whose handles carry the parent's tag and so say nothing
+    /// of which class this is: its index and class type, as `note_objc_state`
+    /// numbered it, and the runtime call lending it. `None` for any other
+    /// receiver.
+    fn state_by_type(&self, access: NodeId) -> Option<(usize, TypeId, &'static str)> {
         let receiver = *self.children(access).first()?;
         let ty = self.class_behind(*self.snapshot.node_types.get(&receiver)?);
         let symbol = self.snapshot.types.get(ty.0 as usize)?.symbol?;
         let class = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().copied().find(|d| {
             self.kind_of(*d) == Some(syntax::CLASS_DECLARATION)
         })?;
-        super::native::gobject_parent(self.snapshot, class)?;
+        let reader = if super::native::gobject_parent(self.snapshot, class).is_some() {
+            "nts_gobject_state"
+        } else if super::native::extends_com(self.snapshot, class) {
+            "nts_com_state"
+        } else {
+            return None;
+        };
         let name = foreign_class_name(self.snapshot, class)?;
-        self.hierarchy.objc_states.get(&name).copied()
+        let &(index, class_ty) = self.hierarchy.objc_states.get(&name)?;
+        Some((index, class_ty, reader))
     }
 
     /// The Objective-C protocols a class the program writes adopts: each
@@ -36539,7 +36548,7 @@ impl<'a> FuncBuilder<'a> {
             let field = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
                 && children.last().and_then(|member| self.literal_name(*member)).is_some_and(|name| {
                     self.is_program_objc_field(&pointee, &name)
-                        || self.gobject_state_of(id).is_some_and(|(_, class_ty)| declares_stored(self.snapshot, class_ty, &name))
+                        || self.state_by_type(id).is_some_and(|(_, class_ty, _)| declares_stored(self.snapshot, class_ty, &name))
                 });
             if !(numeric_index && !matches!(pointee, super::native::Pointee::Opaque(_)) || named_field || accessor || field) {
                 return Err(self.unsupported(id, "a property read through a native pointer"));

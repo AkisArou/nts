@@ -162,11 +162,26 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         let _ = writeln!(out, "@{array} = internal constant [{} x {{ i64, i64, ptr }}] [{}]", rows.len(), rows.join(", "));
         text_constant(&mut out, &format!("{descriptor}.name"), &class.name);
         text_constant(&mut out, &format!("{descriptor}.base"), &composition.class);
-        // `NtsComClass`: natural alignment places it as C does. The last
-        // field is the factory the runtime keeps, so it is not a constant.
+        // `NtsComClass`: natural alignment places it as C does. The factory
+        // is the runtime's to keep, so it is not a constant.
+        // The fields' maker, entered as an entry point is: the runtime calls
+        // it from whatever stack is composing the instance.
+        let maker = match &class.state {
+            Some(state) => {
+                let compiled = program.funcs.iter().find(|func| func.name == *state).ok_or_else(|| refuse(first, "a class whose fields' maker this program does not define"))?;
+                let maker = format!("nts_com_state_{}", class.name);
+                let _ = writeln!(
+                    out,
+                    "define internal ptr @{maker}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
+                    symbol(&compiled.name)
+                );
+                format!("ptr @{maker}")
+            }
+            None => "ptr null".to_owned(),
+        };
         let _ = writeln!(
             out,
-            "@{descriptor} = internal global {{ ptr, ptr, i64, i64, i32, ptr, i32, i8, ptr }} {{ ptr @{descriptor}.name, ptr @{descriptor}.base, i64 {}, i64 {}, i32 {}, ptr @{array}, i32 {}, i8 {}, ptr null }}",
+            "@{descriptor} = internal global {{ ptr, ptr, i64, i64, i32, ptr, i32, i8, ptr, ptr }} {{ ptr @{descriptor}.name, ptr @{descriptor}.base, i64 {}, i64 {}, i32 {}, ptr @{array}, i32 {}, i8 {}, ptr null, {maker} }}",
             low.cast_signed(),
             high.cast_signed(),
             composition.slot,

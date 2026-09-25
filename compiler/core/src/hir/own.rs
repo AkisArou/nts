@@ -2513,6 +2513,8 @@ const RUNTIME_LENDS_A_SLOT: &[&str] = &[
     // A GObject subclass's, which its instance holds at the offset its
     // registration gave: a slot of the receiver, as the Objective-C one is.
     "nts_gobject_state",
+    // A composed Windows Runtime instance's, which its outer object holds.
+    "nts_com_state",
     "nts_promise_value",
     "nts_promise_reference",
     "nts_promise_reason",

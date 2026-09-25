@@ -280,6 +280,14 @@ Application.Start(() => { new App(); });
   arrives as the `HSTRING` the caller lends, and the name is bound to a
   string its text is copied into (`nts_string_copy_hstring`). The fixture
   calls the override through its slot, as XAML would (`states=Custom`).
+- **Fields**, as C#'s `App` has them: the object holding them is made by the
+  class's maker before the base is composed, kept by the outer object and
+  given back with it, and lent wherever the program reads one
+  (`nts_com_state`, which finds the outer object as the aggregate's
+  `IUnknown`). The lookup by the receiver's type is shared with GTK's
+  `GObject` subclasses (`state_by_type`). The fixture's classes keep their
+  counters in fields. The control (a runtime that makes no state) ends at
+  the first field read.
 - **`super.OnLaunched(args)`** calls the base's own implementation through
   its slot (`nts_com_base`), as C#'s `base.OnLaunched(args)` does. The
   control (the runtime answering the program's own face instead) recurses
@@ -289,8 +297,9 @@ Application.Start(() => { new App(); });
     `out` fields;
   - an override answering an object or a string, whose reference the
     caller would own;
-  - a constructor of the class's own, and fields. Captured state works
-    (a closure, a module variable);
+  - a constructor of the class's own;
+  - a field initialiser that calls, reads a member or reads `this`, since
+    it runs as the instance is made;
   - a `new` with arguments; and an override returning a value.
 - **The SDK** is fetched by `tooling/windows/fetch-winappsdk.sh`, pinned in
   `winrt.rs`. The bootstrapper is built beside the program and loaded on its
@@ -305,8 +314,8 @@ Application.Start(() => { new App(); });
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
 2. **W2's rest** as listed above: awaitable operations once `await` honours
-   thenables. **W3:** fields on a composed class, and an override answering
-   an object or a string.
+   thenables. **W3:** a constructor of a composed class's own, and an
+   override answering an object or a string.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT.
 

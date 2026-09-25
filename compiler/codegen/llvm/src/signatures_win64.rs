@@ -128,6 +128,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_com_query", returns: "ptr", params: &["ptr", "i64", "i64"], attributes: &[] },
     Signature { name: "nts_com_release", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_com_releases", returns: "i32", params: &[], attributes: &[] },
+    Signature { name: "nts_com_state", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_com_take", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_concat", returns: "noalias nonnull ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_concat_into", returns: "ptr", params: &["ptr", "ptr", "ptr"], attributes: &[] },

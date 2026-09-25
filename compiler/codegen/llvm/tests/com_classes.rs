@@ -128,7 +128,7 @@ fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
         tables[1]
     );
     assert!(text.contains("static NtsComClass nts_com_class_App = { \"App\", \"Test.Xaml.Application\", "), "{text}");
-    assert!(text.contains(", 6u, nts_com_interfaces_App, 2u, true, 0 };"), "the slot, the interfaces or the xaml flag:\n{text}");
+    assert!(text.contains(", 6u, nts_com_interfaces_App, 2u, true, 0, 0 };"), "the slot, the interfaces, the xaml flag or the maker:\n{text}");
     assert!(text.contains("nts_com_register(&nts_com_class_App);"), "{text}");
     assert!(text.contains("nts_com_compose_named("), "`new App()` does not compose:\n{text}");
     windows_syntax(&dir, &c);
@@ -140,7 +140,7 @@ fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
     assert!(ir.contains("[8 x ptr] [ptr @nts_com_outer_query,"), "the two-override table:\n{ir}");
     // The `int32` converted to the `number` the compiled method takes.
     assert!(ir.contains("%p1 = sitofp i32 %a1 to double"), "{ir}");
-    assert!(ir.contains("i32 6, ptr @nts_com_interfaces_App, i32 2, i8 1, ptr null }"), "{ir}");
+    assert!(ir.contains("i32 6, ptr @nts_com_interfaces_App, i32 2, i8 1, ptr null, ptr null }"), "{ir}");
     assert_eq!(ir.matches("@llvm.global_ctors").count(), 1, "{ir}");
     assert!(ir.contains("ptr @nts_com_register_classes"), "{ir}");
     std::fs::write(dir.join("program.ll"), ir).unwrap();
@@ -295,6 +295,38 @@ fn an_override_answers_through_the_result_pointer() {
     assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
 }
 
+/// Fields, as C#'s `App` has them: the object holding them is made by the
+/// class's maker (`App#state`, entered as an entry point) before the base is
+/// composed, kept by the outer object, and lent by `nts_com_state` wherever
+/// the program reads one -- in an override through `this`, and from outside
+/// through the instance.
+#[test]
+fn a_composed_class_keeps_its_fields_in_its_outer_object() {
+    let source = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\nclass App extends Application {\n  count = 0;\n  name = \"app\";\n  OnLaunched(_args: IInspectable | null): void {\n    this.count += 1;\n  }\n}\nexport function start(): string {\n  const app = new App();\n  return app.name + String(app.count);\n}\n";
+    let Some((dir, prepared)) = prepare("fields", source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("static void *nts_com_state_App(void) { nts_callback_enter();"), "no maker entry:\n{text}");
+    assert!(text.contains(", 0, nts_com_state_App };"), "the descriptor does not name the maker:\n{text}");
+    assert!(text.matches("nts_com_state(").count() >= 3, "a field is not read through the outer object:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("ptr null, ptr @nts_com_state_App }"), "{}", llvm.text);
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .output()
+        .unwrap();
+    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+}
+
 /// A string the Windows Runtime lends an override arrives as its `HSTRING`
 /// and is bound to a string holding its text, copied rather than taken: the
 /// caller still owns the handle (`nts_string_copy_hstring`, not
@@ -432,7 +464,8 @@ fn a_slot_the_class_leaves_is_forwarded_to_its_base() {
 
 /// What a composed class cannot be yet, refused where it is written, naming
 /// it: an interface overridden in part whose other slot cannot be forwarded,
-/// a constructor, and a field.
+/// a constructor, and a field initialiser that could reach the half-made
+/// instance.
 #[test]
 fn what_a_composed_class_cannot_hold_is_refused_by_name() {
     let head = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\n";
@@ -440,7 +473,7 @@ fn what_a_composed_class_cannot_hold_is_refused_by_name() {
     for (name, body, refusal) in [
         ("unforwardable", "  Fourth(): void {}\n", "`Third`, whose base's is forwarded to and cannot be: a result the binding spells as `out` parameters' fields"),
         ("constructor", "  constructor() {\n    super();\n  }\n  OnLaunched(_args: IInspectable | null): void {}\n", "constructor"),
-        ("field", "  count = 0;\n  OnLaunched(_args: IInspectable | null): void {}\n", "field"),
+        ("reaching-initializer", "  me = this;\n  OnLaunched(_args: IInspectable | null): void {}\n", "a field initialiser of a class extending a foreign class"),
     ] {
         let source = format!("{head}class App extends Application {{\n{body}}}\n{tail}");
         let Some((_, prepared)) = prepare(name, &source) else {
@@ -449,7 +482,7 @@ fn what_a_composed_class_cannot_hold_is_refused_by_name() {
         };
         let messages: Vec<&String> = prepared.diagnostics.iter().map(|d| &d.message).collect();
         assert!(
-            messages.iter().any(|m| m.contains("composable") && m.contains(refusal)),
+            messages.iter().any(|m| m.contains(refusal)),
             "{name}: expected a refusal naming {refusal:?}, got {messages:?}"
         );
     }

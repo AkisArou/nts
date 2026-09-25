@@ -30,8 +30,11 @@
 //   `Button`'s, back, and out through the slot's result pointer -- so
 //   `measured` counts them and `styled=true` says each arrived whole. The
 //   interface's other slots, `ArrangeOverride` among them, are `Button`'s.
-// - The button's `Click` handler is a TypeScript function counting into a
-//   captured `let`. The timer presses it the way an accessibility client does
+// - Each class keeps its counters in fields, as C#'s do. The runtime holds
+//   them beside the instance it composes (`nts_com_state`), and the timer
+//   reads the button's from outside it.
+// - The button's `Click` handler is a TypeScript function counting into the
+//   application's `clicks` field. The timer presses it the way an accessibility client does
 //   -- its automation peer's `IInvokeProvider.Invoke` -- so no person is
 //   needed, and `clicks` shows the handler ran once.
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
@@ -58,43 +61,43 @@ declare module "winrt:Microsoft.UI.Xaml.Controls" {
   }
 }
 
-let launched = 0;
-let entered = 0;
-
-let templated = 0;
-let measured = 0;
-let states = "";
-
 class PressButton extends Button {
+  entered = 0;
+  templated = 0;
+  measured = 0;
+  states = "";
+
   OnPointerEntered(_e: IPointerRoutedEventArgs | null): void {
-    entered += 1;
+    this.entered += 1;
   }
   OnApplyTemplate(): void {
     super.OnApplyTemplate();
-    templated += 1;
+    this.templated += 1;
   }
   GoToElementStateCore(stateName: string, _useTransitions: boolean): boolean {
-    states += stateName;
+    this.states += stateName;
     return false;
   }
   MeasureOverride(available: ByValue<Size>): ByValue<Size> {
-    measured += 1;
+    this.measured += 1;
     return super.MeasureOverride(available);
   }
 }
 
 class App extends Application {
+  launched = 0;
+  clicks = 0;
+
   OnLaunched(args: ILaunchActivatedEventArgs | null): void {
     super.OnLaunched(args);
-    launched += 1;
+    this.launched += 1;
     this.get_Resources().get_MergedDictionaries().Append(XamlControlsResources.create().as_IResourceDictionary());
     const window = Window.CreateInstance();
     window.put_Title("nts");
     const button = new PressButton();
     button.as_IContentControl().put_Content(PropertyValue.CreateString("Press"));
-    let clicks = 0;
     button.as_IButtonBase().add_Click(() => {
-      clicks += 1;
+      this.clicks += 1;
     });
     window.put_Content(button.as_IUIElement());
     window.Activate();
@@ -103,7 +106,11 @@ class App extends Application {
       button.as_IFrameworkElementOverrides().GoToElementStateCore("Custom", false);
       ButtonAutomationPeer.CreateInstanceWithOwner(button).as_IInvokeProvider().Invoke();
       const styled = button.as_IFrameworkElement().get_ActualWidth() > 0;
-      report("title=" + window.get_Title() + " launched=" + String(launched) + " clicks=" + String(clicks) + " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(entered) + " templated=" + String(templated) + " measured=" + String(measured > 0) + " states=" + states);
+      report(
+        "title=" + window.get_Title() + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
+          " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
+          " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states,
+      );
       this.Exit();
     }, 1500);
   }

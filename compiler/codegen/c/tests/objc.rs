@@ -775,7 +775,7 @@ fn a_constructor_or_a_reaching_initializer_on_an_objective_c_subclass_is_refused
         return;
     };
     let messages: Vec<&str> = prepared.diagnostics.iter().map(|d| d.message.as_str()).collect();
-    let reaching = "a field initialiser of a class extending an Objective-C or `GObject` class that calls, reads a member or reads `this`";
+    let reaching = "a field initialiser of a class extending a foreign class (Objective-C, `GObject` or a composable Windows Runtime class) that calls, reads a member or reads `this`";
     assert_eq!(messages.iter().filter(|m| m.contains(reaching)).count(), 2, "{messages:?}");
     assert!(messages.iter().any(|m| m.contains("does not open with its `super(...)`")), "{messages:?}");
 }
