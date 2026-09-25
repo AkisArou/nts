@@ -2,9 +2,22 @@
 // other, line for line. `BENCH_CASE` picks one case per process, and each
 // prints `<case> <ns per operation>`: the best of three timed runs after one
 // untimed, which GJS's JIT needs and nts does not.
-import { gtk_init, GtkAdjustment, GtkApplication, GtkButton, GtkLabel, GtkWindow } from "c:Gtk-4.0";
+import {
+  gtk_init,
+  gtk_widget_measure,
+  GtkAdjustment,
+  GtkApplication,
+  GtkButton,
+  GtkLabel,
+  GtkWidget,
+  GtkWindow,
+  Orientation,
+  type GtkOrientation,
+} from "c:Gtk-4.0";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { bench_case, bench_log, bench_now } from "c:bench";
+import type { CEnum, CNumber, Ptr, c_uint } from "c:types";
+import { local } from "c:memory";
 
 function best(name: string, n: number, run: (n: number) => void): void {
   run(n);
@@ -80,6 +93,40 @@ function outs(): void {
   if (sum === 0) bench_log("outs: nothing read");
 }
 
+// A virtual function GTK calls into: `measure` on a widget whose class the
+// program writes. `for_size` cycles through more values than GTK's size
+// cache holds, so every call reaches the override.
+class Square extends GtkWidget {
+  vfunc_measure(
+    orientation: CEnum<GtkOrientation, c_uint>,
+    for_size: CNumber<"int">,
+    minimum: Ptr<CNumber<"int">> | null,
+    natural: Ptr<CNumber<"int">> | null,
+    minimum_baseline: Ptr<CNumber<"int">> | null,
+    natural_baseline: Ptr<CNumber<"int">> | null,
+  ): void {
+    if (minimum !== null) minimum[0] = 42;
+    if (natural !== null) natural[0] = 42;
+    if (minimum_baseline !== null) minimum_baseline[0] = -1;
+    if (natural_baseline !== null) natural_baseline[0] = -1;
+    void orientation;
+    void for_size;
+  }
+}
+
+function vfunc(): void {
+  const square = new Square({});
+  let total = 0;
+  best("vfunc", 200000, (n) => {
+    const size = local<CNumber<"int">>();
+    for (let i = 0; i < n; i++) {
+      gtk_widget_measure(square, Orientation.HORIZONTAL, 100 + (i % 1000), size);
+      total += size[0];
+    }
+  });
+  if (total === 0) bench_log("vfunc: never measured");
+}
+
 // Startup to a mapped window, timed from outside the process.
 function startup(): void {
   const application = new GtkApplication({ application_id: "dev.nts.Bench", flags: ApplicationFlags.NON_UNIQUE });
@@ -106,6 +153,7 @@ function main(): void {
   else if (name === "construct") construct();
   else if (name === "method") method();
   else if (name === "outs") outs();
+  else if (name === "vfunc") vfunc();
   else bench_log("unknown case: " + name);
 }
 

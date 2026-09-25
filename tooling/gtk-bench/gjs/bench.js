@@ -3,7 +3,7 @@
 // `<case> <ns per operation>`: the best of three timed runs after one untimed,
 // which the JIT needs.
 imports.gi.versions.Gtk = '4.0';
-const { GLib, Gio, Gtk } = imports.gi;
+const { GLib, GObject, Gio, Gtk } = imports.gi;
 
 function now() {
     return GLib.get_monotonic_time() / 1e3;
@@ -86,6 +86,25 @@ function outs() {
         print('outs: nothing read');
 }
 
+const Square = GObject.registerClass(class Square extends Gtk.Widget {
+    vfunc_measure(orientation, forSize) {
+        return [42, 42, -1, -1];
+    }
+});
+
+function vfunc() {
+    const square = new Square();
+    let total = 0;
+    best('vfunc', 200000, n => {
+        for (let i = 0; i < n; i++) {
+            const [minimum] = square.measure(Gtk.Orientation.HORIZONTAL, 100 + (i % 1000));
+            total += minimum;
+        }
+    });
+    if (total === 0)
+        print('vfunc: never measured');
+}
+
 function startup() {
     const application = new Gtk.Application({ application_id: 'dev.nts.Bench', flags: Gio.ApplicationFlags.NON_UNIQUE });
     application.connect('activate', () => {
@@ -114,6 +133,8 @@ if (name === 'startup') {
         method();
     else if (name === 'outs')
         outs();
+    else if (name === 'vfunc')
+        vfunc();
     else
         print(`unknown case: ${name}`);
 }

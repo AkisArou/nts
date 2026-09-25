@@ -81,6 +81,44 @@ static void outs_run(long n) {
   outs_sum += sum;
 }
 
+/* A widget class of the benchmark's own whose `measure` answers constants. */
+typedef struct {
+  GtkWidget parent;
+} BenchSquare;
+typedef struct {
+  GtkWidgetClass parent_class;
+} BenchSquareClass;
+G_DEFINE_TYPE(BenchSquare, bench_square, GTK_TYPE_WIDGET)
+static void bench_square_measure(GtkWidget *widget, GtkOrientation orientation,
+                                 int for_size, int *minimum, int *natural,
+                                 int *minimum_baseline, int *natural_baseline) {
+  (void)widget;
+  (void)orientation;
+  (void)for_size;
+  *minimum = 42;
+  *natural = 42;
+  *minimum_baseline = -1;
+  *natural_baseline = -1;
+}
+static void bench_square_class_init(BenchSquareClass *klass) {
+  GTK_WIDGET_CLASS(klass)->measure = bench_square_measure;
+}
+static void bench_square_init(BenchSquare *square) { (void)square; }
+
+static GtkWidget *square;
+static long measured;
+static void vfunc_run(long n) {
+  GtkWidget *widget = square;
+  long total = 0;
+  for (long i = 0; i < n; i++) {
+    int size;
+    gtk_widget_measure(widget, GTK_ORIENTATION_HORIZONTAL, 100 + (int)(i % 1000),
+                       &size, NULL, NULL, NULL);
+    total += size;
+  }
+  measured += total;
+}
+
 static void mapped(GtkWidget *w, gpointer app) {
   (void)w;
   g_application_quit(G_APPLICATION(app));
@@ -119,6 +157,9 @@ int main(void) {
   } else if (strcmp(name, "method") == 0) {
     button = g_object_ref_sink(gtk_button_new_with_label("x"));
     best("method", 2000000, method_run);
+  } else if (strcmp(name, "vfunc") == 0) {
+    square = g_object_ref_sink(g_object_new(bench_square_get_type(), NULL));
+    best("vfunc", 200000, vfunc_run);
   } else if (strcmp(name, "outs") == 0) {
     button = g_object_ref_sink(gtk_button_new_with_label("x"));
     gtk_widget_set_size_request(button, 3, 4);
