@@ -3572,7 +3572,32 @@ enum Moved {
 /// An access typed against a *base* keeps using the base's index, which stays
 /// valid on a subclass exactly because both were reordered against the same
 /// prefix.
+///
+/// # **Nothing in this project reaches it, measured 2026-09-25**
+///
+/// Counted by instrumenting the permutation and asking how many layouts it
+/// actually moves: **zero** across `runtime/node`, zero across
+/// `runtime/web-platform`, and zero across every `examples/` project. The
+/// checker already lists a class's inherited members before its own, so
+/// [`put_bases_first`] computes the identity permutation and this rewrites
+/// nothing.
+///
+/// That is a fact about the *checker's* order and not about the pass, which is
+/// why the pass stays: `docs/conformance/nodejs.md` records that tsgo lists a
+/// type's own members before its inherited ones for an **interface**, so
+/// `interface Wide extends Narrow` is not laid out with `Narrow` as a prefix --
+/// and classes escape that only because their instance type arrives the other
+/// way round. Record 0199 is what a base-first layout cost to get right, "four
+/// attempts, about a thousand refusals", so nothing here is an argument for
+/// removing it.
+///
+/// What it does mean: **the arms below are guards on a guard**, and the unit test
+/// `a_reorder_moves_every_arm_of_an_open_read` is the only thing that exercises
+/// any of this. It hand-builds a non-identity permutation for exactly that
+/// reason, and it is where a future change that makes reorders real will be
+/// caught -- rather than in a program, silently, by an index still in range.
 fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
+
     // **An op keyed on its operand's type, and an op keyed on its arms.** A
     // `FieldGet` names the type it reads through; a shared or open read's operand
     // is *erased* and names nothing, so its layouts come from the arms instead.
