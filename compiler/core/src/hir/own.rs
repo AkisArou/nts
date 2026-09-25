@@ -708,18 +708,15 @@ fn control_flow(func: &Func) -> (Vec<Option<usize>>, Vec<rustc_hash::FxHashSet<u
 /// holder -- C borrows its arguments for the call, and that unrecorded borrow is
 /// the entire reason this rule exists -- which is the line `Callee::Native` draws.
 ///
-/// **A holder is recognised by op shape, and one shape is left out on purpose.** A
-/// handle may reach a table through an `Erase` -- `erase(handle)`, then the erased
-/// value as the argument -- so the handle itself is only the `Erase` operand and
-/// this sees no holder. For a `GObject` or COM handle that changes nothing
-/// observable: such a local was already held to its block's end, which in
-/// straight-line code is the function's. It is left out rather than guessed at
-/// because no fixture witnesses it, and a guard nothing reaches reads as
-/// protection. **It becomes real the day an Objective-C handle stops being boxed on
-/// its way into a table**, since `examples/interop/macos-classes` watches a map
-/// entry weakly and must read `gone`: whoever makes that change should read the HIR
-/// diff of `maps()` asking not only whether the retains match, but whether the
-/// handle is still an argument to a store or a runtime call on its way in.
+/// **An `Erase` is a holder too**, which this rule denied for one commit. A handle
+/// reaches a table, an `unknown` or a field through `erase(handle)` with the erased
+/// value as the argument, so the handle itself is only the `Erase` operand -- and
+/// holding it to the return keeps an object alive past the entry that owned it. It
+/// was left out at first because no fixture witnessed it and a guard nothing
+/// reaches reads as protection; the GTK lane produced the witness the same evening
+/// (`gtk-values`' `temporary` arm, a button set into a map, watched, then deleted,
+/// which must read `gone`), and `examples/interop/macos-classes` will produce the
+/// Objective-C one as soon as such a handle stops being boxed on its way in.
 ///
 /// **Defined outside every cycle.** A handle made in a loop keeps today's
 /// placement: one `ValueId` stands for every iteration's handle, so holding it to
@@ -752,6 +749,36 @@ fn held_to_the_end(func: &Func) -> Vec<ValueId> {
         .iter()
         .flat_map(|op| match &op.kind {
             OpKind::FieldSet { value, .. } | OpKind::ArraySet { value, .. } => vec![*value],
+            // **An erased handle is held by the slot it is erased into.** A
+            // handle reaches a table, an `unknown` or a field through
+            // `erase(handle)` and the erased value as the argument, so the
+            // handle itself is only this operand -- and holding it to the
+            // return would keep an object alive past the entry that owned it.
+            // The GTK lane's `gtk-values` `temporary` arm is the witness:
+            // `m.set("t", new GtkButton())`, watched, then deleted, must read
+            // `gone`. It is also the half that makes their
+            // `release_at_last_use` exemption reachable -- an erased
+            // temporary's release belongs at its last use, which is ARC's
+            // end-of-statement, and this rule must not hold it past that.
+            //
+            // **Back through the `Convert` views, because the owner is not the
+            // operand.** `new GtkButton()` is `gtk_button_new() : GtkWidget*`
+            // then `convert : GtkButton*` then `erase`, so the value that owns
+            // the reference is two steps behind the `Erase`. Marking only the
+            // operand leaves the owner unheld and holds it to the return, which
+            // is the GTK lane's `temporary` arm reading `alive`. `liveness`
+            // walks the same chain for the same reason -- see its `viewed` map,
+            // *"a counted handle converted to a type nothing counts is read
+            // through the conversion afterwards, which holds no reference"*.
+            OpKind::Erase { value, .. } => {
+                let mut chain = vec![*value];
+                let mut at = *value;
+                while let OpKind::Convert(inner) = func.values[at.0 as usize].kind {
+                    chain.push(inner);
+                    at = inner;
+                }
+                chain
+            }
             OpKind::Call { callee, args, .. } => match callee {
                 // A native call *borrows* its arguments for the call, and that
                 // unrecorded borrow is the whole reason this rule exists -- except
