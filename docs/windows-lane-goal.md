@@ -146,8 +146,11 @@ the same vtable calls on the VM measured the behaviour first.
   - A TypeScript function is a COM delegate object whose `Invoke` is a
     per-signature adapter. The closure is lent until the object's count
     reaches zero.
-  - The object is not agile: a source on another thread must marshal to the
-    owner's.
+  - The object is agile, as C++/WinRT's are: a source calls it on whatever
+    thread it completes on. A call there, and the last release, are carried
+    to the thread owning the closure (`nts_com_carry`), with the objects
+    among the arguments held across; the function runs after the source's
+    call returns.
   - A handler that throws ends the process naming the boundary; it never
     answers S_OK for a failure.
 - **Chosen trades, stated so the first person to hit one knows:**
@@ -163,6 +166,10 @@ the same vtable calls on the VM measured the behaviour first.
   There is no `returnValue` without an `[out, retval]`, and an object written
   there may be null. A failed call throws with nothing allocated: the object
   is made on the success edge. A struct `[out]` is refused.
+- **A handle at module scope** is a global (`const window =
+  Window.create()`); a counted one is retained on store and released on
+  overwrite under `--rc`, and an ambient `const` holding one, which has no
+  value, is refused by name.
 - **Priced, and paid:** an `as_X()` parsed its IID from a string on every
   call: 435-444 ns on the VM, against 12.4-12.8 ns for the `QueryInterface`
   plus `Release` it preceded. An IID now crosses as two 64-bit constants
@@ -187,8 +194,13 @@ the same vtable calls on the VM measured the behaviour first.
   `~/.cache/nts/windows/benches/winrt-crossings`; C# (CsWinRT) is not
   measured yet: the VM has no .NET SDK.
 - **Not yet:**
-  - `IAsyncOperation` as a Promise, which needs a decision about whether a
-    console program's loop pumps messages (the user's to make).
+  - `IAsyncOperation` as a Promise. Agile delegates took away the need for
+    a console program's loop to pump messages: a single-threaded
+    apartment's source calls an agile handler on the thread pool, and the
+    carry brings it home. What is left is generic delegates whose IID
+    depends on the interface's own parameters
+    (`AsyncOperationCompletedHandler<TResult>`), below, and the Promise
+    over them.
   - Arrays of anything but bytes, and arrays the callee allocates
     (`CopyToByteArray`, the `Get*Array` methods).
   - Generic delegates whose IID depends on the interface's own parameters
