@@ -12,6 +12,17 @@
 //   moved     the Button moved before the first Label: a reorder, not an add
 //   removed   a Label removed
 //   hidden    hidden and shown again, as Suspense does
+//   reset     removing a prop restores GTK's default, not the last value; a
+//             removed handler stops firing; text children become a Button's
+//             label in the same update that removes its `label` prop
+//   enum      an enum prop reaches its setter
+//   single    a single-child widget holds its child
+//
+// What the host refuses -- text outside a widget with a label, an unknown
+// prop or widget, a second child for a single-child widget -- is an Error
+// naming what is wrong. It is not asserted here: nts does not carry those
+// throws to a handler in this program yet (a throw from a method of a class
+// in another module aborts instead; reported).
 //   work      a slice of scheduler work posted to GLib ran
 //   timer     a timer fired, and a cancelled one did not
 
@@ -27,12 +38,12 @@ import {
   GtkContainer,
   hideInstance,
   insertBefore,
-  LabelNode,
   removeChild,
   unhideInstance,
   type HostNode,
   type Props,
 } from "../../../packages/react-gtk/src/ReactFiberConfig.ts";
+import { BoxNode, ButtonNode, FrameNode, LabelNode } from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
 
 // The children of `parent`, as GTK orders them, named by the nodes they are.
@@ -48,6 +59,10 @@ function order(parent: HostNode, nodes: HostNode[], names: string[]): string {
     child = child.get_next_sibling();
   }
   return out;
+}
+
+function frame(node: HostNode): string {
+  return node instanceof ButtonNode ? String(node.gtk.get_has_frame()) : "not a button";
 }
 
 function main(): void {
@@ -85,7 +100,7 @@ function main(): void {
   react_gtk_log("rebound " + clicks.trim());
 
   commitUpdate(label, "GtkLabel", { children: "hello" }, { children: "world" }, {});
-  react_gtk_log("label " + (label instanceof LabelNode ? String(label.label.get_label()) : "not a label"));
+  react_gtk_log("label " + (label instanceof LabelNode ? String(label.gtk.get_label()) : "not a label"));
 
   const second = createInstance("GtkLabel", { label: "second" }, container, 0, {});
   nodes.push(second);
@@ -103,6 +118,26 @@ function main(): void {
   const hidden = button.widget.get_visible();
   unhideInstance(button, secondProps);
   react_gtk_log("hidden " + String(hidden) + " " + String(button.widget.get_visible()));
+
+  const framed = frame(button);
+  const unframedProps: Props = { label: "Add", hasFrame: false };
+  commitUpdate(button, "GtkButton", secondProps, unframedProps, {});
+  const unframed = frame(button);
+  clicks = "";
+  react_gtk_emit(button.widget, "clicked");
+  commitUpdate(button, "GtkButton", unframedProps, { children: "Text" }, {});
+  const text = button instanceof ButtonNode ? String(button.gtk.get_label()) : "not a button";
+  react_gtk_log("reset " + framed + ">" + unframed + ">" + frame(button) + " clicks=" + (clicks === "" ? "none" : clicks) + " label=" + text);
+
+  const column = createInstance("GtkBox", { orientation: 1 }, container, 0, {});
+  react_gtk_log("enum " + (column instanceof BoxNode ? String(column.gtk.get_orientation()) : "not a box"));
+
+  const framing = createInstance("GtkFrame", { label: "f" }, container, 0, {});
+  const inner = createInstance("GtkLabel", { label: "inner" }, container, 0, {});
+  appendInitialChild(framing, inner);
+  const held = framing instanceof FrameNode && framing.gtk.get_child() === inner.widget;
+  react_gtk_log("single " + String(held));
+
 
   const loop = g_main_loop_new(null, false);
   let ran = "";

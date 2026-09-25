@@ -32,6 +32,9 @@ inserted label,second,button
 moved button,label,second
 removed button,second
 hidden false true
+reset true>false>true clicks=none label=Text
+enum 1
+single true
 work timer"
 
 mkdir -p "$out"
