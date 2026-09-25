@@ -15420,6 +15420,21 @@ impl<'a> FuncBuilder<'a> {
                 let origin = self.origin(id);
                 return Ok(self.push(OpKind::Convert(value), want, origin));
             }
+            // A `GObject` handle the checker narrowed to one of its subclasses
+            // -- after `w instanceof GtkLabel`, which asked the type system
+            // (`lower_gobject_instanceof`). Only a narrowing: an `as` asserts
+            // unchecked, and stays refused (`a_class_downcast_by_assertion_is_refused`).
+            let handle = |ty: &HirType| match ty {
+                HirType::NativePointer(super::native::Pointee::Opaque(handle)) if handle.family == super::native::Family::GObject => Some(handle.clone()),
+                _ => None,
+            };
+            if !matches!(self.kind_of(id), Some(syntax::AS_EXPRESSION | syntax::NON_NULL_EXPRESSION))
+                && let (Some(narrow), Some(held)) = (handle(&want), handle(&self.values[value.0 as usize].ty))
+                && narrow.upcasts_to(&held)
+            {
+                let origin = self.origin(id);
+                return Ok(self.push(OpKind::Convert(value), want, origin));
+            }
             return Err(self.unsupported(id, "a value asserted to be an opaque C pointer"));
         }
         // A view narrowed to its element type, which is the other direction of
@@ -27142,6 +27157,9 @@ impl<'a> FuncBuilder<'a> {
         let symbol = self.denoted_symbol(symbol);
         if let Some(sent) = self.lower_objc_instanceof(id, lhs, rhs, symbol)? {
             return Ok(sent);
+        }
+        if let Some(asked) = self.lower_gobject_instanceof(id, lhs, symbol)? {
+            return Ok(asked);
         }
         // The class's *instance* type. The right operand names the constructor,
         // whose type is not the type of what `new` produces, so it is found by
@@ -45555,6 +45573,55 @@ impl<'a> FuncBuilder<'a> {
             HirType::Bool,
             origin,
         )))
+    }
+
+    /// `object instanceof C` for a `GObject` class `C` -- one a binding
+    /// declares, or one the program wrote over one: `g_type_check_instance_is_a`
+    /// against `C`'s `GType`, so a subclass answers as it does in GJS, and a
+    /// NULL handle answers `false` without being asked.
+    ///
+    /// **A handle is not an object of the program's**, so the class search
+    /// below cannot answer for one: it compared the handle's descriptor, which
+    /// it does not have, and `new Task({}) instanceof Task` was `false` on both
+    /// backends while `instanceof GtkLabel` was refused.
+    fn lower_gobject_instanceof(&mut self, id: NodeId, lhs: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(gtype) = super::native::gtype_function(self.snapshot, symbol) else {
+            return Ok(None);
+        };
+        let object = self.lower_expression(lhs)?;
+        let object_ty = self.values[object.0 as usize].ty.clone();
+        if !matches!(object_ty, HirType::NativePointer(_)) {
+            return Err(self.unsupported(id, "an `instanceof` of a `GObject` class on something that is not a handle"));
+        }
+        let origin = self.origin(id);
+        let null = self.push(OpKind::ConstNull, object_ty, origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: object, rhs: null }, HirType::Bool, origin.clone());
+        let (asked, answered) = (self.new_block(), self.new_block());
+        let answer = self.push_block_param(answered, HirType::Bool, origin.clone());
+        let no = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+        self.terminate(Terminator::Branch { cond: absent, then_target: answered, then_args: vec![no], else_target: asked, else_args: Vec::new() });
+        self.switch_to(asked);
+        // The class's `GType`: a program class's own function, which its
+        // backend defines and registers it in, or the binding's `get_type`.
+        let class = if gtype.starts_with(super::native::PROGRAM_GTYPE) {
+            let size = super::native::Type::Scalar(super::native::Scalar::Size);
+            let ty = size.representation();
+            let function = synthesized(&gtype, Vec::new(), size, None, Vec::new());
+            self.push(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(function)), args: Vec::new(), frame: None }, ty, origin.clone())
+        } else {
+            self.call_foreign_named(id, &gtype, Vec::new())?
+        };
+        let is_a = self.call_foreign_named(id, "g_type_check_instance_is_a", vec![object, class])?;
+        let is_a = if self.values[is_a.0 as usize].ty == HirType::Bool {
+            is_a
+        } else {
+            let ty = self.values[is_a.0 as usize].ty.clone();
+            let zero = self.push(super::zero_of(&ty), ty, origin.clone());
+            self.push(OpKind::Binary { op: BinOp::Ne, lhs: is_a, rhs: zero }, HirType::Bool, origin.clone())
+        };
+        self.terminate(Terminator::Jump { target: answered, args: vec![is_a] });
+        self.switch_to(answered);
+        Ok(Some(answer))
     }
 
     /// Whether `declaration` sits inside `declare module "objc:..."`.

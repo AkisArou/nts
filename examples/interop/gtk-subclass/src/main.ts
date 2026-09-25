@@ -30,8 +30,12 @@
 //                 from outside -- one state object, `A`'s fields first
 //   Q 6           the parent has the fields and the child none
 //   R S 8         the parent has none and the child has them
+//   is C|B|label|button|none  `instanceof`, which asks the type system
+//                 (`g_type_check_instance_is_a`) for a class the program wrote
+//                 and for a binding's, and narrows: `C`'s field read after it
 import {
   GtkButton,
+  GtkLabel,
   GtkWidget,
   gtk_init,
   gtk_widget_measure,
@@ -173,6 +177,14 @@ function chains(): void {
   sub_emit(s, "clicked");
 }
 
+function kind(widget: GtkWidget | null): string {
+  if (widget instanceof C) return "C" + String(widget.c);
+  if (widget instanceof B) return "B";
+  if (widget instanceof GtkLabel) return "label";
+  if (widget instanceof GtkButton) return "button";
+  return "none";
+}
+
 function main(): void {
   gtk_init();
   const counter = new Counter({ label: "0" });
@@ -201,6 +213,7 @@ function main(): void {
   shy.set_visible(true);
   sub_log("shy " + String(shy.shown) + " " + String(shy.get_visible()));
   chains();
+  sub_log("is " + [kind(new C({})), kind(new B({})), kind(new GtkLabel({})), kind(new GtkButton({})), kind(null)].join("|"));
 }
 
 main();

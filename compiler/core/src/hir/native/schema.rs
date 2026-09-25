@@ -254,7 +254,18 @@ pub(crate) fn gobject_parent(snapshot: &SemanticSnapshot, declaration: NodeId) -
         .filter(|child| is(*child, syntax::HERITAGE_CLAUSE))
         .flat_map(|clause| syntax_children(snapshot, clause))
         .find_map(|expression| syntax_children(snapshot, expression).first().copied())?;
-    let mut record = snapshot.symbols.get(node(base)?.symbol?.0 as usize)?;
+    gtype_function(snapshot, node(base)?.symbol?)
+}
+
+/// The function answering the `GType` of the class `symbol` names -- in a
+/// heritage clause or on the right of `instanceof`: a class the program wrote
+/// over a `GObject` class, its own ([`PROGRAM_GTYPE`]), which registers it;
+/// or a binding's, the `@ntsGType` on the `__c_gtype` member of its value.
+/// `None` for any other class.
+pub(crate) fn gtype_function(snapshot: &SemanticSnapshot, symbol: SymbolId) -> Option<String> {
+    let node = |id: NodeId| snapshot.nodes.get(id.0 as usize);
+    let is = |id: NodeId, kind: u16| matches!(node(id).map(|n| &n.kind), Some(NodeKind::Syntax(k)) if *k == kind);
+    let mut record = snapshot.symbols.get(symbol.0 as usize)?;
     while let Some(aliased) = record.aliased {
         record = snapshot.symbols.get(aliased.0 as usize)?;
     }

@@ -36,7 +36,7 @@ pub(crate) fn registered(program: &Program) -> Vec<&ForeignClass> {
     let mut wanted: Vec<&str> = Vec::new();
     for op in program.funcs.iter().flat_map(|func| &func.values) {
         let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
-        if let Some(made) = target.name.strip_prefix("nts_gobject_new_") {
+        if let Some(made) = target.name.strip_prefix("nts_gobject_new_").or_else(|| target.name.strip_prefix(PROGRAM_GTYPE)) {
             wanted.push(made);
         } else if let Some((class, _)) = target.name.strip_prefix("nts_gobject_chain_").and_then(|rest| rest.rsplit_once('_')) {
             wanted.extend(gobject(class).and_then(|class| class.superclass.strip_prefix(PROGRAM_GTYPE)));
@@ -68,9 +68,11 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         writer.line(origin, "void *nts_gobject_new(size_t type);");
         writer.line(origin, "struct nts_gobject_slot { size_t offset; void (*entry)(void); };");
         // Each class's `GType` function, before any class names it as a
-        // parent or a chain-up calls it.
+        // parent or a chain-up calls it. Not `static`: an `instanceof` calls it
+        // too, as the native function it is, and that call's prototype is
+        // printed with every other native's, above this.
         for class in &registered {
-            writer.line(origin, format!("static size_t {PROGRAM_GTYPE}{}(void);", class.name));
+            writer.line(origin, format!("size_t {PROGRAM_GTYPE}{}(void);", class.name));
         }
     }
     for class in registered {
@@ -144,7 +146,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         writer.line(
             origin,
             format!(
-                "static size_t nts_gobject_type_{name}(void) {{ static size_t type = 0; if (type == 0) \
+                "size_t nts_gobject_type_{name}(void) {{ static size_t type = 0; if (type == 0) \
                  type = nts_gobject_register({parent}(), \"Nts_{name}\", {table}, {}u, {make_state}); return type; }}",
                 slots.len()
             ),

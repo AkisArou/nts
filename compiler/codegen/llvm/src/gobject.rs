@@ -32,7 +32,7 @@ fn registered(program: &Program) -> Vec<&ForeignClass> {
     let mut wanted: Vec<&str> = Vec::new();
     for op in program.funcs.iter().flat_map(|func| &func.values) {
         let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
-        if let Some(made) = target.name.strip_prefix("nts_gobject_new_") {
+        if let Some(made) = target.name.strip_prefix("nts_gobject_new_").or_else(|| target.name.strip_prefix(PROGRAM_GTYPE)) {
             wanted.push(made);
         } else if let Some((class, _)) = target.name.strip_prefix("nts_gobject_chain_").and_then(|rest| rest.rsplit_once('_')) {
             wanted.extend(gobject(class).and_then(|class| class.superclass.strip_prefix(PROGRAM_GTYPE)));
