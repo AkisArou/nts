@@ -2469,6 +2469,10 @@ const RUNTIME_HANDS_BACK: &[&str] = &[
     // for the block's end; releasing at the last use freed the array before
     // `xs[1]` read it.
     "nts_array_sort_str",
+    // `Object.assign(target, source)`, which answers the target. Missing on
+    // the day it landed, and found the same way `sort` was; the test below
+    // now reads the runtime for any helper like it.
+    "nts_map_extend",
     "nts_map_set",
     "nts_set_add",
 ];
@@ -3084,4 +3088,92 @@ pub(super) fn reference_fields(func: &Func, layouts: &[Layout], value: ValueId) 
         .filter(|(_, field)| field.ty.is_counted())
         .filter_map(|(index, _)| u32::try_from(index).ok())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    /// Helpers that return a parameter and are rightly not in
+    /// [`super::RUNTIME_HANDS_BACK`], each for its reason.
+    const NOT_HANDED_BACK: &[(&str, &str)] = &[
+        ("nts_str_place", "writes into the frame buffer it is given, which holds no count"),
+        ("nts_str_append", "takes its left side's reference (a move) and hands that back"),
+        ("nts_array_same", "the helper the listed array ones return through"),
+        ("nts_map_same", "the helper the listed table ones return through"),
+        ("nts_array_fill_counted", "the body `nts_array_fill_ref` and `_foreign` share, both listed"),
+    ];
+
+    /// The runtime's pointer-returning `nts_*` definitions that return one of
+    /// their own parameters, directly or through `nts_*_same`, without
+    /// retaining it: each hands back what the caller already holds.
+    fn handing_back(source: &str) -> Vec<String> {
+        let lines: Vec<&str> = source.lines().collect();
+        let mut found = Vec::new();
+        let mut at = 0;
+        while at < lines.len() {
+            let line = lines[at];
+            let starts = line.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) && line.contains("nts_") && line.contains('(');
+            if !starts || line.starts_with("typedef") {
+                at += 1;
+                continue;
+            }
+            let mut signature = line.trim().to_owned();
+            let mut end = at;
+            while !signature.ends_with('{') && !signature.ends_with(';') && end + 1 < lines.len() {
+                end += 1;
+                signature.push(' ');
+                signature.push_str(lines[end].trim());
+            }
+            at = end + 1;
+            let Some(open) = signature.find('(') else { continue };
+            if !signature.ends_with('{') {
+                continue;
+            }
+            let head = &signature[..open];
+            let Some(name) = head.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).rfind(|w| w.starts_with("nts_")) else { continue };
+            if !head.contains('*') {
+                continue;
+            }
+            let close = signature.rfind(')').unwrap_or(signature.len());
+            let parameters: Vec<&str> = signature[open + 1..close]
+                .split(',')
+                .filter_map(|p| p.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).rfind(|w| !w.is_empty()))
+                .filter(|p| *p != "void")
+                .collect();
+            let mut body = String::new();
+            while at < lines.len() && lines[at] != "}" {
+                body.push_str(lines[at]);
+                body.push('\n');
+                at += 1;
+            }
+            let compact: String = body.chars().filter(|c| !c.is_whitespace()).collect();
+            for parameter in parameters {
+                let direct = compact.contains(&format!("return{parameter};"));
+                let through = ["array", "map"].iter().any(|kind| compact.contains(&format!("returnnts_{kind}_same({parameter});")));
+                let retained = compact.contains(&format!("nts_retain({parameter}")) || compact.contains(&format!("nts_retain((NtsHeader*){parameter}"));
+                if (direct || through) && !retained {
+                    found.push(name.to_owned());
+                }
+            }
+        }
+        found
+    }
+
+    /// Every helper that hands back what it was given is listed, or exempt
+    /// with its reason: the caller otherwise counts the result as its own and
+    /// releases it once too often. Two did so for as long as releases waited
+    /// for their block's end, which put the extra release after every read;
+    /// `sort` and `Object.assign` crashed the day releases moved to the last
+    /// use. Reading the runtime is what finds the next one on the day it lands.
+    #[test]
+    fn every_helper_that_hands_back_an_argument_is_listed() {
+        let source = include_str!("../../../../runtime/c/nts_runtime.c");
+        let found = handing_back(source);
+        assert!(found.iter().any(|name| name == "nts_array_sort_str"), "the scan finds nothing: {found:?}");
+        let unlisted: Vec<&String> = found
+            .iter()
+            .filter(|name| !super::RUNTIME_HANDS_BACK.contains(&name.as_str()))
+            .filter(|name| !NOT_HANDED_BACK.iter().any(|(exempt, _)| exempt == name))
+            .collect();
+        assert!(unlisted.is_empty(), "these return an argument unretained and are not in RUNTIME_HANDS_BACK: {unlisted:?}");
+    }
 }
