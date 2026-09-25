@@ -232,7 +232,7 @@ struct Hierarchy {
     objc_chains: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
     /// Every class the program writes over an Objective-C class: the closed
     /// world a call to one of their methods dispatches over
-    /// (`FuncBuilder::objc_overriders`).
+    /// (`FuncBuilder::objc_dispatch`).
     objc_classes: Vec<NodeId>,
 }
 
@@ -5926,6 +5926,29 @@ struct ObjcConstruct {
 #[derive(Clone, Copy)]
 struct ObjcEntry {
     returns_record: bool,
+}
+
+/// How a call to a method of a class the program writes over an
+/// Objective-C class dispatches, where a subclass overrides it
+/// (`FuncBuilder::objc_dispatch`).
+struct ObjcDispatch {
+    /// Each of the program's classes from the method's class down, compared
+    /// with the receiver's own class.
+    exact: Vec<ObjcArm>,
+    /// Each class that overrides the method, deepest first, asked
+    /// `isKindOfClass:` for a class the runtime made below it.
+    overriders: Vec<ObjcArm>,
+    /// The method itself, where nothing else answered.
+    base: ObjcArm,
+}
+
+/// One arm of an [`ObjcDispatch`]: where the receiver is a `tested`, the
+/// method `method` that `owner` implements answers.
+#[derive(Clone, Copy)]
+struct ObjcArm {
+    tested: NodeId,
+    owner: NodeId,
+    method: NodeId,
 }
 
 /// An override of a composable Windows Runtime class, called through its
@@ -43836,207 +43859,163 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expecting(*argument, &ty)?;
             args.push(self.coerce(value, &ty, *argument)?);
         }
-        let overriders = self.objc_overriders(class, &member);
-        if overriders.is_empty() {
+        let Some(dispatch) = self.objc_dispatch(class, method, &member) else {
             return self.push_call(id, Callee::Direct(name), args, Some(method), None);
-        }
-        self.dispatch_over_overriders(id, (name, method), &member, &overriders, args)
+        };
+        self.dispatch_objc_call(id, &member, &dispatch, &args)
     }
 
-    /// The classes the program writes that descend from `class` and override
-    /// its method `member`, deepest first: of any two a receiver is a kind
-    /// of, the first is the nearer its own class, and is the one its method
-    /// is. The program is the whole world a class of its own is overridden
-    /// in -- a binding's classes are Objective-C's, and never subclass one of
-    /// the program's.
-    fn objc_overriders(&self, class: NodeId, member: &str) -> Vec<(NodeId, NodeId)> {
-        let depth = |mut at: NodeId| {
-            let mut depth = 0usize;
-            while let Some(base) = super::native::superclass(self.snapshot, at) {
-                depth += 1;
-                at = base;
+    /// The method named `member` that `class` itself implements: a method
+    /// with a body, not an overload signature or a static one.
+    fn own_method(&self, class: NodeId, member: &str) -> Option<NodeId> {
+        self.children(class).into_iter().find(|child| {
+            self.kind_of(*child) == Some(syntax::METHOD_DECLARATION)
+                && !is_static_member(self.snapshot, *child)
+                && self.member_name(*child).as_deref() == Some(member)
+                && self.children(*child).into_iter().any(|part| self.kind_of(part) == Some(syntax::BLOCK))
+        })
+    }
+
+    /// How a call to `method`, `class`'s method named `member`, dispatches
+    /// over the classes the program writes from `class` down -- the whole
+    /// world a class of the program's is subclassed in, since a binding's
+    /// classes are Objective-C's and never extend one of the program's.
+    /// `None` where no subclass overrides it, and the call is direct.
+    fn objc_dispatch(&self, class: NodeId, method: NodeId, member: &str) -> Option<ObjcDispatch> {
+        let chain = |from: NodeId| std::iter::successors(Some(from), |at| super::native::superclass(self.snapshot, *at)).take(64);
+        let mut exact = Vec::new();
+        let mut overriders = Vec::new();
+        for tested in self.hierarchy.objc_classes.iter().copied().filter(|c| chain(*c).any(|at| at == class)) {
+            // The nearest class from `tested` up to `class` that implements
+            // it: `tested`'s own method, or the one it inherits.
+            let (owner, answering) = chain(tested)
+                .find_map(|at| if at == class { Some((class, method)) } else { self.own_method(at, member).map(|own| (at, own)) })?;
+            let arm = ObjcArm { tested, owner, method: answering };
+            if owner == tested && tested != class {
+                overriders.push((chain(tested).count(), arm));
             }
-            depth
-        };
-        let mut found: Vec<(usize, NodeId, NodeId)> = self
-            .hierarchy
-            .objc_classes
-            .iter()
-            .copied()
-            .filter(|candidate| *candidate != class)
-            .filter(|candidate| {
-                std::iter::successors(super::native::superclass(self.snapshot, *candidate), |at| super::native::superclass(self.snapshot, *at))
-                    .take(64)
-                    .any(|base| base == class)
-            })
-            .filter_map(|candidate| {
-                let overriding = self.children(candidate).into_iter().find(|child| {
-                    self.kind_of(*child) == Some(syntax::METHOD_DECLARATION)
-                        && !is_static_member(self.snapshot, *child)
-                        && self.member_name(*child).as_deref() == Some(member)
-                        // The implementation, not an overload signature.
-                        && self.children(*child).into_iter().any(|part| self.kind_of(part) == Some(syntax::BLOCK))
-                })?;
-                Some((depth(candidate), candidate, overriding))
-            })
-            .collect();
-        found.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.0.cmp(&b.1.0)));
-        found.into_iter().map(|(_, class, method)| (class, method)).collect()
+            exact.push(arm);
+        }
+        if overriders.is_empty() {
+            return None;
+        }
+        // Deepest first: of two overriders a receiver is a kind of, the
+        // deeper is nearer its class, and its method is the one it has.
+        overriders.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.tested.0.cmp(&b.1.tested.0)));
+        let base = ObjcArm { tested: class, owner: class, method };
+        Some(ObjcDispatch { exact, overriders: overriders.into_iter().map(|(_, arm)| arm).collect(), base })
     }
 
-    /// Each class the program writes from `class` down, with the compiled
-    /// method named `member` that class answers with: its own, or the
-    /// nearest ancestor's up to `class`, whose is `method`.
-    fn objc_implementations(&mut self, class: NodeId, method: NodeId, member: &str) -> Result<Vec<(NodeId, String, NodeId)>, Diagnostic> {
-        let below = |candidate: NodeId| {
-            std::iter::successors(Some(candidate), |at| super::native::superclass(self.snapshot, *at)).take(64).any(|at| at == class)
-        };
-        let own = |candidate: NodeId| {
-            self.children(candidate).into_iter().find(|child| {
-                self.kind_of(*child) == Some(syntax::METHOD_DECLARATION)
-                    && !is_static_member(self.snapshot, *child)
-                    && self.member_name(*child).as_deref() == Some(member)
-                    && self.children(*child).into_iter().any(|part| self.kind_of(part) == Some(syntax::BLOCK))
-            })
-        };
-        let mut owners = Vec::new();
-        for candidate in self.hierarchy.objc_classes.iter().copied().filter(|c| below(*c)) {
-            let mut at = candidate;
-            let declaration = loop {
-                if at == class {
-                    break method;
-                }
-                if let Some(declaration) = own(at) {
-                    break declaration;
-                }
-                at = super::native::superclass(self.snapshot, at).ok_or_else(|| self.unsupported(method, "a class outside its base's chain"))?;
-            };
-            owners.push((candidate, at, declaration));
-        }
-        let mut found = Vec::new();
-        for (candidate, owner, declaration) in owners {
-            found.push((candidate, format!("{}#{member}", self.class_name_for(owner, None, false)?), declaration));
-        }
-        Ok(found)
-    }
-
-    /// A call to a method some of the program's subclasses override: asked of
-    /// the receiver's class, overrider by overrider, as the runtime's own
-    /// lookup would answer -- `isKindOfClass:` against each, deepest first,
-    /// and the method `class` declares when none answers. Direct calls in
-    /// every arm, so a method no message could carry (`g(s: string)`)
-    /// dispatches as one the runtime is told of does.
-    fn dispatch_over_overriders(
-        &mut self,
-        id: NodeId,
-        (name, method): (String, NodeId),
-        member: &str,
-        overriders: &[(NodeId, NodeId)],
-        args: Vec<ValueId>,
-    ) -> Result<ValueId, Diagnostic> {
+    /// A call to a method some of the program's subclasses override, at a
+    /// vtable's cost. First the receiver's own class, read once
+    /// (`object_getClass`) and compared with each class the program writes
+    /// below the method's: a load and a compare each, then a direct call of
+    /// the method that class has. Then a class the runtime made below one of
+    /// the program's -- key-value observing's `NSKVONotifying_` subclass --
+    /// asked `isKindOfClass:` of each overrider, deepest first. Then the
+    /// method itself. Every arm is a direct call, so a method no message
+    /// could carry (`g(s: string)`) dispatches as a registered one does.
+    fn dispatch_objc_call(&mut self, id: NodeId, member: &str, dispatch: &ObjcDispatch, args: &[ValueId]) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let receiver = args[0];
         let HirType::NativePointer(pointee) = self.values[receiver.0 as usize].ty.clone() else {
             return Err(self.unsupported(id, "a method of an Objective-C class the program writes on something that is not an object"));
         };
         let class_pointee = super::native::Pointee::Opaque("objc_class".into());
-        let is_kind = std::sync::Arc::new(synthesized(
-            "isKindOfClass:",
-            vec![super::native::Type::Pointer(pointee.clone()), super::native::Type::Pointer(class_pointee.clone())],
-            super::native::Type::Bool,
-            Some(super::native::Send { selector: "isKindOfClass:".to_owned(), class: None, super_of: None }),
-            Vec::new(),
-        ));
-        let class = self.enclosing_class(method).ok_or_else(|| self.unsupported(id, "a method outside a class"))?;
-        let exact = self.objc_implementations(class, method, member)?;
-        let joined = self.new_block();
-        let mut result: Option<ValueId> = None;
-        let mut arm = |this: &mut Self, callee: String, declaration: NodeId, args: Vec<ValueId>| -> Result<(), Diagnostic> {
-            let value = this.push_call(id, Callee::Direct(callee), args, Some(declaration), None)?;
-            let ty = this.values[value.0 as usize].ty.clone();
-            let passed = if ty == HirType::Void {
-                Vec::new()
-            } else {
-                if result.is_none() {
-                    result = Some(this.push_block_param(joined, ty, this.origin(id)));
-                }
-                vec![value]
-            };
-            this.terminate(Terminator::Jump { target: joined, args: passed });
-            Ok(())
-        };
-        // First the object's own class, compared with each class the program
-        // writes below the method's: one load and a compare each, and a
-        // direct call of the method that class has -- its own or the nearest
-        // ancestor's -- which is what a vtable answers.
-        let get_class = std::sync::Arc::new(synthesized(
+        let class_ty = HirType::NativePointer(class_pointee.clone());
+        let get_class = synthesized(
             "object_getClass",
             vec![super::native::Type::Pointer(pointee.clone())],
             super::native::Type::Pointer(class_pointee.clone()),
             None,
             Vec::new(),
+        );
+        let is_kind = std::sync::Arc::new(synthesized(
+            "isKindOfClass:",
+            vec![super::native::Type::Pointer(pointee), super::native::Type::Pointer(class_pointee)],
+            super::native::Type::Bool,
+            Some(super::native::Send { selector: "isKindOfClass:".to_owned(), class: None, super_of: None }),
+            Vec::new(),
         ));
+        let joined = self.new_block();
+        let mut result = None;
         let isa = self.push(
-            OpKind::Call { callee: Callee::Native(get_class), args: vec![receiver], frame: None },
-            HirType::NativePointer(class_pointee.clone()),
+            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(get_class)), args: vec![receiver], frame: None },
+            class_ty.clone(),
             origin.clone(),
         );
-        for (class, callee, declaration) in exact {
-            let runtime_name = super::native::objc_name(self.snapshot, class)
-                .ok_or_else(|| self.unsupported(id, "a class the runtime knows by no name"))?;
-            let class_object = self.push(
-                OpKind::ObjcClass { name: runtime_name, frameworks: Vec::new() },
-                HirType::NativePointer(class_pointee.clone()),
-                origin.clone(),
-            );
-            let same = self.push(OpKind::Binary { op: BinOp::Eq, lhs: isa, rhs: class_object }, HirType::Bool, origin.clone());
-            let (taken, next) = (self.new_block(), self.new_block());
-            self.terminate(Terminator::Branch { cond: same, then_target: taken, then_args: Vec::new(), else_target: next, else_args: Vec::new() });
-            self.switch_to(taken);
-            let owner = self.enclosing_class(declaration).ok_or_else(|| self.unsupported(id, "a method outside a class"))?;
-            let this_ty = instance_type_of(self.snapshot, owner)
-                .and_then(|ty| self.represent(ty))
-                .ok_or_else(|| self.unrepresentable(id, "an overriding method's receiver"))?;
-            let mut exact_args = args.clone();
-            exact_args[0] = self.push(OpKind::Convert(receiver), this_ty, origin.clone());
-            arm(self, callee, declaration, exact_args)?;
-            self.switch_to(next);
+        for arm in &dispatch.exact {
+            let class = self.objc_class_value(id, arm.tested, &class_ty)?;
+            let same = self.push(OpKind::Binary { op: BinOp::Eq, lhs: isa, rhs: class }, HirType::Bool, origin.clone());
+            self.objc_arm(id, member, Some(same), arm, args, (joined, &mut result))?;
         }
-        // Then a class the program did not write -- one the runtime made
-        // below one of the program's, as key-value observing does -- asked
-        // `isKindOfClass:` of each overrider, deepest first.
-        for (class, overriding) in overriders {
-            let runtime_name = super::native::objc_name(self.snapshot, *class)
-                .ok_or_else(|| self.unsupported(id, "an overriding class the runtime knows by no name"))?;
-            let class_object = self.push(
-                OpKind::ObjcClass { name: runtime_name, frameworks: Vec::new() },
-                HirType::NativePointer(class_pointee.clone()),
-                origin.clone(),
-            );
+        for arm in &dispatch.overriders {
+            let class = self.objc_class_value(id, arm.tested, &class_ty)?;
             let kind = self.push(
-                OpKind::Call { callee: Callee::Native(is_kind.clone()), args: vec![receiver, class_object], frame: None },
+                OpKind::Call { callee: Callee::Native(is_kind.clone()), args: vec![receiver, class], frame: None },
                 HirType::Bool,
                 origin.clone(),
             );
-            let (taken, next) = (self.new_block(), self.new_block());
-            self.terminate(Terminator::Branch { cond: kind, then_target: taken, then_args: Vec::new(), else_target: next, else_args: Vec::new() });
-            self.switch_to(taken);
-            let this_ty = instance_type_of(self.snapshot, *class)
-                .and_then(|ty| self.represent(ty))
-                .ok_or_else(|| self.unrepresentable(id, "an overriding method's receiver"))?;
-            // The receiver as the overrider's handle: `isKindOfClass:` just
-            // said it is one, as `instanceof` narrows (`narrowed`).
-            let mut overriding_args = args.clone();
-            overriding_args[0] = self.push(OpKind::Convert(receiver), this_ty, origin.clone());
-            let callee = format!("{}#{member}", self.class_name_for(*class, None, false)?);
-            arm(self, callee, *overriding, overriding_args)?;
-            self.switch_to(next);
+            self.objc_arm(id, member, Some(kind), arm, args, (joined, &mut result))?;
         }
-        arm(self, name, method, args)?;
+        self.objc_arm(id, member, None, &dispatch.base, args, (joined, &mut result))?;
         self.switch_to(joined);
         // A method returning nothing: the placeholder a statement-level call
         // leaves, as every void expression here is.
         Ok(result.unwrap_or_else(|| self.push(OpKind::ConstFloat(0.0), HirType::Void, origin)))
+    }
+
+    /// The class object of `class`, a class the program writes, by the name
+    /// the runtime registered it under.
+    fn objc_class_value(&mut self, id: NodeId, class: NodeId, ty: &HirType) -> Result<ValueId, Diagnostic> {
+        let name = super::native::objc_name(self.snapshot, class).ok_or_else(|| self.unsupported(id, "a class the runtime knows by no name"))?;
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ObjcClass { name, frameworks: Vec::new() }, ty.clone(), origin))
+    }
+
+    /// One arm of [`Self::dispatch_objc_call`]: where `test` holds -- or
+    /// unconditionally, with none -- the receiver as the answering class's
+    /// handle (the test just said it is one, as `instanceof` narrows) and a
+    /// direct call of its method, whose value joins the others at `joined`.
+    fn objc_arm(
+        &mut self,
+        id: NodeId,
+        member: &str,
+        test: Option<ValueId>,
+        arm: &ObjcArm,
+        args: &[ValueId],
+        (joined, result): (BlockId, &mut Option<ValueId>),
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let next = test.map(|cond| {
+            let (taken, next) = (self.new_block(), self.new_block());
+            self.terminate(Terminator::Branch { cond, then_target: taken, then_args: Vec::new(), else_target: next, else_args: Vec::new() });
+            self.switch_to(taken);
+            next
+        });
+        let this_ty = instance_type_of(self.snapshot, arm.owner)
+            .and_then(|ty| self.represent(ty))
+            .ok_or_else(|| self.unrepresentable(id, "an overriding method's receiver"))?;
+        let mut args = args.to_vec();
+        if this_ty != self.values[args[0].0 as usize].ty {
+            args[0] = self.push(OpKind::Convert(args[0]), this_ty, origin.clone());
+        }
+        let callee = format!("{}#{member}", self.class_name_for(arm.owner, None, false)?);
+        let value = self.push_call(id, Callee::Direct(callee), args, Some(arm.method), None)?;
+        let ty = self.values[value.0 as usize].ty.clone();
+        let passed = if ty == HirType::Void {
+            Vec::new()
+        } else {
+            if result.is_none() {
+                *result = Some(self.push_block_param(joined, ty, origin));
+            }
+            vec![value]
+        };
+        self.terminate(Terminator::Jump { target: joined, args: passed });
+        if let Some(next) = next {
+            self.switch_to(next);
+        }
+        Ok(())
     }
 
     fn lower_called_method(

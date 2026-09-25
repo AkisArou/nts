@@ -750,11 +750,11 @@ struct Model<'a> {
     platform: &'static str,
     classes: Vec<Class>,
     protocols: Vec<Protocol>,
-    /// Set while a C function's parameters and result are spelled: there an
-    /// `NSString *` is a `BridgedString`, since a plain `string` is a C
-    /// string outside a message, and a collection is refused, since only a
-    /// message copies one.
-    in_c_function: bool,
+    /// Set while a C function's parameters and result are spelled
+    /// ([`Self::in_c_function`]): there an `NSString *` is a
+    /// `BridgedString`, since a plain `string` is a C string outside a
+    /// message, and a collection is refused, since only a message copies one.
+    c_function: bool,
     /// The protocols this binding declares, by Objective-C name: an `id<P>`
     /// of one is spelled `P`, Swift's `any P`.
     declared_protocols: BTreeSet<String>,
@@ -862,7 +862,7 @@ impl<'a> Model<'a> {
             classes: Vec::new(),
             protocols: Vec::new(),
             declared_protocols: bodies.protocols.keys().cloned().collect(),
-            in_c_function: false,
+            c_function: false,
             mentioned: BTreeMap::new(),
             records: BTreeSet::new(),
             enums: BTreeMap::new(),
@@ -1141,7 +1141,7 @@ impl<'a> Model<'a> {
             Err(why) => class.skipped.push(format!("{shown}: {why}")),
         }
         let initializer = symbol.kind.identifier == "swift.init";
-        let instancetype = decl.get("returnType").map(written).is_some_and(|t| strip_availability(&t).starts_with("instancetype"));
+        let instancetype = decl.get("returnType").map(written).is_some_and(|t| strip_attributes(&t).starts_with("instancetype"));
         if initializer || instancetype {
             reading.repeated.push(origin);
         }
@@ -1240,7 +1240,7 @@ impl<'a> Model<'a> {
         if labels.len() != leading.len() || method_labels.get(..leading.len()) != Some(&labels[..]) {
             return Err("its arguments are labelled otherwise than the handler's method's".to_owned());
         }
-        let written = strip_availability(&written(handler.get("type").ok_or("a handler with no type")?));
+        let written = strip_attributes(&written(handler.get("type").ok_or("a handler with no type")?));
         if !written.contains("(^") {
             return Err("a last parameter that is not a block".to_owned());
         }
@@ -1411,7 +1411,7 @@ impl<'a> Model<'a> {
     }
 
     fn spell(&mut self, class: &Class, ty: &Value, position: Position) -> Spelled {
-        let written = strip_availability(&written(ty));
+        let written = strip_attributes(&written(ty));
         let desugared = desugared(ty).unwrap_or_default();
         let or_null = |text: String| if written.contains("_Nullable") { format!("{text} | null") } else { text };
         if written.contains("(^") || desugared.contains("(^") {
@@ -1478,13 +1478,13 @@ impl<'a> Model<'a> {
             let pointee = pointee.trim_start_matches("__kindof ");
             let base = pointee.split('<').next().unwrap_or_default().trim();
             if base == "NSString" && position != Position::Block {
-                if self.in_c_function {
+                if self.c_function {
                     self.import("objc:types", "BridgedString");
                     return Ok(or_null("BridgedString".to_owned()));
                 }
                 return Ok(or_null("string".to_owned()));
             }
-            if self.in_c_function && position != Position::Block && matches!(base, "NSArray" | "NSDictionary" | "NSSet") {
+            if self.c_function && position != Position::Block && matches!(base, "NSArray" | "NSDictionary" | "NSSet") {
                 return Err(format!("a collection, `{base}`, which a C function passes as the object it is and only a message copies"));
             }
             // Swift's `[T]`: an `NSArray` is copied into a TypeScript array and
@@ -1654,7 +1654,7 @@ impl<'a> Model<'a> {
         }
         // `NS_SWIFT_UI_ACTOR void (^)(BOOL)`: an attribute of the block, not
         // part of its result's type.
-        let result = match strip_availability(result).as_str() {
+        let result = match strip_attributes(result).as_str() {
             "void" => "void".to_owned(),
             result => self.spell(class, &block_part(result, &self.typedefs), Position::Block)?,
         };
@@ -1693,6 +1693,15 @@ impl<'a> Model<'a> {
             }
         };
         Ok(format!("Map<string, {value}>"))
+    }
+
+    /// `spell` a C function's parameters or result: `c_function` for the
+    /// span of `body`, and restored after it whatever it answers.
+    pub(super) fn in_c_function<T>(&mut self, body: impl FnOnce(&mut Self) -> T) -> T {
+        let outer = std::mem::replace(&mut self.c_function, true);
+        let answer = body(self);
+        self.c_function = outer;
+        answer
     }
 
     /// The Swift name of the one protocol `id<P>` names, where this binding
@@ -2091,9 +2100,10 @@ enum Position {
     Block,
 }
 
-/// `API_AVAILABLE(macos(11.0)) NSString *` is how clang writes an annotated
-/// type; the annotation says nothing about how it crosses.
-fn strip_availability(written: &str) -> String {
+/// A type without the attributes clang writes before it: availability
+/// (`API_AVAILABLE(macos(11.0)) NSString *`) and Swift's own
+/// (`NS_SWIFT_UI_ACTOR void`). Neither says anything about how it crosses.
+fn strip_attributes(written: &str) -> String {
     let mut text = written.trim().to_owned();
     // Swift's attributes, which name no type: `NS_SWIFT_UI_ACTOR`,
     // `NS_SWIFT_SENDABLE`, `NS_REFINED_FOR_SWIFT`, each with no arguments.
@@ -2432,6 +2442,30 @@ mod tests {
     #[test]
     fn a_number_is_named_as_swift_names_it() {
         assert_eq!(swift_number("CGFloat", "double"), Some("CGFloat"));
+        // `SWIFT_NUMBERS` is every name `swift_number` answers, and nothing
+        // else: the two say one thing, and a name missing from the list is
+        // a number given a `| null`.
+        let c_types = [
+            ("CGFloat", "double"),
+            ("NSTimeInterval", "double"),
+            ("NSInteger", "long"),
+            ("NSUInteger", "unsigned long"),
+            ("double", "double"),
+            ("float", "float"),
+            ("int", "int"),
+            ("unsigned int", "unsigned int"),
+            ("long", "long"),
+            ("unsigned long", "unsigned long"),
+            ("long long", "long long"),
+            ("unsigned long long", "unsigned long long"),
+            ("short", "short"),
+            ("unsigned short", "unsigned short"),
+            ("char", "char"),
+            ("unsigned char", "unsigned char"),
+        ];
+        let answered: std::collections::BTreeSet<&str> = c_types.iter().filter_map(|(w, d)| swift_number(w, d)).collect();
+        let listed: std::collections::BTreeSet<&str> = SWIFT_NUMBERS.iter().copied().collect();
+        assert_eq!(answered, listed);
         // A class whose name is as short as a number's is still an object.
         assert_eq!(optional_as_swift("UILabel".to_owned(), true), "UILabel | null");
         assert_eq!(optional_as_swift("UInt64".to_owned(), true), "UInt64");
@@ -2877,10 +2911,10 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
 
     #[test]
     fn an_availability_annotation_is_not_part_of_the_type() {
-        assert_eq!(strip_availability("API_AVAILABLE(macos(11.0)) NSString *"), "NSString *");
-        assert_eq!(strip_availability("NSString * _Nonnull"), "NSString * _Nonnull");
-        assert_eq!(strip_availability("NS_SWIFT_UI_ACTOR void"), "void");
-        assert_eq!(strip_availability("NS_SWIFT_NAME(x) API_AVAILABLE(ios(2.0)) BOOL"), "BOOL");
-        assert_eq!(strip_availability("BOOL"), "BOOL");
+        assert_eq!(strip_attributes("API_AVAILABLE(macos(11.0)) NSString *"), "NSString *");
+        assert_eq!(strip_attributes("NSString * _Nonnull"), "NSString * _Nonnull");
+        assert_eq!(strip_attributes("NS_SWIFT_UI_ACTOR void"), "void");
+        assert_eq!(strip_attributes("NS_SWIFT_NAME(x) API_AVAILABLE(ios(2.0)) BOOL"), "BOOL");
+        assert_eq!(strip_attributes("BOOL"), "BOOL");
     }
 }
