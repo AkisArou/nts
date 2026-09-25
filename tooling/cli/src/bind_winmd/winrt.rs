@@ -237,6 +237,8 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
         references: std::collections::BTreeMap::new(),
         spelled: std::collections::BTreeMap::new(),
         generics: Vec::new(),
+        arguments: None,
+        specialized: std::collections::BTreeMap::new(),
         refused: Vec::new(),
         methods: 0,
     };
@@ -304,6 +306,9 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     }
     text.push('\n');
     text.push_str(&body);
+    for specialized in writer.specialized.values() {
+        text.push_str(specialized);
+    }
     text.push_str("}\n");
     Module {
         namespace: namespace.to_owned(),
@@ -329,6 +334,15 @@ struct Writer<'a> {
     spelled: std::collections::BTreeMap<(String, String), String>,
     /// The type parameters of the generic interface being written, by name.
     generics: Vec<String>,
+    /// The type arguments of the instantiation being specialized, which a
+    /// method's signature is read with in place of its parameters.
+    arguments: Option<Vec<Type>>,
+    /// Each instantiation this module names whose interface has members
+    /// that depend on its arguments -- `IAsyncOperation<StorageFile>`'s
+    /// `put_Completed`, whose handler's IID is computed from `StorageFile` --
+    /// by the name it is declared as here, with the declaration. Empty while
+    /// it is being written, which is what its own members naming it find.
+    specialized: std::collections::BTreeMap<String, String>,
     refused: Vec<(String, String)>,
     methods: usize,
 }
@@ -663,12 +677,13 @@ impl Writer<'_> {
     ) -> Result<String, String> {
         // A generic interface's own parameters stand for themselves: the
         // signature reads `T` by its index, and is spelled back by name.
-        let parameters: Vec<Type> = self
-            .generics
-            .iter()
-            .enumerate()
-            .map(|(at, name)| Type::Generic(name.clone(), u16::try_from(at).unwrap_or(u16::MAX)))
-            .collect();
+        let parameters: Vec<Type> = self.arguments.clone().unwrap_or_else(|| {
+            self.generics
+                .iter()
+                .enumerate()
+                .map(|(at, name)| Type::Generic(name.clone(), u16::try_from(at).unwrap_or(u16::MAX)))
+                .collect()
+        });
         let signature = method.signature(&parameters);
         let named = method.params_by_sequence(signature.types.len()).map_err(|_| "a method whose parameters the metadata numbers wrongly".to_owned())?;
         let out = |at: usize| named.params().get(at).copied().flatten().is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out));
@@ -867,7 +882,12 @@ impl Writer<'_> {
                     base
                 } else {
                     let arguments = name.generics.iter().map(|argument| self.type_argument(argument)).collect::<Result<Vec<_>, _>>()?;
-                    format!("{base}<{}>", arguments.join(", "))
+                    let instantiation = format!("{base}<{}>", arguments.join(", "));
+                    if def.category() == TypeCategory::Interface {
+                        self.specialize(def, name, &instantiation).unwrap_or(instantiation)
+                    } else {
+                        instantiation
+                    }
                 };
                 // An object may be null where it is passed, as WinRT's
                 // projections all allow; a result is what C wrote.
@@ -1080,6 +1100,96 @@ impl Writer<'_> {
         let spelled = if declared_here || imported_already { format!("{}_{name}", namespace.replace('.', "_")) } else { name.to_owned() };
         self.spelled.insert(key, spelled.clone());
         spelled
+    }
+}
+
+impl Writer<'_> {
+    /// `IAsyncOperation<StorageFile>` with the members its generic interface
+    /// could not declare, because they depend on its arguments -- a handler
+    /// whose IID is computed from them (`put_Completed`) -- declared for these
+    /// arguments as `IAsyncOperationOfStorageFile`, the instantiation and
+    /// those members together. `None` where every member was declared
+    /// generically, and the instantiation is spelled as it is.
+    fn specialize(&mut self, def: TypeDef, named: &windows_metadata::TypeName, instantiation: &str) -> Option<String> {
+        // Only for arguments that are types: a parameter standing for one
+        // (`IAsyncOperation<TResult>` inside the generic interface) decides
+        // nothing yet.
+        if !named.generics.iter().all(concrete) {
+            return None;
+        }
+        let base = generic_base(&named.name);
+        let alias = format!("{base}Of{}", named.generics.iter().map(word).collect::<String>());
+        if self.specialized.contains_key(&alias) {
+            return Some(alias);
+        }
+        // Marked before anything is spelled: a member naming the
+        // instantiation -- the handler's `asyncInfo` -- finds the name.
+        self.specialized.insert(alias.clone(), String::new());
+        let generics = std::mem::replace(&mut self.generics, def.generic_params().map(|param| param.name().to_owned()).collect());
+        let arguments = self.arguments.take();
+        let this = format!("{base}<{}>", self.generics.join(", "));
+        let generic: Vec<bool> =
+            def.methods().enumerate().map(|(at, method)| self.method(method, 6 + at, Receiver::Instance(&this)).is_ok()).collect();
+        let mut text = String::new();
+        if generic.contains(&false) {
+            self.generics.clear();
+            self.arguments = Some(named.generics.clone());
+            for (at, method) in def.methods().enumerate().filter(|(at, _)| !generic[*at]) {
+                if let Ok(declared) = self.method(method, 6 + at, Receiver::Instance(&alias)) {
+                    text.push_str(&declared);
+                    self.methods += 1;
+                }
+            }
+        }
+        self.generics = generics;
+        self.arguments = arguments;
+        if text.is_empty() {
+            self.specialized.remove(&alias);
+            return None;
+        }
+        let mut declaration = String::new();
+        let _ = writeln!(declaration, "  /** `{instantiation}`, with the members that depend on its arguments. */");
+        let _ = writeln!(declaration, "  export interface {alias}Methods {{");
+        declaration.push_str(&text);
+        let _ = writeln!(declaration, "  }}");
+        let _ = writeln!(declaration, "  export type {alias} = {instantiation} & {alias}Methods;");
+        self.specialized.insert(alias.clone(), declaration);
+        Some(alias)
+    }
+}
+
+/// A type as a word in a specialization's name, as the metadata names it:
+/// `IAsyncOperation<IVectorView<StorageFile>>` is
+/// `IAsyncOperationOfIVectorViewStorageFile`.
+fn word(ty: &Type) -> String {
+    match ty {
+        Type::ClassName(named) => format!("{}{}", generic_base(&named.name), named.generics.iter().map(word).collect::<String>()),
+        Type::ValueName(named) => named.name.clone(),
+        Type::String => "String".to_owned(),
+        Type::Object => "Object".to_owned(),
+        Type::Bool => "Boolean".to_owned(),
+        Type::Char => "Char16".to_owned(),
+        Type::I8 => "Int8".to_owned(),
+        Type::U8 => "UInt8".to_owned(),
+        Type::I16 => "Int16".to_owned(),
+        Type::U16 => "UInt16".to_owned(),
+        Type::I32 => "Int32".to_owned(),
+        Type::U32 => "UInt32".to_owned(),
+        Type::I64 => "Int64".to_owned(),
+        Type::U64 => "UInt64".to_owned(),
+        Type::F32 => "Single".to_owned(),
+        Type::F64 => "Double".to_owned(),
+        other => format!("{other:?}").chars().filter(char::is_ascii_alphanumeric).collect(),
+    }
+}
+
+/// Whether `ty` names no type parameter anywhere in it.
+fn concrete(ty: &Type) -> bool {
+    match ty {
+        Type::Generic(..) => false,
+        Type::ClassName(named) => named.generics.iter().all(concrete),
+        Type::RefMut(inner) | Type::RefConst(inner) | Type::Array(inner) => concrete(inner),
+        _ => true,
     }
 }
 

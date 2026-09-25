@@ -278,7 +278,7 @@ fn winrt_structs_cross_by_value() {
     // A class whose default interface is an instantiation is bound as it,
     // and named where a method answers it.
     assert!(imaging.contains("export type BitmapPropertySet = IMap<HString, IBitmapTypedValue> & BitmapPropertySetInterfaces;"), "{imaging}");
-    assert!(imaging.contains("): IAsyncOperation<BitmapPropertySet>;"), "{imaging}");
+    assert!(imaging.contains("): IAsyncOperationOfBitmapPropertySet;"), "{imaging}");
     assert!(!refused.contains("BitmapPropertySet"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
@@ -319,6 +319,42 @@ fn winrt_byte_arrays_are_lent_in_place() {
     );
     assert!(crypto.contains("function CreateFromByteArray(value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): IBuffer;"), "{crypto}");
     assert!(refused.contains("CryptographicBuffer.CopyToByteArray\tan array"), "{refused}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// An instantiation whose members depend on its arguments -- a handler
+/// whose IID is computed from them -- is declared for those arguments:
+/// `IAsyncOperation<StorageFolder>` is `IAsyncOperationOfStorageFolder`,
+/// with the `put_Completed` its generic interface could not declare. The IID
+/// is the one Windows accepted in `examples/interop/windows-winrt`, where a
+/// wrong one kept the completion from ever arriving.
+#[test]
+fn an_instantiation_declares_the_members_its_arguments_decide() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-specialized-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Storage", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let storage = std::fs::read_to_string(out.join("Windows.Storage.d.ts")).unwrap();
+    assert!(storage.contains("GetFolderFromPathAsync(this: IStorageFolderStatics, path: HString): IAsyncOperationOfStorageFolder;"), "{storage}");
+    assert!(
+        storage.contains("export type IAsyncOperationOfStorageFolder = IAsyncOperation<IStorageFolder> & IAsyncOperationOfStorageFolderMethods;"),
+        "{storage}"
+    );
+    assert!(
+        storage.contains(
+            "put_Completed(this: IAsyncOperationOfStorageFolder, handler: Delegate<(asyncInfo: IAsyncOperationOfStorageFolder, asyncStatus: CEnum<AsyncStatus, c_int32>) => void, \"C211026E-9E63-5452-BA54-3A07D6A96874\">): void;"
+        ),
+        "{storage}"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 
