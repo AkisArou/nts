@@ -2463,6 +2463,12 @@ const RUNTIME_HANDS_BACK: &[&str] = &[
     "nts_array_fill_foreign",
     "nts_array_reverse",
     "nts_array_reverse_ref",
+    // Missing from here until 2026-09-25, while it returned through
+    // `nts_array_same` like the rest: every `xs.sort()` released the array
+    // twice. Both releases came after the last read while a release waited
+    // for the block's end; releasing at the last use freed the array before
+    // `xs[1]` read it.
+    "nts_array_sort_str",
     "nts_map_set",
     "nts_set_add",
 ];
