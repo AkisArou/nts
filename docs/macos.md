@@ -117,6 +117,35 @@ A button's action is Swift's `#selector(Notes.add(_:))`:
 the compiler answers the selector the runtime registered it under (`add:`).
 A binding's class answers its method's own: `selector(NSWindow, "close")`.
 
+## An application
+
+An application delegate is a class like any other, and a menu item's action
+is a selector, as a button's is:
+
+```ts
+class AppDelegate extends NSObject implements NSApplicationDelegate {
+  constructor(private readonly started: () => void) {
+    super();
+  }
+
+  applicationDidFinishLaunching(notification: NSNotification): void {
+    this.started();
+  }
+}
+
+const menu = new NSMenu({ title: "Notes" });
+const item = new NSMenuItem({ title: "Add", action: selector(Notes, "add"), keyEquivalent: "n" });
+item.target = notes;
+menu.addItem(item);
+app.mainMenu = menu;
+app.delegate = new AppDelegate(() => { /* what the application does once launched */ });
+app.run();
+```
+
+`examples/interop/macos-notes` is such an application, and
+`reference/notes.swift` beside it is the same program in Swift. Its
+output is compared with the TypeScript program's, line for line.
+
 ## Drawing
 
 Bind the Core Graphics classes beside AppKit (`--framework CoreGraphics
