@@ -46,13 +46,16 @@
 //   providers -- the handler captures `reference`, which holds the delegate,
 //   which holds the handler: the cycle an event handler that captures its
 //   source makes in every language with counted references.
-import { activations, asked, delegates, invoke_elsewhere, releases, report } from "c:report";
+import { activations, asked, delegates, invoke_elsewhere, pending, releases, report } from "c:report";
 // Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import { local } from "c:memory";
 import type { c_int64, c_uint32 } from "c:types";
 import { GuidHelper, MemoryBuffer } from "winrt:Windows.Foundation";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
+import { ThreadPool } from "winrt:Windows.System.Threading";
+import type { IAsyncAction } from "winrt:Windows.Foundation";
+import { nts_pending_begin, nts_pending_end } from "c:pending";
 import type { DateTime } from "winrt:Windows.Foundation";
 import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
 import { BitmapTransform } from "winrt:Windows.Graphics.Imaging";
@@ -243,7 +246,59 @@ function threaded(): void {
   }, 1000);
 }
 
-if (asked("thread")) {
+// Run as `winrt async`: an `IAsyncAction` as a Promise, written the way a
+// binding's generated one will be. The action's `Completed` comes from the
+// thread pool and is carried here; the operation is outstanding
+// (`nts_pending_begin`) from its start to its completion, which keeps the
+// program running until then, and a start that fails ends it as well. The
+// handler reads the action it is given rather than capturing it: the action
+// holds the handler, and a capture would make a cycle. `GetResults` answers
+// the action's own HRESULT, which a failed one throws.
+function awaitAction(action: IAsyncAction): Promise<number> {
+  return new Promise((resolve, reject) => {
+    nts_pending_begin();
+    try {
+      action.put_Completed((info, status) => {
+        nts_pending_end();
+        try {
+          info.GetResults();
+          resolve(status);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    } catch (error) {
+      nts_pending_end();
+      reject(error);
+    }
+  });
+}
+
+// A work item handed to the thread pool runs here, carried, and so after
+// its action has completed -- WinRT counts it done when its `Invoke`
+// returns -- which is why nothing here reads what it did. The second
+// `put_Completed` on one action is refused (E_ILLEGAL_DELEGATE_ASSIGNMENT):
+// a start that fails, whose operation must not stay outstanding.
+async function awaited(): Promise<string> {
+  const status = await awaitAction(ThreadPool.RunAsync(() => {}));
+  const action = ThreadPool.RunAsync(() => {});
+  action.put_Completed(() => {});
+  let refused = "nothing";
+  try {
+    await awaitAction(action);
+  } catch (error) {
+    refused = (error as Error).message.slice(0, 18);
+  }
+  return "status=" + String(status) + " refused=" + refused + " pending=" + String(pending());
+}
+
+async function reportAwaited(): Promise<void> {
+  report(await awaited());
+}
+
+if (asked("async")) {
+  void reportAwaited();
+} else if (asked("thread")) {
   threaded();
 } else {
   const line = run();

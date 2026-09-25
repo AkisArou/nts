@@ -107,6 +107,24 @@ for provider in nogc rc; do
       *) cat "$build/windows-$product-throw.err" >&2; echo "windows-winrt: $product throw ($provider) exited $status on Windows, not 1" >&2; exit 1 ;;
     esac
   done
+  # Run as `async`, an `IAsyncAction` as a Promise: the completion comes from
+  # the thread pool, the program waits for it, and a start WinRT refuses
+  # rejects and leaves nothing outstanding.
+  for product in winrt winrtLlvm; do
+    exe="$build/$product/windows-x86_64/$product.exe"
+    set +e
+    "$root/tooling/windows/run.sh" "$exe" async >"$build/windows-$product-async.txt" 2>"$build/windows-$product-async.err"
+    status=$?
+    set -e
+    case $status in
+      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      0)
+        printf 'status=1 refused=HRESULT 0x80000018 pending=0\n' | diff -u - "$build/windows-$product-async.txt"
+        echo "windows-x86_64 ($product, $provider): an IAsyncAction settles a Promise, run on Windows"
+        ;;
+      *) cat "$build/windows-$product-async.err" >&2; echo "windows-winrt: $product async ($provider) exited $status on Windows" >&2; exit 1 ;;
+    esac
+  done
   # Run as `thread`, a delegate called and released last on a thread the
   # program does not own: both carried to the owning thread, where the
   # handler reports with the object it was given, and the delegate is gone

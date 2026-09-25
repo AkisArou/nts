@@ -9,6 +9,8 @@ declare module "c:report" {
   export function asked(word: string): boolean;
   // How many delegates the program made are still alive.
   export function delegates(): c_uint;
+  // How many operations the program awaits are outstanding.
+  export function pending(): c_uint;
   // Calls `handler` with `sender` on a thread of its own after 100 ms, and
   // releases both there 300 ms later.
   export function invoke_elsewhere(

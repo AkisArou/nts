@@ -46,6 +46,10 @@ unsigned delegates(void) {
   return nts_com_delegates();
 }
 
+unsigned pending(void) {
+  return nts_pending_count();
+}
+
 #ifdef _WIN32
 #include <windows.h>
 
