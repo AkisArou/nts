@@ -332,6 +332,16 @@ size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
   return (size_t)data->type;
 }
 
+void nts_gobject_made(void *object) {
+#ifndef NTS_PROVIDER_RC
+  if (object != NULL && g_object_is_floating(object)) {
+    g_object_ref_sink(object);
+  }
+#else
+  (void)object;
+#endif
+}
+
 void *nts_gobject_state(void *instance) {
   NtsGObjectClassData *class =
       nts_gobject_class_of(G_TYPE_FROM_INSTANCE(instance));

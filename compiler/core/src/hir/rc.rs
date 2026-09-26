@@ -357,8 +357,9 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
 }
 
 /// Whether every use of a value is an `Erase` of it, or of a view of it (a
-/// `Convert` to another counted type, the same object): a foreign object only
-/// ever handed to nts's own slots. `map.set(k, new NSObject())` is the shape,
+/// `Convert` to another counted type, the same object) -- or a read by a
+/// runtime helper that keeps nothing: a foreign object only ever handed to
+/// nts's own slots. `map.set(k, new NSObject())` is the shape,
 /// whose temporary ARC gives back at the end of the statement, and which the
 /// box this erasure replaced consumed.
 ///
@@ -385,9 +386,14 @@ fn only_erased(func: &Func, value: ValueId) -> bool {
             if matches!(op.kind, OpKind::Retain(_) | OpKind::Release(_)) || !super::operands_of(&op.kind).contains(&at) {
                 continue;
             }
-            match op.kind {
-                OpKind::Erase { value: erasing, .. } if erasing == at => erased = true,
+            match &op.kind {
+                OpKind::Erase { value: erasing, .. } if *erasing == at => erased = true,
                 OpKind::Convert(_) if op.ty.counting().is_some() => views.push(ValueId(u32::try_from(index).unwrap_or(u32::MAX))),
+                // A runtime helper that keeps none of its arguments reads the
+                // object and holds nothing (`runtime::keeps`) -- `nts_gobject_made`,
+                // which a construction calls -- so nothing on the platform's
+                // side can be holding it through that use.
+                OpKind::Call { callee: super::Callee::External(name), .. } if super::runtime::keeps(name).is_some_and(<[usize]>::is_empty) => {}
                 _ => return false,
             }
         }

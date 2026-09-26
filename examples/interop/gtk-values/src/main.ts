@@ -32,11 +32,14 @@
 //                 button's last reference gives it back (`alive alive` without
 //                 counting). Before, a container's death visited only managed
 //                 references, and a tagged handle is not one
+//   kept          a label the program made and names, taken out of the list
+//                 box that held it and put back: still the label, plain and
+//                 under counting (`nts_gobject_made`)
 //   copies c gone  an element read from an `unknown` proven an array owns a
 //                 reference of its own, and the button goes with the array
 //                 (`alive` without counting). The read retained managed
 //                 references only, so its release was one too many
-import { GtkButton, GtkLabel, gtk_init } from "c:Gtk-4.0";
+import { GtkButton, GtkLabel, GtkListBox, gtk_init } from "c:Gtk-4.0";
 import { sub_gone, sub_log, sub_watch } from "c:sub";
 
 function describe(x: unknown): string {
@@ -153,6 +156,23 @@ function copies(): string {
   return made + " " + (sub_gone() ? "gone" : "alive");
 }
 
+// A widget the program made and still names, taken out of the only GTK
+// container holding it and put back: the program's own reference keeps it,
+// whatever the provider. Born floating, it was the list box's row's alone
+// without counting, and `set_child(null)` finalized it (react-gtk's `list`).
+function kept(): string {
+  const list = new GtkListBox();
+  const label = new GtkLabel({ label: "k" });
+  list.append(label);
+  const row = list.get_row_at_index(0);
+  if (row === null) return "no-row";
+  row.set_child(null);
+  list.remove(row);
+  list.insert(label, 0);
+  const again = list.get_row_at_index(0);
+  return again !== null && again.get_child() === label ? "kept" : "lost";
+}
+
 function main(): void {
   gtk_init();
   const b = new GtkButton({ label: "b" });
@@ -185,6 +205,7 @@ function main(): void {
   sub_log("temporary " + temporary());
   sub_log("dropped " + dropped());
   sub_log("copies " + copies());
+  sub_log(kept());
 }
 
 main();

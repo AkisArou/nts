@@ -24,7 +24,7 @@ for mode in plain rc; do
   dropped="alive alive"
   copies="alive"
   [ "$mode" = rc ] && watch="held gone" && dropped="gone gone" && copies="gone"
-  expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch temporary $watch dropped $dropped copies c $copies "
+  expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch temporary $watch dropped $dropped copies c $copies kept "
   flag=""
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086

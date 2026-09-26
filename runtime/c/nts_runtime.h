@@ -1866,6 +1866,16 @@ void *nts_objc_state(void *self);
  * which only a program registering such a class links, and declared here for
  * the one table every backend reads, as `nts_objc_state` is. */
 void *nts_gobject_state(void *instance);
+
+/* A GObject the program has just made with a binding's constructor. Without
+ * reference counting the program never retains a handle, so a widget born
+ * floating would belong to the first container it is put in, and be
+ * finalized when that container lets go while a TypeScript name still holds
+ * it: the program takes the floating reference here instead, and never gives
+ * it back, as it gives back nothing else. Under counting it does nothing: the
+ * program's first retain is `g_object_ref_sink` already. Defined by
+ * `nts_gobject.c`, declared here beside `nts_gobject_state`. */
+void nts_gobject_made(void *object);
 /* That a registered class adopts `protocol` (`implements NSWindowDelegate`),
  * so `conformsToProtocol:` answers for it. A protocol no loaded image
  * mentions has no runtime object, and adopting it is skipped: nothing could

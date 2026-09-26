@@ -28658,6 +28658,13 @@ impl<'a> FuncBuilder<'a> {
         written: &[SetProperty],
         except: &[&str],
     ) -> Result<(), Diagnostic> {
+        // A GObject made here is the program's to keep, whatever the
+        // provider: floating, it would be the first container's
+        // (`nts_gobject_made`).
+        if matches!(&self.values[handle.0 as usize].ty, HirType::NativePointer(pointee) if pointee.family() == Some(super::native::Family::GObject)) {
+            let origin = self.origin(id);
+            self.runtime_call("nts_gobject_made", vec![handle], HirType::Void, origin);
+        }
         for SetProperty { name, value, node, present, unerase } in written.iter().filter(|written| !except.contains(&written.name.as_str())) {
             let setter = super::native::schema::property(self.snapshot, ty, name)
                 .and_then(|record| record.declaration)

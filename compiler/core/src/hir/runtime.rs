@@ -491,7 +491,9 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // delegate through the source, never the program's reference.
         // `own::held_to_the_end` reads these as borrows, so the object keeps
         // its anchor.
-        "nts_com_take" | "nts_com_query" | "nts_winrt_listen" | "nts_winrt_unlisten" => Some(&[]),
+        // And `nts_gobject_made`, which sinks a floating GObject for a
+        // never-free program and does nothing under counting: read, not held.
+        "nts_com_take" | "nts_com_query" | "nts_winrt_listen" | "nts_winrt_unlisten" | "nts_gobject_made" => Some(&[]),
         _ => None,
     }
 }
