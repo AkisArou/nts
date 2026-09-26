@@ -2115,7 +2115,6 @@ react_sources() {
     node runtime/react/tools/gen-jsx-entities.ts --check
 }
 step "react-sources" react_sources
-step "interop" interop
 
 # The 152 fixtures in `tooling/conformance/blockers`, which nothing ran.
 #
@@ -2178,6 +2177,24 @@ blockers() {
 # cases it compiles; nothing else here depends on anything else here.
 jobs=$(( jobs > 4 ? 4 : jobs ))
 concurrently profile sweep llvm llvm-rc jvm dex on-device bench-agree examples rc memory addons blockers divergence
+# **Last, and that position is the whole of what this comment is for.** `step` exits
+# the gate on a failure, which is right for the cheap early ones -- a run whose build
+# or clippy failed has nothing worth reading after it. `interop` is neither cheap nor
+# deterministic: it drives real windows on real VMs, and two of its examples have
+# raced a timer against a callback on main this week ("two event sources started side
+# by side have no order").
+#
+# Sitting *before* the concurrent group, one such flake exited the gate and cost the
+# verdicts of all fourteen steps in it -- including `rc` and `memory`, the two that
+# matter most for a lifetime change, on the one run where I had just landed one. An
+# hour of machine time and no answer to the question the run was asked.
+#
+# Moved rather than made non-fatal: a flaky step should cost *itself*, and the
+# fourteen steps that had already been paid for should report. It is not put *into*
+# the group, deliberately -- the group runs four at a time and contention is what
+# makes a timer race race, so parallelising `interop` would make it flakier rather
+# than cheaper.
+step "interop" interop
 # Every node module built as an addon and *loaded*, under eager binding.
 #
 # The gap this fills was open for the whole of 2026-09-09 and had a crash in it.
