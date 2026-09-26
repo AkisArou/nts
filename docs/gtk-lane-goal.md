@@ -1434,6 +1434,49 @@ The task-list rows' upper ends are the `Task`-object version, from a
 `run.sh` pass at load average 7 rising to 14. The micro rows of that pass
 matched the table above, each within its range.
 
+**The journal** (`examples/interop/gtk-journal`, and `gjs/journal.js` line
+for line) is the first application that uses every surface at once. It is
+a libadwaita window with:
+- a sidebar `GtkListView` over a filter model and a sort model, whose
+  filter and sorter are TypeScript closures;
+- an `EntryView extends AdwBin` built from a template, whose fields are
+  bound both ways to an `Entry extends GObject` of `Property` fields;
+- a cairo chart whose counts are the program's own aggregation;
+- actions, a menu and accelerators;
+- Gio stream I/O.
+
+A scripted workload drives it headless over 5000 seeded entries: load,
+twenty searches, ten sort toggles, 200 additions each edited through the
+bound title, fifty chart frames, a delete, then a save. It prints counts, the
+sort's head, the chart's peak and the saved file's bytes, which must match
+GJS's log before anything is timed, and one `ms` line per phase. The chart's
+line is the time spent inside the draw function. The frames themselves are
+paced by a 16 ms timer, so the phase's wall clock measured the pacing, about
+800 ms on both sides.
+
+Writing it found, in the order the compiler reported them:
+- a class whose only thunks were property notifications had its `GType`
+  undeclared. `registered` is now shared by both backends and counts those
+  thunks;
+- `new EntryView()` in another module made an `AdwBin`: `gobject_new`
+  resolved the class without following the import;
+- `await file.load_contents_async(null)` settled as `[gboolean,
+  Uint8Array]`. The Promise form now settles through the values form, which
+  drops a throwing function's `gboolean`;
+- `JSON` and `TextEncoder` are unsupported in core (reported), so the file is
+  tab-separated lines read with `read_line_utf8`;
+- `g_list_store_splice` is refused as an array, so loading appends one entry
+  at a time.
+
+**Where its time goes** (`perf record -e cycles:u`, the `--rc` C build):
+- `g_list_store_append` is 12.8% inclusive: each append re-runs the sort
+  and filter models. An idiomatic load is one `splice`, which is the next
+  binding to build.
+- GTK's EGL probe at startup (`dlopen` of the GL driver) is 11%, and GJS
+  pays it too.
+- The chart's `monthly` is 7.2% inclusive.
+- The program's own code is 3.7% exclusive.
+
 **Next in M4:** the reference counting cost in the filter's profile
 (`nts_retain` and the cycle collector), checked against a plain build on a
 quiet machine; and the `outs` row, whose gap to C is the tuple allocation,
