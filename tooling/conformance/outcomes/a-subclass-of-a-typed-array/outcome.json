@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: own subclass=true,true;Int8Array subclass=false,true;Float64Array subclass=false,true;",
+  "node": "exit 1; nts: uncaught Observed: own subclass=true,true;Int8Array subclass=true,true;Float64Array subclass=true,true;",
+  "measured_with": "7c81431aeb74f915",
+  "source": "measured"
+}
