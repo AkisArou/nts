@@ -109,7 +109,12 @@ for provider in nogc rc; do
   done
   # Run as `async`, an `IAsyncAction` as a Promise: the completion comes from
   # the thread pool, the program waits for it, and a start WinRT refuses
-  # rejects and leaves nothing outstanding.
+  # rejects and leaves nothing outstanding. Then an `IAsyncOperation` awaited
+  # as itself, through the `then` its binding declares, which afterwards still
+  # reports its status: `completed=1` is `AsyncStatus.Completed`. Awaited a
+  # second time it rejects, as the operation refuses a second `Completed`
+  # (0x80000018), and one that fails -- a folder that is not there -- rejects
+  # with its own error (0x80070002).
   for product in winrt winrtLlvm; do
     exe="$build/$product/windows-x86_64/$product.exe"
     set +e
@@ -119,8 +124,8 @@ for provider in nogc rc; do
     case $status in
       77) echo "SKIP windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
       0)
-        printf 'status=1 refused=HRESULT 0x80000018 folder=Windows pending=0\n' | diff -u - "$build/windows-$product-async.txt"
-        echo "windows-x86_64 ($product, $provider): an IAsyncAction settles a Promise, run on Windows"
+        printf 'status=1 refused=HRESULT 0x80000018 folder=Windows completed=1 again=HRESULT 0x80000018 missing=HRESULT 0x80070002 pending=0\n' | diff -u - "$build/windows-$product-async.txt"
+        echo "windows-x86_64 ($product, $provider): an IAsyncAction settles a Promise, and an IAsyncOperation is awaited as itself, run on Windows"
         ;;
       *) cat "$build/windows-$product-async.err" >&2; echo "windows-winrt: $product async ($provider) exited $status on Windows" >&2; exit 1 ;;
     esac

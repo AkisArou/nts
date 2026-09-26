@@ -174,6 +174,15 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
         let namespace = &module.namespace.clone();
         let path = out.join(format!("{namespace}.d.ts"));
         std::fs::write(&path, &module.text).with_context(|| format!("writing {path}"))?;
+        // Written where there is one and removed where there is not, so a
+        // namespace that stopped declaring a `then` leaves no function behind
+        // for a stale `@ntsCall` to find.
+        let values_path = out.join(format!("{namespace}.values.ts"));
+        match &module.values {
+            Some(values) => std::fs::write(&values_path, values).with_context(|| format!("writing {values_path}"))?,
+            None if values_path.is_file() => std::fs::remove_file(&values_path).with_context(|| format!("removing {values_path}"))?,
+            None => {}
+        }
         let refused = module.refused.iter().fold(String::new(), |mut text, (what, why)| {
             let _ = writeln!(text, "{what}\t{why}");
             text
@@ -191,6 +200,11 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
     }
     Ok(lines)
 }
+
+/// The brands `c:types` declares, beside its `c_` scalars.
+const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "ConstPtr"];
+/// The brands `winrt:types` declares.
+const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
 /// The namespace a `winrt:` module names.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
@@ -220,6 +234,9 @@ pub(crate) struct Module {
     /// included, which a module bound only in part must then declare.
     pub(crate) references: std::collections::BTreeMap<String, BTreeSet<String>>,
     pub(crate) text: String,
+    /// The values module beside it, where it declares a `then`: the functions
+    /// those `then`s name.
+    pub(crate) values: Option<String>,
     pub(crate) refused: Vec<(String, String)>,
     pub(crate) interfaces: usize,
     pub(crate) classes: usize,
@@ -239,6 +256,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
         generics: Vec::new(),
         arguments: None,
         specialized: std::collections::BTreeMap::new(),
+        thens: std::collections::BTreeMap::new(),
         refused: Vec::new(),
         methods: 0,
         bases: default_interface_bases(index, namespace),
@@ -288,11 +306,11 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     let _ = writeln!(text, "// as the metadata names that slot; the compiler refuses the two disagreeing.");
     let _ = writeln!(text, "declare module \"winrt:{namespace}\" {{");
     let c_types: Vec<&str> =
-        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || matches!(*brand, "CEnum" | "CNumber" | "Struct" | "ByValue" | "Fields" | "Counted" | "CBytes" | "ConstPtr")).collect();
+        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || C_BRANDS.contains(brand)).collect();
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
-    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable" | "Inspectable" | "Delegate" | "Event" | "EventRegistrationToken" | "Guid")).collect();
+    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| WINRT_BRANDS.contains(brand)).collect();
     if !winrt.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
     }
@@ -312,10 +330,12 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
         text.push_str(specialized);
     }
     text.push_str("}\n");
+    let values = writer.values(command);
     Module {
         namespace: namespace.to_owned(),
         references: writer.references,
         text,
+        values,
         refused: writer.refused,
         interfaces,
         classes,
@@ -351,6 +371,10 @@ struct Writer<'a> {
     /// by the name it is declared as here, with the declaration. Empty while
     /// it is being written, which is what its own members naming it find.
     specialized: std::collections::BTreeMap<String, String>,
+    /// Each async operation this module declares a `then` for, by its
+    /// specialisation's name, with its result as this module spells it: what
+    /// the values module's function for it is written from.
+    thens: std::collections::BTreeMap<String, String>,
     refused: Vec<(String, String)>,
     methods: usize,
 }
@@ -402,10 +426,19 @@ impl Writer<'_> {
             }
         }
         // The interfaces this one requires, which every object implementing
-        // it answers: `reference.as_IClosable()`. A generic interface's
-        // depend on its parameters, whose IIDs are not known here.
-        if self.generics.is_empty() {
-            let required: Vec<Type> = def.interface_impls().map(|implemented| implemented.interface(&[])).collect();
+        // it answers: `reference.as_IClosable()`. A generic interface's that
+        // are themselves generic depend on its parameters, whose IIDs are not
+        // known here; one that is not has its own IID whatever the arguments
+        // are -- `IAsyncOperation<T>` answers `IAsyncInfo` -- and is declared.
+        {
+            // Read with the interface's own parameters in place, which is
+            // what an `IIterable<T>` required of `IVector<T>` refers to.
+            let own = self.signature_arguments();
+            let required: Vec<Type> = def
+                .interface_impls()
+                .map(|implemented| implemented.interface(&own))
+                .filter(|interface| self.generics.is_empty() || matches!(interface, Type::ClassName(named) if named.generics.is_empty()))
+                .collect();
             methods.push_str(&self.queries(name, &this, &required));
         }
         self.brands.insert("ComClass");
@@ -1672,6 +1705,9 @@ impl Writer<'_> {
             self.specialized.remove(&alias);
             return None;
         }
+        if let Some(then) = self.then(def, named, &alias) {
+            text.push_str(&then);
+        }
         let mut declaration = String::new();
         let _ = writeln!(declaration, "  /** `{instantiation}`, with the members that depend on its arguments. */");
         let _ = writeln!(declaration, "  export interface {alias}Methods {{");
@@ -1681,6 +1717,159 @@ impl Writer<'_> {
         self.specialized.insert(alias.clone(), declaration);
         Some(alias)
     }
+}
+
+impl Writer<'_> {
+    /// `then` for an async operation's specialisation, which makes the
+    /// operation itself awaitable: `await StorageFolder.getFolderFromPathAsync(p)`
+    /// is the folder, and the operation keeps its `IAsyncInfo` -- status, id,
+    /// cancel -- as C#'s `await` on one does, where a separate call returning a
+    /// promise would lose it.
+    ///
+    /// Named with `@ntsCall`, to the function the values module declares for
+    /// this specialisation, which subscribes `Completed`: only it can, because
+    /// the handler's IID is computed from the result type. The compiler
+    /// resolves a promise with the operation through it, as the specification
+    /// resolves any thenable. `None` for every other instantiation, and for an
+    /// operation whose result could not be spelled.
+    fn then(&mut self, def: TypeDef, named: &windows_metadata::TypeName, alias: &str) -> Option<String> {
+        let base = generic_base(&named.name);
+        if def.namespace() != "Windows.Foundation" || !matches!(base, "IAsyncOperation" | "IAsyncOperationWithProgress") {
+            return None;
+        }
+        let argument = named.generics.first()?;
+        // A struct result is read into a native local, whose address a
+        // callback cannot be handed: the compiler refuses the escape, so no
+        // `then` is declared that it would refuse, and the refusal says why.
+        if let Type::ValueName(result) = argument
+            && self.find(&result.namespace, &result.name).is_ok_and(|def| def.category() == TypeCategory::Struct)
+        {
+            self.refuse(
+                &format!("{alias}.then"),
+                "an operation whose result is a struct, which is read into a native local that a callback cannot be handed",
+            );
+            return None;
+        }
+        let result = self.type_argument(argument).ok()?;
+        self.thens.insert(alias.to_owned(), result.clone());
+        let mut text = String::new();
+        let _ = writeln!(text, "    /**");
+        let _ = writeln!(text, "     * `await operation`: its result, or the error it completes with.");
+        let _ = writeln!(text, "     * @ntsCall {}", then_function(alias));
+        let _ = writeln!(text, "     */");
+        let _ = writeln!(
+            text,
+            "    then(this: {alias}, onFulfilled: (value: {result}) => unknown, onRejected: (reason: unknown) => unknown): void;"
+        );
+        Some(text)
+    }
+
+    /// The values module: one function for each `then` this module declares,
+    /// importing exactly the names its functions spell, spelled as the
+    /// declarations spell them. `None` where it declares none.
+    fn values(&self, command: &str) -> Option<String> {
+        if self.thens.is_empty() {
+            return None;
+        }
+        // Decided by the status the handler is given, as C++/WinRT's and C#'s
+        // awaiters decide it: `Completed` fulfils with `GetResults`; `Canceled`
+        // rejects with an `Error` named "Canceled", which is what the Windows
+        // Runtime's JavaScript projection rejects a cancelled operation with --
+        // `GetResults` would answer E_ILLEGAL_METHOD_CALL, which describes the
+        // call rather than the cancellation (measured); and `Error` rejects
+        // with what `GetResults` fails with, the operation's own error, thrown
+        // as every failed HRESULT is. The
+        // callbacks are function values, so neither is called inside a `try`:
+        // a throw from one could not reach its handler.
+        let mut functions = String::new();
+        for (alias, result) in &self.thens {
+            let function = then_function(alias);
+            let _ = writeln!(functions);
+            let _ = writeln!(functions, "export function {function}(");
+            let _ = writeln!(functions, "  operation: {alias},");
+            let _ = writeln!(functions, "  onFulfilled: (value: {result}) => unknown,");
+            let _ = writeln!(functions, "  onRejected: (reason: unknown) => unknown,");
+            let _ = writeln!(functions, "): void {{");
+            let _ = writeln!(functions, "  nts_pending_begin();");
+            let _ = writeln!(functions, "  try {{");
+            let _ = writeln!(functions, "    operation.put_Completed((completed, status) => {{");
+            let _ = writeln!(functions, "      nts_pending_end();");
+            let _ = writeln!(functions, "      if (status === AsyncStatus.Completed) {{");
+            let _ = writeln!(functions, "        onFulfilled(completed.GetResults());");
+            let _ = writeln!(functions, "        return;");
+            let _ = writeln!(functions, "      }}");
+            let _ = writeln!(functions, "      if (status === AsyncStatus.Canceled) {{");
+            let _ = writeln!(functions, "        const canceled = new Error(\"Canceled\");");
+            let _ = writeln!(functions, "        canceled.name = \"Canceled\";");
+            let _ = writeln!(functions, "        onRejected(canceled);");
+            let _ = writeln!(functions, "        return;");
+            let _ = writeln!(functions, "      }}");
+            let _ = writeln!(functions, "      try {{");
+            let _ = writeln!(functions, "        completed.GetResults();");
+            let _ = writeln!(functions, "      }} catch (error) {{");
+            let _ = writeln!(functions, "        onRejected(error);");
+            let _ = writeln!(functions, "        return;");
+            let _ = writeln!(functions, "      }}");
+            let _ = writeln!(functions, "      onRejected(new Error(\"the operation ended \" + String(status) + \" and GetResults did not fail\"));");
+            let _ = writeln!(functions, "    }});");
+            let _ = writeln!(functions, "  }} catch (error) {{");
+            let _ = writeln!(functions, "    nts_pending_end();");
+            let _ = writeln!(functions, "    onRejected(error);");
+            let _ = writeln!(functions, "  }}");
+            let _ = writeln!(functions, "}}");
+        }
+        // The names the functions use, as identifiers: only these are
+        // imported, from wherever the declarations import them.
+        // `AsyncStatus` is imported as a value below, since the functions read
+        // it at run time, so it is not one of these.
+        let used: BTreeSet<&str> = functions
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .filter(|word| word.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_'))
+            .filter(|word| *word != "AsyncStatus")
+            .collect();
+        let mut text = String::new();
+        let _ = writeln!(text, "// Generated by `{command}` beside the binding of `winrt:{}`. Edit the command, not this file.", self.namespace);
+        let _ = writeln!(text, "//");
+        let _ = writeln!(text, "// Each async operation's `then`, which its binding names with `@ntsCall`:");
+        let _ = writeln!(text, "// `Completed` subscribed, and the result or the failure handed on. Pending");
+        let _ = writeln!(text, "// from the subscription to the completion, so the event loop waits for it.");
+        let _ = writeln!(text, "// Subscribing twice is refused by the operation (E_ILLEGAL_DELEGATE_ASSIGNMENT),");
+        let _ = writeln!(text, "// so a second `await` of one operation rejects with that.");
+        let _ = writeln!(text, "import {{ nts_pending_begin, nts_pending_end }} from \"c:pending\";");
+        let _ = writeln!(text, "import {{ AsyncStatus }} from \"winrt:Windows.Foundation\";");
+        for (module, brands) in [("c:types", C_BRANDS), ("winrt:types", WINRT_BRANDS)] {
+            let scalars = used.iter().copied().filter(|word| module == "c:types" && word.starts_with("c_"));
+            let names: Vec<&str> = brands.iter().copied().filter(|brand| used.contains(brand)).chain(scalars).collect();
+            if !names.is_empty() {
+                let _ = writeln!(text, "import type {{ {} }} from \"{module}\";", names.join(", "));
+            }
+        }
+        // The specialisations are this module's own declarations, imported
+        // with the other names it declares.
+        let mut own: BTreeSet<String> = self.thens.keys().cloned().collect();
+        own.extend(self.references.get(self.namespace).into_iter().flatten().filter(|name| used.contains(name.as_str())).cloned());
+        for (namespace, names) in self.references.iter().filter(|(namespace, _)| namespace.as_str() != self.namespace) {
+            let names: Vec<String> = names
+                .iter()
+                .filter_map(|name| {
+                    let spelled = self.spelled.get(&(namespace.clone(), name.clone())).cloned().unwrap_or_else(|| name.clone());
+                    used.contains(spelled.as_str()).then(|| if &spelled == name { spelled } else { format!("{name} as {spelled}") })
+                })
+                .collect();
+            if !names.is_empty() {
+                let _ = writeln!(text, "import type {{ {} }} from \"winrt:{namespace}\";", names.join(", "));
+            }
+        }
+        let own: Vec<String> = own.into_iter().collect();
+        let _ = writeln!(text, "import type {{ {} }} from \"winrt:{}\";", own.join(", "), self.namespace);
+        text.push_str(&functions);
+        Some(text)
+    }
+}
+
+/// The values module's function for one specialisation's `then`.
+fn then_function(alias: &str) -> String {
+    format!("nts_then_{alias}")
 }
 
 impl Writer<'_> {

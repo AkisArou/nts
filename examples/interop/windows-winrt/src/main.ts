@@ -79,7 +79,7 @@ import { StringMap } from "winrt:Windows.Foundation.Collections";
 import { ThreadPool } from "winrt:Windows.System.Threading";
 import type { IAsyncAction } from "winrt:Windows.Foundation";
 import { StorageFolder } from "winrt:Windows.Storage";
-import type { IAsyncOperationOfStorageFolder, IStorageFolder } from "winrt:Windows.Storage";
+import type { IAsyncOperationOfStorageFolder } from "winrt:Windows.Storage";
 import { nts_pending_begin, nts_pending_end } from "c:pending";
 import type { DateTime } from "winrt:Windows.Foundation";
 import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
@@ -320,34 +320,21 @@ function awaitAction(action: IAsyncAction): Promise<number> {
   });
 }
 
-// An `IAsyncOperation<StorageFolder>` as a Promise of the folder -- the
-// class's default interface, which is what the operation answers: its
-// `put_Completed` takes a handler whose IID is computed for `StorageFolder`,
-// declared on the instantiation the binding specializes.
-function awaitFolder(operation: IAsyncOperationOfStorageFolder): Promise<IStorageFolder> {
-  return new Promise((resolve, reject) => {
-    nts_pending_begin();
-    try {
-      operation.put_Completed((info) => {
-        nts_pending_end();
-        try {
-          resolve(info.GetResults());
-        } catch (error) {
-          reject(error);
-        }
-      });
-    } catch (error) {
-      nts_pending_end();
-      reject(error);
-    }
-  });
-}
-
 // A work item handed to the thread pool runs here, carried, and so after
 // its action has completed -- WinRT counts it done when its `Invoke`
 // returns -- which is why nothing here reads what it did. The second
 // `put_Completed` on one action is refused (E_ILLEGAL_DELEGATE_ASSIGNMENT):
 // a start that fails, whose operation must not stay outstanding.
+// What awaiting an operation rejects with, or "resolved".
+async function failure(operation: IAsyncOperationOfStorageFolder): Promise<string> {
+  try {
+    await operation;
+    return "resolved";
+  } catch (error) {
+    return (error instanceof Error ? error.message : "not an Error").slice(0, 18);
+  }
+}
+
 async function awaited(): Promise<string> {
   const status = await awaitAction(ThreadPool.RunAsync(() => {}));
   const action = ThreadPool.RunAsync(() => {});
@@ -358,8 +345,19 @@ async function awaited(): Promise<string> {
   } catch (error) {
     refused = (error instanceof Error ? error.message : "not an Error").slice(0, 18);
   }
-  const folder = await awaitFolder(StorageFolder.GetFolderFromPathAsync("C:\\Windows"));
-  return "status=" + String(status) + " refused=" + refused + " folder=" + folder.as_IStorageItem().get_Name() + " pending=" + String(pending());
+  // The operation itself, awaited: its binding declares `then`, which
+  // subscribes `Completed` as the specification resolves any thenable. It
+  // stays an operation, so afterwards it still answers its `IAsyncInfo`.
+  const operation = StorageFolder.GetFolderFromPathAsync("C:\\Windows");
+  const folder = await operation;
+  const completed = operation.as_IAsyncInfo().get_Status();
+  // A second `await` subscribes `Completed` again, which the operation
+  // refuses (E_ILLEGAL_DELEGATE_ASSIGNMENT), so it rejects with that; and an
+  // operation that fails rejects with its own error.
+  const again = await failure(operation);
+  const missing = await failure(StorageFolder.GetFolderFromPathAsync("C:\\nts-no-such-folder"));
+  return "status=" + String(status) + " refused=" + refused + " folder=" + folder.as_IStorageItem().get_Name() +
+    " completed=" + String(completed) + " again=" + again + " missing=" + missing + " pending=" + String(pending());
 }
 
 async function reportAwaited(): Promise<void> {

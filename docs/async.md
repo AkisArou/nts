@@ -396,6 +396,15 @@ throw ends the program by name, and a class with no job stops through
 `nts_refused`. A site whose payload cannot hold what `then` delivers -- the
 checker typed it from a class above the one declaring `then` -- refuses.
 
+**A binding's `then`** -- declared with `@ntsCall`, naming a function the
+program defines -- is the second table: a Windows Runtime async operation
+declares one on each specialisation. Such a value is a foreign handle, and two
+specialisations are one handle type, so there is no class to test for at run
+time; the job is chosen from the checker's type at the resolve site, which is a
+proof, and calls the named function with the handle and the resolving
+functions. A resolving function settles at the type it delivers, which is what
+lets a counted handle arrive boxed, where a promise of one keeps it.
+
 `examples/an-await-of-a-thenable` pins the tick: awaiting a thenable resumes one
 turn after awaiting a promise would, and running the job inline agrees on every
 other arm and fails that one.

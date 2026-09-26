@@ -23,7 +23,8 @@
 //
 // run as `node --experimental-strip-types`. For n = 3:
 //
-//     aPromise 6        asItsBase 103     firstCallWins 3   late 31
+//     aPromise 6        aVoidThenable 4   asItsBase 103     firstCallWins 3
+//     late 31
 //     lockedInByAThenable 30                  nested 7
 //     ordering "a1,before,a2,a3,thenable 4,a4"
 //     plain 3           rejects "refused 3"       resolvedWith 4
@@ -139,6 +140,17 @@ class Locking {
   }
 }
 
+/**
+ * Completes with nothing, as a Windows Runtime action does: its callback
+ * takes `void`, which a parameter holds as an erased `undefined` (`in_a_slot`)
+ * -- the resolving function has to be typed the way `then` calls it.
+ */
+class Done {
+  then(onFulfilled: (value: void) => unknown): void {
+    onFulfilled(undefined);
+  }
+}
+
 /** A thenable held as its base type: the base has no `then`, the object does. */
 class Base {
   readonly value: number;
@@ -236,6 +248,12 @@ export async function lockedInByAThenable(n: number): Promise<number> {
 /** A thenable that delivers a thenable: resolved twice over, as node does. */
 export async function nested(n: number): Promise<number> {
   return await new Nested(n);
+}
+
+/** A `then` whose callback takes `void`: awaited, it is nothing, one job later. */
+export async function aVoidThenable(n: number): Promise<number> {
+  await new Done();
+  return n + 1;
 }
 
 /** Control: an object with no `then` resolves to itself. */

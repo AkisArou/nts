@@ -208,15 +208,25 @@ the same vtable calls on the VM measured the behaviour first.
   which the floor never makes. The benchmark and its oracle are in
   `~/.cache/nts/windows/benches/winrt-crossings`; C# (CsWinRT) is not
   measured yet: the VM has no .NET SDK.
+- **Awaitable operations:** `await StorageFolder.GetFolderFromPathAsync(p)`
+  is the folder, and the operation stays an operation -- it answers
+  `as_IAsyncInfo()` afterwards, as C#'s `await` keeps it. Each
+  `IAsyncOperation<T>` and `IAsyncOperationWithProgress<T, P>` specialisation
+  declares `then`, naming with `@ntsCall` a function the binder writes into
+  `<namespace>.values.ts`, which subscribes `Completed` (pending until it
+  arrives) and decides by the status it is handed: `Completed` fulfils with
+  `GetResults`, `Error` rejects with the operation's own error, and
+  `Canceled` rejects with an `Error` named "Canceled", as the JavaScript
+  projection does -- `GetResults` would answer E_ILLEGAL_METHOD_CALL there,
+  measured. The compiler resolves a promise with one through it as it
+  resolves any thenable (docs/async.md 5d), chosen from the checker's type:
+  two specialisations are one handle type, so no run-time test could choose.
+  A second `await` of one operation rejects with the operation's own refusal
+  of a second `Completed` (0x80000018).
 - **Not yet:**
-  - The binding's Promise forms. Awaiting works today, written by hand as
-    windows-winrt's `awaitAction` / `awaitFolder` are: `put_Completed` on
-    the operation, `nts_pending_begin`/`end` around it (`c:pending`), and
-    `GetResults` answering the result or throwing the operation's HRESULT.
-    What a binding should declare -- the raw method and a Promise form side
-    by side, which cannot be overloads since they take the same arguments,
-    or the Promise alone as the JavaScript projection did -- is the user's
-    to decide.
+  - `IAsyncAction` and `IAsyncActionWithProgress<P>` as thenables: an
+    operation's result is awaited as itself (below), an action's is still
+    written by hand as windows-winrt's `awaitAction` is.
   - Arrays of anything but bytes, and arrays the callee allocates
     (`CopyToByteArray`, the `Get*Array` methods).
   - Generic delegates whose IID depends on the interface's own parameters
@@ -327,12 +337,9 @@ Application.Start(() => { new App(); });
 1. **W1 is closed.** One named gap: under LLVM on Win64, an exported
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
-2. **W2's rest** as listed above: awaitable operations. `await` now honours
-   a class's `then`, as the specification resolves a thenable (docs/async.md
-   5d), so what is left is the binder's half: a `then` on each async
-   operation type, and the census reaching a bound class, which it does not
-   yet -- a Windows Runtime class is a binding's, not one the program
-   declares. **W3** is complete for the fixture's needs; next is **W4**.
+2. **W2's rest** as listed above: actions as thenables, beside the
+   operations that are. **W3** is complete for the fixture's needs; next is
+   **W4**.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT. The surface is JavaScript-style, as the Windows
    Runtime's own JavaScript projection was: types in PascalCase, members in

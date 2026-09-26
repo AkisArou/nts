@@ -388,6 +388,51 @@ fn an_instantiation_declares_the_members_its_arguments_decide() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+/// An async operation is awaitable as itself: each specialisation declares
+/// `then`, naming with `@ntsCall` a function the values module beside it
+/// defines, which subscribes `Completed` and decides by the status it is
+/// handed. The generic interface answers `IAsyncInfo`, which does not depend
+/// on its arguments, so an awaited operation still reports its status.
+#[test]
+fn an_async_operation_is_awaitable_as_itself() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-then-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Storage", "Windows.Foundation", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let storage = std::fs::read_to_string(out.join("Windows.Storage.d.ts")).unwrap();
+    assert!(storage.contains("@ntsCall nts_then_IAsyncOperationOfStorageFolder"), "{storage}");
+    assert!(
+        storage.contains(
+            "then(this: IAsyncOperationOfStorageFolder, onFulfilled: (value: IStorageFolder) => unknown, onRejected: (reason: unknown) => unknown): void;"
+        ),
+        "{storage}"
+    );
+    let values = std::fs::read_to_string(out.join("Windows.Storage.values.ts")).unwrap();
+    assert!(values.contains("export function nts_then_IAsyncOperationOfStorageFolder("), "{values}");
+    for arm in [
+        "if (status === AsyncStatus.Completed) {",
+        "onFulfilled(completed.GetResults());",
+        "if (status === AsyncStatus.Canceled) {",
+        "canceled.name = \"Canceled\";",
+        "completed.GetResults();\n      } catch (error) {\n        onRejected(error);",
+    ] {
+        assert!(values.contains(arm), "{arm}\n{values}");
+    }
+    assert!(values.contains("import { AsyncStatus } from \"winrt:Windows.Foundation\";"), "{values}");
+    let foundation = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
+    assert!(foundation.contains("as_IAsyncInfo(this: IAsyncOperation<TResult>): IAsyncInfo;"), "{foundation}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
 #[test]
 fn composable_classes_are_constructed_as_themselves() {
     let Some(metadata) = winrt_metadata() else {
