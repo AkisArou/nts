@@ -35196,6 +35196,29 @@ impl<'a> FuncBuilder<'a> {
         classes
     }
 
+    /// The class a polymorphic `this` stands for, and `ty` unchanged otherwise.
+    ///
+    /// TypeScript models `this` as a type parameter named after its class and
+    /// constrained to it, so it is **not** a `TypeKind::Object` and
+    /// [`Self::layout_of`] refused it as "an object type that was not decomposed"
+    /// -- which is what `runtime/node/internal/async-hooks.ts:410` said, with 44
+    /// functions of `http` standing on it once a `try` stops failing open. The
+    /// sentence named no type until `8af9bdc07`, and with the type in it the
+    /// answer took one command: the type is `this`, standing for `NodeError`.
+    ///
+    /// **Resolved before `layout_of`'s cache lookup**, so `this` and its class
+    /// share *one* layout. Two layouts over one set of fields is the silent type
+    /// confusion this file is most careful about, and a resolution after the
+    /// lookup would build exactly that.
+    ///
+    /// Sound for a subclass receiver because `put_bases_first` makes a subclass's
+    /// layout a prefix-compatible extension of its base's -- the argument
+    /// `verify::compatible` already rests on for `Object`/`Object`.
+    ///
+    /// And **not a new derivation**: `representation_within` already resolves a
+    /// `this` type through its constraint, so this makes the layout agree with the
+    /// representation rather than inventing a rule. A representation and a layout
+    /// disagreeing about one value is precisely how this goes wrong.
     fn class_behind(&self, ty: TypeId) -> TypeId {
         let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
             return ty;
@@ -35510,11 +35533,10 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
-        if let Some(known) = self
-            .layouts
-            .iter()
-            .find(|layout| layout.types.contains(&ty))
-        {
+        // Before the lookup below, so `this` and its class share one layout:
+        // see [`Self::class_behind`].
+        let ty = self.class_behind(ty);
+        if let Some(known) = self.layouts.iter().find(|layout| layout.types.contains(&ty)) {
             return Ok(known.clone());
         }
         // Before the snapshot lookup, because the union this stands for is not
