@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: radix Infinity=NaN;radix 2^32+2=NaN;radix 2 (control)=3;",
+  "node": "exit 1; nts: uncaught Observed: radix Infinity=11;radix 2^32+2=3;radix 2 (control)=3;",
+  "measured_with": "7c81431aeb74f915",
+  "source": "measured"
+}
