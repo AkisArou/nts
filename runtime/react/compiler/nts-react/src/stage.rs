@@ -64,6 +64,8 @@ pub struct Outcome {
     pub text: String,
     /// Whether `text` differs from the source.
     pub changed: bool,
+    /// Where `text` came from, when it was printed ([`print::Printed::segments`]).
+    pub segments: Vec<nts_diagnostics::RewrittenSegment>,
     pub functions: Vec<Function>,
     /// The compiler's own answer, for tools that compare it with upstream's.
     pub result: CompileResult,
@@ -125,11 +127,12 @@ pub fn compile_file(
             function.output = printed.map(|p| p.output);
             function.typed_cache = printed.is_some_and(|p| p.typed_cache);
         }
-        printed.text
+        (printed.text, printed.segments)
     } else {
-        code.to_owned()
+        (code.to_owned(), Vec::new())
     };
-    Ok(Outcome { changed: printed != code, text: printed, functions, result })
+    let (printed, segments) = printed;
+    Ok(Outcome { changed: printed != code, text: printed, segments, functions, result })
 }
 
 fn function_of(event: &LoggerEvent, text: &SourceText) -> Option<Function> {

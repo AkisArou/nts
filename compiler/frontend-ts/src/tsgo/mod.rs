@@ -1300,6 +1300,7 @@ impl TsgoApi {
         for (index, source) in snapshot.sources.iter_mut().enumerate() {
             if rewritten.iter().any(|path| path.as_str() == source.display_path.as_str()) {
                 source.rewritten_by = Some(identity.clone());
+                source.rewritten_map = transform.position_map(&source.display_path);
             }
             let file = SourceId(u32::try_from(index).unwrap_or(u32::MAX));
             snapshot.diagnostics.extend(transform.diagnostics(&source.display_path).into_iter().map(|reported| {
@@ -1405,6 +1406,7 @@ impl SemanticSource for TsgoApi {
                     digest: Digest(decoded.content_hash),
                     display_path: path.to_owned(),
                     rewritten_by: None,
+                    rewritten_map: Vec::new(),
                 });
             }
         }

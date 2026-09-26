@@ -47,6 +47,15 @@ impl SourceText {
         self.units.is_empty()
     }
 
+    /// The byte offset, in the text as UTF-8, of the UTF-16 offset `unit`:
+    /// what a diagnostic span counts.
+    #[must_use]
+    pub fn utf8_offset(&self, unit: u32) -> u32 {
+        let end = (unit as usize).min(self.units.len());
+        let bytes: usize = char::decode_utf16(self.units[..end].iter().copied()).map(|c| c.map_or(3, char::len_utf8)).sum();
+        u32::try_from(bytes).unwrap_or(u32::MAX)
+    }
+
     /// The text between two offsets.
     #[must_use]
     pub fn slice(&self, start: u32, end: u32) -> String {

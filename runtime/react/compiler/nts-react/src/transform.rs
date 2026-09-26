@@ -57,6 +57,8 @@ struct FileState {
     types: FxHashMap<u32, Option<String>>,
     print: PrintOptions,
     functions: Vec<Function>,
+    /// Where the text last given for the file came from.
+    segments: Vec<nts_diagnostics::RewrittenSegment>,
 }
 
 impl ReactTransform {
@@ -141,12 +143,14 @@ impl SourceTransform for ReactTransform {
             types: FxHashMap::default(),
             print: PrintOptions { lower_jsx: self.lower_jsx, typed_cache: true, ..PrintOptions::default() },
             functions: Vec::new(),
+            segments: Vec::new(),
         };
         let mut answers = std::mem::take(&mut state.types);
         let outcome = self.print(file.path, &mut state, &mut Remembering { types, answers: &mut answers });
         state.types = answers;
         let outcome = outcome?;
         state.functions = outcome.functions;
+        state.segments = outcome.segments;
         self.record(file.path, &state);
         let rewritten = outcome.changed.then_some(outcome.text);
         self.files.insert(file.path.to_owned(), state);
@@ -177,6 +181,10 @@ impl SourceTransform for ReactTransform {
         reported
     }
 
+    fn position_map(&self, path: &Utf8Path) -> Vec<nts_diagnostics::RewrittenSegment> {
+        self.files.get(path).map_or_else(Vec::new, |state| state.segments.clone())
+    }
+
     fn revise(&mut self, path: &Utf8Path, errors: &[(u32, u32)]) -> Option<String> {
         let mut state = self.files.remove(path)?;
         let failing: Vec<&Function> = state
@@ -200,6 +208,7 @@ impl SourceTransform for ReactTransform {
             state.types = answers;
             outcome.map(|outcome| {
                 state.functions = outcome.functions;
+                state.segments = outcome.segments;
                 outcome.text
             })
         };

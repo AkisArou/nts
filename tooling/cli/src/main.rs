@@ -2793,16 +2793,25 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
         return "<unknown>".to_owned();
     };
     let path = &source.display_path;
-    // The position is in text a source transform wrote, which no disk holds:
-    // a line counted in the file there would send the reader somewhere real
-    // and wrong.
+    let mut offset = at.span.start;
+    let mut generated = None;
+    // The position is in text a source transform wrote, which no disk holds.
+    // Its map says where that text came from in the file the user wrote;
+    // without one, a line counted in the file on disk would send the reader
+    // somewhere real and wrong.
     if let Some(transform) = &source.rewritten_by {
-        return format!("{path} (as {transform} rewrote it; the position is in that text, not the file on disk)");
+        match original_offset(&source.rewritten_map, offset) {
+            Some((original, was_generated)) => {
+                offset = original;
+                generated = was_generated.then_some(transform);
+            }
+            None => return format!("{path} (as {transform} rewrote it; the position is in that text, not the file on disk)"),
+        }
     }
     let Ok(text) = std::fs::read_to_string(path) else {
         return path.to_string();
     };
-    let upto = &text.as_bytes()[..(at.span.start as usize).min(text.len())];
+    let upto = &text.as_bytes()[..(offset as usize).min(text.len())];
     // Counted a byte at a time on purpose: this runs once per diagnostic, and
     // a dependency on a vectorized byte counter for that would be absurd.
     #[allow(clippy::naive_bytecount)]
@@ -2812,7 +2821,37 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
             .iter()
             .rposition(|byte| *byte == b'\n')
             .map_or(0, |at| at + 1);
-    format!("{path}:{line}:{}", column + 1)
+    match generated {
+        // The transform's name, not its whole identity: the rest is a cache key.
+        Some(transform) => format!("{path}:{line}:{} (in code {} generated from it)", column + 1, transform_name(transform)),
+        None => format!("{path}:{line}:{}", column + 1),
+    }
+}
+
+/// A source transform's name, from its identity: `react-compiler` from
+/// `react-compiler@1d34f91d jsx=true ...`.
+fn transform_name(identity: &str) -> &str {
+    identity.split([' ', '@']).next().unwrap_or(identity)
+}
+
+/// Where `offset` in a rewritten file's text came from in the file as written,
+/// and whether it is in code the transform generated: then the answer is the
+/// start of what that code was written from. A position the map does not
+/// cover maps to the end of the copy before it. `None` without a map.
+fn original_offset(map: &[nts_diagnostics::RewrittenSegment], offset: u32) -> Option<(u32, bool)> {
+    let contains = |segment: &&nts_diagnostics::RewrittenSegment| offset >= segment.rewritten && offset < segment.rewritten + segment.len.max(1);
+    // A copy inside generated code (a statement a compiled function kept as
+    // written) is the more precise answer, so copies are asked first.
+    if let Some(copy) = map.iter().filter(|segment| !segment.generated).find(contains) {
+        return Some((copy.original + (offset - copy.rewritten), false));
+    }
+    if let Some(generated) = map.iter().filter(|segment| segment.generated).find(contains) {
+        return Some((generated.original, true));
+    }
+    map.iter()
+        .filter(|segment| !segment.generated && segment.rewritten + segment.len <= offset)
+        .max_by_key(|segment| segment.rewritten)
+        .map(|copy| (copy.original + copy.len, true))
 }
 
 /// The entry point of a standalone program, and the host it needs.
@@ -7454,7 +7493,7 @@ fn deps(rest: &[String]) -> Result<()> {
 
 #[cfg(test)]
 mod where_it_is_tests {
-    use super::where_it_is;
+    use super::{original_offset, transform_name, where_it_is};
     use nts_diagnostics::{Digest, Location, SourceFile, SourceId, Span};
     use nts_semantic_schema::SemanticSnapshot;
 
@@ -7465,6 +7504,7 @@ mod where_it_is_tests {
                 digest: Digest([0; 16]),
                 display_path: "src/App.tsx".into(),
                 rewritten_by: rewritten_by.map(str::to_owned),
+                rewritten_map: Vec::new(),
             }],
             ..SemanticSnapshot::default()
         }
@@ -7478,5 +7518,28 @@ mod where_it_is_tests {
         // The control: a file read as written is rendered as before, here
         // with no file to count lines in.
         assert_eq!(where_it_is(&snapshot(None), &at), "src/App.tsx");
+    }
+
+    #[test]
+    fn a_position_in_a_rewritten_file_is_traced_to_the_file_as_written() {
+        use nts_diagnostics::RewrittenSegment;
+        let copy = |rewritten, original, len| RewrittenSegment { rewritten, original, len, generated: false };
+        // 0..20 copied from 5, then a function the transform printed from
+        // the one at 30 in 20..60, holding a statement copied from 50 at
+        // 40..48; 60..70 copied from 90.
+        let map = [
+            copy(0, 5, 20),
+            RewrittenSegment { rewritten: 20, original: 30, len: 40, generated: true },
+            copy(40, 50, 8),
+            copy(60, 90, 10),
+        ];
+        assert_eq!(original_offset(&map, 3), Some((8, false)), "a copy maps byte for byte");
+        assert_eq!(original_offset(&map, 25), Some((30, true)), "generated code maps to what it came from");
+        assert_eq!(original_offset(&map, 42), Some((52, false)), "a copy inside generated code is the more precise answer");
+        assert_eq!(original_offset(&map, 65), Some((95, false)));
+        assert_eq!(original_offset(&map, 75), Some((100, true)), "past every segment: the end of the copy before");
+        // The control: no map, no answer, so the old sentence is printed.
+        assert_eq!(original_offset(&[], 3), None);
+        assert_eq!(transform_name("react-compiler@1d34f91d jsx=true cache=typed"), "react-compiler");
     }
 }

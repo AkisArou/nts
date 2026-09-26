@@ -45,8 +45,9 @@ use crate::origin::Origin;
 /// a file a source transform rewrote before it was read. 32: `via`, the
 /// interface a Windows Runtime class's member is called through. 33:
 /// `listener`, a Windows Runtime class's `addEventListener`. 34: `iterate`, a
-/// Windows Runtime vector's `for...of`.
-pub const SCHEMA_VERSION: u32 = 34;
+/// Windows Runtime vector's `for...of`. 35: `SourceFile::rewritten_map`,
+/// where a rewritten file's text came from.
+pub const SCHEMA_VERSION: u32 = 35;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

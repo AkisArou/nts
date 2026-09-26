@@ -45,6 +45,14 @@ pub trait SourceTransform: std::fmt::Debug {
         let _ = path;
         Vec::new()
     }
+
+    /// Where the text the transform settled on for `path` came from, so a
+    /// diagnostic in it can point into the file the user wrote. Empty when
+    /// the transform does not say.
+    fn position_map(&self, path: &Utf8Path) -> Vec<nts_diagnostics::RewrittenSegment> {
+        let _ = path;
+        Vec::new()
+    }
 }
 
 /// A transform's diagnostic on a file, as a whole.

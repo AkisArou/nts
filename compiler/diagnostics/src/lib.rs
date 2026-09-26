@@ -42,6 +42,26 @@ pub struct SourceFile {
     /// in a rewritten file are in the rewritten text, which no disk holds.
     #[serde(default)]
     pub rewritten_by: Option<String>,
+    /// Where the rewritten text came from, so a position in it can be told
+    /// in the file the user wrote: empty when the file was not rewritten, or
+    /// the transform gave no map.
+    #[serde(default)]
+    pub rewritten_map: Vec<RewrittenSegment>,
+}
+
+/// A range of a rewritten file's text and where it came from, in bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RewrittenSegment {
+    /// Its start in the rewritten text.
+    pub rewritten: u32,
+    /// Its start in the file as written.
+    pub original: u32,
+    /// Its length in the rewritten text.
+    pub len: u32,
+    /// Whether the transform wrote it: then only `original` means anything,
+    /// the start of what it was written from. Otherwise it is a copy, and each
+    /// byte maps to its own.
+    pub generated: bool,
 }
 
 /// A half-open byte range within a source file.

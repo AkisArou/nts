@@ -79,6 +79,10 @@ pub struct PrintOptions {
 #[derive(Debug)]
 pub struct Printed {
     pub text: String,
+    /// Where `text` came from, in bytes: each stretch copied from the source,
+    /// and each function printed from the compiler's output. What a
+    /// diagnostic on `text` is shown in the file as written through.
+    pub segments: Vec<nts_diagnostics::RewrittenSegment>,
     /// Each function printed from the compiler's output: its original span,
     /// and where it is in `text`, both in UTF-16 units -- what a diagnostic
     /// on `text` is traced back through.
@@ -140,6 +144,7 @@ pub fn print_file(
         hoists: Vec::new(),
         edits: Vec::new(),
         fresh: 0,
+        copied: Vec::new(),
         out: String::new(),
         indent: 0,
     };
@@ -148,7 +153,46 @@ pub fn print_file(
     for function in &mut functions {
         function.typed_cache = printer.caches.typed_spans.contains(&function.original);
     }
-    Printed { text: printer.out, functions }
+    let segments = rewritten_segments(&printer.out, source, &printer.copied, &printer.functions);
+    Printed { text: printer.out, functions, segments }
+}
+
+/// A copied stretch shorter than this is not looked for: it could be found in
+/// the wrong place (`)`, `a`), and a nearby longer one places it anyway.
+const SHORTEST_COPY_FOUND: usize = 8;
+
+/// Where the printed text came from. Each stretch the printer copied is found
+/// in the output in the order it was copied, which is the order the output
+/// holds them in, since the edits made after printing insert but never
+/// reorder. Each printed function spans what it was compiled from.
+fn rewritten_segments(out: &str, source: &SourceText, copied: &[(u32, String)], functions: &[OutputFunction]) -> Vec<nts_diagnostics::RewrittenSegment> {
+    let bytes = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    let mut segments = Vec::new();
+    let mut cursor = 0;
+    for (start, text) in copied {
+        if text.len() < SHORTEST_COPY_FOUND {
+            continue;
+        }
+        if let Some(found) = out.get(cursor..).and_then(|rest| rest.find(text.as_str())) {
+            let at = cursor + found;
+            segments.push(nts_diagnostics::RewrittenSegment {
+                rewritten: bytes(at),
+                original: source.utf8_offset(*start),
+                len: bytes(text.len()),
+                generated: false,
+            });
+            cursor = at + text.len();
+        }
+    }
+    for ((start, _), (from, to)) in functions {
+        segments.push(nts_diagnostics::RewrittenSegment {
+            rewritten: bytes(*from),
+            original: source.utf8_offset(*start),
+            len: bytes(to - from),
+            generated: true,
+        });
+    }
+    segments
 }
 
 /// A function printed from the compiler's output: its original span, and its
@@ -366,6 +410,9 @@ struct Printer<'a> {
     edits: Vec<Edit>,
     /// The next number `fresh_name` tries.
     fresh: u32,
+    /// Each stretch of the source the printer copied, where it starts and
+    /// what it was, in the order copied ([`rewritten_segments`]).
+    copied: Vec<(u32, String)>,
     out: String,
     indent: usize,
 }
@@ -422,12 +469,16 @@ impl Printer<'_> {
     fn copy(&mut self, start: u32, end: u32) -> String {
         let mut at = self.jsx_spans.partition_point(|(s, ..)| *s < start);
         if self.jsx_spans.get(at).is_none_or(|(s, ..)| *s >= end) {
-            return self.source.slice(start, end);
+            let text = self.source.slice(start, end);
+            self.copied.push((start, text.clone()));
+            return text;
         }
         let outer = std::mem::take(&mut self.out);
         let mut cursor = start;
         while let Some(&(jsx_start, jsx_end, id)) = self.jsx_spans.get(at).filter(|(s, ..)| *s < end) {
-            self.out.push_str(&self.source.slice(cursor, jsx_start));
+            let text = self.source.slice(cursor, jsx_start);
+            self.copied.push((cursor, text.clone()));
+            self.out.push_str(&text);
             match self.originals.get(&id).cloned().map(serde_json::from_value::<Expression>) {
                 Some(Ok(Expression::JSXElement(element))) => self.jsx_lower_element(&element),
                 Some(Ok(Expression::JSXFragment(fragment))) => self.jsx_lower_fragment(&fragment),
@@ -439,7 +490,9 @@ impl Printer<'_> {
                 at += 1;
             }
         }
-        self.out.push_str(&self.source.slice(cursor, end));
+        let text = self.source.slice(cursor, end);
+        self.copied.push((cursor, text.clone()));
+        self.out.push_str(&text);
         std::mem::replace(&mut self.out, outer)
     }
 
@@ -587,7 +640,7 @@ impl Printer<'_> {
         // The file's leading comments (a license, `// @flow`) stay first.
         let header_end = self.source.token_start(0).min(first_start);
         if header_end > 0 {
-            self.write(&self.source.slice(0, header_end));
+            self.write_copy(0, header_end);
             cursor = header_end;
         }
         for directive in &compiled.program.directives {
@@ -599,7 +652,7 @@ impl Printer<'_> {
             let original_here = base.node_id.is_some() && base.start.is_some_and(|s| s >= cursor);
             if original_here {
                 let start = base.start.unwrap_or(cursor);
-                self.write(&self.source.slice(cursor, start));
+                self.write_copy(cursor, start);
                 self.top_level(statement);
                 cursor = base.end.unwrap_or(start);
             } else {
@@ -607,7 +660,7 @@ impl Printer<'_> {
                 self.write("\n");
             }
         }
-        self.write(&self.source.slice(cursor, self.source.len()));
+        self.write_copy(cursor, self.source.len());
         let imports = self.jsx_imports.declarations();
         if !imports.is_empty() {
             self.edits.push(Edit { at: imports_at, remove: 0, insert: imports });
@@ -651,6 +704,13 @@ impl Printer<'_> {
             }
             None => self.edits.push(Edit { at: imports_at, remove: 0, insert: format!("import {{ {typed} }} from \"react/compiler-runtime\";\n") }),
         }
+    }
+
+    /// Copies the source between two offsets into the output as it is.
+    fn write_copy(&mut self, start: u32, end: u32) {
+        let text = self.source.slice(start, end);
+        self.write(&text);
+        self.copied.push((start, text));
     }
 
     /// Applies the edits, last first, and moves every recorded function range
