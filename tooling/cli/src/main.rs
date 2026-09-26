@@ -2075,9 +2075,23 @@ fn print_program(program: &hir::Program) {
             .iter()
             .map(|p| format!("{}: {}", p.name, render(&p.ty)))
             .collect();
+        // **`declare func` for a signature with no body**, because the two read
+        // identically otherwise: an abstract declaration's one block is
+        // `unreachable`, and so is the body of a function that genuinely ends
+        // the program on every path. `Func::abstract_declaration` is the fact --
+        // "a backend must not emit a body for one" -- and a reader of this dump
+        // had no way to see it.
+        //
+        // Found from the outside. The conformance lane's phantom detector
+        // compares `nts refusals` against the `func` lines here and flagged
+        // `Corkable#note`, whose refusal ("a method without a body is not
+        // supported") is *honest*: the name is in `funcs` and there is still no
+        // body. Their check could only tell the two apart by guessing at a
+        // single-`unreachable` block, which is a heuristic about the wrong thing.
         println!(
-            "{}func {}({}) -> {} {{",
+            "{}{}func {}({}) -> {} {{",
             if func.exported { "export " } else { "" },
+            if func.abstract_declaration { "declare " } else { "" },
             func.name,
             params.join(", "),
             render(&func.return_type),
