@@ -73,7 +73,16 @@ export function compiledNames(text) {
     if (m) {
       names.add(m[1]);
       lines += 1;
+      continue;
     }
+    // A declaration shell -- an interface member with no body anywhere, which
+    // `declare_interface_methods` emits with a single `unreachable` block so
+    // dispatch has something to name. The summary counts it, so it counts
+    // toward reconciling; it is not compiled, so it is never a phantom. Its
+    // refusal ("a method without a body") is honest. Printed as `declare func`
+    // by the compiler lane's change; before that it read as a function, and
+    // the first scan reported two of them as phantoms.
+    if (/^declare func .+?\(/.test(line)) lines += 1;
   }
   const stated = /^(\d+) function\(s\)/m.exec(text);
   return { names, lines, stated: stated ? Number(stated[1]) : null };
@@ -108,10 +117,10 @@ export function judge(project, hirText, refusalsText) {
 // function must be caught, a genuine one must not, and a listing that lost a
 // function must be NOT MEASURED rather than clean.
 function selfTest() {
-  const hir = "func a(x: f64) -> f64 {\n}\nexport func b#m(this: managed<obj#1>) -> void {\n}\nfunc C.get v() -> f64 {\n}\n\n3 function(s), nothing refused\n";
+  const hir = "func a(x: f64) -> f64 {\n}\nexport func b#m(this: managed<obj#1>) -> void {\n}\nfunc C.get v() -> f64 {\n}\ndeclare func I#shell(this: managed<obj#2>) -> void {\n}\n\n4 function(s), nothing refused\n";
   const caught = judge("self", hir, "b#m\ta refusal that is a lie\nC.get v\tan accessor's\nc\ta genuine refusal\n");
   if (caught.phantoms?.length !== 2 || caught.phantoms[0].name !== "b#m" || caught.phantoms[1].name !== "C.get v") return `a planted phantom was not caught: ${JSON.stringify(caught)}`;
-  const clean = judge("self", hir, "c\ta genuine refusal\n");
+  const clean = judge("self", hir, "c\ta genuine refusal\nI#shell\ta method without a body\n");
   if (clean.phantoms?.length !== 0) return `a genuine refusal was called a phantom: ${JSON.stringify(clean)}`;
   const lost = judge("self", "func a(x: f64) -> f64 {\n}\n\n2 function(s), nothing refused\n", "");
   if (!lost.unmeasured) return `a listing missing a function was measured: ${JSON.stringify(lost)}`;
@@ -123,7 +132,7 @@ if (broken) {
   process.exit(2);
 }
 if (process.argv.includes("--self-test")) {
-  console.log("  self-test: planted phantoms caught (an accessor's included), a genuine refusal passed, a truncated listing not measured");
+  console.log("  self-test: planted phantoms caught (an accessor's included), a declaration shell not one, a genuine refusal passed, a truncated listing not measured");
   process.exit(0);
 }
 
