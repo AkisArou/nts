@@ -591,6 +591,11 @@ declare module "c:memory" {
   // a broken promise rather than an absence.
   /** @ntsAbi intrinsic */
   export function bytesFrom(bytes: ConstPtr<c_uint8> | null, length: number): Uint8Array;
+  // The same for bytes C spells as `char` -- `g_file_load_contents`'s
+  // `char **contents` -- or as untyped memory, `gconstpointer`
+  // (`g_bytes_get_data`): the bytes are the bytes, whatever C calls them.
+  /** @ntsAbi intrinsic */
+  export function bytesFrom(bytes: ConstPtr<c_char> | ConstPtr<void> | null, length: number): Uint8Array;
   // `value` as the handle type `T` when `is` holds, and `null` otherwise:
   // a downcast along a declared `Class` hierarchy, `GTK_BOX(w)` with its
   // check made explicit.

@@ -104,6 +104,7 @@ import {
   ChecksumType,
   KeyFileFlags,
   type GError,
+  g_bytes_new,
 } from "c:GLib-2.0";
 import { g_signal_group_new } from "c:GObject-2.0";
 import { GdkRGBA } from "c:Gdk-4.0";
@@ -266,6 +267,23 @@ function absentArrays(): void {
   gir_log("lists " + String(direct.get_n_items()) + " " + String(constructed.get_n_items()) + " " + String(given.get_n_items()));
 }
 
+// Bytes C hands back. A `GBytes`' own (transfer none) are copied, so the copy
+// outlives the `GBytes`, which is gone by the time `held` returns. A file's
+// contents (transfer full) are copied, and C's buffer freed.
+function held(): Uint8Array {
+  const bytes = g_bytes_new(new Uint8Array([104, 105]));
+  return bytes.get_data();
+}
+
+function bytesOut(): string {
+  const kept = held();
+  const file = g_file_new_for_path("/usr/share/gir-1.0/GLib-2.0.gir");
+  const [loaded, contents] = file.load_contents(null);
+  let head = "";
+  for (let at = 0; at < 5; at++) head += String.fromCharCode(contents[at]);
+  return "bytes " + String(kept.length) + ":" + String(kept[0]) + "," + String(kept[1]) + " " + String(loaded) + " " + head;
+}
+
 function main(): void {
   outParameters();
   boxedRecords();
@@ -317,6 +335,7 @@ function main(): void {
     label.set_selectable(false);
     label.set_label("two");
     gir_log("relabeled " + String(relabeled));
+    gir_log(bytesOut());
     // An interface's methods and properties on a class implementing it, as
     // GJS has them: `GtkEditable`'s on a `GtkEntry`, `GtkOrientable`'s on a
     // `GtkBox` -- each the C function taking the interface.

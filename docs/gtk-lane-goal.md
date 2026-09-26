@@ -270,35 +270,27 @@ The rest are `cairo`, which no `.gir` on this machine describes, and a few
 structs. The gir sweep over the eight core namespaces swept 73 more
 functions, with 0 type errors and 0 refused.
 
-**Not yet: bytes C hands back.** `g_bytes_get_data` (a result array with an
-out length), and `g_file_load_contents` with its `_finish` (an out
-`char **` with an out length, transfer full), are still refused, so a
-program cannot read a file's bytes through GIR, only its lines
-(`GDataInputStream`). The binder alone cannot bind them.
+**Bytes C hands back.** `bytes.get_data()` and `file.load_contents()` answer
+a `Uint8Array`, as GJS's do. A result or out slot of `guint8`/`gchar` bytes,
+whose length is another out slot, maps to `Shape::Bytes` (with
+`Shape::Length`). The raw declaration keeps C's own spelling (`ConstPtr<void>`,
+`Ptr<Ptr<c_char>>`) for the witness, and the values form makes the slots,
+copies with `bytesFrom`, and frees with `g_free` where the transfer is full.
+It meets the constraints agreed with MainClaude without a compiler role:
 
-- The values wrapper could copy with `bytesFrom` and free with `g_free`.
-  But `bytesFrom` takes a `c_uint8` pointer, while C spells these
-  `gconstpointer` and `char **`, and the witness compares prototypes
-  exactly.
-- What they need is the compiler's own, and the design is agreed with
-  MainClaude:
-  - **Extend `Role::Length { array }`**, the pairing an inbound array and its
-    count already use, rather than a parallel role. `prepend_receiver` keeps
-    its indices, and two spellings of one fact would disagree first there.
-  - **The conversion is `nts_view_from_bytes`**, which exists
-    (`bytesFrom`), so there is no new runtime helper.
-  - **The transfer is a field, not a baked-in `g_free`.**
-    `g_bytes_get_data` is transfer none: the bytes are the `GBytes`', and the
-    copy is what lets the view outlive them. `g_file_load_contents` is
-    transfer full, and is freed after the copy.
-  - **Convert only when the call succeeded.** On failure `contents` and
-    `length` are untouched, and reading an uninitialised `gsize` as a length
-    is the worst failure available here.
-  - Fixtures: a view read after its `GBytes` is freed, and the transfer-full
-    arm under `--rc`.
-  - Windows' `Role::Box`/`Lent::Box` lands beside it: read that shape
-    first, so that "what the program sees is not what C has" is spelled
-    once.
+- the transfer is data: `g_free` only where GIR says full;
+- the copy is `nts_view_from_bytes`, so the view outlives what it was read
+  from;
+- a failing call throws before the wrapper reads anything (its error slot is
+  left out), and one with no error slot leaves the zeroed slots alone: NULL
+  and 0, an empty array.
+
+It does not return a values form's omitted outs: `load_contents()` answers
+`[ok, contents]`, not GJS's `[ok, contents, etag]`, since `etag_out` is left
+at its default. 15 more functions bind (1855 -> 1840). The gir sweep swept 11
+more, with 0 type errors and 0 refused. Witness: gtk-gir's `bytes 2:104,105
+true <?xml`, plain and `--rc`. `held()` returns a `GBytes`' copy after the
+`GBytes` is gone, and a file's contents are copied and C's buffer freed.
 
 ### Boxed records
 

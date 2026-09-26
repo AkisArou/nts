@@ -204,6 +204,14 @@ pub(crate) enum Shape {
     /// makes with `new class()` and returns, as `get_bounds()` does. Only an
     /// out: an inout's storage holds what C reads, which the caller gives.
     Filled { class: String },
+    /// Bytes C hands back with their length in another out slot, `length`:
+    /// the call's result or an out slot of its own, which a GJS-style method
+    /// returns as the `Uint8Array` it copies them into (`bytesFrom`), freeing
+    /// C's buffer after where it is the caller's (`owned`).
+    Bytes { length: String, owned: bool },
+    /// The out slot holding a `Bytes`'s length, typed `value`: made and read
+    /// by the values form, and not a value it returns.
+    Length { value: String },
 }
 
 /// Why something was not bound. Counted, so the most common one is the next
@@ -848,17 +856,8 @@ impl<'a> Mapper<'a> {
         let mut hidden = BTreeSet::new();
         let mut no_escape = Vec::new();
         let mut omissible = BTreeMap::new();
-        // The parameters that hold an array's length, which the compiler fills
-        // from the array: `index -> the array's index`.
-        let lengths: BTreeMap<usize, usize> = signature
-            .parameters
-            .iter()
-            .enumerate()
-            .filter_map(|(at, param)| match &param.ty {
-                TypeRef::Array(array) if param.direction == Direction::In => Some((array.length?, at)),
-                _ => None,
-            })
-            .collect();
+        let lengths = in_lengths(signature);
+        let byte_lengths = byte_lengths(signature);
         for (at, param) in signature.parameters.iter().enumerate() {
             if hidden.contains(&at) {
                 continue;
@@ -872,6 +871,12 @@ impl<'a> Mapper<'a> {
                 && param.direction == Direction::In
             {
                 let mapped = self.array_parameter(param, array, at, &signature.parameters)?;
+                c_parameters.push(mapped.c.clone());
+                no_escape.push(identifier(&param.name));
+                parameters.push((identifier(&param.name), mapped));
+                continue;
+            }
+            if let Some(mapped) = self.bytes_parameter(param, at, signature, &byte_lengths)? {
                 c_parameters.push(mapped.c.clone());
                 no_escape.push(identifier(&param.name));
                 parameters.push((identifier(&param.name), mapped));
@@ -896,7 +901,7 @@ impl<'a> Mapper<'a> {
             omissible.extend(omitted.map(|value| (identifier(&param.name), value)));
             parameters.push((identifier(&param.name), mapped));
         }
-        let (result, free) = self.function_result(callable, owner)?;
+        let (result, free) = self.result_or_bytes(callable, owner)?;
         // `GError **error`, which GIR leaves out of the parameter list: the
         // same out parameter as any other, a slot for a nullable handle.
         if signature.throws {
@@ -1183,6 +1188,88 @@ impl<'a> Mapper<'a> {
         };
         let ts = if result.nullable { "string[] | null" } else { "string[]" };
         Ok((Mapped { shape: Shape::Other, ts: ts.to_owned(), c }, free))
+    }
+
+    /// Bytes C returns, their length in the out slot `length`: C's own
+    /// pointer, which the values form copies (`Shape::Bytes`), and frees where
+    /// the transfer makes it the caller's.
+    fn returned_bytes(&mut self, result: &Param, array: &ArrayRef, parameters: &[Param]) -> Result<Mapped, Reason> {
+        let length = array.length.and_then(|index| parameters.get(index)).map(|param| identifier(&param.name)).ok_or(Reason::Array)?;
+        let owned = match result.transfer {
+            Transfer::None => false,
+            Transfer::Full => true,
+            Transfer::Container => return Err(Reason::Array),
+        };
+        let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.split_whitespace().collect();
+        let (ts, pointee) = match spelling.as_str() {
+            "gconstpointer" | "constvoid*" => ("ConstPtr<void> | null", Pointee::Const(Box::new(Pointee::Void))),
+            "constguint8*" | "constguchar*" => ("ConstPtr<c_uint8> | null", Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt8)))),
+            "guint8*" | "guchar*" => ("Ptr<c_uint8> | null", Pointee::Scalar(Scalar::UInt8)),
+            "gchar*" | "char*" => ("Ptr<c_char> | null", Pointee::Scalar(Scalar::Char)),
+            _ => return Err(Reason::Array),
+        };
+        self.binding.brands.extend(["Ptr", "ConstPtr", "c_uint8", "c_char"]);
+        Ok(Mapped { shape: Shape::Bytes { length, owned }, ts: ts.to_owned(), c: Type::Pointer(pointee) })
+    }
+
+    /// The result, and what frees it: bytes C hands back (`returned_bytes`),
+    /// or any other (`function_result`).
+    fn result_or_bytes(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<(Mapped, Option<String>), Reason> {
+        let signature = &callable.signature;
+        match &signature.result.ty {
+            TypeRef::Array(array) if is_bytes(array) => Ok((self.returned_bytes(&signature.result, array, &signature.parameters)?, None)),
+            _ => self.function_result(callable, owner),
+        }
+    }
+
+    /// An out parameter belonging to bytes C hands back: the bytes' slot
+    /// (`out_bytes`), or the slot holding their length (`Shape::Length`).
+    /// `None` for any other parameter.
+    fn bytes_parameter(
+        &mut self,
+        param: &Param,
+        at: usize,
+        signature: &super::model::Signature,
+        byte_lengths: &BTreeSet<usize>,
+    ) -> Result<Option<Mapped>, Reason> {
+        if param.direction == Direction::In {
+            return Ok(None);
+        }
+        if let TypeRef::Array(array) = &param.ty
+            && is_bytes(array)
+        {
+            let length = array.length.and_then(|index| signature.parameters.get(index)).ok_or(Reason::Array)?;
+            return self.out_bytes(param, array, &identifier(&length.name)).map(Some);
+        }
+        if byte_lengths.contains(&at) {
+            let mapped = self.out(param)?;
+            let Shape::Out { value } = mapped.shape else { return Err(Reason::Array) };
+            return Ok(Some(Mapped { shape: Shape::Length { value }, ..mapped }));
+        }
+        Ok(None)
+    }
+
+    /// An out slot C writes bytes' address into, their length in the out slot
+    /// `length`: `Ptr<Ptr<c_char> | null>`, the `char **` C declares, which
+    /// the values form makes, reads and copies (`Shape::Bytes`).
+    fn out_bytes(&mut self, param: &Param, array: &ArrayRef, length: &str) -> Result<Mapped, Reason> {
+        let owned = match param.transfer {
+            Transfer::None => false,
+            Transfer::Full => true,
+            Transfer::Container => return Err(Reason::Array),
+        };
+        let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.split_whitespace().collect();
+        let (ts, element) = match spelling.as_str() {
+            "gchar**" | "char**" => ("Ptr<Ptr<c_char> | null>", Scalar::Char),
+            "guint8**" | "guchar**" => ("Ptr<Ptr<c_uint8> | null>", Scalar::UInt8),
+            _ => return Err(Reason::Array),
+        };
+        self.binding.brands.extend(["Ptr", "c_uint8", "c_char"]);
+        Ok(Mapped {
+            shape: Shape::Bytes { length: length.to_owned(), owned },
+            ts: ts.to_owned(),
+            c: Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(element)))),
+        })
     }
 
     /// An in parameter or an instance.
@@ -1887,6 +1974,41 @@ fn detailed_name(signal: &super::model::Signal) -> String {
     }
 }
 
+/// The parameters that hold an inbound array's length, which the compiler
+/// fills from the array: `index -> the array's index`.
+fn in_lengths(signature: &super::model::Signature) -> BTreeMap<usize, usize> {
+    signature
+        .parameters
+        .iter()
+        .enumerate()
+        .filter_map(|(at, param)| match &param.ty {
+            TypeRef::Array(array) if param.direction == Direction::In => Some((array.length?, at)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The out slots holding the length of bytes C hands back -- an out byte
+/// array's, or the result's -- which the values form reads.
+fn byte_lengths(signature: &super::model::Signature) -> BTreeSet<usize> {
+    signature
+        .parameters
+        .iter()
+        .filter(|param| param.direction != Direction::In)
+        .map(|param| &param.ty)
+        .chain([&signature.result.ty])
+        .filter_map(|ty| match ty {
+            TypeRef::Array(array) if is_bytes(array) => array.length,
+            _ => None,
+        })
+        .collect()
+}
+
+/// An array of bytes: `guint8`, or a `gchar` array that is not a string.
+fn is_bytes(array: &ArrayRef) -> bool {
+    matches!(array.element.as_deref(), Some("guint8" | "gchar" | "guchar")) && !array.zero_terminated && array.length.is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::SCALARS;
@@ -1906,4 +2028,5 @@ mod tests {
         }
     }
 }
+
 

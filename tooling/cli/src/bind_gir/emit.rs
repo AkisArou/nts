@@ -427,10 +427,18 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
         .filter(|function| {
             function.method.is_some()
                 && function.vfunc.is_none()
-                && function.parameters.iter().any(|(_, mapped)| matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. }))
+                && function.parameters.iter().any(|(_, mapped)| {
+                    matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Bytes { .. } | Shape::Length { .. })
+                })
                 && function.parameters.iter().all(|(name, mapped)| {
                     function.throws.as_deref() == Some(name.as_str())
-                        || matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Handle { .. } | Shape::Lent { .. })
+                        // One the caller may leave out -- `g_file_load_contents`'
+                        // `etag_out` -- which the values form leaves out too.
+                        || function.omissible.contains_key(name)
+                        || matches!(
+                            mapped.shape,
+                            Shape::Out { .. } | Shape::Filled { .. } | Shape::Bytes { .. } | Shape::Length { .. } | Shape::Handle { .. } | Shape::Lent { .. }
+                        )
                         || (mapped.shape == Shape::Other && !mapped.ts.starts_with("Ptr<") && !mapped.ts.contains("Closure<"))
                 })
                 && function.throws.as_ref().is_none_or(|slot| function.parameters.last().is_some_and(|(name, _)| name == slot))
@@ -441,12 +449,16 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
 /// What a values form returns: the function's own result, if it has one,
 /// then each out value, in order -- GJS's shape -- and a lone value unwrapped.
 fn values_result(function: &Function) -> String {
-    let result = (function.result.ts != "void").then(|| function.result.ts.clone());
+    let result = match function.result.shape {
+        Shape::Bytes { .. } => Some("Uint8Array".to_owned()),
+        _ => (function.result.ts != "void").then(|| function.result.ts.clone()),
+    };
     let values: Vec<String> = result
         .into_iter()
         .chain(function.parameters.iter().filter_map(|(_, mapped)| match &mapped.shape {
             Shape::Out { value } => Some(value.clone()),
             Shape::Filled { class } => Some(class.clone()),
+            Shape::Bytes { .. } => Some("Uint8Array".to_owned()),
             _ => None,
         }))
         .collect();
@@ -460,7 +472,8 @@ fn values_taken(function: &Function) -> Vec<(String, Mapped)> {
         .parameters
         .iter()
         .filter(|(name, mapped)| {
-            !matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. }) && function.throws.as_deref() != Some(name.as_str())
+            !matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Bytes { .. } | Shape::Length { .. })
+                && function.throws.as_deref() != Some(name.as_str())
         })
         .cloned()
         .collect()
@@ -723,13 +736,25 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             }
         }
     }
-    let memory: Vec<&str> = [(!binding.casts.is_empty()).then_some("unsafeDowncast"), values
+    let shapes = || values.iter().flat_map(|function| function.parameters.iter().map(|(_, mapped)| &mapped.shape).chain([&function.result.shape]));
+    let bytes = shapes().any(|shape| matches!(shape, Shape::Bytes { .. }));
+    let memory: Vec<&str> = [
+        (!binding.casts.is_empty()).then_some("unsafeDowncast"),
+        values
             .iter()
-            .any(|function| function.parameters.iter().any(|(_, mapped)| matches!(mapped.shape, Shape::Out { .. })))
-            .then_some("local")]
-        .into_iter()
-        .flatten()
-        .collect();
+            .any(|function| {
+                function.parameters.iter().any(|(_, mapped)| matches!(mapped.shape, Shape::Out { .. } | Shape::Length { .. } | Shape::Bytes { .. }))
+            })
+            .then_some("local"),
+        bytes.then_some("bytesFrom"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    // The free a buffer the caller owns takes: GLib's, where it is declared.
+    if shapes().any(|shape| matches!(shape, Shape::Bytes { owned: true, .. })) {
+        imports.entry("c:GLib-2.0".to_owned()).or_default().push("g_free".to_owned());
+    }
     if !memory.is_empty() {
         let _ = writeln!(out, "\nimport {{ {} }} from \"c:memory\";", memory.join(", "));
     } else if !imports.is_empty() {
@@ -774,8 +799,19 @@ fn values_wrapper(out: &mut String, function: &Function) {
     let defaulted = defaults(function, &taken);
     let declared = declared_parameters(&taken, &defaulted);
     let mut body = String::new();
+    // What runs once the call has returned: bytes copied out of C's buffer,
+    // and the buffer freed where it is the caller's. A call that fails throws
+    // before this (its error slot is left out), and one without an error slot
+    // left the zeroed slots alone: NULL and 0, an empty array.
+    let mut after = String::new();
     let mut read = Vec::new();
-    if function.result.ts != "void" {
+    if let Shape::Bytes { length, owned } = &function.result.shape {
+        let _ = writeln!(after, "  const nts_bytes = bytesFrom(nts_result, {length}[0]);");
+        if *owned {
+            let _ = writeln!(after, "  g_free(nts_result);");
+        }
+        read.push("nts_bytes".to_owned());
+    } else if function.result.ts != "void" {
         read.push("nts_result".to_owned());
     }
     for (name, mapped) in &function.parameters {
@@ -783,6 +819,18 @@ fn values_wrapper(out: &mut String, function: &Function) {
             Shape::Out { value } => {
                 let _ = writeln!(body, "  const {name} = local<{value}>();");
                 read.push(format!("{name}[0]"));
+            }
+            Shape::Length { value } => {
+                let _ = writeln!(body, "  const {name} = local<{value}>();");
+            }
+            Shape::Bytes { length, owned } => {
+                let slot = mapped.ts.strip_prefix("Ptr<").and_then(|rest| rest.strip_suffix('>')).unwrap_or("never");
+                let _ = writeln!(body, "  const {name} = local<{slot}>();");
+                let _ = writeln!(after, "  const {name}_bytes = bytesFrom({name}[0], {length}[0]);");
+                if *owned {
+                    let _ = writeln!(after, "  g_free({name}[0]);");
+                }
+                read.push(format!("{name}_bytes"));
             }
             Shape::Filled { class } => {
                 let _ = writeln!(body, "  const {name} = new {class}();");
@@ -805,7 +853,7 @@ fn values_wrapper(out: &mut String, function: &Function) {
         out,
         "\n/** `{symbol}`, returning its out values. */\n\
          export function {symbol}_values({declared}): {result} {{\n\
-         {body}\x20 return {returned};\n\
+         {body}{after}\x20 return {returned};\n\
          }}",
         symbol = function.symbol,
         result = values_result(function),
