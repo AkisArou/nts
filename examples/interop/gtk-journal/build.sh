@@ -25,7 +25,7 @@ if [ ! -e /usr/share/gir-1.0/Adw-1.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
 fi
 
 "$source/seed.sh" 5000 > /tmp/nts-gtk-journal.txt
-expected="loaded 5000 searched 26427 sorted river 0 added 5200 edited 199 edits 823 charted true peak 442 deleted 5199 saved 5199 515362 "
+expected="loaded 5000 searched 26427 sorted river 0 added 5200 edited 199 edits 823 charted 50 peak 442 deleted 5199 saved 5199 515362 "
 for mode in plain rc; do
   flag=""
   [ "$mode" = rc ] && flag="--rc"

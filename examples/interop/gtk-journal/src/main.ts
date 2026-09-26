@@ -135,14 +135,17 @@ function drive(journal: Journal): void {
   console.log("added " + String(sidebar.store.get_n_items()) + " " + (edited !== null ? edited.title : "?") + " edits " + String(journal.editor.edits));
   console.log("ms add " + String(Math.round(now() - started)));
 
-  started = now();
-  let frames = 0;
+  // Fifty frames drawn, each asked for by a tick: the row is the time spent
+  // drawing them, not the ticks' pacing.
+  const first = journal.chart.frames;
+  const spent = journal.chart.spent;
   g_timeout_add_full(0, 16, () => {
-    journal.chart.area.queue_draw();
-    frames++;
-    if (frames < 50) return true;
-    console.log("charted " + String(journal.chart.frames > 0) + " peak " + String(journal.chart.peak));
-    console.log("ms chart " + String(Math.round(now() - started)));
+    if (journal.chart.frames - first < 50) {
+      journal.chart.area.queue_draw();
+      return true;
+    }
+    console.log("charted " + String(journal.chart.frames - first) + " peak " + String(journal.chart.peak));
+    console.log("ms chart " + String(Math.round(journal.chart.spent - spent)));
     app.activate_action("delete", null);
     console.log("deleted " + String(sidebar.store.get_n_items()));
     started = now();

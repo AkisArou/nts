@@ -1,7 +1,10 @@
 // Entries per month, drawn with cairo: the counts are the program's own
-// aggregation over the store, redone each frame.
+// aggregation over the store, redone each frame. `spent` is the time inside
+// the draw function, in milliseconds: the frames themselves are paced by the
+// frame clock, so the phase's wall clock would measure the pacing.
 import { GtkDrawingArea } from "c:Gtk-4.0";
 import { GListStore } from "c:Gio-2.0";
+import { g_get_monotonic_time } from "c:GLib-2.0";
 import { Entry } from "./model.ts";
 
 export function monthly(store: GListStore): number[] {
@@ -18,9 +21,11 @@ export class Chart {
   readonly area = new GtkDrawingArea({ content_height: 120, hexpand: true });
   frames = 0;
   peak = 0;
+  spent = 0;
 
   constructor(store: GListStore) {
     this.area.set_draw_func((_area, cr, width, height) => {
+      const started = Number(g_get_monotonic_time());
       const counts = monthly(store);
       let peak = 1;
       for (const count of counts) peak = Math.max(peak, count);
@@ -33,6 +38,7 @@ export class Chart {
       cr.fill();
       this.frames++;
       this.peak = peak;
+      this.spent += (Number(g_get_monotonic_time()) - started) / 1000;
     });
   }
 }
