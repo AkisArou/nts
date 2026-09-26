@@ -21,7 +21,7 @@ if [ ! -e /usr/share/gir-1.0/Adw-1.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 
-expected="status Hello from nts shown true "
+expected="status Hello from nts wifi true name Ada view grid activated 1 dismissed 1 shown true "
 for mode in plain rc; do
   flag=""
   [ "$mode" = rc ] && flag="--rc"
