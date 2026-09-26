@@ -718,8 +718,19 @@ class Panel extends GtkBox {
   through an entry point that takes the signal's arguments and then the
   instance (`nts_gobject_callback_{Class}_{i}`). A handler that is no method
   of the class is refused (NTS1001). Witness: gtk-subclass's `pressed 1 p`.
-- v1: a template on a class over a binding's class. A chain with another
-  templated or fielded program class below it is not supported yet.
+- Chains work. `Wide extends Panel` gets `Panel`'s children, and a child
+  is read from the nearest class up the chain whose template names it.
+  `Tall extends Card`, each with a template, builds both, the parent's
+  first.
+  - GLib runs every ancestor's `instance_init` with `instance->g_class` set
+    to that ancestor's class. So `nts_gobject_instance_init` runs the
+    template of the class whose init it is, and makes the fields once, at
+    the fields' owner's init.
+  - A subclass with a template of its own writes both as `template: string`,
+    because a literal type would not extend the parent's. The compiler then
+    reads the initialiser.
+  - Witness: gtk-subclass's `wide from the template 5 pressed 1` and `tall
+    head foot true`. Each half of the fix alone fails it with a critical.
 - Before this, a `declare`d field compiled into a state field nothing set,
   and reading it failed GTK's assertion. Witness: gtk-subclass's `panel from
   the template true`.
