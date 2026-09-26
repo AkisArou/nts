@@ -43,9 +43,9 @@ pub(crate) const EMIT: &str = "nts_gobject_emit";
 /// backend defines per property, `nts_gobject_prop_{kind}__{name}`, as
 /// `g_object_set`.
 pub(crate) const SET_BY_NAME: &str = "nts_gobject_prop_";
-/// And one with no getter method read through `g_object_get`: a number or a
-/// boolean only, which the thunk reads into a local of the property's own
-/// type -- a string or an object would come back owned.
+/// And one with no getter method read through `g_object_get`, which the thunk
+/// reads into a local of the property's own type: a string or an object comes
+/// back owned (see `get_by_name`).
 pub(crate) const GET_BY_NAME: &str = "nts_gobject_propget_";
 
 /// One namespace's binding, ready to write.
@@ -547,8 +547,9 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 continue;
             }
             let label = format!("{c_type}:{}", property.name);
-            let param = mapper.with_c_type(param);
-            let value = match mapper.typed(&param) {
+            let param = mapper.with_c_type(&spelled_string(param, "const gchar*"));
+            // A string as an in parameter's is (`value`), lent for the call.
+            let value = match if is_string(&param) { mapper.value(&param) } else { mapper.typed(&param) } {
                 Ok(value) => mapper.truth(&param, value),
                 Err(reason) => {
                     mapper.binding.refused.push((label, reason));
@@ -587,6 +588,25 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
     }
 }
 
+/// A property's `utf8` spelled as the thunk passes it -- `const gchar*` in,
+/// `gchar*` back -- so that it maps as a parameter's or a result's string
+/// does. GIR writes a property's with no C type, or as `gchar*`, which a
+/// parameter would mean a buffer the callee writes: `g_object_set` only
+/// reads it.
+fn spelled_string(param: &Param, spelling: &str) -> Param {
+    let mut param = param.clone();
+    if let TypeRef::Named { name, c_type } = &mut param.ty
+        && name == "utf8"
+    {
+        *c_type = Some(spelling.to_owned());
+    }
+    param
+}
+
+fn is_string(param: &Param) -> bool {
+    matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8")
+}
+
 /// How a property's value crosses `g_object_set`/`g_object_get`, as a
 /// thunk's name says it (see `set_by_name`). `None` for any other C type.
 fn value_kind(c: &Type) -> Option<char> {
@@ -602,19 +622,43 @@ fn value_kind(c: &Type) -> Option<char> {
 }
 
 /// A readable property with no getter method, read through `g_object_get`
-/// (`GET_BY_NAME`): `get_width_request`, for a number or a boolean. Anything
-/// else is left unreadable, as it was -- the lowering refuses a read no
-/// `@ntsGet` names.
+/// (`GET_BY_NAME`): `get_width_request`. A number or a boolean, a string --
+/// copied, and freed once read -- or a `GObject`, owned. Anything else is left
+/// unreadable, as it was: the lowering refuses a read no `@ntsGet` names.
 fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &str, param: &Param) {
     let ident = identifier(&property.replace('-', "_"));
     let method = format!("get_{ident}");
     if class.callables.iter().any(|callable| identifier(&callable.name) == method) {
         return;
     }
-    let param = mapper.with_c_type(param);
-    let Ok(value) = mapper.typed(&param) else { return };
-    let value = mapper.truth(&param, value);
-    let Some(kind) = value_kind(&value.c).filter(|kind| *kind != 'p') else { return };
+    let raw = param;
+    let param = mapper.with_c_type(&spelled_string(raw, "const gchar*"));
+    let (value, kind) = if is_string(&param) {
+        (Mapped { shape: Shape::Other, ts: String::new(), c: Type::Pointer(Pointee::Void) }, 'p')
+    } else {
+        let Ok(value) = mapper.typed(&param) else { return };
+        let value = mapper.truth(&param, value);
+        let Some(kind) = value_kind(&value.c) else { return };
+        (value, kind)
+    };
+    // A pointer comes back owned: a string `g_object_get` copied, which the
+    // call frees once read, or a GObject it took a reference to. Anything
+    // else -- a boxed copy -- is left unreadable.
+    let (value, free) = if kind == 'p' {
+        let mut result = mapper.with_c_type(&spelled_string(raw, "gchar*"));
+        result.direction = Direction::Out;
+        result.transfer = Transfer::Full;
+        result.nullable = true;
+        let Ok((read, free)) = mapper.result(&result) else { return };
+        let read = mapper.truth(&result, read);
+        let string = read.ts.starts_with("string");
+        if !string && !matches!(read.shape, Shape::Handle { .. }) {
+            return;
+        }
+        (if string { read } else { mapper.owned(read, true) }, free)
+    } else {
+        (value, None)
+    };
     let this = Mapped { shape: Shape::Other, ts: c_type.to_owned(), c: Type::Pointer(Pointee::Void) };
     mapper.binding.functions.push(Function {
         name: format!("{c_type}_{method}_by_name"),
@@ -623,7 +667,7 @@ fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &
         result: value.clone(),
         c_parameters: vec![this.c],
         deprecated: false,
-        free: None,
+        free,
         no_escape: Vec::new(),
         returns: None,
         method: Some((c_type.to_owned(), method.clone())),

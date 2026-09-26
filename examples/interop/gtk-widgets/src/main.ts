@@ -12,6 +12,11 @@
 //                 `string | null` and written as `string`, an accessor pair
 //   request 140   `width_request`, which has no setter or getter method:
 //                 written and read through `g_object_set`/`g_object_get`
+//   icon edit-clear file null same true  more properties with no getter or
+//                 setter method: an entry's `primary_icon_name`, a string
+//                 written and read back (copied, the copy freed); an image's
+//                 unset `file`, `null`; and `primary_icon_paintable`, an object
+//                 written and read back as itself, owned
 //   drawn true width 300  `Canvas`'s `vfunc_snapshot`, drawing with
 //                 `GtkSnapshot` once GTK renders the window, whose width is
 //                 `default_width` -- another property with no setter
@@ -20,6 +25,8 @@ import {
   GtkApplicationWindow,
   GtkBox,
   GtkDropDown,
+  GtkEntry,
+  GtkImage,
   GtkGrid,
   GtkLabel,
   GtkSpinButton,
@@ -94,6 +101,14 @@ function open(app: GtkApplication): void {
     "label " + (label.label ?? "") + " notified " + String(notified) + " picked " + picked + " page " + (stack.visible_child_name ?? ""),
   );
   console.log("request " + String(canvas.width_request));
+  const entry = new GtkEntry({ primary_icon_name: "edit-find" });
+  entry.primary_icon_name = "edit-clear";
+  const image = new GtkImage({ icon_name: "face-smile" });
+  const paintable = image.paintable;
+  if (paintable !== null) entry.primary_icon_paintable = paintable;
+  console.log(
+    "icon " + (entry.primary_icon_name ?? "null") + " file " + (image.file ?? "null") + " same " + String(entry.primary_icon_paintable === paintable),
+  );
   g_timeout_add_full(0, 300, () => {
     console.log("drawn " + String(canvas.drawn > 0) + " width " + String(canvas.width));
     app.quit();

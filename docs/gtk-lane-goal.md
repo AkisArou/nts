@@ -877,17 +877,26 @@ GtkWindow({ default_width: 400 })` did not type-check, and neither did
   `gboolean` or enum too), `u`, `l`/`L` 64 bits, `d` (a `float` promoted),
   `p` a pointer.
 - A readable property with no getter gets `get_{name}` over
-  `nts_gobject_propget_`, `g_object_get` into a local of its own type, for
-  numbers and booleans. A string or an object would come back owned, so
-  those reads stay refused, as "a read of a native property no @ntsGet
-  names a method for".
+  `nts_gobject_propget_`, `g_object_get` into a local of its own type.
+  - A string comes back copied, and is freed once read (`@ntsFree g_free`).
+  - A GObject comes back owned (`Owned<X>`).
+  - A boxed copy is left unreadable, as "a read of a native property no
+    @ntsGet names a method for".
+- A property's `utf8` has no C type in GIR, or has `gchar*`, which as a
+  parameter means a buffer the callee writes. So the thunks spell it
+  `const gchar*` in and `gchar*` back, and it maps as a lent parameter's or
+  an owned result's string does. That cleared 69 "`Gtk.utf8`, a type this
+  binder does not know" refusals.
 - Neither thunk has a header: the lowering clears `declared_at` and types
   the object `void *`, as for `connect`, and the self-check skips them.
-- Reach: 283 properties written and 300 read across Gtk-4.0's closure.
+- Reach: 353 properties written (every writable one with no setter) and
+  452 read, across Gtk-4.0's closure.
 - LLVM promotes varargs itself. Writing it found that the emit thunk passed
   a `float` unpromoted and widened `int8`/`int16` with `zext`; one helper
   (`promoted`) now does both, signed as the C type is.
-- Witness: gtk-widgets' `request 140`, and `width 300` from `default_width`,
+- Witness: gtk-widgets' `request 140`, `icon edit-clear file null same
+  true` (a string round-tripped, an unset one, an object read back as
+  itself), and `width 300` from `default_width`,
   on C and LLVM, plain and `--rc`. The same line checks GTK 4's own drawing:
   `Canvas`'s `vfunc_snapshot` appends a colour node through `GtkSnapshot`
   (`drawn true`). cairo has no GIR on this machine, so `set_draw_func` stays

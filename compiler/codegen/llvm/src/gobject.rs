@@ -585,7 +585,11 @@ fn get_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
         let thunk = &target.name;
         bytes_constant(&mut out, &format!("{thunk}.name"), &property.replace('_', "-"));
         let value = ty_of(&target.result.abi(platform.abi), func)?.to_owned();
-        let zero = if matches!(value.as_str(), "float" | "double") { "0.0" } else { "0" };
+        let zero = match value.as_str() {
+            "float" | "double" => "0.0",
+            "ptr" => "null",
+            _ => "0",
+        };
         let _ = writeln!(
             out,
             "define {value} @{thunk}(ptr %a0) nounwind {{\nentry:\n  %r = alloca {value}\n  store {value} {zero}, ptr %r\n\x20 call void (ptr, ptr, ...) @g_object_get(ptr %a0, ptr @{thunk}.name, ptr %r, ptr null)\n  %v = load {value}, ptr %r\n  ret {value} %v\n}}"
