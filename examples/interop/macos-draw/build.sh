@@ -4,9 +4,10 @@
 #
 # The arms:
 #
-# - **Binding:** `types/coregraphics.d.ts` is `nts bind-objc`'s, regenerated
-#   and compared: `CGContext`, `CGColor` and `CGColorSpace` as the classes
-#   Swift makes of them, their methods the C functions Swift makes members.
+# - **Binding:** none is committed. `nts build` generates it from what
+#   `src/main.ts` imports from `objc:CoreGraphics`: `CGContext`, `CGColor` and
+#   `CGColorSpace` as the classes Swift makes of them, their methods the C
+#   functions Swift makes members.
 # - **Oracle:** `reference/draw.c`, compiled with the SDK's headers and run on
 #   the same Mac.
 # - **Main (C) and LLVM:** under `--rc` the program prints exactly what the
@@ -40,20 +41,6 @@ fi
   NTS_APPLE_ROOT="$apple" "$root/tooling/apple/build-libuv.sh" >/dev/null
 
 mkdir -p "$out"
-# `types/coregraphics.d.ts` is `nts bind-objc`'s, and must still be:
-# regenerated and compared. NTS_REGENERATE=1 writes it instead.
-"$nts" bind-objc --sdk "$sdk" --module objc:CoreGraphics --framework CoreGraphics \
-  --class CGContext --class CGColor --class CGColorSpace --function CGColorSpaceCreateDeviceRGB \
-  --out "$out/coregraphics.d.ts" >/dev/null
-if [ "${NTS_REGENERATE:-}" = 1 ]; then
-  command cp -f "$out/coregraphics.d.ts" "$source/types/coregraphics.d.ts"
-fi
-diff -u "$source/types/coregraphics.d.ts" "$out/coregraphics.d.ts" >"$out/coregraphics.d.ts.diff" || {
-  head -40 "$out/coregraphics.d.ts.diff" >&2
-  echo "macos-draw: types/coregraphics.d.ts is not what nts bind-objc writes; NTS_REGENERATE=1 rewrites it" >&2
-  exit 1
-}
-echo "bind-objc: types/coregraphics.d.ts is the generator's, unchanged"
 
 # `build DIR [nts build flags]`.
 build() {
@@ -69,6 +56,9 @@ build() {
   fi
 }
 build "$out" --rc
+ls "$source"/.nts/objc/*/CoreGraphics.d.ts >/dev/null 2>&1 ||
+  { echo "macos-draw: nts build did not generate the CoreGraphics binding in .nts/objc" >&2; exit 1; }
+echo "binding: generated from the program's imports"
 for arch in x86_64 aarch64; do
   file -b "$out/draw/macos-13-$arch/draw" | grep -q "Mach-O" ||
     { echo "macos-draw: no $arch Mach-O executable" >&2; exit 1; }

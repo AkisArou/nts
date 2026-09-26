@@ -7,6 +7,8 @@
 
 mod bind;
 mod bind_objc;
+mod objc_bindings;
+mod objc_imports;
 mod bind_gir;
 mod bind_winmd;
 
@@ -1203,11 +1205,24 @@ fn print_public_api(program: &hir::Program) {
 /// it: with the React stage installed when its `nts.config.ts` has a `react`
 /// section, so that every command reads the program nts builds.
 fn frontend_for(tsconfig: &Utf8Path, tsgo_binary: String) -> Result<TsgoApi> {
-    let source = TsgoApi::for_compilation(tsgo_binary);
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
     let Some(config) = nts_build::config::beside(tsconfig) else {
         return Ok(source);
     };
-    let Some(react) = nts_build::config::resolve(&config)?.react else {
+    let resolved = nts_build::config::resolve(&config)?;
+    // A program for macOS or iOS has its Objective-C binding generated from
+    // what it imports (`objc_bindings`).
+    let apple: Vec<nts_build::config::Target> = resolved
+        .products
+        .values()
+        .flat_map(|product| product.targets.iter())
+        .filter(|target| matches!(target.os.as_str(), "macos" | "ios"))
+        .cloned()
+        .collect();
+    if !apple.is_empty() {
+        source = source.with_generated(Box::new(objc_bindings::ObjcBindings::new(apple)));
+    }
+    let Some(react) = resolved.react else {
         return Ok(source);
     };
     let mut options = nts_react::stage::default_options();

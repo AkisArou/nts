@@ -101,6 +101,21 @@ pub(crate) struct Output {
     /// The values module beside the binding: Swift's `async` forms, each a
     /// function its `@ntsCall` overload names. Empty when nothing is `async`.
     pub(crate) values: String,
+    /// For a binding by names: each bound class, by its Swift name, with the
+    /// protocols it adopts that are not bound, by Swift name, and each one's
+    /// members, by the base of the name Swift gives them. What a program that
+    /// reads `field.insertText` needs bound, and not every protocol a class
+    /// adopts, which clash.
+    pub(crate) adoptions: BTreeMap<String, BTreeMap<String, Adopted>>,
+}
+
+/// One protocol a bound class adopts: see [`Output::adoptions`].
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) struct Adopted {
+    /// Its members, by the base of the name Swift gives each.
+    pub(crate) members: BTreeSet<String>,
+    /// The protocols it refines, directly or not, by Swift name.
+    pub(crate) refines: BTreeSet<String>,
 }
 
 pub(crate) fn run(request: &Request) -> Result<Output> {
@@ -130,7 +145,21 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     model.platform = platform;
     model.read_cf(&bodies.functions, &request.functions);
     model.read_constants(&constants, &bodies.variables);
-    Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model) })
+    let adoptions = if request.names.is_empty() { BTreeMap::new() } else { swift.adoptions(&bound, &headers.adopts) };
+    Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model), adoptions })
+}
+
+/// The protocols `classes` adopt, in an interface or a category, and those
+/// they refine.
+fn adopted(classes: &BTreeSet<String>, adopts: &BTreeMap<String, BTreeSet<String>>) -> BTreeSet<String> {
+    let mut seen = BTreeSet::new();
+    let mut pending: Vec<&String> = classes.iter().flat_map(|class| adopts.get(class).into_iter().flatten()).collect();
+    while let Some(protocol) = pending.pop() {
+        if seen.insert(protocol.clone()) {
+            pending.extend(adopts.get(protocol).into_iter().flatten());
+        }
+    }
+    seen
 }
 
 /// The witness program for `model` (see [`Output::witness`]). Plain C over
@@ -174,7 +203,7 @@ fn witness(request: &Request, model: &Model) -> String {
 /// under the SDK's version for macOS (`symbolgraph/26.5`), and under its
 /// canonical name for any other platform (`symbolgraph/iphonesimulator26.5`),
 /// since iOS and macOS number their SDKs alike.
-fn default_symbols(sdk: &str) -> Result<std::path::PathBuf> {
+pub(crate) fn default_symbols(sdk: &str) -> Result<std::path::PathBuf> {
     let sdk = std::path::Path::new(sdk);
     let settings = sdk.join("SDKSettings.json");
     let text = std::fs::read(&settings).with_context(|| format!("reading {}", settings.display()))?;
@@ -583,6 +612,9 @@ enum Optionality {
 #[derive(serde::Deserialize, Clone)]
 struct Fragment {
     spelling: String,
+    /// The USR of the type a fragment names, where it names one.
+    #[serde(default, rename = "preciseIdentifier")]
+    precise: Option<String>,
 }
 
 impl Symbol {
@@ -713,10 +745,19 @@ impl Swift {
         let mut resolved = request.clone();
         for name in &request.names {
             let mut found = false;
-            for usr in self.by_usr.iter().filter(|(_, symbol)| symbol.path.len() == 1 && symbol.path[0] == *name).map(|(usr, _)| usr) {
+            // A function's path carries its labels: `UIApplicationMain(_:_:_:_:)`.
+            let top_level = |symbol: &Symbol| {
+                symbol.path.len() == 1
+                    && symbol.path[0].strip_prefix(name.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('('))
+            };
+            for (usr, symbol) in self.by_usr.iter().filter(|(_, symbol)| top_level(symbol)) {
                 found = true;
                 let (list, declared) = if let Some(class) = usr.strip_prefix("c:objc(cs)") {
                     (&mut resolved.classes, class)
+                } else if usr.starts_with("c:@T@") && symbol.kind.identifier == "swift.class" {
+                    // A Core Foundation class, `CGContextRef` as `CGContext`,
+                    // which is asked for by the name Swift gives it.
+                    (&mut resolved.classes, name.as_str())
                 } else if let Some(protocol) = usr.strip_prefix("c:objc(pl)") {
                     (&mut resolved.protocols, protocol)
                 } else if let Some(function) = usr.strip_prefix("c:@F@") {
@@ -732,7 +773,40 @@ impl Swift {
                 bail!("`{name}` is not a name Swift imports from {}", request.frameworks.join(", "));
             }
         }
+        if !request.names.is_empty() {
+            self.close_over_cf_classes(&mut resolved);
+        }
         Ok(resolved)
+    }
+
+    /// The Core Foundation classes a program reaches without naming them:
+    /// `CGColorSpace`, which `CGColorSpaceCreateDeviceRGB` answers and
+    /// `CGContext`'s initializer takes. A Core Foundation class is a C type
+    /// whose functions Swift makes its members, and one that is not bound
+    /// leaves every function naming it unbound too, so each named by a bound
+    /// function's or member's Swift declaration is bound, until none is new.
+    fn close_over_cf_classes(&self, request: &mut Request) {
+        let cf_class = |usr: &str| {
+            let name = usr.strip_prefix("c:@T@")?.strip_suffix("Ref")?;
+            self.by_usr.get(usr).filter(|symbol| symbol.kind.identifier == "swift.class").map(|_| name.to_owned())
+        };
+        loop {
+            let reached: BTreeSet<String> = self
+                .by_usr
+                .iter()
+                .filter(|(usr, symbol)| {
+                    let owner = symbol.path.first().map(String::as_str).unwrap_or_default();
+                    let function = usr.strip_prefix("c:@F@").is_some_and(|name| request.functions.iter().any(|f| f == name));
+                    function || (symbol.path.len() == 2 && request.classes.iter().any(|class| class == owner))
+                })
+                .flat_map(|(_, symbol)| symbol.fragments.iter().filter_map(|fragment| fragment.precise.as_deref().and_then(cf_class)))
+                .filter(|name| !request.classes.contains(name))
+                .collect();
+            if reached.is_empty() {
+                return;
+            }
+            request.classes.extend(reached);
+        }
     }
 
     /// The extern constants Swift imports as static properties of one of
@@ -758,6 +832,29 @@ impl Swift {
     /// The name Swift gives Objective-C class `class`: `Timer` for `NSTimer`.
     fn class(&self, class: &str) -> String {
         self.get(&format!("c:objc(cs){class}")).map_or_else(|| class.to_owned(), |s| s.names.title.clone())
+    }
+
+    /// See [`Output::adoptions`].
+    fn adoptions(&self, bound: &BTreeSet<String>, adopts: &BTreeMap<String, BTreeSet<String>>) -> BTreeMap<String, BTreeMap<String, Adopted>> {
+        let swift_name = |protocol: &str| self.get(&format!("c:objc(pl){protocol}")).map(|symbol| symbol.names.title.clone());
+        let mut index = BTreeMap::new();
+        for class in bound {
+            let mut protocols = BTreeMap::new();
+            for protocol in adopted(&std::iter::once(class.clone()).collect(), adopts) {
+                let container = format!("c:objc(pl){protocol}");
+                let Some(name) = swift_name(&protocol) else { continue };
+                let members = self
+                    .by_usr
+                    .iter()
+                    .filter(|(usr, _)| usr.strip_prefix(container.as_str()).is_some_and(|rest| rest.starts_with('(')))
+                    .map(|(_, member)| member.names.title.split('(').next().unwrap_or_default().to_owned())
+                    .collect();
+                let refines = adopted(&std::iter::once(protocol.clone()).collect(), adopts).iter().filter_map(|p| swift_name(p)).collect();
+                protocols.insert(name, Adopted { members, refines });
+            }
+            index.insert(self.class(class), protocols);
+        }
+        index
     }
 }
 

@@ -48,24 +48,6 @@ fi
   NTS_APPLE_ROOT="$apple" "$root/tooling/apple/build-libuv.sh" >/dev/null
 
 mkdir -p "$out"
-# `types/appkit.d.ts` is `nts bind-objc`'s, and must still be: regenerated and
-# compared. NTS_REGENERATE=1 writes it instead.
-"$nts" bind-objc --sdk "$sdk" --module objc:AppKit --framework AppKit --framework Foundation \
-  --class NSApplication --class NSWindow --class NSButton --class NSTextField --class NSTableView \
-  --class NSTableColumn --class NSScrollView --class NSString --class NSTimer --class NSEvent \
-  --class NSView --class NSLayoutConstraint --class NSLayoutAnchor --class NSLayoutXAxisAnchor \
-  --class NSLayoutYAxisAnchor --class NSLayoutDimension --class NSMenu --class NSMenuItem \
-  --protocol NSTableViewDataSource --protocol NSApplicationDelegate --out "$out/appkit.d.ts" --values "$out/appkit.values.ts" >/dev/null
-for generated in appkit.d.ts appkit.values.ts; do
-  if [ "${NTS_REGENERATE:-}" = 1 ]; then
-    command cp -f "$out/$generated" "$source/types/$generated"
-  fi
-  diff -u "$source/types/$generated" "$out/$generated" >"$out/$generated.diff" || {
-    head -40 "$out/$generated.diff" >&2
-    echo "macos-notes: types/$generated is not what nts bind-objc writes; NTS_REGENERATE=1 rewrites it" >&2
-    exit 1
-  }
-done
 log="$out/build.log"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
@@ -74,6 +56,9 @@ if grep -qE "refused|NTS[0-9]{4}" "$log"; then
   echo "macos-notes: nts build refused part of the program and exited 0" >&2
   exit 1
 fi
+ls "$source"/.nts/objc/*/AppKit.d.ts >/dev/null 2>&1 ||
+  { echo "macos-notes: nts build did not generate the AppKit binding in .nts/objc" >&2; exit 1; }
+echo "binding: generated from the program's imports"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out/rc" --rc >"$out/rc.log" 2>&1 ||
   { cat "$out/rc.log" >&2; exit 1; }
 if grep -qE "refused|NTS[0-9]{4}" "$out/rc.log"; then

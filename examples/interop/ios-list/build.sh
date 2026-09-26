@@ -4,8 +4,9 @@
 #
 # The arms:
 #
-# - **Binding:** `types/uikit.d.ts` is `nts bind-objc`'s for the simulator's
-#   SDK and Swift's iOS symbol graphs, regenerated and compared.
+# - **Binding:** none is committed. `nts build` generates it from what
+#   `src/main.ts` imports from `objc:UIKit`, into `.nts/objc`, and this
+#   asserts the build read one.
 # - **Main (C, `--rc`) and LLVM:** each is an `.app` for the simulator
 #   (`LC_BUILD_VERSION` names `iossimulator`), installed and launched with
 #   `simctl`. The table asks the program's data source for its rows and
@@ -45,24 +46,6 @@ fi
   NTS_APPLE_ROOT="$apple" "$root/tooling/apple/build-libuv.sh" x86_64-ios-simulator >/dev/null
 
 mkdir -p "$out"
-# `types/uikit.d.ts` is `nts bind-objc`'s, and must still be: regenerated and
-# compared. NTS_REGENERATE=1 writes it instead.
-"$nts" bind-objc --sdk "$sdk" --target x86_64-apple-ios17.0-simulator --module objc:UIKit \
-  --framework UIKit --framework Foundation --class UIApplication --class UIWindow --class UINavigationController \
-  --class UIViewController --class UINavigationBar --class UINavigationItem --class UIView --class UITableView \
-  --class UITableViewCell --class UILabel --class UIScreen --class UIColor --class NSTimer --class NSIndexPath \
-  --function UIApplicationMain --protocol UIApplicationDelegate --protocol UITableViewDataSource --protocol UITableViewDelegate --out "$out/uikit.d.ts" --values "$out/uikit.values.ts" >/dev/null
-for generated in uikit.d.ts uikit.values.ts; do
-  if [ "${NTS_REGENERATE:-}" = 1 ]; then
-    command cp -f "$out/$generated" "$source/types/$generated"
-  fi
-  diff -u "$source/types/$generated" "$out/$generated" >"$out/$generated.diff" || {
-    head -40 "$out/$generated.diff" >&2
-    echo "ios-list: types/$generated is not what nts bind-objc writes; NTS_REGENERATE=1 rewrites it" >&2
-    exit 1
-  }
-done
-echo "bind-objc: types/uikit.d.ts and types/uikit.values.ts are the generator's, unchanged"
 
 NTS_IOS_SIMULATOR_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" --rc >"$out/build.log" 2>&1 ||
   { cat "$out/build.log" >&2; exit 1; }
@@ -71,6 +54,9 @@ if grep -qE "refused|NTS[0-9]{4}" "$out/build.log"; then
   echo "ios-list: nts build refused part of the program and exited 0" >&2
   exit 1
 fi
+ls "$source"/.nts/objc/*/UIKit.d.ts >/dev/null 2>&1 ||
+  { echo "ios-list: nts build did not generate the UIKit binding in .nts/objc" >&2; exit 1; }
+echo "binding: generated from the program's imports"
 for product in list listLlvm; do
   binary="$out/$product/ios-17-x86_64/$product"
   llvm-objdump --macho --private-headers "$binary" | grep -q "platform iossimulator" ||

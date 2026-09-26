@@ -27,6 +27,7 @@
 
 pub mod ast;
 pub mod decompose;
+pub mod generated;
 pub mod proto;
 pub mod symbols;
 pub mod transform;
@@ -113,6 +114,9 @@ pub enum TsgoError {
     #[error("an overlay was set on a tsgo client spawned without overlays")]
     NoOverlays,
 
+    #[error("{0}")]
+    Generated(String),
+
     #[error(
         "{identity} was still revising its rewrite of the project after {rounds} rounds, the most a \
          source transform is given: each revision drew errors the last had not. This is the cap \
@@ -137,7 +141,10 @@ pub enum TsgoError {
 
 impl From<TsgoError> for SnapshotError {
     fn from(error: TsgoError) -> Self {
-        Self::Transport(error.to_string())
+        match error {
+            TsgoError::Generated(why) => Self::Generated(why),
+            error => Self::Transport(error.to_string()),
+        }
     }
 }
 
@@ -1010,6 +1017,8 @@ pub struct TsgoApi {
     fold_constants: Option<decompose::Budget>,
     /// Rewrites the project's files before they are read; see [`transform`].
     transform: Option<Box<dyn transform::SourceTransform>>,
+    /// Adds files a build generates to the project; see [`generated`].
+    generated: Option<Box<dyn generated::Generated>>,
     stats: FrontendStats,
 }
 
@@ -1038,6 +1047,7 @@ impl TsgoApi {
             resolve_calls: None,
             fold_constants: None,
             transform: None,
+            generated: None,
             stats: FrontendStats::default(),
         }
     }
@@ -1046,6 +1056,14 @@ impl TsgoApi {
     #[must_use]
     pub fn with_transform(mut self, transform: Box<dyn transform::SourceTransform>) -> Self {
         self.transform = Some(transform);
+        self
+    }
+
+    /// Add the files `generated` makes for the program to the project it
+    /// opens; see [`generated`].
+    #[must_use]
+    pub fn with_generated(mut self, generated: Box<dyn generated::Generated>) -> Self {
+        self.generated = Some(generated);
         self
     }
 
@@ -1271,7 +1289,10 @@ impl TsgoApi {
     /// is one, rewrite it: the client, and the snapshot nts reads.
     fn open(&mut self, tsconfig: &Utf8Path, root: &Utf8Path) -> Result<(Client, UpdateSnapshotResponse, Vec<String>), TsgoError> {
         let mut client = connect(&self.executable, tsconfig, self.transform.is_some())?;
-        let opened = client.open_project(tsconfig)?;
+        let mut opened = client.open_project(tsconfig)?;
+        if let Some(generated) = self.generated.as_deref_mut() {
+            opened = open_generated(generated, &mut client, tsconfig, opened)?;
+        }
         let Some(transform) = self.transform.as_deref_mut() else {
             return Ok((client, opened, Vec::new()));
         };
@@ -1449,8 +1470,55 @@ impl SemanticSource for TsgoApi {
     }
 
     fn identity(&self) -> String {
-        self.transform.as_ref().map_or_else(String::new, |transform| transform.identity())
+        let transform = self.transform.as_ref().map_or_else(String::new, |transform| transform.identity());
+        match &self.generated {
+            Some(generated) if transform.is_empty() => generated.identity(),
+            Some(generated) => format!("{transform}+{}", generated.identity()),
+            None => transform,
+        }
     }
+}
+
+/// The project at `tsconfig`, opened as `generated` answers: in its place, the
+/// config that adds the files generated for it, and again with what the
+/// checker said of that one until the generator has nothing to add.
+///
+/// **What ends this is the generator, not `ROUNDS`.** Each round must add
+/// something the last did not, from a set that only grows and is finite --
+/// the Objective-C generator adds a class only while it is a stub, and a class
+/// added is a stub no longer. The cap is a backstop against a generator that
+/// breaks that promise; raising it fixes nothing a correct generator needs.
+fn open_generated(
+    generated: &mut dyn generated::Generated,
+    client: &mut Client,
+    tsconfig: &Utf8Path,
+    project: UpdateSnapshotResponse,
+) -> Result<UpdateSnapshotResponse, TsgoError> {
+    const ROUNDS: usize = 4;
+    let roots: Vec<String> = project.projects.iter().flat_map(|opened| opened.root_files.iter().cloned()).collect();
+    let mut opened = project;
+    let mut current: Option<Utf8PathBuf> = None;
+    let mut complaints = Vec::new();
+    for _ in 0..ROUNDS {
+        let Some(config) = generated.config(tsconfig, &roots, &complaints).map_err(TsgoError::Generated)? else { break };
+        if current.as_deref() == Some(config.as_path()) {
+            break;
+        }
+        opened = client.open_project(&config)?;
+        // The project opened last is the one whose program is read, where
+        // the answer names it among the others.
+        if opened.projects.iter().any(|project| Utf8Path::new(&project.config_file_name) == config) {
+            opened.projects.retain(|project| Utf8Path::new(&project.config_file_name) == config);
+        }
+        complaints.clear();
+        for project in &opened.projects {
+            complaints.extend(
+                client.diagnostics(opened.snapshot, &project.id)?.into_iter().map(|d| generated::Complaint { code: d.code, text: d.text }),
+            );
+        }
+        current = Some(config);
+    }
+    Ok(opened)
 }
 
 /// What the frontend did, counted once every pass has run.

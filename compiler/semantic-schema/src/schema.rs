@@ -868,6 +868,11 @@ pub enum SnapshotError {
     #[error("frontend transport failed: {0}")]
     Transport(String),
 
+    /// A generator of files for the program -- its Objective-C binding --
+    /// could not make them, and says why.
+    #[error("{0}")]
+    Generated(String),
+
     #[error("failed to decode snapshot: {0}")]
     Decode(String),
 }
