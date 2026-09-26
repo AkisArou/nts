@@ -249,6 +249,48 @@ JSX handler cannot name yet.
 Regenerate after a GTK update, from a native program's generated bindings:
 `node tools/gen-widgets.ts ../../native/gtk/types/gir`.
 
+## Lists: a row per item, rendered by React (designed, not built)
+
+A ListView, GridView or ColumnView shows its model's items through a
+factory. It makes a widget for each *visible* row and rebinds rows to other
+items as the list scrolls. An app should write the row as React:
+
+```tsx
+<ListView model={selection} renderItem={(item: GtkStringObject) => <Label label={item.get_string()} />} />
+```
+
+**The design is a component that renders a portal per bound row.**
+- `ListView` and `GridView` (and ColumnView's columns) become function
+  components in `src/lists.tsx`, not host components.
+- Each renders the host `GtkListView` with a `GtkSignalListItemFactory` it
+  owns. The factory's `bind` and `unbind` record which item each list item
+  shows, in a ref, and set state. GTK binds a frame's visible rows together,
+  so they coalesce into one render.
+- For each bound row it renders `createPortal(renderItem(item), row)`, keyed
+  by the list item. GTK recycles list items, so a scroll that rebinds a row
+  to another item updates that row's subtree rather than remounting it,
+  which is the reuse GTK's recycling is for.
+
+**A portal's container is where a row goes.** The host config's
+`Container` becomes one interface, "holds one child":
+- a window, through `set_child`;
+- a list item, through its own `set_child`.
+
+`appendChildToContainer` and its siblings call that interface, so a portal
+into a row is the same code path as the root.
+
+**Why not the alternatives.**
+- A root per row would not share context (a row could not read the app's
+  theme or state) or batching, and every row would mount on bind. A portal
+  keeps the row inside the tree that renders the list, as inline JSX would
+  be.
+- The host node cannot render the rows itself: the host config never calls
+  a component. `renderItem` has to run inside React.
+
+**What it waits for:** `useState` and `useRef`, and portals, compiled
+natively (the `useState` chain in the census). Until then it could only be
+checked in JavaScript, where react-gtk does not run.
+
 ## Order of work
 
 1. The GLib scheduler host and a minimal host config (`Window`, `Box`,
@@ -260,5 +302,8 @@ Regenerate after a GTK update, from a native program's generated bindings:
    props with scalar values, and signals with scalar or widget arguments.
 3. `ListBox` (done, with `FlowBox`), `Entry` with controlled `text` (done,
    with the other controlled props), and the rest of the common widgets.
-4. A benchmark against GJS on the same app, which the GTK lane's goal already
+4. Containers that place with parameters (Grid, Stack, Notebook, the bars'
+   groups, Overlay, Fixed) and slot elements: done.
+5. Lists rendered by React (above): designed, waiting on a native render.
+6. A benchmark against GJS on the same app, which the GTK lane's goal already
    names.
