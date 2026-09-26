@@ -5535,23 +5535,29 @@ fn closure_variants(
     variants
 }
 
-/// Record why an exported function was not compiled, for the wrapper to say.
+/// The name a class member is emitted under, when the declaration is one.
 ///
-/// Written where the refusal happens rather than reconstructed afterwards: the
-/// name and the reason are decided in one place, so nothing can pair them
-/// wrongly. Only *declared* names are kept — an anonymous or synthetic function
-/// has no export to explain.
+/// **The emitted spelling, member kind by member kind**, because a cascade asks
+/// with the name the callee was emitted as and a key one character off is a key
+/// nobody finds:
 ///
-/// One entry per name. A generic with several copies can refuse more than once
-/// and the first reason is as good as the fifth; a list of five would read as
-/// five problems.
-/// `Owner#member`, when the declaration is a class member.
+/// | declaration | key | built by |
+/// |---|---|---|
+/// | instance method | `Owner#member` | `FuncBuilder::callee_for` |
+/// | static method | `Owner.member` | `FuncBuilder::static_method_name` |
+/// | instance accessor | `Owner#get x` / `Owner#set x` | `callee_for`; the napi wrapper's `member_kind` documents the space |
+/// | static accessor | `Owner.get x` | `Self::static_accessor_place` |
+/// | constructor | `Owner#constructor` | `lower_class`, and what the napi wrapper asks with |
+///
+/// `None` for anything that is not a class member, which is what makes it the
+/// test [`note_uncompiled`] uses for "is this a member" -- and therefore for
+/// whether the bare name belongs to this declaration at all.
 ///
 /// Walks to the enclosing `class`, which is syntax rather than the hierarchy
 /// lookup the lowering uses -- this runs where a refusal is recorded and has a
 /// node, not a resolved type. A constructor is named `constructor` regardless
-/// of what `declared_name` found in it, because that is what the lowering
-/// spells: `lower.rs` builds `format!("{owner}#constructor")`.
+/// of what `declared_name` found in it, because a constructor has no
+/// `IDENTIFIER` child to find.
 fn qualified_name(
     snapshot: &SemanticSnapshot,
     id: NodeId,
@@ -5564,21 +5570,70 @@ fn qualified_name(
         // a constructor has none -- `constructor` is a keyword. So it answers
         // `None` here, and this arm was unreachable from `note_uncompiled`
         // until that function stopped requiring a declared name first.
-        NodeKind::Syntax(syntax::CONSTRUCTOR) => CONSTRUCTOR_KEY,
-        NodeKind::Syntax(syntax::METHOD_DECLARATION) => declared?,
+        NodeKind::Syntax(syntax::CONSTRUCTOR) => CONSTRUCTOR_KEY.to_owned(),
+        NodeKind::Syntax(syntax::METHOD_DECLARATION) => declared?.to_owned(),
+        // **An accessor's emitted name carries the keyword**, which is why it is
+        // built here rather than taken from `declared_name`: a getter is emitted
+        // as `Owner#get size` (`FuncBuilder::callee_for`) and a static one as
+        // `Owner.get size` (`Self::static_accessor_place`). Measured on the
+        // control, with a refused getter and a refused method in one class:
+        //
+        //     calls  it calls `Holder#plain`, and a regular expression literal ...
+        //     reads  it calls `Holder#get size`, which was refused above
+        //
+        // -- the cause recorded under the bare `size`, which is the key a
+        // module-scope `function size` also owns, and which nothing asks with.
+        NodeKind::Syntax(syntax::GET_ACCESSOR) => format!("get {}", declared?),
+        NodeKind::Syntax(syntax::SET_ACCESSOR) => format!("set {}", declared?),
         _ => return None,
     };
     let mut at = snapshot.nodes.get(id.0 as usize)?.parent;
     while let Some(node) = at {
         let record = snapshot.nodes.get(node.0 as usize)?;
         if matches!(record.kind, NodeKind::Syntax(kind) if declares_a_class(kind)) {
-            return probe.class_name(node).map(|owner| format!("{owner}#{member}"));
+            // **`.` for a static and `#` for an instance member, because that is
+            // the difference between the two emitted names.** A static method is
+            // emitted as `Owner.member` (`FuncBuilder::static_method_name`) and an
+            // instance method as `Owner#member`, and a cascade asks with the
+            // *emitted* name -- so a refused static recorded under `Owner#member`
+            // was unfindable, one character from the key that would have answered.
+            //
+            // Measured on the control, with a class holding one refused static and
+            // one refused instance method:
+            //
+            //     viaInstance  it calls `Holder#instanceNames`, and a regular
+            //                  expression literal ...
+            //     viaStatic    it calls `Holder.names`, which was refused above
+            //
+            // "Which was refused above" is the sentence `drop_callers_of_refused`
+            // calls a claim that "is not always true", and here it was false in the
+            // other direction: the cause was recorded, under a name nobody asks.
+            let separator = if is_static_member(snapshot, id) { '.' } else { '#' };
+            return probe
+                .class_name(node)
+                .map(|owner| format!("{owner}{separator}{member}"));
         }
         at = record.parent;
     }
     None
 }
 
+/// Record why a function was not compiled, for every later reader to say.
+///
+/// Written where the refusal happens rather than reconstructed afterwards: the
+/// name and the reason are decided in one place, so nothing can pair them
+/// wrongly. Only *named* declarations are kept -- an anonymous or synthetic
+/// function has no export to explain.
+///
+/// One entry per name. A generic with several copies can refuse more than once
+/// and the first reason is as good as the fifth; a list of five would read as
+/// five problems.
+///
+/// **This doc comment was attached to [`qualified_name`]**, which was inserted
+/// between it and this function -- so the sentence "record why a function was not
+/// compiled" documented a function that computes a name, and this one had none.
+/// Worth a line because the two are read together and a misfiled doc sends the
+/// reader to the wrong half.
 fn note_uncompiled(
     snapshot: &SemanticSnapshot,
     program: &mut super::Program,
@@ -5612,10 +5667,15 @@ fn note_uncompiled(
     // `parse` was taken. `stream` refuses four constructors; on the old order
     // at most one could ever have been recorded.
     //
-    // So each name is recorded on its own, deduplicated on itself. Both are
-    // kept rather than the bare one dropped: a top-level function is asked for
-    // by its bare name, and the two vocabularies agree only there.
+    // So each name is recorded on its own, deduplicated on itself -- and a
+    // member records its *qualified* name **instead of** its bare one, which
+    // is the correction below.
     let declared = FuncBuilder::probe(snapshot).declared_name(id);
+    // Read before `record` borrows the program, because it decides whether the
+    // bare name is recorded at all. `qualified_name` answers `Some` for a
+    // method or a constructor inside a class and `None` for everything else,
+    // so it *is* the test for "this is a class member".
+    let qualified = qualified_name(snapshot, id, declared.as_deref());
     let mut record = |at: String| {
         if !program.uncompiled.iter().any(|(had, _)| *had == at) {
             program.uncompiled.push((at, diagnostic.message.clone()));
@@ -5639,11 +5699,53 @@ fn note_uncompiled(
     if let Some(emitted) = emitted {
         record(emitted.to_owned());
     }
-    if let Some(qualified) = qualified_name(snapshot, id, declared.as_deref()) {
-        record(qualified);
-    }
-    if let Some(name) = declared {
-        record(name);
+    // **A class member does not claim the bare member name**, and the sentence
+    // this replaced said the opposite: "both are kept rather than the bare one
+    // dropped". Keeping both makes this list a single flat namespace in which
+    // `Holder#names` and a module-scope `function names` are one key, first
+    // writer wins -- and the cascade *prints* what it finds there as the cause.
+    //
+    // Two consequences, both measured on 2026-09-26 with seventeen lines:
+    //
+    //     class Holder { names() { const p = /a+/; return p.source.length; } }
+    //     function names() { return Object.getOwnPropertyNames(globalThis).length; }
+    //     export function caller() { return names(); }
+    //
+    // `nts refusals` printed ``caller  it calls `names`, and a regular
+    // expression literal ...`` -- about a function containing no regular
+    // expression -- and the reflection refusal that is `names`' actual cause
+    // appeared nowhere. With the method's body the only refusal, the bare entry
+    // is a **phantom**: `tag` was in `program.c` while `uncompiled` claimed it
+    // was refused, so a reader asking why an export is missing gets an answer
+    // about one that is present.
+    //
+    // It cost a night. The raising-copy experiment lost 48 functions in
+    // `runtime/node/http` and every one of them read "a super keyword is not
+    // supported by this lowering yet" -- `EventEmitterAsyncResource#emit`'s
+    // reason, arriving under the bare key `emit`, while the function actually
+    // missing was the *top-level* `emit` in `internal/async-hooks.ts` whose own
+    // cause was dropped. A design for `super.m` as a value was written against
+    // that reading before the collision was found.
+    //
+    // **Nothing needs a member's bare name**, which is what makes this safe
+    // rather than a trade: `emit-c`'s `refused_by_lowering` matches an export
+    // name or a `Owner#` prefix, the napi wrapper asks `{name}#constructor` and
+    // export names, and the cascade asks the callee's *emitted* name, which for
+    // a method is `Owner#member`. The bare name stays for a top-level function,
+    // which is the one vocabulary where it is the emitted name.
+    //
+    // `blockers/a-static-that-shadows-a-refused-function` is the same defect one
+    // member kind over -- a `static readonly f = f` publishing the static's
+    // reason against a module-scope `function f` -- and its guard is in
+    // `ModuleScope::unsupported` rather than here, because that one collides
+    // over a *global*'s name and this one over a function's.
+    match qualified {
+        Some(qualified) => record(qualified),
+        None => {
+            if let Some(name) = declared {
+                record(name);
+            }
+        }
     }
 }
 

@@ -761,7 +761,17 @@ fn published_symbols(program: &Program) -> (Vec<String>, Vec<String>) {
 /// means what `published_without_a_symbol` is for.
 fn refused_by_lowering(program: &Program, emitted: &str) -> bool {
     program.uncompiled.iter().any(|(name, _)| {
-        name == emitted || name.split_once('#').is_some_and(|(owner, _)| owner == emitted)
+        // **Both separators, because a member's key carries the one its emitted
+        // name does**: `Owner#member` for an instance method, `Owner.member` for a
+        // static. Only `#` was tested here, and it answered for a static only
+        // because the *bare* member name happened to be recorded beside it -- so
+        // when `note_uncompiled` stopped publishing a member under its bare name,
+        // a class whose only refusal was a static would have started reporting
+        // "published without a symbol" about a name lowering had declined.
+        name == emitted
+            || name
+                .split_once(['#', '.'])
+                .is_some_and(|(owner, _)| owner == emitted)
     })
 }
 
