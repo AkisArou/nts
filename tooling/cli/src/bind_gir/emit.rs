@@ -400,8 +400,15 @@ fn method(out: &mut String, function: &Function) {
     notes(out, function, true, &defaulted, "    ");
     let rest: Vec<String> =
         parameters.map(|(name, mapped)| parameter(function, &defaulted, name, &mapped.ts)).collect();
-    let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
+    let this = std::iter::once(format!("this: {}", receiver(&instance.ts))).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    {name}({this}): {};", function.result.ts);
+}
+
+/// A method's receiver: never NULL, whatever C accepts in its place --
+/// `g_cancellable_cancel(NULL)` does nothing, and `cancellable.cancel()` has a
+/// cancellable.
+fn receiver(instance: &str) -> &str {
+    instance.strip_suffix(" | null").unwrap_or(instance)
 }
 
 /// What a class the program writes implements an interface with
@@ -535,7 +542,7 @@ fn values_method(out: &mut String, function: &Function) {
     let mut parameters = taken.iter();
     let Some((_, instance)) = parameters.next() else { return };
     let rest: Vec<String> = parameters.map(|(name, mapped)| parameter(function, &defaulted, name, &mapped.ts)).collect();
-    let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
+    let this = std::iter::once(format!("this: {}", receiver(&instance.ts))).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    /**\n     * @ntsCall {}_values\n     */", function.symbol);
     let _ = writeln!(out, "    {name}({this}): {};", values_result(function));
 }
@@ -626,7 +633,7 @@ fn promise_method(out: &mut String, start: &Function, finish: &Function) {
     let mut parameters = taken.iter();
     let Some((_, instance)) = parameters.next() else { return };
     let rest: Vec<String> = parameters.map(|(name, mapped)| parameter(start, &defaulted, name, &mapped.ts)).collect();
-    let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
+    let this = std::iter::once(format!("this: {}", receiver(&instance.ts))).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    /**\n     * @ntsCall {}_promise\n     */", start.symbol);
     let _ = writeln!(out, "    {name}({this}): Promise<{}>;", finish.result.ts);
 }

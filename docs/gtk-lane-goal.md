@@ -902,6 +902,18 @@ GtkWindow({ default_width: 400 })` did not type-check, and neither did
   (`drawn true`). cairo has no GIR on this machine, so `set_draw_func` stays
   refused.
 
+### A method whose instance C accepts as NULL
+
+`g_cancellable_cancel(NULL)` is legal, so GIR marks the instance nullable,
+and the binder made such a function a function only: `GCancellable` had no
+`cancel()`, `is_cancelled()` or `reset()`, and nothing said so in the
+refusals. A method's receiver is never NULL, so it is now a method with
+`this` typed non-nullable. That added 110 methods in Gtk-4.0's closure,
+mostly on `GskTransform`, `GMainContext` and `GCancellable`. Witness:
+gtk-actions' `dialog rejected Operation was cancelled`. `await
+dialog.choose(window, cancellable)` is rejected with GIO's error when a
+timer calls `cancellable.cancel()`, on C and LLVM, plain and `--rc`.
+
 ### libadwaita, and what a props type says
 
 Adw-1 binds from GIR like any other namespace (12,342 functions), and

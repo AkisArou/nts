@@ -10,7 +10,13 @@
 //                 its `change-state` handler takes the new state
 //   accels <Control>b  the accelerator set for `app.bump`, read back
 //   big true      the label's style class, which a `GtkCssProvider` styles
+//   dialog rejected Operation was cancelled  `await dialog.choose(window,
+//                 cancellable)`, GJS's Promise form of an `_async`/`_finish`
+//                 pair, rejected with GIO's error when a timer calls
+//                 `cancellable.cancel()` -- a method whose instance C also
+//                 accepts as NULL
 import {
+  GtkAlertDialog,
   GtkApplication,
   GtkApplicationWindow,
   GtkCssProvider,
@@ -20,8 +26,25 @@ import {
   gtk_style_context_add_provider_for_display,
 } from "c:Gtk-4.0";
 import { gdk_display_get_default } from "c:Gdk-4.0";
-import { ApplicationFlags, GMenu, GSimpleAction } from "c:Gio-2.0";
-import { g_variant_get_boolean, g_variant_new_boolean } from "c:GLib-2.0";
+import { ApplicationFlags, GCancellable, GMenu, GSimpleAction } from "c:Gio-2.0";
+import { g_timeout_add_full, g_variant_get_boolean, g_variant_new_boolean } from "c:GLib-2.0";
+
+// A dialog awaited, and cancelled before anyone answers it.
+async function ask(app: GtkApplication, window: GtkApplicationWindow): Promise<void> {
+  const dialog = new GtkAlertDialog({ message: "Delete?", buttons: ["Cancel", "Delete"] });
+  const cancellable = new GCancellable({});
+  g_timeout_add_full(0, 200, () => {
+    cancellable.cancel();
+    return false;
+  });
+  try {
+    const choice = await dialog.choose(window, cancellable);
+    console.log("dialog chose " + String(choice));
+  } catch (error) {
+    console.log("dialog rejected " + (error instanceof Error ? error.message : "?"));
+  }
+  app.quit();
+}
 
 function open(app: GtkApplication): void {
   let count = 0;
@@ -59,7 +82,7 @@ function open(app: GtkApplication): void {
     "count " + String(count) + " dark " + String(state !== null && g_variant_get_boolean(state)) + " accels " + accels.join(",") +
       " big " + String(label.has_css_class("big")),
   );
-  app.quit();
+  void ask(app, window);
 }
 
 function main(): void {

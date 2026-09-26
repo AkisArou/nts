@@ -739,7 +739,9 @@ fn method_of(callable: &Callable, parameters: &[(String, Mapped)]) -> Option<(St
     }
     let (_, instance) = parameters.first()?;
     match &instance.shape {
-        Shape::Handle { class, nullable: false } => Some((class.clone(), identifier(&callable.name))),
+        // A NULL instance C accepts too -- `g_cancellable_cancel(NULL)` does
+        // nothing -- is a method all the same: a receiver is never NULL.
+        Shape::Handle { class, .. } => Some((class.clone(), identifier(&callable.name))),
         // An instance C takes as `gpointer`, `Erased<GObject>`: a method all
         // the same, as a signal's `connect` is -- `source.bind_property(...)`
         // is `g_object_bind_property(source, ...)`.
