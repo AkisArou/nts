@@ -31,7 +31,7 @@ mkdir -p "$out"
 log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
   timeout 30 "$root/examples/interop/with-display.sh" "$out/gir/linux-gnu-x86_64/gir" 2>/dev/null | tr '\n' ' ' || true)
 echo "log: $log"
-expected="ymd=2026-9 values=2026/9/24 markup=bold x|none keyfile true 5 no-error error-set 0 thrown split=a|b|c sha256=ba7816bf iter hello world|orld 7 6 11 bounds 0-11 11 rgba true rgb(255,128,0) font Sans lists 0 0 2 made press false dup-target true buffer ab true inserted 0:x:1 entry typed! 0 bounds true 1 3 cast-ok cast-null clicked 1 order=ab idle label=tick 3 status=0 ticks=3 kind=2 made=true again=rejected removed=true contents=6 "
+expected="ymd=2026-9 values=2026/9/24 markup=bold x|none keyfile true 5 no-error error-set 0 thrown split=a|b|c sha256=ba7816bf iter hello world|orld 7 6 11 bounds 0-11 11 rgba true rgb(255,128,0) font Sans lists 0 0 2 made press false dup-target true buffer ab true inserted 0:x:1 relabeled 2 entry typed! 0 bounds true 1 3 cast-ok cast-null clicked 1 order=ab idle label=tick 3 status=0 ticks=3 kind=2 made=true again=rejected removed=true contents=6 "
 if [ "$log" != "$expected" ]; then
   echo "FAILED gtk-gir: expected $expected" >&2
   exit 1

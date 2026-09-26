@@ -307,6 +307,16 @@ function main(): void {
     buffer.set_text("", -1);
     buffer.insert_text(0, "x", -1);
     gir_log("inserted " + inserted);
+    // A detailed signal, as GJS connects one: `notify::label` runs for that
+    // property's changes and no other's.
+    let relabeled = 0;
+    label.connect("notify::label", () => {
+      relabeled++;
+    });
+    label.set_label("one");
+    label.set_selectable(false);
+    label.set_label("two");
+    gir_log("relabeled " + String(relabeled));
     // An interface's methods and properties on a class implementing it, as
     // GJS has them: `GtkEditable`'s on a `GtkEntry`, `GtkOrientable`'s on a
     // `GtkBox` -- each the C function taking the interface.

@@ -159,7 +159,11 @@ fn signals(class: Node<'_, '_>) -> Vec<Signal> {
     class
         .children()
         .filter(|n| n.tag_name().namespace() == Some(GLIB) && n.tag_name().name() == "signal")
-        .map(|signal| Signal { name: attribute(signal, "name").unwrap_or_default().to_owned(), signature: signature(signal) })
+        .map(|signal| Signal {
+            name: attribute(signal, "name").unwrap_or_default().to_owned(),
+            signature: signature(signal),
+            detailed: attribute(signal, "detailed") == Some("1"),
+        })
         .collect()
 }
 

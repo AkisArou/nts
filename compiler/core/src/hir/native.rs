@@ -3161,11 +3161,23 @@ fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> 
 /// A string literal type, `"clicked"`: a parameter whose only value is that
 /// text, which a binding uses to pin an argument C reads as a name. It crosses
 /// as any `string` does; a return is never one, since C cannot promise it.
+///
+/// A template literal type is one too, and a union of them: a detailed
+/// signal's name, `"notify"` or the template literal `notify::${string}`, is a
+/// set of texts C reads as a name, whichever the program writes.
 fn is_string_literal(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    matches!(
-        snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
-        Some(TypeKind::Literal(LiteralValue::String(_)))
-    )
+    match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+        Some(TypeKind::Literal(LiteralValue::String(_)) | TypeKind::TemplateLiteral { .. }) => true,
+        Some(TypeKind::Union(parts)) => {
+            parts.iter().all(|part| {
+                matches!(
+                    snapshot.types.get(part.0 as usize).map(|record| &record.kind),
+                    Some(TypeKind::Literal(LiteralValue::String(_)) | TypeKind::TemplateLiteral { .. })
+                )
+            })
+        }
+        _ => false,
+    }
 }
 
 /// The element type of a rest parameter, which is the type of each argument

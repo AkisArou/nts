@@ -1381,7 +1381,7 @@ impl<'a> Mapper<'a> {
             symbol: CONNECT.to_owned(),
             parameters: vec![
                 ("instance".to_owned(), Mapped { shape: Shape::Other, ts: format!("Erased<{local}>"), c: context.clone() }),
-                ("detailed_signal".to_owned(), Mapped { shape: Shape::Other, ts: format!("\"{}\"", signal.name), c: string.clone() }),
+                ("detailed_signal".to_owned(), Mapped { shape: Shape::Other, ts: detailed_name(signal), c: string.clone() }),
                 (
                     "handler".to_owned(),
                     Mapped {
@@ -1831,6 +1831,19 @@ fn get_type_function(get_type: &str) -> Function {
     }
 }
 
+/// What a signal's name is written as at `connect`: the name, and for a
+/// signal GIR marks detailed also the name with a detail after `::` --
+/// `"notify"` or the template literal `notify::${string}` -- so
+/// `connect("notify::label", ...)` typechecks and reaches `GLib`, which parses
+/// the detail, as written.
+fn detailed_name(signal: &super::model::Signal) -> String {
+    if signal.detailed {
+        format!("\"{0}\" | `{0}::${{string}}`", signal.name)
+    } else {
+        format!("\"{}\"", signal.name)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::SCALARS;
@@ -1850,3 +1863,4 @@ mod tests {
         }
     }
 }
+

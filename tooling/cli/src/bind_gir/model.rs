@@ -88,6 +88,9 @@ pub(crate) struct Property {
 pub(crate) struct Signal {
     pub(crate) name: String,
     pub(crate) signature: Signature,
+    /// GIR's `detailed="1"`: the signal takes a detail after its name --
+    /// `notify::label`, a property's own change.
+    pub(crate) detailed: bool,
 }
 
 /// A C struct GIR describes: boxed types and plain records alike.
