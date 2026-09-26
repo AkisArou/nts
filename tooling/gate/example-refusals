@@ -73,18 +73,6 @@ a-try-around-a-cycle-of-calls 1 `shared.lifecycle`, a method reached through a p
 # differential compares 3 functions instead of 8 -- the only way round in which
 # this example tests anything.
 a-member-read-through-a-bracket 1 a variable key, which is a member decided at run time
-# The `chosen` arm: a decided conditional between two arrows, whose *other* arm
-# returns a number where the declared element is erased -- "an erased value where a
-# concrete representation is wanted", plus the statement it cuts. It is here rather
-# than removed because the arm is what tests the recursion through a conditional,
-# and both arms are still lowered until a decided conditional folds. **The count
-# should fall to 0 when that lands**, which is the note this file prints rather than
-# a failure.
-#
-# Found by the gate and not by me: I read `nts check`'s tail and saw "agreed on
-# every case", where this file's count is `nts hir`'s -- which its own header says in
-# as many words, three paragraphs up.
-an-arrow-typed-by-the-variable-that-holds-it 2 an erased value where a concrete representation is wanted, in the arm a decided conditional will stop lowering
 
 # Incidental: an example written for something else that happens to contain a
 # construct the compiler refuses. Each is a real gap and each is somebody's next
