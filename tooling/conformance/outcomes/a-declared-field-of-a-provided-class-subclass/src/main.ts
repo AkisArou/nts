@@ -28,9 +28,16 @@
 // and takes the normal path. A subclass's field initialisers belong after
 // `super()`, so the fix is `initialize_fields` after `initialize_error`.
 //
-// No reach into React's render path; the fixture is the only witness. It is the
-// prerequisite for `Error.cause`, declared on lib.d.ts's interface and so
-// correctly absent -- the opposite answer on the same object.
+// No reach into React's render path; the fixture is the only witness.
+//
+// It was once called the prerequisite for `Error.cause` (declared on lib.d.ts's
+// *interface*, so correctly absent, where a class's `code?` is present). It is
+// not: `defined_at_construction` already separates a class field
+// (PROPERTY_DECLARATION) from an interface's optional property
+// (PROPERTY_SIGNATURE), and this fix restored that distinction rather than
+// needing one built. That rests on reading the predicate -- an interface-typed
+// slot and an `in` on a union arm both refuse today -- so `cause`'s own fixture,
+// where `new Error("x")` is drivable, is where it gets measured.
 class Box { tag?: number; }
 observe("plain class", String("tag" in new Box()));
 class Base { base = 1; }
