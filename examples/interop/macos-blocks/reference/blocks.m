@@ -49,6 +49,22 @@ static void enumerate(void) {
     madeWeak = made;
   }
   report([NSString stringWithFormat:@"returned %s", madeWeak ? "alive" : "gone"]);
+  // A block the platform calls, storing what it is handed; the array (`+new`)
+  // is gone once the pool ends, and only `holder` holds the object after.
+  __block id holder = nil;
+  __weak id keptWeak = nil;
+  @autoreleasepool {
+    NSMutableArray *array = [NSMutableArray new];
+    id object = [NSObject new];
+    keptWeak = object;
+    [array addObject:object];
+    [array enumerateObjectsUsingBlock:^(id element, NSUInteger index, BOOL *stop) {
+      holder = element;
+    }];
+  }
+  report([NSString stringWithFormat:@"kept %s", keptWeak ? "alive" : "gone"]);
+  holder = nil;
+  report([NSString stringWithFormat:@"let go %s", keptWeak ? "alive" : "gone"]);
   report(@"flags yes:7 no:-3");
 }
 

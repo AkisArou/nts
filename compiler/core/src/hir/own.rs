@@ -142,19 +142,43 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
         harmless,
         hands_back: hands_back_a_parameter(program, layouts),
         consumes: {
-            // What a foreign runtime calls -- an Objective-C method, a
-            // `GObject` virtual function, a COM override -- it calls through
-            // an entry the backend emits, passing each argument as the
-            // runtime holds it: borrowed, `self` at +0 as ARC passes it. So it
-            // takes over nothing, whatever it stores; a store retains for
-            // itself. Taking `this` over because a closure captured it
-            // released a reference no caller had given.
-            let entered: rustc_hash::FxHashSet<&str> =
-                program.foreign_classes.iter().flat_map(super::ForeignClass::entered).collect();
+            // A function takes over a parameter it stores only if every way
+            // into it hands one over, and only a `Direct` call does
+            // (`handing_over`). Two other ways in lend their arguments:
+            //
+            // - A foreign runtime -- an Objective-C method, a `GObject`
+            //   virtual function, a COM override -- calls through an entry the
+            //   backend emits, passing each argument borrowed, `self` at +0
+            //   as ARC passes it (`ForeignClass::entered`).
+            // - A dispatch: a method some table holds, reached by a
+            //   `Callee::Virtual` whose target the caller cannot see, and a
+            //   closure's body, reached through its table by a
+            //   `Callee::Closure` or by a bridge C calls. A closure's body is
+            //   in its layout's table like any method, which is why closures
+            //   need no line of their own here.
+            //
+            // **The soundness of the second set is a fact about
+            // `Layout::methods`**, not visible from its name: it lists the
+            // slots something fills, and is empty where nothing overrides, so
+            // a method no subclass overrides keeps the handover. A table
+            // filled eagerly -- every class's methods, overridden or not --
+            // would strip the handover everywhere, and nothing would go red,
+            // since the cost is a retain rather than a free.
+            //
+            // Excluding a function adds a retain at its store, so a function
+            // left out needlessly costs a count; one wrongly kept frees what
+            // its store still points at. `Derived#keep(b, h) { h.box = b }`
+            // through a `Base` did: the `Box` was freed and reused.
+            let lent: rustc_hash::FxHashSet<&str> = program
+                .foreign_classes
+                .iter()
+                .flat_map(super::ForeignClass::entered)
+                .chain(program.layouts.iter().flat_map(|layout| layout.methods.iter().flatten().map(String::as_str)))
+                .collect();
             program
                 .funcs
                 .iter()
-                .filter(|func| !entered.contains(func.name.as_str()))
+                .filter(|func| !lent.contains(func.name.as_str()))
                 .filter_map(|func| {
                     let slots = consuming(func, layouts);
                     (!slots.is_empty()).then(|| (func.name.clone(), slots))

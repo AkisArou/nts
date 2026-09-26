@@ -44,6 +44,11 @@ declare module "objc:Foundation" {
    */
   export function newObject(): NSObject;
   /**
+   * @ntsSelector new
+   * @ntsClass NSMutableArray
+   */
+  export function newArray(): NSMutableArray;
+  /**
    * @ntsSelector arrayWithCapacity:
    * @ntsClass NSMutableArray
    */

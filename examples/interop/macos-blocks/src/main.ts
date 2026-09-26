@@ -32,11 +32,26 @@ import {
 } from "c:support";
 import { nts_pending_begin, nts_pending_end } from "c:pending";
 import { NSOperation } from "objc:Foundation";
-import { arrayWithCapacity, newObject, scheduledTimer, type NSObject } from "objc:Foundation";
+import { arrayWithCapacity, newArray, newObject, scheduledTimer, type NSObject } from "objc:Foundation";
 import type { c_double, c_int, c_int8, c_ulong } from "c:types";
 
 function state(watch: c_int): string {
   return weak_alive(watch) ? "alive" : "gone";
+}
+
+// A block the platform calls whose body stores what it is handed, on every
+// path: the array lends each element to the block, so the store must take a
+// count of its own. The array is `+new`, so nothing autoreleases it, and it
+// is gone when this returns. After that only `holder` holds the object.
+function keptBy(holder: { object: NSObject | null }): c_int {
+  const array = newArray();
+  const object = newObject();
+  const watch = weak_watch(object);
+  array.addObject(object);
+  array.enumerateObjectsUsingBlock((element) => {
+    holder.object = element;
+  });
+  return watch;
 }
 
 function enumerate(): void {
@@ -64,6 +79,11 @@ function enumerate(): void {
   // lives only as long as the caller counts it.
   const madeWatch = made_by_block(() => newObject());
   report("returned " + state(madeWatch));
+  const holder: { object: NSObject | null } = { object: null };
+  const keptWatch = keptBy(holder);
+  report("kept " + state(keptWatch));
+  holder.object = null;
+  report("let go " + state(keptWatch));
   // A block taking a `BOOL` and a `short`, called from C: arguments the
   // platform widens, which the adapter's parameters must say.
   let flags = "";
