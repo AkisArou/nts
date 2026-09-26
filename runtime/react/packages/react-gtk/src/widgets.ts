@@ -322,6 +322,7 @@ export interface EditableLabelProps extends WidgetProps {
   xalign?: number;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
+  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Popover>`'s props: GtkPopover's own properties and signals. */
@@ -337,6 +338,7 @@ export interface PopoverProps extends WidgetProps {
 
 /** `<EmojiChooser>`'s props: GtkEmojiChooser's own properties and signals. */
 export interface EmojiChooserProps extends PopoverProps {
+  onEmojiPicked?: (text: string) => void;
 }
 
 /** `<Entry>`'s props: GtkEntry's own properties and signals. */
@@ -364,6 +366,7 @@ export interface EntryProps extends WidgetProps {
   onRemoveWidget?: () => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
+  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Expander>`'s props: GtkExpander's own properties and signals. */
@@ -517,6 +520,7 @@ export interface LevelBarProps extends WidgetProps {
   mode?: GtkLevelBarMode;
   value?: number;
   orientation?: GtkOrientation;
+  onOffsetChanged?: (name: string) => void;
 }
 
 /** `<LinkButton>`'s props: GtkLinkButton's own properties and signals. */
@@ -618,6 +622,7 @@ export interface PasswordEntryProps extends WidgetProps {
   onActivate?: () => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
+  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Picture>`'s props: GtkPicture's own properties and signals. */
@@ -737,6 +742,7 @@ export interface SearchEntryProps extends WidgetProps {
   onStopSearch?: () => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
+  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Separator>`'s props: GtkSeparator's own properties and signals. */
@@ -769,6 +775,7 @@ export interface SpinButtonProps extends WidgetProps {
   onRemoveWidget?: () => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
+  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Spinner>`'s props: GtkSpinner's own properties and signals. */
@@ -826,12 +833,15 @@ export interface TextProps extends WidgetProps {
   onCopyClipboard?: () => void;
   onCutClipboard?: () => void;
   onDeleteFromCursor?: (type: GtkDeleteType, count: number) => void;
+  onInsertAtCursor?: (string: string) => void;
   onInsertEmoji?: () => void;
   onMoveCursor?: (step: GtkMovementStep, count: number, extend: boolean) => void;
   onPasteClipboard?: () => void;
+  onPreeditChanged?: (preedit: string) => void;
   onToggleOverwrite?: () => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
+  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<TextView>`'s props: GtkTextView's own properties and signals. */
@@ -858,10 +868,12 @@ export interface TextViewProps extends WidgetProps {
   onCopyClipboard?: () => void;
   onCutClipboard?: () => void;
   onDeleteFromCursor?: (type: GtkDeleteType, count: number) => void;
+  onInsertAtCursor?: (string: string) => void;
   onInsertEmoji?: () => void;
   onMoveCursor?: (step: GtkMovementStep, count: number, extend_selection: boolean) => void;
   onMoveViewport?: (step: GtkScrollStep, count: number) => void;
   onPasteClipboard?: () => void;
+  onPreeditChanged?: (preedit: string) => void;
   onSelectAll?: (select: boolean) => void;
   onSetAnchor?: () => void;
   onToggleCursorVisible?: () => void;
@@ -1695,6 +1707,11 @@ function editableLabelSignal(gtk: GtkEditableLabel, key: string, slot: SignalSlo
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
       });
       return true;
+    case "onInsertText":
+      gtk.connect("insert-text", (_self, _text, _length, _position) => {
+        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -1737,6 +1754,13 @@ function emojiChooserProp(gtk: GtkEmojiChooser, key: string, value: unknown): bo
 }
 
 function emojiChooserSignal(gtk: GtkEmojiChooser, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onEmojiPicked":
+      gtk.connect("emoji-picked", (_self, _text) => {
+        slot.dispatch(() => (slot.handler as (text: string) => void)(_text));
+      });
+      return true;
+  }
   return popoverSignal(gtk, key, slot);
 }
 
@@ -1821,6 +1845,11 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
     case "onDeleteText":
       gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
+      return true;
+    case "onInsertText":
+      gtk.connect("insert-text", (_self, _text, _length, _position) => {
+        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
       });
       return true;
   }
@@ -2269,6 +2298,13 @@ function levelBarProp(gtk: GtkLevelBar, key: string, value: unknown): boolean {
 }
 
 function levelBarSignal(gtk: GtkLevelBar, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onOffsetChanged":
+      gtk.connect("offset-changed", (_self, _name) => {
+        slot.dispatch(() => (slot.handler as (name: string) => void)(_name));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2577,6 +2613,11 @@ function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: SignalSlo
     case "onDeleteText":
       gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
+      return true;
+    case "onInsertText":
+      gtk.connect("insert-text", (_self, _text, _length, _position) => {
+        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
       });
       return true;
   }
@@ -2928,6 +2969,11 @@ function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): 
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
       });
       return true;
+    case "onInsertText":
+      gtk.connect("insert-text", (_self, _text, _length, _position) => {
+        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -3024,6 +3070,11 @@ function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): bo
     case "onDeleteText":
       gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
+      return true;
+    case "onInsertText":
+      gtk.connect("insert-text", (_self, _text, _length, _position) => {
+        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
       });
       return true;
   }
@@ -3189,6 +3240,11 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (type: GtkDeleteType, count: number) => void)(_type, _count));
       });
       return true;
+    case "onInsertAtCursor":
+      gtk.connect("insert-at-cursor", (_self, _string) => {
+        slot.dispatch(() => (slot.handler as (string: string) => void)(_string));
+      });
+      return true;
     case "onInsertEmoji":
       gtk.connect("insert-emoji", () => slot.fire());
       return true;
@@ -3200,6 +3256,11 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
     case "onPasteClipboard":
       gtk.connect("paste-clipboard", () => slot.fire());
       return true;
+    case "onPreeditChanged":
+      gtk.connect("preedit-changed", (_self, _preedit) => {
+        slot.dispatch(() => (slot.handler as (preedit: string) => void)(_preedit));
+      });
+      return true;
     case "onToggleOverwrite":
       gtk.connect("toggle-overwrite", () => slot.fire());
       return true;
@@ -3209,6 +3270,11 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
     case "onDeleteText":
       gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
+      return true;
+    case "onInsertText":
+      gtk.connect("insert-text", (_self, _text, _length, _position) => {
+        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
       });
       return true;
   }
@@ -3291,6 +3357,11 @@ function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolea
         slot.dispatch(() => (slot.handler as (type: GtkDeleteType, count: number) => void)(_type, _count));
       });
       return true;
+    case "onInsertAtCursor":
+      gtk.connect("insert-at-cursor", (_self, _string) => {
+        slot.dispatch(() => (slot.handler as (string: string) => void)(_string));
+      });
+      return true;
     case "onInsertEmoji":
       gtk.connect("insert-emoji", () => slot.fire());
       return true;
@@ -3306,6 +3377,11 @@ function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolea
       return true;
     case "onPasteClipboard":
       gtk.connect("paste-clipboard", () => slot.fire());
+      return true;
+    case "onPreeditChanged":
+      gtk.connect("preedit-changed", (_self, _preedit) => {
+        slot.dispatch(() => (slot.handler as (preedit: string) => void)(_preedit));
+      });
       return true;
     case "onSelectAll":
       gtk.connect("select-all", (_self, _select) => {

@@ -3,11 +3,10 @@ GtkAboutDialog.artists	a CStrings<"const">, which a JSX attribute does not carry
 GtkAboutDialog.authors	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkAboutDialog.documenters	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkAboutDialog.logo	a GdkPaintable | null, which a JSX attribute does not carry yet
-GtkAboutDialog::activate-link	no connect overload in the bindings
+GtkAboutDialog::activate-link	its handler returns a CBool<c_int>: not generated yet
 GtkAccessible.accessible-role	no setter in the bindings
 GtkActionable.action-target	no setter in the bindings
 GtkAppChooser.content-type	construct-only: a change would need a new widget
-GtkAppChooserButton::custom-item-activated	no connect overload in the bindings
 GtkAppChooserDialog.gfile	construct-only: a change would need a new widget
 GtkAppChooserWidget::application-activated	a handler argument JSX cannot type yet: GAppInfo
 GtkAppChooserWidget::application-selected	a handler argument JSX cannot type yet: GAppInfo
@@ -54,9 +53,7 @@ GtkDropDown.factory	a GtkListItemFactory | null, which a JSX attribute does not 
 GtkDropDown.header-factory	a GtkListItemFactory | null, which a JSX attribute does not carry yet
 GtkDropDown.list-factory	a GtkListItemFactory | null, which a JSX attribute does not carry yet
 GtkDropDown.model	a GListModel | null, which a JSX attribute does not carry yet
-GtkEditable::insert-text	no connect overload in the bindings
 GtkEditableLabel.editing	no setter in the bindings
-GtkEmojiChooser::emoji-picked	no connect overload in the bindings
 GtkEntry.attributes	a PangoAttrList, which a JSX attribute does not carry yet
 GtkEntry.buffer	a GtkEntryBuffer, which a JSX attribute does not carry yet
 GtkEntry.completion	deprecated
@@ -90,7 +87,6 @@ GtkFileChooser.create-folders	deprecated
 GtkFileChooser.filter	deprecated
 GtkFileChooser.select-multiple	deprecated
 GtkFileChooserWidget.search-mode	no setter in the bindings
-GtkFileChooserWidget::location-popup	no connect overload in the bindings
 GtkFlowBox.accept-unpaired-release	no setter in the bindings
 GtkFlowBox::move-cursor	its handler returns a CBool<c_int>: not generated yet
 GtkFontChooser.font	deprecated
@@ -125,8 +121,7 @@ GtkLabel.attributes	a PangoAttrList | null, which a JSX attribute does not carry
 GtkLabel.extra-menu	a GMenuModel | null, which a JSX attribute does not carry yet
 GtkLabel.mnemonic-widget	a GtkWidget | null, which a JSX attribute does not carry yet
 GtkLabel.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
-GtkLabel::activate-link	no connect overload in the bindings
-GtkLevelBar::offset-changed	no connect overload in the bindings
+GtkLabel::activate-link	its handler returns a CBool<c_int>: not generated yet
 GtkLinkButton::activate-link	its handler returns a CBool<c_int>: not generated yet
 GtkListBase.orientation	no setter in the bindings
 GtkListBox.accept-unpaired-release	no setter in the bindings
@@ -243,16 +238,12 @@ GtkText.im-module	no setter in the bindings
 GtkText.input-hints	no setter in the bindings
 GtkText.invisible-char-set	no setter in the bindings
 GtkText.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
-GtkText::insert-at-cursor	no connect overload in the bindings
-GtkText::preedit-changed	no connect overload in the bindings
 GtkTextView.buffer	a GtkTextBuffer | null, which a JSX attribute does not carry yet
 GtkTextView.extra-menu	a GMenuModel | null, which a JSX attribute does not carry yet
 GtkTextView.im-module	no setter in the bindings
 GtkTextView.input-hints	no setter in the bindings
 GtkTextView.tabs	a PangoTabArray, which a JSX attribute does not carry yet
 GtkTextView::extend-selection	its handler returns a CBool<c_int>: not generated yet
-GtkTextView::insert-at-cursor	no connect overload in the bindings
-GtkTextView::preedit-changed	no connect overload in the bindings
 GtkToggleButton.group	a GtkToggleButton | null, which a JSX attribute does not carry yet
 GtkTreeExpander.list-row	a GtkTreeListRow | null, which a JSX attribute does not carry yet
 GtkTreeView.enable-grid-lines	no setter in the bindings
