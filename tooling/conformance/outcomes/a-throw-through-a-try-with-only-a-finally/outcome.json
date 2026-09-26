@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught TypeError",
+  "node": "exit 1; nts: uncaught Observed: log=finally;caught;;",
+  "measured_with": "cfc8206c74defdcb",
+  "source": "measured"
+}
