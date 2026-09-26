@@ -117,10 +117,13 @@ only if its setter does. A widget's child protocol is found from its methods:
 `set_child` taking a widget holds one child. A signal's handler takes the
 signal's arguments after the widget, typed as an app writes them
 (`onRowActivated?: (row: GtkListBoxRow) => void`, a `double` as `number`),
-read from the bindings' own `connect` overloads (119 signals on GTK 4.22).
+read from the bindings' own `connect` overloads (155 signals on GTK 4.22).
+A signal whose handlers answer whether they handled it (GTK's `gboolean`,
+as `close-request` does) takes a handler that returns a `boolean`; with the
+prop absent the answer is "not handled", so the widget's default runs.
 `src/widgets.skipped.txt` lists what is left out and why. The main gaps are
-signals whose handler returns a value (GTK's "handled" booleans), object-valued
-props, and construct-only props.
+object-valued props, construct-only props, and signal arguments of types a
+JSX handler cannot name yet.
 
 Regenerate after a GTK update, from a native program's generated bindings:
 `node tools/gen-widgets.ts ../../native/gtk/types/gir`.
@@ -133,7 +136,7 @@ Regenerate after a GTK update, from a native program's generated bindings:
    widgets (`native/gtk`); rendering waits on the reconciler emitting
    natively.
 2. Props and signals generated from GIR for every widget class. Done for
-   props with scalar values and signals whose handlers return nothing.
+   props with scalar values, and signals with scalar or widget arguments.
 3. `ListBox` (done, with `FlowBox`), `Entry` with controlled `text`, and the
    rest of the common widgets.
 4. A benchmark against GJS on the same app, which the GTK lane's goal already

@@ -3,7 +3,6 @@ GtkAboutDialog.artists	a CStrings<"const">, which a JSX attribute does not carry
 GtkAboutDialog.authors	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkAboutDialog.documenters	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkAboutDialog.logo	a GdkPaintable | null, which a JSX attribute does not carry yet
-GtkAboutDialog::activate-link	its handler returns a CBool<c_int>: not generated yet
 GtkAccessible.accessible-role	no setter in the bindings
 GtkActionable.action-target	no setter in the bindings
 GtkAppChooser.content-type	construct-only: a change would need a new widget
@@ -44,7 +43,6 @@ GtkComboBox.has-entry	construct-only: a change would need a new widget
 GtkComboBox.has-frame	no setter in the bindings
 GtkComboBox.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
 GtkComboBox::format-entry-text	no connect overload in the bindings
-GtkComboBox::popdown	its handler returns a CBool<c_int>: not generated yet
 GtkDialog.use-header-bar	construct-only: a change would need a new widget
 GtkDialog::close	deprecated
 GtkDialog::response	deprecated
@@ -88,7 +86,6 @@ GtkFileChooser.filter	deprecated
 GtkFileChooser.select-multiple	deprecated
 GtkFileChooserWidget.search-mode	no setter in the bindings
 GtkFlowBox.accept-unpaired-release	no setter in the bindings
-GtkFlowBox::move-cursor	its handler returns a CBool<c_int>: not generated yet
 GtkFontChooser.font	deprecated
 GtkFontChooser.font-desc	deprecated
 GtkFontChooser.language	deprecated
@@ -103,14 +100,12 @@ GtkFrame.label-widget	a GtkWidget | null, which a JSX attribute does not carry y
 GtkGLArea.allowed-apis	no setter in the bindings
 GtkGLArea.use-es	deprecated
 GtkGLArea::create-context	its handler returns a GdkGLContext: not generated yet
-GtkGLArea::render	its handler returns a CBool<c_int>: not generated yet
+GtkGLArea::render	a handler argument JSX cannot type yet: GdkGLContext
 GtkGridView.factory	a GtkListItemFactory | null, which a JSX attribute does not carry yet
 GtkGridView.model	a GtkSelectionModel | null, which a JSX attribute does not carry yet
 GtkHeaderBar.title-widget	a GtkWidget | null, which a JSX attribute does not carry yet
 GtkIconView.cell-area	construct-only: a change would need a new widget
 GtkIconView.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
-GtkIconView::activate-cursor-item	its handler returns a CBool<c_int>: not generated yet
-GtkIconView::move-cursor	its handler returns a CBool<c_int>: not generated yet
 GtkImage.file	no setter in the bindings
 GtkImage.gicon	a GIcon, which a JSX attribute does not carry yet
 GtkImage.paintable	a GdkPaintable | null, which a JSX attribute does not carry yet
@@ -121,8 +116,6 @@ GtkLabel.attributes	a PangoAttrList | null, which a JSX attribute does not carry
 GtkLabel.extra-menu	a GMenuModel | null, which a JSX attribute does not carry yet
 GtkLabel.mnemonic-widget	a GtkWidget | null, which a JSX attribute does not carry yet
 GtkLabel.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
-GtkLabel::activate-link	its handler returns a CBool<c_int>: not generated yet
-GtkLinkButton::activate-link	its handler returns a CBool<c_int>: not generated yet
 GtkListBase.orientation	no setter in the bindings
 GtkListBox.accept-unpaired-release	no setter in the bindings
 GtkListView.factory	a GtkListItemFactory | null, which a JSX attribute does not carry yet
@@ -144,21 +137,11 @@ GtkMessageDialog.secondary-use-markup	no setter in the bindings
 GtkMessageDialog.text	no setter in the bindings
 GtkMessageDialog.use-markup	no setter in the bindings
 GtkNotebook.enable-popup	no setter in the bindings
-GtkNotebook::change-current-page	its handler returns a CBool<c_int>: not generated yet
 GtkNotebook::create-window	its handler returns a GtkNotebook | null: not generated yet
-GtkNotebook::focus-tab	its handler returns a CBool<c_int>: not generated yet
-GtkNotebook::reorder-tab	its handler returns a CBool<c_int>: not generated yet
-GtkNotebook::select-page	its handler returns a CBool<c_int>: not generated yet
-GtkOverlay::get-child-position	its handler returns a CBool<c_int>: not generated yet
+GtkOverlay::get-child-position	a handler argument JSX cannot type yet: GtkWidget, GdkRectangle
 GtkPaned.end-child	a GtkWidget | null, which a JSX attribute does not carry yet
 GtkPaned.position-set	no setter in the bindings
 GtkPaned.start-child	a GtkWidget | null, which a JSX attribute does not carry yet
-GtkPaned::accept-position	its handler returns a CBool<c_int>: not generated yet
-GtkPaned::cancel-position	its handler returns a CBool<c_int>: not generated yet
-GtkPaned::cycle-child-focus	its handler returns a CBool<c_int>: not generated yet
-GtkPaned::cycle-handle-focus	its handler returns a CBool<c_int>: not generated yet
-GtkPaned::move-handle	its handler returns a CBool<c_int>: not generated yet
-GtkPaned::toggle-handle-focus	its handler returns a CBool<c_int>: not generated yet
 GtkPasswordEntry.activates-default	no setter in the bindings
 GtkPasswordEntry.extra-menu	a GMenuModel | null, which a JSX attribute does not carry yet
 GtkPasswordEntry.placeholder-text	no setter in the bindings
@@ -181,7 +164,6 @@ GtkPrintUnixDialog.page-setup	no setter in the bindings
 GtkPrintUnixDialog.print-settings	no setter in the bindings
 GtkPrintUnixDialog.support-selection	no setter in the bindings
 GtkRange.adjustment	a GtkAdjustment, which a JSX attribute does not carry yet
-GtkRange::change-value	its handler returns a CBool<c_int>: not generated yet
 GtkScaleButton.adjustment	a GtkAdjustment, which a JSX attribute does not carry yet
 GtkScaleButton.icons	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkScrollable.hadjustment	a GtkAdjustment | null, which a JSX attribute does not carry yet
@@ -191,7 +173,6 @@ GtkScrolledWindow.hadjustment	a GtkAdjustment | null, which a JSX attribute does
 GtkScrolledWindow.hscrollbar-policy	no setter in the bindings
 GtkScrolledWindow.vadjustment	a GtkAdjustment | null, which a JSX attribute does not carry yet
 GtkScrolledWindow.vscrollbar-policy	no setter in the bindings
-GtkScrolledWindow::scroll-child	its handler returns a CBool<c_int>: not generated yet
 GtkSearchBar.key-capture-widget	a GtkWidget | null, which a JSX attribute does not carry yet
 GtkSearchEntry.activates-default	no setter in the bindings
 GtkSearchEntry.input-hints	no setter in the bindings
@@ -224,13 +205,11 @@ GtkShortcutsWindow::close	deprecated
 GtkShortcutsWindow::search	deprecated
 GtkSpinButton.adjustment	a GtkAdjustment, which a JSX attribute does not carry yet
 GtkSpinButton::input	its handler returns a CNumber<"int">: not generated yet
-GtkSpinButton::output	its handler returns a CBool<c_int>: not generated yet
 GtkStack.visible-child	a GtkWidget, which a JSX attribute does not carry yet
 GtkStackSidebar.stack	a GtkStack, which a JSX attribute does not carry yet
 GtkStackSwitcher.stack	a GtkStack | null, which a JSX attribute does not carry yet
 GtkStatusbar::text-popped	deprecated
 GtkStatusbar::text-pushed	deprecated
-GtkSwitch::state-set	its handler returns a CBool<c_int>: not generated yet
 GtkText.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 GtkText.buffer	a GtkEntryBuffer, which a JSX attribute does not carry yet
 GtkText.extra-menu	a GMenuModel | null, which a JSX attribute does not carry yet
@@ -243,22 +222,11 @@ GtkTextView.extra-menu	a GMenuModel | null, which a JSX attribute does not carry
 GtkTextView.im-module	no setter in the bindings
 GtkTextView.input-hints	no setter in the bindings
 GtkTextView.tabs	a PangoTabArray, which a JSX attribute does not carry yet
-GtkTextView::extend-selection	its handler returns a CBool<c_int>: not generated yet
 GtkToggleButton.group	a GtkToggleButton | null, which a JSX attribute does not carry yet
 GtkTreeExpander.list-row	a GtkTreeListRow | null, which a JSX attribute does not carry yet
 GtkTreeView.enable-grid-lines	no setter in the bindings
 GtkTreeView.expander-column	a GtkTreeViewColumn | null, which a JSX attribute does not carry yet
 GtkTreeView.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
-GtkTreeView::expand-collapse-cursor-row	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::move-cursor	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::select-all	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::select-cursor-parent	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::select-cursor-row	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::start-interactive-search	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::test-collapse-row	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::test-expand-row	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::toggle-cursor-row	its handler returns a CBool<c_int>: not generated yet
-GtkTreeView::unselect-all	its handler returns a CBool<c_int>: not generated yet
 GtkVideo.file	a GFile | null, which a JSX attribute does not carry yet
 GtkVideo.media-stream	a GtkMediaStream | null, which a JSX attribute does not carry yet
 GtkVolumeButton.use-symbolic	deprecated
@@ -268,9 +236,6 @@ GtkWidget.cursor	a GdkCursor | null, which a JSX attribute does not carry yet
 GtkWidget.height-request	no setter in the bindings
 GtkWidget.layout-manager	a Consumed<GtkLayoutManager> | null, which a JSX attribute does not carry yet
 GtkWidget.width-request	no setter in the bindings
-GtkWidget::keynav-failed	its handler returns a CBool<c_int>: not generated yet
-GtkWidget::mnemonic-activate	its handler returns a CBool<c_int>: not generated yet
-GtkWidget::query-tooltip	its handler returns a CBool<c_int>: not generated yet
 GtkWindow.application	a GtkApplication | null, which a JSX attribute does not carry yet
 GtkWindow.default-height	no setter in the bindings
 GtkWindow.default-widget	a GtkWidget | null, which a JSX attribute does not carry yet
@@ -281,6 +246,4 @@ GtkWindow.fullscreened	no setter in the bindings
 GtkWindow.maximized	no setter in the bindings
 GtkWindow.titlebar	a GtkWidget | null, which a JSX attribute does not carry yet
 GtkWindow.transient-for	a GtkWindow | null, which a JSX attribute does not carry yet
-GtkWindow::close-request	its handler returns a CBool<c_int>: not generated yet
-GtkWindow::enable-debugging	its handler returns a CBool<c_int>: not generated yet
 GtkWindow::keys-changed	deprecated

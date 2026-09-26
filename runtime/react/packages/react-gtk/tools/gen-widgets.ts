@@ -14,8 +14,9 @@
 // `hasFrame`). A signal prop is `on` + the signal's name in camel case
 // (`clicked` → `onClicked`), its handler taking the signal's arguments after
 // the widget, typed as an app writes them (`(row: GtkListBoxRow) => void`),
-// when each is a widget, string, number, boolean or enum and the signal
-// returns nothing. What is left out is listed, with why, in
+// when each is a widget, string, number, boolean or enum. A signal whose
+// handler returns GTK's "handled" boolean takes a handler that returns one;
+// with none, the widget's default runs. What is left out is listed, with why, in
 // src/widgets.skipped.txt.
 //
 // Each GIR class gets one function that sets its own props and hands any
@@ -296,6 +297,8 @@ interface Signal {
   name: string; // clicked
   /** The handler's parameters after the widget, typed for the app: `row: GtkListBoxRow`. */
   params: { name: string; type: string }[];
+  /** Whether the handler answers whether it handled the signal (GTK's `gboolean`). */
+  decides: boolean;
 }
 
 /**
@@ -468,12 +471,17 @@ function model(gir: Gir, bindings: Bindings): Model {
           skipped.add(`${where}\tdeprecated`);
         } else if (signature === undefined || params === undefined) {
           skipped.add(`${where}\tno connect overload in the bindings`);
-        } else if (signature.returns !== "void") {
+        } else if (signature.returns !== "void" && !/^CBool<\w+>$/.test(signature.returns)) {
           skipped.add(`${where}\tits handler returns a ${signature.returns}: not generated yet`);
         } else if (params.some((p) => p.type === null)) {
           skipped.add(`${where}\ta handler argument JSX cannot type yet: ${signature.params.map((p) => p.type).join(", ")}`);
         } else {
-          signals.push({ jsx: `on${camel(`-${s.name}`)}`, name: s.name, params: params.map((p) => ({ name: p.name, type: p.type! })) });
+          signals.push({
+            jsx: `on${camel(`-${s.name}`)}`,
+            name: s.name,
+            params: params.map((p) => ({ name: p.name, type: p.type! })),
+            decides: signature.returns !== "void",
+          });
         }
       }
     }
@@ -582,7 +590,10 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("  switch (key) {");
       for (const s of t.signals) {
         line(`    case "${s.jsx}":`);
-        if (s.params.length === 0) {
+        if (s.decides) {
+          const args = s.params.map((p) => `_${p.name}`);
+          line(`      gtk.connect("${s.name}", (${["_self", ...args].join(", ")}) => slot.decide(() => (slot.handler as ${handlerSignature(s)})(${args.join(", ")})));`);
+        } else if (s.params.length === 0) {
           line(`      gtk.connect("${s.name}", () => slot.fire());`);
         } else {
           const args = s.params.map((p) => `_${p.name}`).join(", ");
@@ -719,7 +730,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
 
 /** The type of a signal prop's handler: `(row: GtkListBoxRow) => void`. */
 function handlerSignature(s: Signal): string {
-  return `(${s.params.map((p) => `${p.name}: ${p.type}`).join(", ")}) => void`;
+  return `(${s.params.map((p) => `${p.name}: ${p.type}`).join(", ")}) => ${s.decides ? "boolean" : "void"}`;
 }
 
 function propType(value: ValueKind): string {

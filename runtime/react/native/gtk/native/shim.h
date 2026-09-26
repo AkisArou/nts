@@ -8,6 +8,9 @@
 void react_gtk_emit(GObject *instance, const char *signal);
 // The same, for a signal whose one argument is a double.
 void react_gtk_emit_double(GObject *instance, const char *signal, double value);
+// The same, for a signal whose handlers answer whether they handled it:
+// the answer.
+int react_gtk_emit_decision(GObject *instance, const char *signal);
 // Output, for build.sh to read.
 void react_gtk_log(const char *line);
 

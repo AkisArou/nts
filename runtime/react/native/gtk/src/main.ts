@@ -21,6 +21,9 @@
 //             at the discrete event priority
 //   list      a ListBox, which wraps each child in a row: append, insert
 //             before, move and remove, in the rows' own order
+//   decision  a signal whose handler answers whether it handled it: the
+//             handler's answer reaches GTK, and with the prop removed the
+//             answer is "not handled" without calling the old handler
 //
 // What the host refuses -- text outside a widget with a label, an unknown
 // prop or widget, a second child for a single-child widget -- is an Error
@@ -32,7 +35,7 @@
 
 import { gtk_init, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { g_main_loop_new } from "c:GLib-2.0";
-import { react_gtk_emit, react_gtk_emit_double, react_gtk_log } from "c:react-gtk-shim";
+import { react_gtk_emit, react_gtk_emit_decision, react_gtk_emit_double, react_gtk_log } from "c:react-gtk-shim";
 import {
   appendChildToContainer,
   appendInitialChild,
@@ -196,6 +199,19 @@ function main(): void {
   const moved = rows(list, items, labels);
   removeChild(list, b);
   react_gtk_log("list " + appended + " " + inserted + " " + moved + " " + rows(list, items, labels));
+
+  let asked = 0;
+  const closeProps: Props = {
+    onCloseRequest: (): boolean => {
+      asked++;
+      return true;
+    },
+  };
+  const closing = createInstance("GtkWindow", closeProps, container, 0, {});
+  const kept = react_gtk_emit_decision(closing.widget, "close-request");
+  commitUpdate(closing, "GtkWindow", closeProps, {}, {});
+  const released = react_gtk_emit_decision(closing.widget, "close-request");
+  react_gtk_log("decision " + String(kept) + " " + String(released) + " asked=" + String(asked));
 
   const loop = g_main_loop_new(null, false);
   let ran = "";

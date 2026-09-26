@@ -57,6 +57,21 @@ export class SignalSlot {
     }
   }
 
+  /**
+   * A signal whose handler says whether it handled it: runs `call`, which asks
+   * the handler; with no handler, not handled, so GTK's own default runs.
+   */
+  decide(call: () => boolean): boolean {
+    if (this.handler === null) {
+      return false;
+    }
+    const previous = getCurrentUpdatePriority();
+    setCurrentUpdatePriority(DiscreteEventPriority);
+    const handled = call();
+    setCurrentUpdatePriority(previous);
+    return handled;
+  }
+
   /** A signal with arguments: runs `call`, which passes them to the handler. */
   dispatch(call: () => void): void {
     if (this.handler !== null) {
