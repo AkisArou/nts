@@ -80,6 +80,76 @@ fn declaration_index(handle: &NodeHandle, path: &str) -> Option<u32> {
     index.parse::<u32>().ok()
 }
 
+/// Declaration handles that pointed into a file this pass had not decoded yet.
+///
+/// **A dropped handle is not the same as "no declaration", and `declaration_index`
+/// cannot tell them apart.** It keeps a handle only when the handle's path is
+/// *this* file, because the per-file loop in `mod.rs` decodes, interns and
+/// resolves one file at a time: when `main.ts` is the first file to mention a
+/// symbol declared in `thrower.ts`, that file has no base in the arena yet and
+/// there is nothing to map the handle onto.
+///
+/// `intern_declared` fills such a record in later, from whichever file *does*
+/// hold the declaration -- and that is enough only while something in the
+/// declaring file asks the checker for the same symbol. A class member is where
+/// it is not: a method is not an export, so the export walk never names it, and
+/// nothing else in its own file need mention it at all. The checker is then free
+/// to answer an importing file with a *second* symbol for the same method (it
+/// does, for one whose signature it has to instantiate -- a parameter typed
+/// `number | null` is enough), and that second symbol keeps an empty
+/// declarations list for the whole compilation.
+///
+/// What that cost, before this existed: `throwing_symbols` finds a function's
+/// `throw`s by walking its symbol's declarations, so the method's body was never
+/// looked at, `calls_compiled_code` answered "cannot raise" for a call to it, and
+/// a `try` around that call was **dropped** -- no handler edge, no diagnostic,
+/// the exception abandoning the program. The React lane reduced it to two files
+/// and eleven probes; `blockers/a-cross-module-throw-a-nullable-parameter-hides`
+/// is the fixture.
+///
+/// Every file's base is known once the loop ends, which is where `attach` runs --
+/// the same reason `link_modules` cannot run inside the loop either.
+#[derive(Debug, Default)]
+pub struct Deferred(FxHashMap<SymbolId, Vec<NodeHandle>>);
+
+impl Deferred {
+    /// Remember the handles one file could not map for a symbol.
+    ///
+    /// First writer wins: a symbol mentioned by two importers declines the same
+    /// handles in both, and `attach` fills only an empty record, so a second copy
+    /// would be work with no answer of its own.
+    fn remember(&mut self, symbol: SymbolId, handles: Vec<NodeHandle>) {
+        self.0.entry(symbol).or_insert(handles);
+    }
+
+    /// Map what was declined, now that every file has a base.
+    ///
+    /// Fills a record that has **no** declarations only. A record with some was
+    /// filled by the file that holds them, and two files cannot hold the
+    /// declarations of one symbol -- the same rule `intern_declared` states.
+    #[allow(clippy::implicit_hasher)]
+    pub fn attach(self, snapshot: &mut SemanticSnapshot, file_bases: &[(String, u32)]) {
+        let nodes = snapshot.nodes.len();
+        for (symbol, handles) in self.0 {
+            let Some(record) = snapshot.symbols.get_mut(symbol.0 as usize) else {
+                continue;
+            };
+            if !record.declarations.is_empty() {
+                continue;
+            }
+            record.declarations = handles
+                .iter()
+                .filter_map(|handle| super::decompose::declaration_node(handle, file_bases))
+                // The same bound the per-file mapping applies. A handle naming a
+                // node past the end of the arena would otherwise index whatever
+                // a later file put there, which is a wrong answer wearing the
+                // shape of a right one.
+                .filter(|node| (node.0 as usize) < nodes)
+                .collect();
+        }
+    }
+}
+
 /// Everything a per-file pass needs to address one file in a live session.
 ///
 /// Bundled rather than threaded: the same six values are needed by symbol
@@ -105,15 +175,16 @@ pub fn resolve(
     client: &mut Client,
     snapshot: &mut SemanticSnapshot,
     interned: &mut FxHashMap<u32, SymbolId>,
+    deferred: &mut Deferred,
     ctx: FileContext<'_>,
 ) -> Result<(), TsgoError> {
     let FileContext {
         handle,
         project,
-        root,
         path,
         base,
         file,
+        ..
     } = ctx;
     let path = path.as_str();
 
@@ -155,7 +226,7 @@ pub fn resolve(
     for ((node, _), response) in addressable.iter().zip(&responses) {
         let Some(response) = response else { continue };
         let fresh = !interned.contains_key(&response.id);
-        let id = intern(snapshot, interned, response, root, path, base, file);
+        let id = intern(snapshot, interned, deferred, response, ctx);
         snapshot.nodes[node.0 as usize].symbol = Some(id);
         if fresh && response.flags & bits::ALIAS != 0 {
             aliases.push((id, response.id));
@@ -175,7 +246,7 @@ pub fn resolve(
         let Some(target) = client.aliased_symbol(handle, project, tsgo).ok().flatten() else {
             continue;
         };
-        let target = intern(snapshot, interned, &target, root, path, base, file);
+        let target = intern(snapshot, interned, deferred, &target, ctx);
         // A symbol is not its own alias. `export { x }` with no `from` clause
         // is an alias whose target is the local declaration, and the two are
         // the same symbol -- following that would be a self-loop for any
@@ -186,33 +257,7 @@ pub fn resolve(
     }
 
     let exports = match module_symbol {
-        Some(symbol) => client
-            .exports_of_module(handle, project, symbol)?
-            .iter()
-            .map(|export| {
-                // A re-export yields an *alias* symbol declared at the
-                // re-export site, which says nothing about where the thing came
-                // from. `export { two } from "./base.js"` has to resolve to
-                // `base.ts`'s `two` or the export list names a symbol with no
-                // declaration anyone can use -- and `node:path` is nothing but
-                // `export *` and `export * as`, so this is the flagship module
-                // rather than an edge case.
-                //
-                // The exported *name* is unchanged: `export { two as pair }`
-                // publishes `pair` and resolves to `two`.
-                let declaring = if export.flags & bits::ALIAS == 0 {
-                    None
-                } else {
-                    client
-                        .aliased_symbol(handle, project, export.id)
-                        .ok()
-                        .flatten()
-                };
-                let target = declaring.as_ref().unwrap_or(export);
-                let id = intern(snapshot, interned, target, root, path, base, file);
-                (export.name.clone(), id)
-            })
-            .collect(),
+        Some(symbol) => exports_of(client, snapshot, interned, deferred, ctx, symbol)?,
         // A script exports nothing. That is a fact about the file, not a failure.
         None => Vec::new(),
     };
@@ -227,16 +272,54 @@ pub fn resolve(
     Ok(())
 }
 
+/// What one module publishes, each name resolved to the symbol it stands for.
+#[allow(clippy::implicit_hasher)]
+fn exports_of(
+    client: &mut Client,
+    snapshot: &mut SemanticSnapshot,
+    interned: &mut FxHashMap<u32, SymbolId>,
+    deferred: &mut Deferred,
+    ctx: FileContext<'_>,
+    module: u32,
+) -> Result<Vec<(String, SymbolId)>, TsgoError> {
+    Ok(client
+        .exports_of_module(ctx.handle, ctx.project, module)?
+        .iter()
+        .map(|export| {
+                // A re-export yields an *alias* symbol declared at the
+                // re-export site, which says nothing about where the thing came
+                // from. `export { two } from "./base.js"` has to resolve to
+                // `base.ts`'s `two` or the export list names a symbol with no
+                // declaration anyone can use -- and `node:path` is nothing but
+                // `export *` and `export * as`, so this is the flagship module
+                // rather than an edge case.
+                //
+                // The exported *name* is unchanged: `export { two as pair }`
+                // publishes `pair` and resolves to `two`.
+            let declaring = if export.flags & bits::ALIAS == 0 {
+                None
+            } else {
+                client
+                    .aliased_symbol(ctx.handle, ctx.project, export.id)
+                    .ok()
+                    .flatten()
+            };
+            let target = declaring.as_ref().unwrap_or(export);
+            let id = intern(snapshot, interned, deferred, target, ctx);
+            (export.name.clone(), id)
+        })
+        .collect())
+}
+
 /// Intern one symbol response into the arena.
 fn intern(
     snapshot: &mut SemanticSnapshot,
     interned: &mut FxHashMap<u32, SymbolId>,
+    deferred: &mut Deferred,
     response: &SymbolResponse,
-    root: &camino::Utf8Path,
-    path: &str,
-    base: u32,
-    _file: SourceId,
+    ctx: FileContext<'_>,
 ) -> SymbolId {
+    let (root, path, base) = (ctx.root, ctx.path.as_str(), ctx.base);
     let declarations: Vec<NodeId> = response
         .declarations
         .iter()
@@ -248,7 +331,26 @@ fn intern(
         .map(NodeId)
         .collect();
 
-    intern_declared(snapshot, interned, response, root, declarations)
+    // Only when this file has none of them: a symbol declared here keeps what
+    // this pass mapped, and `Deferred::attach` has nothing to add to it. Bounding
+    // the table this way also keeps it to the symbols a file *mentions* rather
+    // than to every symbol it interns.
+    let declined: Vec<NodeHandle> = if declarations.is_empty() {
+        response
+            .declarations
+            .iter()
+            .filter(|handle| declaration_index(handle, path).is_none())
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let id = intern_declared(snapshot, interned, response, root, declarations);
+    if !declined.is_empty() {
+        deferred.remember(id, declined);
+    }
+    id
 }
 
 /// Intern a symbol with declarations already mapped to the shared node arena.

@@ -1752,7 +1752,7 @@ fn file_of(file_bases: &[(String, u32)], arena: u32) -> Option<(&str, u32)> {
 /// Returns `None` for a declaration outside the decoded set — an imported or
 /// ambient function. Mapping it onto whatever node sits at that index in another
 /// file would be a wrong answer that looks exactly like a right one.
-fn declaration_node(handle: &NodeHandle, file_bases: &[(String, u32)]) -> Option<NodeId> {
+pub(super) fn declaration_node(handle: &NodeHandle, file_bases: &[(String, u32)]) -> Option<NodeId> {
     let (index, path) = {
         let rest = handle.0.split_once('.')?;
         let (index, tail) = rest;

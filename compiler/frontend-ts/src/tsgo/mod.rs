@@ -1117,7 +1117,7 @@ fn absolute(path: &Utf8Path) -> Utf8PathBuf {
 
 /// What the deep passes cost, when they ran. `None` is "that pass was not
 /// asked for", which is a different answer from a run that did nothing.
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 struct DeepStats {
     decomposed: Option<decompose::DecomposeStats>,
     resolved: Option<decompose::DecomposeStats>,
@@ -1339,6 +1339,9 @@ impl SemanticSource for TsgoApi {
         // Where each file's nodes begin, so a declaration handle can be mapped
         // back onto the shared arena.
         let mut file_bases: Vec<(String, u32)> = Vec::new();
+        // Declaration handles no file could map when it interned them; see
+        // `symbols::Deferred`.
+        let mut deferred = symbols::Deferred::default();
 
         for project in &opened.projects {
             let compiled = compiled_files(&mut client, opened.snapshot, &project.id)?;
@@ -1385,7 +1388,7 @@ impl SemanticSource for TsgoApi {
 
                 // Symbols first: a type's declaring symbol must be interned before the
                 // type records it, or the type would carry no arena index for it.
-                symbols::resolve(&mut client, &mut snapshot, &mut symbol_ids, ctx)?;
+                symbols::resolve(&mut client, &mut snapshot, &mut symbol_ids, &mut deferred, ctx)?;
                 resolve_types(
                     &mut client,
                     &mut snapshot,
@@ -1406,6 +1409,14 @@ impl SemanticSource for TsgoApi {
             }
         }
 
+        // A declaration in a file that had no base yet when some other file
+        // interned its symbol. Here for the same reason as `link_modules` below,
+        // and **before** it and `deepen`: `decompose`'s library boundary is
+        // `is_ours`, which is "does this symbol have any declarations", so a
+        // record filled after that ran would be read as a library symbol for the
+        // whole compilation.
+        deferred.attach(&mut snapshot, &file_bases);
+
         // The module graph, once every module exists. It cannot be built during
         // the per-file loop: a `ModuleId` indexes a table that is still being
         // filled, so a file importing one processed later would have nothing to
@@ -1414,12 +1425,7 @@ impl SemanticSource for TsgoApi {
 
         self.diagnose(&mut client, &mut snapshot, &opened, &rewritten)?;
 
-        let DeepStats {
-            decomposed,
-            resolved,
-            followup,
-            folded,
-        } = self.deepen(
+        let deep = self.deepen(
             &mut client,
             &mut snapshot,
             &opened,
@@ -1430,29 +1436,7 @@ impl SemanticSource for TsgoApi {
             cwd,
         )?;
 
-        self.stats = FrontendStats {
-            elapsed_ms: started.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
-            round_trips: client.round_trips(),
-            files: u32::try_from(snapshot.sources.len()).unwrap_or(u32::MAX),
-            nodes_decoded: u32::try_from(snapshot.nodes.len()).unwrap_or(u32::MAX),
-            types_resolved: u32::try_from(snapshot.node_types.len()).unwrap_or(u32::MAX),
-            distinct_types: u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX),
-            errors: count_severity(&snapshot, nts_diagnostics::Severity::Error),
-            warnings: count_severity(&snapshot, nts_diagnostics::Severity::Warning),
-            symbols: u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX),
-            modules: symbols::module_count(&snapshot),
-            calls_resolved: resolved.map_or(0, |r| r.decomposed),
-            constants_folded: folded.map_or(0, |f| f.decomposed),
-            // Both passes, because the second is decomposition too and a
-            // number that counted only the first would go down when the work
-            // moved rather than when it stopped happening.
-            decomposed: decomposed.map_or(0, |d| d.decomposed)
-                + followup.map_or(0, |f| f.decomposed),
-            decomposition_exhausted: decomposed.is_some_and(|d| d.exhausted)
-                || followup.is_some_and(|f| f.exhausted),
-            types_unanswered: decomposed.map_or(0, |d| d.unanswered)
-                + followup.map_or(0, |f| f.unanswered),
-        };
+        self.stats = tally(started.elapsed(), client.round_trips(), &snapshot, &deep);
 
         snapshot.validate()?;
         Ok(snapshot)
@@ -1464,6 +1448,43 @@ impl SemanticSource for TsgoApi {
 
     fn identity(&self) -> String {
         self.transform.as_ref().map_or_else(String::new, |transform| transform.identity())
+    }
+}
+
+/// What the frontend did, counted once every pass has run.
+fn tally(
+    elapsed: std::time::Duration,
+    round_trips: u64,
+    snapshot: &SemanticSnapshot,
+    deep: &DeepStats,
+) -> FrontendStats {
+    let DeepStats {
+        decomposed,
+        resolved,
+        followup,
+        folded,
+    } = *deep;
+    FrontendStats {
+        elapsed_ms: elapsed.as_millis().try_into().unwrap_or(u64::MAX),
+        round_trips,
+        files: u32::try_from(snapshot.sources.len()).unwrap_or(u32::MAX),
+        nodes_decoded: u32::try_from(snapshot.nodes.len()).unwrap_or(u32::MAX),
+        types_resolved: u32::try_from(snapshot.node_types.len()).unwrap_or(u32::MAX),
+        distinct_types: u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX),
+        errors: count_severity(snapshot, nts_diagnostics::Severity::Error),
+        warnings: count_severity(snapshot, nts_diagnostics::Severity::Warning),
+        symbols: u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX),
+        modules: symbols::module_count(snapshot),
+        calls_resolved: resolved.map_or(0, |r| r.decomposed),
+        constants_folded: folded.map_or(0, |f| f.decomposed),
+        // Both passes, because the second is decomposition too and a number that
+        // counted only the first would go down when the work moved rather than
+        // when it stopped happening.
+        decomposed: decomposed.map_or(0, |d| d.decomposed) + followup.map_or(0, |f| f.decomposed),
+        decomposition_exhausted: decomposed.is_some_and(|d| d.exhausted)
+            || followup.is_some_and(|f| f.exhausted),
+        types_unanswered: decomposed.map_or(0, |d| d.unanswered)
+            + followup.map_or(0, |f| f.unanswered),
     }
 }
 

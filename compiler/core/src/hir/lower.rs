@@ -46400,6 +46400,7 @@ impl<'a> FuncBuilder<'a> {
             // an Objective-C message.
             Some(syntax::PROPERTY_SIGNATURE) => {
                 self.in_objc_module(*declaration)
+                    && self.declared_by_an_interface(*declaration)
                     && !self.node(*declaration).native.as_deref().is_some_and(|n| n.get.is_some() || n.set.is_some())
             }
             Some(syntax::PROPERTY_DECLARATION) => self.objc_class_member(*declaration).is_some(),
@@ -46432,6 +46433,58 @@ impl<'a> FuncBuilder<'a> {
         let is_static = self.objc_class_member(declaration).is_some_and(|member| member.is_static);
         let (getter, setter) = self.property_selectors(declaration, &name);
         Some(ObjcProperty { declaration, is_static, getter, setter })
+    }
+
+    /// Whether a member is declared by an `interface` rather than by an
+    /// anonymous type literal.
+    ///
+    /// **A property signature inside an `objc:` module is not automatically an
+    /// Objective-C property**, and `in_objc_module` alone says it is. A C record
+    /// declared in the same module is a type literal of field signatures:
+    ///
+    /// ```ts
+    /// declare module "objc:Foundation" {
+    ///   export type Size = Struct<{ width: c_double; height: c_double }, "Size">;
+    /// ```
+    ///
+    /// `width` is a field of a struct read by offset, not a selector sent to an
+    /// object -- and reading it as a message made `dirtyRect.size.width` build a
+    /// *foreign function* called `width`, which then refused for having a return
+    /// with no native ABI. An Objective-C class or protocol arrives as a `class`
+    /// or an `interface`; nothing read by selector is an anonymous literal.
+    ///
+    /// **This was latent, and it is the fill in `symbols::Deferred` that
+    /// published it.** `objc_property` looks the declaration up by the member's
+    /// symbol and falls back to the receiver's type, and the fallback only
+    /// considers a `TypeKind::Object` -- a `Struct<…>` is an intersection, so it
+    /// found nothing and answered "not an objc property", correctly and for the
+    /// wrong reason. While those members had no declarations recorded, only the
+    /// fallback could run.
+    ///
+    /// Bounded rather than a full ascent, and `TYPE_LITERAL` is a *stop* rather
+    /// than something to walk past: a property signature nested inside a literal
+    /// inside an interface belongs to the literal, which is the case the bound
+    /// alone would get wrong.
+    ///
+    /// **Both answers are held by a test**, which is worth saying because the
+    /// corpus holds neither: forcing this to `false` leaves all 50
+    /// `examples/interop` refusal counts byte-identical, and breaks
+    /// `a_property_reads_and_writes_by_message` in `codegen/c/tests/objc.rs` --
+    /// an `objc:` interface's property, read as a message. The `false` side is
+    /// `an_override_takes_the_selector_it_replaces_and_a_record_by_value`, whose
+    /// `Struct` field this exists for. So the whole arm lives in those two tests
+    /// and nothing in `examples` would notice it going wrong.
+    fn declared_by_an_interface(&self, declaration: NodeId) -> bool {
+        let mut at = self.node(declaration).parent;
+        for _ in 0..8 {
+            let Some(parent) = at else { return false };
+            match self.kind_of(parent) {
+                Some(syntax::INTERFACE_DECLARATION) => return true,
+                Some(syntax::TYPE_LITERAL) => return false,
+                _ => at = self.node(parent).parent,
+            }
+        }
+        false
     }
 
     /// `ty` without its absences, where one type is left: `NSWindow` of
