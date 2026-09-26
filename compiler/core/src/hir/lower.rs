@@ -40877,40 +40877,6 @@ impl<'a> FuncBuilder<'a> {
         right: NodeId,
     ) -> Result<ValueId, Diagnostic> {
         let first = self.lower_expression(left)?;
-        // **A dead operand is not lowered**, which is [`Self::folded_branch`]'s
-        // rule one operator over and for the same reason: a construct the
-        // program cannot reach should not decide whether it compiles.
-        // `isDevelopment && typeof console.createTask === "function"` with
-        // `isDevelopment` a `const` bound to `false` is React's own guard, and
-        // the `if` spelling of it has folded since `7c3fc82f9` while this one
-        // still refused -- for a `console` member on the side that never runs.
-        //
-        // It is a **lowering** change and not an analysis one, which is the part
-        // that took a wrong turn first: the refusal is raised *while lowering*
-        // the dead operand, so `children_that_run` -- which decides what a walk
-        // over already-lowered code visits -- never sees it. There is nothing to
-        // prune afterwards, because the diagnostic happens on the way in.
-        //
-        // No `hoists_out_of` guard, and that is a difference in the language
-        // rather than an omission: a dead *statement* can declare a `var` or a
-        // `function` that outlives it, and an expression has neither form to
-        // declare. Skipping the operand is also exactly what JavaScript does --
-        // `false && f()` never calls `f` -- so this is short-circuiting rather
-        // than an optimisation, and the only thing it changes is what a program
-        // has to be able to compile in order to run.
-        //
-        // `left` is still lowered. `f() && b` where `f` returns `false` decides
-        // the operator and still makes the call.
-        if let Some(known) = self.statically_decided(left) {
-            let short_circuits = if and { !known } else { known };
-            // `false && b` is `false` and `true || b` is `true`: the answer is
-            // the operand already lowered.
-            if short_circuits {
-                return Ok(first);
-            }
-            // `true && b` is `b`, and `false || b` is `b`, whatever `b`'s type.
-            return self.lower_expression(right);
-        }
         let condition = self.truthy(id, first);
         // `a && b` is `b` when `a` is truthy and `a` otherwise; `a || b` is the
         // other way round. Neither yields a bool in general — `0 || 5` is `5`.
