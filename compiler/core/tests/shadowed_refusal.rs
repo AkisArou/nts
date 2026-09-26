@@ -247,3 +247,47 @@ fn an_accessors_refusal_is_recorded_under_its_emitted_name() {
          it says {cascade:?}"
     );
 }
+
+/// A copy's refusal is not published against the original.
+///
+/// `note_uncompiled` records a copy under its own emitted name *and* under the
+/// declaration's bare one, so a refused structural copy claimed a name whose
+/// plain body had compiled -- a phantom, which `emit-c`'s `published_symbols`
+/// reads and the cascade prints. Found by a corpus scan over 580 projects
+/// (`tooling/conformance/phantoms.mjs`), whose three hits included
+/// `blockers/an-options-bag-widened-by-assignment`: `make@0obj6` refused,
+/// `func make(...)` was emitted, and a bare `make` carried the copy's reason.
+#[test]
+fn a_copys_refusal_is_not_published_against_the_original() {
+    let Some(lowered) = lower_at("tests/programs/copy-phantom") else {
+        eprintln!("SKIP copy phantom: tsgo is required");
+        return;
+    };
+
+    // The controls: the plain body compiled, and the copy really did refuse.
+    // Either one failing would make the assertion below pass for the wrong
+    // reason -- a fixture where nothing refuses has no phantom to miss.
+    assert!(
+        lowered.program.funcs.iter().any(|f| f.name == "hold"),
+        "the plain `hold` must compile, or there is no phantom to test; emitted {:?}",
+        lowered
+            .program
+            .funcs
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        held(&lowered).iter().any(|at| at.starts_with("hold@")),
+        "the structural copy must refuse under its own name; `uncompiled` holds {:?}",
+        held(&lowered)
+    );
+
+    assert_eq!(
+        reason_for(&lowered, "hold"),
+        None,
+        "the copy's reason must not be published against the original, which \
+         compiled; `uncompiled` holds {:?}",
+        held(&lowered)
+    );
+}

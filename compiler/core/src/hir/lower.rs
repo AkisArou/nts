@@ -5677,6 +5677,38 @@ fn note_uncompiled(
     // so it *is* the test for "this is a class member".
     let qualified = qualified_name(snapshot, id, declared.as_deref());
     let mut record = |at: String| {
+        // **Never claim a name the program emits.** This list answers "why is
+        // there no function called X", so an entry for a name that *is* there is
+        // not a missing cause, it is a **false** one -- and the readers act on
+        // it: `emit-c`'s `published_symbols` excludes such a name from
+        // "published without a symbol", and the cascade prints its reason as the
+        // cause of a call to it.
+        //
+        // The witness is a **structural copy**, and it took a corpus scan to
+        // find: `blockers/an-options-bag-widened-by-assignment` records
+        // `make@0obj6` with a real refusal and, beside it, a bare `make` with the
+        // same sentence -- while `func make(options: managed<obj#8>)` is in the
+        // output, because a `Wide` reaching a `Wide` needs no cast. The copy is
+        // refused and the original is fine, and `emitted` is the copy's name
+        // while `declared_name` is the original's. `programs/copy-phantom` is
+        // that shape in miniature.
+        //
+        // **Why this is a test of `funcs` rather than a rule about suffixes.**
+        // Not recording the bare name whenever `emitted` differs from it would
+        // also cover the copy case -- and it would take out the case
+        // `note_uncompiled` was written for: an exported *generic* has no plain
+        // body, every copy carries a suffix, and the napi wrapper asks with the
+        // export name. That was 19 of `fs`'s 23 rootless wrappers. A generic's
+        // bare name is not in `funcs`, so it is still recorded here.
+        //
+        // The ordering this depends on, stated because it is not obvious: a
+        // function emitted *after* this call could still leave a stale entry.
+        // For the case above it cannot -- `function_copies` puts the plain copy
+        // first and the loop lowers them in order, so the original is already in
+        // `funcs` when a later copy refuses.
+        if program.funcs.iter().any(|func| func.name == at) {
+            return;
+        }
         if !program.uncompiled.iter().any(|(had, _)| *had == at) {
             program.uncompiled.push((at, diagnostic.message.clone()));
         }
