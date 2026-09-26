@@ -7,7 +7,6 @@
 
 struct CGColor;
 
-void report(const char *line);
 int weak_watch(struct CGColor *object);
 bool weak_alive(int watch);
 

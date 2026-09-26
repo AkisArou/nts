@@ -10,7 +10,6 @@ declare module "c:support" {
   import type { Block } from "objc:types";
   import type { Implementation } from "objc:runtime";
   import type { NSObject } from "objc:Foundation";
-  export function report(line: string): void;
   export function loop_run(): void;
   export function loop_stop(): void;
   export function weak_watch(object: NSObject): c_int;

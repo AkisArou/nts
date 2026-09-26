@@ -37,7 +37,6 @@ import {
   type NSNotification,
   type NSTableViewDataSource,
 } from "objc:AppKit";
-import { report } from "c:support";
 import { selector } from "objc:runtime";
 import type { Int } from "objc:types";
 
@@ -74,7 +73,7 @@ class Notes extends NSObject implements NSTableViewDataSource {
     this.notes.push(text);
     this.field.stringValue = "";
     this.table.reloadData();
-    report(`added ${text}`);
+    console.log(`added ${text}`);
   }
 
   // `NSTableViewDataSource`: how many rows, and what each shows.
@@ -101,7 +100,7 @@ class AppDelegate extends NSObject implements NSApplicationDelegate {
   }
 
   applicationDidFinishLaunching(notification: NSNotification): void {
-    report("launched");
+    console.log("launched");
     this.started();
   }
 }
@@ -150,9 +149,9 @@ function main(): void {
   // The controller keeps this array and adds to it, so its length is read
   // now, before any note is.
   const initially = loaded.length;
-  report(`loaded ${initially}`);
+  console.log(`loaded ${initially}`);
   content.layoutSubtreeIfNeeded();
-  report(`layout ${field.frame.size.width} ${button.frame.origin.x} ${scroll.frame.size.height}`);
+  console.log(`layout ${field.frame.size.width} ${button.frame.origin.x} ${scroll.frame.size.height}`);
   const notes = new Notes(loaded, field, table);
   table.dataSource = notes;
   button.target = notes;
@@ -182,8 +181,8 @@ function main(): void {
       return;
     }
     timer.invalidate();
-    report(`rows ${table.numberOfRows}`);
-    report(`saved ${notes.save()}`);
+    console.log(`rows ${table.numberOfRows}`);
+    console.log(`saved ${notes.save()}`);
     window.close();
     app.stop(null);
     // `stop:` is seen when the loop next finishes an event, so one is posted.

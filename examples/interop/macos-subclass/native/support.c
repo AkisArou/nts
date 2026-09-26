@@ -9,12 +9,6 @@ id objc_initWeak(id *location, id value);
 id objc_loadWeakRetained(id *location);
 void objc_release(id value);
 
-void report(const char *line) {
-  fputs(line, stdout);
-  fputc('\n', stdout);
-  fflush(stdout);
-}
-
 void loop_run(void) { CFRunLoopRun(); }
 
 void loop_stop(void) { CFRunLoopStop(CFRunLoopGetMain()); }

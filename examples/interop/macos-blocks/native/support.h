@@ -6,7 +6,6 @@
 
 struct NSObject;
 
-void report(const char *line);
 // `CFRunLoopRun`, until `loop_stop`.
 void loop_run(void);
 void loop_stop(void);

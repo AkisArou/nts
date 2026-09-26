@@ -31,13 +31,12 @@ import {
   type UITextFieldDelegate,
 } from "objc:UIKit";
 import { exit } from "c:stdlib";
-import { report } from "c:support";
 import type { c_int } from "c:types";
 
 // Swift's `class Form: NSObject, UITextFieldDelegate`.
 class Form extends NSObject implements UITextFieldDelegate {
   textFieldShouldReturn(textField: UITextField): boolean {
-    report(`return ${textField.text ?? ""}`);
+    console.log(`return ${textField.text ?? ""}`);
     return false;
   }
 }
@@ -68,18 +67,18 @@ class AppDelegate extends UIResponder implements UIApplicationDelegate {
       { forName: UITextField.textDidChangeNotification, object: field, queue: null },
       (note: NSNotification) => {
         changes++;
-        report(`changed ${field.text ?? ""} ${changes}`);
+        console.log(`changed ${field.text ?? ""} ${changes}`);
       },
     );
-    report(`first ${field.becomeFirstResponder()}`);
+    console.log(`first ${field.becomeFirstResponder()}`);
     typed(field, "hi");
     typed(field, "\n");
-    report(`asked ${field.delegate?.textFieldShouldReturn?.(field) ?? "none"}`);
+    console.log(`asked ${field.delegate?.textFieldShouldReturn?.(field) ?? "none"}`);
     typed(field, "!");
     center.removeObserver(observer);
     typed(field, "?");
-    report(`quiet ${field.text ?? ""} ${changes}`);
-    report("done");
+    console.log(`quiet ${field.text ?? ""} ${changes}`);
+    console.log("done");
     exit(0 as c_int);
     return true;
   }

@@ -28,7 +28,6 @@ import {
 } from "objc:UIKit";
 import { selector } from "objc:runtime";
 import { exit } from "c:stdlib";
-import { report } from "c:support";
 import type { c_int } from "c:types";
 
 // Swift's `class Controller: NSObject` with an `@objc func pressed(_:)`.
@@ -37,7 +36,7 @@ class Controller extends NSObject {
 
   pressed(sender: NSObject): void {
     this.presses++;
-    report(`pressed ${this.presses}`);
+    console.log(`pressed ${this.presses}`);
   }
 }
 
@@ -62,10 +61,10 @@ class AppDelegate extends UIResponder implements UIApplicationDelegate {
     window.makeKeyAndVisible();
     this.window = window;
     this.controller = controller;
-    report(`launched ${label.text} ${window.isKeyWindow} ${root.view.subviews.length}`);
+    console.log(`launched ${label.text} ${window.isKeyWindow} ${root.view.subviews.length}`);
     button.sendActions({ for: UIControl.Event.touchUpInside });
     Timer.scheduledTimer({ withTimeInterval: 0.2, repeats: false }, () => {
-      report("done");
+      console.log("done");
       exit(0 as c_int);
     });
     return true;

@@ -118,9 +118,9 @@ if cmp -s "$c_out/program.c" "$control/program.c"; then
   exit 1
 fi
 for unit in "$control/program.c" "$c_out/main.c" "$c_out/nts_runtime.c" "$c_out/nts_uv_host.c" "$c_out/nts_cf_host.c" \
-  "$c_out/nts_unicode.c" "$source/native/report.c"; do
+  "$c_out/nts_unicode.c"; do
   [ -f "$unit" ] || continue
-  clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -I"$source/native" -c "$unit" \
+  clang "$@" -std=c11 -O2 -w -I"$c_out" -I"$apple/x86_64/include" -c "$unit" \
     -o "$control/$(basename "$unit" .c).o"
 done
 clang "$@" -fuse-ld=lld "$control"/*.o -L"$apple/x86_64/lib" -luv -lobjc -framework Foundation \

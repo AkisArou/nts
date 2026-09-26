@@ -9,7 +9,7 @@
 //
 // Deallocation is observed with a zeroing weak reference (`weak_alive`), not
 // `retainCount`, which Apple documents as meaningless.
-import { report, weak_alive, weak_watch } from "c:report";
+import { weak_alive, weak_watch } from "c:report";
 import {
   allocString,
   arrayWithCapacity,
@@ -69,41 +69,41 @@ function captured(): c_int {
 
 function main(): void {
   const owned = allocString().initWithUTF8String("α\u{1F600} hello");
-  report("length " + String(owned.length()));
-  report("utf8 " + owned.UTF8String());
-  report("upper " + owned.uppercaseString().UTF8String());
+  console.log("length " + String(owned.length()));
+  console.log("utf8 " + owned.UTF8String());
+  console.log("upper " + owned.uppercaseString().UTF8String());
 
   // A class method, and an object as an argument.
   const same = stringWithUTF8String("α\u{1F600} hello");
   const other = stringWithUTF8String("β\u{1F600} hello");
-  report("equal " + String(owned.isEqualToString(same)) + " " + String(owned.isEqualToString(other)));
+  console.log("equal " + String(owned.isEqualToString(same)) + " " + String(owned.isEqualToString(other)));
 
   // A collection: an object in, `id` out, and a checked downcast back.
   const array = arrayWithCapacity(2n as c_ulong);
   array.addObject(owned);
   array.addObject(other);
-  report("count " + String(array.count()));
+  console.log("count " + String(array.count()));
   const first = array.objectAtIndex(0n as c_ulong);
   const text = unsafeDowncast<NSString>(first, first.isKindOfClass(classNSString()));
-  report("first " + (text === null ? "not a string" : text.UTF8String()));
+  console.log("first " + (text === null ? "not a string" : text.UTF8String()));
   // An array seen as an object, so the cast is a real downcast. The check
   // says no, and the answer is null. The compiler refuses the sideways cast
   // (`NSMutableArray` to `NSString`) before the check could say anything.
   const asObject: NSObject = array;
   const wrong = unsafeDowncast<NSString>(asObject, asObject.isKindOfClass(classNSString()));
-  report("array as string " + (wrong === null ? "null" : "a string"));
-  report("array is array " + String(array.isKindOfClass(classNSMutableArray())));
+  console.log("array as string " + (wrong === null ? "null" : "a string"));
+  console.log("array is array " + String(array.isKindOfClass(classNSMutableArray())));
 
   // Lifetimes. An object is alive while a TypeScript value holds it, and gone
   // once the last one dies.
   const held = newObject();
   const watch = weak_watch(held);
-  report("held " + state(watch));
-  report("held again " + String(held.isKindOfClass(classNSString())));
-  report("scoped new " + state(scoped()));
-  report("scoped init " + state(initialised()));
-  report("in a field " + state(inAField()));
-  report("captured " + state(captured()));
+  console.log("held " + state(watch));
+  console.log("held again " + String(held.isKindOfClass(classNSString())));
+  console.log("scoped new " + state(scoped()));
+  console.log("scoped init " + state(initialised()));
+  console.log("in a field " + state(inAField()));
+  console.log("captured " + state(captured()));
 }
 
 main();

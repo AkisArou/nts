@@ -1,6 +1,6 @@
 // A notes application in AppKit, as Swift writes one, on macOS. Run on the
 // lane's Mac, in its GUI session.
-import { app, defineConfig, sources, target } from "@nts/config";
+import { app, defineConfig, target } from "@nts/config";
 
 export default defineConfig({
   products: {
@@ -19,5 +19,4 @@ export default defineConfig({
       targets: [target.macos({ minimumVersion: "13.0", arch: "x86_64", backend: "llvm" })],
     }),
   },
-  native: [sources({ dir: "native" })],
 });

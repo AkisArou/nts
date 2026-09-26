@@ -9,7 +9,6 @@
 struct NSObject;
 struct objc_imp;
 
-void report(const char *line);
 void loop_run(void);
 void loop_stop(void);
 int weak_watch(struct NSObject *object);

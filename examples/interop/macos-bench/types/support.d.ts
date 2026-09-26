@@ -5,7 +5,6 @@
 declare module "c:support" {
   import type { c_double, c_int } from "c:types";
   import type { NSObject, NSString } from "objc:Foundation";
-  export function report(line: string): void;
   /** CLOCK_UPTIME_RAW, in nanoseconds: the clock `DispatchTime` reads. */
   export function now_ns(): c_double;
   export function report_string(label: string, text: NSString): void;

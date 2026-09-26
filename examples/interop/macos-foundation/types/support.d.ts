@@ -8,7 +8,6 @@
 declare module "c:report" {
   import type { c_int } from "c:types";
   import type { NSObject } from "objc:Foundation";
-  export function report(line: string): void;
   /** Starts watching `object`, and answers the watch's number. */
   export function weak_watch(object: NSObject): c_int;
   export function weak_alive(watch: c_int): boolean;

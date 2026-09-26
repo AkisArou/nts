@@ -6,8 +6,6 @@
 
 struct NSObject;
 
-// Prints `line` and a newline to stdout.
-void report(const char *line);
 // Starts a weak reference to `object`, answering its number.
 int weak_watch(struct NSObject *object);
 // Whether the object watch `watch` refers to is still alive.

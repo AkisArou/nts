@@ -24,12 +24,6 @@ int live_objects(void) {
   return (int)nts_live_count();
 }
 
-void report(const char *line) {
-  fputs(line, stdout);
-  fputc('\n', stdout);
-  fflush(stdout);
-}
-
 void report_string(const char *label, struct NSString *text) {
   const char *bytes = ((const char *(*)(id, SEL))objc_msgSend)((id)text, sel_registerName("UTF8String"));
   printf("%s %s\n", label, bytes);

@@ -16,7 +16,7 @@
 //   color gone    the colours this program made, released: a `Create`
 //                 function hands over a reference, which the program owns
 import { CGColor, CGColorSpaceCreateDeviceRGB, CGContext, CGImageAlphaInfo } from "objc:CoreGraphics";
-import { report, weak_alive, weak_watch } from "c:support";
+import { weak_alive, weak_watch } from "c:support";
 import { malloc } from "c:stdlib";
 import type { Ptr, c_int, c_uint8 } from "c:types";
 
@@ -74,15 +74,15 @@ function main(): void {
     // Swift's `CGImageAlphaInfo.premultipliedLast.rawValue`.
     bitmapInfo: CGImageAlphaInfo.premultipliedLast as number,
   });
-  report(`size ${context.width}x${context.height} ${context.bytesPerRow}`);
+  console.log(`size ${context.width}x${context.height} ${context.bytesPerRow}`);
   const alpha = paint(context);
   // A later colour replaces the one the context's state held.
   context.setFillColor({ red: 0, green: 0, blue: 0, alpha: 0 });
   for (let y = 0; y < HEIGHT; y++) {
-    report(`row ${y} ${row(pixels, y)}`);
+    console.log(`row ${y} ${row(pixels, y)}`);
   }
-  report(alpha);
-  report(`color ${weak_alive(watch) ? "alive" : "gone"}`);
+  console.log(alpha);
+  console.log(`color ${weak_alive(watch) ? "alive" : "gone"}`);
 }
 
 main();

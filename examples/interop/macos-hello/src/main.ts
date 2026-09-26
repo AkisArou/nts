@@ -5,7 +5,6 @@
 // 64-bit integer arithmetic, hash-map iteration order, and the event loop
 // (a timer and a promise continuation, which only a working libuv host runs
 // in this order). The same text on both machines is the claim.
-import { report } from "c:report";
 
 const lines: string[] = [];
 
@@ -40,7 +39,12 @@ later();
 setTimeout(() => {
   lines.push("timer");
   for (const line of lines) {
-    report(line);
+    console.log(line);
+    // One line to stderr between two to stdout: a log holding both streams
+    // has it here, as node's does, only when each line is written through.
+    if (line === "sync") {
+      console.error("stderr after sync");
+    }
   }
 }, 1);
 lines.push("sync");

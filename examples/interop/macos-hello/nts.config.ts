@@ -4,7 +4,7 @@
 // and run on a Mac (or the lane's VM, `tooling/apple/run.sh`); what they print
 // must be byte-identical to what Linux printed. aarch64 only links unless an
 // arm64 Mac is reachable -- that gap is written down, not hidden.
-import { app, defineConfig, sources, target } from "@nts/config";
+import { app, defineConfig, target } from "@nts/config";
 
 export default defineConfig({
   products: {
@@ -18,5 +18,4 @@ export default defineConfig({
       ],
     }),
   },
-  native: [sources({ dir: "native" })],
 });

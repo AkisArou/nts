@@ -37,7 +37,6 @@ import {
   type UITableViewDelegate,
 } from "objc:UIKit";
 import { exit } from "c:stdlib";
-import { report } from "c:support";
 import type { c_int } from "c:types";
 import type { Int } from "objc:types";
 
@@ -69,7 +68,7 @@ class Fruits extends NSObject implements UITableViewDataSource, UITableViewDeleg
   }
 
   tableViewDidSelectRowAt(tableView: UITableView, indexPath: NSIndexPath): void {
-    report(`tapped ${this.items[indexPath.row]}`);
+    console.log(`tapped ${this.items[indexPath.row]}`);
   }
 
   append(item: string): void {
@@ -103,24 +102,24 @@ class AppDelegate extends UIResponder implements UIApplicationDelegate {
     this.window = window;
     this.fruits = fruits;
     table.layoutIfNeeded();
-    report(`title ${navigation.navigationBar.topItem?.title ?? "none"}`);
-    report(`rows ${table.numberOfRows({ inSection: 0 })} visible ${table.visibleCells.length}`);
-    report(`row 1 ${shown(table, 1)}`);
+    console.log(`title ${navigation.navigationBar.topItem?.title ?? "none"}`);
+    console.log(`rows ${table.numberOfRows({ inSection: 0 })} visible ${table.visibleCells.length}`);
+    console.log(`row 1 ${shown(table, 1)}`);
     fruits.append("date");
     table.reloadData();
     table.layoutIfNeeded();
-    report(`rows ${table.numberOfRows({ inSection: 0 })} last ${shown(table, 3)}`);
+    console.log(`rows ${table.numberOfRows({ inSection: 0 })} last ${shown(table, 3)}`);
     const second = new NSIndexPath({ forRow: 1, inSection: 0 });
     table.selectRow({ at: second, animated: false, scrollPosition: UITableView.ScrollPosition.none });
-    report(`selected ${table.indexPathForSelectedRow?.row ?? -1}`);
+    console.log(`selected ${table.indexPathForSelectedRow?.row ?? -1}`);
     // Swift's `table.dataSource?.tableView(table, numberOfRowsInSection: 0)`
     // and `table.delegate?.tableView?(table, didSelectRowAt: second)`.
-    report(`asked ${table.dataSource?.tableViewNumberOfRowsInSection(table, 0) ?? -1}`);
+    console.log(`asked ${table.dataSource?.tableViewNumberOfRowsInSection(table, 0) ?? -1}`);
     table.delegate?.tableViewDidSelectRowAt?.(table, second);
-    report(`height ${table.delegate?.tableViewHeightForRowAt?.(table, second) ?? -1}`);
-    report(`header ${table.dataSource?.tableViewTitleForHeaderInSection?.(table, 0) ?? "none"}`);
+    console.log(`height ${table.delegate?.tableViewHeightForRowAt?.(table, second) ?? -1}`);
+    console.log(`header ${table.dataSource?.tableViewTitleForHeaderInSection?.(table, 0) ?? "none"}`);
     Timer.scheduledTimer({ withTimeInterval: 0.2, repeats: false }, () => {
-      report("done");
+      console.log("done");
       exit(0 as c_int);
     });
     return true;

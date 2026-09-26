@@ -29,7 +29,6 @@ import {
   type UIApplicationDelegate,
 } from "objc:UIKit";
 import { exit } from "c:stdlib";
-import { report } from "c:support";
 import type { c_int } from "c:types";
 
 // Swift's `class ListController: UIViewController`.
@@ -43,23 +42,23 @@ class ListController extends UIViewController {
   override viewDidLoad(): void {
     super.viewDidLoad();
     this.title = "Fruits";
-    report(`list loaded ${this.items.length}`);
+    console.log(`list loaded ${this.items.length}`);
   }
 
   override viewWillAppear(animated: boolean): void {
     super.viewWillAppear(animated);
-    report(`list will appear ${this.appeared + 1}`);
+    console.log(`list will appear ${this.appeared + 1}`);
   }
 
   override viewDidAppear(animated: boolean): void {
     super.viewDidAppear(animated);
     this.appeared++;
-    report(`list appeared ${this.appeared}`);
+    console.log(`list appeared ${this.appeared}`);
     if (this.appeared === 1) {
       this.open(this.items[1]);
       return;
     }
-    report(`top ${this.navigationController?.topViewController?.title ?? "none"}`);
+    console.log(`top ${this.navigationController?.topViewController?.title ?? "none"}`);
     exit(0 as c_int);
   }
 
@@ -85,15 +84,15 @@ class DetailController extends UIViewController {
     this.label = label;
     // Swift's `completion: nil`: an optional closure left out.
     UIView.animate({ withDuration: 0, animations: () => (label.alpha = 1) }, null);
-    report(`detail loaded ${this.item}`);
+    console.log(`detail loaded ${this.item}`);
   }
 
   override viewDidAppear(animated: boolean): void {
     super.viewDidAppear(animated);
-    report(`detail appeared ${this.navigationController?.topViewController === this}`);
+    console.log(`detail appeared ${this.navigationController?.topViewController === this}`);
     const label = this.label;
     UIView.animate({ withDuration: 0.1, animations: () => { if (label !== null) label.alpha = 0; } }, (finished) => {
-      report(`faded ${finished} ${label?.alpha ?? -1}`);
+      console.log(`faded ${finished} ${label?.alpha ?? -1}`);
       this.navigationController?.popViewController({ animated: false });
     });
   }

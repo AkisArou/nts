@@ -31,7 +31,6 @@ import {
 } from "objc:AppKit";
 import {
   nested_while_readable,
-  report,
   send_draw_rect,
   send_mouse_down,
   view_alignment_rect,
@@ -50,7 +49,7 @@ let ticks = 0;
 // runs as a microtask.
 async function afterAJob(line: string): Promise<void> {
   await 0;
-  report(line);
+  console.log(line);
 }
 
 function setRect(r: Ptr<CGRect>, x: number, y: number, width: number, height: number): void {
@@ -67,9 +66,9 @@ class Controller extends NSObject implements NSWindowDelegate {
   pressed(sender: NSObject): void {
     presses++;
     const press = presses;
-    report(`pressed ${press}`);
+    console.log(`pressed ${press}`);
     void afterAJob(`micro ${press}`);
-    setTimeout(() => report(`timeout ${press}`), 0);
+    setTimeout(() => console.log(`timeout ${press}`), 0);
     if (press === 1) {
       nested_while_readable();
     }
@@ -78,7 +77,7 @@ class Controller extends NSObject implements NSWindowDelegate {
   // `NSWindowDelegate`'s `windowWillClose(_:)`, sent `windowWillClose:` when the
   // timer closes the window.
   windowWillClose(notification: NSNotification): void {
-    report("closing");
+    console.log("closing");
   }
 }
 
@@ -175,7 +174,7 @@ async function animated(then: () => void): Promise<void> {
     context.duration = 0;
     duration = context.duration;
   });
-  report(`animated ${duration}`);
+  console.log(`animated ${duration}`);
   then();
 }
 
@@ -184,7 +183,7 @@ async function animated(then: () => void): Promise<void> {
 async function sheet(window: NSWindow, panel: NSWindow): Promise<void> {
   const ended = window.beginSheet(panel);
   window.endSheet(panel, { returnCode: 1001 });
-  report(`sheet ${await ended}`);
+  console.log(`sheet ${await ended}`);
 }
 
 function main(): void {
@@ -216,7 +215,7 @@ function main(): void {
     // Begun and ended here, so what awaits it runs at this callback's
     // checkpoint: after the window closes, before the loop returns.
     void sheet(window, makeSheet());
-    report("stopped");
+    console.log("stopped");
     window.close();
     app.stop(null);
     // `stop:` is seen when the loop next finishes an event, so one is posted.
@@ -248,36 +247,36 @@ function main(): void {
   const height = button.frame.size.height;
   // `subviews` is Swift's `[NSView]`: an array copied out of the NSArray.
   const views = window.contentView?.subviews.length ?? 0;
-  report(`window ${shown.size.width} button ${width}x${height} views ${views}`);
+  console.log(`window ${shown.size.width} button ${width}x${height} views ${views}`);
   // Which the program is: a bare executable has no bundle identifier, and an
   // application has the one its `Info.plist` gives it.
-  report(`bundle ${Bundle.main.bundleIdentifier ?? "none"}`);
+  console.log(`bundle ${Bundle.main.bundleIdentifier ?? "none"}`);
   // Swift's `String(cString: text.utf8String!)`: a `const char *` result,
   // copied when the message answers. ASCII has no `é`, so that one is nil.
   const text = new NSString({ string: "héllo wörld" });
-  report(`utf8 ${text.utf8String ?? "none"} ${text.cString({ using: 1 }) ?? "none"}`);
+  console.log(`utf8 ${text.utf8String ?? "none"} ${text.cString({ using: 1 }) ?? "none"}`);
   const canvas = new Canvas({ frame: { size: { width: 40, height: 30 } } });
   window.contentView?.addSubview(canvas);
   // AppKit asks each subview, so the override is called now, synchronously.
   window.contentView?.hitTest({ x: 10, y: 12 });
   const content = window.contentView;
   const found = content === null ? null : content.hitTest({ x: 10, y: 12 });
-  report(`hit ${hitX} ${found === canvas ? "the canvas" : "something else"}`);
+  console.log(`hit ${hitX} ${found === canvas ? "the canvas" : "something else"}`);
   // `drawRect:` sent with a rectangle whose size is known: AppKit's own
   // draws pass what it chooses, which since macOS 14 may exceed the bounds.
   send_draw_rect(canvas, 1 as c_double, 2 as c_double, 40 as c_double, 30 as c_double);
-  report(`drawn ${drawnWidth}x${drawnHeight}`);
+  console.log(`drawn ${drawnWidth}x${drawnHeight}`);
   // And a plain view, which is not: the override is the canvas's alone.
-  report(`flipped ${canvas.isFlipped} ${view_is_flipped(canvas)} ${content === null ? "none" : view_is_flipped(content)}`);
+  console.log(`flipped ${canvas.isFlipped} ${view_is_flipped(canvas)} ${content === null ? "none" : view_is_flipped(content)}`);
   // Swift's `window.contentView?.superview`: a nullable property down an
   // optional chain, `NSView | null | undefined`, whose one null is Swift's
   // one `nil`. The window's frame view is there.
   const frameView = window.contentView?.superview;
-  report(`superview ${frameView == null ? "none" : "some"} ${(window.contentView?.superview ?? canvas) === canvas}`);
+  console.log(`superview ${frameView == null ? "none" : "some"} ${(window.contentView?.superview ?? canvas) === canvas}`);
   // Scanned to whole pixels, through `super` and through an ordinary send,
   // which the canvas does not override: the same NSView implementation.
   const plain = { origin: { x: 0.25, y: 0 }, size: { width: 40.6, height: 30 } };
-  report(`scanned ${canvas.scannedWidth(40.6)} ${canvas.centerScanRect(plain).size.width}`);
+  console.log(`scanned ${canvas.scannedWidth(40.6)} ${canvas.centerScanRect(plain).size.width}`);
   const click = NSEvent.otherEvent({
     with: NSEvent.EventType.applicationDefined,
     location: { x: 0, y: 0 },
@@ -297,15 +296,15 @@ function main(): void {
     mouseData = 0;
     canvas.mouseDown({ with: click });
   }
-  report(`mouse ${sent} ${mouseData}`);
-  report(`records ${view_intrinsic_size(canvas)} ${view_alignment_rect(canvas)}`);
+  console.log(`mouse ${sent} ${mouseData}`);
+  console.log(`records ${view_intrinsic_size(canvas)} ${view_alignment_rect(canvas)}`);
   // AppKit draws the canvas offscreen, as it draws it on screen, and the
   // pixel `draw` filled through Core Graphics reads back red.
   const rep = canvas.bitmapImageRepForCachingDisplay({ in: canvas.bounds });
   if (rep !== null) {
     canvas.cacheDisplay({ in: canvas.bounds, to: rep });
     const pixel = rep.colorAt({ x: 1, y: 1 });
-    report(pixel === null ? "cached none" : `cached ${pixel.redComponent} ${pixel.greenComponent} ${pixel.blueComponent}`);
+    console.log(pixel === null ? "cached none" : `cached ${pixel.redComponent} ${pixel.greenComponent} ${pixel.blueComponent}`);
   }
 
   // Swift's `Timer.scheduledTimer(withTimeInterval:repeats:) { timer in ... }`:
@@ -314,7 +313,7 @@ function main(): void {
     Timer.scheduledTimer({ withTimeInterval: 0.05, repeats: true }, tick);
   });
   app.run();
-  report("done");
+  console.log("done");
 }
 
 main();

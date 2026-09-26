@@ -1,5 +1,5 @@
 // A UIKit application, on the iOS simulator. Run on the lane's Mac.
-import { app, defineConfig, sources, target } from "@nts/config";
+import { app, defineConfig, target } from "@nts/config";
 
 export default defineConfig({
   products: {
@@ -17,5 +17,4 @@ export default defineConfig({
       targets: [target.ios({ minimumVersion: "17.0", arch: "x86_64", backend: "llvm" })],
     }),
   },
-  native: [sources({ dir: "native" })],
 });

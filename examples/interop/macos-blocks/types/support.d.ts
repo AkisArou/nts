@@ -8,7 +8,6 @@ declare module "c:support" {
   import type { c_int, c_int16 } from "c:types";
   import type { NSError, NSObject } from "objc:Foundation";
   import type { Block } from "objc:types";
-  export function report(line: string): void;
   export function loop_run(): void;
   export function loop_stop(): void;
   export function weak_watch(object: NSObject): c_int;

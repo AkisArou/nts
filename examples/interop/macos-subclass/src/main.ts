@@ -12,7 +12,7 @@
 // Foundation then calls the method twice: synchronously through
 // `performSelector:withObject:`, and from the run loop as an NSTimer's
 // target/action, the way AppKit calls a button's target.
-import { loop_run, loop_stop, report, actionImplementation, weak_alive, weak_watch } from "c:support";
+import { loop_run, loop_stop, actionImplementation, weak_alive, weak_watch } from "c:support";
 import { newClickTarget, scheduledTimerCalling, type NSObject } from "objc:Foundation";
 import {
   class_addMethod,
@@ -29,22 +29,22 @@ let targetWatch = 0 as c_int;
 function define(): void {
   const base = objc_getClass("NSObject");
   if (base === null) {
-    report("no NSObject");
+    console.log("no NSObject");
     return;
   }
   const cls = objc_allocateClassPair(base, "NtsClickTarget", 0n as c_size_t);
   if (cls === null) {
-    report("NtsClickTarget already exists");
+    console.log("NtsClickTarget already exists");
     return;
   }
   const clicked = actionImplementation((self: NSObject, sender: NSObject) => {
     clicks++;
-    report("clicked " + String(clicks) + (self === sender ? " by itself" : " by another"));
+    console.log("clicked " + String(clicks) + (self === sender ? " by itself" : " by another"));
     if (clicks === 2) {
       setTimeout(finish, 0);
     }
   });
-  report("added " + String(class_addMethod(cls, sel_registerName("clicked:"), clicked, "v@:@")));
+  console.log("added " + String(class_addMethod(cls, sel_registerName("clicked:"), clicked, "v@:@")));
   objc_registerClassPair(cls);
 }
 
@@ -53,22 +53,22 @@ function start(): void {
   const target = newClickTarget();
   targetWatch = weak_watch(target);
   const base = objc_getClass("NSObject");
-  report("responds " + String(target.respondsToSelector(sel_registerName("clicked:"))));
-  report("is an NSObject " + String(base !== null && target.isKindOfClass(base)));
+  console.log("responds " + String(target.respondsToSelector(sel_registerName("clicked:"))));
+  console.log("is an NSObject " + String(base !== null && target.isKindOfClass(base)));
   target.performSelector(sel_registerName("clicked:"), target);
   // Foundation keeps the target until the timer fires, and then lets it go.
   scheduledTimerCalling(0.01 as c_double, target, sel_registerName("clicked:"), null, false);
 }
 
 function finish(): void {
-  report("target " + (weak_alive(targetWatch) ? "alive" : "gone"));
+  console.log("target " + (weak_alive(targetWatch) ? "alive" : "gone"));
   loop_stop();
 }
 
 function main(): void {
   setTimeout(start, 0);
   loop_run();
-  report("done");
+  console.log("done");
 }
 
 main();

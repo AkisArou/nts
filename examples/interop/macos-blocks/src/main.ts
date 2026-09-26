@@ -26,7 +26,6 @@ import {
   console_arm,
   off_thread_arm,
   on_main_thread,
-  report,
   weak_alive,
   weak_watch,
 } from "c:support";
@@ -65,7 +64,7 @@ function enumerate(): void {
     seen++;
     indices += index as bigint;
   });
-  report("enumerated " + String(seen) + " " + String(indices));
+  console.log("enumerated " + String(seen) + " " + String(indices));
   // The block's `BOOL *stop`, written: the enumeration ends after the second.
   let visited = 0;
   array.enumerateObjectsUsingBlock((object, index, stop) => {
@@ -74,30 +73,30 @@ function enumerate(): void {
       stop[0] = 1 as c_int8;
     }
   });
-  report("stopped after " + String(visited));
+  console.log("stopped after " + String(visited));
   // A block returning an object, which a caller takes at +0: the object
   // lives only as long as the caller counts it.
   const madeWatch = made_by_block(() => newObject());
-  report("returned " + state(madeWatch));
+  console.log("returned " + state(madeWatch));
   const holder: { object: NSObject | null } = { object: null };
   const keptWatch = keptBy(holder);
-  report("kept " + state(keptWatch));
+  console.log("kept " + state(keptWatch));
   holder.object = null;
-  report("let go " + state(keptWatch));
+  console.log("let go " + state(keptWatch));
   // A block taking a `BOOL` and a `short`, called from C: arguments the
   // platform widens, which the adapter's parameters must say.
   let flags = "";
   call_with_flags((flag, n) => {
     flags += `${flag ? "yes" : "no"}:${n} `;
   });
-  report("flags " + flags.trim());
+  console.log("flags " + flags.trim());
 }
 
 function cancelled(): c_int {
   const sentinel = newObject();
   const watch = weak_watch(sentinel);
   const timer = scheduledTimer(60 as c_double, false, () => {
-    report("never " + String(sentinel.hash()));
+    console.log("never " + String(sentinel.hash()));
   });
   timer.invalidate();
   return watch;
@@ -112,7 +111,7 @@ function ticking(): void {
   let ticks = 0;
   scheduledTimer(0.01 as c_double, true, (timer) => {
     ticks++;
-    report("tick " + String(ticks) + " " + (sentinel.hash() === 0n ? "?" : "held"));
+    console.log("tick " + String(ticks) + " " + (sentinel.hash() === 0n ? "?" : "held"));
     if (ticks === 3) {
       timer.invalidate();
       setTimeout(finish, 0);
@@ -132,10 +131,10 @@ function offThread(): void {
   const sentinel = newObject();
   offWatch = weak_watch(sentinel);
   hold_block((value, n) => {
-    report(`off thread: called on the main thread ${on_main_thread()} with ${n} ${value === sentinel ? "same" : "other"}`);
+    console.log(`off thread: called on the main thread ${on_main_thread()} with ${n} ${value === sentinel ? "same" : "other"}`);
   });
   call_held_off_thread(sentinel, 7 as c_int);
-  report("off thread: called and released");
+  console.log("off thread: called and released");
 }
 
 // Swift's `async throws`, as `nts bind-objc --values` writes it: a promise a
@@ -186,21 +185,21 @@ function later(held: boolean): Promise<NSObject> {
 
 async function consoleAwait(held: boolean): Promise<void> {
   const value = await later(held);
-  report(`console: resolved ${value === null ? "nothing" : "an object"} on the main thread ${on_main_thread()}`);
+  console.log(`console: resolved ${value === null ? "nothing" : "an object"} on the main thread ${on_main_thread()}`);
 }
 
 async function offThreadAll(): Promise<void> {
   offThread();
   const value = await completed(false);
-  report(`off thread: resolved ${value === null ? "nothing" : "an object"} on the main thread ${on_main_thread()}`);
+  console.log(`off thread: resolved ${value === null ? "nothing" : "an object"} on the main thread ${on_main_thread()}`);
   try {
     await completed(true);
-    report("off thread: resolved a failure");
+    console.log("off thread: resolved a failure");
   } catch (error) {
-    report(`off thread: rejected with "${(error as Error).message}"`);
+    console.log(`off thread: rejected with "${(error as Error).message}"`);
   }
   const [first, second] = await pair();
-  report(`off thread: a pair of ${first === second ? "one object" : "two objects"}`);
+  console.log(`off thread: a pair of ${first === second ? "one object" : "two objects"}`);
   // A block property: `operation.completionBlock = { ... }`, which Foundation
   // calls on a thread of its own once the operation finishes.
   const operation = new NSOperation();
@@ -208,15 +207,15 @@ async function offThreadAll(): Promise<void> {
     operation.completionBlock = () => resolve(on_main_thread());
   });
   operation.start();
-  report(`off thread: an operation's completion block ran on the main thread ${await finished}`);
+  console.log(`off thread: an operation's completion block ran on the main thread ${await finished}`);
   await new Promise<void>((resolve) => setTimeout(() => resolve(), 20));
-  report("off thread: closure " + state(offWatch));
+  console.log("off thread: closure " + state(offWatch));
   loop_stop();
 }
 
 function finish(): void {
-  report("cancelled " + state(cancelledWatch));
-  report("ticking " + state(tickingWatch));
+  console.log("cancelled " + state(cancelledWatch));
+  console.log("ticking " + state(tickingWatch));
   if (off_thread_arm()) {
     void offThreadAll();
     return;
@@ -236,7 +235,7 @@ function main(): void {
     ticking();
   }, 0);
   loop_run();
-  report("done");
+  console.log("done");
 }
 
 main();

@@ -7,7 +7,6 @@
 struct NSObject;
 struct NSString;
 
-void report(const char *line);
 void report_string(const char *label, struct NSString *text);
 int weak_watch(struct NSObject *object);
 bool weak_alive(int watch);

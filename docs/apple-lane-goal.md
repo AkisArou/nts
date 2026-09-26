@@ -558,7 +558,7 @@ correctness does not depend on arm64 running by luck.
        object result is not optional.
      - `macos-classes` lists a directory and catches the error for a missing
        one, against ARC.
-     - Async (completion handler to `Promise`) is next.
+     - Async (completion handler to `Promise`) landed as S5c, above.
    - **S7, the witness, landed.** `nts bind-objc --witness out.c` writes, from
      the same model the binding is written from, a plain C program that asks
      the Mac's Objective-C runtime for every message the binding sends. That
@@ -1061,9 +1061,14 @@ correctness does not depend on arm64 running by luck.
        word the gate's interop step counts. Every Apple not-run line now says
        `SKIP`. Before this, an unreachable Mac read as eleven examples built
        and run.
-     - Still C in each iOS fixture: `report`, the test's output.
-       `console.log` is the node lane's runtime, which a native application
-       does not link.
+     - **`console.log` (2026-09-26).** The fixtures print with it, as the
+       Swift twins print with `print`: it is a builtin of every compiled
+       program now, written through to stdout as node's is. The C `report`
+       each fixture carried is gone, and with it the whole native half of
+       `macos-hello`, `macos-geometry`, `macos-notes` and the four iOS
+       fixtures. `macos-hello` runs its source in node as the oracle, and
+       compares a log holding both streams, the one check that fails if
+       the line is not written through.
      - Not yet: an array of `ClassObject`, an uncounted C pointer, is
        unrepresentable.
    - **Swift's one `nil` (2026-09-25).** `window.contentView?.superview`

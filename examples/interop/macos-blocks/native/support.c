@@ -27,12 +27,6 @@ int made_by_block(void *block) {
   return watch;
 }
 
-void report(const char *line) {
-  fputs(line, stdout);
-  fputc('\n', stdout);
-  fflush(stdout);
-}
-
 void loop_run(void) { CFRunLoopRun(); }
 
 void loop_stop(void) { CFRunLoopStop(CFRunLoopGetMain()); }

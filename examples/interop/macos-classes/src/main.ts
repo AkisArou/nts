@@ -20,7 +20,7 @@ import {
   XMLParser,
   type NSXMLParserDelegate,
 } from "objc:Foundation";
-import { kvc_watch, kvo_forget, kvo_observe, live_objects, report, weak_alive, weak_watch } from "c:support";
+import { kvc_watch, kvo_forget, kvo_observe, live_objects, weak_alive, weak_watch } from "c:support";
 import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
 import type { c_int } from "c:types";
 import type { ObjCBool, UInt } from "objc:types";
@@ -58,7 +58,7 @@ function maps(): void {
   map.set("kept", map.get("kept")!);
   map.delete("dropped");
   const missing = map.get("missing");
-  report(`maps ${map.size} ${map.has("kept")} ${missing === undefined} ${weak_alive(dropped) ? "alive" : "gone"}`);
+  console.log(`maps ${map.size} ${map.has("kept")} ${missing === undefined} ${weak_alive(dropped) ? "alive" : "gone"}`);
   let count = 0;
   for (const [key, value] of map) {
     if (key === "kept" && value.isEqual(kept)) count++;
@@ -66,7 +66,7 @@ function maps(): void {
   map.forEach((value) => {
     if (value.isEqual(kept)) count++;
   });
-  report(`maps iterated ${count}`);
+  console.log(`maps iterated ${count}`);
 }
 
 // An object only the caller will hold, watched on the way out.
@@ -88,10 +88,10 @@ function arrays(): void {
   for (const n of numbers) {
     total += n.intValue;
   }
-  report(`arrays ${numbers.length} ${tail.length} ${total} ${tail[0].intValue} ${numbers.indexOf(tail[1])}`);
+  console.log(`arrays ${numbers.length} ${tail.length} ${total} ${tail[0].intValue} ${numbers.indexOf(tail[1])}`);
   const objects: NSObject[] = [watched()];
   objects[0] = new NSObject();
-  report(`replaced ${weak_alive(replaced) ? "alive" : "gone"}`);
+  console.log(`replaced ${weak_alive(replaced) ? "alive" : "gone"}`);
   held = weak_watch(objects[0]);
 }
 
@@ -341,64 +341,64 @@ function optional(operation: NSOperation | null): string {
 
 function main(): void {
   const list = new NSMutableArray();
-  report(`empty ${list.count}`);
+  console.log(`empty ${list.count}`);
   for (const n of [1, 2, 3]) {
     list.addObject(new NSNumber(n));
   }
-  report(`count ${list.count}`);
+  console.log(`count ${list.count}`);
   list.insert(new NSNumber(0), { at: 0 });
-  report(`inserted ${list.count} first ${(list.object(0) as NSNumber).intValue}`);
+  console.log(`inserted ${list.count} first ${(list.object(0) as NSNumber).intValue}`);
   list.sort((a, b) => Math.sign((b as NSNumber).intValue - (a as NSNumber).intValue));
-  report(`sorted ${(list.object(0) as NSNumber).intValue} ${(list.object(3) as NSNumber).intValue}`);
+  console.log(`sorted ${(list.object(0) as NSNumber).intValue} ${(list.object(3) as NSNumber).intValue}`);
 
   const answer = new NSNumber(42);
-  report(`number ${answer.intValue} equal ${answer.isEqual(new NSNumber(42))}`);
-  report(`kinds ${answer instanceof NSNumber} ${answer instanceof NSString} ${list instanceof NSObject}`);
-  report(`processors ${NSProcessInfo.processInfo.processorCount > 0}`);
+  console.log(`number ${answer.intValue} equal ${answer.isEqual(new NSNumber(42))}`);
+  console.log(`kinds ${answer instanceof NSNumber} ${answer instanceof NSString} ${list instanceof NSObject}`);
+  console.log(`processors ${NSProcessInfo.processInfo.processorCount > 0}`);
 
   const text = new NSString("worker");
-  report(`length ${text.length}`);
-  report(`upper ${text.uppercaseString} appended ${text.appending("!")}`);
+  console.log(`length ${text.length}`);
+  console.log(`upper ${text.uppercaseString} appended ${text.appending("!")}`);
   const operation = new NSOperation();
   operation.name = "worker";
   const name = operation.name;
   if (name !== null) {
-    report(`name ${name} ${name.length}`);
+    console.log(`name ${name} ${name.length}`);
   }
 
   // Swift's `[String]` and `[Any]` at a message: copied into an `NSArray`
   // for the call, and out of the one it returns.
   const parts = new NSString("a,b,c").components({ separatedBy: "," });
-  report(`parts ${parts.length} ${parts.join("+")} ${NSString.path({ withComponents: ["usr", "lib"] })}`);
+  console.log(`parts ${parts.length} ${parts.join("+")} ${NSString.path({ withComponents: ["usr", "lib"] })}`);
   const more = new NSMutableArray();
   more.addObjects({ from: [new NSNumber(7), new NSNumber(8)] });
   const both = more.adding({ contentsOf: [new NSNumber(9)] });
-  report(`bridged ${more.count} ${both.length} ${(both[2] as NSNumber).intValue}`);
+  console.log(`bridged ${more.count} ${both.length} ${(both[2] as NSNumber).intValue}`);
 
   // Swift's `throws`: a reported `NSError` is a thrown `Error`.
   const frameworks = FileManager.default.contentsOfDirectory({ atPath: "/System/Library/Frameworks/AppKit.framework" });
-  report(`listed ${frameworks.includes("Versions")}`);
+  console.log(`listed ${frameworks.includes("Versions")}`);
   try {
     FileManager.default.contentsOfDirectory({ atPath: "/nts-no-such-directory" });
-    report("listed a missing directory");
+    console.log("listed a missing directory");
   } catch (error) {
-    report(`thrown ${(error as Error).message}`);
+    console.log(`thrown ${(error as Error).message}`);
   }
   // Swift's `[String]?`: a nil `NSArray` is `null`, and one that is there is
   // read as an array.
   const missing = FileManager.default.subpaths({ atPath: "/nts-no-such-directory" });
   const present = FileManager.default.subpaths({ atPath: "/System/Library/Frameworks/AppKit.framework" });
-  report(`subpaths ${missing === null} ${present !== null && present.includes("Versions")}`);
+  console.log(`subpaths ${missing === null} ${present !== null && present.includes("Versions")}`);
   // And `[Any]?` at a message: `null` is sent as nil.
   const always = new NSPredicate({ format: "TRUEPREDICATE", argumentArray: null });
   const three = new NSPredicate({ format: "SELF == %@", argumentArray: [new NSNumber(3)] });
-  report(`predicates ${always.predicateFormat} ${three.predicateFormat}`);
+  console.log(`predicates ${always.predicateFormat} ${three.predicateFormat}`);
   // Swift's `UnsafeMutablePointer<NSRange>`: the method writes the range the
   // attribute is absent across, the whole string.
   const attributed = new NSAttributedString("hello world");
   const range = local<NSRange>();
   const font = attributed.attribute("NSFont", { at: 3, effectiveRange: range });
-  report(`attributed ${font === null} ${range.location} ${range.length}`);
+  console.log(`attributed ${font === null} ${range.location} ${range.length}`);
   // Swift's `[NSAttributedString.Key: Any]`: a map, crossing as the
   // `NSDictionary` the message takes.
   const attributes = new Map<string, NSObject>();
@@ -406,16 +406,16 @@ function main(): void {
   const styled = new NSAttributedString("hello", { attributes });
   const count = styled.attribute("nts.count", { at: 1, effectiveRange: null });
   const absent = styled.attribute("absent", { at: 1, effectiveRange: null });
-  report(`styled ${count !== null && count.isEqual(new NSNumber(7))} ${absent === null}`);
+  console.log(`styled ${count !== null && count.isEqual(new NSNumber(7))} ${absent === null}`);
   const named = new NSAttributedString("hello", { textAttributes: new Map([["nts.name", "ada"]]) });
   const nameValue = named.attribute("nts.name", { at: 0, effectiveRange: null });
-  report(`named ${nameValue !== null && nameValue.isEqual(new NSString("ada"))}`);
+  console.log(`named ${nameValue !== null && nameValue.isEqual(new NSString("ada"))}`);
   // And back: the `NSDictionary` a message answers, as a map.
   const read = styled.attributes({ at: 1, effectiveRange: null });
   const seven = read.get("nts.count");
-  report(`read ${read.size} ${seven !== undefined && seven.isEqual(new NSNumber(7))}`);
+  console.log(`read ${read.size} ${seven !== undefined && seven.isEqual(new NSNumber(7))}`);
   const environment = NSProcessInfo.processInfo.environment;
-  report(`environment ${environment.size > 0} ${environment.get("HOME") !== undefined}`);
+  console.log(`environment ${environment.size > 0} ${environment.get("HOME") !== undefined}`);
   // Swift's `UnsafeMutablePointer<UInt>`, three of them: the numbers the
   // message writes, read back as `[0]`.
   const start = local<UInt>();
@@ -425,16 +425,16 @@ function main(): void {
   at.location = 4;
   at.length = 0;
   new NSString("ab\ncde\nf").getLineStart(start, { end, contentsEnd, for: at });
-  report(`line ${start[0]} ${end[0]} ${contentsEnd[0]}`);
+  console.log(`line ${start[0]} ${end[0]} ${contentsEnd[0]}`);
   // And `UnsafeMutablePointer<ObjCBool>`: a `BOOL` the message writes.
   const directory = local<ObjCBool>();
   const exists = FileManager.default.fileExists({ atPath: "/System", isDirectory: directory });
-  report(`exists ${exists} ${directory[0] !== 0}`);
+  console.log(`exists ${exists} ${directory[0] !== 0}`);
   // Labels held in a variable, as a wrapper passes on the ones it was given:
   // each read from its field at the call.
   const byDash = { separatedBy: "-" };
   const split = (text: string, labels: { separatedBy: string }) => new NSString(text).components(labels);
-  report(`labelled ${split("x-y-z", byDash).length} ${new NSString("p-q").components(byDash).join("+")}`);
+  console.log(`labelled ${split("x-y-z", byDash).length} ${new NSString("p-q").components(byDash).join("+")}`);
   // Swift's `Set<NSObject>` and `Set<String>`. An equal string is one
   // element, as `-isEqual:` says, and the `Set` read back finds an equal one
   // it was not given; the `Set` passed is an `NSSet` made of it.
@@ -442,41 +442,41 @@ function main(): void {
   const grown = pair.setByAdding(new NSString("c"));
   const strings = new NSStringSet(["x", "y", "x"]);
   const added = strings.setByAdding("z");
-  report(
+  console.log(
     `sets ${pair.count} ${grown.size} ${grown.has(new NSString("c"))} ${pair.isSubset({ of: grown })} ${strings.count} ${added.size} ${added.has("z")}`,
   );
 
-  report(`parsed ${parsed()}`);
-  report(`kept ${keptNames()}`);
-  report(`answered ${weak_alive(kvc_watch(new Maker(), "made")) ? "alive" : "gone"}`);
+  console.log(`parsed ${parsed()}`);
+  console.log(`kept ${keptNames()}`);
+  console.log(`answered ${weak_alive(kvc_watch(new Maker(), "made")) ? "alive" : "gone"}`);
   // `dealloc` gave the fields back: as many of the program's objects are
   // alive after as before, the array the fields held included.
   const before = live_objects();
-  report(`fields ${tallied()}`);
+  console.log(`fields ${tallied()}`);
   // Counted before the line reporting it is built, which is itself an object.
   const after = live_objects();
-  report(`fields ${weak_alive(tallyWatch) ? "alive" : "gone"} ${after === before ? "released" : "held"}`);
-  report(`inherited ${scored()}`);
-  report(`inherited ${weak_alive(scoredWatch) ? "alive" : "gone"}`);
-  report(`constructed ${ledgered()}`);
-  report(`constructed ${weak_alive(ledgerWatch) ? "alive" : "gone"}`);
-  report(`ledgers ${Ledger.described()}`);
-  report(`overridden ${overridden()}`);
-  report(`observed ${observed()}`);
-  report(`class-names ${classNames()}`);
+  console.log(`fields ${weak_alive(tallyWatch) ? "alive" : "gone"} ${after === before ? "released" : "held"}`);
+  console.log(`inherited ${scored()}`);
+  console.log(`inherited ${weak_alive(scoredWatch) ? "alive" : "gone"}`);
+  console.log(`constructed ${ledgered()}`);
+  console.log(`constructed ${weak_alive(ledgerWatch) ? "alive" : "gone"}`);
+  console.log(`ledgers ${Ledger.described()}`);
+  console.log(`overridden ${overridden()}`);
+  console.log(`observed ${observed()}`);
+  console.log(`class-names ${classNames()}`);
 
   // Swift's optional chaining: a message to an absent receiver is not sent,
   // and the chain is `undefined`.
-  report(`optional ${optional(operation)} ${optional(null)}`);
+  console.log(`optional ${optional(operation)} ${optional(null)}`);
 
   arrays();
-  report(`array ${weak_alive(held) ? "alive" : "gone"}`);
+  console.log(`array ${weak_alive(held) ? "alive" : "gone"}`);
   maps();
-  report(`mapped ${weak_alive(mapped) ? "alive" : "gone"}`);
+  console.log(`mapped ${weak_alive(mapped) ? "alive" : "gone"}`);
 
   made();
-  report(`object ${weak_alive(watch) ? "alive" : "gone"}`);
-  report("done");
+  console.log(`object ${weak_alive(watch) ? "alive" : "gone"}`);
+  console.log("done");
 }
 
 main();

@@ -1,6 +1,6 @@
 // Records by value through Objective-C, on macOS. Run on the lane's Mac
 // against an Objective-C oracle.
-import { app, defineConfig, sources, target } from "@nts/config";
+import { app, defineConfig, target } from "@nts/config";
 
 export default defineConfig({
   products: {
@@ -23,5 +23,4 @@ export default defineConfig({
       ],
     }),
   },
-  native: [sources({ dir: "native" })],
 });

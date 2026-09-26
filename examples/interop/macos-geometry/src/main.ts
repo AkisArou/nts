@@ -7,7 +7,6 @@
 // `objc_msgSend` would read the receiver where the hidden result pointer is.
 import { NSIntersectionRect, valueWithPoint, valueWithRect, type CGPoint, type CGRect } from "objc:Foundation";
 import { local } from "c:memory";
-import { report } from "c:report";
 import type { Ptr, c_double } from "c:types";
 
 // Fills storage the caller owns: returning a `local` would be its address
@@ -25,20 +24,20 @@ function main(): void {
   setRect(a, 0, 0, 10, 10);
   setRect(b, 5, 2.5, 10, 10);
   const i = NSIntersectionRect(a, b);
-  report(`intersection ${i.origin.x} ${i.origin.y} ${i.size.width} ${i.size.height}`);
+  console.log(`intersection ${i.origin.x} ${i.origin.y} ${i.size.width} ${i.size.height}`);
 
   const boxed = valueWithRect(b);
   const back = boxed.rectValue();
-  report(`rect ${back.origin.x} ${back.origin.y} ${back.size.width} ${back.size.height}`);
+  console.log(`rect ${back.origin.x} ${back.origin.y} ${back.size.width} ${back.size.height}`);
   // The result is its own storage.
   b.size.width = 99 as c_double;
-  report(`kept ${back.size.width}`);
+  console.log(`kept ${back.size.width}`);
 
   const p = local<CGPoint>();
   p.x = 3.5 as c_double;
   p.y = -1 as c_double;
   const q = valueWithPoint(p).pointValue();
-  report(`point ${q.x} ${q.y}`);
+  console.log(`point ${q.x} ${q.y}`);
 }
 
 main();

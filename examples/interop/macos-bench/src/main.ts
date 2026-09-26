@@ -1,6 +1,6 @@
 // Swift's surface, timed: the same four loops as reference/bench.swift.
 import { NSMutableArray, NSNumber, NSObject, NSOperation, NSString } from "objc:Foundation";
-import { now_ns, report } from "c:support";
+import { now_ns } from "c:support";
 
 // Milliseconds, from the clock Swift's `DispatchTime` reads.
 function now(): number {
@@ -48,7 +48,7 @@ function time(label: string, count: number, body: () => number): void {
   const start = now();
   const result = body();
   const elapsed = now() - start;
-  report(`${label} ${((elapsed * 1e6) / count).toFixed(1)} ns/op (${result})`);
+  console.log(`${label} ${((elapsed * 1e6) / count).toFixed(1)} ns/op (${result})`);
 }
 
 function main(): void {

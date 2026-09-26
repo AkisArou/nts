@@ -8,12 +8,6 @@ id objc_initWeak(id *location, id value);
 id objc_loadWeakRetained(id *location);
 void objc_release(id value);
 
-void report(const char *line) {
-  fputs(line, stdout);
-  fputc('\n', stdout);
-  fflush(stdout);
-}
-
 static id watches[16];
 static int watched;
 

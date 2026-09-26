@@ -2,10 +2,17 @@
 # Build one TypeScript program for Linux and for macOS (x86_64 and arm64) from
 # this Linux box, and hold every build to the same output.
 #
-# `expected.txt` is what node prints for the same source, with `report` as
-# `console.log`. What each arm asserts:
+# `expected.txt` is what node prints for the same source. What each arm
+# asserts:
 #
+# - **Node:** where node is on PATH, it runs `src/main.ts` as it is and
+#   prints `expected.txt`, so the expectation is the oracle's today and not a
+#   copy of what it once said.
 # - **Linux:** runs, and prints `expected.txt` byte for byte.
+# - **Both streams:** where node is on PATH, the Linux program's stdout and
+#   stderr in one file are node's. Nothing else checks that `console.log` is
+#   written through: a buffered stdout keeps each stream's order and loses
+#   only their interleaving.
 # - **Control:** the comparison is fed a one-line change of `expected.txt` and
 #   must reject it, so "matches" cannot come from a comparison that always
 #   succeeds.
@@ -48,10 +55,24 @@ if grep -qE "refused|NTS[0-9]{4}" "$log"; then
   exit 1
 fi
 
+if command -v node >/dev/null 2>&1; then
+  node "$source/src/main.ts" >"$out/node.txt" 2>/dev/null
+  diff -u "$source/expected.txt" "$out/node.txt"
+  echo "node: prints expected.txt"
+fi
+
 linux="$out/hello/linux-gnu-x86_64/hello"
-"$linux" >"$out/linux.txt"
+"$linux" >"$out/linux.txt" 2>/dev/null
 diff -u "$source/expected.txt" "$out/linux.txt"
 echo "linux: matches node"
+if command -v node >/dev/null 2>&1; then
+  node "$source/src/main.ts" >"$out/node-both.txt" 2>&1
+  "$linux" >"$out/linux-both.txt" 2>&1
+  diff -u "$out/node-both.txt" "$out/linux-both.txt"
+  grep -q "^stderr after sync$" "$out/linux-both.txt" ||
+    { echo "macos-hello: the stderr line is missing from the combined log" >&2; exit 1; }
+  echo "linux: stdout and stderr interleave as node's do"
+fi
 
 sed 's/^bigint .*/bigint 0/' "$source/expected.txt" >"$out/control.txt"
 if diff -q "$out/control.txt" "$out/linux.txt" >/dev/null; then
@@ -79,7 +100,7 @@ for arch in x86_64 aarch64; do
 done
 
 set +e
-"$root/tooling/apple/run.sh" "$out/hello/macos-13-x86_64/hello" >"$out/macos.txt"
+"$root/tooling/apple/run.sh" "$out/hello/macos-13-x86_64/hello" >"$out/macos.txt" 2>"$out/macos.err"
 status=$?
 set -e
 case $status in
@@ -88,5 +109,5 @@ case $status in
     echo "macos-x86_64: matches node, run on a Mac"
     ;;
   77) echo "SKIP macos-x86_64: not run -- no Mac reachable (tooling/apple/vm.md)" ;;
-  *) echo "macos-hello: the x86_64 program exited $status on the Mac" >&2; exit 1 ;;
+  *) cat "$out/macos.err" >&2; echo "macos-hello: the x86_64 program exited $status on the Mac" >&2; exit 1 ;;
 esac

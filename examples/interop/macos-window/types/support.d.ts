@@ -9,7 +9,6 @@ declare module "c:support" {
   import type { Implementation } from "objc:runtime";
   import type { NSEvent, NSObject, NSView, Timer } from "objc:AppKit";
   import type { c_double } from "c:types";
-  export function report(line: string): void;
   /** `WINDOW_CONTROL=detached` takes libuv's sources off the run loop. */
   export function window_control(): void;
   /** Under `WINDOW_NESTED=1`, a nested run loop inside the callback. */
