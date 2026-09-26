@@ -8,8 +8,8 @@ exceptions across calls in nts (see ../../README.md, Status).
 
 ```tsx
 import { useState } from "react";
-import { Orientation } from "c:Gtk-4.0";
-import { Box, Button, Label } from "react-gtk";
+import { GtkWindow, Orientation } from "c:Gtk-4.0";
+import { Box, Button, Label, createRoot } from "react-gtk";
 
 function Counter() {
   const [count, setCount] = useState(0);
@@ -20,8 +20,15 @@ function Counter() {
     </Box>
   );
 }
+
+const window = new GtkWindow();
+createRoot(window).render(<Counter />);
+window.present();
 ```
 
+- `createRoot(window)` is `react-dom/client`'s root on a GTK window
+  (`src/client.ts`). It renders concurrently and installs the reconciler's
+  sync flush for controlled props.
 - Host components are GTK widgets, named without the `Gtk` prefix.
 - **Props are the widget's GIR properties** in camel case (`has-frame` → `hasFrame`), typed as bind-gir types their setters (`label: string`, `spacing: number`, enums as their GIR enum).
 - **Signals are `on` + the signal name in camel case**: `clicked` → `onClicked`, `notify::text` → `onNotifyText`. They are typed with the signal's own handler signature.
