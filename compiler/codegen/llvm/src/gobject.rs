@@ -88,16 +88,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     if !callbacks_declared {
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
-    out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr, ptr, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
-    if classes.iter().any(|class| class.template.is_some()) {
-        out.push_str("declare void @nts_gtk_class_template(ptr, ptr, i64, ptr, i64)\ndeclare void @nts_gtk_init_template(ptr)\n");
-    }
-    if classes.iter().any(|class| !class.signals.is_empty()) {
-        out.push_str("declare i32 @nts_gobject_add_signal(i64, ptr, ptr)\n");
-    }
-    if classes.iter().any(|class| !class.properties.is_empty()) {
-        out.push_str("declare void @nts_gobject_set_properties(i64, ptr, i64)\n");
-    }
+    declarations(&mut out, &classes);
     for class in classes {
         let name = &class.name;
         let mut slots = Vec::new();
@@ -146,7 +137,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             None => "null".to_owned(),
         };
         // Its signals, added to the type the moment it exists.
-        let hooks = template(&mut out, class);
+        let hooks = template(&mut out, program, platform, class)?;
         let mut signals = registrations(&mut out, class);
         if let Some(table) = properties(&mut out, program, class)? {
             let _ = writeln!(signals, "  call void @nts_gobject_set_properties(i64 %made, ptr {table}, i64 {})", class.properties.len());
@@ -180,12 +171,33 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     Ok(out)
 }
 
+/// The support files' functions the classes' registrations call, each declared
+/// once, and only where a class calls it.
+/// The support files' functions the classes' registrations call, each declared
+/// once, and only where a class calls it.
+fn declarations(out: &mut String, classes: &[&ForeignClass]) {
+    out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr, ptr, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
+    if classes.iter().any(|class| class.template.is_some()) {
+        out.push_str("declare void @nts_gtk_class_template(ptr, ptr, i64, ptr, i64)\ndeclare void @nts_gtk_init_template(ptr)\n");
+    }
+    if classes.iter().any(|class| class.template.as_ref().is_some_and(|template| !template.callbacks.is_empty())) {
+        out.push_str("declare void @nts_gtk_bind_callback(ptr, ptr, ptr)\n");
+    }
+    if classes.iter().any(|class| !class.signals.is_empty()) {
+        out.push_str("declare i32 @nts_gobject_add_signal(i64, ptr, ptr)\n");
+    }
+    if classes.iter().any(|class| !class.properties.is_empty()) {
+        out.push_str("declare void @nts_gobject_set_properties(i64, ptr, i64)\n");
+    }
+}
+
 /// A class's template: the `class_setup` hook setting it and binding each
 /// child it names, and `nts_gtk_init_template` for each instance
 /// (`nts_gtk.c`). The two hook arguments registration passes.
-fn template(out: &mut String, class: &ForeignClass) -> String {
-    let Some(template) = &class.template else { return "ptr null, ptr null".to_owned() };
+fn template(out: &mut String, program: &Program, platform: Platform, class: &ForeignClass) -> Result<String, Diagnostic> {
+    let Some(template) = &class.template else { return Ok("ptr null, ptr null".to_owned()) };
     let name = &class.name;
+    let binds = callbacks(out, program, platform, class, &template.callbacks)?;
     bytes_constant(out, &format!("nts_gobject_template_{name}"), &template.xml);
     let mut names = Vec::new();
     for (at, child) in template.children.iter().enumerate() {
@@ -200,11 +212,58 @@ fn template(out: &mut String, class: &ForeignClass) -> String {
     };
     let _ = writeln!(
         out,
-        "define internal void @nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n  call void @nts_gtk_class_template(ptr %klass, ptr @nts_gobject_template_{name}, i64 {}, ptr {table}, i64 {})\n  ret void\n}}",
+        "define internal void @nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n  call void @nts_gtk_class_template(ptr %klass, ptr @nts_gobject_template_{name}, i64 {}, ptr {table}, i64 {})\n{binds}  ret void\n}}",
         template.xml.len(),
         names.len()
     );
-    format!("ptr @nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template")
+    Ok(format!("ptr @nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template"))
+}
+
+/// Each method a template names as a signal's handler: the entry point a
+/// virtual function's would be, instance first, and the shim GTK calls with
+/// the signal's arguments and the instance last, its user data. Returns the
+/// `class_setup` calls binding each by name.
+fn callbacks(out: &mut String, program: &Program, platform: Platform, class: &ForeignClass, callbacks: &[ForeignMethod]) -> Result<String, Diagnostic> {
+    let name = &class.name;
+    let mut binds = String::new();
+    for (at, callback) in callbacks.iter().enumerate() {
+        let Some(compiled) = program.funcs.iter().find(|func| func.name == callback.function) else {
+            let missing = "a template's handler whose compiled function this program does not define";
+            return match program.funcs.first() {
+                Some(func) => Err(refuse(func, missing)),
+                None => Ok(String::new()),
+            };
+        };
+        let entry = format!("nts_gobject_entry_{name}_cb_{at}");
+        entry_point(out, platform, &entry, callback, compiled)?;
+        let types = callback
+            .signature
+            .parameters
+            .iter()
+            .map(|ty| ty_of(&ty.abi(platform.abi), compiled).map(str::to_owned))
+            .collect::<Result<Vec<_>, _>>()?;
+        let result = callback.signature.result.abi(platform.abi);
+        let returns = if result == HirType::Void { "void".to_owned() } else { ty_of(&result, compiled)?.to_owned() };
+        let parameters: Vec<String> = types.iter().enumerate().skip(1).map(|(at, ty)| format!("{ty} %a{at}")).chain(["ptr %self".to_owned()]).collect();
+        let arguments: Vec<String> = std::iter::once("ptr %self".to_owned())
+            .chain(types.iter().enumerate().skip(1).map(|(at, ty)| format!("{ty} %a{at}")))
+            .collect();
+        let shim = format!("nts_gobject_callback_{name}_{at}");
+        if returns == "void" {
+            let _ = writeln!(out, "define internal void @{shim}({}) nounwind {{\n  call void @{entry}({})\n  ret void\n}}", parameters.join(", "), arguments.join(", "));
+        } else {
+            let _ = writeln!(
+                out,
+                "define internal {returns} @{shim}({}) nounwind {{\n  %r = call {returns} @{entry}({})\n  ret {returns} %r\n}}",
+                parameters.join(", "),
+                arguments.join(", ")
+            );
+        }
+        let handler = callback.selector().trim_start_matches("callback ");
+        bytes_constant(out, &format!("{shim}.name"), handler);
+        let _ = writeln!(binds, "  call void @nts_gtk_bind_callback(ptr %klass, ptr @{shim}.name, ptr @{shim})");
+    }
+    Ok(binds)
 }
 
 /// Each `nts_gobject_child_{Class}_{index}` the program calls, defined as

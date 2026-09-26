@@ -30,3 +30,11 @@ void nts_gtk_init_template(void *instance) {
 void *nts_gtk_template_child(void *widget, size_t type, const char *id) {
   return gtk_widget_get_template_child(GTK_WIDGET(widget), (GType)type, id);
 }
+
+/* A template's signal handler, bound by the name its `<signal handler>`
+ * gives: GTK calls it with the signal's arguments and the instance last. */
+void nts_gtk_bind_callback(void *klass, const char *name,
+                           void (*callback)(void)) {
+  gtk_widget_class_bind_template_callback_full(GTK_WIDGET_CLASS(klass), name,
+                                               G_CALLBACK(callback));
+}

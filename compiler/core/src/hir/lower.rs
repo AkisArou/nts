@@ -6206,6 +6206,23 @@ fn register_gobject_class(
     lowered: &mut Lowered,
 ) {
     let Some(name) = foreign_class_name(snapshot, class) else { return };
+    // A template's handlers are reached through the template, not a slot.
+    let (callbacks, methods): (Vec<super::ForeignMethod>, Vec<super::ForeignMethod>) =
+        methods.into_iter().partition(|method| method.selector().starts_with("callback "));
+    let mut template = gobject_template(snapshot, class);
+    if let Some(template) = &mut template {
+        template.callbacks = callbacks;
+        let missing = template_handlers(&template.xml)
+            .into_iter()
+            .find(|handler| !template.callbacks.iter().any(|callback| callback.selector() == format!("callback {handler}")));
+        if let Some(handler) = missing {
+            let diagnostic = FuncBuilder::probe(snapshot)
+                .unsupported(class, &format!("a template whose handler `{handler}` is no method of the class"));
+            note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+            lowered.diagnostics.push(diagnostic);
+            return;
+        }
+    }
     // Signals are declared on the class over a binding's (`extends
     // GtkButton<{ ... }>`); one over a class the program wrote inherits its
     // parent's, which `emit` finds by name on the instance's type.
@@ -6232,8 +6249,24 @@ fn register_gobject_class(
         composition: None,
         signals,
         properties,
-        template: gobject_template(snapshot, class),
+        template,
     });
+}
+
+/// The names a template's `<signal>` elements give as their handlers, in the
+/// order they appear.
+fn template_handlers(xml: &str) -> Vec<String> {
+    let mut handlers = Vec::new();
+    for (at, _) in xml.match_indices("handler=\"") {
+        let rest = &xml[at + "handler=\"".len()..];
+        if let Some(end) = rest.find('"') {
+            let handler = rest[..end].to_owned();
+            if !handlers.contains(&handler) {
+                handlers.push(handler);
+            }
+        }
+    }
+    handlers
 }
 
 /// The template a class is built from -- `static readonly template`, whose
@@ -6257,7 +6290,11 @@ fn gobject_template(snapshot: &SemanticSnapshot, class: NodeId) -> Option<super:
             _ => None,
         }
     })?;
-    Some(super::Template { xml, children: template_children(snapshot, class).into_iter().map(|(name, _)| name).collect() })
+    Some(super::Template {
+        xml,
+        children: template_children(snapshot, class).into_iter().map(|(name, _)| name).collect(),
+        callbacks: Vec::new(),
+    })
 }
 
 /// The children a class's template names: its own `declare`d fields of a
@@ -14614,6 +14651,11 @@ impl<'a> FuncBuilder<'a> {
             return Ok((self.lower_gobject_constructor(class, member, instance)?, None));
         }
         let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
+        // A handler the class's template names (`<signal handler="...">`):
+        // GTK calls it with the signal's arguments and the instance last.
+        if gobject_template(self.snapshot, class).is_some_and(|template| template_handlers(&template.xml).contains(&name)) {
+            return self.lower_template_callback(class, member, instance, &name);
+        }
         if !name.starts_with("vfunc_") {
             return Ok((self.lower_method_of(class, member, instance)?, None));
         }
@@ -14653,6 +14695,42 @@ impl<'a> FuncBuilder<'a> {
             .map_err(|why| self.unsupported(member, &format!("a virtual function's {why}")))?;
         let func = self.lower_method_of(class, member, instance)?;
         let method = super::ForeignMethod { dispatch: super::Dispatch::Selector(slot), function: func.name.clone(), signature: std::sync::Arc::new(entry) };
+        Ok((func, Some(method)))
+    }
+
+    /// A method a template names as a signal's handler: lowered as any method,
+    /// with an entry point shaped as a virtual function's -- the instance
+    /// first, then the method's own parameters in C -- which the backend's
+    /// shim reaches with the instance moved from last, where GTK passes it.
+    fn lower_template_callback(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+        name: &str,
+    ) -> Result<(Func, Option<super::ForeignMethod>), Diagnostic> {
+        let receiver = instance
+            .or_else(|| instance_type_of(self.snapshot, class))
+            .and_then(|ty| super::native::pointer(self.snapshot, ty))
+            .ok_or_else(|| self.unsupported(member, "a template's handler on a class whose instances are not a GObject handle"))?;
+        let signature = super::generics::declared_signature(self.snapshot, member)
+            .cloned()
+            .ok_or_else(|| self.unsupported(member, "a template's handler with no signature"))?;
+        let mut parameters = vec![super::native::Type::Pointer(receiver)];
+        for parameter in &signature.parameters {
+            parameters.push(super::native::abi_type(self.snapshot, parameter.ty).ok_or_else(|| {
+                self.unsupported(member, &format!("a template's handler `{name}` whose parameter `{}` has no C type", parameter.name))
+            })?);
+        }
+        let result = super::native::abi_type(self.snapshot, signature.return_type)
+            .ok_or_else(|| self.unsupported(member, &format!("a template's handler `{name}` whose result has no C type")))?;
+        let entry = super::native::FnPointer::spell(parameters, result);
+        let func = self.lower_method_of(class, member, instance)?;
+        let method = super::ForeignMethod {
+            dispatch: super::Dispatch::Selector(format!("callback {name}")),
+            function: func.name.clone(),
+            signature: std::sync::Arc::new(entry),
+        };
         Ok((func, Some(method)))
     }
 

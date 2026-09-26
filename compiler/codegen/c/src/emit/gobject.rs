@@ -25,7 +25,7 @@
 use std::fmt::Write as _;
 
 use nts_core::hir::native::{Family, PROGRAM_GTYPE, Type};
-use nts_core::hir::{Callee, ForeignClass, OpKind, Program};
+use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program};
 
 use super::{CodeWriter, Diagnostic, Origin, c_identifier, c_type_of};
 
@@ -130,7 +130,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         }
         // Its signals, added to the type the moment it exists: before any
         // instance can be made or connected to.
-        let hooks = template(writer, origin, class);
+        let hooks = template(writer, origin, program, class)?;
         let mut signals = registrations(class);
         if !signals.is_empty() {
             writer.line(origin, "unsigned nts_gobject_add_signal(size_t type, const char *name, const char *kinds);");
@@ -242,11 +242,12 @@ fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
 /// A class's template (`static readonly template`): `class_init` sets it and
 /// binds each child the class names, and `instance_init` makes the children
 /// (`nts_gtk.c`). The two hooks registration passes, `0, 0` without one.
-fn template(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClass) -> String {
-    let Some(template) = &class.template else { return "0, 0".to_owned() };
+fn template(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass) -> Result<String, Diagnostic> {
+    let Some(template) = &class.template else { return Ok("0, 0".to_owned()) };
     let name = &class.name;
     writer.line(origin, "void nts_gtk_class_template(void *klass, const char *xml, size_t length, const char *const *children, size_t count);");
     writer.line(origin, "void nts_gtk_init_template(void *instance);");
+    let binds = callbacks(writer, origin, program, class, &template.callbacks)?;
     let children: Vec<String> = template.children.iter().map(|child| c_string(child)).collect();
     let table = if children.is_empty() {
         "0".to_owned()
@@ -257,13 +258,57 @@ fn template(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClass) -> S
     writer.line(
         origin,
         format!(
-            "static void nts_gobject_class_setup_{name}(void *klass) {{ nts_gtk_class_template(klass, {}, {}u, {table}, {}u); }}",
+            "static void nts_gobject_class_setup_{name}(void *klass) {{ nts_gtk_class_template(klass, {}, {}u, {table}, {}u);{binds} }}",
             c_string(&template.xml),
             template.xml.len(),
             children.len()
         ),
     );
-    format!("nts_gobject_class_setup_{name}, nts_gtk_init_template")
+    Ok(format!("nts_gobject_class_setup_{name}, nts_gtk_init_template"))
+}
+
+/// Each method a template names as a signal's handler: an entry point GTK
+/// calls with the signal's arguments and then the instance, its user data,
+/// which calls the compiled method with the instance as `this`, entered and
+/// left as any entry point is. Returns the calls binding each by name.
+fn callbacks(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass, callbacks: &[ForeignMethod]) -> Result<String, Diagnostic> {
+    let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
+    if callbacks.is_empty() {
+        return Ok(String::new());
+    }
+    writer.line(origin, "void nts_gtk_bind_callback(void *klass, const char *name, void (*callback)(void));");
+    let name = &class.name;
+    let mut binds = String::new();
+    for (at, callback) in callbacks.iter().enumerate() {
+        let compiled = program
+            .funcs
+            .iter()
+            .find(|func| func.name == callback.function)
+            .ok_or_else(|| refuse("a template's handler whose compiled function this program does not define"))?;
+        let signature = &callback.signature;
+        if compiled.params.len() != signature.parameters.len() {
+            return Err(refuse("a template's handler whose entry point and compiled function disagree about arity"));
+        }
+        let mut parameters = Vec::new();
+        let mut arguments = vec![format!("({})self", c_type_of(program, &compiled.params[0].ty, &compiled.params[0].origin)?)];
+        for (slot, (ty, want)) in signature.parameters.iter().zip(&compiled.params).enumerate().skip(1) {
+            parameters.push(format!("{} a{slot}", ty.c_type()));
+            arguments.push(format!("({})a{slot}", c_type_of(program, &want.ty, &want.origin)?));
+        }
+        parameters.push("void *self".to_owned());
+        let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+        let returns = signature.result.c_type();
+        let body = if matches!(*signature.result, Type::Void) {
+            format!("nts_callback_enter(); {call}; nts_callback_leave();")
+        } else {
+            format!("nts_callback_enter(); {returns} r = ({returns}){call}; nts_callback_leave(); return r;")
+        };
+        let entry = format!("nts_gobject_callback_{name}_{at}");
+        writer.line(origin, format!("static {returns} {entry}({}) {{ {body} }}", parameters.join(", ")));
+        let handler = callback.selector().trim_start_matches("callback ");
+        let _ = write!(binds, " nts_gtk_bind_callback(klass, {}, (void (*)(void)){entry});", c_string(handler));
+    }
+    Ok(binds)
 }
 
 /// The maker of a class's fields, entered and left as an entry point is, or

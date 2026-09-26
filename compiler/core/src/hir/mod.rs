@@ -2212,6 +2212,11 @@ pub struct ForeignClass {
 pub struct Template {
     pub xml: String,
     pub children: Vec<String>,
+    /// The class's methods the template names as signal handlers
+    /// (`<signal handler="onClicked">`): each an entry point shaped as a
+    /// virtual function's, the instance first, which GTK reaches with it last
+    /// (its user data). The dispatch is `callback {handler}`.
+    pub callbacks: Vec<ForeignMethod>,
 }
 
 impl Template {
@@ -2279,6 +2284,8 @@ impl ForeignClass {
             // A property's accessors, which `get_property` and `set_property`
             // call with borrowed arguments.
             .chain(self.properties.iter().flat_map(|property| [property.getter.as_str(), property.setter.as_str()]))
+            // A template's handlers, which its signals call.
+            .chain(self.template.iter().flat_map(|template| template.callbacks.iter().map(|callback| callback.function.as_str())))
     }
 }
 

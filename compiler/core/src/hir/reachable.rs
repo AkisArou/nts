@@ -369,12 +369,10 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
     // A method of a class the program writes over a foreign one is reached
     // through that runtime -- by selector, or through a table -- which no call
     // in the IR names.
+    // Every function a class's runtime calls: `ForeignClass::entered`, the one
+    // list that also says which are called with borrowed arguments.
     for class in &program.foreign_classes {
-        names.extend(class.methods.iter().map(|method| method.function.as_str()));
-        names.extend(class.state.as_deref());
-        // A property's accessors, which `get_property` and `set_property`
-        // call through the registration's table.
-        names.extend(class.properties.iter().flat_map(|property| [property.getter.as_str(), property.setter.as_str()]));
+        names.extend(class.entered());
     }
     if !matches!(roots, Roots::Entry(_)) {
         for generator in &program.generators {

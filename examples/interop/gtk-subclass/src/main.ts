@@ -37,6 +37,8 @@
 //                 widget's first child, and the `declare`d field `title` reads
 //                 it by its id (`gtk_widget_get_template_child`). Without the
 //                 template's registration the field read NULL, a critical
+//   pressed 1 p   the template's button, clicked: its `<signal handler>` is
+//                 the class's `onPressed`, called with the button and `this`
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
@@ -203,15 +205,32 @@ class Panel extends GtkBox {
         <property name="label">from the template</property>
       </object>
     </child>
+    <child>
+      <object class="GtkButton" id="press">
+        <property name="label">p</property>
+        <signal name="clicked" handler="onPressed"/>
+      </object>
+    </child>
   </template>
 </interface>`;
   declare readonly title: GtkLabel;
+  declare readonly press: GtkButton;
+  pressed = 0;
+
+  // A handler the template names: GTK calls it with the button, and `this`
+  // is the panel.
+  onPressed(button: GtkButton): void {
+    this.pressed++;
+    this.title.set_label(button.label ?? "");
+  }
 }
 
 function panel(): string {
   const made = new Panel({});
   const first = made.get_first_child();
-  return "panel " + (made.title.label ?? "") + " " + String(first === made.title);
+  const before = "panel " + (made.title.label ?? "") + " " + String(first === made.title);
+  sub_emit(made.press, "clicked");
+  return before + " pressed " + String(made.pressed) + " " + (made.title.label ?? "");
 }
 
 class Square extends GtkWidget {
