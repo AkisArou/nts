@@ -56,7 +56,7 @@ const UNCAUGHT = /^nts: uncaught ([A-Za-z_$][A-Za-z0-9_$]*)(?::|$)/m;
  * first time the runtime gained a source or a library this would link a
  * different program than `nts build` does.
  */
-function linkCommand(emitted) {
+export function linkCommand(emitted) {
   const joined = emitted
     .split("\n")
     .map((line) => line.trim())
@@ -188,7 +188,7 @@ function includedHeaders(out, source) {
   return [...seen].sort(([a], [b]) => a.localeCompare(b)).map(([n, t]) => `${n}\0${t}`).join("\0");
 }
 
-function withCachedObjects(printed, out, tools) {
+export function withCachedObjects(printed, out, tools) {
   const cache = tools.objectCache;
   if (!cache || process.env.NTS_CENSUS_NO_OBJECT_CACHE) return { args: printed, objects: undefined };
   const sources = printed.filter((part) => part.endsWith(".c"));
@@ -259,7 +259,7 @@ function withCachedObjects(printed, out, tools) {
  * ordinary, and a case that hits it is reported as `memory-cap`, never
  * dropped and never scored as a refusal.
  */
-function capped(tools, command, args) {
+export function capped(tools, command, args) {
   const cap = tools.memoryCapKb;
   if (!cap) return ["-c", 'exec "$0" "$@"', command, ...args];
   return ["-c", `ulimit -v ${Number(cap)}; exec "$0" "$@"`, command, ...args];

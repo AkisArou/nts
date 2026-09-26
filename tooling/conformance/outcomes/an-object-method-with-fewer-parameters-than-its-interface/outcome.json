@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: CallArgumentCount { func: \"Holder#go\", callee: \"Updater#enqueue\", expected: 2, found: 4 }",
+  "node": "exit 1; nts: uncaught Observed: answer=noop true;",
+  "measured_with": "6f3d47600977042e",
+  "source": "measured"
+}
