@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS2009 `Holder#total` cannot be emitted because it calls `Maker#make`, which this backend refused above",
+  "node": "exit 1; nts: uncaught Observed: a call no receiver can reach=0;",
+  "measured_with": "d6c324047322cfd5",
+  "source": "measured"
+}
