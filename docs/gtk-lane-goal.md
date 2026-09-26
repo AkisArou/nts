@@ -286,11 +286,21 @@ It meets the constraints agreed with MainClaude without a compiler role:
   and 0, an empty array.
 
 It does not return a values form's omitted outs: `load_contents()` answers
-`[ok, contents]`, not GJS's `[ok, contents, etag]`, since `etag_out` is left
-at its default. 15 more functions bind (1855 -> 1840). The gir sweep swept 11
-more, with 0 type errors and 0 refused. Witness: gtk-gir's `bytes 2:104,105
-true <?xml`, plain and `--rc`. `held()` returns a `GBytes`' copy after the
-`GBytes` is gone, and a file's contents are copied and C's buffer freed.
+the contents alone, since `etag_out` is left at its default. A throwing
+function's `gboolean` result is left out too, as GJS leaves it out: it only
+says whether the call failed, which the thrown error already says. So the
+answer is not `[ok, contents]`. 15 more functions bind (1855 -> 1840). The
+gir sweep swept 11 more, with 0 type errors and 0 refused. Witness:
+gtk-gir's `bytes 2:104,105 <?xml`, plain and `--rc`. `held()` returns a
+`GBytes`' copy after the `GBytes` is gone, and a file's contents are copied
+and C's buffer freed.
+
+**Promise forms through values forms.** An `_async` method whose `_finish`
+answers through out slots had no Promise form. Its Promise now settles with
+what the `_finish`'s values form returns, where that form takes only the
+instance and the `GAsyncResult`: `await file.load_contents_async(null)` is
+the contents, as a `Uint8Array`. That is 122 of 134 async methods in
+Gtk-4.0's closure, up from 121. Witness: gtk-gir's `awaited <?xml true`.
 
 ### Boxed records
 

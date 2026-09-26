@@ -278,10 +278,21 @@ function held(): Uint8Array {
 function bytesOut(): string {
   const kept = held();
   const file = g_file_new_for_path("/usr/share/gir-1.0/GLib-2.0.gir");
-  const [loaded, contents] = file.load_contents(null);
+  // GJS's shape: a throwing function's `gboolean` is left out, since
+  // failing throws.
+  const contents = file.load_contents(null);
   let head = "";
   for (let at = 0; at < 5; at++) head += String.fromCharCode(contents[at]);
-  return "bytes " + String(kept.length) + ":" + String(kept[0]) + "," + String(kept[1]) + " " + String(loaded) + " " + head;
+  return "bytes " + String(kept.length) + ":" + String(kept[0]) + "," + String(kept[1]) + " " + head;
+}
+
+// The same, awaited: `load_contents_async`'s Promise settles with what its
+// `_finish` hands back through out slots, the contents.
+async function bytesAwaited(): Promise<void> {
+  const contents = await g_file_new_for_path("/usr/share/gir-1.0/GLib-2.0.gir").load_contents_async(null);
+  let head = "";
+  for (let at = 0; at < 5; at++) head += String.fromCharCode(contents[at]);
+  console.log("awaited " + head + " " + String(contents.length > 1000));
 }
 
 function main(): void {
@@ -336,6 +347,7 @@ function main(): void {
     label.set_label("two");
     console.log("relabeled " + String(relabeled));
     console.log(bytesOut());
+    void bytesAwaited();
     // An interface's methods and properties on a class implementing it, as
     // GJS has them: `GtkEditable`'s on a `GtkEntry`, `GtkOrientable`'s on a
     // `GtkBox` -- each the C function taking the interface.

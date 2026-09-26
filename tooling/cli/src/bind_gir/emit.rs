@@ -71,7 +71,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     }
                     method(&mut out, function);
                     if let Some(finish) = promises.get(function.symbol.as_str()) {
-                        promise_method(&mut out, function, finish);
+                        promise_method(&mut out, function, &promise_result(finish));
                     }
                 }
                 for property in binding.properties.get(name.as_str()).into_iter().flatten() {
@@ -463,9 +463,28 @@ pub(crate) fn promise_forms(binding: &Binding) -> Vec<(&Function, &Function)> {
                 .functions
                 .iter()
                 .find(|f| f.method.as_ref().is_some_and(|(c, n)| c == class && n == finish_name))?;
-            (read(finish) == 2 && settles(&finish.result)).then_some((start, finish))
+            ((read(finish) == 2 && settles(&finish.result)) || settles_by_values(binding, finish)).then_some((start, finish))
         })
         .collect()
+}
+
+/// Whether a `_finish` settles its Promise through its values form: it
+/// answers through out slots -- `g_file_load_contents_finish`'s contents,
+/// as a `Uint8Array` -- and its values form takes nothing but the instance
+/// and the `GAsyncResult`, a defaulted slot (`etag_out`) left out.
+fn settles_by_values(binding: &Binding, finish: &Function) -> bool {
+    if !values_forms(binding).iter().any(|form| std::ptr::eq(*form, finish)) {
+        return false;
+    }
+    let taken = values_taken(finish);
+    let defaulted = defaults(finish, &taken);
+    taken.iter().filter(|(name, _)| !defaulted.iter().any(|(given, _)| given == name)).count() == 2
+}
+
+/// What a Promise form answers: the `_finish`'s result, or what its values
+/// form returns where it settles through one.
+fn promise_result(finish: &Function) -> String {
+    if read(finish) == 2 && settles(&finish.result) { finish.result.ts.clone() } else { values_result(finish) }
 }
 
 /// The methods whose out parameters a GJS-style form returns instead of
@@ -501,9 +520,12 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
 
 /// What a values form returns: the function's own result, if it has one,
 /// then each out value, in order -- GJS's shape -- and a lone value unwrapped.
+/// A throwing function's `gboolean` result is left out, as GJS leaves it: it
+/// says whether the call failed, which the thrown error already says.
 fn values_result(function: &Function) -> String {
     let result = match function.result.shape {
         Shape::Bytes { .. } => Some("Uint8Array".to_owned()),
+        _ if reports_by_throwing(function) => None,
         _ => (function.result.ts != "void").then(|| function.result.ts.clone()),
     };
     let values: Vec<String> = result
@@ -516,6 +538,12 @@ fn values_result(function: &Function) -> String {
         }))
         .collect();
     if values.len() == 1 { values[0].clone() } else { format!("[{}]", values.join(", ")) }
+}
+
+/// Whether a function's result only says whether it failed: a `gboolean`
+/// from one that throws, which its values form leaves out.
+fn reports_by_throwing(function: &Function) -> bool {
+    function.throws.is_some() && function.result.ts.starts_with("CBool<")
 }
 
 /// The parameters a values form takes: all but the out slots, the storage it
@@ -625,7 +653,7 @@ fn settles(result: &super::map::Mapped) -> bool {
 /// answering what the `_finish` returns -- `await file.query_info_async(…)`.
 /// An overload of the C one, told apart by arity, and bodied by the wrapper
 /// the companion module defines (`@ntsCall`).
-fn promise_method(out: &mut String, start: &Function, finish: &Function) {
+fn promise_method(out: &mut String, start: &Function, result: &str) {
     let Some((_, name)) = &start.method else { return };
     // Without the callback, which the Promise stands in for.
     let taken = &start.parameters[..start.parameters.len().saturating_sub(1)];
@@ -635,7 +663,7 @@ fn promise_method(out: &mut String, start: &Function, finish: &Function) {
     let rest: Vec<String> = parameters.map(|(name, mapped)| parameter(start, &defaulted, name, &mapped.ts)).collect();
     let this = std::iter::once(format!("this: {}", receiver(&instance.ts))).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    /**\n     * @ntsCall {}_promise\n     */", start.symbol);
-    let _ = writeln!(out, "    {name}({this}): Promise<{}>;", finish.result.ts);
+    let _ = writeln!(out, "    {name}({this}): Promise<{result}>;");
 }
 
 /// The parameters a caller may leave out of `parameters`, and what stands for
@@ -836,7 +864,8 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
         );
     }
     for (start, finish) in &promises {
-        promise_wrapper(&mut out, start, finish);
+        let through = !(read(finish) == 2 && settles(&finish.result));
+        promise_wrapper(&mut out, start, finish, (&promise_result(finish), through));
     }
     for function in &values {
         values_wrapper(&mut out, function);
@@ -864,7 +893,7 @@ fn values_wrapper(out: &mut String, function: &Function) {
             let _ = writeln!(after, "  g_free(nts_result);");
         }
         read.push("nts_bytes".to_owned());
-    } else if function.result.ts != "void" {
+    } else if function.result.ts != "void" && !reports_by_throwing(function) {
         read.push("nts_result".to_owned());
     }
     for (name, mapped) in &function.parameters {
@@ -950,7 +979,9 @@ fn module_of_type(binding: &Binding, name: &str) -> Option<String> {
 /// `start` as a Promise, settled by `finish`: what `finish` returns, or the
 /// `GError` it reports, thrown there and rejected here. The method overload
 /// `promise_method` declares is bodied by this (`@ntsCall`).
-fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
+/// `through` a values form, `finish`'s out slots are what settles it
+/// (`g_file_load_contents_finish_values`, answering the bytes).
+fn promise_wrapper(out: &mut String, start: &Function, finish: &Function, (result, through): (&str, bool)) {
     let taken = &start.parameters[..start.parameters.len().saturating_sub(1)];
     let Some((instance, _)) = taken.first() else { return };
     // The method leaves these out as the C one would; here they are ordinary
@@ -983,8 +1014,7 @@ fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
          \x20 }});\n\
          }}",
         start = start.symbol,
-        finish = finish.symbol,
-        result = finish.result.ts,
+        finish = if through { format!("{}_values", finish.symbol) } else { finish.symbol.clone() },
     );
 }
 
@@ -1101,7 +1131,7 @@ mod tests {
         );
         let finish = function("g_file_replace_contents_finish", vec![("file", mapped("GFile", Shape::Other))], "boolean");
         let mut out = String::new();
-        super::promise_wrapper(&mut out, &start, &finish);
+        super::promise_wrapper(&mut out, &start, &finish, (&finish.result.ts, false));
         let callback = out.split("(_source, nts_result) => {").nth(1).expect("a callback");
         assert!(callback.contains("void contents;"), "{out}");
         assert!(!callback.contains("void file;"), "{out}");
