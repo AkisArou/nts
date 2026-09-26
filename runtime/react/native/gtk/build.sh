@@ -44,6 +44,7 @@ controlled a typed flashed=false
 object true 42
 reference true
 decision 1 0 asked=1
+input 1 0 65307 97 click2 keys=1 after=0
 classes true true>false true>false
 interface true true true
 grid ab- a-b --b

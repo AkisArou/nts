@@ -135,6 +135,16 @@ nothing is dispatched while props are applied, so setting `text` or
 `active` from props does not call `onNotifyText` or `onToggled`, as React
 DOM does not call `onChange` for the value it sets.
 
+**Input is a prop on every widget.** GTK 4 delivers keys, clicks, pointer
+motion and scrolling through event controllers added to a widget, not
+through the widget's signals. So every widget's props include
+`onKeyPressed`/`onKeyReleased`, `onClickPressed`/`onClickReleased`,
+`onPointerEnter`/`onPointerLeave`/`onPointerMotion` and `onScroll`
+(`src/controllers.ts`). A widget gets a kind of controller on the first prop
+that needs it, and the props of that kind share it. `onKeyPressed` and
+`onScroll` answer whether they handled the event, as `close-request` does;
+with the prop gone the answer is "not handled".
+
 **Controlled props.** The props a user changes (an Editable's `text`, a
 CheckButton's, ToggleButton's or Switch's `active`, a SpinButton's `value`,
 an Expander's `expanded`, a DropDown's `selected`, a Stack's

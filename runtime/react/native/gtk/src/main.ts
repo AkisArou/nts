@@ -35,6 +35,11 @@
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
+//   input     input props add event controllers: a key handler's answer
+//             reaches GTK (Escape handled, a letter not), a double click
+//             reaches its handler with its count, a second key prop shares
+//             the one key controller, and with the key prop removed a key is
+//             not handled and the old handler is not called
 //   classes   a list-of-strings prop (cssClasses) sets the widget's CSS
 //             classes; an update replaces them, and removing the prop
 //             clears them
@@ -76,9 +81,26 @@
 //   work      a slice of scheduler work posted to GLib ran
 //   timer     a timer fired, and a cancelled one did not
 
-import { gtk_init, GtkAdjustment, GtkSingleSelection, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
+import {
+  gtk_init,
+  GtkAdjustment,
+  GtkEventControllerKey,
+  GtkGestureClick,
+  GtkSingleSelection,
+  GtkStringList,
+  GtkWindow,
+  type GtkWidget,
+} from "c:Gtk-4.0";
 import { g_main_context_iteration, g_main_loop_new } from "c:GLib-2.0";
-import { react_gtk_emit, react_gtk_emit_decision, react_gtk_emit_double, react_gtk_log } from "c:react-gtk-shim";
+import type { GObject } from "c:GObject-2.0";
+import {
+  react_gtk_emit,
+  react_gtk_emit_decision,
+  react_gtk_emit_double,
+  react_gtk_emit_key_pressed,
+  react_gtk_emit_pressed,
+  react_gtk_log,
+} from "c:react-gtk-shim";
 import {
   appendChildToContainer,
   appendInitialChild,
@@ -356,6 +378,41 @@ function main(): void {
   commitUpdate(closing, "GtkWindow", closeProps, {}, {});
   const released = react_gtk_emit_decision(widget(closing), "close-request");
   react_gtk_log("decision " + String(kept) + " " + String(released) + " asked=" + String(asked));
+
+  let heard = "";
+  const inputProps: Props = {
+    onKeyPressed: (keyval: number): boolean => {
+      heard += String(keyval) + " ";
+      return keyval === 65307;
+    },
+    onClickPressed: (nPress: number) => {
+      heard += "click" + String(nPress) + " ";
+    },
+  };
+  const listening = createInstance("GtkBox", inputProps, container, 0, {});
+  const controllersOf = (kind: string): GObject[] => {
+    const found: GObject[] = [];
+    const list = widget(listening).observe_controllers();
+    for (let i = 0; i < list.get_n_items(); i++) {
+      const item = list.get_item(i);
+      if ((kind === "key" && item instanceof GtkEventControllerKey) || (kind === "click" && item instanceof GtkGestureClick)) {
+        found.push(item);
+      }
+    }
+    return found;
+  };
+  const keyController = controllersOf("key")[0]!;
+  const escape = react_gtk_emit_key_pressed(keyController, 65307, 9, 0);
+  const letter = react_gtk_emit_key_pressed(keyController, 97, 38, 0);
+  react_gtk_emit_pressed(controllersOf("click")[0]!, 2, 1, 2);
+  const withReleased: Props = { onKeyPressed: inputProps["onKeyPressed"], onKeyReleased: () => {} };
+  commitUpdate(listening, "GtkBox", inputProps, withReleased, {});
+  const keyControllers = controllersOf("key").length;
+  commitUpdate(listening, "GtkBox", withReleased, {}, {});
+  const unhandled = react_gtk_emit_key_pressed(keyController, 65307, 9, 0);
+  react_gtk_log(
+    "input " + String(escape) + " " + String(letter) + " " + heard.trim() + " keys=" + String(keyControllers) + " after=" + String(unhandled),
+  );
 
   const styled = createInstance("GtkButton", { cssClasses: ["suggested-action", "pill"] }, container, 0, {});
   const hasClass = (name: string): string => String(widget(styled).has_css_class(name));

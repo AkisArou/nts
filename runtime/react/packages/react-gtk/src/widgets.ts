@@ -179,6 +179,7 @@ import {
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "./HostNode.ts";
 import { type GridChildren, GridChildNode, type StackChildren, StackPageNode, type NotebookChildren, NotebookPageNode, type HeaderBarChildren, PackNode, type ActionBarChildren, type OverlayChildren, OverlayLayerNode, type FixedChildren, FixedChildNode } from "./children.ts";
+import type { ControllerProps } from "./controllers.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -187,7 +188,7 @@ export interface HostProps {
 }
 
 /** `<Widget>`'s props: GtkWidget's own properties and signals. */
-export interface WidgetProps extends HostProps {
+export interface WidgetProps extends HostProps, ControllerProps {
   canFocus?: boolean;
   canTarget?: boolean;
   cssClasses?: readonly string[];

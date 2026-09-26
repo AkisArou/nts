@@ -751,6 +751,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line('import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "./HostNode.ts";');
   const childImports = [...new Set([...childElements.values()].flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]))];
   line(`import { ${childImports.join(", ")} } from "./children.ts";`);
+  line('import type { ControllerProps } from "./controllers.ts";');
   line();
   line("// ---- props: what JSX checks -------------------------------------------------");
   line();
@@ -760,7 +761,9 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   for (const t of m.types) {
     line();
     line(`/** \`<${t.jsx}>\`'s props: ${t.ts}'s own properties and signals. */`);
-    line(`export interface ${t.jsx}Props extends ${t.parent === null ? "HostProps" : `${t.parent.jsx}Props`} {`);
+    // Every widget takes the input props, whose controllers GTK adds to any
+    // widget (src/controllers.ts); slot and child elements do not.
+    line(`export interface ${t.jsx}Props extends ${t.parent === null ? "HostProps, ControllerProps" : `${t.parent.jsx}Props`} {`);
     for (const p of t.props) {
       if (p.value.kind === "enum") {
         types.add(p.value.type);

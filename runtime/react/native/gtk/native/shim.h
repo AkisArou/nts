@@ -11,6 +11,10 @@ void react_gtk_emit_double(GObject *instance, const char *signal, double value);
 // The same, for a signal whose handlers answer whether they handled it:
 // the answer.
 int react_gtk_emit_decision(GObject *instance, const char *signal);
+// A key controller's `key-pressed`, as a key going down: the answer.
+int react_gtk_emit_key_pressed(GObject *controller, unsigned keyval, unsigned keycode, unsigned state);
+// A click gesture's `pressed`, as the `n_press`th press at (x, y).
+void react_gtk_emit_pressed(GObject *gesture, int n_press, double x, double y);
 // Output, for build.sh to read.
 void react_gtk_log(const char *line);
 

@@ -17,6 +17,8 @@
 import type { GtkWidget } from "c:Gtk-4.0";
 import { g_idle_add_full } from "c:GLib-2.0";
 
+import { connectController, Controllers } from "./controllers.ts";
+
 export type Props = { [key: string]: unknown };
 
 // ---- update priority -------------------------------------------------------------
@@ -241,6 +243,8 @@ export abstract class HostNode {
 export abstract class WidgetNode extends HostNode {
   readonly widget: GtkWidget;
   private slots: Map<string, SignalSlot> | null = null;
+  // The event controllers input props added (`onKeyPressed`), made on first use.
+  private controllers: Controllers | null = null;
   // The props last applied: a controlled prop is put back to its value here.
   private props: Props | null = null;
   // The one child a single-child widget holds.
@@ -402,7 +406,7 @@ export abstract class WidgetNode extends HostNode {
     let slot = slots.get(key);
     if (slot === undefined) {
       slot = new SignalSlot();
-      if (!this.connectSignal(key, slot)) {
+      if (!this.connectSignal(key, slot) && !this.connectController(key, slot)) {
         return null;
       }
       slots.set(key, slot);
@@ -444,6 +448,16 @@ export abstract class WidgetNode extends HostNode {
   }
   protected unplace(_child: WidgetNode): void {
     throw new Error(`<${this.name()}> takes no children.`);
+  }
+
+  /** Connects an input prop (`onKeyPressed`) through the widget's controllers; false if `key` is none. */
+  private connectController(key: string, slot: SignalSlot): boolean {
+    let controllers = this.controllers;
+    if (controllers === null) {
+      controllers = new Controllers();
+      this.controllers = controllers;
+    }
+    return connectController(this.widget, controllers, key, slot);
   }
 
   /** For a single-child widget: `child` is the one it holds, or it throws. */
