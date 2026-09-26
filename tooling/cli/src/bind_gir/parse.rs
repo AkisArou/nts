@@ -143,6 +143,7 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
                     })
                     .collect(),
             }),
+            "alias" => namespace.aliases.extend(alias(node)),
             "callback" => namespace.callbacks.push(Callback {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
                 signature: signature(node),
@@ -152,6 +153,12 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
         }
     }
     Ok(namespace)
+}
+
+/// An `<alias>`: its name and the type it names.
+fn alias(node: Node<'_, '_>) -> Option<(String, String)> {
+    let target = child(node, "type").and_then(|ty| attribute(ty, "name"))?;
+    Some((attribute(node, "name").unwrap_or_default().to_owned(), target.to_owned()))
 }
 
 /// A class's `<glib:signal>` elements.

@@ -33,6 +33,9 @@ pub(crate) struct Namespace {
     pub(crate) enums: Vec<Enum>,
     pub(crate) callbacks: Vec<Callback>,
     pub(crate) functions: Vec<Callable>,
+    /// `<alias>`: a name for another type, `(name, target)` --
+    /// `GLib.Quark` for `guint32`, `HarfBuzz.codepoint_t` for `guint32`.
+    pub(crate) aliases: Vec<(String, String)>,
 }
 
 /// A `GObject` class or interface: an instance struct C code only points at.

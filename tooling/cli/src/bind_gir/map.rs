@@ -359,6 +359,12 @@ pub(crate) const SCALARS: &[(&str, &str, Scalar)] = &[
     ("gulong", "c_ulong", Scalar::ULong),
     ("gssize", "c_long", Scalar::Long),
     ("gsize", "c_size_t", Scalar::Size),
+    // GIR's own basic types for C's: `time_t` is 64 bits wherever GLib runs
+    // (`long` on LP64, `__int64` on Windows), `guintptr` a `size_t`'s width.
+    // The self-check compiles each prototype against the header, which is
+    // what says the spelling is compatible.
+    ("time_t", "c_int64", Scalar::Int64),
+    ("guintptr", "c_size_t", Scalar::Size),
     // `GType` is a `gsize`.
     ("GType", "c_size_t", Scalar::Size),
     ("gfloat", "c_float", Scalar::Float),
@@ -542,6 +548,33 @@ enum Resolved<'a> {
 impl<'a> Mapper<'a> {
     fn qualify(&self, name: &str) -> String {
         if name.contains('.') { name.to_owned() } else { format!("{}.{name}", self.namespace.name) }
+    }
+
+    /// The type an alias names, followed to the end of a chain of aliases:
+    /// qualified by the alias's own namespace where it names a type of one,
+    /// and bare where it names a C one (`guint32`). `None` for a name that is
+    /// not an alias.
+    fn alias_target(&self, name: &str) -> Option<String> {
+        let mut at = self.qualify(name);
+        let mut found = None;
+        // Bounded: a chain of aliases is a handful long, and a cycle is GIR's
+        // error, not a reason to hang.
+        for _ in 0..8 {
+            let (ns, local) = at.split_once('.')?;
+            let namespace = self.repository.namespaces.get(ns)?;
+            let Some((_, target)) = namespace.aliases.iter().find(|(alias, _)| alias == local) else { break };
+            let target = if target.contains('.') || SCALARS.iter().any(|(gir, ..)| gir == target) {
+                target.clone()
+            } else {
+                format!("{ns}.{target}")
+            };
+            found = Some(target.clone());
+            if !target.contains('.') {
+                break;
+            }
+            at = target;
+        }
+        found
     }
 
     fn resolve(&self, qualified: &str) -> Option<Resolved<'a>> {
@@ -1191,6 +1224,16 @@ impl<'a> Mapper<'a> {
             TypeRef::Varargs => return Err(Reason::Varargs),
             TypeRef::Missing => return Err(Reason::Unknown("(no type)".to_owned())),
         };
+        // An alias is the type it names -- `GLib.Quark` a `guint32` -- spelled
+        // in C as the parameter says (`GQuark`), which the self-check compiles
+        // against the header's typedef.
+        if let Some(target) = self.alias_target(name) {
+            let mut aliased = param.clone();
+            if let TypeRef::Named { name, .. } = &mut aliased.ty {
+                *name = target;
+            }
+            return self.typed(&aliased);
+        }
         // `gpointer` is C's `void *`: any native pointer, which a binding
         // spells `object` and the compiler checks is not a managed one.
         // `gconstpointer` would need a const `void *` TypeScript has no
