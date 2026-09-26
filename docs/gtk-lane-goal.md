@@ -769,9 +769,11 @@ const model: GListModel = new Words();
 - A method that overrides nothing is refused, as a class's is.
 - `get_item` is transfer full. The label a TypeScript method returns leaves
   with the one reference it was made with, balanced under `--rc`.
-- Witness: gtk-subclass's `words 3 beta true`. The count, and a label made
-  by our method, both come through Gio's own `g_list_model_get_*`, on C and
-  LLVM, plain and `--rc`.
+- Witness: gtk-subclass's `words 3-0+1 4 beta false`. The class calls
+  `this.items_changed` and a handler on its `items-changed` hears it. The
+  count, and a label made by our method, both come through Gio's own
+  `g_list_model_get_*`, on C and LLVM, plain and `--rc`. gtk-list binds a
+  `GtkListView` to a million-row `Range` that holds no rows.
 
 ### A handle where any value may go
 

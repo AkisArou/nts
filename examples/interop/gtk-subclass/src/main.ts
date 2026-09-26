@@ -58,6 +58,10 @@
 //                 from outside -- one state object, `A`'s fields first
 //   Q 6           the parent has the fields and the child none
 //   R S 8         the parent has none and the child has them
+//   words 3-0+1 4 beta false  `Words` implements `GListModel`
+//                 (`GListModelImplementation`): `add` calls the interface's
+//                 `items_changed` on `this`, which a handler hears; Gio's
+//                 `g_list_model_get_*` reach its `vfunc_`s
 //   is C|B|label|button|none  `instanceof`, which asks the type system
 //                 (`g_type_check_instance_is_a`) for a class the program wrote
 //                 and for a binding's, and narrows: `C`'s field read after it
@@ -408,13 +412,25 @@ class Words extends GObject<{}, GListModelImplementation> {
   vfunc_get_item(position: CNumber<"uint">): Owned<Erased<GObject>> | null {
     return position < this.words.length ? new GtkLabel({ label: this.words[position] }) : null;
   }
+  // The interface's own method, on `this`: whoever watches the model hears
+  // of the row.
+  add(word: string): void {
+    this.words.push(word);
+    this.items_changed(this.words.length - 1, 0, 1);
+  }
 }
 
 function words(): string {
-  const model: GListModel = new Words();
+  const words = new Words();
+  let heard = "";
+  words.connect("items-changed", (_model, position, removed, added) => {
+    heard = String(position) + "-" + String(removed) + "+" + String(added);
+  });
+  words.add("delta");
+  const model: GListModel = words;
   const second = g_list_model_get_object(model, 1);
   const label = second instanceof GtkLabel ? second.label : "?";
-  return "words " + String(g_list_model_get_n_items(model)) + " " + label + " " + String(g_list_model_get_object(model, 3) === null);
+  return "words " + heard + " " + String(g_list_model_get_n_items(model)) + " " + label + " " + String(g_list_model_get_object(model, 3) === null);
 }
 
 function main(): void {

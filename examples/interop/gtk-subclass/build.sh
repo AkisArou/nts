@@ -26,7 +26,7 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 
-expected="clicked 0! clicked 0!! type Nts_Counter count 2 seen 0|0! plain p hello ada from hi ada greeter Nts_Greeter framed in false fr unset Nts_Framed tally +2=2+3=5 a>b on kid notes title done weight title a b true 2.5 panel from the template true pressed 1 p wide from the template 5 pressed 1 tall head foot true measure 42 17 square Nts_Square shy 1 true A 2 B 11 2 C 101 11 2 A 3 B 12 3 C 102 12 3 Nts_C 3 12 102 Q 6 R S 8 words 3 beta true is C100|B|label|button|none "
+expected="clicked 0! clicked 0!! type Nts_Counter count 2 seen 0|0! plain p hello ada from hi ada greeter Nts_Greeter framed in false fr unset Nts_Framed tally +2=2+3=5 a>b on kid notes title done weight title a b true 2.5 panel from the template true pressed 1 p wide from the template 5 pressed 1 tall head foot true measure 42 17 square Nts_Square shy 1 true A 2 B 11 2 C 101 11 2 A 3 B 12 3 C 102 12 3 Nts_C 3 12 102 Q 6 R S 8 words 3-0+1 4 beta false is C100|B|label|button|none "
 for mode in plain rc; do
   flag=""
   [ "$mode" = rc ] && flag="--rc"
