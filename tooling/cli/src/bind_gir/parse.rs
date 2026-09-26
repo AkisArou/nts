@@ -23,6 +23,14 @@ pub(crate) fn repository(root: &str, search: &[Utf8PathBuf]) -> Result<Repositor
         if repository.namespaces.contains_key(&name) || repository.missing.contains(&name) {
             continue;
         }
+        // cairo is the binder's own (`CAIRO`): upstream's, where a system ships
+        // it, has no methods. Its fingerprint is the `nts` it is compiled into.
+        if name == "cairo" && version == "1.0" {
+            let namespace = namespace_of_text(CAIRO, "the binder's cairo-1.0.gir")?;
+            pending.extend(namespace.includes.iter().cloned());
+            repository.namespaces.insert(name, namespace);
+            continue;
+        }
         let file = format!("{name}-{version}.gir");
         let Some(path) = search.iter().map(|dir| dir.join(&file)).find(|path| path.exists()) else {
             // The namespace asked for must exist. One it merely includes may
@@ -52,10 +60,17 @@ fn split(spec: &str) -> Result<(String, String)> {
         .ok_or_else(|| anyhow!("`{spec}` is not `Name-Version`, as in `Gtk-4.0`"))
 }
 
+/// cairo 1.0 with its drawing API: see the file's own header.
+const CAIRO: &str = include_str!("cairo-1.0.gir");
+
 fn namespace(path: &Utf8Path) -> Result<Namespace> {
     let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
+    namespace_of_text(&text, path.as_str())
+}
+
+fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
     let document =
-        roxmltree::Document::parse(&text).with_context(|| format!("parsing {path} as XML"))?;
+        roxmltree::Document::parse(text).with_context(|| format!("parsing {path} as XML"))?;
     let repository = document.root_element();
     let element = child(repository, "namespace")
         .ok_or_else(|| anyhow!("{path} has no <namespace>"))?;

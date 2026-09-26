@@ -363,7 +363,10 @@ pub enum Role {
     /// It is the parameter's own C type except for an `ErasedClosure`, whose
     /// parameter is `GLib`'s type-erased `GCallback`, `void (*)(void)`, and
     /// the bridge is converted to it at the call.
-    Closure { lifetime: Lifetime, bridge: std::sync::Arc<FnPointer> },
+    ///
+    /// `boxed`: the callback's parameters that are boxed records, which the
+    /// bridge boxes (`OpKind::NativeBridge`).
+    Closure { lifetime: Lifetime, bridge: std::sync::Arc<FnPointer>, boxed: Vec<super::BoxedParameter> },
     /// A TypeScript function as an Objective-C block (`Block<F>`): one C
     /// parameter, the block's address. `bridge` is the trampoline's type,
     /// `signature` with the context after it; `signature` is the block's own.
@@ -2083,6 +2086,25 @@ pub(crate) fn listener_delegate(snapshot: &SemanticSnapshot, ty: TypeId) -> Resu
     }
 }
 
+/// The parameters of the callback type `function` that are boxed records
+/// (`schema::boxed`), each at its index among the callback's C parameters,
+/// which are the function's own in order.
+fn boxed_parameters(snapshot: &SemanticSnapshot, function: TypeId) -> Vec<super::BoxedParameter> {
+    let Some(TypeKind::Function(signature)) = snapshot.types.get(function.0 as usize).map(|record| &record.kind) else {
+        return Vec::new();
+    };
+    let Some(signature) = snapshot.signatures.get(signature.0 as usize) else { return Vec::new() };
+    signature
+        .parameters
+        .iter()
+        .enumerate()
+        .filter_map(|(at, parameter)| {
+            let record = schema::boxed(snapshot, parameter.ty)?;
+            Some(super::BoxedParameter { at: u32::try_from(at).ok()?, get_type: record.get_type })
+        })
+        .collect()
+}
+
 /// The C parameters one `Closure<F>` or `ScopedClosure<F>` becomes: the
 /// callback with the context as its last parameter, the context, and for a
 /// retained closure the function that releases it.
@@ -2133,7 +2155,8 @@ fn closure_slots(
             Type::FnPointer(bridge.clone())
         }
     };
-    let mut slots = vec![(slot, Role::Closure { lifetime, bridge }), (context.clone(), Role::ClosureData)];
+    let boxed = boxed_parameters(snapshot, function);
+    let mut slots = vec![(slot, Role::Closure { lifetime, bridge, boxed }), (context.clone(), Role::ClosureData)];
     match kind {
         ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Block | ClosureKind::Delegate(_) => {}
         ClosureKind::Retained => slots.push((

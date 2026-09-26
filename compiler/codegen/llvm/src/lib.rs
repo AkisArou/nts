@@ -1168,15 +1168,16 @@ fn bridge_callee(compiled: &Func, dispatched: Option<u32>, receiver: &str, body:
 fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut types: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut declared = false;
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| func.value(*value)) {
-            let OpKind::NativeBridge { closure, signature, context, once } = &op.kind else { continue };
+            let OpKind::NativeBridge { closure, signature, context, once, boxed } = &op.kind else { continue };
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
                 .closure_call()
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
-            let name = nts_codegen_common::symbols::bridge_name(target, signature, *once);
+            let name = nts_codegen_common::symbols::bridge_name(target, signature, *once, boxed);
             if !seen.insert(name.clone()) {
                 continue;
             }
@@ -1184,6 +1185,16 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 declared = true;
                 out.push_str("declare void @nts_callback_enter()\n");
                 out.push_str("declare void @nts_callback_leave()\n");
+            }
+            // Each boxed parameter's `GType` function, once, unless the
+            // program declares it by calling it: LLVM refuses a second.
+            for parameter in boxed {
+                let called = program.funcs.iter().flat_map(|f| &f.values).any(|op| {
+                    matches!(&op.kind, OpKind::Call { callee: Callee::Native(t), .. } if t.name == parameter.get_type)
+                });
+                if !called && types.insert(parameter.get_type.clone()) {
+                    let _ = writeln!(out, "declare i64 @{}()", parameter.get_type);
+                }
             }
             let compiled = program
                 .funcs
@@ -1223,31 +1234,11 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                     parameters.push(format!("{} %a{at}", ty_of(&from, compiled)?));
                     continue;
                 }
-                let to = compiled.params[at + 1].ty.clone();
-                let (from_ty, to_ty) = (ty_of(&from, compiled)?, ty_of(&to, compiled)?);
-                parameters.push(format!("{from_ty} %a{at}"));
-                // A string C lends: copied in for the call, given back after
-                // it, as the C bridge does.
-                if nts_core::hir::native::lent_string(foreign, &to) {
-                    let _ = writeln!(body, "  %s{at} = call ptr @nts_string_from_cstring(ptr %a{at})");
-                    let _ = writeln!(releases, "  call void @nts_release(ptr %s{at})");
-                    arguments.push(format!("ptr %s{at}"));
-                    continue;
-                }
-                // One pointer as another is the same address, as C's cast says.
-                if from == to || matches!((&from, &to), (HirType::NativePointer(_), HirType::NativePointer(_))) {
-                    arguments.push(format!("{to_ty} %a{at}"));
-                } else if to == HirType::Bool {
-                    // A `gboolean` C passes, read as C reads it: any non-zero
-                    // is true, as `Convert` reads one -- a `trunc` to `i1`
-                    // would read 2 as false.
-                    let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{at}"), &from, from_ty, &format!("%a{at}")));
-                    arguments.push(format!("{to_ty} %p{at}"));
-                } else {
-                    let instruction = conversion(&from, &to, compiled)?;
-                    let _ = writeln!(body, "  %p{at} = {instruction} {from_ty} %a{at} to {to_ty}");
-                    arguments.push(format!("{to_ty} %p{at}"));
-                }
+                parameters.push(format!("{} %a{at}", ty_of(&from, compiled)?));
+                let boxing = boxed.iter().find(|parameter| parameter.at as usize == at);
+                let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
+                let passed = bridge_argument(compiled, (at, foreign, from), (boxing, counted), (&mut body, &mut releases))?;
+                arguments.push(passed);
             }
             let want = signature.result.abi(platform.abi);
             let have = compiled.return_type.clone();
@@ -1291,6 +1282,53 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
         }
     }
     Ok(out)
+}
+
+/// Argument `at` of a callback bridge, as the compiled function takes it:
+/// C's value converted, a string C lends copied in, or a boxed record C lends
+/// boxed. What the conversion needs goes into `body`, what gives it back after
+/// the call into `releases`.
+fn bridge_argument(
+    compiled: &Func,
+    (at, foreign, from): (usize, &nts_core::hir::native::Type, HirType),
+    (boxing, counted): (Option<&nts_core::hir::BoxedParameter>, bool),
+    (body, releases): (&mut String, &mut String),
+) -> Result<String, Diagnostic> {
+    let to = compiled.params[at + 1].ty.clone();
+    let (from_ty, to_ty) = (ty_of(&from, compiled)?, ty_of(&to, compiled)?);
+    // A boxed record C lends, in a box of the program's: a copy by its
+    // `GType`, as the C bridge makes. Under reference counting the bridge owns
+    // the copy and releases it after the call; anything that keeps the box
+    // counts it, so one kept past the call outlives this release. Without
+    // counting nothing is given back (see the C bridge).
+    if let Some(boxing) = boxing {
+        let _ = writeln!(body, "  %g{at} = call i64 @{}()", boxing.get_type);
+        let _ = writeln!(body, "  %b{at} = call ptr @nts_gobject_boxed_copy(ptr %a{at}, i64 %g{at})");
+        if counted {
+            let _ = writeln!(releases, "  call void @nts_release(ptr %b{at})");
+        }
+        return Ok(format!("ptr %b{at}"));
+    }
+    // A string C lends: copied in for the call, given back after it, as the C
+    // bridge does.
+    if nts_core::hir::native::lent_string(foreign, &to) {
+        let _ = writeln!(body, "  %s{at} = call ptr @nts_string_from_cstring(ptr %a{at})");
+        let _ = writeln!(releases, "  call void @nts_release(ptr %s{at})");
+        return Ok(format!("ptr %s{at}"));
+    }
+    // One pointer as another is the same address, as C's cast says.
+    if from == to || matches!((&from, &to), (HirType::NativePointer(_), HirType::NativePointer(_))) {
+        return Ok(format!("{to_ty} %a{at}"));
+    }
+    if to == HirType::Bool {
+        // A `gboolean` C passes, read as C reads it: any non-zero is true, as
+        // `Convert` reads one -- a `trunc` to `i1` would read 2 as false.
+        let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{at}"), &from, from_ty, &format!("%a{at}")));
+        return Ok(format!("{to_ty} %p{at}"));
+    }
+    let instruction = conversion(&from, &to, compiled)?;
+    let _ = writeln!(body, "  %p{at} = {instruction} {from_ty} %a{at} to {to_ty}");
+    Ok(format!("{to_ty} %p{at}"))
 }
 
 /// The functions foreign code calls into: the callback bridges, and the
@@ -1745,6 +1783,8 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_check_fn",
     // A handle read back out of an erased value is checked in raw IR
     // (`Unerase`), for the same reason as the rest of this list.
+    // A boxed record a callback's bridge boxes (`bridge_argument`), in raw IR.
+    "nts_gobject_boxed_copy",
     "nts_handle_check",
     // The growing pair, here for the reason the view trio is: `index_lines`
     // writes the call as raw IR, so `externals` -- which reads `OpKind::Call` --
@@ -2773,14 +2813,14 @@ fn allocation(
         // A bridge's address is its symbol. `getelementptr i8, ptr @f, i64 0` for
         // the same reason the static closure below uses one: a value needs a
         // name, and there is no no-op cast between two `ptr`s.
-        OpKind::NativeBridge { closure, signature, once, .. } => {
+        OpKind::NativeBridge { closure, signature, once, boxed, .. } => {
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
                 .closure_call()
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
             format!(
                 "{out} = getelementptr i8, ptr @{}, i64 0",
-                nts_codegen_common::symbols::bridge_name(target, signature, *once)
+                nts_codegen_common::symbols::bridge_name(target, signature, *once, boxed)
             )
         }
         OpKind::NativeBlock { invoke, context, signature } => objc::block(&out, *invoke, *context, signature),

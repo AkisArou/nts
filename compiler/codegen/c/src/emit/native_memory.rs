@@ -711,11 +711,13 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     // The receiver: the static closure's name, or `None` when it arrives as
     // the context parameter.
     #[allow(clippy::type_complexity)]
-    let mut wanted: std::collections::BTreeMap<String, (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>, bool, Option<u32>)> =
-        std::collections::BTreeMap::new();
+    let mut wanted: std::collections::BTreeMap<
+        String,
+        (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>, bool, Option<u32>, &[nts_core::hir::BoxedParameter]),
+    > = std::collections::BTreeMap::new();
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
-            let OpKind::NativeBridge { closure, signature, context, once } = &op.kind else { continue };
+            let OpKind::NativeBridge { closure, signature, context, once, boxed } = &op.kind else { continue };
             let layout = layout_of(program, &func.values[closure.0 as usize].ty, origin)?;
             let target = layout
                 .closure_call()
@@ -746,15 +748,23 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 return Err(refuse("a callback bridge with no context whose closure is not known here"));
             }
             wanted.insert(
-                bridge_name(target, signature, *once),
-                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout)), *once, dispatched),
+                bridge_name(target, signature, *once, boxed),
+                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout)), *once, dispatched, boxed.as_slice()),
             );
         }
     }
     if wanted.is_empty() {
         return Ok(false);
     }
-    for (name, (signature, compiled, receiver, once, dispatched)) in &wanted {
+    let mut declared = std::collections::BTreeSet::new();
+    for (name, (signature, compiled, receiver, once, dispatched, boxed)) in &wanted {
+        // Each boxed parameter's `GType` function, declared once before the
+        // first bridge that boxes by it.
+        for parameter in *boxed {
+            if declared.insert(parameter.get_type.clone()) {
+                writer.line(origin, format!("size_t {}(void);", parameter.get_type));
+            }
+        }
         let mut parameters = Vec::new();
         // The receiver is the static closure itself -- one immortal object per
         // closure with no captured state -- or, for a bridge with a context,
@@ -778,20 +788,8 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             if at + 1 >= compiled.params.len() {
                 continue;
             }
-            // The compiled function takes the managed representation -- a
-            // `number` is a `double` there and an `int` here -- so each argument
-            // is converted on the way in and the result on the way out. C's own
-            // conversions do the work; what this supplies is the target type,
-            // which is the compiled function's and not the foreign one's.
-            let want = c_type_of(program, &compiled.params[at + 1].ty, &compiled.params[at + 1].origin)?;
-            // A string C lends: copied in for the call, given back after it.
-            if nts_core::hir::native::lent_string(ty, &compiled.params[at + 1].ty) {
-                let _ = write!(copies, " NtsString *s{at} = nts_string_from_cstring({slot});");
-                let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
-                arguments.push(format!("s{at}"));
-                continue;
-            }
-            arguments.push(format!("({want}){slot}"));
+            let boxing = boxed.iter().find(|parameter| parameter.at as usize == at);
+            arguments.push(bridge_argument(program, compiled, (at, ty), boxing, (&mut copies, &mut releases))?);
         }
         let parameters = if parameters.is_empty() { "void".to_owned() } else { parameters.join(", ") };
         let call = match dispatched {
@@ -825,6 +823,50 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         writer.line(origin, format!("static {result} {name}({parameters}) {{ {body} }}"));
     }
     Ok(true)
+}
+
+/// Argument `at` of a C callback bridge, as the compiled function takes it:
+/// C's value converted, a string C lends copied in, or a boxed record C lends
+/// boxed. What the conversion needs goes into `copies`, what gives it back
+/// after the call into `releases`.
+fn bridge_argument(
+    program: &Program,
+    compiled: &Func,
+    (at, ty): (usize, &nts_core::hir::native::Type),
+    boxing: Option<&nts_core::hir::BoxedParameter>,
+    (copies, releases): (&mut String, &mut String),
+) -> Result<String, Diagnostic> {
+    let slot = format!("a{at}");
+    // The compiled function takes the managed representation -- a `number`
+    // is a `double` there and an `int` here -- so each argument is converted
+    // on the way in and the result on the way out. C's own conversions do the
+    // work; what this supplies is the target type, which is the compiled
+    // function's and not the foreign one's.
+    let want = c_type_of(program, &compiled.params[at + 1].ty, &compiled.params[at + 1].origin)?;
+    // A boxed record C lends, in a box of the program's: a copy by its
+    // `GType` (`cairo_reference` for a `cairo_t`), as a result is boxed. Under
+    // reference counting the bridge owns this copy and releases it after the
+    // call; anything that keeps it counts it -- a store of a managed object
+    // retains it, and an entered function's parameters are borrowed
+    // (`own::Summaries::consumes`) -- so a box kept past the call outlives
+    // this release. The day something keeps one without counting it, this
+    // release is the use-after-free. Without counting nothing is given back,
+    // a box included: nothing counted a store either, and a release here
+    // would run the box's free under a program that kept it.
+    if let Some(parameter) = boxing {
+        let _ = write!(copies, " {want} b{at} = ({want})nts_gobject_boxed_copy({slot}, {}());", parameter.get_type);
+        if program.provider == nts_core::hir::Provider::ReferenceCounting {
+            let _ = write!(releases, " nts_release((NtsHeader *)b{at});");
+        }
+        return Ok(format!("b{at}"));
+    }
+    // A string C lends: copied in for the call, given back after it.
+    if nts_core::hir::native::lent_string(ty, &compiled.params[at + 1].ty) {
+        let _ = write!(copies, " NtsString *s{at} = nts_string_from_cstring({slot});");
+        let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
+        return Ok(format!("s{at}"));
+    }
+    Ok(format!("({want}){slot}"))
 }
 
 /// Every C function pointer typedef this program's foreign signatures need.

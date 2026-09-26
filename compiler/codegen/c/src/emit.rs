@@ -2691,7 +2691,7 @@ fn bridge_text(
     func: &Func,
     op: &nts_core::hir::Op,
     closure: ValueId,
-    signature: &nts_core::hir::native::FnPointer,
+    (signature, boxed): (&nts_core::hir::native::FnPointer, &[nts_core::hir::BoxedParameter]),
     once: bool,
     name: &str,
     context: &Context<'_>,
@@ -2704,7 +2704,7 @@ fn bridge_text(
             op.origin.location,
         )
     })?;
-    Ok(format!("{name} = {};", nts_codegen_common::symbols::bridge_name(target, signature, once)))
+    Ok(format!("{name} = {};", nts_codegen_common::symbols::bridge_name(target, signature, once, boxed)))
 }
 
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
@@ -4888,7 +4888,7 @@ fn memory_op(
         // Read only by a bridge, which names a symbol instead.
         OpKind::ClosureStatic if !context.read.contains(&value) => return Ok(()),
         OpKind::ClosureStatic => static_closure_text(op, &name, context)?,
-        OpKind::NativeBridge { closure, signature, once, .. } => bridge_text(func, op, *closure, signature, *once, &name, context)?,
+        OpKind::NativeBridge { closure, signature, once, boxed, .. } => bridge_text(func, op, *closure, (signature, boxed), *once, &name, context)?,
         OpKind::ObjectNew { frame } => {
             allocate_object(writer, op, &name, *frame, context)?
         }

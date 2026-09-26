@@ -35,6 +35,7 @@
     "gtk-gir/nts.config.ts",
     "gtk-cycles/nts.config.ts",
     "gtk-actions/nts.config.ts",
+    "gtk-cairo/nts.config.ts",
     "gtk-list/nts.config.ts",
     "gtk-widgets/nts.config.ts",
     "gtk-subclass/nts.config.ts",

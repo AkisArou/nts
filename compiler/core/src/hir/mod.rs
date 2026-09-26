@@ -764,6 +764,15 @@ pub struct Op {
     pub origin: Origin,
 }
 
+/// A parameter a bridge receives as a boxed record's pointer: its index among
+/// the bridge's C parameters, and the function answering the record's `GType`
+/// (`schema::boxed`, the one derivation the result path reads too).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BoxedParameter {
+    pub at: u32,
+    pub get_type: String,
+}
+
 /// What an operation does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
@@ -854,7 +863,12 @@ pub enum OpKind {
     /// and passes nothing that would release the closure -- GIO's
     /// `GAsyncReadyCallback`, GIR's `scope="async"` -- so the bridge gives
     /// the closure back itself (`nts_closure_unlend`) after that one call.
-    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool, once: bool },
+    ///
+    /// **And `boxed`**: the parameters C passes as a boxed record's pointer
+    /// (`cairo_t *` to a draw function, a `GdkRGBA *` to a signal handler),
+    /// which the compiled function takes in a box of the program's. The bridge
+    /// boxes each, a copy by the record's `GType`, as a result is boxed.
+    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool, once: bool, boxed: Vec<BoxedParameter> },
     /// An Objective-C block in this function's frame, which is what clang
     /// passes for `^{ ... }`: the address is the value, and it is valid until
     /// the function returns. A callee that keeps it copies it (`_Block_copy`),

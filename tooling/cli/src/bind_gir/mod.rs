@@ -72,7 +72,9 @@ pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<Strin
     let plausible = !name.is_empty()
         && name.chars().all(|c| c.is_ascii_alphanumeric())
         && version.chars().all(|c| c.is_ascii_digit() || c == '.');
-    (plausible && search.iter().any(|dir| dir.join(format!("{spec}.gir")).exists())).then(|| spec.to_owned())
+    // cairo is the binder's own (`parse::CAIRO`), shipped or not.
+    let known = spec == "cairo-1.0" || search.iter().any(|dir| dir.join(format!("{spec}.gir")).exists());
+    (plausible && known).then(|| spec.to_owned())
 }
 
 /// Bind `roots` into `out` unless the bindings there are already of these

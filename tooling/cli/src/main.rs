@@ -2408,10 +2408,10 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
         // Named by the function it bridges rather than by the closure value, so
         // reading the dump answers "which function does C get" without first
         // resolving a layout by hand.
-        OpKind::NativeBridge { closure, signature, context, once } => {
+        OpKind::NativeBridge { closure, signature, context, once, boxed } => {
             let with = if *context { " with context" } else { "" };
             let once = if *once { ", once" } else { "" };
-            format!("bridge %{} as {}{with}{once}", closure.0, signature.name)
+            format!("bridge %{} as {}{with}{once}{}", closure.0, signature.name, boxed_note(boxed))
         }
         OpKind::NativeBlock { invoke, context, signature } => {
             format!("block %{} with %{} as {}", invoke.0, context.0, signature.name)
@@ -2563,10 +2563,10 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::NativeCopy { destination, source } => {
             format!("native.copy %{} <- %{}", destination.0, source.0)
         }
-        OpKind::NativeBridge { closure, signature, context, once } => {
+        OpKind::NativeBridge { closure, signature, context, once, boxed } => {
             let with = if *context { " with context" } else { "" };
             let once = if *once { ", once" } else { "" };
-            format!("%{index} = native.bridge %{} as {}{with}{once} : {ty}", closure.0, signature.name)
+            format!("%{index} = native.bridge %{} as {}{with}{once}{} : {ty}", closure.0, signature.name, boxed_note(boxed))
         }
         OpKind::NativeBlock { invoke, context, signature } => {
             format!("%{index} = native.block %{} with %{} as {} : {ty}", invoke.0, context.0, signature.name)
@@ -7520,6 +7520,16 @@ fn deps(rest: &[String]) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// A bridge's boxed parameters as the dumps print them: `, boxing 1 by
+/// cairo_gobject_context_get_type`.
+fn boxed_note(boxed: &[nts_core::hir::BoxedParameter]) -> String {
+    use std::fmt::Write as _;
+    boxed.iter().fold(String::new(), |mut note, parameter| {
+        let _ = write!(note, ", boxing {} by {}", parameter.at, parameter.get_type);
+        note
+    })
 }
 
 #[cfg(test)]

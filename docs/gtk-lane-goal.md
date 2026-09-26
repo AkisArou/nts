@@ -921,6 +921,53 @@ gtk-actions' `dialog rejected Operation was cancelled`. `await
 dialog.choose(window, cancellable)` is rejected with GIO's error when a
 timer calls `cancellable.cancel()`, on C and LLVM, plain and `--rc`.
 
+### Drawing with cairo
+
+```ts
+area.set_draw_func((area, cr, width, height) => {
+  cr.set_source_rgb(0.2, 0.4, 0.8);
+  cr.arc(width / 2, height / 2, 20, 0, 2 * Math.PI);
+  cr.fill();
+});
+const cr = cairo_t.create(cairo_surface_t.create_image(Format.ARGB32, 64, 32));
+```
+
+- **A cairo namespace of the binder's own.** This machine ships
+  `cairo-1.0.typelib` but no `cairo-1.0.gir`, and upstream's has types and no
+  methods anyway. So every `cairo.Context` API was refused: 18 in Gtk-4.0,
+  `set_draw_func` among them.
+- `tooling/cli/src/bind_gir/cairo-1.0.gir` is embedded, and preferred where
+  a system ships one. It holds upstream's records with their
+  `cairo-gobject` GTypes, all 24 enums (values read from `cairo.h` by the
+  compiler), and the drawing API as methods: paths, sources, strokes and
+  fills, clips, transforms, text, groups, image surfaces, patterns. GJS
+  hand-writes the same.
+- The self-check compiles every declaration against `cairo.h`: cairo 83
+  bound, 0 refused, and Gtk-4.0's 18 cairo refusals are gone.
+- A record's constructors are statics of its value, as a class's are:
+  `cairo_t.create(surface)`.
+- **A boxed record C lends a callback** is boxed by the bridge. Before, the
+  bridge cast C's `cairo_t *` to the program's box, and the draw function
+  crashed in `cairo_set_source_rgb`. The same was true of any callback or
+  signal handler taking a boxed record.
+  - `OpKind::NativeBridge` carries `boxed: Vec<BoxedParameter>`: the index,
+    and the `GType` function `schema::boxed` reads, the derivation the
+    result path uses too.
+  - Both bridges copy the record into a box after `nts_callback_enter`
+    (`nts_gobject_boxed_copy`; `cairo_reference` for a context).
+  - Under reference counting the bridge owns that copy and releases it
+    after the call. A store that keeps the box counted it.
+  - Without counting nothing is released: nothing counted the store either,
+    and a release there ran `cairo_destroy` under a program that kept the
+    context. A kept context then read 0 references.
+- Witness: gtk-cairo, C and LLVM, plain and `--rc`. It draws offscreen, and
+  in a drawing area's draw function.
+  - `counted 2`: GTK's reference and the bridge's copy.
+  - `kept 1`: a context kept past its frame holds the one copy.
+  - `frames true growth 0`: five more frames with the program's live objects
+    counted before and after. A bridge that never released its box grows by
+    one a frame; without counting, growth is positive by design.
+
 ### Sorting and filtering by TypeScript
 
 A `GtkCustomSorter` compares two `gpointer`s (`GCompareDataFunc`). GIR types

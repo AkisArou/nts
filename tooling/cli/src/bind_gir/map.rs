@@ -456,17 +456,25 @@ pub(crate) fn bind<'a>(
     mapper.enums();
     // Each with the class it is declared in, which is what a constructor
     // returns whatever its return type says.
-    let mut callables: Vec<(&Callable, Option<&Class>)> = namespace.functions.iter().map(|f| (f, None)).collect();
+    // A record's, with the record's C type: its constructors and functions
+    // are statics of its value, `cairo_t.create(surface)`, as a class's are.
+    let mut callables: Vec<(&Callable, Option<&Class>, Option<&str>)> = namespace.functions.iter().map(|f| (f, None, None)).collect();
     for class in &namespace.classes {
-        callables.extend(class.callables.iter().map(|c| (c, Some(class))));
+        callables.extend(class.callables.iter().map(|c| (c, Some(class), None)));
     }
     for record in namespace.records.iter().filter(|r| !r.class_struct) {
-        callables.extend(record.callables.iter().map(|c| (c, None)));
+        callables.extend(record.callables.iter().map(|c| (c, None, record.c_type.as_deref())));
     }
-    for (callable, owner) in callables {
+    for (callable, owner, record) in callables {
         let name = callable.c_identifier.clone().unwrap_or_else(|| callable.name.clone());
         match mapper.function(callable, owner) {
-            Ok(function) => {
+            Ok(mut function) => {
+                if let Some(record) = record
+                    && function.method.is_none()
+                    && matches!(callable.kind, CallableKind::Constructor | CallableKind::Function)
+                {
+                    function.statics = Some((record.to_owned(), callable.name.clone()));
+                }
                 // `new GtkButton({ … })` calls the class's `new`, when it
                 // takes nothing; and a class with construct-only properties,
                 // the constructor that takes them.
