@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught TypeError",
+  "category": "refused",
+  "nts": "NTS1001 a call inside a `try` whose `throw` would not reach this handler: through a function value, which has no raising copy to call",
   "node": "exit 1; nts: uncaught Observed: log=finally;caught;;",
-  "measured_with": "cfc8206c74defdcb",
+  "measured_with": "f920c53126e758c5",
   "source": "measured"
 }
