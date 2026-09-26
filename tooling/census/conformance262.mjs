@@ -94,7 +94,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.mjs";
-import { HARNESS, pinCompiler } from "./project.mjs";
+import { HARNESS, HARNESS_THROWS, pinCompiler } from "./project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -148,7 +148,7 @@ const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
 // Runtime objects compiled once and kept across runs; `attempt262.mjs`'s
 // `withCachedObjects` says why this is the same program and how it is keyed.
 const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".cache/nts/c-objects");
-const HARNESS_HASH = createHash("sha256").update(HARNESS).digest("hex").slice(0, 16);
+const HARNESS_HASH = createHash("sha256").update(HARNESS).update(HARNESS_THROWS).digest("hex").slice(0, 16);
 const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE };
 
 // --- the population --------------------------------------------------------
@@ -257,7 +257,6 @@ function harnessGap(record, source) {
   const flags = /^\s*flags:\s*\[([^\]]*)\]/m.exec(meta)?.[1] ?? "";
   if (/\basync\b/.test(flags)) return "harness:async ($DONE)";
   const body = source.replace(FRONTMATTER, "");
-  if (/\bassert\.throws\s*\(/.test(body)) return "harness:assert.throws";
   if (/\$262\b/.test(body)) return "harness:$262";
   return null;
 }
@@ -274,9 +273,15 @@ const HARNESS_NAMES = new Set(["typeof assert", "Test262Error", "$DONE", "$262",
 // Roots only: a cascade (NTS1005 "this statement is skipped") has been seen
 // located at the end of the harness when the skipped statement is the test's
 // first -- its span starts at the leading trivia -- so its place says nothing.
+//
+// **Named, not placed.** A root *located* in the stand-in is still the
+// compiler's: `assert.throws` must call a function value inside a `try`, and the
+// refusal of that is a compiler gap any implementation of the harness would hit.
+// It is ranked as refused, with `[in the harness]` on its cause key. Only a
+// diagnostic that *names* a stand-in gap -- `assert` not callable, `$DONE`
+// missing -- is ours alone, and `unsupported`.
 const namesHarness = (diagnostic) =>
-  !CASCADE.has(diagnostic.code) &&
-  (diagnostic.named.some((name) => HARNESS_NAMES.has(name)) || diagnostic.where === "harness");
+  !CASCADE.has(diagnostic.code) && diagnostic.named.some((name) => HARNESS_NAMES.has(name));
 
 // --- attempts, in parallel workers -----------------------------------------
 

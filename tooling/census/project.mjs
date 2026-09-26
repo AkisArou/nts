@@ -16,6 +16,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** The lowerable stand-in for the harness entries every non-raw test receives. */
 export const HARNESS = readFileSync(join(HERE, "harness.ts"), "utf8");
 
+/** `assert.throws`, spliced in only for a test that calls it; the file says why. */
+export const HARNESS_THROWS = readFileSync(join(HERE, "harness-throws.ts"), "utf8");
+
+/** The stand-in one test receives: `HARNESS`, plus `throws` if the test calls it. */
+export function harnessFor(body) {
+  if (!/\bassert\.throws\s*\(/.test(body)) return HARNESS;
+  const opening = "class assert {\n";
+  if (!HARNESS.includes(opening)) throw new Error("harness.ts has no `class assert {` line to splice throws into");
+  return HARNESS.replace(opening, opening + HARNESS_THROWS);
+}
+
 /**
  * A scratch project, with its compiler options **inlined**.
  *
@@ -57,7 +68,7 @@ export function workspace(dir) {
  * Prepending sibling top-level statements is none of those.
  */
 export function materialise(dir, body) {
-  const source = `"use strict";\n${HARNESS}${body}`;
+  const source = `"use strict";\n${harnessFor(body)}${body}`;
   writeFileSync(join(dir, "src", "main.ts"), source);
   return source;
 }

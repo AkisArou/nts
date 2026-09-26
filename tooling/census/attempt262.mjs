@@ -94,7 +94,7 @@ export function linkCommand(emitted) {
 const unapostrophe = (text) => text.replace(/(\w)'(t|s|re|ve|ll|d)\b/g, "$1\u2019$2");
 const redactQuoted = (text) => unapostrophe(text).replace(/'[^']*'/g, "'X'").replace(/\u2019/g, "'").trim();
 
-export function parseDiagnostics(text) {
+export function parseDiagnostics(text, bodyFirstLine = BODY_FIRST_LINE) {
   const seen = new Set();
   const found = [];
   for (const raw of text.split("\n")) {
@@ -105,7 +105,7 @@ export function parseDiagnostics(text) {
       const [, file, row, , code, said] = located;
       const where = !file.endsWith("src/main.ts")
         ? "other"
-        : Number(row) >= BODY_FIRST_LINE - 1
+        : Number(row) >= bodyFirstLine - 1
           ? "body"
           : "harness";
       const text = said.replace(/ is not supported by this lowering yet$/, "");
@@ -116,7 +116,7 @@ export function parseDiagnostics(text) {
         where,
         // The line in the test body (1-based), so a later rule about `where`
         // can be re-applied to stored rows instead of re-running them.
-        line: Number(row) - BODY_FIRST_LINE + 1,
+        line: Number(row) - bodyFirstLine + 1,
       };
     } else {
       const checker = /^(TS\d{4,5})\s+(.*)$/.exec(line);
@@ -268,7 +268,10 @@ export function capped(tools, command, args) {
 /** Compile, link and run one program body. Never reads an exit status alone. */
 export function attempt(dir, body, tools) {
   const { nts, cc } = tools;
-  materialise(dir, body);
+  const source = materialise(dir, body);
+  // Where the body starts in *this* case's file: the stand-in is not one length
+  // any more -- `throws` is spliced in only for a test that calls it.
+  const bodyFirst = source.slice(0, source.length - body.length).split("\n").length;
   const out = join(dir, "out");
 
   // **`spawnSync`, because both streams have to be read on success.**
@@ -322,7 +325,7 @@ export function attempt(dir, body, tools) {
         // alone silently splits in two the day a wording changes.
         code: type_error[1],
         first: type_error[2].replace(/'[^']*'/g, "'X'").trim(),
-        diagnostics: parseDiagnostics(diagnostics),
+        diagnostics: parseDiagnostics(diagnostics, bodyFirst),
       };
     }
     // **Invalid HIR is a compiler defect, not a decline.** The verifier caught
@@ -343,7 +346,7 @@ export function attempt(dir, body, tools) {
     // as "exited non-zero with no diagnostic" because only the exit-0 branch
     // below read NTS lines. A refusal, then, with its diagnostics.
     if (/NTS\d{4}/.test(diagnostics)) {
-      return { bucket: "unsupported", why: "backend", diagnostics: parseDiagnostics(diagnostics) };
+      return { bucket: "unsupported", why: "backend", diagnostics: parseDiagnostics(diagnostics, bodyFirst) };
     }
     return { bucket: "unsupported", why: "emit" };
   }
@@ -364,7 +367,7 @@ export function attempt(dir, body, tools) {
     return {
       bucket: "unsupported",
       why: "lowering",
-      diagnostics: parseDiagnostics(diagnostics),
+      diagnostics: parseDiagnostics(diagnostics, bodyFirst),
       first: first ? first[1].replace(/`[^`]*`/g, "`X`").trim() : undefined,
       // **The redaction that makes a row rankable destroys the work list.**
       // The largest actionable row is 147 files of ``\`X\`, a builtin this
