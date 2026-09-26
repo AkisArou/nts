@@ -16193,11 +16193,17 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn literal_name(&self, name: NodeId) -> Option<String> {
+        // **A numeric literal's text is the authority on its *value*, not on its
+        // *name*.** See [`Self::numeric_member_name`], which is the whole of the
+        // reason this early return is guarded.
+        if self.kind_of(name) == Some(syntax::NUMERIC_LITERAL) {
+            return self.numeric_member_name(name);
+        }
         if let Some(text) = self.node(name).text.clone() {
             return Some(text);
         }
         match self.kind_of(name) {
-            // The decoder carries no text on a literal. The checker does carry
+            // The decoder carries no text on a *string* literal. The checker does carry
             // the *symbol* the name binds, and its name is the answer for every
             // spelling -- `"quoted"`, `["bracketed"]` and `[0]` all name a
             // symbol called what they say. That is also the name TypeScript
@@ -16249,6 +16255,66 @@ impl<'a> FuncBuilder<'a> {
     /// One derivation for two callers that each want the same fact: a string or
     /// numeric literal the decoder gave no text to, and a `const` standing in
     /// for one inside `[ ]`.
+    /// The name a numeric literal gives a member: ECMAScript's `ToString` of the
+    /// value it denotes, which is neither its spelling nor, necessarily, the
+    /// checker's number.
+    ///
+    /// `[0x10]` names `"16"`, and so do `[0b10000]`, `[0o20]`, `[1.6e1]` and
+    /// `[16.0]`. Taking the **spelling** -- which `ast.rs` attaches to a numeric
+    /// literal deliberately, because the checker's value is not always the literal
+    /// -- put `"0x10"` in the layout while every read looked for `"16"`. An
+    /// accessor or method lookup then found nothing and **the reading statement
+    /// was dropped with no diagnostic**; a class field `[0x10] = "f"` reached a
+    /// slot that was not there and **segfaulted**. Eighteen test262 cases, in
+    /// every non-decimal spelling.
+    ///
+    /// **And the checker's number is not the answer either.**
+    /// `[0.9999999999999999]` is a key named `"0.9999999999999999"` in
+    /// JavaScript -- a distinct double whose shortest round-trip string is itself
+    /// -- while tsgo answers `1` for that literal, which is exactly why `ast.rs`
+    /// carries the text. So the two sources are each wrong for a different set of
+    /// spellings, and the name comes from the *exact* value of what was written.
+    ///
+    /// So the name is `crate::number::to_js_string` of the **exact** value, and
+    /// what is left here is only which source that value comes from:
+    ///
+    /// - **the text**, parsed by Rust, for any spelling Rust accepts. That is
+    ///   exact, and it is what keeps the checker's rounding out of the answer.
+    /// - **the checker's number** for a spelling Rust's parser rejects -- `0x10`,
+    ///   `0b10000`, `0o20`, digits with `_` separators. Every one of those is an
+    ///   integer, so there is no rounding for the checker to have done.
+    ///
+    /// **Two rules that looked right were each refuted by one value**, which is
+    /// why this ended up as the algorithm rather than a test on spellings. "Use
+    /// the checker's number" dies on `[0.9999999999999999]`, whose key is
+    /// `"0.9999999999999999"` while tsgo answers `1`. "Use the text when it
+    /// reprints identically" dies on `[1e-7]`, whose key is `"1e-7"` while Rust's
+    /// `Display` gives `0.0000001` -- so that rule would have started refusing a
+    /// key that works today. The conformance lane found both against node before
+    /// any of it was built.
+    fn numeric_member_name(&self, name: NodeId) -> Option<String> {
+        let value = self
+            .node(name)
+            .text
+            .as_deref()
+            .and_then(crate::number::parse_literal)
+            .or_else(|| self.constant_number(name))?;
+        Some(crate::number::to_js_string(value))
+    }
+
+    /// The number a node's type says it is, where that type is a literal.
+    fn constant_number(&self, node: NodeId) -> Option<f64> {
+        match &self
+            .snapshot
+            .types
+            .get(self.snapshot.node_types.get(&node)?.0 as usize)?
+            .kind
+        {
+            TypeKind::Literal(LiteralValue::Number(value)) => Some(*value),
+            _ => None,
+        }
+    }
+
     fn constant_member_name(&self, node: NodeId) -> Option<String> {
         match &self
             .snapshot
