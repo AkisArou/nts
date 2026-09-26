@@ -404,22 +404,60 @@ export function removeHook(hook: RegisteredHook): boolean {
  * and exits, and so does this.
  */
 function fatalError(error: unknown): void {
-  let stack: string | undefined;
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "stack" in error &&
-    typeof error.stack === "string"
-  ) {
-    stack = error.stack;
-  }
-  // Node wraps a non-Error throw in an Error-shaped diagnostic.  In
-  // particular, hooks that throw `null` or a symbol print `Error: null` and
-  // `Error: Symbol(...)`, rather than printing the bare value as an ordinary
-  // uncaught throw would.
-  const diagnostic = typeof stack === "string" ? stack : `Error: ${String(error)}`;
-  nts_write_stderr(`${diagnostic}\n`);
+  nts_write_stderr(`${describeThrown(error)}\n`);
   nts_process_really_exit(1);
+}
+
+/**
+ * A thrown value as a line of diagnostic, without asking for a stack.
+ *
+ * **No stack, and that is permanent rather than a gap.** This used to read
+ * `error.stack` behind a `"stack" in error` narrowing, and a compiled binary
+ * cannot answer it: the compiler's own sentence is *"`stack`, which this
+ * compiler's `Error` does not have -- a compiled binary keeps no record of its
+ * frames"*. So the old code could never have printed a stack here however the
+ * lowering improved; what it did instead was refuse, and take this function and
+ * everything calling it out of the program.
+ *
+ * That cost is easy to understate. `fatalError` is called from the `catch` of
+ * every hook dispatch, and a `catch` body is only lowered once the `try` around
+ * it stops failing open -- so on a compiler that carries `throw`s through
+ * closures and methods, **44 functions in `runtime/node/http` alone** and about
+ * 330 across eighteen modules stopped being emitted, all of them standing on this
+ * one read.
+ *
+ * Narrowed arm by arm rather than through `String(error)`, because a conversion
+ * to string from `unknown` has no representation either -- and writing the arms
+ * out keeps node's own intent visible: node wraps a non-Error throw in an
+ * Error-shaped diagnostic, printing `Error: null` and `Error: Symbol(...)` rather
+ * than the bare value an ordinary uncaught throw would show.
+ *
+ * The one thing lost against node is the stack itself, which no build of this
+ * program can produce.
+ */
+function describeThrown(error: unknown): string {
+  if (error instanceof Error) {
+    return `Error: ${error.message}`;
+  }
+  if (typeof error === "string") {
+    return `Error: ${error}`;
+  }
+  if (typeof error === "number") {
+    return `Error: ${error}`;
+  }
+  if (typeof error === "boolean") {
+    return `Error: ${error}`;
+  }
+  if (error === null) {
+    return "Error: null";
+  }
+  if (error === undefined) {
+    return "Error: undefined";
+  }
+  // A symbol, a bigint, or an object that is not an `Error`. Node prints the
+  // value; this says what kind it was, which is as far as a fixed layout can go
+  // without a dynamic conversion.
+  return "Error: a value that is not an Error";
 }
 
 /** Call one kind of hook on every registered hook that wants it. */
