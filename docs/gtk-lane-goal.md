@@ -1161,6 +1161,7 @@ GTK 4.22; ns per operation, best of three in-process runs after one untimed.
 | inherited method (`get_visible()`) | 4.0 | 4.1-4.2 | 128-133 | 31x |
 | out values (`const [w, h] = get_size_request()`) | 4.2 | 12.0 | 165 | 13.8x |
 | a virtual function GTK calls (`measure` on a subclass) | 14.8-15.0 | 14.5-15.1 | 234-241 | 16x |
+| an interface's virtual function (`get_n_items` on a model the program writes) | 7.8-8.1 | 14.5-15.4 | 294-313 | 20x |
 | startup to a mapped window (ms) | 73.1 | 69.7-77.8 | 73.3-78.7 | 1.0-1.1x |
 | startup peak RSS (MB) | | 88-101 | 105-120 | 1.2x |
 | notes app, 1000 notes, open to quit (ms) | | 102-123 | 116-186 | 1.1-1.5x |
@@ -1183,6 +1184,16 @@ whose override answers constants (`class Square extends GtkWidget` in nts,
 cycling past GTK's size cache so every call reaches the override: nts's
 entry point is a direct C function in the class struct, at the floor, where
 GJS enters its engine for each call.
+
+**The interface row** is the one where nts is well off the floor. Every
+entry from GTK's loop leaves through `nts_callback_leave`, which runs a
+checkpoint. The checkpoint is about 2.2 ns of the 7 even when it finds
+nothing: removing it measured 12.3-12.8, interleaved under the lock at load
+~4.5. The rest is `nts_callback_enter`'s owner check and the environment
+reads. The `vfunc` row pays the same and still reads at the floor, because
+GTK's own `measure` work hides it. The runtime is MainClaude's, and the
+numbers are with them. Times from `with-lock.sh` at load 4-5, five
+interleaved rounds for nts and C, three for GJS.
 
 **Where the notes row's time goes** (`perf record -e cycles:u`, the `--rc`
 build, 1000 seeded notes, 654 samples): the dynamic loader 36%, libgtk 18%,
