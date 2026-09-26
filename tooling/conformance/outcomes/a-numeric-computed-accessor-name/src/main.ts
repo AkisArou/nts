@@ -1,3 +1,11 @@
+// **Now a guard.** Fixed by 11013501 (ECMAScript Number::toString in Rust, and a
+// literal's digits parsed as written rather than taken from the checker), and
+// re-recorded as agreeing: anything else is REGRESSED. It guards the
+// *declaration* side -- the name a numeric key gives a member -- and reads it back
+// by a string, which no rounding touches. The *read* side, `o[0.9999999999999999]`
+// by the numeric literal, is still refused and lives in
+// tooling/conformance/blockers/a-numeric-key-read-by-a-literal-the-checker-rounds.
+//
 // A computed accessor name that is a numeric literal is the property named by that
 // number's *string*: `get [0x10]()` defines "16", and `obj['16']` reaches it. nts
 // answers otherwise for every spelling test262 tries -- hex, binary, octal,
