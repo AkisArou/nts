@@ -5,6 +5,12 @@
 //   node tooling/conformance/outcomes-check.mjs --record <name> [name ...]
 //   NTS_BIN=<a pinned copy> node tooling/conformance/outcomes-check.mjs
 //
+// **A record is a claim about main, so --record runs on main's binary**: built
+// from a clean tree at a named commit, never a worktree carrying an unlanded
+// change and never a shared tree with someone's edits in it. A pin gives
+// stability, not provenance. Measure a change *against* the records from its
+// own worktree; re-record only once the change is on main.
+//
 // # Why a third fixture kind
 //
 // `examples/` requires agreement with node, so a program that disagrees cannot
@@ -36,7 +42,8 @@
 //          **Observations are reported only by `done()`.** `observe` collects;
 //          nothing leaves until `done()` throws. So a program that aborts part
 //          way reports *no* arm -- the controls observed before the abort
-//          included -- and its record is the abort itself. An aborting shape
+//          included -- and its record is the abort itself, so no control can
+//          show the abort was specific to the defect arm. An aborting shape
 //          therefore gets a fixture of its own rather than an arm in another,
 //          where it would erase every arm beside it (a-repeat-too-long-aborts-
 //          instead-of-throwing is its own record for that reason). Arms that
