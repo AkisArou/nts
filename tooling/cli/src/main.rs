@@ -2845,7 +2845,9 @@ fn original_offset(map: &[nts_diagnostics::RewrittenSegment], offset: u32) -> Op
     if let Some(copy) = map.iter().filter(|segment| !segment.generated).find(contains) {
         return Some((copy.original + (offset - copy.rewritten), false));
     }
-    if let Some(generated) = map.iter().filter(|segment| segment.generated).find(contains) {
+    // Generated code nests (a function, its statements, their expressions):
+    // the smallest range holding the position names what it was written from.
+    if let Some(generated) = map.iter().filter(|segment| segment.generated).filter(contains).min_by_key(|segment| segment.len) {
         return Some((generated.original, true));
     }
     map.iter()
@@ -7530,11 +7532,14 @@ mod where_it_is_tests {
         let map = [
             copy(0, 5, 20),
             RewrittenSegment { rewritten: 20, original: 30, len: 40, generated: true },
+            // An expression in that function, printed from the one at 44.
+            RewrittenSegment { rewritten: 30, original: 44, len: 6, generated: true },
             copy(40, 50, 8),
             copy(60, 90, 10),
         ];
         assert_eq!(original_offset(&map, 3), Some((8, false)), "a copy maps byte for byte");
         assert_eq!(original_offset(&map, 25), Some((30, true)), "generated code maps to what it came from");
+        assert_eq!(original_offset(&map, 32), Some((44, true)), "the smallest generated range holding it wins");
         assert_eq!(original_offset(&map, 42), Some((52, false)), "a copy inside generated code is the more precise answer");
         assert_eq!(original_offset(&map, 65), Some((95, false)));
         assert_eq!(original_offset(&map, 75), Some((100, true)), "past every segment: the end of the copy before");

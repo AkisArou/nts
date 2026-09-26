@@ -145,6 +145,7 @@ pub fn print_file(
         edits: Vec::new(),
         fresh: 0,
         copied: Vec::new(),
+        printed_nodes: Vec::new(),
         out: String::new(),
         indent: 0,
     };
@@ -153,7 +154,7 @@ pub fn print_file(
     for function in &mut functions {
         function.typed_cache = printer.caches.typed_spans.contains(&function.original);
     }
-    let segments = rewritten_segments(&printer.out, source, &printer.copied, &printer.functions);
+    let segments = rewritten_segments(&printer.out, source, &printer.copied, &printer.functions, &printer.printed_nodes);
     Printed { text: printer.out, functions, segments }
 }
 
@@ -164,8 +165,15 @@ const SHORTEST_COPY_FOUND: usize = 8;
 /// Where the printed text came from. Each stretch the printer copied is found
 /// in the output in the order it was copied, which is the order the output
 /// holds them in, since the edits made after printing insert but never
-/// reorder. Each printed function spans what it was compiled from.
-fn rewritten_segments(out: &str, source: &SourceText, copied: &[(u32, String)], functions: &[OutputFunction]) -> Vec<nts_diagnostics::RewrittenSegment> {
+/// reorder. Each printed function, and each statement and expression printed
+/// from the compiler's output, spans what it was compiled from.
+fn rewritten_segments(
+    out: &str,
+    source: &SourceText,
+    copied: &[(u32, String)],
+    functions: &[OutputFunction],
+    printed_nodes: &[(u32, (usize, usize))],
+) -> Vec<nts_diagnostics::RewrittenSegment> {
     let bytes = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
     let mut segments = Vec::new();
     let mut cursor = 0;
@@ -184,10 +192,11 @@ fn rewritten_segments(out: &str, source: &SourceText, copied: &[(u32, String)], 
             cursor = at + text.len();
         }
     }
-    for ((start, _), (from, to)) in functions {
+    let printed = functions.iter().map(|((start, _), range)| (*start, *range)).chain(printed_nodes.iter().copied());
+    for (start, (from, to)) in printed {
         segments.push(nts_diagnostics::RewrittenSegment {
-            rewritten: bytes(*from),
-            original: source.utf8_offset(*start),
+            rewritten: bytes(from),
+            original: source.utf8_offset(start),
             len: bytes(to - from),
             generated: true,
         });
@@ -412,6 +421,10 @@ struct Printer<'a> {
     fresh: u32,
     /// Each stretch of the source the printer copied, where it starts and
     /// what it was, in the order copied ([`rewritten_segments`]).
+    /// Each statement and expression printed from the compiler's output that
+    /// kept its source span: that span's start, and its range in the output.
+    /// A diagnostic in compiled code is traced to the smallest one holding it.
+    printed_nodes: Vec<(u32, (usize, usize))>,
     copied: Vec<(u32, String)>,
     out: String,
     indent: usize,
@@ -729,6 +742,15 @@ impl Printer<'_> {
                     *end = *end + edit.insert.len() - edit.remove;
                 }
             }
+            // A node the edit lands inside grows with it.
+            for (_, (start, end)) in &mut self.printed_nodes {
+                if *start >= after {
+                    *start = *start + edit.insert.len() - edit.remove;
+                    *end = *end + edit.insert.len() - edit.remove;
+                } else if *end >= after {
+                    *end = *end + edit.insert.len() - edit.remove;
+                }
+            }
         }
     }
 
@@ -922,8 +944,23 @@ impl Printer<'_> {
 
     // ---- statements ------------------------------------------------------
 
-    #[allow(clippy::too_many_lines)]
     fn statement(&mut self, statement: &Statement) {
+        let at = self.out.len();
+        self.statement_inner(statement);
+        self.record_printed(statement_base(statement), at);
+    }
+
+    /// The node at `base`, printed from `at` to here, for the position map.
+    fn record_printed(&mut self, base: &BaseNode, at: usize) {
+        if let Some((start, _)) = span_of_base(base, self.source)
+            && self.out.len() > at
+        {
+            self.printed_nodes.push((start, (at, self.out.len())));
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn statement_inner(&mut self, statement: &Statement) {
         if let Some(text) = self.unchanged(statement, statement_base(statement)) {
             self.write(&text);
             return;
@@ -1599,6 +1636,12 @@ impl Printer<'_> {
     /// An expression, parenthesised if its precedence is below `min`, with a
     /// `!` or type arguments the output dropped restored after it.
     fn expression(&mut self, expression: &Expression, min: u8) {
+        let at = self.out.len();
+        self.expression_outer(expression, min);
+        self.record_printed(expression_base(expression), at);
+    }
+
+    fn expression_outer(&mut self, expression: &Expression, min: u8) {
         let base = expression_base(expression);
         let wrapper = self.dropped_wrapper(base);
         // A restored `!` or `<T>` binds like a member access: an operand of
