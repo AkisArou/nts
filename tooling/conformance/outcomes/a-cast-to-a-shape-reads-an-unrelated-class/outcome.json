@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "refused",
-  "nts": "NTS1001 a value of unknown layout asserted with `as` to a type that has fields, which would read them at that type's offsets without checking the value is one",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: object=2;unknown=5;",
   "node": "exit 1; nts: uncaught Observed: object=-1;unknown=-1;",
-  "measured_with": "b279e61a5495a1c2",
+  "measured_with": "6c9ab2ad9b9af234",
   "source": "measured"
 }
