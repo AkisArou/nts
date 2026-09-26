@@ -366,6 +366,8 @@ interface Prop {
   setter: string; // set_has_frame
   /** For a controlled prop, the getter that reads the widget's own value. */
   controlledBy?: string;
+  /** For a prop that names a child (a Stack's visible child), the getter that finds it by that name. */
+  namesChildBy?: string;
   value: ValueKind;
   /** The value that restores GTK's default when the prop is removed, or null when there is none to say. */
   reset: string | null;
@@ -475,6 +477,14 @@ const widgetReferences = new Set(["mnemonic-widget", "default-widget", "focus-wi
 
 // Children arrive as React children, never as a prop.
 const childProps = new Set(["child"]);
+
+// Props that name one of the widget's children, by the GIR type that
+// declares them, with the getter that finds a child by that name. React sets
+// a node's props before placing its children, so the name can arrive before
+// its child: GTK warns and selects nothing, and the child selects itself when
+// it is attached (src/children.ts). So such a prop is set only when the child
+// exists, and removing it leaves the selection as it is.
+const childNamingProps = new Map([["Stack", new Map([["visible-child-name", "get_child_by_name"]])]]);
 
 // Containers that place a child with parameters of its own, through a child
 // element written by hand in src/children.ts: the members their component
@@ -661,7 +671,15 @@ function model(gir: Gir, bindings: Bindings): Model {
           const read = bindings.getters.get(sourceTs)?.get(getter);
           const readType = p.readable && read !== undefined ? handlerType(read, handlerTypes) : null;
           const controlled = readType !== null && controlledProps.get(source.name)?.includes(p.name) === true;
-          props.push({ jsx: camel(p.name), setter, value, reset, ...(controlled ? { controlledBy: getter } : {}) });
+          const namesChildBy = childNamingProps.get(source.name)?.get(p.name);
+          props.push({
+            jsx: camel(p.name),
+            setter,
+            value,
+            reset,
+            ...(controlled ? { controlledBy: getter } : {}),
+            ...(namesChildBy !== undefined ? { namesChildBy } : {}),
+          });
           if (readType !== null) {
             signals.push({
               jsx: `onNotify${camel(`-${p.name}`)}`,
@@ -1059,6 +1077,9 @@ function propType(value: ValueKind): string {
 
 /** The statement that sets `p` from `value`, restoring GTK's default for any other value. */
 function assign(p: Prop): string {
+  if (p.namesChildBy !== undefined) {
+    return `if (typeof value === "string" && gtk.${p.namesChildBy}(value) !== null) gtk.${p.setter}(value);`;
+  }
   if (p.value.kind === "object") {
     // A checked narrowing, which a native build reads a GObject back from an
     // erased value by (its GType); an assertion it does not.

@@ -89,7 +89,10 @@ places a new tree during render, which can be thrown away, and before that
 tree is in any window. `finalizeInitialChildren` asks for a commit mount,
 and `commitMount` presents the window, transient for the window its opener
 is in. Taking it out destroys it, so unmounting a dialog closes it. A window
-rendered at the root opens over the root's window the same way.
+rendered at the root opens over the root's window the same way. A popover
+is the third placement: rendered in a widget, it is attached to that widget
+(`set_parent`), not placed among its children, and shown by its `visible`
+prop; taken out, it is detached.
 
 **Lifetime.** A fiber's `stateNode` holds the widget. Cycles between fibers
 and GObjects (a closure capturing a widget, connected to that widget) are the

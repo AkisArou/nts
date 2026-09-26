@@ -6094,7 +6094,7 @@ function stackProp(gtk: GtkStack, key: string, value: unknown): boolean {
       if (value instanceof GtkWidget) gtk.set_visible_child(value);
       return true;
     case "visibleChildName":
-      gtk.set_visible_child_name(typeof value === "string" ? value : "");
+      if (typeof value === "string" && gtk.get_child_by_name(value) !== null) gtk.set_visible_child_name(value);
       return true;
   }
   return widgetProp(gtk, key, value);

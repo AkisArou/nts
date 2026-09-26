@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build react-gtk's host config into a GTK program that drives it directly and
 # run it (see src/main.ts): each logged line is one thing the reconciler will
-# ask of the host, checked on real widgets. `G_DEBUG=fatal-criticals` turns
+# ask of the host, checked on real widgets. `G_DEBUG=fatal-warnings` turns
 # any GTK complaint -- a widget parented twice, a source removed twice -- into
 # an end. It builds with reference counting, as the GTK examples do; the
 # default build passes too (since d8889f02 it sinks every widget it makes).
@@ -55,6 +55,7 @@ bar b1>b2 e1>e2 b0>b1 b1>-
 overlay true true true>false true
 fixed 12,40>5,40
 window true true false>true over=true closed=true
+popover true true true
 slot side,main side,none none,none titled=true
 work timer"
 
@@ -67,7 +68,7 @@ if ! node "$root/runtime/react/packages/react-gtk/tools/gen-widgets.ts" "$source
   echo "FAILED react-gtk: src/widgets.ts is stale for this nts's bindings; run tools/gen-widgets.ts ../../native/gtk/types/gir" >&2
   exit 1
 fi
-log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
+log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-warnings \
   timeout 30 "$root/examples/interop/with-display.sh" "$out/host/linux-gnu-x86_64/host" 2>/dev/null || true)
 if [ "$log" != "$expected" ]; then
   printf 'FAILED react-gtk: expected\n%s\ngot\n%s\n' "$expected" "$log" >&2

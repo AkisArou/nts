@@ -69,6 +69,10 @@
 //   window    a Window rendered inside the tree is a toplevel, not a child:
 //             placed in a Box it is not parented or shown; at commit it is
 //             presented over the root's window; taken out, it is destroyed
+//   popover   a Popover rendered in a Box is attached to it (set_parent), not
+//             placed among its children; taken out, it is detached. Popping
+//             it up is GTK's, and this display cannot: under Xvfb with no
+//             focus, showing any popover is a GTK critical, in plain C too
 //   slot      slot elements fill a Paned's start and end children, their
 //             children placed first as React completes them; a child removed
 //             from its slot element empties the slot, and so does the slot
@@ -609,6 +613,28 @@ function main(): void {
   react_gtk_log(
     "window " + String(wantsMount) + " " + beforeCommit + ">" + String(presented) + " over=" + String(overRoot) + " closed=" + String(!widget(dialog).get_visible()),
   );
+
+  // A popover opens inside a shown window, as an app's is.
+  const popped = new GtkContainer(new GtkWindow());
+  const anchor = createInstance("GtkBox", {}, popped, 0, {});
+  appendChildToContainer(popped, anchor);
+  popped.window.present();
+  idle();
+  const popover = createInstance("GtkPopover", {}, popped, 0, {});
+  const anchorChildren = (): number => {
+    let count = 0;
+    for (let child = widget(anchor).get_first_child(); child !== null; child = child.get_next_sibling()) {
+      if (child !== widget(popover)) {
+        count++;
+      }
+    }
+    return count;
+  };
+  appendInitialChild(anchor, popover);
+  let popping = String(widget(popover).get_parent() === widget(anchor)) + " " + String(anchorChildren() === 0);
+  removeChild(anchor, popover);
+  popping += " " + String(widget(popover).get_parent() === null);
+  react_gtk_log("popover " + popping);
 
   const paned = createInstance("GtkPaned", {}, container, 0, {});
   const startSlot = createInstance("GtkPaned.StartChild", {}, container, 0, {});

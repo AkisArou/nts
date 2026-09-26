@@ -14,7 +14,7 @@
 // window needs. Each subclass also holds it typed as what it is, in its own
 // `gtk` field, so its setters are the widget's own methods, with no cast.
 
-import { type GtkWidget, GtkWindow } from "c:Gtk-4.0";
+import { GtkPopover, type GtkWidget, GtkWindow } from "c:Gtk-4.0";
 import { g_idle_add_full } from "c:GLib-2.0";
 
 import { connectController, Controllers } from "./controllers.ts";
@@ -246,9 +246,32 @@ export abstract class HostNode {
   }
 }
 
+/**
+ * Where a widget goes when React places it:
+ * - Child: among its parent's children, by the parent's protocol;
+ * - Toplevel: a window, opened over the window its parent is in;
+ * - Attached: a popover, attached to its parent (`set_parent`).
+ */
+const enum Placement {
+  Child,
+  Toplevel,
+  Attached,
+}
+
+function placementOf(widget: GtkWidget): Placement {
+  if (widget instanceof GtkWindow) {
+    return Placement.Toplevel;
+  }
+  if (widget instanceof GtkPopover) {
+    return Placement.Attached;
+  }
+  return Placement.Child;
+}
+
 /** A widget's node. */
 export abstract class WidgetNode extends HostNode {
   readonly widget: GtkWidget;
+  private readonly placement: Placement;
   private slots: Map<string, SignalSlot> | null = null;
   // The event controllers input props added (`onKeyPressed`), made on first use.
   private controllers: Controllers | null = null;
@@ -262,6 +285,7 @@ export abstract class WidgetNode extends HostNode {
   constructor(type: string, widget: GtkWidget) {
     super(type);
     this.widget = widget;
+    this.placement = placementOf(widget);
   }
 
   /** Sets the prop `key`, or restores its default for `undefined`; false if the widget has no such prop. */
@@ -437,10 +461,11 @@ export abstract class WidgetNode extends HostNode {
   // from inside the tree. Placing one records what opened it. It is presented
   // at commit (React places a new tree during render, which can be thrown
   // away, and before that tree is in any window), over the window its opener
-  // is in, and destroyed when React takes it out.
+  // is in, and destroyed when React takes it out. A popover is attached to
+  // the widget it is rendered in, and shown by its `visible` prop.
   /** Whether this is a window, which opens as a toplevel rather than going into its parent. */
   isToplevel(): boolean {
-    return this.widget instanceof GtkWindow;
+    return this.placement === Placement.Toplevel;
   }
   /** A window, opened from `opener`. */
   openFrom(opener: GtkWidget): void {
@@ -470,8 +495,14 @@ export abstract class WidgetNode extends HostNode {
 
   // A widget goes among its parent's children, by the parent's protocol.
   placeIn(parent: WidgetNode, before: HostNode | null): void {
-    if (this.isToplevel()) {
+    if (this.placement === Placement.Toplevel) {
       this.openFrom(parent.widget);
+      return;
+    }
+    if (this.placement === Placement.Attached) {
+      if (this.widget.get_parent() !== parent.widget) {
+        this.widget.set_parent(parent.widget);
+      }
       return;
     }
     // Before a slot element is last among the children: only single-child
@@ -484,8 +515,12 @@ export abstract class WidgetNode extends HostNode {
     }
   }
   takeOutOf(parent: WidgetNode): void {
-    if (this.isToplevel()) {
+    if (this.placement === Placement.Toplevel) {
       this.close();
+      return;
+    }
+    if (this.placement === Placement.Attached) {
+      this.widget.unparent();
       return;
     }
     parent.unplace(this);
