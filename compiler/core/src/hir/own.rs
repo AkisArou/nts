@@ -122,6 +122,28 @@ impl Summaries {
 #[must_use]
 pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
     let harmless = initializing_only(program, layouts);
+    // **Every function some caller cannot see the target of.** Lifted out of
+    // `consumes` below, where it was computed and explained, because a *second*
+    // ownership fact needs the same set and the two must not derive it twice: a
+    // function reached other than by a `Direct` call can neither take a parameter
+    // over nor hand one back, for one reason -- the caller does not know which
+    // body it is calling, so it cannot hold up its end of either convention.
+    //
+    // The comment inside `consumes` carries the argument and the case that forced
+    // it (`Derived#keep(b, h) { h.box = b }` through a `Base`, which freed a live
+    // `Box`). That case is the **parameter** half; `hands_back` is the **return**
+    // half, and it was still wrong.
+    let lent: rustc_hash::FxHashSet<&str> = program
+        .foreign_classes
+        .iter()
+        .flat_map(super::ForeignClass::entered)
+        .chain(
+            program
+                .layouts
+                .iter()
+                .flat_map(|layout| layout.methods.iter().flatten().map(String::as_str)),
+        )
+        .collect();
     // Computed before the literal because the slot answer is derived from it:
     // a slot mutates when an implementation in it does.
     // One fixpoint for both: a slot reaches a store when an implementation in
@@ -140,7 +162,29 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
         mutating_slots,
         mutates,
         harmless,
-        hands_back: hands_back_a_parameter(program, layouts),
+        // **Not a function a dispatch table holds.** `hands_back` means "the caller
+        // is holding this already, so I owe nothing on the way out", and a caller
+        // that reached the function through a slot cannot know that: it sees one
+        // `Callee::Virtual` and several possible bodies, of which some may hand a
+        // parameter back and others return something fresh.
+        //
+        // **Measured.** `class Leaf extends Base { self() { return this } }` called
+        // through `Base` emitted `v2 = methods[0](v1);` with **no retain**, while
+        // the same call on a `Leaf`-typed receiver emitted
+        // `v2 = Leaf__self(v1); nts_retain(v2);`. So every store through a virtual
+        // `return this` stole a reference, and under `--rc` the React lane's GTK
+        // driver lost its root Box and Button to it -- `GTK_IS_BUTTON failed`, then
+        // abort. A release reaching zero while the object is buffered waits for the
+        // next collection, which is why it surfaced only at a checkpoint.
+        //
+        // Excluding it makes `count_only_returns` retain at the return instead, so
+        // the convention is uniformly "owned" and **both** call sites are right
+        // without either knowing which body ran. That is the same repair `consumes`
+        // makes for the parameter direction, with the same set.
+        hands_back: hands_back_a_parameter(program, layouts)
+            .into_iter()
+            .filter(|name| !lent.contains(name.as_str()))
+            .collect(),
         consumes: {
             // A function takes over a parameter it stores only if every way
             // into it hands one over, and only a `Direct` call does
@@ -169,12 +213,6 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
             // left out needlessly costs a count; one wrongly kept frees what
             // its store still points at. `Derived#keep(b, h) { h.box = b }`
             // through a `Base` did: the `Box` was freed and reused.
-            let lent: rustc_hash::FxHashSet<&str> = program
-                .foreign_classes
-                .iter()
-                .flat_map(super::ForeignClass::entered)
-                .chain(program.layouts.iter().flat_map(|layout| layout.methods.iter().flatten().map(String::as_str)))
-                .collect();
             program
                 .funcs
                 .iter()
