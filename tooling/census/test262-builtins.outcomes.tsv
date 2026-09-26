@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.mjs --record; compared by --check.
-# compiler 7c81431aeb74f915, harness 0ffd3f93392c2106; machine at start: 15.6 GB available, swap 12.4/20 GB, load 1.8/5 (1m/5m), 32 cores; 8 worker(s)
+# compiler 7c81431aeb74f915, harness 662f0576d379ce63; machine at start: 15.4 GB available, swap 12.2/20 GB, load 15.9/20.9 (1m/5m), 32 cores; 8 worker(s)
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-7.js	pass	
@@ -113,6 +113,7 @@ test/built-ins/Iterator/prototype/every/result-is-boolean.js	pass
 test/built-ins/Iterator/prototype/some/result-is-boolean.js	pass	
 test/built-ins/Map/map-iterable.js	pass	
 test/built-ins/Map/prototype/delete/returns-false.js	pass	
+test/built-ins/Map/prototype/delete/returns-true-for-deleted-entry.js	pass	
 test/built-ins/Map/prototype/set/replaces-a-value-normalizes-zero-key.js	pass	
 test/built-ins/Map/prototype/set/replaces-a-value.js	pass	
 test/built-ins/Math/E/value.js	pass	
@@ -227,6 +228,8 @@ test/built-ins/NativeErrors/ReferenceError/constructor.js	pass
 test/built-ins/NativeErrors/SyntaxError/constructor.js	pass	
 test/built-ins/NativeErrors/TypeError/constructor.js	pass	
 test/built-ins/NativeErrors/URIError/constructor.js	pass	
+test/built-ins/Number/MAX_VALUE/value.js	pass	
+test/built-ins/Number/MIN_VALUE/value.js	pass	
 test/built-ins/Number/NEGATIVE_INFINITY/S15.7.3.5_A1.js	pass	
 test/built-ins/Number/NEGATIVE_INFINITY/value.js	pass	
 test/built-ins/Number/POSITIVE_INFINITY/S15.7.3.6_A1.js	pass	
@@ -374,6 +377,9 @@ test/built-ins/Object/is/symbol-object-is-same-value.js	pass
 test/built-ins/Object/keys/15.2.3.14-2-1.js	pass	
 test/built-ins/Object/keys/15.2.3.14-3-1.js	pass	
 test/built-ins/Object/keys/15.2.3.14-3-5.js	pass	
+test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_2.js	pass	
+test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_20.js	pass	
+test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_22.js	pass	
 test/built-ins/Promise/resolve/S25.4.4.5_A2.1_T1.js	fail	nts: uncaught Test262Error: The value of p1 is expected to equal the value of p2
 test/built-ins/RegExp/15.10.4.1-4.js	pass	
 test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F-negated.js	pass	
@@ -641,8 +647,10 @@ test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-less-t
 test/built-ins/String/prototype/concat/S15.5.4.6_A1_T4.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Success.js	pass	
+test/built-ins/String/prototype/endsWith/searchstring-found-without-position.js	pass	
 test/built-ins/String/prototype/endsWith/searchstring-not-found-without-position.js	pass	
 test/built-ins/String/prototype/includes/String.prototype.includes_SuccessNoLocation.js	pass	
+test/built-ins/String/prototype/includes/searchstring-found-without-position.js	pass	
 test/built-ins/String/prototype/includes/searchstring-not-found-without-position.js	pass	
 test/built-ins/String/prototype/indexOf/S15.5.4.7_A2_T1.js	pass	
 test/built-ins/String/prototype/indexOf/S15.5.4.7_A2_T2.js	pass	
@@ -667,6 +675,7 @@ test/built-ins/String/prototype/replaceAll/replaceValue-value-replaces-string.js
 test/built-ins/String/prototype/replaceAll/searchValue-empty-string-this-empty-string.js	pass	
 test/built-ins/String/prototype/replaceAll/searchValue-empty-string.js	pass	
 test/built-ins/String/prototype/slice/S15.5.4.13_A2_T1.js	pass	
+test/built-ins/String/prototype/startsWith/searchstring-found-without-position.js	pass	
 test/built-ins/String/prototype/startsWith/searchstring-not-found-without-position.js	pass	
 test/built-ins/String/prototype/toLowerCase/Final_Sigma_U180E.js	fail	nts: uncaught Test262Error: Sigma preceded by LATIN CAPITAL LETTER A, MONGOLIAN VOWEL SEPARATOR
 test/built-ins/String/prototype/toLowerCase/S15.5.4.16_A1_T5.js	pass	
@@ -854,6 +863,7 @@ test/built-ins/parseFloat/tonumber-numeric-separator-literal-nzd-nsl-dds.js	pass
 test/built-ins/parseFloat/tonumber-numeric-separator-literal-sign-plus-dds-nsl-dd.js	pass	
 test/built-ins/parseInt/15.1.2.2-2-1.js	pass	
 test/built-ins/parseInt/S15.1.2.2_A2_T1.js	pass	
+test/built-ins/parseInt/S15.1.2.2_A2_T10.js	fail	nts: uncaught Test262Error: parseInt(uspU[index] + "1") must return the same value returned by parseInt("1")
 test/built-ins/parseInt/S15.1.2.2_A2_T10_U180E.js	pass	
 test/built-ins/parseInt/S15.1.2.2_A2_T2.js	pass	
 test/built-ins/parseInt/S15.1.2.2_A2_T3.js	pass	

@@ -1806,7 +1806,7 @@ test262() {
 # is not seen) and 1 when the outcomes do not reconcile or a recorded case
 # changed; a missing `pass-count:` line is a run that said nothing, and fails
 # rather than reading as zero.
-TEST262_LANGUAGE_PASS_FLOOR=4503
+TEST262_LANGUAGE_PASS_FLOOR=5422
 # One recorded test262 directory, re-run and held to its record and its floor:
 # `test262_recorded <dir> <record> <floor> <floor variable name>`. Shared by
 # test262-cases and test262-builtins-cases, so the two steps cannot come to
@@ -1858,7 +1858,7 @@ test262_cases() {
 # not DEGRADED. The first full census (7c81431a, 38.7 pages/s) had 865 of
 # 23,812 -- 3.91% of the 22,101 in scope, with Temporal's 4,603 kept in the
 # denominator because nothing in docs/ makes it a non-goal. About 35 s.
-TEST262_BUILTINS_PASS_FLOOR=865
+TEST262_BUILTINS_PASS_FLOOR=874
 test262_builtins_cases() {
   test262_recorded test/built-ins tooling/census/test262-builtins.outcomes.tsv \
     "$TEST262_BUILTINS_PASS_FLOOR" TEST262_BUILTINS_PASS_FLOOR
