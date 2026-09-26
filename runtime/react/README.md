@@ -60,16 +60,26 @@ build:
 
 In the `react` suite, upstream's own build fails the same 2 tests.
 
-**Native build.** native/probe compiles the runtime whole with nts. The
-census went from 1286 to 582 refusal lines. Creating a root compiles, and
-the render path runs from `updateContainer` to the commit. What stops it now
-is the compiler's, and has been reported to the language lane:
-- exceptions thrown across a call to a function value (effects, refs,
-  function components), which Suspense and error boundaries rely on;
-- a tuple holding a function (`useState`'s `[state, setState]`).
+**Native build.** native/probe compiles the runtime whole with nts. With
+the compiler's open invalid-HIR defects worked around locally, it emits
+with 211 root refusals, and a GTK program importing React now links. The
+C backend no longer declines its top level: the dispatcher slot is
+erased (ed11876f). Nothing renders natively yet. What stops the render
+path is the compiler's, reported in order with reductions:
+- two verifier failures (an object literal whose keys are out of the
+  interface's order; a method with fewer parameters than its interface);
+- a throw carried through a call to a function value, which
+  `flushMutationEffects`' `try … finally` needs, so it gates every render,
+  with hooks or without;
+- `useState`: its action type `S | ((prev: S) => S)` cannot instantiate a
+  generic; plus an instantiation expression and a generic function passed
+  as a value in the hooks;
+- `jsx` chosen by `isDevelopment ? … : …`, whose test has the literal type
+  `false` natively and could be folded.
 
-Ours to design: class component state merge and lifecycles, and a generic
-`ReactContext<T>` held in erased dependency lists.
+Class components are designed for the native build and verified through
+the JavaScript run (CLASS-COMPONENTS.md). Contexts are classes held by a
+non-generic base.
 
 The rules nts imposes on this code are the ones ported code must follow;
 they are listed in PORTING.md and in the native config's comments.
@@ -78,9 +88,11 @@ they are listed in PORTING.md and in the native config's comments.
 
 | Path | What it is |
 | --- | --- |
-| `packages/` | the runtime: `react`, `react-reconciler`, `scheduler`, `react-noop-renderer` and `shared`, plus `react-gtk` (a design draft so far). Native twins sit beside the files they replace (`*.native.ts`) |
+| `packages/` | the runtime: `react`, `react-reconciler`, `scheduler`, `react-noop-renderer` and `shared`, plus `react-gtk`, GTK 4's host (its widgets, props and signals generated from GIR). Native twins sit beside the files they replace (`*.native.ts`) |
 | `tsconfig.native.json` | the base of every native program: binds the twins, and maps packages to their sources |
 | `native/probe/` | a native program: the runtime, a typed test host and a deterministic scheduler host |
+| `native/compiled/` | the probe's scenarios in TSX, which `tools/probe-agree.ts` runs plain, as written, and as the React stage rewrote them |
+| `native/gtk/` | react-gtk's host config and GLib scheduler host driven on real GTK widgets, as the reconciler will drive them (`build.sh`) |
 | `conformance/` | the harness that runs upstream's tests, and the per-test ledgers |
 | `compiler/` | the upstream Rust React Compiler as our memoizer: the audit (`AUDIT.md`), and how its output stays typed TypeScript (`TYPED-OUTPUT.md`, with its fixtures and study) |
 | `spikes/` | representation experiments the design rests on |
