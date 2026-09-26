@@ -169,7 +169,16 @@ function machineState() {
   );
   const gb = (kb) => (kb / 1024 / 1024).toFixed(1);
   const [one, five] = loadavg();
+  const vm = Object.fromEntries(
+    readFileSync("/proc/vmstat", "utf8")
+      .split("\n")
+      .map((line) => line.split(" "))
+      .filter(([key]) => key === "pswpin" || key === "pswpout")
+      .map(([key, value]) => [key, Number(value)]),
+  );
   return {
+    at: Date.now(),
+    pages_swapped: (vm.pswpin ?? 0) + (vm.pswpout ?? 0),
     available_gb: Number(gb(info.MemAvailable ?? 0)),
     swap_used_gb: Number(gb((info.SwapTotal ?? 0) - (info.SwapFree ?? 0))),
     swap_total_gb: Number(gb(info.SwapTotal ?? 0)),
@@ -690,11 +699,19 @@ say(`  compiler ${NTS} (sha256:${FINGERPRINT}), harness sha256:${HARNESS_HASH}`)
 const machineAtEnd = machineState();
 say(`  machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)`);
 say(`  machine at end:   ${describeMachine(machineAtEnd)}`);
-// Named, not judged: a threshold would be a guess. A swap-heavy run says so on
-// its own line, where a reader deciding whether to move a floor will see it.
-if (Math.max(machineAtStart.swap_used_gb, machineAtEnd.swap_used_gb) > machineAtStart.swap_total_gb / 2 ||
-    Math.min(machineAtStart.available_gb, machineAtEnd.available_gb) < 4) {
-  say("  DEGRADED MACHINE: more than half of swap in use or under 4 GB available at one end of the run --");
+// **Paging during the run, not swap occupied.** The first version flagged "more
+// than half of swap in use", and on this box that is always true: two idle VMs
+// sit paged out, 17 of 19 GB, while `vmstat` shows zero pages moving. That is a
+// correct measurement of the wrong quantity. What degrades a run is swap
+// *traffic* while it runs -- a worker waiting on a page-in times out, and the
+// memory cap fires -- so the rate is `pswpin + pswpout` over the run, from
+// /proc/vmstat. The threshold, 256 pages/s (1 MB/s at 4 KB) averaged over the
+// whole run, is a judgement, printed beside the number it judges.
+const seconds = Math.max(1, (machineAtEnd.at - machineAtStart.at) / 1000);
+const pagingRate = (machineAtEnd.pages_swapped - machineAtStart.pages_swapped) / seconds;
+say(`  paging during the run: ${pagingRate.toFixed(1)} pages/s swapped in or out, over ${Math.round(seconds)} s`);
+if (pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.available_gb) < 4) {
+  say("  DEGRADED MACHINE: over 256 pages/s of swap traffic, or under 4 GB available at one end of the run --");
   say("  do not move a floor or re-derive the evidence set from this run");
 }
 say(`  runtime objects: ${objectTally.hit} cached, ${objectTally.miss} compiled (${OBJECT_CACHE})`);
