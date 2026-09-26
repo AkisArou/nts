@@ -214,9 +214,12 @@ function readBindings(dir: string): Bindings {
       entry(plainSignals, signal[1]!, () => new Set()).add(signal[2]!);
       continue;
     }
-    const constructor = /^ {4}new \(props\?: (\w+)Props\): (\w+);$/.exec(line);
-    if (constructor !== null && constructor[1] === constructor[2]) {
-      constructible.add(constructor[2]!);
+    // `new (props?: GtkButtonProps): GtkButton`, or with the signals a
+    // program class may declare: `new <Sig ...>(props?: ...): Signalled<GtkButton, Sig>`.
+    const constructor = /^ {4}new (?:<[^>]*>)?\(props\?: (\w+)Props\): (?:Signalled<(\w+), \w+>|(\w+));$/.exec(line);
+    const constructed = constructor === null ? undefined : (constructor[2] ?? constructor[3]);
+    if (constructed !== undefined && constructor![1] === constructed) {
+      constructible.add(constructed);
     }
   }
   return { setters, plainSignals, constructible, modules };
