@@ -59,6 +59,7 @@ use std::process::{Command, Stdio};
 mod cf;
 
 /// What to bind, and from where.
+#[derive(Clone)]
 pub(crate) struct Request {
     /// Frameworks to import, and to link: `AppKit`, `Foundation`.
     pub(crate) frameworks: Vec<String>,
@@ -74,6 +75,11 @@ pub(crate) struct Request {
     /// `CGColorSpaceCreateDeviceRGB`. A Core Foundation class's own -- its
     /// methods and initializers -- come with the class.
     pub(crate) functions: Vec<String>,
+    /// Names as a program imports them from the module, which are Swift's:
+    /// `Timer`, `UIApplicationDelegate`, `UIApplicationMain`. Each is found in
+    /// Swift's graphs and bound as the class, protocol or function it is. A
+    /// record, an enum or a type alias comes with the class that names it.
+    pub(crate) names: Vec<String>,
     /// The macOS SDK.
     pub(crate) sdk: String,
     /// The clang target, `x86_64-apple-macos13`, whose version is the
@@ -108,6 +114,7 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
         None => default_symbols(&request.sdk)?,
     };
     let swift = Swift::read(&symbols, &request.frameworks)?;
+    let request = &swift.resolved(request)?;
     // A Core Foundation class is not an Objective-C one: its members are C
     // functions, which the second pass keeps the declarations of.
     let cf_types = cf::requested(&swift, &headers.typedefs, &request.classes);
@@ -695,6 +702,37 @@ impl Swift {
 
     fn get(&self, usr: &str) -> Option<&Symbol> {
         self.by_usr.get(usr)
+    }
+
+    /// `request`, with each of its `names` bound as what Swift imports it as:
+    /// a class, a protocol or a function, by the name Objective-C and C know
+    /// it by. A name Swift declares nowhere in the frameworks is an error that
+    /// says so; one that is a record, an enum or a type alias is bound with
+    /// the class that names it, and adds nothing here.
+    fn resolved(&self, request: &Request) -> Result<Request> {
+        let mut resolved = request.clone();
+        for name in &request.names {
+            let mut found = false;
+            for usr in self.by_usr.iter().filter(|(_, symbol)| symbol.path.len() == 1 && symbol.path[0] == *name).map(|(usr, _)| usr) {
+                found = true;
+                let (list, declared) = if let Some(class) = usr.strip_prefix("c:objc(cs)") {
+                    (&mut resolved.classes, class)
+                } else if let Some(protocol) = usr.strip_prefix("c:objc(pl)") {
+                    (&mut resolved.protocols, protocol)
+                } else if let Some(function) = usr.strip_prefix("c:@F@") {
+                    (&mut resolved.functions, function)
+                } else {
+                    continue;
+                };
+                if !list.iter().any(|known| known == declared) {
+                    list.push(declared.to_owned());
+                }
+            }
+            if !found {
+                bail!("`{name}` is not a name Swift imports from {}", request.frameworks.join(", "));
+            }
+        }
+        Ok(resolved)
     }
 
     /// The extern constants Swift imports as static properties of one of
@@ -2659,9 +2697,15 @@ mod tempfile_path {
 
     pub(crate) struct TempFile(std::path::PathBuf);
 
+    /// Files made so far by this process. The process id alone named one
+    /// file for every binding a process makes, so two made at once -- a build
+    /// binding two modules, or two tests -- wrote over each other's.
+    static MADE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     impl TempFile {
         pub(crate) fn with(suffix: &str, text: &str) -> Result<Self> {
-            let path = std::env::temp_dir().join(format!("nts-bind-objc-{}{suffix}", std::process::id()));
+            let made = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!("nts-bind-objc-{}-{made}{suffix}", std::process::id()));
             std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
             Ok(Self(path))
         }
@@ -2933,6 +2977,52 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         format!(r#"{{"symbols":[{}],"relationships":[{},{required}]}}"#, symbols.join(","), optional.join(","))
     }
 
+    /// The synthetic framework's SDK and graphs, written under a directory of
+    /// this test's own, and a request of it with nothing asked for yet.
+    fn fake_request(test: &str) -> Request {
+        let root = std::env::temp_dir().join(format!("nts-bind-objc-{test}-{}", std::process::id()));
+        let headers = root.join("System/Library/Frameworks/Fake.framework/Headers");
+        let symbols = root.join("symbolgraph");
+        std::fs::create_dir_all(&headers).unwrap();
+        std::fs::create_dir_all(&symbols).unwrap();
+        std::fs::write(headers.join("Fake.h"), FAKE).unwrap();
+        std::fs::write(symbols.join("Fake.symbols.json"), graph()).unwrap();
+        std::fs::write(symbols.join("ObjectiveC.symbols.json"), r#"{"symbols":[]}"#).unwrap();
+        Request {
+            frameworks: vec!["Fake".to_owned()],
+            module: "objc:Fake".to_owned(),
+            classes: Vec::new(),
+            protocols: Vec::new(),
+            functions: Vec::new(),
+            names: Vec::new(),
+            sdk: root.to_string_lossy().into_owned(),
+            target: "x86_64-apple-macos13".to_owned(),
+            symbols: Some(symbols),
+        }
+    }
+
+    /// A program's import names what it binds, as Swift names it: `Round`
+    /// is class `Circle` and `ShapeWatching` protocol `ShapeDelegate`, and
+    /// the binding is the one those flags give. A name Swift does not
+    /// declare is an error that says which.
+    #[test]
+    fn a_program_names_what_it_binds_as_swift_does() {
+        let by_objc = Request { classes: vec!["Circle".to_owned()], protocols: vec!["ShapeDelegate".to_owned()], ..fake_request("objc-names") };
+        let by_swift = Request { names: vec!["Round".to_owned(), "ShapeWatching".to_owned()], ..fake_request("swift-names") };
+        let (objc, swift) = match (run(&by_objc), run(&by_swift)) {
+            (Ok(objc), Ok(swift)) => (objc.binding, swift.binding),
+            (Err(error), _) | (_, Err(error)) if Command::new("clang").arg("--version").output().is_err() => {
+                eprintln!("skipped: no clang ({error})");
+                return;
+            }
+            (Err(error), _) | (_, Err(error)) => panic!("{error:#}"),
+        };
+        assert_eq!(objc, swift);
+        let missing = Request { names: vec!["Round".to_owned(), "Square".to_owned()], ..fake_request("missing-name") };
+        let error = run(&missing).err().map(|error| format!("{error:#}")).unwrap_or_default();
+        assert!(error.contains("`Square` is not a name Swift imports from Fake"), "{error}");
+    }
+
     /// Every rule the binding applies, on real clang output.
     #[test]
     fn a_framework_is_bound_as_swift_imports_it() {
@@ -2951,6 +3041,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             classes: vec!["Circle".to_owned(), "Pen".to_owned()],
             protocols: vec!["ShapeDelegate".to_owned()],
             functions: Vec::new(),
+            names: Vec::new(),
             sdk: root.to_string_lossy().into_owned(),
             target: "x86_64-apple-macos13".to_owned(),
             symbols: Some(symbols),

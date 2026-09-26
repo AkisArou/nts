@@ -367,12 +367,13 @@ fn bind_objc(rest: &[String]) -> Result<()> {
         classes: repeated("--class"),
         protocols: repeated("--protocol"),
         functions: repeated("--function"),
+        names: repeated("--name"),
         sdk,
         target: single("--target").unwrap_or_else(|| "x86_64-apple-macos13".to_owned()),
         symbols: single("--symbols").map(std::path::PathBuf::from),
     };
-    if request.frameworks.is_empty() || request.classes.is_empty() {
-        anyhow::bail!("`nts bind-objc` needs at least one `--framework` and one `--class`");
+    if request.frameworks.is_empty() || (request.classes.is_empty() && request.names.is_empty()) {
+        anyhow::bail!("`nts bind-objc` needs at least one `--framework`, and a `--class` or a `--name`");
     }
     let output = bind_objc::run(&request)?;
     if let Some(path) = single("--witness") {
