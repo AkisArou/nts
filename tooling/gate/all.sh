@@ -1836,6 +1836,23 @@ test262_cases() {
   fi
 }
 
+# Defects pinned to what they do: `tooling/conformance/outcomes/`, where a wrong
+# answer, invalid HIR, uncompilable C or a runtime abort lives when it refuses
+# nothing and so has no `blockers/` expect line to write.
+#
+# The harness's **exit status** decides, not a grep of its output: `blockers`
+# above grepped for three loud words and went green over fixtures it had not
+# measured. `outcomes-check.mjs` exits 1 on CHANGED, REGRESSED, ORACLE CHANGED
+# and NOT MEASURED, 2 when a self-check fails, and 0 -- printing loudly -- on
+# FIXED and REFUSES NOW, which are progress: "a gate that goes red when you fix
+# something teaches people to stop fixing things". About three seconds.
+outcomes() {
+  out=$(node tooling/conformance/outcomes-check.mjs 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^  (reproduces|holds) / && !/^$/'
+  return $status
+}
+
 step "build"   cargo build --release
 step "clippy"  lint
 # Every interop project, built the way its README says and then run.
@@ -1965,6 +1982,7 @@ step "reformat" reformatted
 step "records" records
 step "test262" test262
 step "test262-cases" test262_cases
+step "outcomes" outcomes
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly
