@@ -378,6 +378,85 @@ void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high) {
   return nts_query(object, &wanted);
 }
 
+/* `Windows.Foundation.PropertyValue`'s statics, activated once: what boxes a
+ * string, a number or a boolean for a slot taking an object. */
+static const IID nts_iid_property_value_statics = {
+    0x629BDBC8,
+    0xD932,
+    0x4FF4,
+    {0x96, 0xB9, 0x8D, 0x96, 0xC5, 0xC1, 0xE8, 0x58}};
+
+static void *nts_property_value_statics(void) {
+  static void *statics;
+  if (statics == 0) {
+    static const wchar_t name[] = L"Windows.Foundation.PropertyValue";
+    HSTRING_HEADER header;
+    HSTRING handle;
+    HRESULT hr = WindowsCreateStringReference(
+        name, (UINT32)(sizeof name / sizeof *name - 1), &header, &handle);
+    if (SUCCEEDED(hr)) {
+      hr = RoGetActivationFactory(handle, &nts_iid_property_value_statics,
+                                  &statics);
+    }
+    if (FAILED(hr)) {
+      fprintf(stderr,
+              "nts: Windows.Foundation.PropertyValue is not activatable "
+              "(0x%08lx)\n",
+              (unsigned long)hr);
+      abort();
+    }
+  }
+  return statics;
+}
+
+void *nts_winrt_box(NtsValue value) {
+  void *boxed = 0;
+  HRESULT hr = S_OK;
+  switch (value.tag) {
+  case NTS_TAG_UNDEFINED:
+  case NTS_TAG_NULL:
+    return 0;
+  case NTS_TAG_HANDLE_COM:
+    return nts_com_addref(value.as.native);
+  case NTS_TAG_STRING: {
+    const NtsString *s = (const NtsString *)nts_value_reference(value);
+    void *text = nts_string_to_hstring(s);
+    void *statics = nts_property_value_statics();
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, void *, void **))(
+        *(void ***)statics)[18])(statics, text, &boxed);
+    nts_hstring_release(s, text);
+    break;
+  }
+  case NTS_TAG_NUMBER: {
+    void *statics = nts_property_value_statics();
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, double, void **))(
+        *(void ***)statics)[15])(statics, nts_value_number(value), &boxed);
+    break;
+  }
+  case NTS_TAG_BOOLEAN: {
+    void *statics = nts_property_value_statics();
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, uint8_t, void **))(
+        *(void ***)statics)[17])(statics, (uint8_t)nts_value_boolean(value),
+                                 &boxed);
+    break;
+  }
+  default:
+    fprintf(stderr,
+            "nts: a value tagged %u where the Windows Runtime takes an "
+            "object, which only a string, number, boolean or object is\n",
+            (unsigned)value.tag);
+    abort();
+  }
+  if (FAILED(hr)) {
+    fprintf(stderr,
+            "nts: boxing a value for the Windows Runtime failed "
+            "(0x%08lx)\n",
+            (unsigned long)hr);
+    abort();
+  }
+  return boxed;
+}
+
 /* Events, as `addEventListener` registers them: an object's event and a
  * function, and the token the event's `add_` answered, which its `remove_`
  * takes back. Keyed as the DOM keys a listener -- the object by its

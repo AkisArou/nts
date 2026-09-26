@@ -41,6 +41,11 @@ declare module "winrt:types" {
   // `PropertySet` holds, or a boxed value. `QueryInterface` is how one
   // becomes something more particular.
   export type IInspectable = ComClass<"IInspectable">;
+  // What a method taking an object takes: the object, or a string, number or
+  // boolean, which is boxed into an `IPropertyValue` for the call, as the
+  // Windows Runtime's JavaScript projection boxed one -- `button.content =
+  // "Press"`.
+  export type Inspectable = IInspectable | string | number | boolean;
 
   // A `string` as the Windows Runtime's `HSTRING`: made for the call and
   // deleted after it, and a returned one copied into a `string` and deleted.

@@ -377,6 +377,12 @@ pub enum Role {
     /// lent for as long as the object lives. The caller's reference is given
     /// back after the call; a callee that keeps the delegate added its own.
     Delegate { bridge: std::sync::Arc<FnPointer>, signature: std::sync::Arc<FnPointer>, iid: std::sync::Arc<str> },
+    /// A TypeScript value where the Windows Runtime takes an `IInspectable`
+    /// (`Inspectable`, `winrt:types`): a string, number or boolean boxed as an
+    /// `IPropertyValue`, as the Windows Runtime's JavaScript projection boxed
+    /// one -- `button.content = "Press"` -- and an object passed as itself.
+    /// The box is a reference of the call's, given back after it.
+    Box,
     /// The closure's context, the `void *` C hands back to the callback:
     /// `nts_closure_lend(closure)`. Hidden from TypeScript.
     ClosureData,
@@ -595,6 +601,7 @@ impl Function {
                 | Role::Closure { .. }
                 | Role::Block { .. }
                 | Role::Delegate { .. }
+                | Role::Box
                 | Role::Strings
                 | Role::Bytes
                 | Role::ErrorSlot { .. } => {
@@ -3003,6 +3010,9 @@ fn c_parameter(
     if let Some(array) = native_array(snapshot, parameter.ty) {
         return array_slots(snapshot, name, &parameter.name, &array, at).map(Some);
     }
+    if let Some(object) = boxable(snapshot, parameter.ty) {
+        return Ok(Some(vec![(object, Role::Box)]));
+    }
     if is_object_pointer(snapshot, parameter.ty) {
         return Ok(Some(vec![(Type::Pointer(Pointee::Void), Role::Plain)]));
     }
@@ -3018,6 +3028,31 @@ fn c_parameter(
     }
 }
 
+
+/// The slot an `Inspectable` parameter passes (`Role::Box`): a union of one
+/// Windows Runtime object type with a string, a number or a boolean, and
+/// perhaps `null` or `undefined`. Typed `void *`, as a queried interface is:
+/// the box is the call's alone, given back after it, and a counted type would
+/// have the ownership pass release it a second time.
+fn boxable(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let TypeKind::Union(members) = kind(ty)? else { return None };
+    let mut object = None;
+    let mut primitive = false;
+    for member in members {
+        match kind(*member)? {
+            TypeKind::String | TypeKind::Number | TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => primitive = true,
+            TypeKind::Null | TypeKind::Undefined => {}
+            _ => match abi_type(snapshot, *member)? {
+                Type::Pointer(Pointee::Opaque(handle)) if handle.family == Family::Com && object.is_none() => {
+                    object = Some(Type::Pointer(Pointee::Void));
+                }
+                _ => return None,
+            },
+        }
+    }
+    object.filter(|_| primitive)
+}
 
 /// A set Swift bridges as `Set<T>` (`Role::NSSet`): a `Set<T>` of objects
 /// of a class a binding declares, or of strings. `null` is a nil set.

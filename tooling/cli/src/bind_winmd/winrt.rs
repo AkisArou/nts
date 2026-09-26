@@ -292,7 +292,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
     if !c_types.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
     }
-    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable" | "Delegate" | "Event" | "EventRegistrationToken" | "Guid")).collect();
+    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| matches!(*brand, "ComClass" | "HString" | "IInspectable" | "Inspectable" | "Delegate" | "Event" | "EventRegistrationToken" | "Guid")).collect();
     if !winrt.is_empty() {
         let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
     }
@@ -1370,10 +1370,18 @@ impl Writer<'_> {
                 Ok(format!("ConstPtr<{record}>"))
             }
             Type::ValueName(name) => self.spell_value(name),
-            // Any object: `IInspectable`, which is what the ABI passes.
+            // Any object: `IInspectable`, which is what the ABI passes -- and
+            // taken as `Inspectable`, which a string, number or boolean is
+            // boxed into, as the Windows Runtime's JavaScript projection
+            // boxed one (`button.content = "Press"`).
             Type::Object => {
-                self.brands.insert("IInspectable");
-                Ok(if argument { "IInspectable | null".to_owned() } else { "IInspectable".to_owned() })
+                if argument {
+                    self.brands.insert("Inspectable");
+                    Ok("Inspectable | null".to_owned())
+                } else {
+                    self.brands.insert("IInspectable");
+                    Ok("IInspectable".to_owned())
+                }
             }
             Type::Array(_) => Err("an array".to_owned()),
             Type::RefMut(_) => Err("an `out` parameter".to_owned()),
@@ -1386,8 +1394,17 @@ impl Writer<'_> {
     /// An `[in]` parameter as a method of `receiver` declares it: see
     /// [`Self::or_fields`].
     fn parameter(&mut self, ty: &Type, receiver: &Receiver<'_>) -> Result<String, String> {
+        if matches!(receiver, Receiver::Override { .. }) {
+            // What an override is handed rather than what a call passes: an
+            // object is one, never a primitive the runtime boxed.
+            if matches!(ty, Type::Object) {
+                self.brands.insert("IInspectable");
+                return Ok("IInspectable | null".to_owned());
+            }
+            return self.spell(ty, true);
+        }
         let spelled = self.spell(ty, true)?;
-        Ok(if matches!(receiver, Receiver::Override { .. }) { spelled } else { self.or_fields(spelled) })
+        Ok(self.or_fields(spelled))
     }
 
     /// A record a call takes by value, which the program may also write as

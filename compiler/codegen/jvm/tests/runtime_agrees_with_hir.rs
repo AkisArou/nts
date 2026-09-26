@@ -264,4 +264,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 111 for `nts_winrt_listen` and `nts_winrt_unlisten`, a Windows Runtime
 /// class's `addEventListener`: Windows, and native calls again.
-const REFUSED_FLOOR: usize = 111;
+///
+/// 112 for `nts_winrt_box`, a string or number boxed where the Windows
+/// Runtime takes an object: Windows again.
+const REFUSED_FLOOR: usize = 112;

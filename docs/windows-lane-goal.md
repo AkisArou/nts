@@ -385,9 +385,16 @@ Application.Start(() => { new App(); });
      the class's namespace (`let` where it is written as read, `const`
      otherwise), called through the statics factory's slots. A name that is
      a reserved word (`try`) stays its `get_X()`.
+   - **Boxing:** `button.content = "Press"`. A parameter taking any object
+     is `Inspectable | null` (an object, string, number or boolean), and
+     the runtime boxes a primitive as an `IPropertyValue` for the call
+     (`nts_winrt_box`), as the Windows Runtime's JavaScript projection
+     did. An override's object parameter stays `IInspectable | null`: it
+     is handed an object. Reading an `IPropertyValue` back as the
+     primitive is not done yet.
    - Not yet: `for…of` over an `IIterable<T>` that is not a vector, struct
-     fields (`size.Width`), strings boxed where a slot takes `IInspectable`,
-     and `instanceof` of a COM value in `unknown`. Also started: a record a call takes by value may be
+     fields (`size.Width`), unboxing an `IPropertyValue` read back, and
+     `instanceof` of a COM value in `unknown`. Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
    record stays `ByValue<T>`.

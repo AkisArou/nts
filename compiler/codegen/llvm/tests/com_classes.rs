@@ -951,3 +951,56 @@ fn a_static_property_is_called_on_its_factory() {
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 }
+
+/// A method and a property taking any object, as `bind-winmd` writes them:
+/// `Inspectable | null`.
+const BOXING: &str = r#"declare module "winrt:Test.Boxing" {
+  import type { ComClass, IInspectable, Inspectable } from "winrt:types";
+  export interface IHolderMethods {
+    /**
+     * @ntsVtable 6 Put
+     * @ntsHresult
+     */
+    Put(this: IHolder, value: Inspectable | null): void;
+    /**
+     * @ntsVtable 7 get_Content
+     * @ntsHresult
+     */
+    get_Content(this: IHolder): IInspectable;
+  }
+  export interface IHolderMembers {
+    /**
+     * @ntsGet 7 get_Content
+     */
+    get content(): IInspectable;
+    /**
+     * @ntsSet 8 put_Content
+     */
+    set content(value: Inspectable | null);
+  }
+  export type IHolder = ComClass<"Test_IHolder"> & IHolderMethods & IHolderMembers;
+}
+"#;
+
+/// A string, number or boolean where the Windows Runtime takes an object is
+/// boxed by the runtime (`nts_winrt_box`) and the box given back after the
+/// call; an object is passed as itself. `holder.content = "Press"` is the
+/// same, through the setter's slot.
+#[test]
+fn a_primitive_where_an_object_is_taken_is_boxed() {
+    let source = "import type { IHolder } from \"winrt:Test.Boxing\";\nexport function fill(h: IHolder): void {\n  h.Put(\"text\");\n  h.Put(4.5);\n  h.Put(h.content);\n  h.content = \"Press\";\n}\n";
+    let Some((dir, prepared)) = prepare_with("boxing", BOXING, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert_eq!(text.matches("nts_winrt_box(").count(), 3, "not the string, the number and the property's string boxed:\n{text}");
+    assert!(text.matches("nts_com_release(").count() >= 3, "a box is not given back:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    assert!(llvm.text.contains("@nts_winrt_box("), "the IR does not box:\n{}", llvm.text);
+}

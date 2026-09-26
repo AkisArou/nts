@@ -12525,6 +12525,10 @@ enum Lent {
     /// That inner object, taken from its slot in the call's own block
     /// (`finish_hresult_call`) and released on both paths after it.
     Taken { object: ValueId },
+    /// A string, number or boolean boxed for an `IInspectable` parameter
+    /// (`Role::Box`): the runtime's reference, given back after the call,
+    /// which leaves the box to whatever the callee kept of it.
+    Box { object: ValueId },
 }
 
 impl<'a> FuncBuilder<'a> {
@@ -45577,7 +45581,7 @@ impl<'a> FuncBuilder<'a> {
                 }
                 // A reference the call was handed, or the inner object a
                 // composable factory answered: the program's, given back.
-                Lent::Delegate { object } | Lent::Taken { object } => {
+                Lent::Delegate { object } | Lent::Taken { object } | Lent::Box { object } => {
                     self.runtime_call("nts_com_release", vec![object], HirType::Void, origin.clone());
                 }
                 Lent::Inner { slot } => {
@@ -45727,6 +45731,26 @@ impl<'a> FuncBuilder<'a> {
             self.push(OpKind::ConstInt(i128::from(low)), word.clone(), origin.clone()),
             self.push(OpKind::ConstInt(i128::from(high)), word, origin.clone()),
         ]
+    }
+
+    /// An argument where the Windows Runtime takes any object (`Role::Box`):
+    /// an object as itself, and a string, number or boolean boxed by the
+    /// runtime (`nts_winrt_box`, from the value erased) into an
+    /// `IPropertyValue` the call is lent and gives back.
+    fn box_argument(&mut self, id: NodeId, value: ValueId, want: HirType, lent: &mut Vec<Lent>, origin: &Origin) -> Result<ValueId, Diagnostic> {
+        // Lowered against the union the parameter is, an object arrives
+        // erased: the object it was is passed instead.
+        let object = match self.values[value.0 as usize].kind {
+            OpKind::Erase { value: inner, .. } if matches!(self.values[inner.0 as usize].ty, HirType::NativePointer(_)) => Some(inner),
+            _ => matches!(self.values[value.0 as usize].ty, HirType::NativePointer(_)).then_some(value),
+        };
+        if let Some(object) = object {
+            return self.coerce(object, &want, id);
+        }
+        let erased = self.coerce(value, &HirType::Erased, id)?;
+        let object = self.runtime_call("nts_winrt_box", vec![erased], want, origin.clone());
+        lent.push(Lent::Box { object });
+        Ok(object)
     }
 
     /// A closure as a Windows Runtime delegate: a COM object made for the call
@@ -46002,6 +46026,14 @@ impl<'a> FuncBuilder<'a> {
             match role {
                 Role::Plain => c_args.extend(argument.map(|value| self.unboxed_argument(value, &target.parameters[at], &origin))),
                 Role::Receiver => c_args.extend(receiver_value),
+                // An object as itself; a string, number or boolean boxed by
+                // the runtime (`nts_winrt_box`, from the value erased) into
+                // an `IPropertyValue` the call is lent and gives back.
+                Role::Box => {
+                    let Some(value) = argument else { continue };
+                    let want = target.parameters[at].representation();
+                    c_args.push(self.box_argument(id, value, want, &mut lent, &origin)?);
+                }
                 // A label crosses as its own role says, with the value the
                 // literal gave that property.
                 Role::Label { key, inner, .. } => {

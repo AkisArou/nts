@@ -48,7 +48,6 @@
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
 import { report } from "c:report";
 import type { ByValue } from "c:types";
-import { PropertyValue } from "winrt:Windows.Foundation";
 import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
@@ -94,7 +93,7 @@ class PressButton extends Button {
   constructor(label: string) {
     super();
     this.label = label;
-    this.content = PropertyValue.createString(label);
+    this.content = label;
   }
 
   onPointerEntered(_e: IPointerRoutedEventArgs | null): void {

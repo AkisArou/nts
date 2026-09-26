@@ -464,6 +464,9 @@ fn composable_classes_are_constructed_as_themselves() {
     let xaml = std::fs::read_to_string(out.join("Windows.UI.Xaml.d.ts")).unwrap();
     assert!(xaml.contains("    Measure(this: IUIElement, availableSize: ByValue<Size> | Fields<Size>): void;"), "Measure does not take its fields");
     assert!(module.contains("    measureOverride(availableSize: ByValue<Size>): ByValue<Size>;"), "an override's record is spelled with its fields");
+    // A setter taking any object takes a string, number or boolean too,
+    // boxed for the call (`Inspectable`); what the getter answers is the
+    // object.
     // The idiomatic surface: declared once, on the class implementing the
     // interface, and inherited along the class chain; a property as its
     // getter and setter, a `get`/`set` pair where they spell differently;
@@ -478,7 +481,7 @@ fn composable_classes_are_constructed_as_themselves() {
     assert!(content_control.starts_with("  export interface ContentControlMembers extends ControlMembers {"), "{content_control}");
     assert!(
         content_control.contains("     * @ntsGet 6 get_Content\n     * @ntsVia A26DD1DC-CD44-435C-BE94-01D6241C231C Windows_UI_Xaml_Controls_IContentControl\n     */\n    get content(): IInspectable;")
-            && content_control.contains("     * @ntsSet 7 put_Content\n     * @ntsVia A26DD1DC-CD44-435C-BE94-01D6241C231C Windows_UI_Xaml_Controls_IContentControl\n     */\n    set content(value: IInspectable | null);"),
+            && content_control.contains("     * @ntsSet 7 put_Content\n     * @ntsVia A26DD1DC-CD44-435C-BE94-01D6241C231C Windows_UI_Xaml_Controls_IContentControl\n     */\n    set content(value: Inspectable | null);"),
         "{content_control}"
     );
     let button_surface = surface("Button");

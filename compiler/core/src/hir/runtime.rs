@@ -281,6 +281,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_value_truthy_fn", &[None], Some(HirType::Bool)),
     ("nts_view_unlend", &[None], None),
     ("nts_winrt_activate", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    ("nts_winrt_box", &[None], None),
     ("nts_winrt_factory", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_winrt_listen", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
     ("nts_winrt_unlisten", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
@@ -493,7 +494,7 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // its anchor.
         // And `nts_gobject_made`, which sinks a floating GObject for a
         // never-free program and does nothing under counting: read, not held.
-        "nts_com_take" | "nts_com_query" | "nts_winrt_listen" | "nts_winrt_unlisten" | "nts_gobject_made" => Some(&[]),
+        "nts_com_take" | "nts_com_query" | "nts_winrt_listen" | "nts_winrt_unlisten" | "nts_winrt_box" | "nts_gobject_made" => Some(&[]),
         _ => None,
     }
 }

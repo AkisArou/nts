@@ -1991,6 +1991,11 @@ uint32_t nts_winrt_activations(void);
  * function -- a key, never read -- back to the event's `remove_`; one never
  * added is not there to remove. Each answers the HRESULT of the call it made,
  * or S_OK. */
+/* A TypeScript value where the Windows Runtime takes an `IInspectable`, as a
+ * reference of its own the caller releases: a string, number or boolean
+ * boxed as an `IPropertyValue`, an object as itself, and `null` or
+ * `undefined` as NULL. */
+void *nts_winrt_box(NtsValue value);
 int32_t nts_winrt_listen(void *object, uint64_t iid_low, uint64_t iid_high,
                          uint32_t add, void *delegate);
 int32_t nts_winrt_unlisten(void *object, uint64_t iid_low, uint64_t iid_high,
