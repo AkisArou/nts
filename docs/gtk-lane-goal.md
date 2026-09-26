@@ -645,11 +645,14 @@ class Note extends GObject {
   `"notify"` or the template literal `notify::${string}`, so
   `connect("notify::label", ...)` typechecks. GLib parses the detail.
 - **A widget without counting.** A never-free build takes the floating
-  reference of every GObject a binding constructs (`nts_gobject_made`).
-  Otherwise the first container owned it, and finalized it on letting go
-  while a name still held it (react-gtk's list). Under counting it does
-  nothing: the first retain is `g_object_ref_sink`. A construction through a
-  static constructor (`GtkLabel.new(...)`) does not call it yet.
+  reference of every GObject a foreign call hands it (`nts_gobject_made`,
+  inserted by the HIR pass `floating` in place of `rc::insert`). That covers
+  `new`, a static constructor (`GtkLabel.new(...)`) and a direct
+  `gtk_label_new()`. Otherwise the first container owned the widget, and
+  finalized it on letting go while a name still held it (react-gtk's list).
+  Under counting nothing is inserted: the first retain is `g_object_ref_sink`.
+  Its call is one of the triggers that link `nts_gobject.c`; a program that
+  made a widget and connected nothing did not link without that.
 - Witnesses: gtk-subclass's `notes` arm (`notes title done weight title a b
   true 2.5`), gtk-gir's `relabeled 2`, gtk-values' `kept`. Each is C and
   LLVM, plain and `--rc`, and each has its failing control recorded in its
