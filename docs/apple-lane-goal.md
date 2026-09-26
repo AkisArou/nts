@@ -254,17 +254,9 @@ correctness does not depend on arm64 running by luck.
      blocks, `void *`, C function pointers, pointers to structs, variadic
      methods.
 
-   Not yet:
-   - The Objective-C witness (a `@selector` and `method_getTypeEncoding`
-     check per member, run on the Mac).
-   - Availability filtering. Clang's JSON carries no version on
-     `AvailabilityAttr`.
-   - Enum constants as values.
-   - Protocols, so delegates are still declared by hand.
-   - Blocks in generated signatures.
-   - A lowering gap it found: an optional call (`window.contentView?.addSubview(v)`)
-     on a native method takes its return type from the whole expression and
-     is refused.
+   Everything this list once said was not yet done has since landed, below:
+   the witness (S7), availability from Swift's graphs (S4), enums (S3),
+   protocols (S6), blocks (S5), and optional calls on native methods.
    It replaces the hand-written `.d.ts` in every `macos-*` fixture. Sugar for
    `class X extends NSObject` belongs to A4, and so does per-instance
    TypeScript state, and so does `NSMakeRect`-style construction. Today a
@@ -1214,12 +1206,13 @@ correctness does not depend on arm64 running by luck.
      says its member is missing, the class is added, and the binding is
      generated again, until nothing is missing. `names.json` keeps what was
      added. ios-list added three classes, macos-notes four.
-   - The cold cost is generation, clang's pass over the headers, and not the
-     checker's rounds. Measured on ios-list: 16.5 s the first time, three
-     generations; 5.3 s with `names.json`, one, which is what a second
-     developer on the project meets; 0.64 s warm, against 0.57 s for its
-     committed binding. Caching the headers' parse per SDK would make a round
-     cost a checker open only; not done yet.
+   - Measured on ios-list: 11.7 to 16.5 s the first time, three generations;
+     5.3 s with `names.json`, one, which is what a second developer on the
+     project meets; 0.64 s warm, against 0.57 s for its committed binding.
+     One generation is 1.9 s, of which clang's dump of the headers is 1.0 s,
+     so a first build's three are about 6 s of it; the rest is the snapshot
+     and compiling both products, which a committed binding pays too. Caching
+     the headers' parse per SDK would save about a second a round.
    - Migrated: the four iOS fixtures, macos-notes and macos-draw. Each
      asserts the build read a generated binding. macos-window keeps its
      committed binding and witness, as the generator's oracle; the other
