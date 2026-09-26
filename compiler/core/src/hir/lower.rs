@@ -6453,19 +6453,29 @@ fn vfunc_declaration_signature(snapshot: &SemanticSnapshot, declaration: NodeId)
 /// What names the `emit` thunk of a binding's own signal: `g`, then each
 /// parameter's C type -- `p` a pointer, `B` a `bool`, a scalar by its name
 /// (`Int32`) -- where a program's signal is named by its kinds (`d`, `b`, `s`,
-/// `o`). A record passed by value has no place in `g_signal_emit`'s varargs.
-fn binding_signal_kinds(parameters: &[super::native::Type]) -> Result<String, String> {
+/// `o`); then, for a signal that answers, `R` and its result's the same way
+/// (`gUInt...RInt`). A record passed by value has no place in
+/// `g_signal_emit`'s varargs.
+fn binding_signal_kinds(parameters: &[super::native::Type], result: &super::native::Type) -> Result<String, String> {
     use std::fmt::Write as _;
-    let mut kinds = String::from("g");
-    for parameter in parameters {
-        match parameter {
+    let code = |kinds: &mut String, ty: &super::native::Type| -> Result<(), String> {
+        match ty {
             super::native::Type::Pointer(_) => kinds.push('p'),
             super::native::Type::Bool => kinds.push('B'),
             super::native::Type::Scalar(scalar) => {
                 let _ = write!(kinds, "{scalar:?}");
             }
-            other => return Err(format!("`emit` of a signal with a parameter of C type {other:?}")),
+            other => return Err(format!("`emit` of a signal with a value of C type {other:?}")),
         }
+        Ok(())
+    };
+    let mut kinds = String::from("g");
+    for parameter in parameters {
+        code(&mut kinds, parameter)?;
+    }
+    if !matches!(result, super::native::Type::Void) {
+        kinds.push('R');
+        code(&mut kinds, result)?;
     }
     Ok(kinds)
 }
@@ -13551,6 +13561,27 @@ impl<'a> FuncBuilder<'a> {
             && let Some(read) = self.read_objc_property(id, object, &property, (!property.is_static).then_some(receiver))?
         {
             return Ok(read);
+        }
+        // A binding's property read through its getter -- `row?.string`,
+        // `label?.label` -- on the receiver the chain found present, at the
+        // part of its type that is present: as `label.label` is, and not as a
+        // struct field, which a handle has no layout for.
+        if self.is_accessor_property(member) {
+            let method = self
+                .accessor(member, false)
+                .ok_or_else(|| self.unsupported(id, "a read of a native property no @ntsGet names a method for"))?;
+            let ty = self
+                .snapshot
+                .node_types
+                .get(&object)
+                .copied()
+                .ok_or_else(|| self.unsupported(id, &format!("a native property whose accessor `{method}` has no receiver type")))?;
+            let ty = self.present_part(ty).unwrap_or(ty);
+            if let [slot, name] = method.split_whitespace().collect::<Vec<_>>()[..] {
+                let slot: u32 = slot.parse().map_err(|_| self.unsupported(id, "@ntsGet or @ntsSet naming a slot that is not a number"))?;
+                return self.lower_slot_accessor(id, member, receiver, ty, (slot, name), None);
+            }
+            return self.lower_accessor_on(id, receiver, ty, &method, None);
         }
         let name = self.literal_name(member).ok_or_else(|| self.unsupported(member, "a computed property name"))?;
         self.member_of(id, receiver, &name)
@@ -40636,38 +40667,6 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Err(self.unsupported(id, "a conditional of unexpected shape"));
         };
-        // **A decided condition takes its arm, and the other is not lowered** --
-        // [`Self::folded_branch`]'s rule for an `if`, and the same one
-        // [`Self::lower_logical`] applies to a dead `&&` operand.
-        //
-        // This one is the load-bearing member of the three, and the measurement
-        // that says so is a reverted commit. Folding `&&` alone turned
-        //
-        //     const createTask: (name: string) => Task | null =
-        //       isDevelopment && typeof console.createTask === "function"
-        //         ? (name) => console.createTask!(name)
-        //         : (_name) => null;
-        //
-        // into `%0 = const false; br %0, b1, b2` with **both** arms still lowered,
-        // both closures refused, and their values carried through block arguments
-        // into a merge parameter -- which is the one thing
-        // `excise_from_initializer` cannot cut, so module evaluation was dropped
-        // *whole* rather than the binding cut. One statement left every
-        // module-scope binding in the program unwritten, and 620 of the React
-        // lane's cascades were one later module reading one of them.
-        //
-        // Folding here removes all three halves of that at once: the dead arm is
-        // never lowered (so its `console` refusal never happens), there is no
-        // branch and no block parameter (so the cut is narrow again), and the
-        // `&&` fold becomes safe to keep.
-        //
-        // The condition is still lowered, for [`Self::lower_logical`]'s reason:
-        // `f() ? a : b` where `f` returns `false` decides the arm and still makes
-        // the call.
-        if let Some(taken) = self.statically_decided(condition) {
-            self.lower_expression(condition)?;
-            return self.lower_expression(if taken { when_true } else { when_false });
-        }
         let condition = self.lower_expression(condition)?;
         let condition = self.truthy(id, condition);
         self.lower_branching_value(
@@ -41012,40 +41011,6 @@ impl<'a> FuncBuilder<'a> {
         right: NodeId,
     ) -> Result<ValueId, Diagnostic> {
         let first = self.lower_expression(left)?;
-        // **A dead operand is not lowered**, which is [`Self::folded_branch`]'s
-        // rule one operator over and for the same reason: a construct the
-        // program cannot reach should not decide whether it compiles.
-        // `isDevelopment && typeof console.createTask === "function"` with
-        // `isDevelopment` a `const` bound to `false` is React's own guard, and
-        // the `if` spelling of it has folded since `7c3fc82f9` while this one
-        // still refused -- for a `console` member on the side that never runs.
-        //
-        // It is a **lowering** change and not an analysis one, which is the part
-        // that took a wrong turn first: the refusal is raised *while lowering*
-        // the dead operand, so `children_that_run` -- which decides what a walk
-        // over already-lowered code visits -- never sees it. There is nothing to
-        // prune afterwards, because the diagnostic happens on the way in.
-        //
-        // No `hoists_out_of` guard, and that is a difference in the language
-        // rather than an omission: a dead *statement* can declare a `var` or a
-        // `function` that outlives it, and an expression has neither form to
-        // declare. Skipping the operand is also exactly what JavaScript does --
-        // `false && f()` never calls `f` -- so this is short-circuiting rather
-        // than an optimisation, and the only thing it changes is what a program
-        // has to be able to compile in order to run.
-        //
-        // `left` is still lowered. `f() && b` where `f` returns `false` decides
-        // the operator and still makes the call.
-        if let Some(known) = self.statically_decided(left) {
-            let short_circuits = if and { !known } else { known };
-            // `false && b` is `false` and `true || b` is `true`: the answer is
-            // the operand already lowered.
-            if short_circuits {
-                return Ok(first);
-            }
-            // `true && b` is `b`, and `false || b` is `b`, whatever `b`'s type.
-            return self.lower_expression(right);
-        }
         let condition = self.truthy(id, first);
         // `a && b` is `b` when `a` is truthy and `a` otherwise; `a || b` is the
         // other way round. Neither yields a bool in general — `0 || 5` is `5`.
@@ -46030,7 +45995,7 @@ impl<'a> FuncBuilder<'a> {
                     *parameter = super::native::Type::Pointer(super::native::Pointee::Void);
                 }
             }
-            binding_signal_kinds(&thunk.parameters[1..]).map_err(|why| self.unsupported(id, &why))?
+            binding_signal_kinds(&thunk.parameters[1..], &thunk.result).map_err(|why| self.unsupported(id, &why))?
         };
         thunk.name = super::ForeignSignal::emit_thunk(&signal, &kinds);
         thunk.declared_at = None;
