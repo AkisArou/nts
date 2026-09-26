@@ -39,6 +39,14 @@ pub(crate) const CONNECT: &str = "nts_gobject_connect";
 /// What a signal's `emit` view names: no C function, but a thunk the
 /// compiler defines per signal, which emits by the signal's id.
 pub(crate) const EMIT: &str = "nts_gobject_emit";
+/// What a property with no setter method is written through: a thunk the
+/// backend defines per property, `nts_gobject_prop_{kind}__{name}`, as
+/// `g_object_set`.
+pub(crate) const SET_BY_NAME: &str = "nts_gobject_prop_";
+/// And one with no getter method read through `g_object_get`: a number or a
+/// boolean only, which the thunk reads into a local of the property's own
+/// type -- a string or an object would come back owned.
+pub(crate) const GET_BY_NAME: &str = "nts_gobject_propget_";
 
 /// One namespace's binding, ready to write.
 #[derive(Debug, Default)]
@@ -485,6 +493,7 @@ pub(crate) fn bind<'a>(
         }
     }
     vfuncs(&mut mapper, namespace);
+    set_by_name(&mut mapper, namespace);
     for class in &namespace.classes {
         for signal in &class.signals {
             let label = format!("{}::{}", class.c_type.as_deref().unwrap_or(&class.name), signal.name);
@@ -510,6 +519,124 @@ pub(crate) fn bind<'a>(
     // names of their own, which is what this compares.
     mapper.binding.functions.dedup_by(|a, b| a.name == b.name);
     mapper.binding
+}
+
+/// Each property writable after construction with no setter method --
+/// `GtkWidget`'s `width-request`, `GtkWindow`'s `default-width` -- given one:
+/// `set_width_request`, whose symbol is the thunk the backend defines as
+/// `g_object_set(object, "width-request", value, NULL)`, so that `new
+/// GtkWidget({ width_request })` and `widget.width_request = 80` write it
+/// as they write a property with a setter. The value crosses `g_object_set`'s
+/// varargs, so the thunk's name says how (`SET_BY_NAME`): `i` an `int`
+/// (`gint`, `gboolean`, an enum), `u` a `guint` or flags, `l`/`L` 64 bits,
+/// `d` a `double` or `float`, `p` a pointer. Anything else is refused.
+fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
+    for class in &namespace.classes {
+        let Some(c_type) = class.c_type.clone() else { continue };
+        if class.interface || !mapper.facts.tags.contains_key(&c_type) {
+            continue;
+        }
+        for property in &class.properties {
+            if let Some(param) = &property.get_by_name {
+                get_by_name(mapper, class, &c_type, &property.name, param);
+            }
+            let Some(param) = &property.set_by_name else { continue };
+            let ident = identifier(&property.name.replace('-', "_"));
+            let method = format!("set_{ident}");
+            if class.callables.iter().any(|callable| identifier(&callable.name) == method) {
+                continue;
+            }
+            let label = format!("{c_type}:{}", property.name);
+            let param = mapper.with_c_type(param);
+            let value = match mapper.typed(&param) {
+                Ok(value) => mapper.truth(&param, value),
+                Err(reason) => {
+                    mapper.binding.refused.push((label, reason));
+                    continue;
+                }
+            };
+            let Some(kind) = value_kind(&value.c) else {
+                mapper.binding.refused.push((label, Reason::Unknown(format!("a property value of C type {:?}", value.c))));
+                continue;
+            };
+            let this = Mapped { shape: Shape::Other, ts: c_type.clone(), c: Type::Pointer(Pointee::Void) };
+            mapper.binding.functions.push(Function {
+                name: format!("{c_type}_{method}_by_name"),
+                symbol: format!("{SET_BY_NAME}{kind}__{}", property.name.replace('-', "_")),
+                parameters: vec![("self".to_owned(), this.clone()), ("value".to_owned(), value.clone())],
+                result: Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
+                c_parameters: vec![this.c, value.c],
+                deprecated: false,
+                free: None,
+                no_escape: Vec::new(),
+                returns: None,
+                method: Some((c_type.clone(), method.clone())),
+                throws: None,
+                finish: None,
+                omissible: BTreeMap::new(),
+                method_only: true,
+                statics: None,
+                vfunc: None,
+            });
+            if let Some(accessor) =
+                mapper.binding.properties.get_mut(&c_type).and_then(|all| all.iter_mut().find(|accessor| accessor.name == ident))
+            {
+                accessor.setter = Some(method);
+            }
+        }
+    }
+}
+
+/// How a property's value crosses `g_object_set`/`g_object_get`, as a
+/// thunk's name says it (see `set_by_name`). `None` for any other C type.
+fn value_kind(c: &Type) -> Option<char> {
+    Some(match c {
+        Type::Scalar(Scalar::Int | Scalar::Int32 | Scalar::Int16 | Scalar::Int8 | Scalar::Char) | Type::Bool => 'i',
+        Type::Scalar(Scalar::UInt | Scalar::UInt32 | Scalar::UInt16 | Scalar::UInt8) => 'u',
+        Type::Scalar(Scalar::Int64 | Scalar::Long) => 'l',
+        Type::Scalar(Scalar::UInt64 | Scalar::ULong) => 'L',
+        Type::Scalar(Scalar::Double | Scalar::Float) => 'd',
+        Type::Pointer(_) => 'p',
+        _ => return None,
+    })
+}
+
+/// A readable property with no getter method, read through `g_object_get`
+/// (`GET_BY_NAME`): `get_width_request`, for a number or a boolean. Anything
+/// else is left unreadable, as it was -- the lowering refuses a read no
+/// `@ntsGet` names.
+fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &str, param: &Param) {
+    let ident = identifier(&property.replace('-', "_"));
+    let method = format!("get_{ident}");
+    if class.callables.iter().any(|callable| identifier(&callable.name) == method) {
+        return;
+    }
+    let param = mapper.with_c_type(param);
+    let Ok(value) = mapper.typed(&param) else { return };
+    let value = mapper.truth(&param, value);
+    let Some(kind) = value_kind(&value.c).filter(|kind| *kind != 'p') else { return };
+    let this = Mapped { shape: Shape::Other, ts: c_type.to_owned(), c: Type::Pointer(Pointee::Void) };
+    mapper.binding.functions.push(Function {
+        name: format!("{c_type}_{method}_by_name"),
+        symbol: format!("{GET_BY_NAME}{kind}__{}", property.replace('-', "_")),
+        parameters: vec![("self".to_owned(), this.clone())],
+        result: value.clone(),
+        c_parameters: vec![this.c],
+        deprecated: false,
+        free: None,
+        no_escape: Vec::new(),
+        returns: None,
+        method: Some((c_type.to_owned(), method.clone())),
+        throws: None,
+        finish: None,
+        omissible: BTreeMap::new(),
+        method_only: true,
+        statics: None,
+        vfunc: None,
+    });
+    if let Some(accessor) = mapper.binding.properties.get_mut(c_type).and_then(|all| all.iter_mut().find(|accessor| accessor.name == ident)) {
+        accessor.getter = Some(method);
+    }
 }
 
 /// Each class's virtual functions, as `vfunc_*` methods naming their class

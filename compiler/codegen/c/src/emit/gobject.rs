@@ -156,6 +156,8 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     let wrote = chains(writer, origin, program, wrote)?;
     let wrote = notifies(writer, origin, program, wrote);
     let wrote = children(writer, origin, program, wrote);
+    let wrote = set_by_name(writer, origin, program, wrote);
+    let wrote = get_by_name(writer, origin, program, wrote);
     emits(writer, origin, program, wrote);
     Ok(())
 }
@@ -207,6 +209,77 @@ fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClas
     }
     writer.line(origin, format!("static const struct nts_gobject_interface nts_gobject_interfaces_{name}[] = {{ {} }};", rows.join(", ")));
     Ok(format!(" nts_gobject_add_interfaces(type, nts_gobject_interfaces_{name}, {}u);", rows.len()))
+}
+
+/// Each `nts_gobject_prop_{kind}__{name}` the program calls -- a write of a
+/// property with no setter method, `widget.width_request = 80` -- defined as
+/// its prototype declares it: `g_object_set` by the property's name, read
+/// back with `-` for `_`, which C's varargs promote as `g_object_set` reads.
+fn set_by_name(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
+    let mut done = std::collections::BTreeSet::new();
+    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_prop_") => Some(target),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((_, property)) = target.name.trim_start_matches("nts_gobject_prop_").split_once("__") else { continue };
+        let [object, value] = target.parameters.as_slice() else { continue };
+        if !wrote {
+            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            wrote = true;
+        }
+        if done.len() == 1 {
+            writer.line(origin, "void g_object_set(void *object, const char *first_property_name, ...);");
+        }
+        writer.line(
+            origin,
+            format!(
+                "void {}({} a0, {} a1) {{ g_object_set(a0, {}, a1, (void *)0); }}",
+                target.name,
+                object.c_type(),
+                value.c_type(),
+                c_string(&property.replace('_', "-"))
+            ),
+        );
+    }
+    wrote
+}
+
+/// Each `nts_gobject_propget_{kind}__{name}` the program calls -- a read of
+/// a property with no getter method -- defined as `g_object_get` into a
+/// local of the property's own type.
+fn get_by_name(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
+    let mut done = std::collections::BTreeSet::new();
+    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_propget_") => Some(target),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((_, property)) = target.name.trim_start_matches("nts_gobject_propget_").split_once("__") else { continue };
+        let [object] = target.parameters.as_slice() else { continue };
+        if !wrote {
+            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            wrote = true;
+        }
+        if done.len() == 1 {
+            writer.line(origin, "void g_object_get(void *object, const char *first_property_name, ...);");
+        }
+        let value = target.result.c_type();
+        writer.line(
+            origin,
+            format!(
+                "{value} {}({} a0) {{ {value} r = 0; g_object_get(a0, {}, &r, (void *)0); return r; }}",
+                target.name,
+                object.c_type(),
+                c_string(&property.replace('_', "-"))
+            ),
+        );
+    }
+    wrote
 }
 
 /// Each `nts_gobject_child_{Class}_{index}` the program calls -- a read of a

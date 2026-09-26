@@ -8,7 +8,7 @@
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::{Family, PROGRAM_GTYPE, Type};
+use nts_core::hir::native::{Family, PROGRAM_GTYPE, Scalar, Type};
 use nts_core::hir::{Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program};
 use nts_diagnostics::Diagnostic;
 
@@ -71,6 +71,8 @@ pub(super) fn defined_here(name: &str) -> bool {
         || name.starts_with("nts_gobject_emit_")
         || name.starts_with("nts_gobject_notify_")
         || name.starts_with("nts_gobject_child_")
+        || name.starts_with("nts_gobject_prop_")
+        || name.starts_with("nts_gobject_propget_")
 }
 
 pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
@@ -79,6 +81,8 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     let mut parents = std::collections::BTreeSet::new();
     let mut out = chains(program, platform, &mut parents)?;
     out.push_str(&emits(program, platform)?);
+    out.push_str(&set_by_name(program, platform)?);
+    out.push_str(&get_by_name(program, platform)?);
     out.push_str(&notifies(program));
     out.push_str(&children(program));
     let classes = registered(program);
@@ -485,12 +489,7 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
         let mut body = String::new();
         let mut passed = Vec::new();
         for (at, ty) in types.iter().enumerate().skip(1) {
-            if matches!(ty.as_str(), "i1" | "i8" | "i16") {
-                let _ = writeln!(body, "  %p{at} = zext {ty} %a{at} to i32");
-                passed.push(format!("i32 %p{at}"));
-            } else {
-                passed.push(format!("{ty} %a{at}"));
-            }
+            passed.push(promoted(&mut body, at, ty, &target.parameters[at]));
         }
         let mut rest = String::new();
         for arg in &passed {
@@ -504,6 +503,92 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
              {body}\
              \x20 call void (ptr, i32, i32, ...) @g_signal_emit(ptr %a0, i32 %id, i32 0{rest})\n  ret void\n}}",
             parameters.join(", ")
+        );
+    }
+    Ok(out)
+}
+
+/// Argument `at` (`%a{at}`, of LLVM type `ty`) as C passes it through `...`:
+/// a `bool` or narrow integer widened to `int` -- signed as its C type is --
+/// and a `float` to `double`, which is what the callee's `va_arg` reads.
+fn promoted(body: &mut String, at: usize, ty: &str, native: &Type) -> String {
+    let signed = matches!(native, Type::Scalar(Scalar::Int8 | Scalar::Int16 | Scalar::Char));
+    match ty {
+        "i1" | "i8" | "i16" => {
+            let widen = if signed { "sext" } else { "zext" };
+            let _ = writeln!(body, "  %p{at} = {widen} {ty} %a{at} to i32");
+            format!("i32 %p{at}")
+        }
+        "float" => {
+            let _ = writeln!(body, "  %p{at} = fpext float %a{at} to double");
+            format!("double %p{at}")
+        }
+        _ => format!("{ty} %a{at}"),
+    }
+}
+
+/// Each `nts_gobject_prop_{kind}__{name}` the program calls -- a write of a
+/// property with no setter method -- defined as its prototype declares it:
+/// `g_object_set` by the property's name, the value promoted as C's varargs
+/// promote it.
+fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
+    let mut out = String::new();
+    let mut done = std::collections::BTreeSet::new();
+    for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_prop_") => Some((func, target)),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((_, property)) = target.name.trim_start_matches("nts_gobject_prop_").split_once("__") else {
+            return Err(refuse(func, "a property thunk whose name does not say its property"));
+        };
+        if target.parameters.len() != 2 {
+            return Err(refuse(func, "a property thunk that does not take an object and a value"));
+        }
+        if done.len() == 1 {
+            out.push_str("declare void @g_object_set(ptr, ptr, ...)\n");
+        }
+        let thunk = &target.name;
+        bytes_constant(&mut out, &format!("{thunk}.name"), &property.replace('_', "-"));
+        let value = ty_of(&target.parameters[1].abi(platform.abi), func)?.to_owned();
+        let mut body = String::new();
+        let passed = promoted(&mut body, 1, &value, &target.parameters[1]);
+        let _ = writeln!(
+            out,
+            "define void @{thunk}(ptr %a0, {value} %a1) nounwind {{\nentry:\n{body}\x20 call void (ptr, ptr, ...) @g_object_set(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)\n  ret void\n}}"
+        );
+    }
+    Ok(out)
+}
+
+/// Each `nts_gobject_propget_{kind}__{name}` the program calls -- a read of
+/// a property with no getter method -- defined as `g_object_get` into a
+/// local of the property's own type.
+fn get_by_name(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
+    let mut out = String::new();
+    let mut done = std::collections::BTreeSet::new();
+    for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_propget_") => Some((func, target)),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((_, property)) = target.name.trim_start_matches("nts_gobject_propget_").split_once("__") else {
+            return Err(refuse(func, "a property thunk whose name does not say its property"));
+        };
+        if done.len() == 1 {
+            out.push_str("declare void @g_object_get(ptr, ptr, ...)\n");
+        }
+        let thunk = &target.name;
+        bytes_constant(&mut out, &format!("{thunk}.name"), &property.replace('_', "-"));
+        let value = ty_of(&target.result.abi(platform.abi), func)?.to_owned();
+        let zero = if matches!(value.as_str(), "float" | "double") { "0.0" } else { "0" };
+        let _ = writeln!(
+            out,
+            "define {value} @{thunk}(ptr %a0) nounwind {{\nentry:\n  %r = alloca {value}\n  store {value} {zero}, ptr %r\n\x20 call void (ptr, ptr, ...) @g_object_get(ptr %a0, ptr @{thunk}.name, ptr %r, ptr null)\n  %v = load {value}, ptr %r\n  ret {value} %v\n}}"
         );
     }
     Ok(out)

@@ -1,6 +1,7 @@
 #!/bin/sh
-# Build a window of a stack, a grid, a drop-down and a switch, on C and LLVM,
-# plain and under reference counting, and run each (see src/main.ts).
+# Build a window of a stack, a grid, a drop-down, a switch and a widget that
+# draws itself, on C and LLVM, plain and under reference counting, and run
+# each (see src/main.ts).
 # `G_DEBUG=fatal-criticals` turns any GTK complaint into an end.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
@@ -21,7 +22,7 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 
-expected="label 42.000000 notified 1 picked blue page choices "
+expected="label 42.000000 notified 1 picked blue page choices request 140 drawn true width 300 "
 for mode in plain rc; do
   flag=""
   [ "$mode" = rc ] && flag="--rc"
@@ -37,4 +38,4 @@ for mode in plain rc; do
     fi
   done
 done
-echo "stack, grid, drop-down, switch and a property binding, on C and LLVM: OK"
+echo "stack, grid, drop-down, switch, a property binding and drawing, on C and LLVM: OK"

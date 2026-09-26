@@ -47063,6 +47063,18 @@ impl<'a> FuncBuilder<'a> {
         // it, so a program carries the headers it reaches rather than every one
         // in the snapshot.
         native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
+        // A property with no setter method is written through a thunk the
+        // backend defines (`nts_gobject_prop_{kind}__{name}`, as
+        // `g_object_set`; one with no getter read through
+        // `nts_gobject_propget_`, as `g_object_get`): no header declares it, and its object is the
+        // `void *` it is to C whichever class a binding names it on, so every
+        // call of one prints one prototype.
+        if native.name.starts_with("nts_gobject_prop_") || native.name.starts_with("nts_gobject_propget_") {
+            native.declared_at = None;
+            if let Some(object) = native.parameters.first_mut() {
+                *object = super::native::Type::Pointer(super::native::Pointee::Void);
+            }
+        }
         // A virtual function is a class struct's slot, overridden by a
         // subclass and reached through the class; it has no symbol, so a
         // direct call would link one that does not exist.

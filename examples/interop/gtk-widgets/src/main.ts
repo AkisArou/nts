@@ -10,6 +10,11 @@
 //                 model
 //   page choices  `stack.visible_child_name = "choices"`: a property read as
 //                 `string | null` and written as `string`, an accessor pair
+//   request 140   `width_request`, which has no setter or getter method:
+//                 written and read through `g_object_set`/`g_object_get`
+//   drawn true width 300  `Canvas`'s `vfunc_snapshot`, drawing with
+//                 `GtkSnapshot` once GTK renders the window, whose width is
+//                 `default_width` -- another property with no setter
 import {
   GtkApplication,
   GtkApplicationWindow,
@@ -21,11 +26,31 @@ import {
   GtkStack,
   GtkStackSwitcher,
   GtkStringList,
+  GtkSnapshot,
   GtkSwitch,
+  GtkWidget,
   Orientation,
 } from "c:Gtk-4.0";
+import { GdkRGBA } from "c:Gdk-4.0";
+import { graphene_rect_t } from "c:Graphene-1.0";
+import { g_timeout_add_full } from "c:GLib-2.0";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { BindingFlags } from "c:GObject-2.0";
+
+// A widget that draws itself, as GTK 4 draws: a render node per frame.
+class Canvas extends GtkWidget {
+  drawn = 0;
+  width = 0;
+  vfunc_snapshot(snapshot: GtkSnapshot): void {
+    const color = new GdkRGBA();
+    color.parse("tomato");
+    const bounds = new graphene_rect_t();
+    bounds.init(0, 0, this.get_width(), this.get_height());
+    snapshot.append_color(color, bounds);
+    this.drawn++;
+    this.width = this.get_width();
+  }
+}
 
 function open(app: GtkApplication): void {
   const stack = new GtkStack({});
@@ -56,7 +81,10 @@ function open(app: GtkApplication): void {
   const column = new GtkBox({ orientation: Orientation.VERTICAL });
   column.append(switcher);
   column.append(stack);
-  const window = new GtkApplicationWindow({ application: app, title: "Probe", child: column });
+  const canvas = new Canvas({ height_request: 40 });
+  canvas.width_request = 140;
+  column.append(canvas);
+  const window = new GtkApplicationWindow({ application: app, title: "Widgets", child: column, default_width: 300 });
   window.present();
   spin.value = 42;
   toggle.active = true;
@@ -65,7 +93,12 @@ function open(app: GtkApplication): void {
   console.log(
     "label " + (label.label ?? "") + " notified " + String(notified) + " picked " + picked + " page " + (stack.visible_child_name ?? ""),
   );
-  app.quit();
+  console.log("request " + String(canvas.width_request));
+  g_timeout_add_full(0, 300, () => {
+    console.log("drawn " + String(canvas.drawn > 0) + " width " + String(canvas.width));
+    app.quit();
+    return false;
+  });
 }
 
 function main(): void {

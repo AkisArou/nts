@@ -200,6 +200,12 @@ fn properties(class: Node<'_, '_>) -> Vec<Property> {
                 setter: attribute(property, "setter").map(str::to_owned),
                 construct_only: attribute(property, "construct-only") == Some("1")
                     && attribute(property, "writable") == Some("1"),
+                set_by_name: (attribute(property, "writable") == Some("1")
+                    && attribute(property, "construct-only") != Some("1")
+                    && attribute(property, "setter").is_none())
+                .then(|| param(property, false)),
+                get_by_name: (attribute(property, "readable") != Some("0") && attribute(property, "getter").is_none())
+                    .then(|| param(property, false)),
             })
         })
         .collect()

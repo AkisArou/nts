@@ -862,6 +862,37 @@ failed to type-check: the only constructor that qualified was
   handlers on a switch and a drop-down. The previous binder does not
   type-check it (TS2339 `bind_property`, TS2540 `visible_child_name`).
 
+### A property with no setter or getter method: by name
+
+`width-request`, `GtkWindow`'s `default-width` and the scrolled window's
+scrollbar policies are writable properties with no setter method. So `new
+GtkWindow({ default_width: 400 })` did not type-check, and neither did
+`widget.width_request = 80`, both of which GJS writes.
+
+- The binder gives such a property a `set_{name}` method. Its symbol is a
+  thunk the backend defines per property,
+  `nts_gobject_prop_{kind}__{name}`, as `g_object_set(object, "name",
+  value, NULL)`.
+- The kind says how the value crosses the varargs: `i` an `int` (a
+  `gboolean` or enum too), `u`, `l`/`L` 64 bits, `d` (a `float` promoted),
+  `p` a pointer.
+- A readable property with no getter gets `get_{name}` over
+  `nts_gobject_propget_`, `g_object_get` into a local of its own type, for
+  numbers and booleans. A string or an object would come back owned, so
+  those reads stay refused, as "a read of a native property no @ntsGet
+  names a method for".
+- Neither thunk has a header: the lowering clears `declared_at` and types
+  the object `void *`, as for `connect`, and the self-check skips them.
+- Reach: 283 properties written and 300 read across Gtk-4.0's closure.
+- LLVM promotes varargs itself. Writing it found that the emit thunk passed
+  a `float` unpromoted and widened `int8`/`int16` with `zext`; one helper
+  (`promoted`) now does both, signed as the C type is.
+- Witness: gtk-widgets' `request 140`, and `width 300` from `default_width`,
+  on C and LLVM, plain and `--rc`. The same line checks GTK 4's own drawing:
+  `Canvas`'s `vfunc_snapshot` appends a colour node through `GtkSnapshot`
+  (`drawn true`). cairo has no GIR on this machine, so `set_draw_func` stays
+  refused.
+
 ### libadwaita, and what a props type says
 
 Adw-1 binds from GIR like any other namespace (12,342 functions), and
