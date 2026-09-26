@@ -82,7 +82,8 @@ export function compiledNames(text) {
     // refusal ("a method without a body") is honest. Printed as `declare func`
     // by the compiler lane's change; before that it read as a function, and
     // the first scan reported two of them as phantoms.
-    if (/^declare func .+?\(/.test(line)) lines += 1;
+    // `export declare func` for an exported one: `declare` sits after `export`.
+    if (/^(?:export )?declare func .+?\(/.test(line)) lines += 1;
   }
   const stated = /^(\d+) function\(s\)/m.exec(text);
   return { names, lines, stated: stated ? Number(stated[1]) : null };
@@ -117,7 +118,7 @@ export function judge(project, hirText, refusalsText) {
 // function must be caught, a genuine one must not, and a listing that lost a
 // function must be NOT MEASURED rather than clean.
 function selfTest() {
-  const hir = "func a(x: f64) -> f64 {\n}\nexport func b#m(this: managed<obj#1>) -> void {\n}\nfunc C.get v() -> f64 {\n}\ndeclare func I#shell(this: managed<obj#2>) -> void {\n}\n\n4 function(s), nothing refused\n";
+  const hir = "func a(x: f64) -> f64 {\n}\nexport func b#m(this: managed<obj#1>) -> void {\n}\nfunc C.get v() -> f64 {\n}\ndeclare func I#shell(this: managed<obj#2>) -> void {\n}\nexport declare func J#shell(this: managed<obj#3>) -> f64 {\n}\n\n5 function(s), nothing refused\n";
   const caught = judge("self", hir, "b#m\ta refusal that is a lie\nC.get v\tan accessor's\nc\ta genuine refusal\n");
   if (caught.phantoms?.length !== 2 || caught.phantoms[0].name !== "b#m" || caught.phantoms[1].name !== "C.get v") return `a planted phantom was not caught: ${JSON.stringify(caught)}`;
   const clean = judge("self", hir, "c\ta genuine refusal\nI#shell\ta method without a body\n");
