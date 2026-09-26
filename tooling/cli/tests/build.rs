@@ -530,11 +530,11 @@ fn a_build_that_drops_functions_says_how_many() {
     // deleted, and it had never once checked anything. A check whose answer does
     // not depend on its input is not a check.
     let project = fixture("build-dropped", SHARED);
-    // `console.log` is a global with no definition here, and lowering refuses
-    // it by name.
+    // `console.table` inspects structure, which this compiler does not, and
+    // lowering refuses it by name.
     std::fs::write(
         project.join("src/main.ts"),
-        "export function published(): void { console.log('x'); }\n",
+        "export function published(): void { console.table([1]); }\n",
     )
     .expect("writing the program");
     let run = build(&project, &[]);
@@ -1452,10 +1452,9 @@ export default defineConfig({
 ///
 /// **Both arms, because the interesting failure is silent.** An empty `main`
 /// exits zero, so "it ran" cannot be read off the status of a program that
-/// prints nothing -- and `console.log` is unsupported in this lowering, so
-/// nothing here can print. The positive arm's module evaluation therefore
-/// *throws*: `nts: uncaught` on stderr and a non-zero status is proof the
-/// launcher called it. The negative arm has nothing to evaluate and must exit
+/// prints nothing. The positive arm's module evaluation therefore *throws*:
+/// `nts: uncaught` on stderr and a non-zero status is proof the launcher
+/// called it. The negative arm has nothing to evaluate and must exit
 /// zero, which is what separates "it ran" from "the assertion is about the JVM
 /// starting up".
 #[test]

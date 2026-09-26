@@ -2364,6 +2364,23 @@ NtsString *nts_string_from_code_point_into(NtsHeader *into, double point);
  * a boolean, a number and a string; every other tag is a lowering that should
  * have refused, and it aborts rather than guessing. */
 NtsString *nts_value_to_string(NtsValue value);
+/* An argument of `console.log`, as node's `util.inspect` spells one at the top
+ * level: `String(v)`, except that negative zero is `-0` and not `0`. A typed
+ * number is told apart in the lowering; this is the same rule for a value
+ * carrying its tag, `number | undefined`. */
+NtsString *nts_value_inspect(NtsValue value);
+/* `console.log` and `console.error`: `line`, as UTF-8, and a newline, to
+ * stdout or to stderr. The lowering has already spelled and joined the
+ * arguments, so this is only the write.
+ *
+ * **Written through at once**, as node's is: node writes a file, a pipe and a
+ * terminal synchronously, so a line survives a crash or a kill that follows
+ * it, and a line to stdout comes before a later one to stderr in a combined
+ * log. Holding lines in stdio's buffer would be faster and would lose both.
+ *
+ * U+0000 is written, as node writes it; a lone surrogate becomes U+FFFD, as
+ * node's UTF-8 stream makes it. */
+void nts_console_write(const NtsString *line, bool to_stderr);
 
 /* The `Number` predicates. Exactly specified, unlike most of `Math` below.
  * `Number.isNaN` is absent because it is `x != x`, which the lowering emits

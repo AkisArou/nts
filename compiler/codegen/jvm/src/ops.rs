@@ -404,6 +404,9 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         "nts_value_to_string" => {
             (types::VALUE, "valueToString", "(Lnts/rt/NtsValue;)Ljava/lang/String;")
         }
+        "nts_value_inspect" => {
+            (types::VALUE, "valueInspect", "(Lnts/rt/NtsValue;)Ljava/lang/String;")
+        }
         // `Number(v)` on an erased union of primitives, and `+v` since unary
         // plus became the same operation. The helper has existed for as long as
         // `Number` has; no example on this lane reached it until
@@ -814,6 +817,7 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_string_from_code_point" => {
             (RUNTIME, "stringFromCodePoint", "(D)Ljava/lang/String;")
         }
+        "nts_console_write" => (RUNTIME, "consoleWrite", "(Ljava/lang/String;Z)V"),
         _ => return None,
     })
 }

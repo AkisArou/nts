@@ -4829,15 +4829,16 @@ NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
   return out;
 }
 
-/* `s` as NUL-terminated UTF-8 into `out`, which has room for `s->length * 3
- * + 1` bytes, answering the bytes written before the terminator. The one
- * transcoding a string gets on its way to C, so a lone surrogate and a U+0000
- * mean the same thing in a `string` parameter and in a `string[]` one. */
-static size_t nts_write_cstring(const NtsString *s, char *out) {
+/* `s` as UTF-8 into `out`, which has room for `s->length * 3` bytes,
+ * answering the bytes written. The one transcoding a string gets on its way
+ * out of the program, so a lone surrogate means the same thing in a `string`
+ * parameter, a `string[]` one and a line of `console.log`. `c_string` says
+ * the bytes are for C, which cannot hold a U+0000. */
+static size_t nts_write_utf8(const NtsString *s, char *out, bool c_string) {
   size_t n = 0;
   for (uint32_t at = 0; at < s->length; at++) {
     uint32_t point = nts_unit(s, at);
-    if (point == 0u) {
+    if (point == 0u && c_string) {
       fprintf(stderr,
               "nts: a string containing U+0000 at index %u cannot cross to C "
               "as a NUL-terminated `const char *`\n",
@@ -4870,8 +4871,61 @@ static size_t nts_write_cstring(const NtsString *s, char *out) {
       out[n++] = (char)(0x80u | (point & 0x3Fu));
     }
   }
+  return n;
+}
+
+/* `s` as NUL-terminated UTF-8 into `out`, which has room for `s->length * 3
+ * + 1` bytes, answering the bytes written before the terminator. */
+static size_t nts_write_cstring(const NtsString *s, char *out) {
+  size_t n = nts_write_utf8(s, out, true);
   out[n] = '\0';
   return n;
+}
+
+NtsString *nts_value_inspect(NtsValue value) {
+  if (nts_value_tag(value) == NTS_TAG_NUMBER) {
+    double x = nts_value_number(value);
+    if (x == 0.0 && 1.0 / x < 0.0) {
+      return nts_string_from_utf8("-0", 2);
+    }
+  }
+  return nts_value_to_string(value);
+}
+
+void nts_console_write(const NtsString *line, bool to_stderr) {
+  FILE *stream = to_stderr ? stderr : stdout;
+  /* ASCII as it is stored, U+0000 included: the common line costs a scan and
+   * one write. Anything else is transcoded, on the stack when it is short. */
+  if ((line->flags & NTS_TWO_BYTE) == 0) {
+    const unsigned char *bytes = NTS_ELEMENTS(line, unsigned char);
+    unsigned char high = 0;
+    for (uint32_t at = 0; at < line->length; at++) {
+      high |= bytes[at];
+    }
+    if ((high & 0x80u) == 0) {
+      fwrite(bytes, 1, line->length, stream);
+      fputc('\n', stream);
+      fflush(stream);
+      return;
+    }
+  }
+  if ((size_t)line->length > SIZE_MAX / 3u) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  char small[1024];
+  size_t most = (size_t)line->length * 3u;
+  char *out = most <= sizeof small ? small : (char *)malloc(most);
+  if (!out) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  fwrite(out, 1, nts_write_utf8(line, out, false), stream);
+  if (out != small) {
+    free(out);
+  }
+  fputc('\n', stream);
+  fflush(stream);
 }
 
 /* Whether a one-byte string's storage is already its C string: every byte

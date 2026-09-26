@@ -680,6 +680,20 @@ public final class NtsRuntime {
         return into.append((char) toUint16(code));
     }
     public static String stringFromCodePoint(double code) { return new String(Character.toChars((int) toInteger(code))); }
+    /**
+     * {@code console.log} and {@code console.error}: the line the lowering
+     * spelled and joined, as UTF-8, and a newline, written through at once as
+     * node writes it. A lone surrogate is U+FFFD, as node's stream makes it;
+     * Java's own encoder would write {@code ?}.
+     */
+    public static void consoleWrite(String line, boolean toStderr) {
+        java.io.PrintStream stream = toStderr ? System.err : System.out;
+        if (toStderr) { System.out.flush(); }
+        byte[] bytes = strToWellFormed(line).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        stream.write(bytes, 0, bytes.length);
+        stream.write('\n');
+        stream.flush();
+    }
     public static String strRepeat(String s, double times) {
         int count = (int) toInteger(times);
         if (count <= 0 || s.isEmpty()) { return ""; }

@@ -144,6 +144,13 @@ public final class NtsValue {
      * uses, which is the point; it was a separate one until 2026-09-12 and
      * spelled `1.5` as `1.50000`.
      */
+    /** An argument of {@code console.log}: {@code String(v)}, except that negative zero is {@code -0}. */
+    public static String valueInspect(NtsValue value) {
+        if (value != null && value.tag == NUMBER && value.num == 0.0 && 1.0 / value.num < 0.0) {
+            return "-0";
+        }
+        return valueToString(value);
+    }
     public static String valueToString(NtsValue value) {
         if (value == null) {
             throw new NtsRefusal("String() on a value that is not there");

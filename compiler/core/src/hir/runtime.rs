@@ -112,6 +112,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_com_compose_named", &[None], None),
     ("nts_com_delegate", &[None, None, None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_com_query", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    ("nts_console_write", &[None, Some(HirType::Bool)], None),
     ("nts_cstring_release", &[None, None], None),
     ("nts_cstrings_release", &[None], None),
     ("nts_cycle_candidates", &[], Some(HirType::Int { bits: 64, signed: false })),

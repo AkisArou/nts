@@ -23787,6 +23787,9 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
         }
+        if let Some(to_stderr) = self.console_method(callee) {
+            return Some(self.lower_console(id, arguments, to_stderr));
+        }
         if let Some(intrinsic) = self.intrinsic_of(callee) {
             return Some(self.lower_intrinsic(id, intrinsic, arguments));
         }
@@ -48603,6 +48606,173 @@ impl<'a> FuncBuilder<'a> {
                 _ => return None,
             }),
             _ => None,
+        }
+    }
+
+    /// Whether `callee` is a member of the global `console` this compiler
+    /// provides, and if so whether it writes to stderr: `log`, `info` and
+    /// `debug` write to stdout, `error` and `warn` to stderr, as node's do.
+    ///
+    /// The library's `console`, which nothing compiled declares. A program's
+    /// own binding of that name, such as an import, is the program's.
+    /// `console.trace` prints a stack, and `console.table` and `console.dir`
+    /// inspect structure, so they stay refused.
+    fn console_method(&self, callee: NodeId) -> Option<bool> {
+        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let children = self.children(callee);
+        let (object, member) = (*children.first()?, *children.last()?);
+        if self.kind_of(object) != Some(syntax::IDENTIFIER) || self.node(object).text.as_deref() != Some("console") {
+            return None;
+        }
+        let global = self
+            .node(object)
+            .symbol
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .is_some_and(|record| record.declarations.is_empty());
+        if !global {
+            return None;
+        }
+        match self.node(member).text.as_deref()? {
+            "log" | "info" | "debug" => Some(false),
+            "error" | "warn" => Some(true),
+            _ => None,
+        }
+    }
+
+    /// `console.log(a, b)`: each argument spelled as node's `util.inspect`
+    /// spells it at the top level, joined by a space, and written with a
+    /// newline by `nts_console_write`.
+    ///
+    /// The spelling is `String(v)` with two corrections, `-0` and `10n`.
+    /// An object is refused: node prints its structure, with depth and
+    /// colour rules, and a placeholder would look like it works. So is a
+    /// first argument that can hold a `%` directive when others follow it,
+    /// which node substitutes from them (`console.log("%d items", n)`). A
+    /// literal with no `%` is spelled as written.
+    ///
+    /// Written with the program's other output in the order it happens, and
+    /// with no promise about output the program makes some other way, such as
+    /// a C `printf` holding its own buffer.
+    fn lower_console(&mut self, id: NodeId, arguments: &[NodeId], to_stderr: bool) -> Result<ValueId, Diagnostic> {
+        let text = HirType::Managed(ManagedType::String);
+        if arguments.len() > 1
+            && let Some(first) = arguments.first()
+            && self.may_format(*first)
+        {
+            return Err(self.unsupported(
+                *first,
+                "a first argument of `console.log` that can hold a `%` directive, which node substitutes from the arguments after it",
+            ));
+        }
+        let mut line = None;
+        for (at, argument) in arguments.iter().enumerate() {
+            if self.kind_of(*argument) == Some(syntax::SPREAD_ELEMENT) {
+                return Err(self.unsupported(*argument, "a spread argument of `console.log`"));
+            }
+            // `null` and `undefined` as written, which have no value to lower.
+            let spelled = if let Some(absent) = self.absence_written_at(*argument) {
+                let origin = self.origin(*argument);
+                let word = if absent == super::tags::NULL { "null" } else { "undefined" };
+                self.push(OpKind::ConstString(word.to_owned()), text.clone(), origin)
+            } else {
+                let value = self.lower_expression(*argument)?;
+                self.inspected(*argument, value)?
+            };
+            if at > 0 {
+                let origin = self.origin(*argument);
+                let space = self.push(OpKind::ConstString(" ".to_owned()), text.clone(), origin);
+                line = Some(self.join(*argument, line, space, &text));
+            }
+            line = Some(self.join(*argument, line, spelled, &text));
+        }
+        let origin = self.origin(id);
+        let line = match line {
+            Some(line) => line,
+            None => self.push(OpKind::ConstString(String::new()), text, origin.clone()),
+        };
+        let stream = self.push(OpKind::ConstBool(to_stderr), HirType::Bool, origin.clone());
+        Ok(self.runtime_call("nts_console_write", vec![line, stream], HirType::Void, origin))
+    }
+
+    /// Whether a first argument of `console.log` could hold a `%` directive:
+    /// a literal that has one, a template with one in its text or in a
+    /// substitution that could hold one, or a value whose type admits a
+    /// string that is not a literal without one.
+    fn may_format(&self, node: NodeId) -> bool {
+        match self.kind_of(node) {
+            Some(
+                syntax::STRING_LITERAL
+                | syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL
+                | syntax::TEMPLATE_HEAD
+                | syntax::TEMPLATE_MIDDLE
+                | syntax::TEMPLATE_TAIL,
+            ) => {
+                return self.node(node).text.as_deref().is_some_and(|written| written.contains('%'));
+            }
+            Some(syntax::TEMPLATE_EXPRESSION | syntax::TEMPLATE_SPAN | syntax::PARENTHESIZED_EXPRESSION) => {
+                return self.children(node).into_iter().any(|part| self.may_format(part));
+            }
+            _ => {}
+        }
+        let Some(ty) = self.snapshot.node_types.get(&node) else { return true };
+        let members = match self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+            Some(TypeKind::Union(members)) => members.clone(),
+            _ => vec![*ty],
+        };
+        members.iter().any(|member| match self.snapshot.types.get(member.0 as usize).map(|record| &record.kind) {
+            Some(TypeKind::Literal(nts_semantic_schema::LiteralValue::String(value))) => value.contains('%'),
+            Some(
+                TypeKind::Number
+                | TypeKind::Boolean
+                | TypeKind::BigInt
+                | TypeKind::Null
+                | TypeKind::Undefined
+                | TypeKind::Void
+                | TypeKind::Symbol
+                | TypeKind::Literal(_),
+            ) => false,
+            _ => true,
+        })
+    }
+
+    /// One argument of `console.log`, spelled as node's `util.inspect`
+    /// spells it at the top level: a string as itself, and a primitive as
+    /// `String` spells it, except that negative zero is `-0` and a bigint
+    /// ends in `n`.
+    fn inspected(&mut self, from: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        let text = HirType::Managed(ManagedType::String);
+        match self.values[value.0 as usize].ty {
+            HirType::Float { .. } => {
+                let spelled = self.as_string(from, value)?;
+                let origin = self.origin(from);
+                let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+                let minus = self.push(OpKind::ConstString("-0".to_owned()), text.clone(), origin.clone());
+                // `x === 0`, then which zero by its reciprocal's sign: `1/x`
+                // alone is `-Infinity` for a subnormal too.
+                let is_zero = self.push(OpKind::Binary { op: BinOp::Eq, lhs: value, rhs: zero }, HirType::Bool, origin.clone());
+                let inverse = self.push(OpKind::Binary { op: BinOp::Div, lhs: one, rhs: value }, HirType::NUMBER, origin.clone());
+                let negative = self.push(OpKind::Binary { op: BinOp::Lt, lhs: inverse, rhs: zero }, HirType::Bool, origin);
+                let zero_spelled = self.lower_branching_value_at(from, text.clone(), negative, Branch::Value(minus), Branch::Value(spelled))?;
+                self.lower_branching_value_at(from, text, is_zero, Branch::Value(zero_spelled), Branch::Value(spelled))
+            }
+            HirType::BigInt => {
+                let spelled = self.as_string(from, value)?;
+                let origin = self.origin(from);
+                let suffix = self.push(OpKind::ConstString("n".to_owned()), text.clone(), origin);
+                Ok(self.join(from, Some(spelled), suffix, &text))
+            }
+            HirType::Erased if self.spells_itself(from) => {
+                let origin = self.origin(from);
+                Ok(self.runtime_call("nts_value_inspect", vec![value], text, origin))
+            }
+            HirType::Int { .. } | HirType::Bool | HirType::Managed(ManagedType::String | ManagedType::Symbol) => self.as_string(from, value),
+            _ => {
+                let named = self.describe_node(from);
+                Err(self.unsupported(from, &format!("`console.log` of {named}, which node prints by inspecting its structure")))
+            }
         }
     }
 
