@@ -3437,7 +3437,10 @@ fn calls_guarded_by_a_try(
             {
                 called.insert(callee);
             }
-            pending.extend(probe.children(at));
+            // The same pruning, so which callees a `try` is taken to reach and
+            // which it is refused for are one answer. A copy made for a callee
+            // only a dead branch reaches is a body lowered for nothing.
+            pending.extend(children_that_run(probe, at));
         }
     }
     called
@@ -40991,7 +40994,15 @@ impl<'a> FuncBuilder<'a> {
         ) {
             return None;
         }
-        self.children(node)
+        // **`children_that_run`, because a `try` whose dead branch is inline was
+        // still refused.** `f7c244445` gave the two *analyses* this treatment and
+        // left the walk that refuses the `try` itself reading every child -- so a
+        // dead branch in a **callee** cleared and a dead branch in the `try`'s own
+        // body did not. The React lane measured the difference: 49 `try`s in
+        // `ReactFiberCommitEffects.ts` write `try { … if (isDevelopment) { destroy =
+        // runWithFiberInDEV(…) } … }` **inline**, which is the shape my fixture did
+        // not have, and every one stayed refused.
+        children_that_run(self, node)
             .into_iter()
             .find_map(|child| self.call_within(child, handled))
     }

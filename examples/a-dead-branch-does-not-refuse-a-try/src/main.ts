@@ -47,6 +47,28 @@ export function viaDeadBranch(n: number): number {
 }
 
 /**
+ * **The same dead branch written inline in the `try`'s own body**, which is the
+ * shape a `__DEV__` port actually has -- `try { … if (isDevelopment) {
+ * runWithFiberInDEV(…) } … }` -- and the one the first version of this fixture did
+ * not have. Pruning the *analyses* cleared a dead branch in a **callee** and left
+ * this refused, because the walk that refuses the `try` read every child. 49 `try`s
+ * in one file of the React port are this form.
+ */
+export function inlineDeadBranch(n: number): number {
+  try {
+    let out = n;
+    if (isDevelopment) {
+      out = inDev(n);
+    } else {
+      out = n * 3;
+    }
+    return out;
+  } catch {
+    return -1;
+  }
+}
+
+/**
  * The control: the same `try` over a live call to the same generic, which **must**
  * still refuse -- pruning a dead branch must not make a reachable one disappear.
  * Kept in a separate function so the subject above can compile while this one does
