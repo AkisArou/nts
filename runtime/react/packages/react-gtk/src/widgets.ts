@@ -2,9 +2,18 @@
 // its bindings. Edit the generator, not this file.
 
 import {
+  GdkCursor,
+  GdkDisplay,
+} from "c:Gdk-4.0";
+import {
+  GMenuModel,
+} from "c:Gio-2.0";
+import {
   GtkAboutDialog,
   GtkActionBar,
+  GtkAdjustment,
   type GtkAlign,
+  GtkApplication,
   GtkApplicationWindow,
   type GtkArrowType,
   GtkAspectFrame,
@@ -14,6 +23,7 @@ import {
   GtkCalendar,
   GtkCenterBox,
   GtkCheckButton,
+  GtkColorDialog,
   GtkColorDialogButton,
   GtkColumnView,
   type GtkContentFit,
@@ -26,11 +36,13 @@ import {
   GtkEditableLabel,
   GtkEmojiChooser,
   GtkEntry,
+  GtkEntryBuffer,
   type GtkEntryIconPosition,
   GtkExpander,
   GtkFixed,
   GtkFlowBox,
   GtkFlowBoxChild,
+  GtkFontDialog,
   GtkFontDialogButton,
   type GtkFontLevel,
   GtkFrame,
@@ -54,9 +66,11 @@ import {
   type GtkListBase,
   GtkListBox,
   GtkListBoxRow,
+  GtkListItemFactory,
   type GtkListTabBehavior,
   GtkListView,
   GtkMediaControls,
+  GtkMediaStream,
   GtkMenuButton,
   type GtkMessageType,
   type GtkMovementStep,
@@ -102,6 +116,7 @@ import {
   type GtkStringFilterMatchMode,
   GtkSwitch,
   GtkText,
+  GtkTextBuffer,
   type GtkTextDirection,
   type GtkTextExtendSelection,
   type GtkTextIter,
@@ -110,6 +125,7 @@ import {
   type GtkTooltip,
   GtkTreeExpander,
   type GtkTreeIter,
+  GtkTreeListRow,
   type GtkTreePath,
   type GtkTreeViewColumn,
   GtkVideo,
@@ -138,6 +154,7 @@ export interface HostProps {
 export interface WidgetProps extends HostProps {
   canFocus?: boolean;
   canTarget?: boolean;
+  cursor?: GdkCursor | null;
   focusOnClick?: boolean;
   focusable?: boolean;
   halign?: GtkAlign;
@@ -201,9 +218,11 @@ export interface WidgetProps extends HostProps {
 
 /** `<Window>`'s props: GtkWindow's own properties and signals. */
 export interface WindowProps extends WidgetProps {
+  application?: GtkApplication | null;
   decorated?: boolean;
   deletable?: boolean;
   destroyWithParent?: boolean;
+  display?: GdkDisplay;
   focusVisible?: boolean;
   gravity?: GtkWindowGravity;
   handleMenubarAccel?: boolean;
@@ -214,6 +233,8 @@ export interface WindowProps extends WidgetProps {
   resizable?: boolean;
   startupId?: string;
   title?: string | null;
+  transientFor?: GtkWindow | null;
+  onNotifyApplication?: (value: GtkApplication | null) => void;
   onNotifyDecorated?: (value: boolean) => void;
   onNotifyDeletable?: (value: boolean) => void;
   onNotifyDestroyWithParent?: (value: boolean) => void;
@@ -226,6 +247,7 @@ export interface WindowProps extends WidgetProps {
   onNotifyModal?: (value: boolean) => void;
   onNotifyResizable?: (value: boolean) => void;
   onNotifyTitle?: (value: string | null) => void;
+  onNotifyTransientFor?: (value: GtkWindow | null) => void;
   onActivateDefault?: () => void;
   onActivateFocus?: () => void;
   onCloseRequest?: () => boolean;
@@ -345,6 +367,7 @@ export interface CenterBoxProps extends WidgetProps {
 /** `<CheckButton>`'s props: GtkCheckButton's own properties and signals. */
 export interface CheckButtonProps extends WidgetProps {
   active?: boolean;
+  group?: GtkCheckButton | null;
   inconsistent?: boolean;
   label?: string | null;
   useUnderline?: boolean;
@@ -360,27 +383,37 @@ export interface CheckButtonProps extends WidgetProps {
 
 /** `<ColorDialogButton>`'s props: GtkColorDialogButton's own properties and signals. */
 export interface ColorDialogButtonProps extends WidgetProps {
+  dialog?: GtkColorDialog;
+  onNotifyDialog?: (value: GtkColorDialog | null) => void;
   onActivate?: () => void;
 }
 
 /** `<ColumnView>`'s props: GtkColumnView's own properties and signals. */
 export interface ColumnViewProps extends WidgetProps {
   enableRubberband?: boolean;
+  headerFactory?: GtkListItemFactory | null;
   reorderable?: boolean;
+  rowFactory?: GtkListItemFactory | null;
   showColumnSeparators?: boolean;
   showRowSeparators?: boolean;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
+  hadjustment?: GtkAdjustment | null;
   hscrollPolicy?: GtkScrollablePolicy;
+  vadjustment?: GtkAdjustment | null;
   vscrollPolicy?: GtkScrollablePolicy;
   onNotifyEnableRubberband?: (value: boolean) => void;
+  onNotifyHeaderFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyReorderable?: (value: boolean) => void;
+  onNotifyRowFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyShowColumnSeparators?: (value: boolean) => void;
   onNotifyShowRowSeparators?: (value: boolean) => void;
   onNotifySingleClickActivate?: (value: boolean) => void;
   onNotifyTabBehavior?: (value: GtkListTabBehavior) => void;
   onActivate?: (position: number) => void;
+  onNotifyHadjustment?: (value: GtkAdjustment | null) => void;
   onNotifyHscrollPolicy?: (value: GtkScrollablePolicy) => void;
+  onNotifyVadjustment?: (value: GtkAdjustment | null) => void;
   onNotifyVscrollPolicy?: (value: GtkScrollablePolicy) => void;
 }
 
@@ -400,10 +433,16 @@ export interface DrawingAreaProps extends WidgetProps {
 /** `<DropDown>`'s props: GtkDropDown's own properties and signals. */
 export interface DropDownProps extends WidgetProps {
   enableSearch?: boolean;
+  factory?: GtkListItemFactory | null;
+  headerFactory?: GtkListItemFactory | null;
+  listFactory?: GtkListItemFactory | null;
   searchMatchMode?: GtkStringFilterMatchMode;
   selected?: number;
   showArrow?: boolean;
   onNotifyEnableSearch?: (value: boolean) => void;
+  onNotifyFactory?: (value: GtkListItemFactory | null) => void;
+  onNotifyHeaderFactory?: (value: GtkListItemFactory | null) => void;
+  onNotifyListFactory?: (value: GtkListItemFactory | null) => void;
   onNotifySearchMatchMode?: (value: GtkStringFilterMatchMode) => void;
   onNotifySelected?: (value: number) => void;
   onNotifyShowArrow?: (value: boolean) => void;
@@ -453,6 +492,8 @@ export interface EmojiChooserProps extends PopoverProps {
 /** `<Entry>`'s props: GtkEntry's own properties and signals. */
 export interface EntryProps extends WidgetProps {
   activatesDefault?: boolean;
+  buffer?: GtkEntryBuffer;
+  extraMenu?: GMenuModel | null;
   hasFrame?: boolean;
   inputPurpose?: GtkInputPurpose;
   invisibleChar?: number;
@@ -469,6 +510,7 @@ export interface EntryProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyBuffer?: (value: GtkEntryBuffer) => void;
   onNotifyHasFrame?: (value: boolean) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
@@ -547,10 +589,12 @@ export interface FlowBoxChildProps extends WidgetProps {
 
 /** `<FontDialogButton>`'s props: GtkFontDialogButton's own properties and signals. */
 export interface FontDialogButtonProps extends WidgetProps {
+  dialog?: GtkFontDialog;
   fontFeatures?: string | null;
   level?: GtkFontLevel;
   useFont?: boolean;
   useSize?: boolean;
+  onNotifyDialog?: (value: GtkFontDialog | null) => void;
   onNotifyFontFeatures?: (value: string | null) => void;
   onNotifyLevel?: (value: GtkFontLevel) => void;
   onNotifyUseFont?: (value: boolean) => void;
@@ -604,21 +648,27 @@ export interface GridProps extends WidgetProps {
 /** `<ListBase>`'s props: GtkListBase's own properties and signals. */
 export interface ListBaseProps extends WidgetProps {
   orientation?: GtkOrientation;
+  hadjustment?: GtkAdjustment | null;
   hscrollPolicy?: GtkScrollablePolicy;
+  vadjustment?: GtkAdjustment | null;
   vscrollPolicy?: GtkScrollablePolicy;
   onNotifyOrientation?: (value: GtkOrientation) => void;
+  onNotifyHadjustment?: (value: GtkAdjustment | null) => void;
   onNotifyHscrollPolicy?: (value: GtkScrollablePolicy) => void;
+  onNotifyVadjustment?: (value: GtkAdjustment | null) => void;
   onNotifyVscrollPolicy?: (value: GtkScrollablePolicy) => void;
 }
 
 /** `<GridView>`'s props: GtkGridView's own properties and signals. */
 export interface GridViewProps extends ListBaseProps {
   enableRubberband?: boolean;
+  factory?: GtkListItemFactory | null;
   maxColumns?: number;
   minColumns?: number;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
   onNotifyEnableRubberband?: (value: boolean) => void;
+  onNotifyFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyMaxColumns?: (value: number) => void;
   onNotifyMinColumns?: (value: number) => void;
   onNotifySingleClickActivate?: (value: boolean) => void;
@@ -672,6 +722,7 @@ export interface InscriptionProps extends WidgetProps {
 /** `<Label>`'s props: GtkLabel's own properties and signals. */
 export interface LabelProps extends WidgetProps {
   ellipsize?: PangoEllipsizeMode;
+  extraMenu?: GMenuModel | null;
   justify?: GtkJustification;
   label?: string;
   lines?: number;
@@ -766,10 +817,14 @@ export interface ListBoxRowProps extends WidgetProps {
 /** `<ListView>`'s props: GtkListView's own properties and signals. */
 export interface ListViewProps extends ListBaseProps {
   enableRubberband?: boolean;
+  factory?: GtkListItemFactory | null;
+  headerFactory?: GtkListItemFactory | null;
   showSeparators?: boolean;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
   onNotifyEnableRubberband?: (value: boolean) => void;
+  onNotifyFactory?: (value: GtkListItemFactory | null) => void;
+  onNotifyHeaderFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyShowSeparators?: (value: boolean) => void;
   onNotifySingleClickActivate?: (value: boolean) => void;
   onNotifyTabBehavior?: (value: GtkListTabBehavior) => void;
@@ -778,6 +833,8 @@ export interface ListViewProps extends ListBaseProps {
 
 /** `<MediaControls>`'s props: GtkMediaControls's own properties and signals. */
 export interface MediaControlsProps extends WidgetProps {
+  mediaStream?: GtkMediaStream | null;
+  onNotifyMediaStream?: (value: GtkMediaStream | null) => void;
 }
 
 /** `<MenuButton>`'s props: GtkMenuButton's own properties and signals. */
@@ -789,6 +846,7 @@ export interface MenuButtonProps extends WidgetProps {
   hasFrame?: boolean;
   iconName?: string;
   label?: string;
+  menuModel?: GMenuModel | null;
   primary?: boolean;
   useUnderline?: boolean;
   onNotifyActive?: (value: boolean) => void;
@@ -858,6 +916,7 @@ export interface PanedProps extends WidgetProps {
 
 /** `<PasswordEntry>`'s props: GtkPasswordEntry's own properties and signals. */
 export interface PasswordEntryProps extends WidgetProps {
+  extraMenu?: GMenuModel | null;
   showPeekIcon?: boolean;
   editable?: boolean;
   enableUndo?: boolean;
@@ -893,15 +952,18 @@ export interface PictureProps extends WidgetProps {
 /** `<PopoverBin>`'s props: GtkPopoverBin's own properties and signals. */
 export interface PopoverBinProps extends WidgetProps {
   handleInput?: boolean;
+  menuModel?: GMenuModel | null;
   onNotifyHandleInput?: (value: boolean) => void;
 }
 
 /** `<PopoverMenu>`'s props: GtkPopoverMenu's own properties and signals. */
 export interface PopoverMenuProps extends PopoverProps {
+  menuModel?: GMenuModel | null;
 }
 
 /** `<PopoverMenuBar>`'s props: GtkPopoverMenuBar's own properties and signals. */
 export interface PopoverMenuBarProps extends WidgetProps {
+  menuModel?: GMenuModel | null;
 }
 
 /** `<ProgressBar>`'s props: GtkProgressBar's own properties and signals. */
@@ -924,12 +986,14 @@ export interface ProgressBarProps extends WidgetProps {
 
 /** `<Range>`'s props: GtkRange's own properties and signals. */
 export interface RangeProps extends WidgetProps {
+  adjustment?: GtkAdjustment;
   fillLevel?: number;
   inverted?: boolean;
   restrictToFillLevel?: boolean;
   roundDigits?: number;
   showFillLevel?: boolean;
   orientation?: GtkOrientation;
+  onNotifyAdjustment?: (value: GtkAdjustment) => void;
   onNotifyFillLevel?: (value: number) => void;
   onNotifyInverted?: (value: boolean) => void;
   onNotifyRestrictToFillLevel?: (value: boolean) => void;
@@ -966,9 +1030,11 @@ export interface ScaleProps extends RangeProps {
 
 /** `<ScaleButton>`'s props: GtkScaleButton's own properties and signals. */
 export interface ScaleButtonProps extends WidgetProps {
+  adjustment?: GtkAdjustment;
   hasFrame?: boolean;
   value?: number;
   orientation?: GtkOrientation;
+  onNotifyAdjustment?: (value: GtkAdjustment) => void;
   onNotifyHasFrame?: (value: boolean) => void;
   onNotifyValue?: (value: number) => void;
   onPopdown?: () => void;
@@ -979,12 +1045,15 @@ export interface ScaleButtonProps extends WidgetProps {
 
 /** `<Scrollbar>`'s props: GtkScrollbar's own properties and signals. */
 export interface ScrollbarProps extends WidgetProps {
+  adjustment?: GtkAdjustment | null;
   orientation?: GtkOrientation;
+  onNotifyAdjustment?: (value: GtkAdjustment) => void;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<ScrolledWindow>`'s props: GtkScrolledWindow's own properties and signals. */
 export interface ScrolledWindowProps extends WidgetProps {
+  hadjustment?: GtkAdjustment | null;
   hasFrame?: boolean;
   kineticScrolling?: boolean;
   maxContentHeight?: number;
@@ -994,7 +1063,9 @@ export interface ScrolledWindowProps extends WidgetProps {
   overlayScrolling?: boolean;
   propagateNaturalHeight?: boolean;
   propagateNaturalWidth?: boolean;
+  vadjustment?: GtkAdjustment | null;
   windowPlacement?: GtkCornerType;
+  onNotifyHadjustment?: (value: GtkAdjustment) => void;
   onNotifyHasFrame?: (value: boolean) => void;
   onNotifyKineticScrolling?: (value: boolean) => void;
   onNotifyMaxContentHeight?: (value: number) => void;
@@ -1004,6 +1075,7 @@ export interface ScrolledWindowProps extends WidgetProps {
   onNotifyOverlayScrolling?: (value: boolean) => void;
   onNotifyPropagateNaturalHeight?: (value: boolean) => void;
   onNotifyPropagateNaturalWidth?: (value: boolean) => void;
+  onNotifyVadjustment?: (value: GtkAdjustment) => void;
   onNotifyWindowPlacement?: (value: GtkCornerType) => void;
   onEdgeOvershot?: (pos: GtkPositionType) => void;
   onEdgeReached?: (pos: GtkPositionType) => void;
@@ -1059,6 +1131,7 @@ export interface SeparatorProps extends WidgetProps {
 /** `<SpinButton>`'s props: GtkSpinButton's own properties and signals. */
 export interface SpinButtonProps extends WidgetProps {
   activatesDefault?: boolean;
+  adjustment?: GtkAdjustment;
   climbRate?: number;
   digits?: number;
   numeric?: boolean;
@@ -1074,6 +1147,7 @@ export interface SpinButtonProps extends WidgetProps {
   xalign?: number;
   orientation?: GtkOrientation;
   onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyAdjustment?: (value: GtkAdjustment) => void;
   onNotifyClimbRate?: (value: number) => void;
   onNotifyDigits?: (value: number) => void;
   onNotifyNumeric?: (value: boolean) => void;
@@ -1124,11 +1198,15 @@ export interface StackProps extends WidgetProps {
 
 /** `<StackSidebar>`'s props: GtkStackSidebar's own properties and signals. */
 export interface StackSidebarProps extends WidgetProps {
+  stack?: GtkStack;
+  onNotifyStack?: (value: GtkStack | null) => void;
 }
 
 /** `<StackSwitcher>`'s props: GtkStackSwitcher's own properties and signals. */
 export interface StackSwitcherProps extends WidgetProps {
+  stack?: GtkStack | null;
   orientation?: GtkOrientation;
+  onNotifyStack?: (value: GtkStack | null) => void;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
@@ -1147,7 +1225,9 @@ export interface SwitchProps extends WidgetProps {
 /** `<Text>`'s props: GtkText's own properties and signals. */
 export interface TextProps extends WidgetProps {
   activatesDefault?: boolean;
+  buffer?: GtkEntryBuffer;
   enableEmojiCompletion?: boolean;
+  extraMenu?: GMenuModel | null;
   inputPurpose?: GtkInputPurpose;
   invisibleChar?: number;
   maxLength?: number;
@@ -1163,6 +1243,7 @@ export interface TextProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyBuffer?: (value: GtkEntryBuffer) => void;
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
@@ -1198,8 +1279,10 @@ export interface TextProps extends WidgetProps {
 export interface TextViewProps extends WidgetProps {
   acceptsTab?: boolean;
   bottomMargin?: number;
+  buffer?: GtkTextBuffer | null;
   cursorVisible?: boolean;
   editable?: boolean;
+  extraMenu?: GMenuModel | null;
   indent?: number;
   inputPurpose?: GtkInputPurpose;
   justification?: GtkJustification;
@@ -1212,10 +1295,13 @@ export interface TextViewProps extends WidgetProps {
   rightMargin?: number;
   topMargin?: number;
   wrapMode?: GtkWrapMode;
+  hadjustment?: GtkAdjustment | null;
   hscrollPolicy?: GtkScrollablePolicy;
+  vadjustment?: GtkAdjustment | null;
   vscrollPolicy?: GtkScrollablePolicy;
   onNotifyAcceptsTab?: (value: boolean) => void;
   onNotifyBottomMargin?: (value: number) => void;
+  onNotifyBuffer?: (value: GtkTextBuffer) => void;
   onNotifyCursorVisible?: (value: boolean) => void;
   onNotifyEditable?: (value: boolean) => void;
   onNotifyIndent?: (value: number) => void;
@@ -1245,13 +1331,16 @@ export interface TextViewProps extends WidgetProps {
   onSetAnchor?: () => void;
   onToggleCursorVisible?: () => void;
   onToggleOverwrite?: () => void;
+  onNotifyHadjustment?: (value: GtkAdjustment | null) => void;
   onNotifyHscrollPolicy?: (value: GtkScrollablePolicy) => void;
+  onNotifyVadjustment?: (value: GtkAdjustment | null) => void;
   onNotifyVscrollPolicy?: (value: GtkScrollablePolicy) => void;
 }
 
 /** `<ToggleButton>`'s props: GtkToggleButton's own properties and signals. */
 export interface ToggleButtonProps extends ButtonProps {
   active?: boolean;
+  group?: GtkToggleButton | null;
   onNotifyActive?: (value: boolean) => void;
   onToggled?: () => void;
 }
@@ -1261,9 +1350,11 @@ export interface TreeExpanderProps extends WidgetProps {
   hideExpander?: boolean;
   indentForDepth?: boolean;
   indentForIcon?: boolean;
+  listRow?: GtkTreeListRow | null;
   onNotifyHideExpander?: (value: boolean) => void;
   onNotifyIndentForDepth?: (value: boolean) => void;
   onNotifyIndentForIcon?: (value: boolean) => void;
+  onNotifyListRow?: (value: GtkTreeListRow | null) => void;
 }
 
 /** `<Video>`'s props: GtkVideo's own properties and signals. */
@@ -1271,18 +1362,24 @@ export interface VideoProps extends WidgetProps {
   autoplay?: boolean;
   graphicsOffload?: GtkGraphicsOffloadEnabled;
   loop?: boolean;
+  mediaStream?: GtkMediaStream | null;
   onNotifyAutoplay?: (value: boolean) => void;
   onNotifyGraphicsOffload?: (value: GtkGraphicsOffloadEnabled) => void;
   onNotifyLoop?: (value: boolean) => void;
+  onNotifyMediaStream?: (value: GtkMediaStream | null) => void;
 }
 
 /** `<Viewport>`'s props: GtkViewport's own properties and signals. */
 export interface ViewportProps extends WidgetProps {
   scrollToFocus?: boolean;
+  hadjustment?: GtkAdjustment | null;
   hscrollPolicy?: GtkScrollablePolicy;
+  vadjustment?: GtkAdjustment | null;
   vscrollPolicy?: GtkScrollablePolicy;
   onNotifyScrollToFocus?: (value: boolean) => void;
+  onNotifyHadjustment?: (value: GtkAdjustment | null) => void;
   onNotifyHscrollPolicy?: (value: GtkScrollablePolicy) => void;
+  onNotifyVadjustment?: (value: GtkAdjustment | null) => void;
   onNotifyVscrollPolicy?: (value: GtkScrollablePolicy) => void;
 }
 
@@ -1531,6 +1628,9 @@ function widgetProp(gtk: GtkWidget, key: string, value: unknown): boolean {
     case "canTarget":
       gtk.set_can_target(typeof value === "boolean" ? value : true);
       return true;
+    case "cursor":
+      gtk.set_cursor(value instanceof GdkCursor ? value : null);
+      return true;
     case "focusOnClick":
       gtk.set_focus_on_click(typeof value === "boolean" ? value : true);
       return true;
@@ -1774,6 +1874,9 @@ function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boolean {
 
 function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
   switch (key) {
+    case "application":
+      gtk.set_application(value instanceof GtkApplication ? value : null);
+      return true;
     case "decorated":
       gtk.set_decorated(typeof value === "boolean" ? value : true);
       return true;
@@ -1782,6 +1885,9 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
       return true;
     case "destroyWithParent":
       gtk.set_destroy_with_parent(typeof value === "boolean" ? value : false);
+      return true;
+    case "display":
+      if (value instanceof GdkDisplay) gtk.set_display(value);
       return true;
     case "focusVisible":
       gtk.set_focus_visible(typeof value === "boolean" ? value : true);
@@ -1813,12 +1919,20 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
     case "title":
       gtk.set_title(typeof value === "string" ? value : null);
       return true;
+    case "transientFor":
+      gtk.set_transient_for(value instanceof GtkWindow ? value : null);
+      return true;
   }
   return widgetProp(gtk, key, value);
 }
 
 function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyApplication":
+      gtk.connect("notify::application", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkApplication | null) => void)(gtk.get_application()));
+      });
+      return true;
     case "onNotifyDecorated":
       gtk.connect("notify::decorated", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_decorated()));
@@ -1877,6 +1991,11 @@ function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
     case "onNotifyTitle":
       gtk.connect("notify::title", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_title()));
+      });
+      return true;
+    case "onNotifyTransientFor":
+      gtk.connect("notify::transient-for", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWindow | null) => void)(gtk.get_transient_for()));
       });
       return true;
     case "onActivateDefault":
@@ -2300,6 +2419,9 @@ function checkButtonProp(gtk: GtkCheckButton, key: string, value: unknown): bool
     case "active":
       gtk.set_active(typeof value === "boolean" ? value : false);
       return true;
+    case "group":
+      gtk.set_group(value instanceof GtkCheckButton ? value : null);
+      return true;
     case "inconsistent":
       gtk.set_inconsistent(typeof value === "boolean" ? value : false);
       return true;
@@ -2354,11 +2476,21 @@ function checkButtonSignal(gtk: GtkCheckButton, key: string, slot: SignalSlot): 
 }
 
 function colorDialogButtonProp(gtk: GtkColorDialogButton, key: string, value: unknown): boolean {
+  switch (key) {
+    case "dialog":
+      if (value instanceof GtkColorDialog) gtk.set_dialog(value);
+      return true;
+  }
   return widgetProp(gtk, key, value);
 }
 
 function colorDialogButtonSignal(gtk: GtkColorDialogButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyDialog":
+      gtk.connect("notify::dialog", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkColorDialog | null) => void)(gtk.get_dialog()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -2371,8 +2503,14 @@ function columnViewProp(gtk: GtkColumnView, key: string, value: unknown): boolea
     case "enableRubberband":
       gtk.set_enable_rubberband(typeof value === "boolean" ? value : false);
       return true;
+    case "headerFactory":
+      gtk.set_header_factory(value instanceof GtkListItemFactory ? value : null);
+      return true;
     case "reorderable":
       gtk.set_reorderable(typeof value === "boolean" ? value : true);
+      return true;
+    case "rowFactory":
+      gtk.set_row_factory(value instanceof GtkListItemFactory ? value : null);
       return true;
     case "showColumnSeparators":
       gtk.set_show_column_separators(typeof value === "boolean" ? value : false);
@@ -2386,8 +2524,14 @@ function columnViewProp(gtk: GtkColumnView, key: string, value: unknown): boolea
     case "tabBehavior":
       gtk.set_tab_behavior(typeof value === "number" ? value as GtkListTabBehavior : 0 as GtkListTabBehavior);
       return true;
+    case "hadjustment":
+      gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
+      return true;
     case "hscrollPolicy":
       gtk.set_hscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
+      return true;
+    case "vadjustment":
+      gtk.set_vadjustment(value instanceof GtkAdjustment ? value : null);
       return true;
     case "vscrollPolicy":
       gtk.set_vscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
@@ -2403,9 +2547,19 @@ function columnViewSignal(gtk: GtkColumnView, key: string, slot: SignalSlot): bo
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_rubberband()));
       });
       return true;
+    case "onNotifyHeaderFactory":
+      gtk.connect("notify::header-factory", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_header_factory()));
+      });
+      return true;
     case "onNotifyReorderable":
       gtk.connect("notify::reorderable", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_reorderable()));
+      });
+      return true;
+    case "onNotifyRowFactory":
+      gtk.connect("notify::row-factory", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_row_factory()));
       });
       return true;
     case "onNotifyShowColumnSeparators":
@@ -2433,9 +2587,19 @@ function columnViewSignal(gtk: GtkColumnView, key: string, slot: SignalSlot): bo
         slot.dispatch(() => (slot.handler as (position: number) => void)(_position));
       });
       return true;
+    case "onNotifyHadjustment":
+      gtk.connect("notify::hadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment | null) => void)(gtk.get_hadjustment()));
+      });
+      return true;
     case "onNotifyHscrollPolicy":
       gtk.connect("notify::hscroll-policy", () => {
         slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_hscroll_policy()));
+      });
+      return true;
+    case "onNotifyVadjustment":
+      gtk.connect("notify::vadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment | null) => void)(gtk.get_vadjustment()));
       });
       return true;
     case "onNotifyVscrollPolicy":
@@ -2493,6 +2657,15 @@ function dropDownProp(gtk: GtkDropDown, key: string, value: unknown): boolean {
     case "enableSearch":
       gtk.set_enable_search(typeof value === "boolean" ? value : false);
       return true;
+    case "factory":
+      gtk.set_factory(value instanceof GtkListItemFactory ? value : null);
+      return true;
+    case "headerFactory":
+      gtk.set_header_factory(value instanceof GtkListItemFactory ? value : null);
+      return true;
+    case "listFactory":
+      gtk.set_list_factory(value instanceof GtkListItemFactory ? value : null);
+      return true;
     case "searchMatchMode":
       gtk.set_search_match_mode(typeof value === "number" ? value as GtkStringFilterMatchMode : 2 as GtkStringFilterMatchMode);
       return true;
@@ -2511,6 +2684,21 @@ function dropDownSignal(gtk: GtkDropDown, key: string, slot: SignalSlot): boolea
     case "onNotifyEnableSearch":
       gtk.connect("notify::enable-search", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_search()));
+      });
+      return true;
+    case "onNotifyFactory":
+      gtk.connect("notify::factory", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_factory()));
+      });
+      return true;
+    case "onNotifyHeaderFactory":
+      gtk.connect("notify::header-factory", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_header_factory()));
+      });
+      return true;
+    case "onNotifyListFactory":
+      gtk.connect("notify::list-factory", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_list_factory()));
       });
       return true;
     case "onNotifySearchMatchMode":
@@ -2686,6 +2874,12 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
       return true;
+    case "buffer":
+      if (value instanceof GtkEntryBuffer) gtk.set_buffer(value);
+      return true;
+    case "extraMenu":
+      gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
+      return true;
     case "hasFrame":
       gtk.set_has_frame(typeof value === "boolean" ? value : true);
       return true;
@@ -2740,6 +2934,11 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyBuffer":
+      gtk.connect("notify::buffer", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkEntryBuffer) => void)(gtk.get_buffer()));
       });
       return true;
     case "onNotifyHasFrame":
@@ -3030,6 +3229,9 @@ function flowBoxChildSignal(gtk: GtkFlowBoxChild, key: string, slot: SignalSlot)
 
 function fontDialogButtonProp(gtk: GtkFontDialogButton, key: string, value: unknown): boolean {
   switch (key) {
+    case "dialog":
+      if (value instanceof GtkFontDialog) gtk.set_dialog(value);
+      return true;
     case "fontFeatures":
       gtk.set_font_features(typeof value === "string" ? value : null);
       return true;
@@ -3048,6 +3250,11 @@ function fontDialogButtonProp(gtk: GtkFontDialogButton, key: string, value: unkn
 
 function fontDialogButtonSignal(gtk: GtkFontDialogButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyDialog":
+      gtk.connect("notify::dialog", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkFontDialog | null) => void)(gtk.get_dialog()));
+      });
+      return true;
     case "onNotifyFontFeatures":
       gtk.connect("notify::font-features", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_font_features()));
@@ -3237,8 +3444,14 @@ function listBaseProp(gtk: GtkListBase, key: string, value: unknown): boolean {
     case "orientation":
       gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
       return true;
+    case "hadjustment":
+      gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
+      return true;
     case "hscrollPolicy":
       gtk.set_hscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
+      return true;
+    case "vadjustment":
+      gtk.set_vadjustment(value instanceof GtkAdjustment ? value : null);
       return true;
     case "vscrollPolicy":
       gtk.set_vscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
@@ -3254,9 +3467,19 @@ function listBaseSignal(gtk: GtkListBase, key: string, slot: SignalSlot): boolea
         slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
       });
       return true;
+    case "onNotifyHadjustment":
+      gtk.connect("notify::hadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment | null) => void)(gtk.get_hadjustment()));
+      });
+      return true;
     case "onNotifyHscrollPolicy":
       gtk.connect("notify::hscroll-policy", () => {
         slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_hscroll_policy()));
+      });
+      return true;
+    case "onNotifyVadjustment":
+      gtk.connect("notify::vadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment | null) => void)(gtk.get_vadjustment()));
       });
       return true;
     case "onNotifyVscrollPolicy":
@@ -3272,6 +3495,9 @@ function gridViewProp(gtk: GtkGridView, key: string, value: unknown): boolean {
   switch (key) {
     case "enableRubberband":
       gtk.set_enable_rubberband(typeof value === "boolean" ? value : false);
+      return true;
+    case "factory":
+      gtk.set_factory(value instanceof GtkListItemFactory ? value : null);
       return true;
     case "maxColumns":
       gtk.set_max_columns(typeof value === "number" ? value : 7);
@@ -3294,6 +3520,11 @@ function gridViewSignal(gtk: GtkGridView, key: string, slot: SignalSlot): boolea
     case "onNotifyEnableRubberband":
       gtk.connect("notify::enable-rubberband", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_rubberband()));
+      });
+      return true;
+    case "onNotifyFactory":
+      gtk.connect("notify::factory", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_factory()));
       });
       return true;
     case "onNotifyMaxColumns":
@@ -3488,6 +3719,9 @@ function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
   switch (key) {
     case "ellipsize":
       gtk.set_ellipsize(typeof value === "number" ? value as PangoEllipsizeMode : 0 as PangoEllipsizeMode);
+      return true;
+    case "extraMenu":
+      gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
       return true;
     case "justify":
       gtk.set_justify(typeof value === "number" ? value as GtkJustification : 0 as GtkJustification);
@@ -3839,6 +4073,12 @@ function listViewProp(gtk: GtkListView, key: string, value: unknown): boolean {
     case "enableRubberband":
       gtk.set_enable_rubberband(typeof value === "boolean" ? value : false);
       return true;
+    case "factory":
+      gtk.set_factory(value instanceof GtkListItemFactory ? value : null);
+      return true;
+    case "headerFactory":
+      gtk.set_header_factory(value instanceof GtkListItemFactory ? value : null);
+      return true;
     case "showSeparators":
       gtk.set_show_separators(typeof value === "boolean" ? value : false);
       return true;
@@ -3857,6 +4097,16 @@ function listViewSignal(gtk: GtkListView, key: string, slot: SignalSlot): boolea
     case "onNotifyEnableRubberband":
       gtk.connect("notify::enable-rubberband", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_rubberband()));
+      });
+      return true;
+    case "onNotifyFactory":
+      gtk.connect("notify::factory", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_factory()));
+      });
+      return true;
+    case "onNotifyHeaderFactory":
+      gtk.connect("notify::header-factory", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_header_factory()));
       });
       return true;
     case "onNotifyShowSeparators":
@@ -3884,10 +4134,22 @@ function listViewSignal(gtk: GtkListView, key: string, slot: SignalSlot): boolea
 }
 
 function mediaControlsProp(gtk: GtkMediaControls, key: string, value: unknown): boolean {
+  switch (key) {
+    case "mediaStream":
+      gtk.set_media_stream(value instanceof GtkMediaStream ? value : null);
+      return true;
+  }
   return widgetProp(gtk, key, value);
 }
 
 function mediaControlsSignal(gtk: GtkMediaControls, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyMediaStream":
+      gtk.connect("notify::media-stream", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkMediaStream | null) => void)(gtk.get_media_stream()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3913,6 +4175,9 @@ function menuButtonProp(gtk: GtkMenuButton, key: string, value: unknown): boolea
       return true;
     case "label":
       gtk.set_label(typeof value === "string" ? value : "");
+      return true;
+    case "menuModel":
+      gtk.set_menu_model(value instanceof GMenuModel ? value : null);
       return true;
     case "primary":
       gtk.set_primary(typeof value === "boolean" ? value : false);
@@ -4171,6 +4436,9 @@ function panedSignal(gtk: GtkPaned, key: string, slot: SignalSlot): boolean {
 
 function passwordEntryProp(gtk: GtkPasswordEntry, key: string, value: unknown): boolean {
   switch (key) {
+    case "extraMenu":
+      gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
+      return true;
     case "showPeekIcon":
       gtk.set_show_peek_icon(typeof value === "boolean" ? value : false);
       return true;
@@ -4302,6 +4570,9 @@ function popoverBinProp(gtk: GtkPopoverBin, key: string, value: unknown): boolea
     case "handleInput":
       gtk.set_handle_input(typeof value === "boolean" ? value : false);
       return true;
+    case "menuModel":
+      gtk.set_menu_model(value instanceof GMenuModel ? value : null);
+      return true;
   }
   return widgetProp(gtk, key, value);
 }
@@ -4318,6 +4589,11 @@ function popoverBinSignal(gtk: GtkPopoverBin, key: string, slot: SignalSlot): bo
 }
 
 function popoverMenuProp(gtk: GtkPopoverMenu, key: string, value: unknown): boolean {
+  switch (key) {
+    case "menuModel":
+      gtk.set_menu_model(value instanceof GMenuModel ? value : null);
+      return true;
+  }
   return popoverProp(gtk, key, value);
 }
 
@@ -4326,6 +4602,11 @@ function popoverMenuSignal(gtk: GtkPopoverMenu, key: string, slot: SignalSlot): 
 }
 
 function popoverMenuBarProp(gtk: GtkPopoverMenuBar, key: string, value: unknown): boolean {
+  switch (key) {
+    case "menuModel":
+      gtk.set_menu_model(value instanceof GMenuModel ? value : null);
+      return true;
+  }
   return widgetProp(gtk, key, value);
 }
 
@@ -4403,6 +4684,9 @@ function progressBarSignal(gtk: GtkProgressBar, key: string, slot: SignalSlot): 
 
 function rangeProp(gtk: GtkRange, key: string, value: unknown): boolean {
   switch (key) {
+    case "adjustment":
+      if (value instanceof GtkAdjustment) gtk.set_adjustment(value);
+      return true;
     case "fillLevel":
       gtk.set_fill_level(typeof value === "number" ? value : 1.7976931348623157e+308);
       return true;
@@ -4427,6 +4711,11 @@ function rangeProp(gtk: GtkRange, key: string, value: unknown): boolean {
 
 function rangeSignal(gtk: GtkRange, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAdjustment":
+      gtk.connect("notify::adjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment) => void)(gtk.get_adjustment()));
+      });
+      return true;
     case "onNotifyFillLevel":
       gtk.connect("notify::fill-level", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_fill_level()));
@@ -4559,6 +4848,9 @@ function scaleSignal(gtk: GtkScale, key: string, slot: SignalSlot): boolean {
 
 function scaleButtonProp(gtk: GtkScaleButton, key: string, value: unknown): boolean {
   switch (key) {
+    case "adjustment":
+      if (value instanceof GtkAdjustment) gtk.set_adjustment(value);
+      return true;
     case "hasFrame":
       gtk.set_has_frame(typeof value === "boolean" ? value : false);
       return true;
@@ -4574,6 +4866,11 @@ function scaleButtonProp(gtk: GtkScaleButton, key: string, value: unknown): bool
 
 function scaleButtonSignal(gtk: GtkScaleButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAdjustment":
+      gtk.connect("notify::adjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment) => void)(gtk.get_adjustment()));
+      });
+      return true;
     case "onNotifyHasFrame":
       gtk.connect("notify::has-frame", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
@@ -4606,6 +4903,9 @@ function scaleButtonSignal(gtk: GtkScaleButton, key: string, slot: SignalSlot): 
 
 function scrollbarProp(gtk: GtkScrollbar, key: string, value: unknown): boolean {
   switch (key) {
+    case "adjustment":
+      gtk.set_adjustment(value instanceof GtkAdjustment ? value : null);
+      return true;
     case "orientation":
       gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
       return true;
@@ -4615,6 +4915,11 @@ function scrollbarProp(gtk: GtkScrollbar, key: string, value: unknown): boolean 
 
 function scrollbarSignal(gtk: GtkScrollbar, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAdjustment":
+      gtk.connect("notify::adjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment) => void)(gtk.get_adjustment()));
+      });
+      return true;
     case "onNotifyOrientation":
       gtk.connect("notify::orientation", () => {
         slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
@@ -4626,6 +4931,9 @@ function scrollbarSignal(gtk: GtkScrollbar, key: string, slot: SignalSlot): bool
 
 function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown): boolean {
   switch (key) {
+    case "hadjustment":
+      gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
+      return true;
     case "hasFrame":
       gtk.set_has_frame(typeof value === "boolean" ? value : false);
       return true;
@@ -4653,6 +4961,9 @@ function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown)
     case "propagateNaturalWidth":
       gtk.set_propagate_natural_width(typeof value === "boolean" ? value : false);
       return true;
+    case "vadjustment":
+      gtk.set_vadjustment(value instanceof GtkAdjustment ? value : null);
+      return true;
     case "windowPlacement":
       gtk.set_placement(typeof value === "number" ? value as GtkCornerType : 0 as GtkCornerType);
       return true;
@@ -4662,6 +4973,11 @@ function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown)
 
 function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyHadjustment":
+      gtk.connect("notify::hadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment) => void)(gtk.get_hadjustment()));
+      });
+      return true;
     case "onNotifyHasFrame":
       gtk.connect("notify::has-frame", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
@@ -4705,6 +5021,11 @@ function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalS
     case "onNotifyPropagateNaturalWidth":
       gtk.connect("notify::propagate-natural-width", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_propagate_natural_width()));
+      });
+      return true;
+    case "onNotifyVadjustment":
+      gtk.connect("notify::vadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment) => void)(gtk.get_vadjustment()));
       });
       return true;
     case "onNotifyWindowPlacement":
@@ -4902,6 +5223,9 @@ function spinButtonProp(gtk: GtkSpinButton, key: string, value: unknown): boolea
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
       return true;
+    case "adjustment":
+      if (value instanceof GtkAdjustment) gtk.set_adjustment(value);
+      return true;
     case "climbRate":
       gtk.set_climb_rate(typeof value === "number" ? value : 0);
       return true;
@@ -4953,6 +5277,11 @@ function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): bo
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyAdjustment":
+      gtk.connect("notify::adjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment) => void)(gtk.get_adjustment()));
       });
       return true;
     case "onNotifyClimbRate":
@@ -5146,15 +5475,30 @@ function stackSignal(gtk: GtkStack, key: string, slot: SignalSlot): boolean {
 }
 
 function stackSidebarProp(gtk: GtkStackSidebar, key: string, value: unknown): boolean {
+  switch (key) {
+    case "stack":
+      if (value instanceof GtkStack) gtk.set_stack(value);
+      return true;
+  }
   return widgetProp(gtk, key, value);
 }
 
 function stackSidebarSignal(gtk: GtkStackSidebar, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyStack":
+      gtk.connect("notify::stack", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkStack | null) => void)(gtk.get_stack()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
 function stackSwitcherProp(gtk: GtkStackSwitcher, key: string, value: unknown): boolean {
   switch (key) {
+    case "stack":
+      gtk.set_stack(value instanceof GtkStack ? value : null);
+      return true;
     case "orientation":
       gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
       return true;
@@ -5164,6 +5508,11 @@ function stackSwitcherProp(gtk: GtkStackSwitcher, key: string, value: unknown): 
 
 function stackSwitcherSignal(gtk: GtkStackSwitcher, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyStack":
+      gtk.connect("notify::stack", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkStack | null) => void)(gtk.get_stack()));
+      });
+      return true;
     case "onNotifyOrientation":
       gtk.connect("notify::orientation", () => {
         slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
@@ -5220,8 +5569,14 @@ function textProp(gtk: GtkText, key: string, value: unknown): boolean {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
       return true;
+    case "buffer":
+      if (value instanceof GtkEntryBuffer) gtk.set_buffer(value);
+      return true;
     case "enableEmojiCompletion":
       gtk.set_enable_emoji_completion(typeof value === "boolean" ? value : false);
+      return true;
+    case "extraMenu":
+      gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
       return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
@@ -5274,6 +5629,11 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyBuffer":
+      gtk.connect("notify::buffer", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkEntryBuffer) => void)(gtk.get_buffer()));
       });
       return true;
     case "onNotifyEnableEmojiCompletion":
@@ -5417,11 +5777,17 @@ function textViewProp(gtk: GtkTextView, key: string, value: unknown): boolean {
     case "bottomMargin":
       gtk.set_bottom_margin(typeof value === "number" ? value : 0);
       return true;
+    case "buffer":
+      gtk.set_buffer(value instanceof GtkTextBuffer ? value : null);
+      return true;
     case "cursorVisible":
       gtk.set_cursor_visible(typeof value === "boolean" ? value : true);
       return true;
     case "editable":
       gtk.set_editable(typeof value === "boolean" ? value : true);
+      return true;
+    case "extraMenu":
+      gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
       return true;
     case "indent":
       gtk.set_indent(typeof value === "number" ? value : 0);
@@ -5459,8 +5825,14 @@ function textViewProp(gtk: GtkTextView, key: string, value: unknown): boolean {
     case "wrapMode":
       gtk.set_wrap_mode(typeof value === "number" ? value as GtkWrapMode : 0 as GtkWrapMode);
       return true;
+    case "hadjustment":
+      gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
+      return true;
     case "hscrollPolicy":
       gtk.set_hscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
+      return true;
+    case "vadjustment":
+      gtk.set_vadjustment(value instanceof GtkAdjustment ? value : null);
       return true;
     case "vscrollPolicy":
       gtk.set_vscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
@@ -5479,6 +5851,11 @@ function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolea
     case "onNotifyBottomMargin":
       gtk.connect("notify::bottom-margin", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_bottom_margin()));
+      });
+      return true;
+    case "onNotifyBuffer":
+      gtk.connect("notify::buffer", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkTextBuffer) => void)(gtk.get_buffer()));
       });
       return true;
     case "onNotifyCursorVisible":
@@ -5608,9 +5985,19 @@ function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolea
     case "onToggleOverwrite":
       gtk.connect("toggle-overwrite", () => slot.fire());
       return true;
+    case "onNotifyHadjustment":
+      gtk.connect("notify::hadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment | null) => void)(gtk.get_hadjustment()));
+      });
+      return true;
     case "onNotifyHscrollPolicy":
       gtk.connect("notify::hscroll-policy", () => {
         slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_hscroll_policy()));
+      });
+      return true;
+    case "onNotifyVadjustment":
+      gtk.connect("notify::vadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment | null) => void)(gtk.get_vadjustment()));
       });
       return true;
     case "onNotifyVscrollPolicy":
@@ -5626,6 +6013,9 @@ function toggleButtonProp(gtk: GtkToggleButton, key: string, value: unknown): bo
   switch (key) {
     case "active":
       gtk.set_active(typeof value === "boolean" ? value : false);
+      return true;
+    case "group":
+      gtk.set_group(value instanceof GtkToggleButton ? value : null);
       return true;
   }
   return buttonProp(gtk, key, value);
@@ -5656,6 +6046,9 @@ function treeExpanderProp(gtk: GtkTreeExpander, key: string, value: unknown): bo
     case "indentForIcon":
       gtk.set_indent_for_icon(typeof value === "boolean" ? value : true);
       return true;
+    case "listRow":
+      gtk.set_list_row(value instanceof GtkTreeListRow ? value : null);
+      return true;
   }
   return widgetProp(gtk, key, value);
 }
@@ -5677,6 +6070,11 @@ function treeExpanderSignal(gtk: GtkTreeExpander, key: string, slot: SignalSlot)
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_indent_for_icon()));
       });
       return true;
+    case "onNotifyListRow":
+      gtk.connect("notify::list-row", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkTreeListRow | null) => void)(gtk.get_list_row()));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -5691,6 +6089,9 @@ function videoProp(gtk: GtkVideo, key: string, value: unknown): boolean {
       return true;
     case "loop":
       gtk.set_loop(typeof value === "boolean" ? value : false);
+      return true;
+    case "mediaStream":
+      gtk.set_media_stream(value instanceof GtkMediaStream ? value : null);
       return true;
   }
   return widgetProp(gtk, key, value);
@@ -5713,6 +6114,11 @@ function videoSignal(gtk: GtkVideo, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_loop()));
       });
       return true;
+    case "onNotifyMediaStream":
+      gtk.connect("notify::media-stream", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkMediaStream | null) => void)(gtk.get_media_stream()));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -5722,8 +6128,14 @@ function viewportProp(gtk: GtkViewport, key: string, value: unknown): boolean {
     case "scrollToFocus":
       gtk.set_scroll_to_focus(typeof value === "boolean" ? value : true);
       return true;
+    case "hadjustment":
+      gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
+      return true;
     case "hscrollPolicy":
       gtk.set_hscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
+      return true;
+    case "vadjustment":
+      gtk.set_vadjustment(value instanceof GtkAdjustment ? value : null);
       return true;
     case "vscrollPolicy":
       gtk.set_vscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
@@ -5739,9 +6151,19 @@ function viewportSignal(gtk: GtkViewport, key: string, slot: SignalSlot): boolea
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_scroll_to_focus()));
       });
       return true;
+    case "onNotifyHadjustment":
+      gtk.connect("notify::hadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment | null) => void)(gtk.get_hadjustment()));
+      });
+      return true;
     case "onNotifyHscrollPolicy":
       gtk.connect("notify::hscroll-policy", () => {
         slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_hscroll_policy()));
+      });
+      return true;
+    case "onNotifyVadjustment":
+      gtk.connect("notify::vadjustment", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAdjustment | null) => void)(gtk.get_vadjustment()));
       });
       return true;
     case "onNotifyVscrollPolicy":

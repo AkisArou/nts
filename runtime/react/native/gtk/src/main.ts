@@ -28,6 +28,8 @@
 //             the props' value when the app keeps it, kept when the app's
 //             flush commits it, without passing through the old value on the
 //             way (the flush is stubbed: no reconciler here)
+//   object    an object the app makes (a Scale's adjustment) passes through the
+//             props as itself, and the widget holds that object
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
@@ -40,7 +42,7 @@
 //   work      a slice of scheduler work posted to GLib ran
 //   timer     a timer fired, and a cancelled one did not
 
-import { gtk_init, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
+import { gtk_init, GtkAdjustment, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { g_main_context_iteration, g_main_loop_new } from "c:GLib-2.0";
 import { react_gtk_emit, react_gtk_emit_decision, react_gtk_emit_double, react_gtk_log } from "c:react-gtk-shim";
 import {
@@ -58,7 +60,7 @@ import {
   type Props,
 } from "../../../packages/react-gtk/src/ReactFiberConfig.ts";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
-import { BoxNode, ButtonNode, EntryNode, FrameNode, LabelNode, ListBoxNode } from "../../../packages/react-gtk/src/widgets.ts";
+import { BoxNode, ButtonNode, EntryNode, FrameNode, LabelNode, ListBoxNode, ScaleNode } from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
 
 // The children of `parent`, as GTK orders them, named by the nodes they are.
@@ -273,6 +275,14 @@ function main(): void {
   idle();
   setAfterEvent(() => {});
   react_gtk_log("controlled " + rejected + " " + entryText(accepting) + " flashed=" + String(flashed));
+
+  const adjustment = new GtkAdjustment();
+  adjustment.set_upper(100);
+  adjustment.set_value(42);
+  const scaled = createInstance("GtkScale", { adjustment }, container, 0, {});
+  const holds = scaled instanceof ScaleNode && scaled.gtk.get_adjustment() === adjustment;
+  const at = scaled instanceof ScaleNode ? scaled.gtk.get_value() : -1;
+  react_gtk_log("object " + String(holds) + " " + String(at));
 
   let asked = 0;
   const closeProps: Props = {

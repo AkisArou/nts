@@ -30,7 +30,7 @@
 //   writing, and fails if the committed files are stale.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -191,6 +191,11 @@ interface Bindings {
   /** Each signal's handler as bind-gir declared `connect` for it, by type and signal name. */
   signals: Map<string, Map<string, Signature>>;
   constructible: Set<string>;
+  /**
+   * Every class, in any of the bindings' namespaces, with a constructor
+   * (abstract ones included): a value `instanceof` can check against.
+   */
+  classes: Set<string>;
   /** The module each type from another namespace comes from: `PangoWrapMode` → `c:Pango-1.0`. */
   modules: Map<string, string>;
 }
@@ -287,13 +292,25 @@ function readBindings(dir: string): Bindings {
       constructible.add(constructed);
     }
   }
-  return { setters, getters, signals, constructible, modules };
+  const classes = new Set(constructible);
+  for (const file of readdirSync(dir).filter((name) => name.endsWith(".d.ts"))) {
+    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+      const made = /^ {4}new (?:<[^>]*>)?\(props\?: \w+Props\): (?:Signalled<(\w+)(?:, \w+)+>|(\w+));$/.exec(line);
+      const abstract = /^ {2}export const (\w+): \(abstract new /.exec(line);
+      const name = made?.[1] ?? made?.[2] ?? abstract?.[1];
+      if (name !== undefined) {
+        classes.add(name);
+      }
+    }
+  }
+  return { setters, getters, signals, constructible, classes, modules };
 }
 
 // ---- the model ---------------------------------------------------------------
 
 type ValueKind =
   | { kind: "string"; nullable: boolean }
+  | { kind: "object"; type: string; nullable: boolean }
   | { kind: "boolean" }
   | { kind: "number" }
   | { kind: "enum"; type: string };
@@ -381,7 +398,7 @@ const controlledProps = new Map([
 // Children arrive as React children, never as a prop.
 const childProps = new Set(["child"]);
 
-function valueKind(type: string): ValueKind | null {
+function valueKind(type: string, classes: Set<string>): ValueKind | null {
   if (type === "string" || type === "string | null") {
     return { kind: "string", nullable: type.endsWith("null") };
   }
@@ -392,7 +409,18 @@ function valueKind(type: string): ValueKind | null {
     return { kind: "number" };
   }
   const enumType = /^CEnum<(\w+), \w+>$/.exec(type);
-  return enumType === null ? null : { kind: "enum", type: enumType[1]! };
+  if (enumType !== null) {
+    return { kind: "enum", type: enumType[1]! };
+  }
+  // An object the app makes and hands over: a model, an adjustment, a menu.
+  // Not a widget, which React makes and an app would need a ref to; not a
+  // boxed Pango type, a handle of another kind.
+  const object = /^((?:Gtk|Gdk|G)[A-Z]\w+)( \| null)?$/.exec(type);
+  // A class, since the narrowing is `instanceof`: an interface has no value.
+  if (object !== null && object[1] !== "GtkWidget" && classes.has(object[1]!)) {
+    return { kind: "object", type: object[1]!, nullable: object[2] !== undefined };
+  }
+  return null;
 }
 
 /**
@@ -405,6 +433,10 @@ function resetValue(value: ValueKind, girDefault: string | undefined, members: M
   if (value.kind === "string") {
     return girDefault === undefined || girDefault === "NULL" ? (value.nullable ? "null" : '""') : JSON.stringify(girDefault);
   }
+  if (value.kind === "object") {
+    // Unset where the setter takes null; otherwise what was set stays.
+    return value.nullable ? "null" : null;
+  }
   if (girDefault === undefined) {
     return null;
   }
@@ -415,6 +447,8 @@ function resetValue(value: ValueKind, girDefault: string | undefined, members: M
       const n = Number(girDefault);
       return Number.isFinite(n) ? String(n) : null;
     }
+    case "object":
+      return null;
     case "enum": {
       // A flags default may be several members joined with `|`.
       let n = 0;
@@ -478,7 +512,7 @@ function model(gir: Gir, bindings: Bindings): Model {
         if (childProps.has(p.name) || !p.writable) {
           continue;
         }
-        const value = type === undefined ? null : valueKind(type);
+        const value = type === undefined ? null : valueKind(type, bindings.classes);
         if (p.constructOnly) {
           skipped.add(`${where}\tconstruct-only: a change would need a new widget`);
         } else if (p.deprecated) {
@@ -592,6 +626,9 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     for (const p of t.props) {
       if (p.value.kind === "enum") {
         types.add(p.value.type);
+      } else if (p.value.kind === "object") {
+        // A value: `instanceof` checks against it.
+        values.add(p.value.type);
       }
       line(`  ${p.jsx}?: ${propType(p.value)};`);
     }
@@ -805,6 +842,8 @@ function propType(value: ValueKind): string {
       return value.nullable ? "string | null" : "string";
     case "enum":
       return value.type;
+    case "object":
+      return value.nullable ? `${value.type} | null` : value.type;
     default:
       return value.kind;
   }
@@ -812,6 +851,13 @@ function propType(value: ValueKind): string {
 
 /** The statement that sets `p` from `value`, restoring GTK's default for any other value. */
 function assign(p: Prop): string {
+  if (p.value.kind === "object") {
+    // A checked narrowing, which a native build reads a GObject back from an
+    // erased value by (its GType); an assertion it does not.
+    return p.reset === null
+      ? `if (value instanceof ${p.value.type}) gtk.${p.setter}(value);`
+      : `gtk.${p.setter}(value instanceof ${p.value.type} ? value : null);`;
+  }
   const test = p.value.kind === "enum" ? "number" : p.value.kind;
   const valueOf = p.value.kind === "enum" ? `value as ${p.value.type}` : "value";
   if (p.reset === null) {

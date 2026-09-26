@@ -41,6 +41,7 @@ argument 2.5@2
 list a,b,c a,d,b,c c,a,d,b c,a,d
 notify none>typed
 controlled a typed flashed=false
+object true 42
 decision 1 0 asked=1
 work timer"
 

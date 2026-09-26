@@ -147,9 +147,15 @@ without passing through the old one. The flush is a hook the root installs
 (`setAfterEvent(flushSyncWork)`), so the host does not import the
 reconciler. The list is kept by hand in the generator: GIR does not say
 which properties input changes.
-`src/widgets.skipped.txt` lists what is left out and why. The main gaps are
-object-valued props, construct-only props, and signal arguments of types a
-JSX handler cannot name yet.
+`src/widgets.skipped.txt` lists what is left out and why. A prop can hold an object
+the app makes (an adjustment, a model, a list-item factory, a menu) when its
+type is a class: it is read back from the props with `instanceof`, a check
+against the object's GType, which is how a native build reads a GObject out
+of an erased value. An interface-typed prop (`GListModel`) is left out,
+because an interface has no value to check against, and so is a
+widget-typed one (`mnemonicWidget`), because a widget belongs to React and
+an app would need a ref to it. The other gaps are construct-only props, and
+signal arguments of types a JSX handler cannot name yet.
 
 Regenerate after a GTK update, from a native program's generated bindings:
 `node tools/gen-widgets.ts ../../native/gtk/types/gir`.
