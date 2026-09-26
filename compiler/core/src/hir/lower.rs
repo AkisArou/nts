@@ -34308,9 +34308,21 @@ impl<'a> FuncBuilder<'a> {
     /// `ToIntegerOrInfinity(NaN)` is `0`, so `"x".repeat(NaN)` is `""` and the
     /// runtime's clamp is right about it.
     ///
-    /// So the test is `n < 0 || n === Infinity`, and each half earns its place:
-    /// `-Infinity` is caught by the first, `-0` is not negative and must not
-    /// throw, and a `NaN` fails both, which is the answer.
+    /// So the test is `ToIntegerOrInfinity(n) < 0 || n === Infinity`, and the
+    /// first half is spelled **`n <= -1`** rather than `n < 0`.
+    ///
+    /// That is not a loosening, it is the exact same predicate: truncation is
+    /// toward zero, so `ToIntegerOrInfinity(n) < 0` holds precisely when
+    /// `n <= -1`. `-0.5` truncates to `-0`, which is not negative, so
+    /// `"x".repeat(-0.5)` is `""` in node -- and `n < 0` threw for it. Every
+    /// boundary agrees: `-1` and `-1.5` throw, `-0.999` and `-0` do not,
+    /// `-Infinity` does, and a `NaN` fails both halves, which is the answer
+    /// (`ToIntegerOrInfinity(NaN)` is `0`).
+    ///
+    /// The truncation is therefore not emitted at all, which is why this is one
+    /// operator and not a call: there is no `ToIntegerOrInfinity` in this IR, and
+    /// asking for one would have been the natural way to write a change that the
+    /// comparison already expresses.
     ///
     /// Two branches rather than one disjunction, because this IR has no boolean
     /// `||` -- a short circuit is control flow, and `n === Infinity` is
@@ -34378,12 +34390,14 @@ impl<'a> FuncBuilder<'a> {
 
     fn guard_repeat_count(&mut self, id: NodeId, count: ValueId) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
-        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        // `<= -1` rather than `< 0`: see above -- truncation toward zero makes the
+        // two differ exactly on the values whose integer part is `-0`.
+        let minus_one = self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
         let negative = self.push(
             OpKind::Binary {
-                op: BinOp::Lt,
+                op: BinOp::Le,
                 lhs: count,
-                rhs: zero,
+                rhs: minus_one,
             },
             HirType::Bool,
             origin.clone(),
