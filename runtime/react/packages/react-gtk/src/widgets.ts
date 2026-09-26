@@ -177,7 +177,7 @@ import {
   type PangoWrapMode,
 } from "c:Pango-1.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
-import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";
+import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "./HostNode.ts";
 import { type GridChildren, GridChildNode, type StackChildren, StackPageNode, type NotebookChildren, NotebookPageNode, type HeaderBarChildren, PackNode, type ActionBarChildren, type OverlayChildren, OverlayLayerNode, type FixedChildren, FixedChildNode } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
@@ -190,6 +190,7 @@ export interface HostProps {
 export interface WidgetProps extends HostProps {
   canFocus?: boolean;
   canTarget?: boolean;
+  cssClasses?: readonly string[];
   cursor?: GdkCursor | null;
   focusOnClick?: boolean;
   focusable?: boolean;
@@ -306,8 +307,11 @@ export interface WindowProps extends WidgetProps {
 
 /** `<AboutDialog>`'s props: GtkAboutDialog's own properties and signals. */
 export interface AboutDialogProps extends WindowProps {
+  artists?: readonly string[];
+  authors?: readonly string[];
   comments?: string | null;
   copyright?: string | null;
+  documenters?: readonly string[];
   license?: string | null;
   licenseType?: GtkLicense;
   logo?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable | null;
@@ -1130,6 +1134,7 @@ export interface ScaleProps extends RangeProps {
 export interface ScaleButtonProps extends WidgetProps {
   adjustment?: GtkAdjustment;
   hasFrame?: boolean;
+  icons?: readonly string[];
   value?: number;
   orientation?: GtkOrientation;
   onNotifyAdjustment?: (value: GtkAdjustment) => void;
@@ -1785,6 +1790,9 @@ function widgetProp(gtk: GtkWidget, key: string, value: unknown): boolean {
     case "canTarget":
       gtk.set_can_target(typeof value === "boolean" ? value : true);
       return true;
+    case "cssClasses":
+      gtk.set_css_classes(stringsOf(value) ?? []);
+      return true;
     case "cursor":
       gtk.set_cursor(value instanceof GdkCursor ? value : null);
       return true;
@@ -2227,11 +2235,20 @@ function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
 
 function aboutDialogProp(gtk: GtkAboutDialog, key: string, value: unknown): boolean {
   switch (key) {
+    case "artists":
+      gtk.set_artists(stringsOf(value) ?? []);
+      return true;
+    case "authors":
+      gtk.set_authors(stringsOf(value) ?? []);
+      return true;
     case "comments":
       gtk.set_comments(typeof value === "string" ? value : null);
       return true;
     case "copyright":
       gtk.set_copyright(typeof value === "string" ? value : null);
+      return true;
+    case "documenters":
+      gtk.set_documenters(stringsOf(value) ?? []);
       return true;
     case "license":
       gtk.set_license(typeof value === "string" ? value : null);
@@ -5315,6 +5332,9 @@ function scaleButtonProp(gtk: GtkScaleButton, key: string, value: unknown): bool
       return true;
     case "hasFrame":
       gtk.set_has_frame(typeof value === "boolean" ? value : false);
+      return true;
+    case "icons":
+      gtk.set_icons(stringsOf(value) ?? []);
       return true;
     case "value":
       gtk.set_value(typeof value === "number" ? value : 0);

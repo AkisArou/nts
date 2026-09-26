@@ -162,6 +162,25 @@ function isSignalProp(key: string): boolean {
   return third >= "A" && third <= "Z";
 }
 
+// ---- prop values -----------------------------------------------------------------
+
+/**
+ * A prop's value as a list of strings (a widget's `cssClasses`), or null when
+ * it is not an array of strings: what a `CStrings` setter takes, checked, as
+ * a native build reads anything else out of an erased value.
+ */
+export function stringsOf(value: unknown): readonly string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  for (let i = 0; i < value.length; i++) {
+    if (typeof value[i] !== "string") {
+      return null;
+    }
+  }
+  return value as readonly string[];
+}
+
 // ---- a list container's children ----------------------------------------------------
 
 /** Puts `item` at `index` in `items`, moving what follows up by one. */

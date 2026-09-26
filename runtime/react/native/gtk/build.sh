@@ -44,6 +44,7 @@ controlled a typed flashed=false
 object true 42
 reference true
 decision 1 0 asked=1
+classes true true>false true>false
 interface true true true
 grid ab- a-b --b
 stack b B Bee

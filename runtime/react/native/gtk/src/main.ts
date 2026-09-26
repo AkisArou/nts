@@ -35,6 +35,9 @@
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
+//   classes   a list-of-strings prop (cssClasses) sets the widget's CSS
+//             classes; an update replaces them, and removing the prop
+//             clears them
 //   interface a prop typed as a GObject interface (a ListView's selection
 //             model, a DropDown's list model) takes each class that
 //             implements it, as itself; one that does not (an adjustment)
@@ -353,6 +356,15 @@ function main(): void {
   commitUpdate(closing, "GtkWindow", closeProps, {}, {});
   const released = react_gtk_emit_decision(widget(closing), "close-request");
   react_gtk_log("decision " + String(kept) + " " + String(released) + " asked=" + String(asked));
+
+  const styled = createInstance("GtkButton", { cssClasses: ["suggested-action", "pill"] }, container, 0, {});
+  const hasClass = (name: string): string => String(widget(styled).has_css_class(name));
+  let styling = hasClass("suggested-action") + " " + hasClass("pill");
+  commitUpdate(styled, "GtkButton", { cssClasses: ["suggested-action", "pill"] }, { cssClasses: ["pill"] }, {});
+  styling += ">" + hasClass("suggested-action") + " " + hasClass("pill");
+  commitUpdate(styled, "GtkButton", { cssClasses: ["pill"] }, {}, {});
+  styling += ">" + hasClass("pill");
+  react_gtk_log("classes " + styling);
 
   const strings = new GtkStringList();
   strings.append("one");

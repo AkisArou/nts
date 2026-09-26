@@ -1,7 +1,4 @@
 # What tools/gen-widgets.ts left out of src/widgets.ts, and why (GTK 4.22.5).
-GtkAboutDialog.artists	a CStrings<"const">, which a JSX attribute does not carry yet
-GtkAboutDialog.authors	a CStrings<"const">, which a JSX attribute does not carry yet
-GtkAboutDialog.documenters	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkAccessible.accessible-role	no setter in the bindings
 GtkActionable.action-target	no setter in the bindings
 GtkAppChooser.content-type	construct-only: a change would need a new widget
@@ -104,7 +101,6 @@ GtkPrintUnixDialog.print-settings	no setter in the bindings
 GtkPrintUnixDialog.support-selection	no setter in the bindings
 GtkRange.adjustment	removing it leaves its value: GIR gives no default
 GtkScaleButton.adjustment	removing it leaves its value: GIR gives no default
-GtkScaleButton.icons	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkSearchEntry.input-hints	no setter in the bindings
 GtkShortcutLabel.accelerator	deprecated
 GtkShortcutLabel.disabled-text	deprecated
@@ -148,7 +144,6 @@ GtkTextView.input-hints	no setter in the bindings
 GtkTextView.tabs	a PangoTabArray, which a JSX attribute does not carry yet
 GtkVideo.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkVolumeButton.use-symbolic	deprecated
-GtkWidget.css-classes	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkWidget.css-name	construct-only: a change would need a new widget
 GtkWidget.layout-manager	a Consumed<GtkLayoutManager> | null, which a JSX attribute does not carry yet
 GtkWindow.display	removing it leaves its value: GIR gives no default

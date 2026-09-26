@@ -9,8 +9,8 @@
 //       and its value is typed as that setter's parameter
 //
 // A prop is a writable, non-construct-only, non-deprecated GIR property with a
-// setter, whose value a JSX attribute can carry: a string, a boolean, a number
-// or an enum. Its name is the property's in camel case (`has-frame` →
+// setter, whose value a JSX attribute can carry: a string, a list of strings,
+// a boolean, a number or an enum. Its name is the property's in camel case (`has-frame` →
 // `hasFrame`). A signal prop is `on` + the signal's name in camel case
 // (`clicked` → `onClicked`), its handler taking the signal's arguments after
 // the widget, typed as an app writes them (`(row: GtkListBoxRow) => void`),
@@ -352,6 +352,8 @@ function readBindings(dir: string): Bindings {
 
 type ValueKind =
   | { kind: "string"; nullable: boolean }
+  // A list of strings: a `CStrings` setter (`cssClasses`).
+  | { kind: "strings"; nullable: boolean }
   // `classes` are what `instanceof` checks: the type itself for a class, the
   // classes that implement it for an interface.
   | { kind: "object"; type: string; classes: string[]; nullable: boolean }
@@ -492,6 +494,10 @@ function valueKind(type: string, bindings: Bindings, reference = false): ValueKi
   if (type === "string" || type === "string | null") {
     return { kind: "string", nullable: type.endsWith("null") };
   }
+  const strings = /^CStrings<"[\w ]+">( \| null)?$/.exec(type);
+  if (strings !== null) {
+    return { kind: "strings", nullable: strings[1] !== undefined };
+  }
   if (/^CBool<\w+>$/.test(type)) {
     return { kind: "boolean" };
   }
@@ -540,6 +546,10 @@ function resetValue(value: ValueKind, girDefault: string | undefined, members: M
     // Unset where the setter takes null; otherwise what was set stays.
     return value.nullable ? "null" : null;
   }
+  if (value.kind === "strings") {
+    // Unset where the setter takes null; an empty list otherwise.
+    return value.nullable ? "null" : "[]";
+  }
   if (girDefault === undefined) {
     return null;
   }
@@ -551,6 +561,7 @@ function resetValue(value: ValueKind, girDefault: string | undefined, members: M
       return Number.isFinite(n) ? String(n) : null;
     }
     case "object":
+    case "strings":
       return null;
     case "enum": {
       // A flags default may be several members joined with `|`.
@@ -737,7 +748,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line();
   line("__IMPORTS__");
   line('import type { HostComponent } from "shared/ReactHostComponent.ts";');
-  line('import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";');
+  line('import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "./HostNode.ts";');
   const childImports = [...new Set([...childElements.values()].flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]))];
   line(`import { ${childImports.join(", ")} } from "./children.ts";`);
   line();
@@ -1032,6 +1043,8 @@ function propType(value: ValueKind): string {
       return value.nullable ? "string | null" : "string";
     case "enum":
       return value.type;
+    case "strings":
+      return value.nullable ? "readonly string[] | null" : "readonly string[]";
     case "object": {
       const union = value.classes.join(" | ");
       return value.nullable ? `${union} | null` : union;
@@ -1057,6 +1070,9 @@ function assign(p: Prop): string {
     // several handle types.
     const calls = p.value.classes.map((c) => `if (value instanceof ${c}) gtk.${p.setter}(value);`);
     return (p.reset === null ? calls : [...calls, `gtk.${p.setter}(null);`]).join("\n      else ");
+  }
+  if (p.value.kind === "strings") {
+    return `gtk.${p.setter}(stringsOf(value) ?? ${p.reset});`;
   }
   const test = p.value.kind === "enum" ? "number" : p.value.kind;
   const valueOf = p.value.kind === "enum" ? `value as ${p.value.type}` : "value";
