@@ -130,3 +130,47 @@ fn symbol_resolution_stays_linear_in_files() {
     assert!(stats.symbols > 0);
     assert_eq!(stats.modules, stats.files);
 }
+
+/// **A symbol declared in two files keeps both declarations.** A class in one
+/// file and an interface merging into it from another -- a Swift extension,
+/// as `AppKit` adds members to Foundation's `NSString` -- is one symbol, and it
+/// used to keep only the declarations of the file it was first recorded
+/// from: `AppKit`'s `NSString` lost its class and lowering found none, and here
+/// the class's file first loses the interface. Both file orders, since which
+/// one comes first decided it.
+#[test]
+fn a_symbol_declared_in_two_files_keeps_both_declarations() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    for (order, files) in [("class-first", ["a.d.ts", "b.d.ts"]), ("interface-first", ["b.d.ts", "a.d.ts"])] {
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-symbols-merged-{}-{order}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.d.ts"), "declare module \"m\" {\n  export class Box {\n    a(): number;\n  }\n}\n").unwrap();
+        std::fs::write(dir.join("b.d.ts"), "declare module \"m\" {\n  interface Box {\n    b(): number;\n  }\n}\n").unwrap();
+        std::fs::write(dir.join("main.ts"), "import { Box } from \"m\";\nexport function both(box: Box): number {\n  return box.a() + box.b();\n}\n").unwrap();
+        std::fs::write(
+            dir.join("tsconfig.json"),
+            format!(
+                r#"{{ "compilerOptions": {{ "strict": true, "noEmit": true, "target": "es2022", "module": "esnext" }}, "files": ["{}", "{}", "main.ts"] }}"#,
+                files[0], files[1]
+            ),
+        )
+        .unwrap();
+        let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
+        let snapshot = TsgoApi::new(tsgo.clone()).snapshot(&tsconfig).expect("snapshot should succeed");
+        let kinds: Vec<u16> = snapshot
+            .symbols
+            .iter()
+            .filter(|symbol| symbol.name == "Box")
+            .flat_map(|symbol| symbol.declarations.iter())
+            .filter_map(|node| match snapshot.nodes[node.0 as usize].kind {
+                nts_semantic_schema::NodeKind::Syntax(kind) => Some(kind),
+                nts_semantic_schema::NodeKind::List => None,
+            })
+            .collect();
+        for (kind, what) in [(nts_semantic_schema::syntax::CLASS_DECLARATION, "class"), (nts_semantic_schema::syntax::INTERFACE_DECLARATION, "interface")] {
+            assert!(kinds.contains(&kind), "{order}: `Box` lost its {what} declaration: {kinds:?}");
+        }
+    }
+}

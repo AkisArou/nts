@@ -113,31 +113,35 @@ fn declaration_index(handle: &NodeHandle, path: &str) -> Option<u32> {
 pub struct Deferred(FxHashMap<SymbolId, Vec<NodeHandle>>);
 
 impl Deferred {
-    /// Remember the handles one file could not map for a symbol.
-    ///
-    /// First writer wins: a symbol mentioned by two importers declines the same
-    /// handles in both, and `attach` fills only an empty record, so a second copy
-    /// would be work with no answer of its own.
+    /// Remember the handles one file could not map for a symbol: every
+    /// declaration of it in another file. Each is kept once, however many
+    /// files decline it.
     fn remember(&mut self, symbol: SymbolId, handles: Vec<NodeHandle>) {
-        self.0.entry(symbol).or_insert(handles);
+        let kept = self.0.entry(symbol).or_default();
+        for handle in handles {
+            if !kept.contains(&handle) {
+                kept.push(handle);
+            }
+        }
     }
 
-    /// Map what was declined, now that every file has a base.
+    /// Map what was declined, now that every file has a base, adding each
+    /// declaration a record does not have yet.
     ///
-    /// Fills a record that has **no** declarations only. A record with some was
-    /// filled by the file that holds them, and two files cannot hold the
-    /// declarations of one symbol -- the same rule `intern_declared` states.
+    /// **A record with declarations is not a complete one.** One symbol can be
+    /// declared in two files -- a class and an interface merging into it, a
+    /// module augmented from another file, a namespace in two -- and this
+    /// filled only an empty record, on the rule that two files cannot hold the
+    /// declarations of one symbol. That rule was false: `objc:Foundation`'s
+    /// class `NSString` extended by `AppKit`'s `interface NSString` kept only the
+    /// interface, and the class was then refused as unrepresentable. Adding a
+    /// declaration already present changes nothing, so attaching twice is
+    /// harmless.
     #[allow(clippy::implicit_hasher)]
     pub fn attach(self, snapshot: &mut SemanticSnapshot, file_bases: &[(String, u32)]) {
         let nodes = snapshot.nodes.len();
         for (symbol, handles) in self.0 {
-            let Some(record) = snapshot.symbols.get_mut(symbol.0 as usize) else {
-                continue;
-            };
-            if !record.declarations.is_empty() {
-                continue;
-            }
-            record.declarations = handles
+            let mapped: Vec<NodeId> = handles
                 .iter()
                 .filter_map(|handle| super::decompose::declaration_node(handle, file_bases))
                 // The same bound the per-file mapping applies. A handle naming a
@@ -146,6 +150,9 @@ impl Deferred {
                 // shape of a right one.
                 .filter(|node| (node.0 as usize) < nodes)
                 .collect();
+            if let Some(record) = snapshot.symbols.get_mut(symbol.0 as usize) {
+                add_declarations(&mut record.declarations, mapped);
+            }
         }
     }
 }
@@ -331,26 +338,35 @@ fn intern(
         .map(NodeId)
         .collect();
 
-    // Only when this file has none of them: a symbol declared here keeps what
-    // this pass mapped, and `Deferred::attach` has nothing to add to it. Bounding
-    // the table this way also keeps it to the symbols a file *mentions* rather
-    // than to every symbol it interns.
-    let declined: Vec<NodeHandle> = if declarations.is_empty() {
-        response
-            .declarations
-            .iter()
-            .filter(|handle| declaration_index(handle, path).is_none())
-            .cloned()
-            .collect()
-    } else {
-        Vec::new()
-    };
+    // Every declaration in another file, whether or not this file has some:
+    // one symbol can be declared in several (see `Deferred::attach`).
+    let declined: Vec<NodeHandle> = response
+        .declarations
+        .iter()
+        .filter(|handle| declaration_index(handle, path).is_none())
+        .cloned()
+        .collect();
 
     let id = intern_declared(snapshot, interned, response, root, declarations);
     if !declined.is_empty() {
         deferred.remember(id, declined);
     }
     id
+}
+
+/// Add `more` to a symbol's declarations: each once, in node order, which is
+/// the order of the files and of the declarations in each -- stable however
+/// the files were visited.
+fn add_declarations(declarations: &mut Vec<NodeId>, more: Vec<NodeId>) {
+    let before = declarations.len();
+    for node in more {
+        if !declarations.contains(&node) {
+            declarations.push(node);
+        }
+    }
+    if declarations.len() != before {
+        declarations.sort_unstable_by_key(|node| node.0);
+    }
 }
 
 /// Intern a symbol with declarations already mapped to the shared node arena.
@@ -381,14 +397,10 @@ pub(super) fn intern_declared(
     // type for", 110 of them in `stream` alone, and 187 more classes were
     // refused for having a base that was.
     if let Some(&existing) = interned.get(&response.id) {
-        // Fill them in where this file is the one that has them. A symbol keeps
-        // whatever it already had otherwise: two files cannot both hold the
-        // declarations of one symbol, so this can only go from empty to filled.
-        if !declarations.is_empty()
-            && let Some(record) = snapshot.symbols.get_mut(existing.0 as usize)
-            && record.declarations.is_empty()
-        {
-            record.declarations = declarations;
+        // Add those this file holds: a symbol can be declared in several
+        // files, so a record that has some may still lack this file's.
+        if let Some(record) = snapshot.symbols.get_mut(existing.0 as usize) {
+            add_declarations(&mut record.declarations, declarations);
         }
         return existing;
     }
