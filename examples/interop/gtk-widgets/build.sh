@@ -22,7 +22,7 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 
-expected="label 42.000000 notified 1 picked blue page choices request 140 icon edit-clear file null same true drawn true width 300 "
+expected="label 42.000000 notified 1 picked blue page choices request 140 icon edit-clear file null same true keys 65,66, handled true false click 2@1.5x2.5 drawn true width 300 "
 for mode in plain rc; do
   flag=""
   [ "$mode" = rc ] && flag="--rc"

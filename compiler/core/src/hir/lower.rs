@@ -6453,19 +6453,29 @@ fn vfunc_declaration_signature(snapshot: &SemanticSnapshot, declaration: NodeId)
 /// What names the `emit` thunk of a binding's own signal: `g`, then each
 /// parameter's C type -- `p` a pointer, `B` a `bool`, a scalar by its name
 /// (`Int32`) -- where a program's signal is named by its kinds (`d`, `b`, `s`,
-/// `o`). A record passed by value has no place in `g_signal_emit`'s varargs.
-fn binding_signal_kinds(parameters: &[super::native::Type]) -> Result<String, String> {
+/// `o`); then, for a signal that answers, `R` and its result's the same way
+/// (`gUInt...RInt`). A record passed by value has no place in
+/// `g_signal_emit`'s varargs.
+fn binding_signal_kinds(parameters: &[super::native::Type], result: &super::native::Type) -> Result<String, String> {
     use std::fmt::Write as _;
-    let mut kinds = String::from("g");
-    for parameter in parameters {
-        match parameter {
+    let code = |kinds: &mut String, ty: &super::native::Type| -> Result<(), String> {
+        match ty {
             super::native::Type::Pointer(_) => kinds.push('p'),
             super::native::Type::Bool => kinds.push('B'),
             super::native::Type::Scalar(scalar) => {
                 let _ = write!(kinds, "{scalar:?}");
             }
-            other => return Err(format!("`emit` of a signal with a parameter of C type {other:?}")),
+            other => return Err(format!("`emit` of a signal with a value of C type {other:?}")),
         }
+        Ok(())
+    };
+    let mut kinds = String::from("g");
+    for parameter in parameters {
+        code(&mut kinds, parameter)?;
+    }
+    if !matches!(result, super::native::Type::Void) {
+        kinds.push('R');
+        code(&mut kinds, result)?;
     }
     Ok(kinds)
 }
@@ -45861,7 +45871,7 @@ impl<'a> FuncBuilder<'a> {
                     *parameter = super::native::Type::Pointer(super::native::Pointee::Void);
                 }
             }
-            binding_signal_kinds(&thunk.parameters[1..]).map_err(|why| self.unsupported(id, &why))?
+            binding_signal_kinds(&thunk.parameters[1..], &thunk.result).map_err(|why| self.unsupported(id, &why))?
         };
         thunk.name = super::ForeignSignal::emit_thunk(&signal, &kinds);
         thunk.declared_at = None;

@@ -495,13 +495,23 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
         for arg in &passed {
             let _ = write!(rest, ", {arg}");
         }
+        // A signal that answers writes its handlers' result through a
+        // location passed after the parameters, which the thunk returns.
+        let (returns, slot, answer) = if matches!(target.result, Type::Void) {
+            ("void".to_owned(), String::new(), "  ret void\n".to_owned())
+        } else {
+            let ty = ty_of(&target.result.abi(platform.abi), func)?.to_owned();
+            let zero = if matches!(ty.as_str(), "float" | "double") { "0.0" } else { "0" };
+            let _ = write!(rest, ", ptr %r");
+            (ty.clone(), format!("  %r = alloca {ty}\n  store {ty} {zero}, ptr %r\n"), format!("  %v = load {ty}, ptr %r\n  ret {ty} %v\n"))
+        };
         let _ = writeln!(
             out,
             "@{thunk}.cache = internal global [2 x i64] zeroinitializer\n\
-             define void @{thunk}({}) nounwind {{\nentry:\n\
+             define {returns} @{thunk}({}) nounwind {{\nentry:\n{slot}\
              \x20 %id = call i32 @nts_gobject_signal_id(ptr %a0, ptr @{thunk}.name, ptr @{thunk}.cache)\n\
              {body}\
-             \x20 call void (ptr, i32, i32, ...) @g_signal_emit(ptr %a0, i32 %id, i32 0{rest})\n  ret void\n}}",
+             \x20 call void (ptr, i32, i32, ...) @g_signal_emit(ptr %a0, i32 %id, i32 0{rest})\n{answer}}}",
             parameters.join(", ")
         );
     }

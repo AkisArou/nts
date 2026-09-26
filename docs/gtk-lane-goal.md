@@ -645,6 +645,13 @@ tally.connect("incremented", (self, by) => { /* self: Tally, by: number */ });
     same-named signals of different shapes are two thunks. Every pointer is
     `void *`, so one thunk prints one prototype.
   - The self-check skips the view, since no header declares the thunk.
+  - A signal that answers a number or a boolean emits too, and `emit`
+    returns the handlers' answer. The thunk passes a zeroed local as the
+    last vararg, which `g_signal_emit` writes the result through, and
+    returns it. Its name carries `R` and the result's C type
+    (`...RInt`). `keys.emit("key-pressed", ...)` is whether a handler took
+    the key. A signal answering a pointer has no `emit`: nothing here says
+    who owns what comes back. Witness: gtk-widgets' `handled true false`.
   - This retired the C `emit` shims. gtk-subclass is now TypeScript only: it
     logs with `console.log`, and its `native/` is gone.
   - Witness: every `clicked` in gtk-subclass, and `direction 2`, an enum

@@ -17,6 +17,10 @@
 //                 written and read back (copied, the copy freed); an image's
 //                 unset `file`, `null`; and `primary_icon_paintable`, an object
 //                 written and read back as itself, owned
+//   keys 65,66, handled true false click 2@1.5x2.5  a key controller whose
+//                 `key-pressed` handler answers whether it handled the key --
+//                 `emit` of a signal with a result answers the handlers' -- and
+//                 a click gesture's `pressed`, its coordinates `double`s
 //   drawn true width 300  `Canvas`'s `vfunc_snapshot`, drawing with
 //                 `GtkSnapshot` once GTK renders the window, whose width is
 //                 `default_width` -- another property with no setter
@@ -26,6 +30,8 @@ import {
   GtkBox,
   GtkDropDown,
   GtkEntry,
+  GtkEventControllerKey,
+  GtkGestureClick,
   GtkImage,
   GtkGrid,
   GtkLabel,
@@ -109,6 +115,23 @@ function open(app: GtkApplication): void {
   console.log(
     "icon " + (entry.primary_icon_name ?? "null") + " file " + (image.file ?? "null") + " same " + String(entry.primary_icon_paintable === paintable),
   );
+  const keys = new GtkEventControllerKey({});
+  let pressed = "";
+  keys.connect("key-pressed", (_self, keyval) => {
+    pressed += String(keyval) + ",";
+    return keyval === 65;
+  });
+  label.add_controller(keys);
+  const click = new GtkGestureClick({});
+  let at = "";
+  click.connect("pressed", (_self, n_press, x, y) => {
+    at = String(n_press) + "@" + String(x) + "x" + String(y);
+  });
+  label.add_controller(click);
+  const handled = keys.emit("key-pressed", 65, 38, 0);
+  const unhandled = keys.emit("key-pressed", 66, 56, 0);
+  click.emit("pressed", 2, 1.5, 2.5);
+  console.log("keys " + pressed + " handled " + String(handled) + " " + String(unhandled) + " click " + at);
   g_timeout_add_full(0, 300, () => {
     console.log("drawn " + String(canvas.drawn > 0) + " width " + String(canvas.width));
     app.quit();

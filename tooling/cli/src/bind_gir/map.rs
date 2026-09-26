@@ -1660,10 +1660,10 @@ impl<'a> Mapper<'a> {
     /// own signature is GIR's: the instance first, the signal's parameters,
     /// and the `user_data` last, where the bridge takes the closure from.
     ///
-    /// With it, for a signal that returns nothing, the view `emit` is:
-    /// `button.emit("clicked")`, GJS's spelling, the signal's parameters
-    /// after its name. A signal with a result has none, since `g_signal_emit`
-    /// would write it through a location the view does not take.
+    /// With it, the view `emit`: `button.emit("clicked")`, GJS's spelling,
+    /// the signal's parameters after its name, answering the handlers'
+    /// result where that is a number or a boolean -- `keys.emit("key-pressed",
+    /// ...)` is whether one handled it. A signal answering a pointer has none.
     fn signal(&mut self, class: &'a Class, signal: &super::model::Signal) -> Result<(Function, Option<Function>), Reason> {
         let c_type = class.c_type.clone().ok_or_else(|| Reason::Unknown(class.name.clone()))?;
         if !self.binding.headers.iter().any(|header| header == nts_codegen_c::GOBJECT_HEADER_NAME) {
@@ -1770,10 +1770,14 @@ impl<'a> Mapper<'a> {
             statics: None,
             vfunc: None,
         };
-        if result.c != Type::Void {
+        // What an emit answers: nothing, or a number or a boolean -- the
+        // handlers' answer through the location `g_signal_emit` writes. A
+        // pointer would come back with an ownership nothing here says, so a
+        // signal answering one has no `emit`.
+        if result.c != Type::Void && value_kind(&result.c).is_none_or(|kind| kind == 'p') {
             return Ok((connect, None));
         }
-        let emit = emit_view(&connect, &signal.name, emitted);
+        let emit = emit_view(&connect, &signal.name, emitted, result);
         Ok((connect, Some(emit)))
     }
 
@@ -2198,8 +2202,8 @@ fn get_type_function(get_type: &str) -> Function {
 /// the detail, as written.
 /// A signal's `emit` view, made from its `connect`: the instance and the
 /// signal's plain name -- a detail (`notify::label`) would be part of the
-/// thunk's -- then the signal's parameters, and no result.
-fn emit_view(connect: &Function, signal: &str, emitted: Vec<(String, Mapped)>) -> Function {
+/// thunk's -- then the signal's parameters, answering the signal's result.
+fn emit_view(connect: &Function, signal: &str, emitted: Vec<(String, Mapped)>, result: Mapped) -> Function {
     let mut parameters = connect.parameters[..2].to_vec();
     parameters[1].1.ts = format!("\"{signal}\"");
     let mut c_parameters = connect.c_parameters[..2].to_vec();
@@ -2211,7 +2215,7 @@ fn emit_view(connect: &Function, signal: &str, emitted: Vec<(String, Mapped)>) -
         name: connect.name.replacen("_connect_", "_emit_", 1),
         symbol: EMIT.to_owned(),
         parameters,
-        result: Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
+        result,
         c_parameters,
         method: connect.method.as_ref().map(|(class, _)| (class.clone(), "emit".to_owned())),
         omissible: BTreeMap::new(),

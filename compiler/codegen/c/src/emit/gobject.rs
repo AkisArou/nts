@@ -548,10 +548,19 @@ fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote:
         for at in 1..target.parameters.len() {
             let _ = write!(arguments, ", a{at}");
         }
+        // A signal that answers writes its handlers' result through a
+        // location passed after the parameters, which the thunk returns.
+        let (returns, slot, answer) = if matches!(target.result, Type::Void) {
+            ("void".to_owned(), String::new(), String::new())
+        } else {
+            let ty = target.result.c_type();
+            (ty.to_string(), format!(" {ty} r = 0;"), " return r;".to_owned())
+        };
+        let location = if slot.is_empty() { "" } else { ", &r" };
         writer.line(
             origin,
             format!(
-                "void {}({}) {{ static size_t cache[2]; g_signal_emit(a0, nts_gobject_signal_id(a0, {}, cache), 0u{arguments}); }}",
+                "{returns} {}({}) {{ static size_t cache[2];{slot} g_signal_emit(a0, nts_gobject_signal_id(a0, {}, cache), 0u{arguments}{location});{answer} }}",
                 target.name,
                 parameters.join(", "),
                 c_string(signal),
