@@ -1807,7 +1807,15 @@ test262() {
 # changed; a missing `pass-count:` line is a run that said nothing, and fails
 # rather than reading as zero.
 TEST262_LANGUAGE_PASS_FLOOR=4503
-test262_cases() {
+# One recorded test262 directory, re-run and held to its record and its floor:
+# `test262_recorded <dir> <record> <floor> <floor variable name>`. Shared by
+# test262-cases and test262-builtins-cases, so the two steps cannot come to
+# disagree about what "measured" means.
+test262_recorded() {
+  under=$1
+  record=$2
+  floor=$3
+  floor_name=$4
   if [ ! -d third_party/test262/.git ]; then
     echo "  no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
     return 0
@@ -1818,7 +1826,7 @@ test262_cases() {
   # killer. `tooling/census/attempt262.mjs`'s `capped` has the numbers.
   cap=$(( ${jobs:-8} > 8 ? 8 : ${jobs:-8} ))
   out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.mjs \
-    --recorded tooling/census/test262-language.outcomes.tsv --jobs "$cap" 2>&1)
+    --under "$under" --recorded "$record" --jobs "$cap" 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|pass-count|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/'
   [ "$status" -eq 0 ] || return 1
@@ -1827,13 +1835,33 @@ test262_cases() {
     echo "  no pass-count line: the run measured nothing, which is not zero"
     return 1
   fi
-  if [ "$passed" -lt "$TEST262_LANGUAGE_PASS_FLOOR" ]; then
-    echo "  $passed pass, below the floor of $TEST262_LANGUAGE_PASS_FLOOR -- see REGRESSED above"
+  if [ "$passed" -lt "$floor" ]; then
+    echo "  $passed pass, below the floor of $floor -- see REGRESSED above"
     return 1
   fi
-  if [ "$passed" -gt "$TEST262_LANGUAGE_PASS_FLOOR" ]; then
-    echo "  $passed pass, above the floor of $TEST262_LANGUAGE_PASS_FLOOR: raise TEST262_LANGUAGE_PASS_FLOOR in tooling/gate/all.sh"
+  if [ "$passed" -gt "$floor" ]; then
+    echo "  $passed pass, above the floor of $floor: raise $floor_name in tooling/gate/all.sh"
   fi
+}
+test262_cases() {
+  test262_recorded test/language tooling/census/test262-language.outcomes.tsv \
+    "$TEST262_LANGUAGE_PASS_FLOOR" TEST262_LANGUAGE_PASS_FLOOR
+}
+
+# Test262 `test/built-ins`, the same way, with its own record and floor --
+# kept apart from the language floor so that library surface (RegExp, BigInt,
+# Temporal, typed arrays) neither swamps nor hides the language's signal.
+#
+# **The floor exists because the record passed a threshold, stated here so a
+# low floor reads as a judgement rather than an oversight:** a floor is added
+# once the recorded set guards at least 500 passing cases from a run that was
+# not DEGRADED. The first full census (7c81431a, 38.7 pages/s) had 865 of
+# 23,812 -- 3.91% of the 22,101 in scope, with Temporal's 4,603 kept in the
+# denominator because nothing in docs/ makes it a non-goal. About 35 s.
+TEST262_BUILTINS_PASS_FLOOR=865
+test262_builtins_cases() {
+  test262_recorded test/built-ins tooling/census/test262-builtins.outcomes.tsv \
+    "$TEST262_BUILTINS_PASS_FLOOR" TEST262_BUILTINS_PASS_FLOOR
 }
 
 # Defects pinned to what they do: `tooling/conformance/outcomes/`, where a wrong
@@ -1982,6 +2010,7 @@ step "reformat" reformatted
 step "records" records
 step "test262" test262
 step "test262-cases" test262_cases
+step "test262-builtins-cases" test262_builtins_cases
 step "outcomes" outcomes
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
