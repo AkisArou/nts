@@ -58,6 +58,13 @@ work timer"
 
 mkdir -p "$out"
 "$nts" build "$source/tsconfig.json" --out "$out" --rc "$@"
+# The build has just written types/gir from this nts's bindings, and
+# react-gtk's widgets are generated from them: generated from an older nts's,
+# a prop can be missing or name a setter that is gone.
+if ! node "$root/runtime/react/packages/react-gtk/tools/gen-widgets.ts" "$source/types/gir" --check >/dev/null; then
+  echo "FAILED react-gtk: src/widgets.ts is stale for this nts's bindings; run tools/gen-widgets.ts ../../native/gtk/types/gir" >&2
+  exit 1
+fi
 log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
   timeout 30 "$root/examples/interop/with-display.sh" "$out/host/linux-gnu-x86_64/host" 2>/dev/null || true)
 if [ "$log" != "$expected" ]; then
