@@ -81,7 +81,7 @@ done
 echo "ios: both products built for the simulator and bundled"
 
 if ! "$root/tooling/apple/run-ios.sh" --reachable; then
-  echo "ios-list: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP ios-list: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
 printf '%s\n' "title Fruits" "rows 3 visible 3" "row 1 banana" "rows 4 last date" "selected 1" "asked 4" "tapped banana" "height -1" "done" >"$out/expected.txt"

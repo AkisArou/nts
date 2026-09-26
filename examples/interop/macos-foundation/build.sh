@@ -92,7 +92,7 @@ status=$?
 set -e
 case $status in
   0) ;;
-  77) echo "macos-x86_64: not run -- no Mac reachable (tooling/apple/vm.md)"; exit 0 ;;
+  77) echo "SKIP macos-x86_64: not run -- no Mac reachable (tooling/apple/vm.md)"; exit 0 ;;
   *) echo "macos-foundation: the C oracle exited $status on the Mac" >&2; exit 1 ;;
 esac
 # An oracle that printed nothing would make every comparison below vacuous.

@@ -94,7 +94,7 @@ echo "macos: both slices link AppKit"
 
 program="$out/window/macos-13-x86_64/window"
 if ! "$root/tooling/apple/run.sh" --reachable; then
-  echo "macos-window: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP macos-window: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
 # The witness: every message the binding sends, asked of the Mac's runtime.
@@ -107,6 +107,12 @@ timeout 60 "$root/tooling/apple/run.sh" "$out/witness" >"$out/witness.txt" 2>&1 
 grep -v '^#' "$source/witness.expected" | diff -u - "$out/witness.txt" ||
   { echo "macos-window: the runtime's answer to the binding's messages changed (witness.expected)" >&2; exit 1; }
 echo "witness: $(tail -1 "$out/witness.txt")"
+
+# The witness needs no desktop; the window does.
+if ! "$root/tooling/apple/run.sh" --gui; then
+  echo "SKIP macos-window: not run -- the Mac has no user logged in to its desktop, so no window can open (tooling/apple/vm.md)"
+  exit 0
+fi
 
 # Runs the program on the Mac, bounded: a window whose loop never stops would
 # otherwise hold the gate.

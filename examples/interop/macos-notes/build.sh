@@ -84,7 +84,11 @@ fi
 echo "macos: both slices built and linked"
 
 if ! "$root/tooling/apple/run.sh" --reachable; then
-  echo "macos-notes: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP macos-notes: not run -- no Mac reachable (tooling/apple/vm.md)"
+  exit 0
+fi
+if ! "$root/tooling/apple/run.sh" --gui; then
+  echo "SKIP macos-notes: not run -- the Mac has no user logged in to its desktop, so no window can open (tooling/apple/vm.md)"
   exit 0
 fi
 ssh -o BatchMode=yes "${NTS_APPLE_SSH:-nts-mac}" rm -f /tmp/nts-macos-notes.txt

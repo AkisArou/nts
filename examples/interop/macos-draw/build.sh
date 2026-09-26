@@ -82,7 +82,7 @@ clang -target x86_64-apple-macos13 -isysroot "$sdk" -fuse-ld=lld -Wall -Werror \
   "$source/reference/draw.c" -framework CoreGraphics -lobjc -o "$out/oracle"
 
 if ! "$root/tooling/apple/run.sh" --reachable; then
-  echo "macos-draw: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP macos-draw: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
 # Runs a program on the Mac into `$2.txt`, and fails on anything on stderr.

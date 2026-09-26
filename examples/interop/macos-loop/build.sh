@@ -54,7 +54,7 @@ echo "macos: both slices link CoreFoundation and carry the run-loop host"
 
 program="$out/loop/macos-13-x86_64/loop"
 if ! "$root/tooling/apple/run.sh" --reachable; then
-  echo "macos-loop: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP macos-loop: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
 run() {

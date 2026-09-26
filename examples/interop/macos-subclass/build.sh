@@ -74,7 +74,7 @@ clang "$@" -fuse-ld=lld -x objective-c -fobjc-arc -fblocks -Wall -Werror \
   "$source/reference/subclass.m" -framework Foundation -framework CoreFoundation -o "$out/oracle"
 
 if ! "$root/tooling/apple/run.sh" --reachable; then
-  echo "macos-subclass: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP macos-subclass: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
 # Runs a program on the Mac into `$2.txt`, and fails on anything on stderr.

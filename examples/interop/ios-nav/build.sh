@@ -80,7 +80,7 @@ done
 echo "ios: both products built for the simulator and bundled"
 
 if ! "$root/tooling/apple/run-ios.sh" --reachable; then
-  echo "ios-nav: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP ios-nav: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
 printf '%s\n' "list loaded 2" "list will appear 1" "list appeared 1" "detail loaded banana" "detail appeared true" \

@@ -8,6 +8,8 @@
 # run as its own executable, `name.app/Contents/MacOS/name`, which is how it
 # finds its `Info.plist`.
 #   tooling/apple/run.sh --reachable        # exit 0 if a Mac answers, else 77
+#   tooling/apple/run.sh --gui              # exit 0 if a user is logged in to
+#                                           # its desktop, else 77
 #
 # NTS_APPLE_SSH names the ssh destination (default `nts-mac`, an alias in
 # ~/.ssh/config; vm.md has the stanza). Exit 77 means "no Mac reachable", which
@@ -24,6 +26,16 @@ reachable() { ssh "${ssh_opts[@]}" "$dest" true >/dev/null 2>&1; }
 
 if [[ "${1:-}" == "--reachable" ]]; then
   reachable && exit 0 || exit 77
+fi
+# Whether an application can put up a window: a user logged in to the
+# desktop, whose Dock runs. After a reboot with no automatic login the Mac
+# answers ssh from its login window, and AppKit's apps -- their Swift twins
+# too -- print NSXPCSharedListener errors and never finish launching. That is
+# the Mac, not the artifact, so a caller skips on 77 and names this reason. It
+# asks for the session and never for a symptom, so an app that fails with a
+# session present still fails.
+if [[ "${1:-}" == "--gui" ]]; then
+  ssh "${ssh_opts[@]}" "$dest" 'pgrep -x Dock >/dev/null' >/dev/null 2>&1 && exit 0 || exit 77
 fi
 # `--env NAME=VALUE`: set for the program on the Mac, which ssh does not
 # forward from here.

@@ -55,3 +55,16 @@ by luck.
 | `tooling/apple/build-libuv.sh` | libuv for `aarch64`/`x86_64` macOS, which every nts executable links |
 | `tooling/apple/run.sh <artifact>` | runs it on the Mac; exit 77 means no Mac reachable (callers print SKIP) |
 | `tooling/apple/sync-sdk.sh` | copies the Command Line Tools SDK out of the VM |
+
+## A desktop session
+
+An application that opens a window needs a user logged in to the Mac's
+desktop. After a reboot with no automatic login, the VM answers ssh from its
+login window: the command-line examples run, and `macos-window` and
+`macos-notes` print "not run -- the Mac has no user logged in to its desktop"
+(`run.sh --gui`). Log in once through the SPICE socket,
+`remote-viewer spice+unix:///$HOME/macos-tahoe/macos-tahoe.sock`, tunnelled
+from another machine with `ssh -L 5930:$HOME/macos-tahoe/macos-tahoe.sock`.
+Turning on automatic login (System Settings, Users & Groups) keeps a reboot
+from losing the session.
+

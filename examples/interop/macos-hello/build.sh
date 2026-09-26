@@ -87,6 +87,6 @@ case $status in
     diff -u "$source/expected.txt" "$out/macos.txt"
     echo "macos-x86_64: matches node, run on a Mac"
     ;;
-  77) echo "macos-x86_64: not run -- no Mac reachable (tooling/apple/vm.md)" ;;
+  77) echo "SKIP macos-x86_64: not run -- no Mac reachable (tooling/apple/vm.md)" ;;
   *) echo "macos-hello: the x86_64 program exited $status on the Mac" >&2; exit 1 ;;
 esac

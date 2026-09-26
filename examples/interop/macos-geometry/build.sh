@@ -75,7 +75,7 @@ clang "$@" -fuse-ld=lld -x objective-c -fobjc-arc -Wall -Werror \
   "$source/reference/geometry.m" -framework Foundation -o "$out/oracle"
 
 if ! "$root/tooling/apple/run.sh" --reachable; then
-  echo "macos-geometry: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP macos-geometry: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
 # Runs a program on the Mac into `$2.txt`, and fails on anything on stderr.

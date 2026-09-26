@@ -80,7 +80,7 @@ done
 echo "ios: both products built for the simulator and bundled"
 
 if ! "$root/tooling/apple/run-ios.sh" --reachable; then
-  echo "ios-hello: not run -- no Mac reachable (tooling/apple/vm.md)"
+  echo "SKIP ios-hello: not run -- no Mac reachable (tooling/apple/vm.md)"
   exit 0
 fi
 printf '%s\n' "launched Hello from TypeScript true 2" "pressed 1" "done" >"$out/expected.txt"
