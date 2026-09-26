@@ -73,6 +73,9 @@
 //             placed among its children; taken out, it is detached. Popping
 //             it up is GTK's, and this display cannot: under Xvfb with no
 //             focus, showing any popover is a GTK critical, in plain C too
+//   application  an application's root: an ApplicationWindow rendered there
+//             asks for a commit mount, joins the application and is shown at
+//             commit, and taken out it leaves the application
 //   slot      slot elements fill a Paned's start and end children, their
 //             children placed first as React completes them; a child removed
 //             from its slot element empties the slot, and so does the slot
@@ -88,9 +91,11 @@
 //   work      a slice of scheduler work posted to GLib ran
 //   timer     a timer fired, and a cancelled one did not
 
+import { ApplicationFlags } from "c:Gio-2.0";
 import {
   gtk_init,
   GtkAdjustment,
+  GtkApplication,
   GtkEventControllerKey,
   GtkGestureClick,
   GtkSingleSelection,
@@ -109,6 +114,7 @@ import {
   react_gtk_log,
 } from "c:react-gtk-shim";
 import {
+  ApplicationRoot,
   appendChildToContainer,
   appendInitialChild,
   commitMount,
@@ -117,10 +123,11 @@ import {
   finalizeInitialChildren,
   getCurrentUpdatePriority,
   getPublicInstance,
-  GtkContainer,
+  WindowRoot,
   hideInstance,
   insertBefore,
   removeChild,
+  removeChildFromContainer,
   unhideInstance,
   type HostNode,
   type Props,
@@ -200,7 +207,7 @@ function frame(node: HostNode): string {
 
 function main(): void {
   gtk_init();
-  const container = new GtkContainer(new GtkWindow());
+  const container = new WindowRoot(new GtkWindow());
   const root = createInstance("GtkBox", { spacing: 6 }, container, 0, {});
   const label = createInstance("GtkLabel", { children: "hello" }, container, 0, {});
   let clicks = "";
@@ -615,7 +622,7 @@ function main(): void {
   );
 
   // A popover opens inside a shown window, as an app's is.
-  const popped = new GtkContainer(new GtkWindow());
+  const popped = new WindowRoot(new GtkWindow());
   const anchor = createInstance("GtkBox", {}, popped, 0, {});
   appendChildToContainer(popped, anchor);
   popped.window.present();
@@ -635,6 +642,19 @@ function main(): void {
   removeChild(anchor, popover);
   popping += " " + String(widget(popover).get_parent() === null);
   react_gtk_log("popover " + popping);
+
+  const application = new GtkApplication({ application_id: "org.nts.ReactGtk", flags: ApplicationFlags.NON_UNIQUE });
+  application.register(null, null);
+  const appRoot = new ApplicationRoot(application);
+  const appWindow = createInstance("GtkApplicationWindow", { title: "App" }, appRoot, 0, {});
+  const appWantsMount = finalizeInitialChildren(appWindow, "GtkApplicationWindow", { title: "App" }, 0);
+  appendChildToContainer(appRoot, appWindow);
+  commitMount(appWindow, "GtkApplicationWindow", { title: "App" }, {});
+  const appWidget = widget(appWindow);
+  const joined = appWidget instanceof GtkWindow && appWidget.get_application() === application && appWidget.get_visible();
+  removeChildFromContainer(appRoot, appWindow);
+  const left = appWidget instanceof GtkWindow && appWidget.get_application() === null;
+  react_gtk_log("application " + String(appWantsMount) + " " + String(joined) + " " + String(left));
 
   const paned = createInstance("GtkPaned", {}, container, 0, {});
   const startSlot = createInstance("GtkPaned.StartChild", {}, container, 0, {});

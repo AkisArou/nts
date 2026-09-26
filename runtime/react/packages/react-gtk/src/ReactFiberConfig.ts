@@ -17,32 +17,24 @@ export * from "react-reconciler/ReactFiberConfigWithNoTestSelectors.ts";
 export * from "react-reconciler/ReactFiberConfigWithNoViewTransition.ts";
 
 import { ReactContext } from "shared/ReactContext.ts";
-import type { GtkWidget, GtkWindow } from "c:Gtk-4.0";
+import type { GtkWidget } from "c:Gtk-4.0";
 
 import { getCurrentUpdatePriority, type HostNode, NoEventPriority, type Props, type WidgetNode } from "./HostNode.ts";
+import type { HostRoot } from "./HostRoot.ts";
 import { cancelTimer, startTimer } from "./SchedulerHost.ts";
 import { createNode } from "./widgets.ts";
 
 export { getCurrentUpdatePriority, HostNode, setCurrentUpdatePriority, SlotNode, type Props, WidgetNode } from "./HostNode.ts";
+export { ApplicationRoot, HostRoot, WindowRoot } from "./HostRoot.ts";
 
 export type Type = string;
-
-/** The root: a window, which holds one child. */
-export class GtkContainer {
-  readonly window: GtkWindow;
-  child: WidgetNode | null = null;
-
-  constructor(window: GtkWindow) {
-    this.window = window;
-  }
-}
 
 // ---- the reconciler's contract ---------------------------------------------------
 
 export type Instance = HostNode;
 // GTK has no bare text node: text is a Label's.
 export type TextInstance = HostNode;
-export type Container = GtkContainer;
+export type Container = HostRoot;
 export type PublicInstance = GtkWidget;
 export type HostContext = number;
 
@@ -88,7 +80,7 @@ export function shouldAttemptEagerTransition(): boolean {
   return false;
 }
 
-export function getRootHostContext(_rootContainer: GtkContainer): HostContext {
+export function getRootHostContext(_rootContainer: HostRoot): HostContext {
   return 0;
 }
 export function getChildHostContext(parentHostContext: HostContext, _type: string): HostContext {
@@ -97,10 +89,10 @@ export function getChildHostContext(parentHostContext: HostContext, _type: strin
 export function getPublicInstance(instance: HostNode): PublicInstance {
   return instance.publicInstance();
 }
-export function prepareForCommit(_containerInfo: GtkContainer): object | null {
+export function prepareForCommit(_containerInfo: HostRoot): object | null {
   return null;
 }
-export function resetAfterCommit(_containerInfo: GtkContainer): void {}
+export function resetAfterCommit(_containerInfo: HostRoot): void {}
 
 // Text children are a widget's label: no text instance is made for them, and
 // a widget with no label refuses them (HostNode.applyProps).
@@ -109,7 +101,7 @@ export function shouldSetTextContent(_type: string, props: Props): boolean {
   return typeof children === "string" || typeof children === "number";
 }
 
-export function createInstance(type: string, props: Props, _root: GtkContainer, _hostContext: HostContext, _handle: object): HostNode {
+export function createInstance(type: string, props: Props, _root: HostRoot, _hostContext: HostContext, _handle: object): HostNode {
   const node = createNode(type);
   if (node === null) {
     throw new Error(`react-gtk has no <${type.startsWith("Gtk") ? type.slice(3) : type}>.`);
@@ -118,7 +110,7 @@ export function createInstance(type: string, props: Props, _root: GtkContainer, 
   return node;
 }
 
-export function createTextInstance(text: string, _root: GtkContainer, _hostContext: HostContext, _handle: object): HostNode {
+export function createTextInstance(text: string, _root: HostRoot, _hostContext: HostContext, _handle: object): HostNode {
   throw new Error(`Text "${text}" must be inside a <Label>: GTK has no bare text.`);
 }
 
@@ -139,45 +131,23 @@ export function cloneMutableTextInstance(textInstance: HostNode): HostNode {
 export function appendChild(parentInstance: HostNode, child: HostNode): void {
   parentInstance.appendChild(child);
 }
-export function appendChildToContainer(container: GtkContainer, child: HostNode): void {
-  const widget = child.widgetNode();
-  if (widget === null) {
-    throw new Error(`<${child.name()}> goes directly inside its widget, not in a window's root.`);
-  }
-  // A window rendered at the root opens over the root's window.
-  if (widget.isToplevel()) {
-    widget.openFrom(container.window);
-    return;
-  }
-  if (container.child !== null && container.child !== widget) {
-    throw new Error("A GTK window holds one child: wrap its children in a <Box>.");
-  }
-  container.child = widget;
-  container.window.set_child(widget.widget);
+export function appendChildToContainer(container: HostRoot, child: HostNode): void {
+  container.appendChild(child);
 }
 export function insertBefore(parentInstance: HostNode, child: HostNode, beforeChild: HostNode): void {
   parentInstance.insertBefore(child, beforeChild);
 }
-export function insertInContainerBefore(_container: GtkContainer, _child: HostNode, _beforeChild: HostNode): void {
-  throw new Error("A GTK window holds one child: wrap its children in a <Box>.");
+export function insertInContainerBefore(container: HostRoot, child: HostNode, beforeChild: HostNode): void {
+  container.insertBefore(child, beforeChild);
 }
 export function removeChild(parentInstance: HostNode, child: HostNode): void {
   parentInstance.removeChild(child);
 }
-export function removeChildFromContainer(container: GtkContainer, child: HostNode): void {
-  const widget = child.widgetNode();
-  if (widget !== null && widget.isToplevel()) {
-    widget.close();
-    return;
-  }
-  if (container.child === child) {
-    container.child = null;
-    container.window.set_child(null);
-  }
+export function removeChildFromContainer(container: HostRoot, child: HostNode): void {
+  container.removeChild(child);
 }
-export function clearContainer(container: GtkContainer): void {
-  container.child = null;
-  container.window.set_child(null);
+export function clearContainer(container: HostRoot): void {
+  container.clear();
 }
 
 export function commitTextUpdate(_textInstance: HostNode, _oldText: string, _newText: string): void {}
@@ -210,7 +180,7 @@ export function getInstanceFromNode(_node: unknown): HostNode | null {
 }
 export function beforeActiveInstanceBlur(_handle: object): void {}
 export function afterActiveInstanceBlur(): void {}
-export function preparePortalMount(_portalInstance: GtkContainer): void {}
+export function preparePortalMount(_portalInstance: HostRoot): void {}
 export function requestPostPaintCallback(_callback: (time: number) => void): void {}
 
 // Commits never wait on host resources here.
@@ -230,14 +200,14 @@ export function startSuspendingCommit(): SuspendedState {
   return null;
 }
 export function suspendInstance(_state: SuspendedState, _instance: HostNode, _type: string, _props: Props): void {}
-export function suspendOnActiveViewTransition(_state: SuspendedState, _container: GtkContainer): void {}
+export function suspendOnActiveViewTransition(_state: SuspendedState, _container: HostRoot): void {}
 export function waitForCommitToBeReady(
   _state: SuspendedState,
   _timeoutOffset: number,
 ): ((initiateCommit: () => void) => () => void) | null {
   return null;
 }
-export function getSuspendedCommitReason(_state: SuspendedState, _rootContainer: GtkContainer): string | null {
+export function getSuspendedCommitReason(_state: SuspendedState, _rootContainer: HostRoot): string | null {
   return null;
 }
 export function resetFormInstance(_form: FormInstance): void {}

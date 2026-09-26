@@ -14,7 +14,7 @@
 // window needs. Each subclass also holds it typed as what it is, in its own
 // `gtk` field, so its setters are the widget's own methods, with no cast.
 
-import { GtkPopover, type GtkWidget, GtkWindow } from "c:Gtk-4.0";
+import { type GtkApplication, GtkPopover, type GtkWidget, GtkWindow } from "c:Gtk-4.0";
 import { g_idle_add_full } from "c:GLib-2.0";
 
 import { connectController, Controllers } from "./controllers.ts";
@@ -470,6 +470,14 @@ export abstract class WidgetNode extends HostNode {
   /** A window, opened from `opener`. */
   openFrom(opener: GtkWidget): void {
     this.opener = opener;
+  }
+  /** A window, opened as one of `application`'s, over none of its others. */
+  joinApplication(application: GtkApplication): void {
+    const window = this.widget;
+    if (window instanceof GtkWindow) {
+      window.set_application(application);
+    }
+    this.opener = null;
   }
   /** A window, closed. */
   close(): void {

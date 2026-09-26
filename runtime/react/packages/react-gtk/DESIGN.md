@@ -47,7 +47,7 @@ contract the noop renderer and the test host implement.
 | `createTextInstance` | refused: GTK has no bare text node; text is a `Label`'s `label` |
 | `commitUpdate(old, new)` | for each changed property, its setter; for signals, see below |
 | `appendChild` / `insertBefore` / `removeChild` | the parent's container protocol (below) |
-| `appendChildToContainer` | the window's `set_child`, or the application's window list |
+| `appendChildToContainer` | the root's (`src/HostRoot.ts`): a window's `set_child`, or, for an application, the window joining it |
 | `finalizeInitialChildren` / `commitMount` | a window is presented at commit (below) |
 | `hideInstance` / `unhideInstance` | `set_visible(false)` / `set_visible(true)`, for Suspense and Activity |
 | `scheduleMicrotask` | nts's microtask queue |
@@ -80,6 +80,13 @@ reads it back).
 
 A widget with no child protocol refuses children at `appendInitialChild`,
 with a message naming the widget.
+
+**A root is a window or an application.** `createRoot(window)` renders into
+a window, which holds one child. `createApplicationRoot(app)` renders an
+application's windows: each `<ApplicationWindow>` at its root joins the
+application (`set_application`), is presented at commit, and leaves it when
+it is no longer rendered. There are two entry points rather than one taking
+either, because a union of two handle types has no native representation.
 
 **A window is a toplevel wherever it is rendered.** A component can render a
 dialog (`<Window>`, `<AboutDialog>`) inside its tree, and the dialog opens
@@ -299,12 +306,10 @@ items as the list scrolls. An app should write the row as React:
   which is the reuse GTK's recycling is for.
 
 **A portal's container is where a row goes.** The host config's
-`Container` becomes one interface, "holds one child":
-- a window, through `set_child`;
-- a list item, through its own `set_child`.
-
-`appendChildToContainer` and its siblings call that interface, so a portal
-into a row is the same code path as the root.
+`Container` is a `HostRoot` (`src/HostRoot.ts`), so a list item is a third
+kind of root beside a window and an application, holding one child through
+its own `set_child`. `appendChildToContainer` and its siblings already call
+the root, so a portal into a row takes the root's code path.
 
 **Why not the alternatives.**
 - A root per row would not share context (a row could not read the app's

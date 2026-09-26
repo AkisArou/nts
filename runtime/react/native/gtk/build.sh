@@ -56,6 +56,7 @@ overlay true true true>false true
 fixed 12,40>5,40
 window true true false>true over=true closed=true
 popover true true true
+application true true true
 slot side,main side,none none,none titled=true
 work timer"
 

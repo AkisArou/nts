@@ -8,4 +8,4 @@
 // config creates (ReactFiberConfig.ts).
 
 export * from "./widgets.ts";
-export { createRoot, Root, type RootOptions } from "./client.ts";
+export { createApplicationRoot, createRoot, Root, type RootOptions } from "./client.ts";
