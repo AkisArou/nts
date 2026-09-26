@@ -1,8 +1,8 @@
 {
   "run": "build",
   "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: plain class=true;own-class subclass=true;Error subclass=false;Error subclass, read=undefined;Error subclass, after assignment=true;TypeError subclass=false;Error subclass, explicit constructor=true;Error subclass, initialised field=true;",
-  "node": "exit 1; nts: uncaught Observed: plain class=true;own-class subclass=true;Error subclass=true;Error subclass, read=undefined;Error subclass, after assignment=true;TypeError subclass=true;Error subclass, explicit constructor=true;Error subclass, initialised field=true;",
+  "nts": "exit 1; nts: uncaught Observed: plain class=true;own-class subclass=true;Error subclass=false;Error subclass, read=undefined;Error subclass, after assignment=true;TypeError subclass=false;Error subclass, explicit constructor=true;explicit constructor, initialised value=5;Error subclass, initialised field, in=true;Error subclass, initialised field, value=0;",
+  "node": "exit 1; nts: uncaught Observed: plain class=true;own-class subclass=true;Error subclass=true;Error subclass, read=undefined;Error subclass, after assignment=true;TypeError subclass=true;Error subclass, explicit constructor=true;explicit constructor, initialised value=5;Error subclass, initialised field, in=true;Error subclass, initialised field, value=5;",
   "measured_with": "42825d77e95a84bc",
   "source": "measured"
 }

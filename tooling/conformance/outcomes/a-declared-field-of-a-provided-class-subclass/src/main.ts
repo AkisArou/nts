@@ -1,34 +1,29 @@
-// **A declared, never-assigned class field reads absent to `in` -- only when the
-// class extends a *provided* class.** At `target: esnext`, `useDefineForClassFields`
-// defines a declared field with the value `undefined`, so `"code" in e` is true
-// (node: `Object.getOwnPropertyNames(new C("b"))` lists it). nts answers false for
-// `class Coded extends Error { code?: number }` and for a `TypeError` subclass.
+// **A subclass of a provided class with no constructor of its own never runs its
+// field initialisers** -- so a declared field is both absent to `in` and, if it
+// has an initialiser, missing its value. `class Kept extends Error { code = 5 }`:
+// `new Kept("k").code` is 0 in nts, 5 in node. `class Coded extends Error { code?:
+// number }`: `"code" in e` is false in nts, true in node (useDefineForClassFields
+// defines a declared field with `undefined`). A lost value, not only an `in`.
 //
-// Arms, each differing from the defect in one thing (the first two found by the
-// compiler lane, the rest here):
-//   plain class                          true   -- not "a declared optional field" alone
-//   own-class subclass                   true   -- not "a subclass" alone: the base is provided
-//   Error / TypeError subclass           FALSE  -- the defect
-//   the same, after `c.code = 7`         true   -- the presence bit is the right one:
-//                                                  the assignment sets what `in` reads
-//   an initialised field (`code = 5`)    true   -- only a declared-but-unassigned field
-//   reading `c.code`                     undefined, as node -- so the value is right
-//                                                  and only presence is wrong
-//   the same subclass with an explicit
-//   `constructor(m) { super(m) }`        true   -- only the *implicit* constructor
-// So the bit index is sound, and what is missing is marking the declared field
-// present at construction -- for a subclass of a provided class with **no
-// explicit constructor**. Located by the compiler lane: `initialisers_this_site_owes`
-// (lower.rs) owes the field initialisers of the chain *below* the class whose
-// constructor runs, by `take_while(|class| **class != declaring)` over the
-// reversed chain. With no constructor of its own the subclass runs the provided
-// base's, so it sits above that class, falls outside `owed`, and its presence
-// mask is never set.
+// Arms, each differing from a defect arm in one thing:
+//   plain class, own-class subclass     true    -- the base must be provided
+//   Error / TypeError subclass, `in`    FALSE   -- defect
+//   the same after `c.code = 7`         true    -- the presence bit is the right one
+//   initialised field, `in`             true    -- misleading on its own: see its value
+//   initialised field, value            0 vs 5  -- defect: the initialiser never ran
+//   explicit `constructor(m){super(m)}` true, 5 -- only the implicit constructor
 //
-// No reach into React's render path (its only optional class fields are on
-// ReactContext, none observed for presence); the fixture is the only witness.
-// Ranked ahead of `Error.cause`, which is declared on lib.d.ts's *interface* and
-// so correctly absent -- the opposite answer on the same object.
+// **Where (the compiler lane, checked at the last step):** `lower_new`'s branch for a
+// class whose `constructor(type_id)` is None calls `initialize_error` for a
+// provided error base and returns before `initialize_fields`, which the sibling
+// path three lines below calls ("nothing runs but this, so this site owes the
+// whole chain"). An explicit constructor makes `constructor(type_id)` the subclass
+// and takes the normal path. A subclass's field initialisers belong after
+// `super()`, so the fix is `initialize_fields` after `initialize_error`.
+//
+// No reach into React's render path; the fixture is the only witness. It is the
+// prerequisite for `Error.cause`, declared on lib.d.ts's interface and so
+// correctly absent -- the opposite answer on the same object.
 class Box { tag?: number; }
 observe("plain class", String("tag" in new Box()));
 class Base { base = 1; }
@@ -47,6 +42,13 @@ class Explicit extends Error {
   constructor(m: string) { super(m); }
 }
 observe("Error subclass, explicit constructor", String("code" in new Explicit("x")));
+class ExplicitKept extends Error {
+  code = 5;
+  constructor(m: string) { super(m); }
+}
+observe("explicit constructor, initialised value", String(new ExplicitKept("x").code));
 class Kept extends Error { code = 5; }
-observe("Error subclass, initialised field", String("code" in new Kept("k")));
+const kept = new Kept("k");
+observe("Error subclass, initialised field, in", String("code" in kept));
+observe("Error subclass, initialised field, value", String(kept.code));
 done();
