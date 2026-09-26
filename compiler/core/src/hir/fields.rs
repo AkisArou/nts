@@ -526,32 +526,56 @@ pub fn lengths(program: &Program, analyses: &[Analysis]) -> FieldFacts {
 
     for (index, func) in program.funcs.iter().enumerate() {
         for op in &func.values {
-            match &op.kind {
-                OpKind::FieldSet {
-                    object,
-                    field,
-                    value,
-                } => {
-                    let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) else {
-                        continue;
-                    };
-                    let entry: &mut Facts = stored.entry((layout, *field)).or_insert(Facts::BOTTOM);
-                    *entry = entry.join(allocated_length(func, &analyses[index], *value));
+            // A let-chain rather than the `let ... else { continue }` this used to
+            // be, and the difference is load-bearing: that `continue` skipped the
+            // rest of the loop body, and the escape check below now lives there.
+            // A field store whose *object* has no layout is exactly the closure
+            // frame this pass has to notice, so keeping the `continue` would have
+            // skipped the check for the one case it was added for.
+            if let OpKind::FieldSet {
+                object,
+                field,
+                value,
+            } = &op.kind
+                && let Some(layout) = layouts.of(&func.values[object.0 as usize].ty)
+            {
+                let entry: &mut Facts = stored.entry((layout, *field)).or_insert(Facts::BOTTOM);
+                *entry = entry.join(allocated_length(func, &analyses[index], *value));
+            }
+
+            // A reference that leaves the function can be **shrunk** by whatever
+            // receives it, and a length this pass records is read by `bounds.rs`
+            // as a lower bound -- so a check removed against it reads past the end
+            // once the array is shorter.
+            //
+            // This asked only about a **call argument** whose operand was itself a
+            // `FieldGet`, which is most spellings and not all of them. A closure
+            // captures by storing into its frame, so `const xs = h.items` followed
+            // by `xs.length = 0` inside the closure puts the `FieldGet` in a field
+            // *store* and hands the frame to the call. The field kept its recorded
+            // length, the check was removed, and `h.items[5]` read a stale element
+            // where node answers `undefined` --
+            // `outcomes/a-bounds-check-removed-past-a-closures-shrink`.
+            //
+            // So the question is asked of every operand, through the shared escape
+            // test. Note what is deliberately *not* here: a growing store does not
+            // invalidate a field's length, because growth cannot make a check
+            // wrongly removable when the length is a lower bound, and
+            // `this.items[i] = v` is the shape every remaining Are We Fast Yet
+            // bounds check is in. That is the one clause by which this and
+            // `allocated_length_is_exact` differ, and it is not caution on either
+            // side -- see [`super::use_keeps_the_array_here`].
+            for operand in super::operands_of(&op.kind) {
+                if super::use_keeps_the_array_here(operand, &op.kind) {
+                    continue;
                 }
-                // A reference that leaves the function can be grown by whatever
-                // receives it.
-                OpKind::Call { args, .. } => {
-                    for arg in args {
-                        let OpKind::FieldGet { object, field } = &func.values[arg.0 as usize].kind
-                        else {
-                            continue;
-                        };
-                        if let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) {
-                            grown.insert((layout, *field));
-                        }
-                    }
+                let OpKind::FieldGet { object, field } = &func.values[operand.0 as usize].kind
+                else {
+                    continue;
+                };
+                if let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) {
+                    grown.insert((layout, *field));
                 }
-                _ => {}
             }
         }
     }

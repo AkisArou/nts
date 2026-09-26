@@ -2941,12 +2941,49 @@ pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) ->
 /// value or part of the index, and the first of those puts it somewhere a later
 /// read can reach with no call anywhere in the function.
 fn use_keeps_the_allocated_length(func: &Func, array: ValueId, kind: &OpKind) -> bool {
+    if !use_keeps_the_array_here(array, kind) {
+        return false;
+    }
+    // Of the uses that keep the reference here, only a store can change the
+    // length: `xs[20] = v` on an array of eight appends. An *unchecked* store is
+    // one the bounds pass proved in range, so it names an existing slot by
+    // construction; a checked one has to say so.
+    match kind {
+        OpKind::ArraySet {
+            array: receiver,
+            index,
+            checked: true,
+            ..
+        } if *receiver == array => store_names_a_slot_that_exists(func, array, *index),
+        _ => true,
+    }
+}
+
+/// Whether an operation leaves an array's **reference** where this function can
+/// still see it.
+///
+/// The escape half, shared with [`fields::lengths`] -- and the two predicates
+/// that read it differ by exactly one clause, for a reason worth stating because
+/// transplanting the whole thing is the obvious mistake.
+///
+/// [`allocated_length_is_exact`] feeds the `.length` **fold**, which a growing
+/// store invalidates: answer 8 for an array a store made 9 long and the program
+/// reads a stale number. `fields::lengths` feeds `bounds.rs`, which reads a length
+/// as a **lower** bound -- `facts.hi < length.lo`, whose own comment says "a
+/// larger one only helps" -- so growth cannot make a check wrongly removable and
+/// only *shrinking* can. A store cannot shrink an array, so the field side must
+/// not lose its fact to one: `this.items[i] = v` is the commonest shape in Are We
+/// Fast Yet and every remaining bounds check there is of that kind.
+///
+/// So: this answers "did the reference leave", both callers require it, and the
+/// growing-store question is asked only by the caller it is a hazard for.
+fn use_keeps_the_array_here(array: ValueId, kind: &OpKind) -> bool {
     if !operands_of(kind).contains(&array) {
         return true;
     }
     match kind {
-        // Reading the length, and counting a reference: neither moves the array
-        // nor resizes it. One arm because the answer is the same expression, not
+        // Reading the length, and counting a reference: neither hands the array
+        // anywhere. One arm because the answer is the same expression, not
         // because the operations are alike.
         OpKind::Length(of) | OpKind::Retain(of) | OpKind::Release(of) => *of == array,
         // An element, by an index that is not the array itself.
@@ -2955,20 +2992,17 @@ fn use_keeps_the_allocated_length(func: &Func, array: ValueId, kind: &OpKind) ->
             index,
             ..
         } => *receiver == array && *index != array,
-        // A store into a slot the allocation already made. An *unchecked* store
-        // is one the bounds pass proved in range, so it names an existing slot by
-        // construction; a checked one has to say so.
+        // A store *into* it. The array must be the receiver and neither the
+        // index nor the value: `xs[0] = xs` puts it somewhere a later read can
+        // reach with no call anywhere in the function.
         OpKind::ArraySet {
             array: receiver,
             index,
             value,
-            checked,
-        } => {
-            *receiver == array
-                && *index != array
-                && *value != array
-                && (!*checked || store_names_a_slot_that_exists(func, array, *index))
-        }
+            ..
+        } => *receiver == array && *index != array && *value != array,
+        // Everything else hands it over: a call argument, a field store into an
+        // object (which is how a closure captures), an `Erase` into a table.
         _ => false,
     }
 }
