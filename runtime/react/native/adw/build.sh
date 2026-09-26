@@ -31,6 +31,9 @@ expected="props true true
 slot true true
 signal 1
 controlled kept
+group A,X,B B,A,X B,X suffix=true
+toolbar true true
+row p1>p2 s1>s2 e1>e2
 application true true
 unknown true true
 reset true true"

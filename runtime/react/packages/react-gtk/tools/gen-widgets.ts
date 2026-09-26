@@ -207,6 +207,8 @@ function readType(element: XmlElement, namespace: string, prefix: string): GirTy
 interface Bindings {
   /** Setters taking one value, by the TypeScript name of the type that declares them: `set_label` → `string`. */
   setters: Map<string, Map<string, string>>;
+  /** Child methods taking one widget (`add`, `add_row`, `remove`), by type: the type they take. */
+  childMethods: Map<string, Map<string, string>>;
   /** Getters taking nothing, the same way: `get_text` → `string`. */
   getters: Map<string, Map<string, string>>;
   /** Each signal's handler as bind-gir declared `connect` for it, by type and signal name. */
@@ -277,6 +279,7 @@ function readSignature(line: string): Signature | null {
 
 function readBindings(dir: string): Bindings {
   const setters = new Map<string, Map<string, string>>();
+  const childMethods = new Map<string, Map<string, string>>();
   const getters = new Map<string, Map<string, string>>();
   const signals = new Map<string, Map<string, Signature>>();
   const constructible = new Set<string>();
@@ -299,6 +302,11 @@ function readBindings(dir: string): Bindings {
     const getter = /^ {4}(get_\w+)\(this: (\w+)\): (.+);$/.exec(line);
     if (getter !== null) {
       entry(getters, getter[2]!, () => new Map()).set(getter[1]!, getter[3]!);
+      continue;
+    }
+    const childMethod = /^ {4}(add|add_row|remove)\(this: (\w+), \w+: (\w+)\): void;$/.exec(line);
+    if (childMethod !== null) {
+      entry(childMethods, childMethod[2]!, () => new Map()).set(childMethod[1]!, childMethod[3]!);
       continue;
     }
     const setter = /^ {4}(set_\w+)\(this: (\w+), \w+: (.+)\): void;$/.exec(line);
@@ -364,7 +372,7 @@ function readBindings(dir: string): Bindings {
     // Topmost: a class whose parent also implements it is covered by the parent's check.
     implementers.set(name, all.filter((c) => !implementing(gobjectClasses.get(c)!.parent)).sort());
   }
-  return { setters, getters, signals, constructible, classes, modules, implementers };
+  return { setters, childMethods, getters, signals, constructible, classes, modules, implementers };
 }
 
 // ---- the model ---------------------------------------------------------------
@@ -432,7 +440,14 @@ function handlerType(type: string, types: Set<string>): string | null {
   return null;
 }
 
-type ChildProtocol = "none" | "single" | "box" | "list";
+type ChildProtocol = "none" | "single" | "box" | "list" | "adds";
+
+/** A widget that only adds and removes children: the methods, and the class each takes. */
+interface Adds {
+  add: string; // add, add_row
+  addType: string; // GtkWidget, AdwPreferencesGroup
+  removeType: string;
+}
 
 /** A GIR class from Widget down, abstract or not: what its own function sets. */
 interface WidgetType {
@@ -444,6 +459,8 @@ interface WidgetType {
   signals: Signal[];
   slots: Slot[];
   children: ChildProtocol;
+  /** For the "adds" protocol: how it adds and removes. */
+  adds?: Adds;
 }
 
 /** The nearest class in `t`'s chain, `t` included, with widget slots of its own. */
@@ -467,6 +484,17 @@ const tsName = (t: GirType): string => `${t.prefix}${t.name}`;
 
 // A list container's accessor for the row it made for a child, by index: a
 // moved child is taken back out of it before the row goes.
+// A widget that adds its children with a method other than `add`: an
+// ExpanderRow's children are its rows. It comes before a protocol the widget
+// inherits.
+const addsBy = new Map([["Adw.ExpanderRow", "add_row"]]);
+
+// Widgets whose inherited child protocol is wrong for them, by a class in
+// their chain: libadwaita's rows build their own child (GtkListBoxRow's
+// `set_child` would replace it), and its windows take their content through
+// their Content slot. They take children only through their elements.
+const noChildProtocol = new Set(["Adw.PreferencesRow", "Adw.ApplicationWindow", "Adw.Window"]);
+
 const rowAccessors = new Map([
   ["Gtk.ListBox", "get_row_at_index"],
   ["Gtk.FlowBox", "get_child_at_index"],
@@ -509,10 +537,11 @@ const childProps = new Set(["child"]);
 // exists, and removing it leaves the selection as it is.
 const childNamingProps = new Map([["Gtk.Stack", new Map([["visible-child-name", "get_child_by_name"]])]]);
 
-// Containers that place a child with parameters of its own, through a child
-// element written by hand in src/children.ts: the members their component
-// has, each element's host type and node class, and what to say to a widget
-// placed in the container directly.
+// Containers that place a child with parameters of its own, or in groups,
+// through elements written by hand in each module's children.ts (src/, and
+// src/adw/): the members their component has, each element's host type and
+// node class, and what to say to a widget placed in the container directly.
+// A container's subclasses take its elements (a SwitchRow is an ActionRow).
 const childElements = new Map([
   ["Gtk.Grid", { members: "GridChildren", elements: [["GtkGrid.Child", "GridChildNode"]], use: "<Grid.Child column row>" }],
   ["Gtk.Stack", { members: "StackChildren", elements: [["GtkStack.Page", "StackPageNode"]], use: "<Stack.Page name>" }],
@@ -521,7 +550,22 @@ const childElements = new Map([
   ["Gtk.ActionBar", { members: "ActionBarChildren", elements: [["GtkActionBar.Start", "PackNode"], ["GtkActionBar.End", "PackNode"]], use: "<ActionBar.Start> or <ActionBar.End>" }],
   ["Gtk.Overlay", { members: "OverlayChildren", elements: [["GtkOverlay.Layer", "OverlayLayerNode"]], use: "<Overlay.Layer>" }],
   ["Gtk.Fixed", { members: "FixedChildren", elements: [["GtkFixed.Child", "FixedChildNode"]], use: "<Fixed.Child x y>" }],
+  ["Adw.HeaderBar", { members: "HeaderBarChildren", elements: [["AdwHeaderBar.Start", "AdwGroupNode"], ["AdwHeaderBar.End", "AdwGroupNode"]], use: "<HeaderBar.Start> or <HeaderBar.End>" }],
+  ["Adw.ToolbarView", { members: "ToolbarViewChildren", elements: [["AdwToolbarView.Top", "AdwGroupNode"], ["AdwToolbarView.Bottom", "AdwGroupNode"]], use: "<ToolbarView.Top> or <ToolbarView.Bottom>" }],
+  ["Adw.ActionRow", { members: "ActionRowChildren", elements: [["AdwActionRow.Prefix", "AdwGroupNode"], ["AdwActionRow.Suffix", "AdwGroupNode"]], use: "<ActionRow.Prefix> or <ActionRow.Suffix>" }],
+  ["Adw.ExpanderRow", { members: "ExpanderRowChildren", elements: [["AdwExpanderRow.Prefix", "AdwGroupNode"], ["AdwExpanderRow.Suffix", "AdwGroupNode"]], use: "<ExpanderRow.Prefix> or <ExpanderRow.Suffix>" }],
 ]);
+
+/** The elements `t` takes: its own class's, or the nearest ancestor's with some. */
+function childElementsOf(t: WidgetType): (typeof childElements extends Map<string, infer E> ? E : never) | null {
+  for (let c: WidgetType | null = t; c !== null; c = c.parent) {
+    const elements = childElements.get(qualified(c.gir));
+    if (elements !== undefined) {
+      return elements;
+    }
+  }
+  return null;
+}
 
 function valueKind(type: string, bindings: Bindings, reference = false): ValueKind | null {
   if (type === "string" || type === "string | null") {
@@ -746,14 +790,30 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
     const chain = [...chainOf(t)];
     const has = (method: string): boolean => chain.some((c) => c.methods.has(method));
     const takesChild = chain.some((c) => bindings.setters.get(tsName(c))?.get("set_child") === "GtkWidget | null");
-    const children: ChildProtocol = ["append", "remove", "insert_child_after", "reorder_child_after"].every(has)
-      ? "box"
-      : ["append", "remove", "insert"].every(has) && rowAccessors.has(qualified(t))
-        ? "list"
-        : takesChild
-          ? "single"
-          : "none";
-    const type: WidgetType = { gir: t, ts, jsx: t.name, parent, props, signals, slots, children };
+    // A widget that only adds and removes (a PreferencesGroup): the class in
+    // its chain that declares the adding method, and what that method takes.
+    const addMethod = addsBy.get(qualified(t)) ?? "add";
+    const addsFrom = chain.find((c) => bindings.childMethods.get(tsName(c))?.has(addMethod) === true);
+    const addsMethods = addsFrom === undefined ? undefined : bindings.childMethods.get(tsName(addsFrom));
+    const adds: Adds | undefined =
+      addsMethods === undefined || !addsMethods.has("remove")
+        ? undefined
+        : { add: addMethod, addType: addsMethods.get(addMethod)!, removeType: addsMethods.get("remove")! };
+    const children: ChildProtocol =
+      adds !== undefined && addsBy.has(qualified(t))
+        ? "adds"
+        : chain.some((c) => noChildProtocol.has(qualified(c)))
+          ? "none"
+          : ["append", "remove", "insert_child_after", "reorder_child_after"].every(has)
+            ? "box"
+            : ["append", "remove", "insert"].every(has) && rowAccessors.has(qualified(t))
+              ? "list"
+              : takesChild
+                ? "single"
+                : adds !== undefined
+                  ? "adds"
+                  : "none";
+    const type: WidgetType = { gir: t, ts, jsx: t.name, parent, props, signals, slots, children, ...(children === "adds" ? { adds } : {}) };
     types.set(qualified(t), type);
     return type;
   };
@@ -763,13 +823,6 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(typeOf)
     .filter((w) => !w.gir.abstract && !w.gir.deprecated && bindings.constructible.has(w.ts));
-  // A widget that places children by index would need to find a slot
-  // element's place among them (WidgetNode.insertBefore): none has slots.
-  for (const w of widgets) {
-    if ((w.children === "box" || w.children === "list") && slotOwner(w) !== null) {
-      throw new Error(`${w.ts} places children by index and has widget slots: WidgetNode.insertBefore would misplace one`);
-    }
-  }
   // Only the classes some widget's chain passes through.
   const used = new Set(widgets.flatMap((w) => [...chainOf(w.gir)].map(qualified)));
   return {
@@ -823,9 +876,13 @@ function emit(m: Model, target: Target): string {
   }
   line('import type { HostComponent } from "shared/ReactHostComponent.ts";');
   line("__HOST_NODE__");
-  if (gtk) {
-    const childImports = [...new Set([...childElements.values()].flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]))];
+  // This module's own elements, from its own children.ts.
+  const ownElements = [...childElements].filter(([key]) => key.startsWith(`${target.namespace}.`)).map(([, c]) => c);
+  if (ownElements.length > 0) {
+    const childImports = [...new Set(ownElements.flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]))];
     line(`import { ${childImports.join(", ")} } from "./children.ts";`);
+  }
+  if (gtk) {
     line('import type { ControllerProps } from "./controllers.ts";');
   }
   line();
@@ -884,7 +941,7 @@ function emit(m: Model, target: Target): string {
     const owner = slotOwner(w);
     line();
     line(`/** \`<${w.jsx}>\`: ${article(w.ts)} ${w.ts}. */`);
-    const members = [owner === null ? null : ref(owner, `${owner.jsx}Slots`), childElements.get(qualified(w.gir))?.members ?? null].filter((m) => m !== null);
+    const members = [owner === null ? null : ref(owner, `${owner.jsx}Slots`), childElementsOf(w)?.members ?? null].filter((m) => m !== null);
     line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${w.jsx}Props>${members.map((m) => ` & ${m}`).join("")};`);
   }
 
@@ -954,6 +1011,54 @@ function emit(m: Model, target: Target): string {
     line("}");
   }
 
+  // A widget that only adds and removes keeps its children in React's order
+  // itself: a child inserted before another takes out what follows and adds
+  // it again. A method taking a particular class (a PreferencesPage's groups)
+  // takes a child narrowed to it, and refuses any other.
+  const emitAdds = (w: WidgetType, adds: Adds): void => {
+    const narrowed = (method: string, type: string): string[] => {
+      if (type === "GtkWidget") {
+        return [`    this.gtk.${method}(child.widget);`];
+      }
+      values.add(type);
+      return [
+        "    const widget = child.widget;",
+        `    if (!(widget instanceof ${type})) {`,
+        `      throw new Error(\`<${w.jsx}> holds ${type.replace(/^[A-Z][a-z]+/, "")}s, not <\${child.name()}>.\`);`,
+        "    }",
+        `    this.gtk.${method}(widget);`,
+      ];
+    };
+    line("  // It only adds: a child inserted before another takes out what follows");
+    line("  // and adds it again, so the order is React's.");
+    line("  private readonly items: WidgetNode[] = [];");
+    line("  private adds(child: WidgetNode): void {");
+    narrowed(adds.add, adds.addType).forEach((l) => line(l));
+    line("    this.items.push(child);");
+    line("  }");
+    line("  private takes(child: WidgetNode): void {");
+    line("    const at = this.items.indexOf(child);");
+    line("    if (at < 0) {");
+    line("      return;");
+    line("    }");
+    narrowed("remove", adds.removeType).forEach((l) => line(l));
+    line("    this.items.splice(at, 1);");
+    line("  }");
+    line("  protected place(child: WidgetNode): void {");
+    line("    this.adds(child);");
+    line("  }");
+    line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
+    line("    this.takes(child);");
+    line("    const after = this.items.slice(this.items.indexOf(before));");
+    line("    after.forEach((item) => this.takes(item));");
+    line("    this.adds(child);");
+    line("    after.forEach((item) => this.adds(item));");
+    line("  }");
+    line("  protected unplace(child: WidgetNode): void {");
+    line("    this.takes(child);");
+    line("  }");
+  };
+
   line();
   line("// ---- nodes ------------------------------------------------------------------");
   for (const w of m.widgets) {
@@ -1000,8 +1105,8 @@ function emit(m: Model, target: Target): string {
     // Child elements place themselves, beside the widget's own protocol if it
     // has one (an Overlay's main child and its layers); a widget with none
     // says which element to use.
-    const elements = childElements.get(qualified(w.gir));
-    if (elements !== undefined && w.children === "none") {
+    const elements = childElementsOf(w);
+    if (elements !== null && w.children === "none") {
       line("  protected place(_child: WidgetNode): void {");
       line(`    throw new Error("<${w.jsx}> places a child through ${elements.use}.");`);
       line("  }");
@@ -1057,6 +1162,8 @@ function emit(m: Model, target: Target): string {
       line("      this.placed.splice(at, 1);");
       line("    }");
       line("  }");
+    } else if (w.children === "adds" && w.adds !== undefined) {
+      emitAdds(w, w.adds);
     } else if (w.children === "box") {
       line("  protected place(child: WidgetNode): void {");
       line("    this.gtk.append(child.widget);");
@@ -1101,7 +1208,7 @@ function emit(m: Model, target: Target): string {
     needs.add("SlotNode");
     line("      return new SlotNode(type);");
   }
-  for (const c of gtk ? childElements.values() : []) {
+  for (const c of ownElements) {
     for (const [hostType, node] of c.elements) {
       line(`    case "${hostType}":`);
       line(`      return new ${node}(type);`);

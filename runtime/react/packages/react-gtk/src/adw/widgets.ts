@@ -139,6 +139,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "../HostNode.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -949,7 +950,7 @@ export interface ViewSwitcherSidebarSlots {
 export declare const AboutDialog: HostComponent<"AdwAboutDialog", AboutDialogProps>;
 
 /** `<ActionRow>`: an AdwActionRow. */
-export declare const ActionRow: HostComponent<"AdwActionRow", ActionRowProps> & ActionRowSlots;
+export declare const ActionRow: HostComponent<"AdwActionRow", ActionRowProps> & ActionRowSlots & ActionRowChildren;
 
 /** `<AlertDialog>`: an AdwAlertDialog. */
 export declare const AlertDialog: HostComponent<"AdwAlertDialog", AlertDialogProps> & AlertDialogSlots;
@@ -994,7 +995,7 @@ export declare const Clamp: HostComponent<"AdwClamp", ClampProps>;
 export declare const ClampScrollable: HostComponent<"AdwClampScrollable", ClampScrollableProps>;
 
 /** `<ComboRow>`: an AdwComboRow. */
-export declare const ComboRow: HostComponent<"AdwComboRow", ComboRowProps> & ActionRowSlots;
+export declare const ComboRow: HostComponent<"AdwComboRow", ComboRowProps> & ActionRowSlots & ActionRowChildren;
 
 /** `<Dialog>`: an AdwDialog. */
 export declare const Dialog: HostComponent<"AdwDialog", DialogProps>;
@@ -1003,10 +1004,10 @@ export declare const Dialog: HostComponent<"AdwDialog", DialogProps>;
 export declare const EntryRow: HostComponent<"AdwEntryRow", EntryRowProps>;
 
 /** `<ExpanderRow>`: an AdwExpanderRow. */
-export declare const ExpanderRow: HostComponent<"AdwExpanderRow", ExpanderRowProps>;
+export declare const ExpanderRow: HostComponent<"AdwExpanderRow", ExpanderRowProps> & ExpanderRowChildren;
 
 /** `<HeaderBar>`: an AdwHeaderBar. */
-export declare const HeaderBar: HostComponent<"AdwHeaderBar", HeaderBarProps> & HeaderBarSlots;
+export declare const HeaderBar: HostComponent<"AdwHeaderBar", HeaderBarProps> & HeaderBarSlots & HeaderBarChildren;
 
 /** `<InlineViewSwitcher>`: an AdwInlineViewSwitcher. */
 export declare const InlineViewSwitcher: HostComponent<"AdwInlineViewSwitcher", InlineViewSwitcherProps>;
@@ -1054,7 +1055,7 @@ export declare const Sidebar: HostComponent<"AdwSidebar", SidebarProps> & Sideba
 export declare const Spinner: HostComponent<"AdwSpinner", SpinnerProps>;
 
 /** `<SpinRow>`: an AdwSpinRow. */
-export declare const SpinRow: HostComponent<"AdwSpinRow", SpinRowProps> & ActionRowSlots;
+export declare const SpinRow: HostComponent<"AdwSpinRow", SpinRowProps> & ActionRowSlots & ActionRowChildren;
 
 /** `<SplitButton>`: an AdwSplitButton. */
 export declare const SplitButton: HostComponent<"AdwSplitButton", SplitButtonProps>;
@@ -1063,7 +1064,7 @@ export declare const SplitButton: HostComponent<"AdwSplitButton", SplitButtonPro
 export declare const StatusPage: HostComponent<"AdwStatusPage", StatusPageProps>;
 
 /** `<SwitchRow>`: an AdwSwitchRow. */
-export declare const SwitchRow: HostComponent<"AdwSwitchRow", SwitchRowProps> & ActionRowSlots;
+export declare const SwitchRow: HostComponent<"AdwSwitchRow", SwitchRowProps> & ActionRowSlots & ActionRowChildren;
 
 /** `<TabBar>`: an AdwTabBar. */
 export declare const TabBar: HostComponent<"AdwTabBar", TabBarProps> & TabBarSlots;
@@ -1084,7 +1085,7 @@ export declare const ToastOverlay: HostComponent<"AdwToastOverlay", ToastOverlay
 export declare const ToggleGroup: HostComponent<"AdwToggleGroup", ToggleGroupProps>;
 
 /** `<ToolbarView>`: an AdwToolbarView. */
-export declare const ToolbarView: HostComponent<"AdwToolbarView", ToolbarViewProps> & ToolbarViewSlots;
+export declare const ToolbarView: HostComponent<"AdwToolbarView", ToolbarViewProps> & ToolbarViewSlots & ToolbarViewChildren;
 
 /** `<ViewStack>`: an AdwViewStack. */
 export declare const ViewStack: HostComponent<"AdwViewStack", ViewStackProps>;
@@ -3972,13 +3973,8 @@ export class AdwActionRowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return actionRowSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
+  protected place(_child: WidgetNode): void {
+    throw new Error("<ActionRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
 }
 
@@ -4027,14 +4023,6 @@ export class AdwApplicationWindowNode extends WidgetNode {
   }
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return applicationWindowSlot(this.gtk, slot, widget);
-  }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
   }
 }
 
@@ -4174,14 +4162,6 @@ export class AdwButtonRowNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return buttonRowSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
-  }
 }
 
 /** `<Carousel>`: an AdwCarousel. */
@@ -4303,13 +4283,8 @@ export class AdwComboRowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return actionRowSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
+  protected place(_child: WidgetNode): void {
+    throw new Error("<ComboRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
 }
 
@@ -4360,14 +4335,6 @@ export class AdwEntryRowNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
-  }
 }
 
 /** `<ExpanderRow>`: an AdwExpanderRow. */
@@ -4385,13 +4352,33 @@ export class AdwExpanderRowNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return expanderRowSignal(this.gtk, key, slot);
   }
+  // It only adds: a child inserted before another takes out what follows
+  // and adds it again, so the order is React's.
+  private readonly items: WidgetNode[] = [];
+  private adds(child: WidgetNode): void {
+    this.gtk.add_row(child.widget);
+    this.items.push(child);
+  }
+  private takes(child: WidgetNode): void {
+    const at = this.items.indexOf(child);
+    if (at < 0) {
+      return;
+    }
+    this.gtk.remove(child.widget);
+    this.items.splice(at, 1);
+  }
   protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
+    this.adds(child);
+  }
+  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
+    this.takes(child);
+    const after = this.items.slice(this.items.indexOf(before));
+    after.forEach((item) => this.takes(item));
+    this.adds(child);
+    after.forEach((item) => this.adds(item));
   }
   protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
+    this.takes(child);
   }
 }
 
@@ -4412,6 +4399,9 @@ export class AdwHeaderBarNode extends WidgetNode {
   }
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return headerBarSlot(this.gtk, slot, widget);
+  }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<HeaderBar> places a child through <HeaderBar.Start> or <HeaderBar.End>.");
   }
 }
 
@@ -4506,6 +4496,42 @@ export class AdwNavigationViewNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return navigationViewSignal(this.gtk, key, slot);
   }
+  // It only adds: a child inserted before another takes out what follows
+  // and adds it again, so the order is React's.
+  private readonly items: WidgetNode[] = [];
+  private adds(child: WidgetNode): void {
+    const widget = child.widget;
+    if (!(widget instanceof AdwNavigationPage)) {
+      throw new Error(`<NavigationView> holds NavigationPages, not <${child.name()}>.`);
+    }
+    this.gtk.add(widget);
+    this.items.push(child);
+  }
+  private takes(child: WidgetNode): void {
+    const at = this.items.indexOf(child);
+    if (at < 0) {
+      return;
+    }
+    const widget = child.widget;
+    if (!(widget instanceof AdwNavigationPage)) {
+      throw new Error(`<NavigationView> holds NavigationPages, not <${child.name()}>.`);
+    }
+    this.gtk.remove(widget);
+    this.items.splice(at, 1);
+  }
+  protected place(child: WidgetNode): void {
+    this.adds(child);
+  }
+  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
+    this.takes(child);
+    const after = this.items.slice(this.items.indexOf(before));
+    after.forEach((item) => this.takes(item));
+    this.adds(child);
+    after.forEach((item) => this.adds(item));
+  }
+  protected unplace(child: WidgetNode): void {
+    this.takes(child);
+  }
 }
 
 /** `<OverlaySplitView>`: an AdwOverlaySplitView. */
@@ -4549,14 +4575,6 @@ export class AdwPasswordEntryRowNode extends WidgetNode {
         return this.gtk.get_text();
     }
     return undefined;
-  }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
   }
 }
 
@@ -4603,6 +4621,34 @@ export class AdwPreferencesGroupNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return preferencesGroupSlot(this.gtk, slot, widget);
   }
+  // It only adds: a child inserted before another takes out what follows
+  // and adds it again, so the order is React's.
+  private readonly items: WidgetNode[] = [];
+  private adds(child: WidgetNode): void {
+    this.gtk.add(child.widget);
+    this.items.push(child);
+  }
+  private takes(child: WidgetNode): void {
+    const at = this.items.indexOf(child);
+    if (at < 0) {
+      return;
+    }
+    this.gtk.remove(child.widget);
+    this.items.splice(at, 1);
+  }
+  protected place(child: WidgetNode): void {
+    this.adds(child);
+  }
+  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
+    this.takes(child);
+    const after = this.items.slice(this.items.indexOf(before));
+    after.forEach((item) => this.takes(item));
+    this.adds(child);
+    after.forEach((item) => this.adds(item));
+  }
+  protected unplace(child: WidgetNode): void {
+    this.takes(child);
+  }
 }
 
 /** `<PreferencesPage>`: an AdwPreferencesPage. */
@@ -4620,6 +4666,42 @@ export class AdwPreferencesPageNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return preferencesPageSignal(this.gtk, key, slot);
   }
+  // It only adds: a child inserted before another takes out what follows
+  // and adds it again, so the order is React's.
+  private readonly items: WidgetNode[] = [];
+  private adds(child: WidgetNode): void {
+    const widget = child.widget;
+    if (!(widget instanceof AdwPreferencesGroup)) {
+      throw new Error(`<PreferencesPage> holds PreferencesGroups, not <${child.name()}>.`);
+    }
+    this.gtk.add(widget);
+    this.items.push(child);
+  }
+  private takes(child: WidgetNode): void {
+    const at = this.items.indexOf(child);
+    if (at < 0) {
+      return;
+    }
+    const widget = child.widget;
+    if (!(widget instanceof AdwPreferencesGroup)) {
+      throw new Error(`<PreferencesPage> holds PreferencesGroups, not <${child.name()}>.`);
+    }
+    this.gtk.remove(widget);
+    this.items.splice(at, 1);
+  }
+  protected place(child: WidgetNode): void {
+    this.adds(child);
+  }
+  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
+    this.takes(child);
+    const after = this.items.slice(this.items.indexOf(before));
+    after.forEach((item) => this.takes(item));
+    this.adds(child);
+    after.forEach((item) => this.adds(item));
+  }
+  protected unplace(child: WidgetNode): void {
+    this.takes(child);
+  }
 }
 
 /** `<PreferencesRow>`: an AdwPreferencesRow. */
@@ -4636,14 +4718,6 @@ export class AdwPreferencesRowNode extends WidgetNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return preferencesRowSignal(this.gtk, key, slot);
-  }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
   }
 }
 
@@ -4751,13 +4825,8 @@ export class AdwSpinRowNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
+  protected place(_child: WidgetNode): void {
+    throw new Error("<SpinRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
 }
 
@@ -4829,13 +4898,8 @@ export class AdwSwitchRowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return actionRowSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
+  protected place(_child: WidgetNode): void {
+    throw new Error("<SwitchRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
 }
 
@@ -4978,6 +5042,9 @@ export class AdwToolbarViewNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return toolbarViewSlot(this.gtk, slot, widget);
   }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<ToolbarView> places a child through <ToolbarView.Top> or <ToolbarView.Bottom>.");
+  }
 }
 
 /** `<ViewStack>`: an AdwViewStack. */
@@ -5068,14 +5135,6 @@ export class AdwWindowNode extends WidgetNode {
   }
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return windowSlot(this.gtk, slot, widget);
-  }
-  protected place(child: WidgetNode): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
   }
 }
 
@@ -5262,6 +5321,22 @@ export function createNode(type: string): HostNode | null {
     case "AdwToolbarView.Content":
     case "AdwViewSwitcherSidebar.Placeholder":
       return new SlotNode(type);
+    case "AdwHeaderBar.Start":
+      return new AdwGroupNode(type);
+    case "AdwHeaderBar.End":
+      return new AdwGroupNode(type);
+    case "AdwToolbarView.Top":
+      return new AdwGroupNode(type);
+    case "AdwToolbarView.Bottom":
+      return new AdwGroupNode(type);
+    case "AdwActionRow.Prefix":
+      return new AdwGroupNode(type);
+    case "AdwActionRow.Suffix":
+      return new AdwGroupNode(type);
+    case "AdwExpanderRow.Prefix":
+      return new AdwGroupNode(type);
+    case "AdwExpanderRow.Suffix":
+      return new AdwGroupNode(type);
   }
   return null;
 }

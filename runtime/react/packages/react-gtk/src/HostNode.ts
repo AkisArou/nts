@@ -185,6 +185,14 @@ export function stringsOf(value: unknown): readonly string[] | null {
 
 // ---- a list container's children ----------------------------------------------------
 
+/** Takes `item` out of `items`, if it is there. */
+function remove<T>(items: T[], item: T): void {
+  const at = items.indexOf(item);
+  if (at >= 0) {
+    items.splice(at, 1);
+  }
+}
+
 /** Puts `item` at `index` in `items`, moving what follows up by one. */
 export function insertAt<T>(items: T[], index: number, item: T): void {
   items.push(item);
@@ -464,14 +472,54 @@ export abstract class WidgetNode extends HostNode {
     return slot;
   }
 
+  // React's order of this widget's host children, slot and child elements
+  // included, made on the first child: where a widget inserted before a slot
+  // element goes is before the first widget after it.
+  private order: HostNode[] | null = null;
+
   appendChild(child: HostNode): void {
+    const order = this.orderOf();
+    remove(order, child);
+    order.push(child);
     child.placeIn(this, null);
   }
   insertBefore(child: HostNode, before: HostNode): void {
+    const order = this.orderOf();
+    remove(order, child);
+    const at = order.indexOf(before);
+    insertAt(order, at < 0 ? order.length : at, child);
     child.placeIn(this, before);
   }
   removeChild(child: HostNode): void {
+    const order = this.order;
+    if (order !== null) {
+      remove(order, child);
+    }
     child.takeOutOf(this);
+  }
+
+  private orderOf(): HostNode[] {
+    let order = this.order;
+    if (order === null) {
+      order = [];
+      this.order = order;
+    }
+    return order;
+  }
+
+  /** The first widget among this widget's children from `from` on, in React's order; null if none. */
+  private widgetFrom(from: HostNode): WidgetNode | null {
+    const order = this.order;
+    if (order === null) {
+      return null;
+    }
+    for (let i = Math.max(order.indexOf(from), 0); i < order.length; i++) {
+      const widget = order[i]!.widgetNode();
+      if (widget !== null) {
+        return widget;
+      }
+    }
+    return null;
   }
 
   // A window is a toplevel wherever it is rendered: a dialog a component opens
@@ -530,9 +578,8 @@ export abstract class WidgetNode extends HostNode {
       }
       return;
     }
-    // Before a slot element is last among the children: only single-child
-    // widgets have slots (the generator checks), and they hold one.
-    const sibling = before === null ? null : before.widgetNode();
+    // Before a slot or child element is before the first widget after it.
+    const sibling = before === null ? null : parent.widgetFrom(before);
     if (sibling === null) {
       parent.place(this);
     } else {

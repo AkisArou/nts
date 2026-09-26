@@ -387,6 +387,30 @@ without `Gtk`: an app that uses both imports one set under other names. The
 node classes carry the namespace (`AdwHeaderBarNode`, for the host type
 `AdwHeaderBar`), so a program importing both modules' nodes needs no aliases.
 
+**libadwaita's containers.**
+- A container that only adds and removes (a PreferencesGroup's rows, a
+  PreferencesPage's groups, an ExpanderRow's rows through `add_row`, a
+  NavigationView's pages) keeps React's order itself: a child inserted before
+  another takes out what follows and adds it again. A method that takes a
+  particular class (a PreferencesPage takes groups) refuses any other child,
+  naming what it holds.
+- Containers with named places take group elements, as GTK's bars do:
+  `<HeaderBar.Start>`, `<ToolbarView.Top>`/`<ToolbarView.Bottom>`,
+  `<ActionRow.Prefix>`/`<ActionRow.Suffix>`, and an ExpanderRow's. They share
+  core's `GroupNode`, with placements of their own (`src/adw/children.ts`), so
+  core never names an Adw class. Which side of a row fills from its far edge
+  was measured, not assumed: an ActionRow prepends its prefixes, and an
+  ExpanderRow appends them.
+- A container's subclasses take its elements (a SwitchRow is an ActionRow).
+- libadwaita's rows take children only through their groups (GtkListBoxRow's
+  `set_child` would replace the row's own layout), and its windows only
+  through their `Content` slot.
+
+**A container knows React's order of all its children**, slot and child
+elements included. A widget inserted before a slot element goes before the
+first widget after it, which is what let a PreferencesGroup keep its
+`HeaderSuffix` slot beside its rows.
+
 `native/adw` drives it as `native/gtk` drives GTK: an Adw prop and an
 inherited GTK one, the ApplicationWindow's `Content` slot, a signal, an
 EntryRow's controlled `text` (from GTK's Editable), an AdwApplication's

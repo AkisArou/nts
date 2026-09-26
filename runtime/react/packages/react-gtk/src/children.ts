@@ -292,16 +292,41 @@ export interface ActionBarChildren {
 }
 
 /**
- * A bar's start or end (`GtkHeaderBar.Start`, `GtkActionBar.End`): a group
- * of widgets packed there in the order React holds them, left to right. GTK
- * packs an end from the edge in, so an end packs its children last first.
- * Neither bar can move a packed child, so any change packs the group again;
- * a bar holds a handful.
+ * How a group's container takes its widgets: `add` places one (false when
+ * the group's parent is not that container) and `remove` takes it back. They
+ * are functions, so a module of widgets (react-gtk/adw) supplies its own
+ * containers' without this one naming their classes. `fromEnd`: the container
+ * fills from its far edge, as a bar's end does, so the group adds its widgets
+ * last first and they read in React's order.
  */
-export class PackNode extends HostNode {
+export class GroupPlacement {
+  readonly add: (container: GtkWidget, widget: GtkWidget) => boolean;
+  readonly remove: (container: GtkWidget, widget: GtkWidget) => void;
+  readonly fromEnd: boolean;
+
+  constructor(add: (container: GtkWidget, widget: GtkWidget) => boolean, remove: (container: GtkWidget, widget: GtkWidget) => void, fromEnd: boolean) {
+    this.add = add;
+    this.remove = remove;
+    this.fromEnd = fromEnd;
+  }
+}
+
+/**
+ * A group of widgets a container places together (a bar's start or end, a
+ * row's prefixes): placed in the order React holds them. A container that can
+ * move none of them places the group again on any change; a group holds a
+ * handful.
+ */
+export class GroupNode extends HostNode {
+  private readonly placement: GroupPlacement;
   private owner: WidgetNode | null = null;
   private readonly items: WidgetNode[] = [];
   private packed = false;
+
+  constructor(type: string, placement: GroupPlacement) {
+    super(type);
+    this.placement = placement;
+  }
 
   applyProps(_previous: Props | null, next: Props): void {
     const children = next["children"];
@@ -366,18 +391,12 @@ export class PackNode extends HostNode {
     if (this.packed || owner === null) {
       return;
     }
-    const bar = owner.widget;
-    const end = this.type.endsWith(".End");
+    const container = owner.widget;
+    const fromEnd = this.placement.fromEnd;
     const count = this.items.length;
     for (let i = 0; i < count; i++) {
-      const widget = this.items[end ? count - 1 - i : i]!.widget;
-      if (bar instanceof GtkHeaderBar) {
-        if (end) bar.pack_end(widget);
-        else bar.pack_start(widget);
-      } else if (bar instanceof GtkActionBar) {
-        if (end) bar.pack_end(widget);
-        else bar.pack_start(widget);
-      } else {
+      const widget = this.items[fromEnd ? count - 1 - i : i]!.widget;
+      if (!this.placement.add(container, widget)) {
         throw new Error(`<${this.name()}> goes directly inside a <${this.name().split(".")[0]}>, not a <${owner.name()}>.`);
       }
     }
@@ -390,14 +409,9 @@ export class PackNode extends HostNode {
       return;
     }
     this.packed = false;
-    const bar = owner.widget;
+    const container = owner.widget;
     for (let i = 0; i < this.items.length; i++) {
-      const widget = this.items[i]!.widget;
-      if (bar instanceof GtkHeaderBar) {
-        bar.remove(widget);
-      } else if (bar instanceof GtkActionBar) {
-        bar.remove(widget);
-      }
+      this.placement.remove(container, this.items[i]!.widget);
     }
   }
 
@@ -418,5 +432,39 @@ export class PackNode extends HostNode {
     for (let i = 0; i < this.items.length; i++) {
       this.items[i]!.setVisible(visible);
     }
+  }
+}
+
+/** A bar's side: a HeaderBar's or ActionBar's start, or its end, which GTK packs from the edge in. */
+function barPlacement(end: boolean): GroupPlacement {
+  return new GroupPlacement(
+    (bar, widget) => {
+      if (bar instanceof GtkHeaderBar) {
+        if (end) bar.pack_end(widget);
+        else bar.pack_start(widget);
+        return true;
+      }
+      if (bar instanceof GtkActionBar) {
+        if (end) bar.pack_end(widget);
+        else bar.pack_start(widget);
+        return true;
+      }
+      return false;
+    },
+    (bar, widget) => {
+      if (bar instanceof GtkHeaderBar) {
+        bar.remove(widget);
+      } else if (bar instanceof GtkActionBar) {
+        bar.remove(widget);
+      }
+    },
+    end,
+  );
+}
+
+/** A HeaderBar's or ActionBar's start or end (`GtkHeaderBar.Start`, `GtkActionBar.End`). */
+export class PackNode extends GroupNode {
+  constructor(type: string) {
+    super(type, barPlacement(type.endsWith(".End")));
   }
 }

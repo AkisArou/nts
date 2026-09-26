@@ -12,11 +12,27 @@
 //             user's edit goes back to the props' value when the app keeps it
 //   application  an AdwApplication's root: an ApplicationWindow rendered there
 //             joins the application at commit
+//   group     a PreferencesGroup adds its rows in React's order: a row
+//             inserted before its HeaderSuffix slot element goes before the
+//             first row after it; a moved row and a removed one keep the order
+//   toolbar   a ToolbarView's Top group holds a header bar, and its Content
+//             slot its content
+//   row       an ActionRow's Prefix and Suffix groups, and an ExpanderRow's
+//             Prefix, place their widgets left to right in React's order
 //   unknown   a root without the adw set creates no Adw widget
 //   reset     removing the Adw prop restores libadwaita's default, and
 //             removing the inherited GTK one clears it
 
-import { AdwActionRow, adw_init, AdwApplication, AdwApplicationWindow, AdwEntryRow, AdwHeaderBar } from "c:Adw-1";
+import {
+  AdwActionRow,
+  adw_init,
+  AdwApplication,
+  AdwApplicationWindow,
+  AdwEntryRow,
+  AdwHeaderBar,
+  AdwPreferencesGroup,
+  AdwToolbarView,
+} from "c:Adw-1";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { g_main_context_iteration } from "c:GLib-2.0";
 import { GtkWindow, type GtkWidget } from "c:Gtk-4.0";
@@ -32,6 +48,7 @@ import {
   createInstance,
   finalizeInitialChildren,
   getPublicInstance,
+  insertBefore,
   type HostNode,
   removeChild,
   removeChildFromContainer,
@@ -90,6 +107,93 @@ function main(): void {
   }
   idle();
   react_gtk_log("controlled " + (entryWidget instanceof AdwEntryRow ? entryWidget.get_text() : "not an entry row"));
+
+  const group = createInstance("AdwPreferencesGroup", { title: "Group" }, root, 0, {});
+  const rows: HostNode[] = [];
+  const rowNames = ["A", "B", "X"];
+  for (const name of rowNames) {
+    rows.push(createInstance("AdwActionRow", { title: name }, root, 0, {}));
+  }
+  const suffixSlot = createInstance("AdwPreferencesGroup.HeaderSuffix", {}, root, 0, {});
+  const suffix = createInstance("GtkButton", { label: "more" }, root, 0, {});
+  appendInitialChild(suffixSlot, suffix);
+  appendInitialChild(group, rows[0]!);
+  appendInitialChild(group, suffixSlot);
+  appendInitialChild(group, rows[1]!);
+  const groupWidget = widget(group);
+  const rowOrder = (): string => {
+    if (!(groupWidget instanceof AdwPreferencesGroup)) {
+      return "not a group";
+    }
+    let order = "";
+    for (let i = 0; ; i++) {
+      const row = groupWidget.get_row(i);
+      if (row === null) {
+        break;
+      }
+      for (let r = 0; r < rows.length; r++) {
+        if (widget(rows[r]!) === row) {
+          order += (order === "" ? "" : ",") + rowNames[r]!;
+        }
+      }
+    }
+    return order;
+  };
+  insertBefore(group, rows[2]!, suffixSlot);
+  let grouping = rowOrder();
+  insertBefore(group, rows[1]!, rows[0]!);
+  grouping += " " + rowOrder();
+  removeChild(group, rows[0]!);
+  grouping += " " + rowOrder();
+  const suffixed = groupWidget instanceof AdwPreferencesGroup && groupWidget.get_header_suffix() === widget(suffix);
+  react_gtk_log("group " + grouping + " suffix=" + String(suffixed));
+
+  const view = createInstance("AdwToolbarView", {}, root, 0, {});
+  const top = createInstance("AdwToolbarView.Top", {}, root, 0, {});
+  const topBar = createInstance("AdwHeaderBar", {}, root, 0, {});
+  const viewContent = createInstance("AdwToolbarView.Content", {}, root, 0, {});
+  const page = createInstance("GtkLabel", { label: "page" }, root, 0, {});
+  appendInitialChild(top, topBar);
+  appendInitialChild(viewContent, page);
+  appendInitialChild(view, top);
+  appendInitialChild(view, viewContent);
+  const viewWidget = widget(view);
+  const hasContent = viewWidget instanceof AdwToolbarView && viewWidget.get_content() === widget(page);
+  const barPlaced = widget(topBar).get_parent() !== null;
+  react_gtk_log("toolbar " + String(barPlaced) + " " + String(hasContent));
+
+  const sided = createInstance("AdwActionRow", { title: "Sides" }, root, 0, {});
+  const prefix = createInstance("AdwActionRow.Prefix", {}, root, 0, {});
+  const suffixes = createInstance("AdwActionRow.Suffix", {}, root, 0, {});
+  const sides: HostNode[] = [];
+  const sideNames = ["p1", "p2", "s1", "s2"];
+  for (const name of sideNames) {
+    sides.push(createInstance("GtkLabel", { label: name }, root, 0, {}));
+  }
+  appendInitialChild(prefix, sides[0]!);
+  appendInitialChild(prefix, sides[1]!);
+  appendInitialChild(suffixes, sides[2]!);
+  appendInitialChild(suffixes, sides[3]!);
+  appendInitialChild(sided, prefix);
+  appendInitialChild(sided, suffixes);
+  const nextOf = (i: number): string => {
+    const next = widget(sides[i]!).get_next_sibling();
+    for (let n = 0; n < sides.length; n++) {
+      if (next === widget(sides[n]!)) {
+        return sideNames[n]!;
+      }
+    }
+    return next === null ? "-" : "?";
+  };
+  const expander = createInstance("AdwExpanderRow", { title: "More" }, root, 0, {});
+  const expanderPrefix = createInstance("AdwExpanderRow.Prefix", {}, root, 0, {});
+  const e1 = createInstance("GtkLabel", { label: "e1" }, root, 0, {});
+  const e2 = createInstance("GtkLabel", { label: "e2" }, root, 0, {});
+  appendInitialChild(expanderPrefix, e1);
+  appendInitialChild(expanderPrefix, e2);
+  appendInitialChild(expander, expanderPrefix);
+  const expanderOrder = widget(e1).get_next_sibling() === widget(e2) ? "e1>e2" : "e1>?";
+  react_gtk_log("row " + sideNames[0]! + ">" + nextOf(0) + " " + sideNames[2]! + ">" + nextOf(2) + " " + expanderOrder);
 
   const application = new AdwApplication({ application_id: "org.nts.ReactAdw", flags: ApplicationFlags.NON_UNIQUE });
   application.register(null, null);
