@@ -14,6 +14,14 @@
 // `index 5 is outside [0, 0)`. A reproduction written that way sees nothing and
 // looks fixed; it is not.
 //
+// **What the fix should make this say: CHANGED, not FIXED.** When `fields::lengths`
+// stops trusting the recorded length, the check comes back and the read aborts
+// (`index 5 is outside [0, 0)`) where node answers `undefined`: a *stale element
+// read with no check* becomes a *refused index*. That is progress -- the silent
+// divergence replaced by a loud one -- and still a divergence. Answering
+// `undefined` is a separate question about the read, pinned in
+// a-read-past-the-end-of-an-array-aborts.
+//
 // **The cause (compiler lane's reading, this fixture its witness):**
 // `fields::lengths` records a `(layout, field)` as changing length only when a
 // `FieldGet` of it appears directly in a call's argument list, and its answer
