@@ -163,12 +163,16 @@ the design; the implementation is `nts-react`, which `nts` runs when
    work:
 
    ```ts
-   const _cache0 = { create: ..., clone: ... };       // module scope, made once
+   type _Cache0 = { f0: number; s0: string; s1: (ReactElement) | undefined };
+   const _cache0: _MemoCacheShape<_Cache0> = { create: ..., clone: ... };   // module scope, made once
    const $ = _cacheOf(_cache0);
    if (($.f0 & 1) === 0 || $.s0 !== label) { ...; $.s0 = label; $.s1 = t1; $.f0 |= 1; }
    else { t1 = ($.s1 as (ReactElement)); }
    ```
 
+   - The shape is annotated `MemoCacheShape`: to nts an object literal has
+     an interface's layout only where it is typed as one. A shape that
+     cannot be hoisted is typed by `_cacheOf`'s type argument instead.
    - The bits are exact because the compiler writes a scope's slots
      together.
    - A slot typed `any` or `unknown`, or with no type, keeps the compiler's

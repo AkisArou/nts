@@ -87,7 +87,7 @@ impl CachePlan {
     }
 
     /// The record's type, spelled out.
-    fn record_type(&self) -> String {
+    pub(super) fn record_type(&self) -> String {
         let mut fields: Vec<String> = (0..self.words()).map(|w| format!("f{w}: number")).collect();
         for (at, slot) in self.slots.iter().enumerate() {
             // Parenthesised: `(x: T) => U | undefined` would make `undefined`
@@ -104,7 +104,11 @@ impl CachePlan {
     /// The shape `cacheOf` takes: how a cache is made, with nothing filled,
     /// and how one is copied.
     pub(super) fn shape(&self) -> String {
-        let ty = self.record_type();
+        self.shape_of(&self.record_type())
+    }
+
+    /// The shape, with the record written as `ty` (its type, or an alias of it).
+    pub(super) fn shape_of(&self, ty: &str) -> String {
         let names: Vec<String> = (0..self.words()).map(|w| format!("f{w}")).chain((0..self.slots.len()).map(|at| format!("s{at}"))).collect();
         let fresh: Vec<String> = (0..self.words())
             .map(|w| format!("f{w}: 0"))
@@ -125,8 +129,16 @@ impl CachePlan {
     }
 
     /// What `cacheOf` is called with: the hoisted shape, or the shape itself.
+    /// A shape is a `MemoCacheShape` to nts, whose layout an object literal
+    /// has only where it is typed as one: the hoisted const is annotated, and
+    /// the inline shape is typed by `cacheOf`'s type argument.
     pub(super) fn argument(&self) -> String {
         self.hoisted.clone().unwrap_or_else(|| self.shape())
+    }
+
+    /// `cacheOf`'s type argument, for a shape written inline.
+    pub(super) fn type_argument(&self) -> String {
+        if self.hoisted.is_some() { String::new() } else { format!("<{}>", self.record_type()) }
     }
 
     /// How a read of slot `at` is written: the field, cast to what was stored

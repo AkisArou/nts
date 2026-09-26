@@ -169,6 +169,8 @@ struct Caches {
     /// Where the compiler runtime's import was printed, rewritten once it is
     /// known which of the two the file uses.
     runtime_import: Option<(usize, usize)>,
+    /// Some shape was hoisted, so `MemoCacheShape` is imported to annotate it.
+    shape_type: bool,
     /// Functions to keep on the array cache ([`PrintOptions::array_cache`]).
     forced_array: FxHashSet<(u32, u32)>,
     /// The functions whose cache was typed, by original span.
@@ -639,7 +641,7 @@ impl Printer<'_> {
             return;
         }
         let callee = self.caches.callee.clone().unwrap_or_default();
-        let typed = "cacheOf as _cacheOf";
+        let typed = if self.caches.shape_type { "cacheOf as _cacheOf, type MemoCacheShape as _MemoCacheShape" } else { "cacheOf as _cacheOf" };
         match self.caches.runtime_import {
             Some((start, end)) => {
                 let printed = self.out[start..end].to_owned();
@@ -719,14 +721,14 @@ impl Printer<'_> {
         self.write("}");
     }
 
-    /// `const $ = _c(n)` in a function whose cache is typed: the shape the
-    /// typed cache is made from, in its place.
+    /// `const $ = _c(n)` in a function whose cache is typed: the call that
+    /// makes the typed cache from its shape, in its place.
     fn cache_declaration(&self, id: &PatternLike, init: &Expression) -> Option<String> {
         let plan = self.cache()?;
         let callee = self.caches.callee.as_deref()?;
         let is_cache = matches!(id, PatternLike::Identifier(i) if i.name == plan.name)
             && matches!(init, Expression::CallExpression(call) if matches!(call.callee.as_ref(), Expression::Identifier(c) if c.name == callee));
-        is_cache.then(|| plan.argument())
+        is_cache.then(|| format!("_cacheOf{}({})", plan.type_argument(), plan.argument()))
     }
 
     /// A memo scope's `if`, when the cache is typed: the next bit of the
@@ -777,8 +779,13 @@ impl Printer<'_> {
         // whose own cache is being printed.
         let nested = self.caches.stack.iter().any(Option::is_some);
         if !nested && !plan.names_any(&self.local_type_names(function)) {
-            let name = self.fresh_name("_cache");
-            self.hoists.push(format!("const {name} = {};", plan.shape()));
+            let [name, record] = self.fresh_names(["_cache", "_Cache"]);
+            self.hoists.push(format!(
+                "type {record} = {};\nconst {name}: _MemoCacheShape<{record}> = {};",
+                plan.record_type(),
+                plan.shape_of(&record)
+            ));
+            self.caches.shape_type = true;
             plan.hoisted = Some(name);
         }
         Some(plan)
@@ -828,13 +835,15 @@ impl Printer<'_> {
     }
 
     /// A name the file does not use: `base` numbered.
-    fn fresh_name(&mut self, base: &str) -> String {
+    /// Names that share one number, none of them in the source: `_cache0` and
+    /// the `_Cache0` it is typed with.
+    fn fresh_names<const N: usize>(&mut self, bases: [&str; N]) -> [String; N] {
         let text = self.source.slice(0, self.source.len());
         loop {
-            let name = format!("{base}{}", self.fresh);
+            let names = bases.map(|base| format!("{base}{}", self.fresh));
             self.fresh += 1;
-            if !text.contains(&name) {
-                return name;
+            if names.iter().all(|name| !text.contains(name.as_str())) {
+                return names;
             }
         }
     }
@@ -1163,9 +1172,9 @@ impl Printer<'_> {
                 self.typed_locals.insert(name);
             }
             if let Some(init) = &declarator.init
-                && let Some(shape) = self.cache_declaration(&declarator.id, init)
+                && let Some(call) = self.cache_declaration(&declarator.id, init)
             {
-                let _ = write!(self.out, " = _cacheOf({shape})");
+                let _ = write!(self.out, " = {call}");
             } else if let Some(init) = &declarator.init {
                 self.write(" = ");
                 if in_for {
