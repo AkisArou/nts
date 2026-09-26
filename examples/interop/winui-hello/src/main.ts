@@ -188,13 +188,16 @@ class App extends Application {
     // Windows Runtime's JavaScript projection read it.
     const shown = button.content;
     const content = typeof shown === "string" ? shown : "object";
+    // The window's content is the button it was given, asked of the
+    // object itself: `QueryInterface` for `Button`'s interface.
+    const isButton = window.content instanceof Button;
     // A record written as its fields, where the call takes one by value.
     button.measure({ Width: 1000, Height: 1000 });
     const desired = button.desiredSize.Width > 0;
     console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " rebuilt=" + String(this.rebuilt()),
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " rebuilt=" + String(this.rebuilt()),
     );
     this.exit();
   }

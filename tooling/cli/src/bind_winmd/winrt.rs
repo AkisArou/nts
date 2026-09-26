@@ -427,17 +427,19 @@ impl Writer<'_> {
         // The tag is the C struct a handle points at, so a C identifier: the
         // namespace kept, since two namespaces may name an interface alike.
         let tag = format!("{}_{name}", self.namespace.replace('.', "_"));
-        match &base {
-            Some(base) => {
-                let _ = write!(body, "  export type {this} = ComClass<\"{tag}\", {base}> & {name}Methods{parameters}");
-                for methods in &inherited {
-                    let _ = write!(body, " & {methods}");
-                }
-                let _ = writeln!(body, ";");
+        if let Some(base) = &base {
+            let _ = write!(body, "  export type {this} = ComClass<\"{tag}\", {base}> & {name}Methods{parameters}");
+            for methods in &inherited {
+                let _ = write!(body, " & {methods}");
             }
-            None => {
-                let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\"> & {name}Methods{parameters}{surface};");
-            }
+            let _ = writeln!(body, ";");
+        } else {
+            // Every Windows Runtime interface is an `IInspectable`, so one
+            // with no base class's interface above it has that as its
+            // parent: any object goes where any object is taken
+            // (`button.content = textBlock`).
+            self.brands.insert("IInspectable");
+            let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\", IInspectable> & {name}Methods{parameters}{surface};");
         }
         self.generics.clear();
         true

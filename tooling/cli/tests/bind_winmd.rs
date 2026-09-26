@@ -175,7 +175,9 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
     // idiomatic surface.
     assert!(module.contains("export type JsonValue = IJsonValue & JsonValueInterfaces & JsonValueMembers;"), "{module}");
     assert!(module.contains("export namespace JsonValue {"), "{module}");
-    assert!(module.contains("ComClass<\"Windows_Data_Json_IJsonValue\">"), "{module}");
+    // Every Windows Runtime interface is an `IInspectable`, the root of its
+    // chain, so any object goes where any object is taken.
+    assert!(module.contains("ComClass<\"Windows_Data_Json_IJsonValue\", IInspectable>"), "{module}");
     // A class's other interface, by the IID the Windows Runtime computes for
     // the instantiation: the value Windows answered `QueryInterface` for, in
     // `examples/interop/windows-winrt`.
@@ -198,7 +200,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
     // `list.size`, `list.getAt(0)`, `list.append(v)`, for any `T`.
     let collections = std::fs::read_to_string(out.join("Windows.Foundation.Collections.d.ts")).unwrap();
     assert!(
-        collections.contains("export type IVector<T> = ComClass<\"Windows_Foundation_Collections_IVector\"> & IVectorMethods<T> & IVectorMembers<T>;"),
+        collections.contains("export type IVector<T> = ComClass<\"Windows_Foundation_Collections_IVector\", IInspectable> & IVectorMethods<T> & IVectorMembers<T>;"),
         "IVector<T> does not carry its surface"
     );
     assert!(collections.contains("     * @ntsGet 7 get_Size\n     */\n    readonly size: CNumber<\"uint32\">;"), "IVector<T> has no `size`");

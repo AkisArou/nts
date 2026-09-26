@@ -16499,7 +16499,22 @@ impl<'a> FuncBuilder<'a> {
                 && matches!(&want, HirType::NativePointer(pointee) if super::tags::erased_handle_tag(pointee).is_some())
             {
                 let origin = self.origin(id);
-                return Ok(self.push(OpKind::Unerase { value }, want, origin));
+                let read = self.push(OpKind::Unerase { value }, want.clone(), origin.clone());
+                // A COM object is stored as whichever of its interfaces it
+                // was erased as -- the `IInspectable` a getter answered, or a
+                // `Button` -- and each interface is its own pointer. So the
+                // one the narrowing wants is asked for (`nts_com_query`, a
+                // reference of its own), where a binding says its IID;
+                // reading the stored pointer as another interface would call
+                // through the wrong table.
+                if let HirType::NativePointer(super::native::Pointee::Opaque(handle)) = &want
+                    && handle.family == super::native::Family::Com
+                    && let Some(iid) = self.hierarchy.com_iids.get(&handle.tag).cloned()
+                {
+                    let [low, high] = self.iid_arguments(&iid, &origin);
+                    return Ok(self.runtime_call("nts_com_query", vec![read, low, high], want, origin));
+                }
+                return Ok(read);
             }
             return Err(self.unsupported(id, "a value asserted to be an opaque C pointer"));
         }
@@ -17337,6 +17352,10 @@ impl<'a> FuncBuilder<'a> {
                 && from.family == super::native::Family::Com
                 && to.family == super::native::Family::Com
                 && from.tag != to.tag
+                // Every Windows Runtime interface begins with `IInspectable`'s
+                // table, so any of them is one as it is: the root every
+                // interface's chain ends in is a relabel, not a query.
+                && to.tag != "IInspectable"
             {
                 let Some(iid) = self.hierarchy.com_iids.get(&to.tag).cloned() else {
                     return Some(Err(self.unsupported(id, &format!("a Windows Runtime object as `{}`, an interface no binding asks for by IID", to.tag))));
@@ -28334,6 +28353,9 @@ impl<'a> FuncBuilder<'a> {
             return Ok(sent);
         }
         if let Some(asked) = self.lower_gobject_instanceof(id, lhs, symbol)? {
+            return Ok(asked);
+        }
+        if let Some(asked) = self.lower_com_instanceof(id, lhs, symbol)? {
             return Ok(asked);
         }
         // The class's *instance* type. The right operand names the constructor,
@@ -48143,6 +48165,53 @@ impl<'a> FuncBuilder<'a> {
         self.terminate(Terminator::Jump { target: answered, args: vec![is_a] });
         self.switch_to(answered);
         Ok(Some(answer))
+    }
+
+    /// `x instanceof Button` for a Windows Runtime class: whether `x` is a COM
+    /// object that answers the class's default interface, asked by
+    /// `QueryInterface` (`nts_winrt_is`) of the value erased -- whatever
+    /// interface it was stored as, since a COM object is one object behind
+    /// all of them. `None` for a class that is not a Windows Runtime one.
+    fn lower_com_instanceof(&mut self, id: NodeId, lhs: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(declarations) = self.snapshot.symbols.get(symbol.0 as usize).map(|record| record.declarations.clone()) else {
+            return Ok(None);
+        };
+        if !declarations.iter().any(|decl| self.kind_of(*decl) == Some(syntax::CLASS_DECLARATION)) {
+            return Ok(None);
+        }
+        // A binding's class is ambient, so its instance type is the one its
+        // merged interface (`interface Button extends IButton, …`) declares:
+        // the handle `new` makes and a narrowing reads.
+        let handle = declarations
+            .iter()
+            .filter(|decl| self.kind_of(**decl) == Some(syntax::INTERFACE_DECLARATION))
+            .filter_map(|decl| self.name_node(*decl))
+            .filter_map(|name| self.snapshot.node_types.get(&name).copied())
+            .find_map(|instance| match super::native::pointer(self.snapshot, instance) {
+                Some(super::native::Pointee::Opaque(handle)) => Some(handle),
+                _ => None,
+            });
+        // A Windows Runtime class this cannot resolve is refused, never
+        // handed on: the general `instanceof` below finds no class of the
+        // program's by that name and answers `false` for every value.
+        let composable = declarations.iter().any(|decl| self.node(*decl).native.as_ref().is_some_and(|n| n.composable.is_some()));
+        let Some(handle) = handle else {
+            if composable {
+                return Err(self.unsupported(id, "an `instanceof` of a Windows Runtime class whose instance type names no interface"));
+            }
+            return Ok(None);
+        };
+        if handle.family != super::native::Family::Com {
+            return Ok(None);
+        }
+        let Some(iid) = self.hierarchy.com_iids.get(&handle.tag).cloned() else {
+            return Err(self.unsupported(id, &format!("an `instanceof` of a Windows Runtime class whose interface `{}` no binding asks for by IID", handle.tag)));
+        };
+        let object = self.lower_expression(lhs)?;
+        let erased = self.coerce(object, &HirType::Erased, id)?;
+        let origin = self.origin(id);
+        let [low, high] = self.iid_arguments(&iid, &origin);
+        Ok(Some(self.runtime_call("nts_winrt_is", vec![erased, low, high], HirType::Bool, origin)))
     }
 
     /// A class's `GType`, from the function `gtype_function` named: a program

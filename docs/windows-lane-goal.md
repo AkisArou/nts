@@ -357,9 +357,7 @@ Application.Start(() => { new App(); });
    - **A COM handle where any value may go:** a `Map`, an `unknown[]`,
      `unknown`, through Gtk's handle tag block (`NTS_TAG_HANDLE_COM`,
      registered by `nts_winrt.c`). Read back out of a typed `Map` it is the
-     same object. Narrowing an `unknown` by `instanceof` a WinRT class is not
-     done yet; GObject's `lower_gobject_instanceof` is the shape, with
-     `QueryInterface` as the class check.
+     same object, asked for the interface it is read as.
    - **Events, as the DOM and WinJS spell them:** `button.addEventListener(
      "click", f)` and `removeEventListener`. Each class has a
      `{Class}EventMap` extending its base's, keyed by the event's name
@@ -390,11 +388,18 @@ Application.Start(() => { new App(); });
      the runtime boxes a primitive as an `IPropertyValue` for the call
      (`nts_winrt_box`), as the Windows Runtime's JavaScript projection
      did. An override's object parameter stays `IInspectable | null`: it
-     is handed an object. Reading an `IPropertyValue` back as the
-     primitive is not done yet.
-   - Not yet: `for…of` over an `IIterable<T>` that is not a vector, struct
-     fields (`size.Width`), and `instanceof` of a COM value in
-     `unknown` or `Inspectable`. Also started: a record a call takes by value may be
+     is handed an object.
+   - **Unboxing:** what a method or getter answers as any object is
+     `Inspectable` too. The runtime (`nts_winrt_unbox`) reads a boxed
+     `IPropertyValue` back as its string, number or boolean and anything
+     else as the object, which the program narrows by `typeof`, as
+     JavaScript did.
+   - **`instanceof` and narrowing:** `content instanceof Button` asks the
+     object for the class's default interface (`nts_winrt_is`). Every
+     interface's chain ends in `IInspectable`, so any object goes where
+     any object is taken.
+   - Not yet: `for…of` over an `IIterable<T>` that is not a vector, and
+     struct fields (`size.Width`). Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
    record stays `ByValue<T>`.

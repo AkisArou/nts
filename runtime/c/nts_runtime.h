@@ -2000,6 +2000,9 @@ void *nts_winrt_box(NtsValue value);
  * the program reads -- the string, number or boolean an `IPropertyValue`
  * holds, and any other object as itself; NULL as `null`. */
 NtsValue nts_winrt_unbox(void *object);
+/* `value instanceof C` for a Windows Runtime class: whether the value is a
+ * COM object that answers the interface `iid` names, C's default. */
+bool nts_winrt_is(NtsValue value, uint64_t iid_low, uint64_t iid_high);
 int32_t nts_winrt_listen(void *object, uint64_t iid_low, uint64_t iid_high,
                          uint32_t add, void *delegate);
 int32_t nts_winrt_unlisten(void *object, uint64_t iid_low, uint64_t iid_high,

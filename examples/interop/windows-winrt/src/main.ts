@@ -33,8 +33,11 @@
 // - `global`: a handle held at module scope, read from a function (`held`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
-//   call that was handed it -- and 42 under `--rc` (`expected-rc.txt`),
-//   those two and one for each object handed over, among them: the five
+//   call that was handed it -- and 43 under `--rc` (`expected-rc.txt`),
+//   those two and one for each object handed over, among them: the one the
+//   `erased` arm's `get` is narrowed back through -- a COM value read out of
+//   an erased slot is asked for the interface it is read as, a reference of
+//   its own (42 before that) -- the five
 //   the `for...of` walk takes -- the parsed array, its `IVector`, and the
 //   three values `GetAt` answers (37 before the walk) -- the six
 //   releases of `erased`'s one object -- `seven`'s own, `back`'s own, the

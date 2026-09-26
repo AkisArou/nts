@@ -270,4 +270,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 113 for `nts_winrt_unbox`, an object a Windows Runtime getter answers read
 /// back as the primitive it boxes: Windows again.
-const REFUSED_FLOOR: usize = 113;
+///
+/// 114 for `nts_winrt_is`, `x instanceof Button` of a Windows Runtime value:
+/// Windows again.
+const REFUSED_FLOOR: usize = 114;

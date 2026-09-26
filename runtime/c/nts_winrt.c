@@ -565,6 +565,22 @@ NtsValue nts_winrt_unbox(void *object) {
   return value;
 }
 
+bool nts_winrt_is(NtsValue value, uint64_t iid_low, uint64_t iid_high) {
+  if (value.tag != NTS_TAG_HANDLE_COM || value.as.native == 0) {
+    return false;
+  }
+  IID wanted = nts_iid(iid_low, iid_high);
+  void *answer = 0;
+  void *object = value.as.native;
+  if (FAILED((*(const NtsUnknownTable **)object)
+                 ->query_interface(object, &wanted, &answer)) ||
+      answer == 0) {
+    return false;
+  }
+  nts_unknown_release(answer);
+  return true;
+}
+
 /* Events, as `addEventListener` registers them: an object's event and a
  * function, and the token the event's `add_` answered, which its `remove_`
  * takes back. Keyed as the DOM keys a listener -- the object by its

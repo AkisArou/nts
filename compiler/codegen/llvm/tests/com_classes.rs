@@ -1024,3 +1024,69 @@ fn an_object_read_back_is_unboxed() {
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 }
+
+/// A composable class with its default interface, which a class's
+/// `as_IThing()` names by IID, as `bind-winmd` writes one.
+const NARROWING: &str = r#"declare module "winrt:Test.Narrow" {
+  import type { ComClass, IInspectable, Inspectable } from "winrt:types";
+  export interface IThingMethods {
+    /**
+     * @ntsVtable 6 Poke
+     * @ntsHresult
+     */
+    Poke(this: IThing): void;
+  }
+  export type IThing = ComClass<"Test_IThing", IInspectable> & IThingMethods;
+  export interface ThingInterfaces {
+    /**
+     * @ntsQuery 0C0C0C0C-1111-2222-3333-444444444444
+     */
+    as_IThing(this: Thing): IThing;
+  }
+  /**
+   * @ntsComposable Test.Narrow.Thing 1D1D1D1D-1111-2222-3333-444444444444 6
+   */
+  export class Thing {
+    /**
+     * @ntsVtable 6 CreateInstance
+     * @ntsHresult composable
+     * @ntsFactory Test.Narrow.Thing 1D1D1D1D-1111-2222-3333-444444444444
+     */
+    constructor();
+  }
+  export interface Thing extends IThing, ThingInterfaces {}
+  export interface IHolderMethods {
+    /**
+     * @ntsVtable 6 get_Content
+     * @ntsHresult
+     */
+    get_Content(this: IHolder): Inspectable;
+  }
+  export type IHolder = ComClass<"Test_IHolder"> & IHolderMethods;
+}
+"#;
+
+/// `x instanceof Thing` of what a getter answered: the runtime asks the value
+/// for the class's default interface (`nts_winrt_is`), and the branch the
+/// test narrowed reads it as that interface -- asked for again
+/// (`nts_com_query`), since the value holds whichever interface it was
+/// stored as, and calling `Poke` through another's table would call the
+/// wrong slot.
+#[test]
+fn an_instanceof_narrows_a_com_value_to_its_interface() {
+    let source = "import { Thing } from \"winrt:Test.Narrow\";\nimport type { IHolder } from \"winrt:Test.Narrow\";\nexport function poke(h: IHolder): boolean {\n  const value = h.get_Content();\n  if (value instanceof Thing) {\n    value.Poke();\n    return true;\n  }\n  return false;\n}\n";
+    let Some((dir, prepared)) = prepare_with("narrowing", NARROWING, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    let first = 0x0C0C_0C0C_u64 | (0x1111 << 32) | (0x2222 << 48);
+    assert!(text.contains("nts_winrt_is(") && text.contains(&first.to_string()), "not asked for the class's interface:\n{text}");
+    assert!(text.contains("nts_com_query("), "the narrowed value is not asked for its interface before the call:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+}
