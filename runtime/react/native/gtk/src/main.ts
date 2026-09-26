@@ -17,6 +17,8 @@
 //             label in the same update that removes its `label` prop
 //   enum      an enum prop reaches its setter
 //   single    a single-child widget holds its child
+//   argument  a signal's argument reaches the handler its prop holds, typed,
+//             at the discrete event priority
 //
 // What the host refuses -- text outside a widget with a label, an unknown
 // prop or widget, a second child for a single-child widget -- is an Error
@@ -28,7 +30,7 @@
 
 import { gtk_init, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { g_main_loop_new } from "c:GLib-2.0";
-import { react_gtk_emit, react_gtk_log } from "c:react-gtk-shim";
+import { react_gtk_emit, react_gtk_emit_double, react_gtk_log } from "c:react-gtk-shim";
 import {
   appendChildToContainer,
   appendInitialChild,
@@ -138,6 +140,21 @@ function main(): void {
   const held = framing instanceof FrameNode && framing.gtk.get_child() === inner.widget;
   react_gtk_log("single " + String(held));
 
+
+  let bounds = "none";
+  const scale = createInstance(
+    "GtkScale",
+    {
+      onAdjustBounds: (value: number) => {
+        bounds = String(value) + "@" + String(getCurrentUpdatePriority());
+      },
+    },
+    container,
+    0,
+    {},
+  );
+  react_gtk_emit_double(scale.widget, "adjust-bounds", 2.5);
+  react_gtk_log("argument " + bounds);
 
   const loop = g_main_loop_new(null, false);
   let ran = "";

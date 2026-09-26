@@ -18,12 +18,15 @@ import {
   GtkColumnView,
   type GtkContentFit,
   type GtkCornerType,
+  type GtkDeleteType,
+  type GtkDirectionType,
   GtkDragIcon,
   GtkDrawingArea,
   GtkDropDown,
   GtkEditableLabel,
   GtkEmojiChooser,
   GtkEntry,
+  type GtkEntryIconPosition,
   GtkExpander,
   GtkFixed,
   GtkFlowBox,
@@ -55,8 +58,10 @@ import {
   GtkListView,
   GtkMediaControls,
   GtkMenuButton,
+  type GtkMovementStep,
   type GtkNaturalWrapMode,
   GtkNotebook,
+  type GtkNotebookTab,
   type GtkOrientation,
   type GtkOverflow,
   GtkOverlay,
@@ -75,6 +80,8 @@ import {
   type GtkRevealerTransitionType,
   GtkScale,
   GtkScaleButton,
+  type GtkScrollStep,
+  type GtkScrollType,
   type GtkScrollablePolicy,
   GtkScrollbar,
   GtkScrolledWindow,
@@ -89,12 +96,20 @@ import {
   GtkStackSidebar,
   GtkStackSwitcher,
   type GtkStackTransitionType,
+  type GtkStateFlags,
   type GtkStringFilterMatchMode,
   GtkSwitch,
   GtkText,
+  type GtkTextDirection,
+  type GtkTextExtendSelection,
+  type GtkTextIter,
   GtkTextView,
   GtkToggleButton,
+  type GtkTooltip,
   GtkTreeExpander,
+  type GtkTreeIter,
+  type GtkTreePath,
+  type GtkTreeViewColumn,
   GtkVideo,
   GtkViewport,
   type GtkWidget,
@@ -144,10 +159,13 @@ export interface WidgetProps extends HostProps {
   vexpandSet?: boolean;
   visible?: boolean;
   onDestroy?: () => void;
+  onDirectionChanged?: (previous_direction: GtkTextDirection) => void;
   onHide?: () => void;
   onMap?: () => void;
+  onMoveFocus?: (direction: GtkDirectionType) => void;
   onRealize?: () => void;
   onShow?: () => void;
+  onStateFlagsChanged?: (flags: GtkStateFlags) => void;
   onUnmap?: () => void;
   onUnrealize?: () => void;
 }
@@ -271,6 +289,7 @@ export interface ColumnViewProps extends WidgetProps {
   tabBehavior?: GtkListTabBehavior;
   hscrollPolicy?: GtkScrollablePolicy;
   vscrollPolicy?: GtkScrollablePolicy;
+  onActivate?: (position: number) => void;
 }
 
 /** `<DragIcon>`'s props: GtkDragIcon's own properties and signals. */
@@ -281,6 +300,7 @@ export interface DragIconProps extends WidgetProps {
 export interface DrawingAreaProps extends WidgetProps {
   contentHeight?: number;
   contentWidth?: number;
+  onResize?: (width: number, height: number) => void;
 }
 
 /** `<DropDown>`'s props: GtkDropDown's own properties and signals. */
@@ -301,6 +321,7 @@ export interface EditableLabelProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onChanged?: () => void;
+  onDeleteText?: (start_pos: number, end_pos: number) => void;
 }
 
 /** `<Popover>`'s props: GtkPopover's own properties and signals. */
@@ -337,9 +358,12 @@ export interface EntryProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onActivate?: () => void;
+  onIconPress?: (icon_pos: GtkEntryIconPosition) => void;
+  onIconRelease?: (icon_pos: GtkEntryIconPosition) => void;
   onEditingDone?: () => void;
   onRemoveWidget?: () => void;
   onChanged?: () => void;
+  onDeleteText?: (start_pos: number, end_pos: number) => void;
 }
 
 /** `<Expander>`'s props: GtkExpander's own properties and signals. */
@@ -367,6 +391,7 @@ export interface FlowBoxProps extends WidgetProps {
   selectionMode?: GtkSelectionMode;
   orientation?: GtkOrientation;
   onActivateCursorChild?: () => void;
+  onChildActivated?: (child: GtkFlowBoxChild) => void;
   onSelectAll?: () => void;
   onSelectedChildrenChanged?: () => void;
   onToggleCursorChild?: () => void;
@@ -398,6 +423,7 @@ export interface GLAreaProps extends WidgetProps {
   autoRender?: boolean;
   hasDepthBuffer?: boolean;
   hasStencilBuffer?: boolean;
+  onResize?: (width: number, height: number) => void;
 }
 
 /** `<GraphicsOffload>`'s props: GtkGraphicsOffload's own properties and signals. */
@@ -430,6 +456,7 @@ export interface GridViewProps extends ListBaseProps {
   minColumns?: number;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
+  onActivate?: (position: number) => void;
 }
 
 /** `<HeaderBar>`'s props: GtkHeaderBar's own properties and signals. */
@@ -479,6 +506,7 @@ export interface LabelProps extends WidgetProps {
   yalign?: number;
   onActivateCurrentLink?: () => void;
   onCopyClipboard?: () => void;
+  onMoveCursor?: (step: GtkMovementStep, count: number, extend_selection: boolean) => void;
 }
 
 /** `<LevelBar>`'s props: GtkLevelBar's own properties and signals. */
@@ -504,6 +532,9 @@ export interface ListBoxProps extends WidgetProps {
   showSeparators?: boolean;
   tabBehavior?: GtkListTabBehavior;
   onActivateCursorRow?: () => void;
+  onMoveCursor?: (step: GtkMovementStep, count: number, extend: boolean, modify: boolean) => void;
+  onRowActivated?: (row: GtkListBoxRow) => void;
+  onRowSelected?: (row: GtkListBoxRow | null) => void;
   onSelectAll?: () => void;
   onSelectedRowsChanged?: () => void;
   onToggleCursorRow?: () => void;
@@ -524,6 +555,7 @@ export interface ListViewProps extends ListBaseProps {
   showSeparators?: boolean;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
+  onActivate?: (position: number) => void;
 }
 
 /** `<MediaControls>`'s props: GtkMediaControls's own properties and signals. */
@@ -552,6 +584,11 @@ export interface NotebookProps extends WidgetProps {
   showBorder?: boolean;
   showTabs?: boolean;
   tabPos?: GtkPositionType;
+  onMoveFocusOut?: (direction: GtkDirectionType) => void;
+  onPageAdded?: (child: GtkWidget, page_num: number) => void;
+  onPageRemoved?: (child: GtkWidget, page_num: number) => void;
+  onPageReordered?: (child: GtkWidget, page_num: number) => void;
+  onSwitchPage?: (page: GtkWidget, page_num: number) => void;
 }
 
 /** `<Overlay>`'s props: GtkOverlay's own properties and signals. */
@@ -580,6 +617,7 @@ export interface PasswordEntryProps extends WidgetProps {
   xalign?: number;
   onActivate?: () => void;
   onChanged?: () => void;
+  onDeleteText?: (start_pos: number, end_pos: number) => void;
 }
 
 /** `<Picture>`'s props: GtkPicture's own properties and signals. */
@@ -622,6 +660,8 @@ export interface RangeProps extends WidgetProps {
   roundDigits?: number;
   showFillLevel?: boolean;
   orientation?: GtkOrientation;
+  onAdjustBounds?: (value: number) => void;
+  onMoveSlider?: (step: GtkScrollType) => void;
   onValueChanged?: () => void;
 }
 
@@ -647,6 +687,7 @@ export interface ScaleButtonProps extends WidgetProps {
   orientation?: GtkOrientation;
   onPopdown?: () => void;
   onPopup?: () => void;
+  onValueChanged?: (value: number) => void;
 }
 
 /** `<Scrollbar>`'s props: GtkScrollbar's own properties and signals. */
@@ -666,6 +707,9 @@ export interface ScrolledWindowProps extends WidgetProps {
   propagateNaturalHeight?: boolean;
   propagateNaturalWidth?: boolean;
   windowPlacement?: GtkCornerType;
+  onEdgeOvershot?: (pos: GtkPositionType) => void;
+  onEdgeReached?: (pos: GtkPositionType) => void;
+  onMoveFocusOut?: (direction_type: GtkDirectionType) => void;
 }
 
 /** `<SearchBar>`'s props: GtkSearchBar's own properties and signals. */
@@ -692,6 +736,7 @@ export interface SearchEntryProps extends WidgetProps {
   onSearchStarted?: () => void;
   onStopSearch?: () => void;
   onChanged?: () => void;
+  onDeleteText?: (start_pos: number, end_pos: number) => void;
 }
 
 /** `<Separator>`'s props: GtkSeparator's own properties and signals. */
@@ -717,11 +762,13 @@ export interface SpinButtonProps extends WidgetProps {
   xalign?: number;
   orientation?: GtkOrientation;
   onActivate?: () => void;
+  onChangeValue?: (scroll: GtkScrollType) => void;
   onValueChanged?: () => void;
   onWrapped?: () => void;
   onEditingDone?: () => void;
   onRemoveWidget?: () => void;
   onChanged?: () => void;
+  onDeleteText?: (start_pos: number, end_pos: number) => void;
 }
 
 /** `<Spinner>`'s props: GtkSpinner's own properties and signals. */
@@ -778,10 +825,13 @@ export interface TextProps extends WidgetProps {
   onBackspace?: () => void;
   onCopyClipboard?: () => void;
   onCutClipboard?: () => void;
+  onDeleteFromCursor?: (type: GtkDeleteType, count: number) => void;
   onInsertEmoji?: () => void;
+  onMoveCursor?: (step: GtkMovementStep, count: number, extend: boolean) => void;
   onPasteClipboard?: () => void;
   onToggleOverwrite?: () => void;
   onChanged?: () => void;
+  onDeleteText?: (start_pos: number, end_pos: number) => void;
 }
 
 /** `<TextView>`'s props: GtkTextView's own properties and signals. */
@@ -807,8 +857,12 @@ export interface TextViewProps extends WidgetProps {
   onBackspace?: () => void;
   onCopyClipboard?: () => void;
   onCutClipboard?: () => void;
+  onDeleteFromCursor?: (type: GtkDeleteType, count: number) => void;
   onInsertEmoji?: () => void;
+  onMoveCursor?: (step: GtkMovementStep, count: number, extend_selection: boolean) => void;
+  onMoveViewport?: (step: GtkScrollStep, count: number) => void;
   onPasteClipboard?: () => void;
+  onSelectAll?: (select: boolean) => void;
   onSetAnchor?: () => void;
   onToggleCursorVisible?: () => void;
   onToggleOverwrite?: () => void;
@@ -1158,17 +1212,32 @@ function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boolean {
     case "onDestroy":
       gtk.connect("destroy", () => slot.fire());
       return true;
+    case "onDirectionChanged":
+      gtk.connect("direction-changed", (_self, _previous_direction) => {
+        slot.dispatch(() => (slot.handler as (previous_direction: GtkTextDirection) => void)(_previous_direction));
+      });
+      return true;
     case "onHide":
       gtk.connect("hide", () => slot.fire());
       return true;
     case "onMap":
       gtk.connect("map", () => slot.fire());
       return true;
+    case "onMoveFocus":
+      gtk.connect("move-focus", (_self, _direction) => {
+        slot.dispatch(() => (slot.handler as (direction: GtkDirectionType) => void)(_direction));
+      });
+      return true;
     case "onRealize":
       gtk.connect("realize", () => slot.fire());
       return true;
     case "onShow":
       gtk.connect("show", () => slot.fire());
+      return true;
+    case "onStateFlagsChanged":
+      gtk.connect("state-flags-changed", (_self, _flags) => {
+        slot.dispatch(() => (slot.handler as (flags: GtkStateFlags) => void)(_flags));
+      });
       return true;
     case "onUnmap":
       gtk.connect("unmap", () => slot.fire());
@@ -1524,6 +1593,13 @@ function columnViewProp(gtk: GtkColumnView, key: string, value: unknown): boolea
 }
 
 function columnViewSignal(gtk: GtkColumnView, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onActivate":
+      gtk.connect("activate", (_self, _position) => {
+        slot.dispatch(() => (slot.handler as (position: number) => void)(_position));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -1548,6 +1624,13 @@ function drawingAreaProp(gtk: GtkDrawingArea, key: string, value: unknown): bool
 }
 
 function drawingAreaSignal(gtk: GtkDrawingArea, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onResize":
+      gtk.connect("resize", (_self, _width, _height) => {
+        slot.dispatch(() => (slot.handler as (width: number, height: number) => void)(_width, _height));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -1606,6 +1689,11 @@ function editableLabelSignal(gtk: GtkEditableLabel, key: string, slot: SignalSlo
   switch (key) {
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
+      return true;
+    case "onDeleteText":
+      gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
+        slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -1711,6 +1799,16 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
+    case "onIconPress":
+      gtk.connect("icon-press", (_self, _icon_pos) => {
+        slot.dispatch(() => (slot.handler as (icon_pos: GtkEntryIconPosition) => void)(_icon_pos));
+      });
+      return true;
+    case "onIconRelease":
+      gtk.connect("icon-release", (_self, _icon_pos) => {
+        slot.dispatch(() => (slot.handler as (icon_pos: GtkEntryIconPosition) => void)(_icon_pos));
+      });
+      return true;
     case "onEditingDone":
       gtk.connect("editing-done", () => slot.fire());
       return true;
@@ -1719,6 +1817,11 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
       return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
+      return true;
+    case "onDeleteText":
+      gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
+        slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -1796,6 +1899,11 @@ function flowBoxSignal(gtk: GtkFlowBox, key: string, slot: SignalSlot): boolean 
   switch (key) {
     case "onActivateCursorChild":
       gtk.connect("activate-cursor-child", () => slot.fire());
+      return true;
+    case "onChildActivated":
+      gtk.connect("child-activated", (_self, _child) => {
+        slot.dispatch(() => (slot.handler as (child: GtkFlowBoxChild) => void)(_child));
+      });
       return true;
     case "onSelectAll":
       gtk.connect("select-all", () => slot.fire());
@@ -1885,6 +1993,13 @@ function gLAreaProp(gtk: GtkGLArea, key: string, value: unknown): boolean {
 }
 
 function gLAreaSignal(gtk: GtkGLArea, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onResize":
+      gtk.connect("resize", (_self, _width, _height) => {
+        slot.dispatch(() => (slot.handler as (width: number, height: number) => void)(_width, _height));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -1973,6 +2088,13 @@ function gridViewProp(gtk: GtkGridView, key: string, value: unknown): boolean {
 }
 
 function gridViewSignal(gtk: GtkGridView, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onActivate":
+      gtk.connect("activate", (_self, _position) => {
+        slot.dispatch(() => (slot.handler as (position: number) => void)(_position));
+      });
+      return true;
+  }
   return listBaseSignal(gtk, key, slot);
 }
 
@@ -2113,6 +2235,11 @@ function labelSignal(gtk: GtkLabel, key: string, slot: SignalSlot): boolean {
     case "onCopyClipboard":
       gtk.connect("copy-clipboard", () => slot.fire());
       return true;
+    case "onMoveCursor":
+      gtk.connect("move-cursor", (_self, _step, _count, _extend_selection) => {
+        slot.dispatch(() => (slot.handler as (step: GtkMovementStep, count: number, extend_selection: boolean) => void)(_step, _count, _extend_selection));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -2184,6 +2311,21 @@ function listBoxSignal(gtk: GtkListBox, key: string, slot: SignalSlot): boolean 
     case "onActivateCursorRow":
       gtk.connect("activate-cursor-row", () => slot.fire());
       return true;
+    case "onMoveCursor":
+      gtk.connect("move-cursor", (_self, _step, _count, _extend, _modify) => {
+        slot.dispatch(() => (slot.handler as (step: GtkMovementStep, count: number, extend: boolean, modify: boolean) => void)(_step, _count, _extend, _modify));
+      });
+      return true;
+    case "onRowActivated":
+      gtk.connect("row-activated", (_self, _row) => {
+        slot.dispatch(() => (slot.handler as (row: GtkListBoxRow) => void)(_row));
+      });
+      return true;
+    case "onRowSelected":
+      gtk.connect("row-selected", (_self, _row) => {
+        slot.dispatch(() => (slot.handler as (row: GtkListBoxRow | null) => void)(_row));
+      });
+      return true;
     case "onSelectAll":
       gtk.connect("select-all", () => slot.fire());
       return true;
@@ -2243,6 +2385,13 @@ function listViewProp(gtk: GtkListView, key: string, value: unknown): boolean {
 }
 
 function listViewSignal(gtk: GtkListView, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onActivate":
+      gtk.connect("activate", (_self, _position) => {
+        slot.dispatch(() => (slot.handler as (position: number) => void)(_position));
+      });
+      return true;
+  }
   return listBaseSignal(gtk, key, slot);
 }
 
@@ -2321,6 +2470,33 @@ function notebookProp(gtk: GtkNotebook, key: string, value: unknown): boolean {
 }
 
 function notebookSignal(gtk: GtkNotebook, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onMoveFocusOut":
+      gtk.connect("move-focus-out", (_self, _direction) => {
+        slot.dispatch(() => (slot.handler as (direction: GtkDirectionType) => void)(_direction));
+      });
+      return true;
+    case "onPageAdded":
+      gtk.connect("page-added", (_self, _child, _page_num) => {
+        slot.dispatch(() => (slot.handler as (child: GtkWidget, page_num: number) => void)(_child, _page_num));
+      });
+      return true;
+    case "onPageRemoved":
+      gtk.connect("page-removed", (_self, _child, _page_num) => {
+        slot.dispatch(() => (slot.handler as (child: GtkWidget, page_num: number) => void)(_child, _page_num));
+      });
+      return true;
+    case "onPageReordered":
+      gtk.connect("page-reordered", (_self, _child, _page_num) => {
+        slot.dispatch(() => (slot.handler as (child: GtkWidget, page_num: number) => void)(_child, _page_num));
+      });
+      return true;
+    case "onSwitchPage":
+      gtk.connect("switch-page", (_self, _page, _page_num) => {
+        slot.dispatch(() => (slot.handler as (page: GtkWidget, page_num: number) => void)(_page, _page_num));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2397,6 +2573,11 @@ function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: SignalSlo
       return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
+      return true;
+    case "onDeleteText":
+      gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
+        slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -2510,6 +2691,16 @@ function rangeProp(gtk: GtkRange, key: string, value: unknown): boolean {
 
 function rangeSignal(gtk: GtkRange, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onAdjustBounds":
+      gtk.connect("adjust-bounds", (_self, _value) => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(_value));
+      });
+      return true;
+    case "onMoveSlider":
+      gtk.connect("move-slider", (_self, _step) => {
+        slot.dispatch(() => (slot.handler as (step: GtkScrollType) => void)(_step));
+      });
+      return true;
     case "onValueChanged":
       gtk.connect("value-changed", () => slot.fire());
       return true;
@@ -2581,6 +2772,11 @@ function scaleButtonSignal(gtk: GtkScaleButton, key: string, slot: SignalSlot): 
     case "onPopup":
       gtk.connect("popup", () => slot.fire());
       return true;
+    case "onValueChanged":
+      gtk.connect("value-changed", (_self, _value) => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(_value));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -2635,6 +2831,23 @@ function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown)
 }
 
 function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onEdgeOvershot":
+      gtk.connect("edge-overshot", (_self, _pos) => {
+        slot.dispatch(() => (slot.handler as (pos: GtkPositionType) => void)(_pos));
+      });
+      return true;
+    case "onEdgeReached":
+      gtk.connect("edge-reached", (_self, _pos) => {
+        slot.dispatch(() => (slot.handler as (pos: GtkPositionType) => void)(_pos));
+      });
+      return true;
+    case "onMoveFocusOut":
+      gtk.connect("move-focus-out", (_self, _direction_type) => {
+        slot.dispatch(() => (slot.handler as (direction_type: GtkDirectionType) => void)(_direction_type));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2710,6 +2923,11 @@ function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): 
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
       return true;
+    case "onDeleteText":
+      gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
+        slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -2783,6 +3001,11 @@ function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): bo
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
+    case "onChangeValue":
+      gtk.connect("change-value", (_self, _scroll) => {
+        slot.dispatch(() => (slot.handler as (scroll: GtkScrollType) => void)(_scroll));
+      });
+      return true;
     case "onValueChanged":
       gtk.connect("value-changed", () => slot.fire());
       return true;
@@ -2797,6 +3020,11 @@ function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): bo
       return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
+      return true;
+    case "onDeleteText":
+      gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
+        slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -2956,8 +3184,18 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
     case "onCutClipboard":
       gtk.connect("cut-clipboard", () => slot.fire());
       return true;
+    case "onDeleteFromCursor":
+      gtk.connect("delete-from-cursor", (_self, _type, _count) => {
+        slot.dispatch(() => (slot.handler as (type: GtkDeleteType, count: number) => void)(_type, _count));
+      });
+      return true;
     case "onInsertEmoji":
       gtk.connect("insert-emoji", () => slot.fire());
+      return true;
+    case "onMoveCursor":
+      gtk.connect("move-cursor", (_self, _step, _count, _extend) => {
+        slot.dispatch(() => (slot.handler as (step: GtkMovementStep, count: number, extend: boolean) => void)(_step, _count, _extend));
+      });
       return true;
     case "onPasteClipboard":
       gtk.connect("paste-clipboard", () => slot.fire());
@@ -2967,6 +3205,11 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
       return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
+      return true;
+    case "onDeleteText":
+      gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
+        slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -3043,11 +3286,31 @@ function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolea
     case "onCutClipboard":
       gtk.connect("cut-clipboard", () => slot.fire());
       return true;
+    case "onDeleteFromCursor":
+      gtk.connect("delete-from-cursor", (_self, _type, _count) => {
+        slot.dispatch(() => (slot.handler as (type: GtkDeleteType, count: number) => void)(_type, _count));
+      });
+      return true;
     case "onInsertEmoji":
       gtk.connect("insert-emoji", () => slot.fire());
       return true;
+    case "onMoveCursor":
+      gtk.connect("move-cursor", (_self, _step, _count, _extend_selection) => {
+        slot.dispatch(() => (slot.handler as (step: GtkMovementStep, count: number, extend_selection: boolean) => void)(_step, _count, _extend_selection));
+      });
+      return true;
+    case "onMoveViewport":
+      gtk.connect("move-viewport", (_self, _step, _count) => {
+        slot.dispatch(() => (slot.handler as (step: GtkScrollStep, count: number) => void)(_step, _count));
+      });
+      return true;
     case "onPasteClipboard":
       gtk.connect("paste-clipboard", () => slot.fire());
+      return true;
+    case "onSelectAll":
+      gtk.connect("select-all", (_self, _select) => {
+        slot.dispatch(() => (slot.handler as (select: boolean) => void)(_select));
+      });
       return true;
     case "onSetAnchor":
       gtk.connect("set-anchor", () => slot.fire());

@@ -12,8 +12,10 @@
 // setter, whose value a JSX attribute can carry: a string, a boolean, a number
 // or an enum. Its name is the property's in camel case (`has-frame` →
 // `hasFrame`). A signal prop is `on` + the signal's name in camel case
-// (`clicked` → `onClicked`), generated when the signal takes no arguments
-// beyond the widget. What is left out is listed, with why, in
+// (`clicked` → `onClicked`), its handler taking the signal's arguments after
+// the widget, typed as an app writes them (`(row: GtkListBoxRow) => void`),
+// when each is a widget, string, number, boolean or enum and the signal
+// returns nothing. What is left out is listed, with why, in
 // src/widgets.skipped.txt.
 //
 // Each GIR class gets one function that sets its own props and hands any
@@ -178,16 +180,63 @@ function readType(element: XmlElement): GirType {
 interface Bindings {
   /** Setters taking one value, by the TypeScript name of the type that declares them: `set_label` → `string`. */
   setters: Map<string, Map<string, string>>;
-  /** Signals bind-gir declared `connect` for, with a handler that takes only the widget. */
-  plainSignals: Map<string, Set<string>>;
+  /** Each signal's handler as bind-gir declared `connect` for it, by type and signal name. */
+  signals: Map<string, Map<string, Signature>>;
   constructible: Set<string>;
   /** The module each type from another namespace comes from: `PangoWrapMode` → `c:Pango-1.0`. */
   modules: Map<string, string>;
 }
 
+/** A signal handler's parameters after the widget, and what it returns, as bind-gir typed them. */
+interface Signature {
+  params: { name: string; type: string }[];
+  returns: string;
+}
+
+/** `text`'s items at depth zero, split at `separator`: `CEnum<A, B>, T` is two. */
+function splitTopLevel(text: string, separator: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if ("<({[".includes(c)) depth++;
+    else if (">)}]".includes(c) && text[i - 1] !== "=") depth--;
+    else if (c === separator && depth === 0) {
+      parts.push(text.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  const last = text.slice(start).trim();
+  return last === "" ? parts : [...parts, last];
+}
+
+/** The handler of a `connect(...)` line: `ErasedClosure<(self: T, a: A) => R, ...>`. */
+function readSignature(line: string): Signature | null {
+  const at = line.indexOf("handler: ErasedClosure<(");
+  if (at < 0) return null;
+  const open = at + "handler: ErasedClosure<".length;
+  let depth = 0;
+  let close = -1;
+  for (let i = open; i < line.length; i++) {
+    if (line[i] === "(") depth++;
+    else if (line[i] === ")" && --depth === 0) {
+      close = i;
+      break;
+    }
+  }
+  if (close < 0 || !line.startsWith(" => ", close + 1)) return null;
+  const returns = splitTopLevel(line.slice(close + 5), ",")[0]!;
+  const params = splitTopLevel(line.slice(open + 1, close), ",").slice(1).map((param) => {
+    const colon = param.indexOf(": ");
+    return { name: param.slice(0, colon), type: param.slice(colon + 2) };
+  });
+  return { params, returns };
+}
+
 function readBindings(dir: string): Bindings {
   const setters = new Map<string, Map<string, string>>();
-  const plainSignals = new Map<string, Set<string>>();
+  const signals = new Map<string, Map<string, Signature>>();
   const constructible = new Set<string>();
   const modules = new Map<string, string>();
   const entry = <V>(map: Map<string, V>, key: string, make: () => V): V => {
@@ -209,9 +258,10 @@ function readBindings(dir: string): Bindings {
       entry(setters, setter[2]!, () => new Map()).set(setter[1]!, setter[3]!);
       continue;
     }
-    const signal = /^ {4}connect\(this: Erased<(\w+)>, detailed_signal: "([^"]+)", handler: ErasedClosure<\(self: \w+\) => void,/.exec(line);
-    if (signal !== null) {
-      entry(plainSignals, signal[1]!, () => new Set()).add(signal[2]!);
+    const signal = /^ {4}connect\(this: Erased<(\w+)>, detailed_signal: "([^"]+)", handler: ErasedClosure</.exec(line);
+    const signature = signal === null ? null : readSignature(line);
+    if (signal !== null && signature !== null) {
+      entry(signals, signal[1]!, () => new Map()).set(signal[2]!, signature);
       continue;
     }
     // `new (props?: GtkButtonProps): GtkButton`, or with the signals a
@@ -222,7 +272,7 @@ function readBindings(dir: string): Bindings {
       constructible.add(constructed);
     }
   }
-  return { setters, plainSignals, constructible, modules };
+  return { setters, signals, constructible, modules };
 }
 
 // ---- the model ---------------------------------------------------------------
@@ -244,6 +294,30 @@ interface Prop {
 interface Signal {
   jsx: string; // onClicked
   name: string; // clicked
+  /** The handler's parameters after the widget, typed for the app: `row: GtkListBoxRow`. */
+  params: { name: string; type: string }[];
+}
+
+/**
+ * A handler parameter's type as an app writes it: a widget, a string, a
+ * number, a boolean or an enum, without the C spelling (`CNumber<"double">` is
+ * `number`); null for one a handler cannot be written against yet.
+ */
+function handlerType(type: string, types: Set<string>): string | null {
+  const widget = /^(Gtk\w+)( \| null)?$/.exec(type);
+  if (widget !== null) {
+    types.add(widget[1]!);
+    return type;
+  }
+  if (type === "string" || type === "string | null") return type;
+  if (/^CNumber<"\w+">$/.test(type)) return "number";
+  if (/^CBool<\w+>$/.test(type)) return "boolean";
+  const enumType = /^CEnum<(\w+), \w+>$/.exec(type);
+  if (enumType !== null) {
+    types.add(enumType[1]!);
+    return enumType[1]!;
+  }
+  return null;
 }
 
 type ChildProtocol = "none" | "single" | "box";
@@ -318,6 +392,7 @@ interface Model {
   /** Every class from Widget down, in declaration order: parents first. */
   types: WidgetType[];
   modules: Map<string, string>;
+  handlerTypes: Set<string>;
   /** The ones an app can create. */
   widgets: WidgetType[];
   skipped: string[];
@@ -325,6 +400,8 @@ interface Model {
 
 function model(gir: Gir, bindings: Bindings): Model {
   const skipped = new Set<string>();
+  // The types handler parameters name, for the generated file to import.
+  const handlerTypes = new Set<string>();
   const parentOf = (t: GirType): GirType | undefined => (t.parent === undefined ? undefined : gir.types.get(t.parent));
   const chainOf = function* (t: GirType | undefined): Generator<GirType> {
     for (; t !== undefined; t = parentOf(t)) {
@@ -378,14 +455,18 @@ function model(gir: Gir, bindings: Bindings): Model {
       }
       for (const s of source.signals) {
         const where = `${sourceTs}::${s.name}`;
+        const signature = bindings.signals.get(sourceTs)?.get(s.name);
+        const params = signature?.params.map((p) => ({ name: p.name, type: handlerType(p.type, handlerTypes) }));
         if (s.deprecated) {
           skipped.add(`${where}\tdeprecated`);
-        } else if (s.takesArguments || s.returnsValue) {
-          skipped.add(`${where}\ttakes arguments or returns a value: not generated yet`);
-        } else if (!bindings.plainSignals.get(sourceTs)?.has(s.name)) {
+        } else if (signature === undefined || params === undefined) {
           skipped.add(`${where}\tno connect overload in the bindings`);
+        } else if (signature.returns !== "void") {
+          skipped.add(`${where}\tits handler returns a ${signature.returns}: not generated yet`);
+        } else if (params.some((p) => p.type === null)) {
+          skipped.add(`${where}\ta handler argument JSX cannot type yet: ${signature.params.map((p) => p.type).join(", ")}`);
         } else {
-          signals.push({ jsx: `on${camel(`-${s.name}`)}`, name: s.name });
+          signals.push({ jsx: `on${camel(`-${s.name}`)}`, name: s.name, params: params.map((p) => ({ name: p.name, type: p.type! })) });
         }
       }
     }
@@ -413,6 +494,7 @@ function model(gir: Gir, bindings: Bindings): Model {
     types: [...types.values()].filter((t) => used.has(t.gir.name)),
     widgets,
     modules: bindings.modules,
+    handlerTypes,
     skipped: [...skipped].sort(),
   };
 }
@@ -425,7 +507,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     out.push(text);
   };
   const values = new Set<string>();
-  const types = new Set<string>();
+  const types = new Set<string>(m.handlerTypes);
 
   line(`// Generated by tools/gen-widgets.ts from GTK ${gtkVersion} (Gtk-${gir.version}.gir) and`);
   line("// its bindings. Edit the generator, not this file.");
@@ -450,7 +532,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line(`  ${p.jsx}?: ${propType(p.value)};`);
     }
     for (const s of t.signals) {
-      line(`  ${s.jsx}?: () => void;`);
+      line(`  ${s.jsx}?: ${handlerSignature(s)};`);
     }
     line("}");
   }
@@ -491,7 +573,14 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("  switch (key) {");
       for (const s of t.signals) {
         line(`    case "${s.jsx}":`);
-        line(`      gtk.connect("${s.name}", () => slot.fire());`);
+        if (s.params.length === 0) {
+          line(`      gtk.connect("${s.name}", () => slot.fire());`);
+        } else {
+          const args = s.params.map((p) => `_${p.name}`).join(", ");
+          line(`      gtk.connect("${s.name}", (_self, ${args}) => {`);
+          line(`        slot.dispatch(() => (slot.handler as ${handlerSignature(s)})(${args}));`);
+          line("      });");
+        }
         line("      return true;");
       }
       line("  }");
@@ -577,6 +666,11 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   }
   const imports = [...byModule.keys()].sort().map((module) => `import {\n${byModule.get(module)!.map((n) => `  ${n},`).join("\n")}\n} from "${module}";`);
   return out.join("\n").replace("__IMPORTS__", imports.join("\n"));
+}
+
+/** The type of a signal prop's handler: `(row: GtkListBoxRow) => void`. */
+function handlerSignature(s: Signal): string {
+  return `(${s.params.map((p) => `${p.name}: ${p.type}`).join(", ")}) => void`;
 }
 
 function propType(value: ValueKind): string {

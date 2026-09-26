@@ -26,14 +26,14 @@ export function getCurrentUpdatePriority(): number {
   return currentUpdatePriority;
 }
 
+// No `finally`: a handler runs from a GTK signal, below C frames a throw
+// cannot cross, so a handler that throws ends the program and there is no
+// priority left to restore.
 function discreteEvent(handler: () => void): void {
   const previous = currentUpdatePriority;
   currentUpdatePriority = DiscreteEventPriority;
-  try {
-    handler();
-  } finally {
-    currentUpdatePriority = previous;
-  }
+  handler();
+  currentUpdatePriority = previous;
 }
 
 // ---- signals ----------------------------------------------------------------------
@@ -45,12 +45,22 @@ function discreteEvent(handler: () => void): void {
  * reconnects, and a removed prop leaves it null.
  */
 export class SignalSlot {
-  handler: (() => void) | null = null;
+  // The prop's handler, erased: each signal's trampoline reads it back as
+  // the handler type its prop declares.
+  handler: unknown = null;
 
+  /** A signal without arguments: calls the handler. */
   fire(): void {
     const handler = this.handler;
     if (handler !== null) {
-      discreteEvent(handler);
+      discreteEvent(handler as () => void);
+    }
+  }
+
+  /** A signal with arguments: runs `call`, which passes them to the handler. */
+  dispatch(call: () => void): void {
+    if (this.handler !== null) {
+      discreteEvent(call);
     }
   }
 }
@@ -140,7 +150,7 @@ export abstract class HostNode {
       }
       slots.set(key, slot);
     }
-    slot.handler = value as () => void;
+    slot.handler = value;
   }
 
   /** The JSX name: `Button` for `GtkButton`. */

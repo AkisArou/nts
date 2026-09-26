@@ -110,9 +110,13 @@ are written once. It reads GIR for the structure and defaults and the
 bindings `nts build` generated for what TypeScript can call, so a prop exists
 only if its setter does. A widget's child protocol is found from its methods:
 `append`/`remove`/`insert_child_after`/`reorder_child_after` is a box, a
-`set_child` taking a widget holds one child. `src/widgets.skipped.txt` lists
-what is left out and why. The main gaps are signals with arguments, object-
-valued props, and construct-only props.
+`set_child` taking a widget holds one child. A signal's handler takes the
+signal's arguments after the widget, typed as an app writes them
+(`onRowActivated?: (row: GtkListBoxRow) => void`, a `double` as `number`),
+read from the bindings' own `connect` overloads (119 signals on GTK 4.22).
+`src/widgets.skipped.txt` lists what is left out and why. The main gaps are
+signals whose handler returns a value (GTK's "handled" booleans), object-valued
+props, and construct-only props.
 
 Regenerate after a GTK update, from a native program's generated bindings:
 `node tools/gen-widgets.ts ../../native/gtk/types/gir`.
@@ -125,7 +129,7 @@ Regenerate after a GTK update, from a native program's generated bindings:
    widgets (`native/gtk`); rendering waits on the reconciler emitting
    natively.
 2. Props and signals generated from GIR for every widget class. Done for
-   props with scalar values and signals without arguments.
+   props with scalar values and signals whose handlers return nothing.
 3. `ListBox`, `Entry` with controlled `text`, and the rest of the common
    widgets.
 4. A benchmark against GJS on the same app, which the GTK lane's goal already

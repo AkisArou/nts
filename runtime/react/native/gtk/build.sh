@@ -35,6 +35,7 @@ hidden false true
 reset true>false>true clicks=none label=Text
 enum 1
 single true
+argument 2.5@2
 work timer"
 
 mkdir -p "$out"

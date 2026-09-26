@@ -6,6 +6,8 @@
 
 // `g_signal_emit_by_name`: varargs, so GIR marks it not introspectable.
 void react_gtk_emit(GObject *instance, const char *signal);
+// The same, for a signal whose one argument is a double.
+void react_gtk_emit_double(GObject *instance, const char *signal, double value);
 // Output, for build.sh to read.
 void react_gtk_log(const char *line);
 
