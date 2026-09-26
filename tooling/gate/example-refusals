@@ -62,6 +62,17 @@ a-throw-that-stays-in-its-function 1 a method callee, which has no raising copy
 # other direction: the gate run that cleared that commit was taken before the
 # example was in the tree, and this step is the only one that would have said so.
 a-try-around-a-cycle-of-calls 1 `shared.lifecycle`, a method reached through a plain callee, which has no raising copy
+# Nine arms, and the one refusal is the **boundary** rather than a debt: `Math[k]`
+# where `k` is a variable is a member decided at run time, and reading it as the
+# name `k` would put it in the same slot as `Math["k"]`. A count of 0 here means
+# that narrowing was lost; a count above 1 means one of the five bracket arms
+# stopped lowering. Both directions matter, which is why the arm is in the
+# example rather than left out of it.
+#
+# On a compiler built before `member_access` existed the count is **6** and the
+# differential compares 3 functions instead of 8 -- the only way round in which
+# this example tests anything.
+a-member-read-through-a-bracket 1 a variable key, which is a member decided at run time
 
 # Incidental: an example written for something else that happens to contain a
 # construct the compiler refuses. Each is a real gap and each is somebody's next

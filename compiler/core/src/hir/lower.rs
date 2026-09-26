@@ -14341,18 +14341,55 @@ impl<'a> FuncBuilder<'a> {
         None
     }
 
-    fn member_read_from(&self, id: NodeId) -> Option<String> {
-        let parent = self.node(id).parent?;
-        if self.kind_of(parent) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+    /// The object and the member name a member access reads, in **either**
+    /// spelling. `o.name` and `o["name"]` name the same member, and three
+    /// questions were each asked of the dot form only: which member a name is
+    /// refused *for* ([`Self::member_read_from`]), whether a callee is a
+    /// `Math`/`Number`/`String` intrinsic ([`Self::intrinsic_of`]), and whether
+    /// it is a `console` method ([`Self::console_method`]).
+    ///
+    /// So `console["error"](e)` reached **none** of the three: it refused as
+    /// "`console`, a global with no definition here" where `console.error(e)`
+    /// gets the principled refusal naming what printing an unknown would take,
+    /// and the bracket form never reached the console lowering at all. One
+    /// helper rather than three preambles, so the two spellings cannot drift
+    /// apart again -- which they had, in three places, for as long as the
+    /// question was asked three times.
+    ///
+    /// **A string literal only, and the two exclusions are not caution.** An
+    /// identifier key is a *variable*: reading `o[k]` as the name `k` puts it in
+    /// the same slot as `o["k"]`, which is the collision
+    /// [`Self::literal_name`] exists to prevent one property further out. And a
+    /// numeric key is an *index* here -- `xs[0]` -- where in a declaration's
+    /// computed name it really does name `"0"`; that is why this does not defer
+    /// to `literal_name` for every literal kind, and why widening it to numbers
+    /// would make `someGlobal[0]` refuse as a member named `0`.
+    ///
+    /// `first`/`last` rather than a two-element destructure, because `?.` is a
+    /// token of its own among the children ([`Self::ends_an_optional_chain`]
+    /// says so): `console?.error` has three, and it lowers today.
+    fn member_access(&self, access: NodeId) -> Option<(NodeId, String)> {
+        let parts = self.children(access);
+        if parts.len() < 2 {
             return None;
         }
-        let parts = self.children(parent);
-        let [target, member] = parts.as_slice() else {
-            return None;
+        let (object, member) = (*parts.first()?, *parts.last()?);
+        let name = match self.kind_of(access)? {
+            syntax::PROPERTY_ACCESS_EXPRESSION => self.node(member).text.clone()?,
+            syntax::ELEMENT_ACCESS_EXPRESSION
+                if self.kind_of(member) == Some(syntax::STRING_LITERAL) =>
+            {
+                self.literal_name(member)?
+            }
+            _ => return None,
         };
-        (*target == id)
-            .then(|| self.node(*member).text.clone())
-            .flatten()
+        Some((object, name))
+    }
+
+    fn member_read_from(&self, id: NodeId) -> Option<String> {
+        let parent = self.node(id).parent?;
+        let (object, member) = self.member_access(parent)?;
+        (object == id).then_some(member)
     }
 
     /// The nearest ancestor of a given kind.
@@ -49414,16 +49451,11 @@ impl<'a> FuncBuilder<'a> {
     /// compiler-owned semantics, so the core never matches on a name at all.
     /// This is the shape that becomes.
     fn intrinsic_of(&self, callee: NodeId) -> Option<Intrinsic> {
-        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
-            return None;
-        }
-        let children = self.children(callee);
-        let object = *children.first()?;
-        let member = *children.last()?;
+        let (object, member) = self.member_access(callee)?;
         if self.kind_of(object) != Some(syntax::IDENTIFIER) {
             return None;
         }
-        let member = self.node(member).text.as_deref()?;
+        let member = member.as_str();
         match self.node(object).text.as_deref()? {
             "Math" => math_member(member),
             // `Number`'s four predicates. The first two are `Number` only in
@@ -49463,12 +49495,10 @@ impl<'a> FuncBuilder<'a> {
     /// `console.trace` prints a stack, and `console.table` and `console.dir`
     /// inspect structure, so they stay refused.
     fn console_method(&self, callee: NodeId) -> Option<bool> {
-        if self.kind_of(callee) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
-            return None;
-        }
-        let children = self.children(callee);
-        let (object, member) = (*children.first()?, *children.last()?);
-        if self.kind_of(object) != Some(syntax::IDENTIFIER) || self.node(object).text.as_deref() != Some("console") {
+        let (object, member) = self.member_access(callee)?;
+        if self.kind_of(object) != Some(syntax::IDENTIFIER)
+            || self.node(object).text.as_deref() != Some("console")
+        {
             return None;
         }
         let global = self
@@ -49479,7 +49509,7 @@ impl<'a> FuncBuilder<'a> {
         if !global {
             return None;
         }
-        match self.node(member).text.as_deref()? {
+        match member.as_str() {
             "log" | "info" | "debug" => Some(false),
             "error" | "warn" => Some(true),
             _ => None,
