@@ -47,6 +47,7 @@ pub mod suspend;
 pub mod tags;
 pub mod unerase;
 
+pub mod floating;
 pub mod inline;
 pub mod lower;
 pub mod monomorphize;
@@ -4603,6 +4604,18 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
 }
 
 #[must_use]
+/// What the provider inserts: reference counting's retains and releases, or,
+/// without counting, the sink that keeps a floating `GObject` the program's
+/// rather than the first container's (`floating`).
+fn provide(program: &mut Program, provider: Provider) -> rc::Report {
+    if provider == Provider::ReferenceCounting {
+        rc::insert(program)
+    } else {
+        floating::sink(program);
+        rc::Report::default()
+    }
+}
+
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
     let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
@@ -4760,11 +4773,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // Reference counting, after everything that could move or remove an
     // operation: a retain inserted before dead-code elimination would keep
     // alive exactly what that pass was about to drop.
-    let counting = if options.provider == Provider::ReferenceCounting {
-        rc::insert(&mut program)
-    } else {
-        rc::Report::default()
-    };
+    let counting = provide(&mut program, options.provider);
     // Recorded on the program rather than left in the options, because a
     // backend is handed the program alone and one of them has to act on this.
     // Set here, beside the pass it describes, so the two cannot drift.

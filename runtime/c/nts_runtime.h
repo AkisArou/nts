@@ -1867,8 +1867,9 @@ void *nts_objc_state(void *self);
  * the one table every backend reads, as `nts_objc_state` is. */
 void *nts_gobject_state(void *instance);
 
-/* A GObject the program has just made with a binding's constructor. Without
- * reference counting the program never retains a handle, so a widget born
+/* A GObject a foreign call has just handed a never-free program (the HIR pass
+ * `floating` inserts it only then). Without reference counting the program
+ * never retains a handle, so a widget born
  * floating would belong to the first container it is put in, and be
  * finalized when that container lets go while a TypeScript name still holds
  * it: the program takes the floating reference here instead, and never gives

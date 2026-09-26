@@ -609,6 +609,37 @@ fn type_headers_preserve_brands_and_boolean_abi() {
     assert!(Command::new(dir.join("caller")).status().unwrap().success());
 }
 
+/// A never-free program keeps a `GObject` a foreign call hands it
+/// (`hir::floating`), and so links the file that defines how: a program that
+/// makes a widget and connects nothing called `nts_gobject_made` and failed to
+/// link, because the support file came only with a connect, a registration,
+/// a boxed record or an erased handle.
+#[test]
+fn a_gobject_a_call_hands_a_never_free_program_brings_the_support_file() {
+    let binding = "declare module \"c:w\" {\n\
+         import type { GObjectClass } from \"c:types\";\n\
+         export type Widget = GObjectClass<\"_Widget\">;\n\
+         export function widget_new(): Widget;\n\
+         export function widget_mark(widget: Widget): void;\n\
+         }\n";
+    let program = "import { widget_new, widget_mark } from \"c:w\";\n\
+         export function run(): void {\n\
+         widget_mark(widget_new());\n\
+         }\n";
+    let Some((_, prepared)) = prepare_with_binding("gobject-made", binding, program) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.writer.text().contains("nts_gobject_made("), "a never-free program keeps nothing it is handed");
+    let files: Vec<&str> = emitted.support_files().iter().map(|file| file.name).collect();
+    assert!(
+        files.contains(&nts_codegen_c::GOBJECT_SOURCE_NAME),
+        "the program calls `nts_gobject_made` and does not link its definition: {files:?}"
+    );
+}
+
 /// Two declarations of one C symbol that disagree, and what the emitter does
 /// with a refusal it cannot act on.
 ///

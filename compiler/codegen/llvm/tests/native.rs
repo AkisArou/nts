@@ -4096,6 +4096,9 @@ int editable_value(struct _Editable *e) { return ((struct _Widget *)e)->value - 
 int widget_value(struct _Widget *w) { return w->value; }
 void *g_object_ref_sink(void *o) { return o; }
 void g_object_unref(void *o) { (void)o; }
+/* The GObject support file's, which a never-free program calls after a call
+ * answering a GObject (`hir::floating`) and this test does not link. */
+void nts_gobject_made(void *o) { (void)o; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");

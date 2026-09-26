@@ -564,11 +564,15 @@ impl Emitted {
         // holds a boxed record (`nts_gobject_boxed`, `_copy`, `_new`).
         let text = self.writer.text();
         // Or erases a `GObject` handle into a value (`NTS_TAG_HANDLE_GOBJECT`),
-        // which the family's registration in that file is what counts.
+        // which the family's registration in that file is what counts. Or,
+        // never-free, keeps a `GObject` a call handed it (`nts_gobject_made`,
+        // `hir::floating`): a program that makes a widget and connects nothing
+        // failed to link without this.
         let connects = text.contains("nts_gobject_connect(")
             || text.contains("nts_gobject_register(")
             || text.contains("nts_gobject_boxed")
-            || text.contains("NTS_TAG_HANDLE_GOBJECT");
+            || text.contains("NTS_TAG_HANDLE_GOBJECT")
+            || text.contains("nts_gobject_made(");
         if connects || self.witness.contains(GOBJECT_HEADER_NAME) {
             files.push(Support { name: GOBJECT_HEADER_NAME, contents: GOBJECT_HEADER, compiled: false });
         }

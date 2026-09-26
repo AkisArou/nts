@@ -170,7 +170,18 @@ function kept(): string {
   list.remove(row);
   list.insert(label, 0);
   const again = list.get_row_at_index(0);
-  return again !== null && again.get_child() === label ? "kept" : "lost";
+  // The same for a label a static constructor made, as GJS's
+  // `Gtk.Label.new(...)` does.
+  const other = GtkLabel.new("o");
+  list.append(other);
+  const second = list.get_row_at_index(1);
+  if (second === null) return "no-second-row";
+  second.set_child(null);
+  list.remove(second);
+  list.insert(other, 1);
+  const back = list.get_row_at_index(1);
+  const kept = again !== null && again.get_child() === label && back !== null && back.get_child() === other;
+  return kept ? "kept" : "lost";
 }
 
 function main(): void {
