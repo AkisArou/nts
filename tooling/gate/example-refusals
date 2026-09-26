@@ -82,3 +82,10 @@ jsx 2 a jsx self closing element
 enum-reverse-map-unsupported 2 the constructs the name promises
 an-optional-method-called-optionally 2 the two `uncork?(): void;` and `note?(by): void;` declarations on the abstract class, which have no body -- the *calls* are what this fixture is about and they compile
 using-unsupported 2 the constructs the name promises
+# One of two arms, and the refusing one is the *control*. The subject
+# (`viaDeadBranch`) compiles because the call that cannot carry a `throw` is
+# inside `if (isDevelopment)` and `isDevelopment` is a literal `false`; this arm
+# is the same `try` over a **live** call to the same generic, so pruning a dead
+# branch must not make it disappear. A count of 0 here means the analyses stopped
+# walking a branch that runs.
+a-dead-branch-does-not-refuse-a-try 1 the control arm: a live call to a generic that throws, which cannot have a raising copy
