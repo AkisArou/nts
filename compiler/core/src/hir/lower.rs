@@ -35906,6 +35906,44 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// The expression an options literal gives for `key`.
+    ///
+    /// Written for `ErrorOptions`, whose only member is `cause`, and deliberately
+    /// narrow: an argument that is not an object *literal* answers `None` so the
+    /// caller refuses by name rather than reading a field off a layout nothing
+    /// else needs.
+    ///
+    /// Both spellings, because `{ cause }` is the one React writes and is a
+    /// `SHORTHAND_PROPERTY_ASSIGNMENT` whose single child is both the key and the
+    /// value -- an identifier, which lowers as the expression it is. The
+    /// single-child guard is [`Self::literal_name`]'s reason one construct over:
+    /// `{ a = 1 }` is three children and a destructuring *pattern*, not a literal.
+    fn option_in_a_literal(&self, argument: NodeId, key: &str) -> Option<NodeId> {
+        if self.kind_of(argument) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            return None;
+        }
+        for property in self.children(argument) {
+            let parts = self.children(property);
+            match self.kind_of(property) {
+                Some(syntax::PROPERTY_ASSIGNMENT) if parts.len() >= 2 => {
+                    let name = parts.first().copied()?;
+                    if self.literal_name(name).as_deref() == Some(key) {
+                        return parts.last().copied();
+                    }
+                },
+                Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) if parts.len() == 1 => {
+                    let at = parts.first().copied()?;
+                    if self.node(at).text.as_deref() == Some(key) {
+                        return Some(at);
+                    }
+                },
+                // A spread, an accessor or a method: not a shape this reads.
+                _ => return None,
+            }
+        }
+        None
+    }
+
     /// `Error`'s constructor, inline.
     ///
     /// This compiler provides the class, so there is no function to call and
@@ -35937,17 +35975,16 @@ impl<'a> FuncBuilder<'a> {
         // that one, because the failure it resembles is the one nothing catches:
         // a second signature quietly sharing the first's argument positions.
         let aggregate = provided == "AggregateError";
-        // `new Error(message, { cause })`. The options object's only member is
-        // `cause`, which this compiler does not provide -- see `super::builtin`.
-        //
-        // Counted from where the options argument actually is rather than from
-        // a constant. This was `arguments.len() > 1`, which is the same number
-        // only while every provided class takes one argument before its
-        // options, and it refused `new AggregateError(errors, message)` as "an
-        // `Error` with options" the moment one did not.
-        if arguments.len() > 1 + usize::from(aggregate) {
-            return Err(self.unsupported(id, "an `Error` with options"));
+        // `new Error(message, { cause })`. Counted from where the options argument
+        // actually is rather than from a constant: this was `arguments.len() > 1`,
+        // which is the same number only while every provided class takes one
+        // argument before its options, and it refused
+        // `new AggregateError(errors, message)` the moment one did not.
+        let options = arguments.get(2 + usize::from(aggregate));
+        if options.is_some() {
+            return Err(self.unsupported(id, "an `Error` with more than options after its message"));
         }
+        let options = arguments.get(1 + usize::from(aggregate)).copied();
         let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[receiver.0 as usize].ty.clone()
         else {
@@ -35977,6 +36014,39 @@ impl<'a> FuncBuilder<'a> {
             };
             self.field_set(receiver, field, value, &origin);
         }
+        // **The cause, when the options object carries one.**
+        //
+        // Read out of the literal rather than lowered as an object: `{ cause }` is
+        // an anonymous type whose layout nothing else needs, and the only member
+        // `ErrorOptions` declares is this one. A variable holding options
+        // (`new Error(m, opts)`) is refused by name instead of guessed at -- it
+        // would need the object's layout and a field read, which is a different
+        // piece of work and not one React's three sites ask for.
+        //
+        // Lowered **expecting** `Erased`, which is what makes `{ cause: undefined }`
+        // right: a bare `undefined` or `null` takes its representation from what it
+        // stands in for, and an erased slot has a tag for each. `{ cause: undefined }`
+        // is therefore *present and undefined* rather than absent, which is what
+        // node says and the distinction the presence bit exists for.
+        //
+        // The bit is set by the store itself -- `field_set` records presence at
+        // every write -- so nothing here asks for it. And no store happens when the
+        // options object is absent, which is why `"cause" in new Error("x")` is
+        // false.
+        if let Some(options) = options {
+            let Some(value) = self.option_in_a_literal(options, super::builtin::CAUSE_FIELD) else {
+                return Err(self.unsupported(
+                    id,
+                    "an `Error` whose options are not written as a literal with a `cause`",
+                ));
+            };
+            let cause = self.lower_expecting(value, &HirType::Erased)?;
+            let cause = self.erased(cause, &origin);
+            if let Some(field) = layout.index_of(super::builtin::CAUSE_FIELD) {
+                self.field_set(receiver, field, cause, &origin);
+            }
+        }
+
         // The errors it aggregates, which is why it is a separate class at all.
         //
         // Stored rather than dropped. Nothing in `runtime/node` *reads*

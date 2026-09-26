@@ -4,8 +4,17 @@
 //!
 //! Every other class this compiler lays out is decomposed from the checker's
 //! own type, and `Error` cannot be. Its declared interface has `stack?: string`
-//! and `cause?: unknown`, and an optional property is refused here because it
-//! needs a presence bit, which changes the layout rather than adding to it.
+//! and `cause?: unknown`, and an optional property once had nowhere to go here:
+//! it needs a presence bit, which changes the layout rather than adding to it.
+//!
+//! **That sentence has expired for one of the two, and they were never one
+//! answer.** `super::presence` exists now -- one bit per optional property in
+//! the header's `flags` word, twenty-six of them free -- so `cause?: unknown` is
+//! an ordinary optional field of erased type and is provided below. `stack?:
+//! string` stays refused and always will: a compiled binary keeps no record of
+//! its frames, which is a fact about compilation rather than a gap. Grouping
+//! them made one buildable member read as refused on principle, which is how it
+//! sat unbuilt after the thing it was waiting for had landed.
 //!
 //! So `class MyError extends Error {}` — which is how every error in a real
 //! TypeScript program is written — failed for a reason that had nothing to do
@@ -85,16 +94,18 @@ pub(super) const ERRORS: &[&str] = &[
 /// that *reading* it says why it is absent; it says nothing about writing.
 const AGGREGATE_ERRORS_FIELD: &str = "errors";
 
+/// `new Error(message, { cause })`'s second member, which every error class has.
+pub(super) const CAUSE_FIELD: &str = "cause";
+
 /// Members of the declared `Error` that this compiler does not provide.
 ///
 /// Named, rather than left to fail as "a property the type does not declare",
 /// so that reading one says *why* it is absent.
 pub(super) const OMITTED: &[(&str, &str)] = &[
+    // `cause` used to be here, reading "the chained error would have to be a
+    // reference to any error type". That is what `HirType::Erased` is, so it is a
+    // field now rather than a sentence.
     ("stack", "a compiled binary keeps no record of its frames"),
-    (
-        "cause",
-        "the chained error would have to be a reference to any error type",
-    ),
 ];
 
 /// Whether a name is one of the provided error classes.
@@ -229,6 +240,34 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
     // a slot declared for it must find `message` and `name` at the same indices,
     // and a subclass of `AggregateError` must find all three. Putting `errors`
     // first would have been correct only for programs that never mix them.
+    // **`cause`, third and before `errors`**, for the reason the `AggregateError`
+    // branch below states about itself: an `Error` reaching a slot declared for it
+    // must find the shared fields at the same indices, so a member shared by every
+    // error class goes above one that only `AggregateError` has. `errors` moves
+    // from index 2 to 3, which nothing reads by number -- checked: the constant has
+    // two mentions, both in this file, and no literal field index on an error
+    // layout exists anywhere in lowering.
+    //
+    // **Erased, because a cause is any value.** `new Error(m, { cause: 5 })` and
+    // `{ cause: err }` are both legal, and `unknown` is what the language declares
+    // it as. That is also the reason it was listed as omitted rather than built:
+    // "the chained error would have to be a reference to any error type", which is
+    // exactly what an erased slot holds.
+    //
+    // **Optional, and that is the snapshot's answer rather than this list's.** A
+    // `Field` carries no optionality; `super::presence` indexes a bit by a
+    // property's position among the layout's optional fields, and `cause?` is
+    // optional in `lib.d.ts`. Nothing here has to say so -- and nothing here may,
+    // because `"cause" in new Error("x")` is **false** in node: the property is
+    // written only when the options object carries one. `defined_at_construction`
+    // gets that right on its own, since an interface's `PROPERTY_SIGNATURE` is not
+    // a class's `PROPERTY_DECLARATION`.
+    fields.push(Field {
+        name: CAUSE_FIELD.to_owned(),
+        ty: HirType::Erased,
+        readonly: false,
+        declared_by: None,
+    });
     if class == "AggregateError" {
         fields.push(Field {
             name: AGGREGATE_ERRORS_FIELD.to_owned(),
