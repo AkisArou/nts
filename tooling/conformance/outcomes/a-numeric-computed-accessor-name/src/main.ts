@@ -5,11 +5,18 @@
 // statics and class declarations alike -- and not only accessors: a computed
 // *method* `[0x10]()` loses its reading statement the same way, and a computed
 // class *field* `[0x10] = ...` segfaults (a-numeric-computed-field-name). The
-// decimal spelling of each agrees with node, so the cause is how a numeric key
-// spelled other than in decimal is folded to a name. 18 test262 cases under
+// decimal spelling of each agrees with node. 18 test262 cases under
 // {expressions,statements}/class/accessor-name-static/literal-numeric-* and
 // expressions/object/accessor-name-literal-numeric-*. No diagnostic. Found by the
 // first census after the stand-in harness took a generic sameValue.
+//
+// **The cause (diagnosed by the compiler lane):** a numeric literal carries its raw
+// source text (ast.rs, rightly, for values), and `literal_name` returns that text
+// for a computed *name* -- `"0x10"` -- while every read of the member looks up
+// ECMAScript's ToString of the value, `"16"`. One name in the layout, another in
+// the lookup: an accessor or method read finds nothing and its statement is
+// dropped, a field reaches a slot that is not there. Formatting cases the fix must
+// also get right are pinned in numeric-computed-keys-where-formatting-can-disagree.
 var stringSet: string | undefined;
 var obj = {
   get [0x10]() { return "get string"; },
