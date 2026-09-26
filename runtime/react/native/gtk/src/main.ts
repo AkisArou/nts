@@ -35,6 +35,12 @@
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
+//   slot      slot elements fill a Paned's start and end children, their
+//             children placed first as React completes them; a child removed
+//             from its slot element empties the slot, and so does the slot
+//             element removed from the Paned. A Frame's label widget comes
+//             from a slot element after its child, which React inserts before
+//             the slot element
 //
 // What the host refuses -- text outside a widget with a label, an unknown
 // prop or widget, a second child for a single-child widget -- is an Error
@@ -53,6 +59,7 @@ import {
   commitUpdate,
   createInstance,
   getCurrentUpdatePriority,
+  getPublicInstance,
   GtkContainer,
   hideInstance,
   insertBefore,
@@ -62,16 +69,21 @@ import {
   type Props,
 } from "../../../packages/react-gtk/src/ReactFiberConfig.ts";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
-import { BoxNode, ButtonNode, EntryNode, FrameNode, LabelNode, ListBoxNode, ScaleNode } from "../../../packages/react-gtk/src/widgets.ts";
+import { BoxNode, ButtonNode, EntryNode, FrameNode, LabelNode, ListBoxNode, PanedNode, ScaleNode } from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
+
+// The widget a node shows: what a ref to it holds.
+function widget(node: HostNode): GtkWidget {
+  return getPublicInstance(node);
+}
 
 // The children of `parent`, as GTK orders them, named by the nodes they are.
 function order(parent: HostNode, nodes: HostNode[], names: string[]): string {
   let out = "";
-  let child: GtkWidget | null = parent.widget.get_first_child();
+  let child: GtkWidget | null = widget(parent).get_first_child();
   while (child !== null) {
     for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i]!.widget === child) {
+      if (widget(nodes[i]!) === child) {
         out += (out === "" ? "" : ",") + names[i]!;
       }
     }
@@ -93,7 +105,7 @@ function rows(list: HostNode, nodes: HostNode[], names: string[]): string {
     }
     const child = row.get_child();
     for (let n = 0; n < nodes.length; n++) {
-      if (nodes[n]!.widget === child) {
+      if (widget(nodes[n]!) === child) {
         out += (out === "" ? "" : ",") + names[n]!;
       }
     }
@@ -132,7 +144,7 @@ function main(): void {
   const names = ["label", "button"];
   react_gtk_log("tree " + order(root, nodes, names));
 
-  react_gtk_emit(button.widget, "clicked");
+  react_gtk_emit(widget(button), "clicked");
   react_gtk_log("clicked " + clicks + "after@" + String(getCurrentUpdatePriority()));
 
   clicks = "";
@@ -143,7 +155,7 @@ function main(): void {
     },
   };
   commitUpdate(button, "GtkButton", firstProps, secondProps, {});
-  react_gtk_emit(button.widget, "clicked");
+  react_gtk_emit(widget(button), "clicked");
   react_gtk_log("rebound " + clicks.trim());
 
   commitUpdate(label, "GtkLabel", { children: "hello" }, { children: "world" }, {});
@@ -162,16 +174,16 @@ function main(): void {
   react_gtk_log("removed " + order(root, nodes, names));
 
   hideInstance(button);
-  const hidden = button.widget.get_visible();
+  const hidden = widget(button).get_visible();
   unhideInstance(button, secondProps);
-  react_gtk_log("hidden " + String(hidden) + " " + String(button.widget.get_visible()));
+  react_gtk_log("hidden " + String(hidden) + " " + String(widget(button).get_visible()));
 
   const framed = frame(button);
   const unframedProps: Props = { label: "Add", hasFrame: false };
   commitUpdate(button, "GtkButton", secondProps, unframedProps, {});
   const unframed = frame(button);
   clicks = "";
-  react_gtk_emit(button.widget, "clicked");
+  react_gtk_emit(widget(button), "clicked");
   commitUpdate(button, "GtkButton", unframedProps, { children: "Text" }, {});
   const text = button instanceof ButtonNode ? String(button.gtk.get_label()) : "not a button";
   react_gtk_log("reset " + framed + ">" + unframed + ">" + frame(button) + " clicks=" + (clicks === "" ? "none" : clicks) + " label=" + text);
@@ -182,7 +194,7 @@ function main(): void {
   const framing = createInstance("GtkFrame", { label: "f" }, container, 0, {});
   const inner = createInstance("GtkLabel", { label: "inner" }, container, 0, {});
   appendInitialChild(framing, inner);
-  const held = framing instanceof FrameNode && framing.gtk.get_child() === inner.widget;
+  const held = framing instanceof FrameNode && framing.gtk.get_child() === widget(inner);
   react_gtk_log("single " + String(held));
 
 
@@ -198,7 +210,7 @@ function main(): void {
     0,
     {},
   );
-  react_gtk_emit_double(scale.widget, "adjust-bounds", 2.5);
+  react_gtk_emit_double(widget(scale), "adjust-bounds", 2.5);
   react_gtk_log("argument " + bounds);
 
   const list = createInstance("GtkListBox", {}, container, 0, {});
@@ -287,8 +299,8 @@ function main(): void {
   react_gtk_log("object " + String(holds) + " " + String(at));
 
   const target = createInstance("GtkEntry", {}, container, 0, {});
-  const naming = createInstance("GtkLabel", { label: "_Name", useUnderline: true, mnemonicWidget: target.widget }, container, 0, {});
-  react_gtk_log("reference " + String(naming instanceof LabelNode && naming.gtk.get_mnemonic_widget() === target.widget));
+  const naming = createInstance("GtkLabel", { label: "_Name", useUnderline: true, mnemonicWidget: widget(target) }, container, 0, {});
+  react_gtk_log("reference " + String(naming instanceof LabelNode && naming.gtk.get_mnemonic_widget() === widget(target)));
 
   let asked = 0;
   const closeProps: Props = {
@@ -298,10 +310,39 @@ function main(): void {
     },
   };
   const closing = createInstance("GtkWindow", closeProps, container, 0, {});
-  const kept = react_gtk_emit_decision(closing.widget, "close-request");
+  const kept = react_gtk_emit_decision(widget(closing), "close-request");
   commitUpdate(closing, "GtkWindow", closeProps, {}, {});
-  const released = react_gtk_emit_decision(closing.widget, "close-request");
+  const released = react_gtk_emit_decision(widget(closing), "close-request");
   react_gtk_log("decision " + String(kept) + " " + String(released) + " asked=" + String(asked));
+
+  const paned = createInstance("GtkPaned", {}, container, 0, {});
+  const startSlot = createInstance("GtkPaned.StartChild", {}, container, 0, {});
+  const endSlot = createInstance("GtkPaned.EndChild", {}, container, 0, {});
+  const side = createInstance("GtkLabel", { label: "side" }, container, 0, {});
+  const content = createInstance("GtkButton", { label: "main" }, container, 0, {});
+  const nameOf = (child: GtkWidget | null): string =>
+    child === null ? "none" : child === widget(side) ? "side" : child === widget(content) ? "main" : "other";
+  const ends = (): string =>
+    paned instanceof PanedNode ? nameOf(paned.gtk.get_start_child()) + "," + nameOf(paned.gtk.get_end_child()) : "not a paned";
+  appendInitialChild(startSlot, side);
+  appendInitialChild(endSlot, content);
+  appendInitialChild(paned, startSlot);
+  appendInitialChild(paned, endSlot);
+  let slots = ends();
+  removeChild(endSlot, content);
+  slots += " " + ends();
+  removeChild(paned, startSlot);
+  slots += " " + ends();
+  const titled = createInstance("GtkFrame", {}, container, 0, {});
+  const titleSlot = createInstance("GtkFrame.LabelWidget", {}, container, 0, {});
+  const title = createInstance("GtkLabel", { label: "Title" }, container, 0, {});
+  const body = createInstance("GtkLabel", { label: "body" }, container, 0, {});
+  appendInitialChild(titleSlot, title);
+  appendInitialChild(titled, titleSlot);
+  insertBefore(titled, body, titleSlot);
+  const labelled =
+    titled instanceof FrameNode && titled.gtk.get_child() === widget(body) && titled.gtk.get_label_widget() === widget(title);
+  react_gtk_log("slot " + slots + " titled=" + String(labelled));
 
   const loop = g_main_loop_new(null, false);
   let ran = "";

@@ -84,6 +84,7 @@ import {
   GtkPaned,
   GtkPasswordEntry,
   GtkPicture,
+  type GtkPolicyType,
   GtkPopover,
   GtkPopoverBin,
   GtkPopoverMenu,
@@ -128,6 +129,7 @@ import {
   GtkTreeListRow,
   type GtkTreePath,
   type GtkTreeViewColumn,
+  type GtkTreeViewGridLines,
   GtkVideo,
   GtkViewport,
   GtkWidget,
@@ -142,7 +144,7 @@ import {
   type PangoWrapMode,
 } from "c:Pango-1.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
-import { HostNode, insertAt, type SignalSlot } from "./HostNode.ts";
+import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -159,6 +161,7 @@ export interface WidgetProps extends HostProps {
   focusable?: boolean;
   halign?: GtkAlign;
   hasTooltip?: boolean;
+  heightRequest?: number;
   hexpand?: boolean;
   hexpandSet?: boolean;
   limitEvents?: boolean;
@@ -177,12 +180,14 @@ export interface WidgetProps extends HostProps {
   vexpand?: boolean;
   vexpandSet?: boolean;
   visible?: boolean;
+  widthRequest?: number;
   onNotifyCanFocus?: (value: boolean) => void;
   onNotifyCanTarget?: (value: boolean) => void;
   onNotifyFocusOnClick?: (value: boolean) => void;
   onNotifyFocusable?: (value: boolean) => void;
   onNotifyHalign?: (value: GtkAlign) => void;
   onNotifyHasTooltip?: (value: boolean) => void;
+  onNotifyHeightRequest?: (value: number) => void;
   onNotifyHexpand?: (value: boolean) => void;
   onNotifyHexpandSet?: (value: boolean) => void;
   onNotifyLimitEvents?: (value: boolean) => void;
@@ -201,6 +206,7 @@ export interface WidgetProps extends HostProps {
   onNotifyVexpand?: (value: boolean) => void;
   onNotifyVexpandSet?: (value: boolean) => void;
   onNotifyVisible?: (value: boolean) => void;
+  onNotifyWidthRequest?: (value: number) => void;
   onDestroy?: () => void;
   onDirectionChanged?: (previous_direction: GtkTextDirection) => void;
   onHide?: () => void;
@@ -220,16 +226,20 @@ export interface WidgetProps extends HostProps {
 export interface WindowProps extends WidgetProps {
   application?: GtkApplication | null;
   decorated?: boolean;
+  defaultHeight?: number;
   defaultWidget?: GtkWidget | null;
+  defaultWidth?: number;
   deletable?: boolean;
   destroyWithParent?: boolean;
   display?: GdkDisplay;
   focusVisible?: boolean;
   focusWidget?: GtkWidget | null;
+  fullscreened?: boolean;
   gravity?: GtkWindowGravity;
   handleMenubarAccel?: boolean;
   hideOnClose?: boolean;
   iconName?: string | null;
+  maximized?: boolean;
   mnemonicsVisible?: boolean;
   modal?: boolean;
   resizable?: boolean;
@@ -238,7 +248,9 @@ export interface WindowProps extends WidgetProps {
   transientFor?: GtkWindow | null;
   onNotifyApplication?: (value: GtkApplication | null) => void;
   onNotifyDecorated?: (value: boolean) => void;
+  onNotifyDefaultHeight?: (value: number) => void;
   onNotifyDefaultWidget?: (value: GtkWidget | null) => void;
+  onNotifyDefaultWidth?: (value: number) => void;
   onNotifyDeletable?: (value: boolean) => void;
   onNotifyDestroyWithParent?: (value: boolean) => void;
   onNotifyFocusVisible?: (value: boolean) => void;
@@ -455,12 +467,14 @@ export interface DropDownProps extends WidgetProps {
 
 /** `<EditableLabel>`'s props: GtkEditableLabel's own properties and signals. */
 export interface EditableLabelProps extends WidgetProps {
+  editing?: boolean;
   editable?: boolean;
   enableUndo?: boolean;
   maxWidthChars?: number;
   text?: string;
   widthChars?: number;
   xalign?: number;
+  onNotifyEditing?: (value: boolean) => void;
   onNotifyEditable?: (value: boolean) => void;
   onNotifyEnableUndo?: (value: boolean) => void;
   onNotifyMaxWidthChars?: (value: number) => void;
@@ -498,15 +512,23 @@ export interface EmojiChooserProps extends PopoverProps {
 export interface EntryProps extends WidgetProps {
   activatesDefault?: boolean;
   buffer?: GtkEntryBuffer;
+  enableEmojiCompletion?: boolean;
   extraMenu?: GMenuModel | null;
   hasFrame?: boolean;
   inputPurpose?: GtkInputPurpose;
   invisibleChar?: number;
+  invisibleCharSet?: boolean;
   maxLength?: number;
   overwriteMode?: boolean;
   placeholderText?: string | null;
+  primaryIconActivatable?: boolean;
+  primaryIconSensitive?: boolean;
   progressFraction?: number;
   progressPulseStep?: number;
+  secondaryIconActivatable?: boolean;
+  secondaryIconSensitive?: boolean;
+  showEmojiIcon?: boolean;
+  truncateMultiline?: boolean;
   visibility?: boolean;
   editable?: boolean;
   enableUndo?: boolean;
@@ -516,14 +538,22 @@ export interface EntryProps extends WidgetProps {
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
   onNotifyBuffer?: (value: GtkEntryBuffer) => void;
+  onNotifyEnableEmojiCompletion?: (value: boolean) => void;
   onNotifyHasFrame?: (value: boolean) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
+  onNotifyInvisibleCharSet?: (value: boolean) => void;
   onNotifyMaxLength?: (value: number) => void;
   onNotifyOverwriteMode?: (value: boolean) => void;
   onNotifyPlaceholderText?: (value: string | null) => void;
+  onNotifyPrimaryIconActivatable?: (value: boolean) => void;
+  onNotifyPrimaryIconSensitive?: (value: boolean) => void;
   onNotifyProgressFraction?: (value: number) => void;
   onNotifyProgressPulseStep?: (value: number) => void;
+  onNotifySecondaryIconActivatable?: (value: boolean) => void;
+  onNotifySecondaryIconSensitive?: (value: boolean) => void;
+  onNotifyShowEmojiIcon?: (value: boolean) => void;
+  onNotifyTruncateMultiline?: (value: boolean) => void;
   onNotifyVisibility?: (value: boolean) => void;
   onActivate?: () => void;
   onIconPress?: (icon_pos: GtkEntryIconPosition) => void;
@@ -562,6 +592,7 @@ export interface FixedProps extends WidgetProps {
 
 /** `<FlowBox>`'s props: GtkFlowBox's own properties and signals. */
 export interface FlowBoxProps extends WidgetProps {
+  acceptUnpairedRelease?: boolean;
   activateOnSingleClick?: boolean;
   columnSpacing?: number;
   homogeneous?: boolean;
@@ -570,6 +601,7 @@ export interface FlowBoxProps extends WidgetProps {
   rowSpacing?: number;
   selectionMode?: GtkSelectionMode;
   orientation?: GtkOrientation;
+  onNotifyAcceptUnpairedRelease?: (value: boolean) => void;
   onNotifyActivateOnSingleClick?: (value: boolean) => void;
   onNotifyColumnSpacing?: (value: number) => void;
   onNotifyHomogeneous?: (value: boolean) => void;
@@ -696,9 +728,11 @@ export interface ImageProps extends WidgetProps {
   iconName?: string | null;
   iconSize?: GtkIconSize;
   pixelSize?: number;
+  useFallback?: boolean;
   onNotifyIconName?: (value: string | null) => void;
   onNotifyIconSize?: (value: GtkIconSize) => void;
   onNotifyPixelSize?: (value: number) => void;
+  onNotifyUseFallback?: (value: boolean) => void;
 }
 
 /** `<Inscription>`'s props: GtkInscription's own properties and signals. */
@@ -792,10 +826,12 @@ export interface LinkButtonProps extends ButtonProps {
 
 /** `<ListBox>`'s props: GtkListBox's own properties and signals. */
 export interface ListBoxProps extends WidgetProps {
+  acceptUnpairedRelease?: boolean;
   activateOnSingleClick?: boolean;
   selectionMode?: GtkSelectionMode;
   showSeparators?: boolean;
   tabBehavior?: GtkListTabBehavior;
+  onNotifyAcceptUnpairedRelease?: (value: boolean) => void;
   onNotifyActivateOnSingleClick?: (value: boolean) => void;
   onNotifySelectionMode?: (value: GtkSelectionMode) => void;
   onNotifyShowSeparators?: (value: boolean) => void;
@@ -870,12 +906,14 @@ export interface MenuButtonProps extends WidgetProps {
 
 /** `<Notebook>`'s props: GtkNotebook's own properties and signals. */
 export interface NotebookProps extends WidgetProps {
+  enablePopup?: boolean;
   groupName?: string | null;
   page?: number;
   scrollable?: boolean;
   showBorder?: boolean;
   showTabs?: boolean;
   tabPos?: GtkPositionType;
+  onNotifyEnablePopup?: (value: boolean) => void;
   onNotifyGroupName?: (value: string | null) => void;
   onNotifyPage?: (value: number) => void;
   onNotifyScrollable?: (value: boolean) => void;
@@ -900,6 +938,7 @@ export interface OverlayProps extends WidgetProps {
 /** `<Paned>`'s props: GtkPaned's own properties and signals. */
 export interface PanedProps extends WidgetProps {
   position?: number;
+  positionSet?: boolean;
   resizeEndChild?: boolean;
   resizeStartChild?: boolean;
   shrinkEndChild?: boolean;
@@ -907,6 +946,7 @@ export interface PanedProps extends WidgetProps {
   wideHandle?: boolean;
   orientation?: GtkOrientation;
   onNotifyPosition?: (value: number) => void;
+  onNotifyPositionSet?: (value: boolean) => void;
   onNotifyResizeEndChild?: (value: boolean) => void;
   onNotifyResizeStartChild?: (value: boolean) => void;
   onNotifyShrinkEndChild?: (value: boolean) => void;
@@ -923,6 +963,7 @@ export interface PanedProps extends WidgetProps {
 
 /** `<PasswordEntry>`'s props: GtkPasswordEntry's own properties and signals. */
 export interface PasswordEntryProps extends WidgetProps {
+  activatesDefault?: boolean;
   extraMenu?: GMenuModel | null;
   showPeekIcon?: boolean;
   editable?: boolean;
@@ -931,6 +972,7 @@ export interface PasswordEntryProps extends WidgetProps {
   text?: string;
   widthChars?: number;
   xalign?: number;
+  onNotifyActivatesDefault?: (value: boolean) => void;
   onNotifyShowPeekIcon?: (value: boolean) => void;
   onActivate?: () => void;
   onNotifyEditable?: (value: boolean) => void;
@@ -1062,6 +1104,7 @@ export interface ScrollbarProps extends WidgetProps {
 export interface ScrolledWindowProps extends WidgetProps {
   hadjustment?: GtkAdjustment | null;
   hasFrame?: boolean;
+  hscrollbarPolicy?: GtkPolicyType;
   kineticScrolling?: boolean;
   maxContentHeight?: number;
   maxContentWidth?: number;
@@ -1071,9 +1114,11 @@ export interface ScrolledWindowProps extends WidgetProps {
   propagateNaturalHeight?: boolean;
   propagateNaturalWidth?: boolean;
   vadjustment?: GtkAdjustment | null;
+  vscrollbarPolicy?: GtkPolicyType;
   windowPlacement?: GtkCornerType;
   onNotifyHadjustment?: (value: GtkAdjustment) => void;
   onNotifyHasFrame?: (value: boolean) => void;
+  onNotifyHscrollbarPolicy?: (value: GtkPolicyType) => void;
   onNotifyKineticScrolling?: (value: boolean) => void;
   onNotifyMaxContentHeight?: (value: number) => void;
   onNotifyMaxContentWidth?: (value: number) => void;
@@ -1083,6 +1128,7 @@ export interface ScrolledWindowProps extends WidgetProps {
   onNotifyPropagateNaturalHeight?: (value: boolean) => void;
   onNotifyPropagateNaturalWidth?: (value: boolean) => void;
   onNotifyVadjustment?: (value: GtkAdjustment) => void;
+  onNotifyVscrollbarPolicy?: (value: GtkPolicyType) => void;
   onNotifyWindowPlacement?: (value: GtkCornerType) => void;
   onEdgeOvershot?: (pos: GtkPositionType) => void;
   onEdgeReached?: (pos: GtkPositionType) => void;
@@ -1102,6 +1148,7 @@ export interface SearchBarProps extends WidgetProps {
 
 /** `<SearchEntry>`'s props: GtkSearchEntry's own properties and signals. */
 export interface SearchEntryProps extends WidgetProps {
+  activatesDefault?: boolean;
   inputPurpose?: GtkInputPurpose;
   keyCaptureWidget?: GtkWidget | null;
   placeholderText?: string | null;
@@ -1112,6 +1159,7 @@ export interface SearchEntryProps extends WidgetProps {
   text?: string;
   widthChars?: number;
   xalign?: number;
+  onNotifyActivatesDefault?: (value: boolean) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyKeyCaptureWidget?: (value: GtkWidget | null) => void;
   onNotifyPlaceholderText?: (value: string | null) => void;
@@ -1198,12 +1246,14 @@ export interface StackProps extends WidgetProps {
   transitionDuration?: number;
   transitionType?: GtkStackTransitionType;
   vhomogeneous?: boolean;
+  visibleChild?: GtkWidget;
   visibleChildName?: string;
   onNotifyHhomogeneous?: (value: boolean) => void;
   onNotifyInterpolateSize?: (value: boolean) => void;
   onNotifyTransitionDuration?: (value: number) => void;
   onNotifyTransitionType?: (value: GtkStackTransitionType) => void;
   onNotifyVhomogeneous?: (value: boolean) => void;
+  onNotifyVisibleChild?: (value: GtkWidget | null) => void;
   onNotifyVisibleChildName?: (value: string | null) => void;
 }
 
@@ -1241,6 +1291,7 @@ export interface TextProps extends WidgetProps {
   extraMenu?: GMenuModel | null;
   inputPurpose?: GtkInputPurpose;
   invisibleChar?: number;
+  invisibleCharSet?: boolean;
   maxLength?: number;
   overwriteMode?: boolean;
   placeholderText?: string | null;
@@ -1258,6 +1309,7 @@ export interface TextProps extends WidgetProps {
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
+  onNotifyInvisibleCharSet?: (value: boolean) => void;
   onNotifyMaxLength?: (value: number) => void;
   onNotifyOverwriteMode?: (value: boolean) => void;
   onNotifyPlaceholderText?: (value: string | null) => void;
@@ -1412,15 +1464,60 @@ export interface WindowHandleProps extends WidgetProps {
 //
 // Declared, never defined: the React stage lowers `<Button />` to
 // `jsx("GtkButton", props)`, so a widget costs no component of its own.
+// A widget with slots names its slot elements as members:
+// `<Paned.StartChild>` lowers to `jsx("GtkPaned.StartChild", props)`.
+
+/** `<Window>`'s slot elements: each holds one child, which fills GtkWindow's property of that name. */
+export interface WindowSlots {
+  readonly Titlebar: HostComponent<"GtkWindow.Titlebar", HostProps>;
+}
+
+/** `<CenterBox>`'s slot elements: each holds one child, which fills GtkCenterBox's property of that name. */
+export interface CenterBoxSlots {
+  readonly CenterWidget: HostComponent<"GtkCenterBox.CenterWidget", HostProps>;
+  readonly EndWidget: HostComponent<"GtkCenterBox.EndWidget", HostProps>;
+  readonly StartWidget: HostComponent<"GtkCenterBox.StartWidget", HostProps>;
+}
+
+/** `<Expander>`'s slot elements: each holds one child, which fills GtkExpander's property of that name. */
+export interface ExpanderSlots {
+  readonly LabelWidget: HostComponent<"GtkExpander.LabelWidget", HostProps>;
+}
+
+/** `<Frame>`'s slot elements: each holds one child, which fills GtkFrame's property of that name. */
+export interface FrameSlots {
+  readonly LabelWidget: HostComponent<"GtkFrame.LabelWidget", HostProps>;
+}
+
+/** `<HeaderBar>`'s slot elements: each holds one child, which fills GtkHeaderBar's property of that name. */
+export interface HeaderBarSlots {
+  readonly TitleWidget: HostComponent<"GtkHeaderBar.TitleWidget", HostProps>;
+}
+
+/** `<MenuButton>`'s slot elements: each holds one child, which fills GtkMenuButton's property of that name. */
+export interface MenuButtonSlots {
+  readonly Popover: HostComponent<"GtkMenuButton.Popover", HostProps>;
+}
+
+/** `<Paned>`'s slot elements: each holds one child, which fills GtkPaned's property of that name. */
+export interface PanedSlots {
+  readonly EndChild: HostComponent<"GtkPaned.EndChild", HostProps>;
+  readonly StartChild: HostComponent<"GtkPaned.StartChild", HostProps>;
+}
+
+/** `<PopoverBin>`'s slot elements: each holds one child, which fills GtkPopoverBin's property of that name. */
+export interface PopoverBinSlots {
+  readonly Popover: HostComponent<"GtkPopoverBin.Popover", HostProps>;
+}
 
 /** `<AboutDialog>`: a GtkAboutDialog. */
-export declare const AboutDialog: HostComponent<"GtkAboutDialog", AboutDialogProps>;
+export declare const AboutDialog: HostComponent<"GtkAboutDialog", AboutDialogProps> & WindowSlots;
 
 /** `<ActionBar>`: a GtkActionBar. */
 export declare const ActionBar: HostComponent<"GtkActionBar", ActionBarProps>;
 
 /** `<ApplicationWindow>`: a GtkApplicationWindow. */
-export declare const ApplicationWindow: HostComponent<"GtkApplicationWindow", ApplicationWindowProps>;
+export declare const ApplicationWindow: HostComponent<"GtkApplicationWindow", ApplicationWindowProps> & WindowSlots;
 
 /** `<AspectFrame>`: a GtkAspectFrame. */
 export declare const AspectFrame: HostComponent<"GtkAspectFrame", AspectFrameProps>;
@@ -1435,7 +1532,7 @@ export declare const Button: HostComponent<"GtkButton", ButtonProps>;
 export declare const Calendar: HostComponent<"GtkCalendar", CalendarProps>;
 
 /** `<CenterBox>`: a GtkCenterBox. */
-export declare const CenterBox: HostComponent<"GtkCenterBox", CenterBoxProps>;
+export declare const CenterBox: HostComponent<"GtkCenterBox", CenterBoxProps> & CenterBoxSlots;
 
 /** `<CheckButton>`: a GtkCheckButton. */
 export declare const CheckButton: HostComponent<"GtkCheckButton", CheckButtonProps>;
@@ -1465,7 +1562,7 @@ export declare const EmojiChooser: HostComponent<"GtkEmojiChooser", EmojiChooser
 export declare const Entry: HostComponent<"GtkEntry", EntryProps>;
 
 /** `<Expander>`: a GtkExpander. */
-export declare const Expander: HostComponent<"GtkExpander", ExpanderProps>;
+export declare const Expander: HostComponent<"GtkExpander", ExpanderProps> & ExpanderSlots;
 
 /** `<Fixed>`: a GtkFixed. */
 export declare const Fixed: HostComponent<"GtkFixed", FixedProps>;
@@ -1480,7 +1577,7 @@ export declare const FlowBoxChild: HostComponent<"GtkFlowBoxChild", FlowBoxChild
 export declare const FontDialogButton: HostComponent<"GtkFontDialogButton", FontDialogButtonProps>;
 
 /** `<Frame>`: a GtkFrame. */
-export declare const Frame: HostComponent<"GtkFrame", FrameProps>;
+export declare const Frame: HostComponent<"GtkFrame", FrameProps> & FrameSlots;
 
 /** `<GLArea>`: a GtkGLArea. */
 export declare const GLArea: HostComponent<"GtkGLArea", GLAreaProps>;
@@ -1495,7 +1592,7 @@ export declare const Grid: HostComponent<"GtkGrid", GridProps>;
 export declare const GridView: HostComponent<"GtkGridView", GridViewProps>;
 
 /** `<HeaderBar>`: a GtkHeaderBar. */
-export declare const HeaderBar: HostComponent<"GtkHeaderBar", HeaderBarProps>;
+export declare const HeaderBar: HostComponent<"GtkHeaderBar", HeaderBarProps> & HeaderBarSlots;
 
 /** `<Image>`: a GtkImage. */
 export declare const Image: HostComponent<"GtkImage", ImageProps>;
@@ -1525,7 +1622,7 @@ export declare const ListView: HostComponent<"GtkListView", ListViewProps>;
 export declare const MediaControls: HostComponent<"GtkMediaControls", MediaControlsProps>;
 
 /** `<MenuButton>`: a GtkMenuButton. */
-export declare const MenuButton: HostComponent<"GtkMenuButton", MenuButtonProps>;
+export declare const MenuButton: HostComponent<"GtkMenuButton", MenuButtonProps> & MenuButtonSlots;
 
 /** `<Notebook>`: a GtkNotebook. */
 export declare const Notebook: HostComponent<"GtkNotebook", NotebookProps>;
@@ -1534,7 +1631,7 @@ export declare const Notebook: HostComponent<"GtkNotebook", NotebookProps>;
 export declare const Overlay: HostComponent<"GtkOverlay", OverlayProps>;
 
 /** `<Paned>`: a GtkPaned. */
-export declare const Paned: HostComponent<"GtkPaned", PanedProps>;
+export declare const Paned: HostComponent<"GtkPaned", PanedProps> & PanedSlots;
 
 /** `<PasswordEntry>`: a GtkPasswordEntry. */
 export declare const PasswordEntry: HostComponent<"GtkPasswordEntry", PasswordEntryProps>;
@@ -1546,7 +1643,7 @@ export declare const Picture: HostComponent<"GtkPicture", PictureProps>;
 export declare const Popover: HostComponent<"GtkPopover", PopoverProps>;
 
 /** `<PopoverBin>`: a GtkPopoverBin. */
-export declare const PopoverBin: HostComponent<"GtkPopoverBin", PopoverBinProps>;
+export declare const PopoverBin: HostComponent<"GtkPopoverBin", PopoverBinProps> & PopoverBinSlots;
 
 /** `<PopoverMenu>`: a GtkPopoverMenu. */
 export declare const PopoverMenu: HostComponent<"GtkPopoverMenu", PopoverMenuProps>;
@@ -1621,7 +1718,7 @@ export declare const Video: HostComponent<"GtkVideo", VideoProps>;
 export declare const Viewport: HostComponent<"GtkViewport", ViewportProps>;
 
 /** `<Window>`: a GtkWindow. */
-export declare const Window: HostComponent<"GtkWindow", WindowProps>;
+export declare const Window: HostComponent<"GtkWindow", WindowProps> & WindowSlots;
 
 /** `<WindowControls>`: a GtkWindowControls. */
 export declare const WindowControls: HostComponent<"GtkWindowControls", WindowControlsProps>;
@@ -1653,6 +1750,9 @@ function widgetProp(gtk: GtkWidget, key: string, value: unknown): boolean {
       return true;
     case "hasTooltip":
       gtk.set_has_tooltip(typeof value === "boolean" ? value : false);
+      return true;
+    case "heightRequest":
+      gtk.set_height_request(typeof value === "number" ? value : -1);
       return true;
     case "hexpand":
       gtk.set_hexpand(typeof value === "boolean" ? value : false);
@@ -1708,6 +1808,9 @@ function widgetProp(gtk: GtkWidget, key: string, value: unknown): boolean {
     case "visible":
       gtk.set_visible(typeof value === "boolean" ? value : true);
       return true;
+    case "widthRequest":
+      gtk.set_width_request(typeof value === "number" ? value : -1);
+      return true;
   }
   return false;
 }
@@ -1742,6 +1845,11 @@ function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boolean {
     case "onNotifyHasTooltip":
       gtk.connect("notify::has-tooltip", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_tooltip()));
+      });
+      return true;
+    case "onNotifyHeightRequest":
+      gtk.connect("notify::height-request", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_height_request()));
       });
       return true;
     case "onNotifyHexpand":
@@ -1834,6 +1942,11 @@ function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_visible()));
       });
       return true;
+    case "onNotifyWidthRequest":
+      gtk.connect("notify::width-request", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_width_request()));
+      });
+      return true;
     case "onDestroy":
       gtk.connect("destroy", () => slot.fire());
       return true;
@@ -1891,8 +2004,14 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
     case "decorated":
       gtk.set_decorated(typeof value === "boolean" ? value : true);
       return true;
+    case "defaultHeight":
+      gtk.set_default_height(typeof value === "number" ? value : 0);
+      return true;
     case "defaultWidget":
       gtk.set_default_widget(value instanceof GtkWidget ? value : null);
+      return true;
+    case "defaultWidth":
+      gtk.set_default_width(typeof value === "number" ? value : 0);
       return true;
     case "deletable":
       gtk.set_deletable(typeof value === "boolean" ? value : true);
@@ -1909,6 +2028,9 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
     case "focusWidget":
       gtk.set_focus(value instanceof GtkWidget ? value : null);
       return true;
+    case "fullscreened":
+      gtk.set_fullscreened(typeof value === "boolean" ? value : false);
+      return true;
     case "gravity":
       gtk.set_gravity(typeof value === "number" ? value as GtkWindowGravity : 9 as GtkWindowGravity);
       return true;
@@ -1920,6 +2042,9 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
       return true;
     case "iconName":
       gtk.set_icon_name(typeof value === "string" ? value : null);
+      return true;
+    case "maximized":
+      gtk.set_maximized(typeof value === "boolean" ? value : false);
       return true;
     case "mnemonicsVisible":
       gtk.set_mnemonics_visible(typeof value === "boolean" ? value : false);
@@ -1955,9 +2080,19 @@ function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_decorated()));
       });
       return true;
+    case "onNotifyDefaultHeight":
+      gtk.connect("notify::default-height", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_default_height()));
+      });
+      return true;
     case "onNotifyDefaultWidget":
       gtk.connect("notify::default-widget", () => {
         slot.dispatch(() => (slot.handler as (value: GtkWidget | null) => void)(gtk.get_default_widget()));
+      });
+      return true;
+    case "onNotifyDefaultWidth":
+      gtk.connect("notify::default-width", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_default_width()));
       });
       return true;
     case "onNotifyDeletable":
@@ -2752,6 +2887,9 @@ function dropDownSignal(gtk: GtkDropDown, key: string, slot: SignalSlot): boolea
 
 function editableLabelProp(gtk: GtkEditableLabel, key: string, value: unknown): boolean {
   switch (key) {
+    case "editing":
+      gtk.set_editing(typeof value === "boolean" ? value : false);
+      return true;
     case "editable":
       gtk.set_editable(typeof value === "boolean" ? value : true);
       return true;
@@ -2776,6 +2914,11 @@ function editableLabelProp(gtk: GtkEditableLabel, key: string, value: unknown): 
 
 function editableLabelSignal(gtk: GtkEditableLabel, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyEditing":
+      gtk.connect("notify::editing", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editing()));
+      });
+      return true;
     case "onNotifyEditable":
       gtk.connect("notify::editable", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
@@ -2907,6 +3050,9 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "buffer":
       if (value instanceof GtkEntryBuffer) gtk.set_buffer(value);
       return true;
+    case "enableEmojiCompletion":
+      gtk.set_enable_emoji_completion(typeof value === "boolean" ? value : false);
+      return true;
     case "extraMenu":
       gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
       return true;
@@ -2919,6 +3065,9 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "invisibleChar":
       gtk.set_invisible_char(typeof value === "number" ? value : 42);
       return true;
+    case "invisibleCharSet":
+      gtk.set_invisible_char_set(typeof value === "boolean" ? value : false);
+      return true;
     case "maxLength":
       gtk.set_max_length(typeof value === "number" ? value : 0);
       return true;
@@ -2928,11 +3077,29 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "placeholderText":
       gtk.set_placeholder_text(typeof value === "string" ? value : null);
       return true;
+    case "primaryIconActivatable":
+      gtk.set_primary_icon_activatable(typeof value === "boolean" ? value : true);
+      return true;
+    case "primaryIconSensitive":
+      gtk.set_primary_icon_sensitive(typeof value === "boolean" ? value : true);
+      return true;
     case "progressFraction":
       gtk.set_progress_fraction(typeof value === "number" ? value : 0);
       return true;
     case "progressPulseStep":
       gtk.set_progress_pulse_step(typeof value === "number" ? value : 0);
+      return true;
+    case "secondaryIconActivatable":
+      gtk.set_secondary_icon_activatable(typeof value === "boolean" ? value : true);
+      return true;
+    case "secondaryIconSensitive":
+      gtk.set_secondary_icon_sensitive(typeof value === "boolean" ? value : true);
+      return true;
+    case "showEmojiIcon":
+      gtk.set_show_emoji_icon(typeof value === "boolean" ? value : false);
+      return true;
+    case "truncateMultiline":
+      gtk.set_truncate_multiline(typeof value === "boolean" ? value : false);
       return true;
     case "visibility":
       gtk.set_visibility(typeof value === "boolean" ? value : true);
@@ -2971,6 +3138,11 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: GtkEntryBuffer) => void)(gtk.get_buffer()));
       });
       return true;
+    case "onNotifyEnableEmojiCompletion":
+      gtk.connect("notify::enable-emoji-completion", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_emoji_completion()));
+      });
+      return true;
     case "onNotifyHasFrame":
       gtk.connect("notify::has-frame", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
@@ -2984,6 +3156,11 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
     case "onNotifyInvisibleChar":
       gtk.connect("notify::invisible-char", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_invisible_char()));
+      });
+      return true;
+    case "onNotifyInvisibleCharSet":
+      gtk.connect("notify::invisible-char-set", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_invisible_char_set()));
       });
       return true;
     case "onNotifyMaxLength":
@@ -3001,6 +3178,16 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_placeholder_text()));
       });
       return true;
+    case "onNotifyPrimaryIconActivatable":
+      gtk.connect("notify::primary-icon-activatable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_primary_icon_activatable()));
+      });
+      return true;
+    case "onNotifyPrimaryIconSensitive":
+      gtk.connect("notify::primary-icon-sensitive", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_primary_icon_sensitive()));
+      });
+      return true;
     case "onNotifyProgressFraction":
       gtk.connect("notify::progress-fraction", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_progress_fraction()));
@@ -3009,6 +3196,26 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
     case "onNotifyProgressPulseStep":
       gtk.connect("notify::progress-pulse-step", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_progress_pulse_step()));
+      });
+      return true;
+    case "onNotifySecondaryIconActivatable":
+      gtk.connect("notify::secondary-icon-activatable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_secondary_icon_activatable()));
+      });
+      return true;
+    case "onNotifySecondaryIconSensitive":
+      gtk.connect("notify::secondary-icon-sensitive", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_secondary_icon_sensitive()));
+      });
+      return true;
+    case "onNotifyShowEmojiIcon":
+      gtk.connect("notify::show-emoji-icon", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_emoji_icon()));
+      });
+      return true;
+    case "onNotifyTruncateMultiline":
+      gtk.connect("notify::truncate-multiline", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_truncate_multiline()));
       });
       return true;
     case "onNotifyVisibility":
@@ -3147,6 +3354,9 @@ function fixedSignal(gtk: GtkFixed, key: string, slot: SignalSlot): boolean {
 
 function flowBoxProp(gtk: GtkFlowBox, key: string, value: unknown): boolean {
   switch (key) {
+    case "acceptUnpairedRelease":
+      gtk.set_accept_unpaired_release(typeof value === "boolean" ? value : false);
+      return true;
     case "activateOnSingleClick":
       gtk.set_activate_on_single_click(typeof value === "boolean" ? value : true);
       return true;
@@ -3177,6 +3387,11 @@ function flowBoxProp(gtk: GtkFlowBox, key: string, value: unknown): boolean {
 
 function flowBoxSignal(gtk: GtkFlowBox, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAcceptUnpairedRelease":
+      gtk.connect("notify::accept-unpaired-release", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_accept_unpaired_release()));
+      });
+      return true;
     case "onNotifyActivateOnSingleClick":
       gtk.connect("notify::activate-on-single-click", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activate_on_single_click()));
@@ -3472,7 +3687,7 @@ function gridSignal(gtk: GtkGrid, key: string, slot: SignalSlot): boolean {
 function listBaseProp(gtk: GtkListBase, key: string, value: unknown): boolean {
   switch (key) {
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 1 as GtkOrientation);
       return true;
     case "hadjustment":
       gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
@@ -3633,6 +3848,9 @@ function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
     case "pixelSize":
       gtk.set_pixel_size(typeof value === "number" ? value : -1);
       return true;
+    case "useFallback":
+      gtk.set_use_fallback(typeof value === "boolean" ? value : false);
+      return true;
   }
   return widgetProp(gtk, key, value);
 }
@@ -3652,6 +3870,11 @@ function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boolean {
     case "onNotifyPixelSize":
       gtk.connect("notify::pixel-size", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_pixel_size()));
+      });
+      return true;
+    case "onNotifyUseFallback":
+      gtk.connect("notify::use-fallback", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_fallback()));
       });
       return true;
   }
@@ -3995,6 +4218,9 @@ function linkButtonSignal(gtk: GtkLinkButton, key: string, slot: SignalSlot): bo
 
 function listBoxProp(gtk: GtkListBox, key: string, value: unknown): boolean {
   switch (key) {
+    case "acceptUnpairedRelease":
+      gtk.set_accept_unpaired_release(typeof value === "boolean" ? value : false);
+      return true;
     case "activateOnSingleClick":
       gtk.set_activate_on_single_click(typeof value === "boolean" ? value : true);
       return true;
@@ -4013,6 +4239,11 @@ function listBoxProp(gtk: GtkListBox, key: string, value: unknown): boolean {
 
 function listBoxSignal(gtk: GtkListBox, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAcceptUnpairedRelease":
+      gtk.connect("notify::accept-unpaired-release", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_accept_unpaired_release()));
+      });
+      return true;
     case "onNotifyActivateOnSingleClick":
       gtk.connect("notify::activate-on-single-click", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activate_on_single_click()));
@@ -4283,6 +4514,9 @@ function menuButtonSignal(gtk: GtkMenuButton, key: string, slot: SignalSlot): bo
 
 function notebookProp(gtk: GtkNotebook, key: string, value: unknown): boolean {
   switch (key) {
+    case "enablePopup":
+      gtk.set_enable_popup(typeof value === "boolean" ? value : false);
+      return true;
     case "groupName":
       gtk.set_group_name(typeof value === "string" ? value : null);
       return true;
@@ -4307,6 +4541,11 @@ function notebookProp(gtk: GtkNotebook, key: string, value: unknown): boolean {
 
 function notebookSignal(gtk: GtkNotebook, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyEnablePopup":
+      gtk.connect("notify::enable-popup", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_popup()));
+      });
+      return true;
     case "onNotifyGroupName":
       gtk.connect("notify::group-name", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_group_name()));
@@ -4391,6 +4630,9 @@ function panedProp(gtk: GtkPaned, key: string, value: unknown): boolean {
     case "position":
       gtk.set_position(typeof value === "number" ? value : 0);
       return true;
+    case "positionSet":
+      gtk.set_position_set(typeof value === "boolean" ? value : false);
+      return true;
     case "resizeEndChild":
       gtk.set_resize_end_child(typeof value === "boolean" ? value : true);
       return true;
@@ -4418,6 +4660,11 @@ function panedSignal(gtk: GtkPaned, key: string, slot: SignalSlot): boolean {
     case "onNotifyPosition":
       gtk.connect("notify::position", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_position()));
+      });
+      return true;
+    case "onNotifyPositionSet":
+      gtk.connect("notify::position-set", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_position_set()));
       });
       return true;
     case "onNotifyResizeEndChild":
@@ -4474,6 +4721,9 @@ function panedSignal(gtk: GtkPaned, key: string, slot: SignalSlot): boolean {
 
 function passwordEntryProp(gtk: GtkPasswordEntry, key: string, value: unknown): boolean {
   switch (key) {
+    case "activatesDefault":
+      gtk.set_activates_default(typeof value === "boolean" ? value : false);
+      return true;
     case "extraMenu":
       gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
       return true;
@@ -4504,6 +4754,11 @@ function passwordEntryProp(gtk: GtkPasswordEntry, key: string, value: unknown): 
 
 function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActivatesDefault":
+      gtk.connect("notify::activates-default", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
     case "onNotifyShowPeekIcon":
       gtk.connect("notify::show-peek-icon", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_peek_icon()));
@@ -4975,6 +5230,9 @@ function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown)
     case "hasFrame":
       gtk.set_has_frame(typeof value === "boolean" ? value : false);
       return true;
+    case "hscrollbarPolicy":
+      gtk.set_hscrollbar_policy(typeof value === "number" ? value as GtkPolicyType : 1 as GtkPolicyType);
+      return true;
     case "kineticScrolling":
       gtk.set_kinetic_scrolling(typeof value === "boolean" ? value : true);
       return true;
@@ -5002,6 +5260,9 @@ function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown)
     case "vadjustment":
       gtk.set_vadjustment(value instanceof GtkAdjustment ? value : null);
       return true;
+    case "vscrollbarPolicy":
+      gtk.set_vscrollbar_policy(typeof value === "number" ? value as GtkPolicyType : 1 as GtkPolicyType);
+      return true;
     case "windowPlacement":
       gtk.set_placement(typeof value === "number" ? value as GtkCornerType : 0 as GtkCornerType);
       return true;
@@ -5019,6 +5280,11 @@ function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalS
     case "onNotifyHasFrame":
       gtk.connect("notify::has-frame", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
+      });
+      return true;
+    case "onNotifyHscrollbarPolicy":
+      gtk.connect("notify::hscrollbar-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkPolicyType) => void)(gtk.get_hscrollbar_policy()));
       });
       return true;
     case "onNotifyKineticScrolling":
@@ -5064,6 +5330,11 @@ function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalS
     case "onNotifyVadjustment":
       gtk.connect("notify::vadjustment", () => {
         slot.dispatch(() => (slot.handler as (value: GtkAdjustment) => void)(gtk.get_vadjustment()));
+      });
+      return true;
+    case "onNotifyVscrollbarPolicy":
+      gtk.connect("notify::vscrollbar-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkPolicyType) => void)(gtk.get_vscrollbar_policy()));
       });
       return true;
     case "onNotifyWindowPlacement":
@@ -5131,6 +5402,9 @@ function searchBarSignal(gtk: GtkSearchBar, key: string, slot: SignalSlot): bool
 
 function searchEntryProp(gtk: GtkSearchEntry, key: string, value: unknown): boolean {
   switch (key) {
+    case "activatesDefault":
+      gtk.set_activates_default(typeof value === "boolean" ? value : false);
+      return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
@@ -5167,6 +5441,11 @@ function searchEntryProp(gtk: GtkSearchEntry, key: string, value: unknown): bool
 
 function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActivatesDefault":
+      gtk.connect("notify::activates-default", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
     case "onNotifyInputPurpose":
       gtk.connect("notify::input-purpose", () => {
         slot.dispatch(() => (slot.handler as (value: GtkInputPurpose) => void)(gtk.get_input_purpose()));
@@ -5485,6 +5764,9 @@ function stackProp(gtk: GtkStack, key: string, value: unknown): boolean {
     case "vhomogeneous":
       gtk.set_vhomogeneous(typeof value === "boolean" ? value : true);
       return true;
+    case "visibleChild":
+      if (value instanceof GtkWidget) gtk.set_visible_child(value);
+      return true;
     case "visibleChildName":
       gtk.set_visible_child_name(typeof value === "string" ? value : "");
       return true;
@@ -5517,6 +5799,11 @@ function stackSignal(gtk: GtkStack, key: string, slot: SignalSlot): boolean {
     case "onNotifyVhomogeneous":
       gtk.connect("notify::vhomogeneous", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_vhomogeneous()));
+      });
+      return true;
+    case "onNotifyVisibleChild":
+      gtk.connect("notify::visible-child", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWidget | null) => void)(gtk.get_visible_child()));
       });
       return true;
     case "onNotifyVisibleChildName":
@@ -5638,6 +5925,9 @@ function textProp(gtk: GtkText, key: string, value: unknown): boolean {
     case "invisibleChar":
       gtk.set_invisible_char(typeof value === "number" ? value : 42);
       return true;
+    case "invisibleCharSet":
+      gtk.set_invisible_char_set(typeof value === "boolean" ? value : false);
+      return true;
     case "maxLength":
       gtk.set_max_length(typeof value === "number" ? value : 0);
       return true;
@@ -5703,6 +5993,11 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
     case "onNotifyInvisibleChar":
       gtk.connect("notify::invisible-char", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_invisible_char()));
+      });
+      return true;
+    case "onNotifyInvisibleCharSet":
+      gtk.connect("notify::invisible-char-set", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_invisible_char_set()));
       });
       return true;
     case "onNotifyMaxLength":
@@ -6273,10 +6568,93 @@ function windowHandleSignal(gtk: GtkWindowHandle, key: string, slot: SignalSlot)
   return widgetSignal(gtk, key, slot);
 }
 
+// ---- filling widget slots, one function per class that has them ---------------
+
+function windowSlot(gtk: GtkWindow, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "GtkWindow.Titlebar":
+      gtk.set_titlebar(widget);
+      return true;
+  }
+  return false;
+}
+
+function centerBoxSlot(gtk: GtkCenterBox, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "GtkCenterBox.CenterWidget":
+      gtk.set_center_widget(widget);
+      return true;
+    case "GtkCenterBox.EndWidget":
+      gtk.set_end_widget(widget);
+      return true;
+    case "GtkCenterBox.StartWidget":
+      gtk.set_start_widget(widget);
+      return true;
+  }
+  return false;
+}
+
+function expanderSlot(gtk: GtkExpander, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "GtkExpander.LabelWidget":
+      gtk.set_label_widget(widget);
+      return true;
+  }
+  return false;
+}
+
+function frameSlot(gtk: GtkFrame, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "GtkFrame.LabelWidget":
+      gtk.set_label_widget(widget);
+      return true;
+  }
+  return false;
+}
+
+function headerBarSlot(gtk: GtkHeaderBar, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "GtkHeaderBar.TitleWidget":
+      gtk.set_title_widget(widget);
+      return true;
+  }
+  return false;
+}
+
+function menuButtonSlot(gtk: GtkMenuButton, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "GtkMenuButton.Popover":
+      gtk.set_popover(widget);
+      return true;
+  }
+  return false;
+}
+
+function panedSlot(gtk: GtkPaned, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "GtkPaned.EndChild":
+      gtk.set_end_child(widget);
+      return true;
+    case "GtkPaned.StartChild":
+      gtk.set_start_child(widget);
+      return true;
+  }
+  return false;
+}
+
+function popoverBinSlot(gtk: GtkPopoverBin, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "GtkPopoverBin.Popover":
+      gtk.set_popover(widget);
+      return true;
+  }
+  return false;
+}
+
 // ---- nodes ------------------------------------------------------------------
 
 /** `<AboutDialog>`: a GtkAboutDialog. */
-export class AboutDialogNode extends HostNode {
+export class AboutDialogNode extends WidgetNode {
   readonly gtk: GtkAboutDialog;
 
   constructor() {
@@ -6290,18 +6668,21 @@ export class AboutDialogNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return aboutDialogSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return windowSlot(this.gtk, slot, widget);
+  }
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<ActionBar>`: a GtkActionBar. */
-export class ActionBarNode extends HostNode {
+export class ActionBarNode extends WidgetNode {
   readonly gtk: GtkActionBar;
 
   constructor() {
@@ -6318,7 +6699,7 @@ export class ActionBarNode extends HostNode {
 }
 
 /** `<ApplicationWindow>`: a GtkApplicationWindow. */
-export class ApplicationWindowNode extends HostNode {
+export class ApplicationWindowNode extends WidgetNode {
   readonly gtk: GtkApplicationWindow;
 
   constructor() {
@@ -6332,18 +6713,21 @@ export class ApplicationWindowNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return applicationWindowSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return windowSlot(this.gtk, slot, widget);
+  }
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<AspectFrame>`: a GtkAspectFrame. */
-export class AspectFrameNode extends HostNode {
+export class AspectFrameNode extends WidgetNode {
   readonly gtk: GtkAspectFrame;
 
   constructor() {
@@ -6357,18 +6741,18 @@ export class AspectFrameNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return aspectFrameSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Box>`: a GtkBox. */
-export class BoxNode extends HostNode {
+export class BoxNode extends WidgetNode {
   readonly gtk: GtkBox;
 
   constructor() {
@@ -6382,10 +6766,10 @@ export class BoxNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return boxSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.gtk.append(child.widget);
   }
-  insertBefore(child: HostNode, before: HostNode): void {
+  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
     // GTK places a child after a sibling; React places it before one. A
     // child already here is a move -- a keyed list reordered.
     const after = before.widget.get_prev_sibling();
@@ -6397,13 +6781,13 @@ export class BoxNode extends HostNode {
       this.gtk.insert_child_after(child.widget, after);
     }
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.remove(child.widget);
   }
 }
 
 /** `<Button>`: a GtkButton. */
-export class ButtonNode extends HostNode {
+export class ButtonNode extends WidgetNode {
   readonly gtk: GtkButton;
 
   constructor() {
@@ -6417,18 +6801,18 @@ export class ButtonNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return buttonSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Calendar>`: a GtkCalendar. */
-export class CalendarNode extends HostNode {
+export class CalendarNode extends WidgetNode {
   readonly gtk: GtkCalendar;
 
   constructor() {
@@ -6445,7 +6829,7 @@ export class CalendarNode extends HostNode {
 }
 
 /** `<CenterBox>`: a GtkCenterBox. */
-export class CenterBoxNode extends HostNode {
+export class CenterBoxNode extends WidgetNode {
   readonly gtk: GtkCenterBox;
 
   constructor() {
@@ -6459,10 +6843,13 @@ export class CenterBoxNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return centerBoxSignal(this.gtk, key, slot);
   }
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return centerBoxSlot(this.gtk, slot, widget);
+  }
 }
 
 /** `<CheckButton>`: a GtkCheckButton. */
-export class CheckButtonNode extends HostNode {
+export class CheckButtonNode extends WidgetNode {
   readonly gtk: GtkCheckButton;
 
   constructor() {
@@ -6483,18 +6870,18 @@ export class CheckButtonNode extends HostNode {
     }
     return undefined;
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<ColorDialogButton>`: a GtkColorDialogButton. */
-export class ColorDialogButtonNode extends HostNode {
+export class ColorDialogButtonNode extends WidgetNode {
   readonly gtk: GtkColorDialogButton;
 
   constructor() {
@@ -6511,7 +6898,7 @@ export class ColorDialogButtonNode extends HostNode {
 }
 
 /** `<ColumnView>`: a GtkColumnView. */
-export class ColumnViewNode extends HostNode {
+export class ColumnViewNode extends WidgetNode {
   readonly gtk: GtkColumnView;
 
   constructor() {
@@ -6528,7 +6915,7 @@ export class ColumnViewNode extends HostNode {
 }
 
 /** `<DragIcon>`: a GtkDragIcon. */
-export class DragIconNode extends HostNode {
+export class DragIconNode extends WidgetNode {
   readonly gtk: GtkDragIcon;
 
   constructor() {
@@ -6542,18 +6929,18 @@ export class DragIconNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return dragIconSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<DrawingArea>`: a GtkDrawingArea. */
-export class DrawingAreaNode extends HostNode {
+export class DrawingAreaNode extends WidgetNode {
   readonly gtk: GtkDrawingArea;
 
   constructor() {
@@ -6570,7 +6957,7 @@ export class DrawingAreaNode extends HostNode {
 }
 
 /** `<DropDown>`: a GtkDropDown. */
-export class DropDownNode extends HostNode {
+export class DropDownNode extends WidgetNode {
   readonly gtk: GtkDropDown;
 
   constructor() {
@@ -6594,7 +6981,7 @@ export class DropDownNode extends HostNode {
 }
 
 /** `<EditableLabel>`: a GtkEditableLabel. */
-export class EditableLabelNode extends HostNode {
+export class EditableLabelNode extends WidgetNode {
   readonly gtk: GtkEditableLabel;
 
   constructor() {
@@ -6618,7 +7005,7 @@ export class EditableLabelNode extends HostNode {
 }
 
 /** `<EmojiChooser>`: a GtkEmojiChooser. */
-export class EmojiChooserNode extends HostNode {
+export class EmojiChooserNode extends WidgetNode {
   readonly gtk: GtkEmojiChooser;
 
   constructor() {
@@ -6632,18 +7019,18 @@ export class EmojiChooserNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return emojiChooserSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Entry>`: a GtkEntry. */
-export class EntryNode extends HostNode {
+export class EntryNode extends WidgetNode {
   readonly gtk: GtkEntry;
 
   constructor() {
@@ -6667,7 +7054,7 @@ export class EntryNode extends HostNode {
 }
 
 /** `<Expander>`: a GtkExpander. */
-export class ExpanderNode extends HostNode {
+export class ExpanderNode extends WidgetNode {
   readonly gtk: GtkExpander;
 
   constructor() {
@@ -6681,6 +7068,9 @@ export class ExpanderNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return expanderSignal(this.gtk, key, slot);
   }
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return expanderSlot(this.gtk, slot, widget);
+  }
   readControlled(key: string): unknown {
     switch (key) {
       case "expanded":
@@ -6688,18 +7078,18 @@ export class ExpanderNode extends HostNode {
     }
     return undefined;
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Fixed>`: a GtkFixed. */
-export class FixedNode extends HostNode {
+export class FixedNode extends WidgetNode {
   readonly gtk: GtkFixed;
 
   constructor() {
@@ -6716,7 +7106,7 @@ export class FixedNode extends HostNode {
 }
 
 /** `<FlowBox>`: a GtkFlowBox. */
-export class FlowBoxNode extends HostNode {
+export class FlowBoxNode extends WidgetNode {
   readonly gtk: GtkFlowBox;
 
   constructor() {
@@ -6733,18 +7123,18 @@ export class FlowBoxNode extends HostNode {
   // A list places a child at an index, and holds a child that is not a
   // row in a row it makes for it: React's order of the children gives the
   // index, and what the list holds for each is what moves or goes.
-  private readonly items: HostNode[] = [];
+  private readonly items: WidgetNode[] = [];
   private readonly placed: GtkWidget[] = [];
-  private held(child: HostNode): GtkWidget {
+  private held(child: WidgetNode): GtkWidget {
     const parent = child.widget.get_parent();
     return parent !== null && parent !== this.gtk ? parent : child.widget;
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.gtk.append(child.widget);
     this.items.push(child);
     this.placed.push(this.held(child));
   }
-  insertBefore(child: HostNode, before: HostNode): void {
+  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
     const at = this.items.indexOf(child);
     if (at >= 0) {
       // A move. A row the list made is its own: it goes when removed, so the
@@ -6761,7 +7151,7 @@ export class FlowBoxNode extends HostNode {
     insertAt(this.items, index, child);
     insertAt(this.placed, index, this.held(child));
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     const at = this.items.indexOf(child);
     if (at >= 0) {
       this.gtk.remove(this.placed[at]!);
@@ -6772,7 +7162,7 @@ export class FlowBoxNode extends HostNode {
 }
 
 /** `<FlowBoxChild>`: a GtkFlowBoxChild. */
-export class FlowBoxChildNode extends HostNode {
+export class FlowBoxChildNode extends WidgetNode {
   readonly gtk: GtkFlowBoxChild;
 
   constructor() {
@@ -6786,18 +7176,18 @@ export class FlowBoxChildNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return flowBoxChildSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<FontDialogButton>`: a GtkFontDialogButton. */
-export class FontDialogButtonNode extends HostNode {
+export class FontDialogButtonNode extends WidgetNode {
   readonly gtk: GtkFontDialogButton;
 
   constructor() {
@@ -6814,7 +7204,7 @@ export class FontDialogButtonNode extends HostNode {
 }
 
 /** `<Frame>`: a GtkFrame. */
-export class FrameNode extends HostNode {
+export class FrameNode extends WidgetNode {
   readonly gtk: GtkFrame;
 
   constructor() {
@@ -6828,18 +7218,21 @@ export class FrameNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return frameSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return frameSlot(this.gtk, slot, widget);
+  }
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<GLArea>`: a GtkGLArea. */
-export class GLAreaNode extends HostNode {
+export class GLAreaNode extends WidgetNode {
   readonly gtk: GtkGLArea;
 
   constructor() {
@@ -6856,7 +7249,7 @@ export class GLAreaNode extends HostNode {
 }
 
 /** `<GraphicsOffload>`: a GtkGraphicsOffload. */
-export class GraphicsOffloadNode extends HostNode {
+export class GraphicsOffloadNode extends WidgetNode {
   readonly gtk: GtkGraphicsOffload;
 
   constructor() {
@@ -6870,18 +7263,18 @@ export class GraphicsOffloadNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return graphicsOffloadSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Grid>`: a GtkGrid. */
-export class GridNode extends HostNode {
+export class GridNode extends WidgetNode {
   readonly gtk: GtkGrid;
 
   constructor() {
@@ -6898,7 +7291,7 @@ export class GridNode extends HostNode {
 }
 
 /** `<GridView>`: a GtkGridView. */
-export class GridViewNode extends HostNode {
+export class GridViewNode extends WidgetNode {
   readonly gtk: GtkGridView;
 
   constructor() {
@@ -6915,7 +7308,7 @@ export class GridViewNode extends HostNode {
 }
 
 /** `<HeaderBar>`: a GtkHeaderBar. */
-export class HeaderBarNode extends HostNode {
+export class HeaderBarNode extends WidgetNode {
   readonly gtk: GtkHeaderBar;
 
   constructor() {
@@ -6929,10 +7322,13 @@ export class HeaderBarNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return headerBarSignal(this.gtk, key, slot);
   }
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return headerBarSlot(this.gtk, slot, widget);
+  }
 }
 
 /** `<Image>`: a GtkImage. */
-export class ImageNode extends HostNode {
+export class ImageNode extends WidgetNode {
   readonly gtk: GtkImage;
 
   constructor() {
@@ -6949,7 +7345,7 @@ export class ImageNode extends HostNode {
 }
 
 /** `<Inscription>`: a GtkInscription. */
-export class InscriptionNode extends HostNode {
+export class InscriptionNode extends WidgetNode {
   readonly gtk: GtkInscription;
 
   constructor() {
@@ -6966,7 +7362,7 @@ export class InscriptionNode extends HostNode {
 }
 
 /** `<Label>`: a GtkLabel. */
-export class LabelNode extends HostNode {
+export class LabelNode extends WidgetNode {
   readonly gtk: GtkLabel;
 
   constructor() {
@@ -6983,7 +7379,7 @@ export class LabelNode extends HostNode {
 }
 
 /** `<LevelBar>`: a GtkLevelBar. */
-export class LevelBarNode extends HostNode {
+export class LevelBarNode extends WidgetNode {
   readonly gtk: GtkLevelBar;
 
   constructor() {
@@ -7000,7 +7396,7 @@ export class LevelBarNode extends HostNode {
 }
 
 /** `<LinkButton>`: a GtkLinkButton. */
-export class LinkButtonNode extends HostNode {
+export class LinkButtonNode extends WidgetNode {
   readonly gtk: GtkLinkButton;
 
   constructor() {
@@ -7014,18 +7410,18 @@ export class LinkButtonNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return linkButtonSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<ListBox>`: a GtkListBox. */
-export class ListBoxNode extends HostNode {
+export class ListBoxNode extends WidgetNode {
   readonly gtk: GtkListBox;
 
   constructor() {
@@ -7042,18 +7438,18 @@ export class ListBoxNode extends HostNode {
   // A list places a child at an index, and holds a child that is not a
   // row in a row it makes for it: React's order of the children gives the
   // index, and what the list holds for each is what moves or goes.
-  private readonly items: HostNode[] = [];
+  private readonly items: WidgetNode[] = [];
   private readonly placed: GtkWidget[] = [];
-  private held(child: HostNode): GtkWidget {
+  private held(child: WidgetNode): GtkWidget {
     const parent = child.widget.get_parent();
     return parent !== null && parent !== this.gtk ? parent : child.widget;
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.gtk.append(child.widget);
     this.items.push(child);
     this.placed.push(this.held(child));
   }
-  insertBefore(child: HostNode, before: HostNode): void {
+  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
     const at = this.items.indexOf(child);
     if (at >= 0) {
       // A move. A row the list made is its own: it goes when removed, so the
@@ -7070,7 +7466,7 @@ export class ListBoxNode extends HostNode {
     insertAt(this.items, index, child);
     insertAt(this.placed, index, this.held(child));
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     const at = this.items.indexOf(child);
     if (at >= 0) {
       this.gtk.remove(this.placed[at]!);
@@ -7081,7 +7477,7 @@ export class ListBoxNode extends HostNode {
 }
 
 /** `<ListBoxRow>`: a GtkListBoxRow. */
-export class ListBoxRowNode extends HostNode {
+export class ListBoxRowNode extends WidgetNode {
   readonly gtk: GtkListBoxRow;
 
   constructor() {
@@ -7095,18 +7491,18 @@ export class ListBoxRowNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return listBoxRowSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<ListView>`: a GtkListView. */
-export class ListViewNode extends HostNode {
+export class ListViewNode extends WidgetNode {
   readonly gtk: GtkListView;
 
   constructor() {
@@ -7123,7 +7519,7 @@ export class ListViewNode extends HostNode {
 }
 
 /** `<MediaControls>`: a GtkMediaControls. */
-export class MediaControlsNode extends HostNode {
+export class MediaControlsNode extends WidgetNode {
   readonly gtk: GtkMediaControls;
 
   constructor() {
@@ -7140,7 +7536,7 @@ export class MediaControlsNode extends HostNode {
 }
 
 /** `<MenuButton>`: a GtkMenuButton. */
-export class MenuButtonNode extends HostNode {
+export class MenuButtonNode extends WidgetNode {
   readonly gtk: GtkMenuButton;
 
   constructor() {
@@ -7154,18 +7550,21 @@ export class MenuButtonNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return menuButtonSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return menuButtonSlot(this.gtk, slot, widget);
+  }
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Notebook>`: a GtkNotebook. */
-export class NotebookNode extends HostNode {
+export class NotebookNode extends WidgetNode {
   readonly gtk: GtkNotebook;
 
   constructor() {
@@ -7182,7 +7581,7 @@ export class NotebookNode extends HostNode {
 }
 
 /** `<Overlay>`: a GtkOverlay. */
-export class OverlayNode extends HostNode {
+export class OverlayNode extends WidgetNode {
   readonly gtk: GtkOverlay;
 
   constructor() {
@@ -7196,18 +7595,18 @@ export class OverlayNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return overlaySignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Paned>`: a GtkPaned. */
-export class PanedNode extends HostNode {
+export class PanedNode extends WidgetNode {
   readonly gtk: GtkPaned;
 
   constructor() {
@@ -7221,10 +7620,13 @@ export class PanedNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return panedSignal(this.gtk, key, slot);
   }
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return panedSlot(this.gtk, slot, widget);
+  }
 }
 
 /** `<PasswordEntry>`: a GtkPasswordEntry. */
-export class PasswordEntryNode extends HostNode {
+export class PasswordEntryNode extends WidgetNode {
   readonly gtk: GtkPasswordEntry;
 
   constructor() {
@@ -7248,7 +7650,7 @@ export class PasswordEntryNode extends HostNode {
 }
 
 /** `<Picture>`: a GtkPicture. */
-export class PictureNode extends HostNode {
+export class PictureNode extends WidgetNode {
   readonly gtk: GtkPicture;
 
   constructor() {
@@ -7265,7 +7667,7 @@ export class PictureNode extends HostNode {
 }
 
 /** `<Popover>`: a GtkPopover. */
-export class PopoverNode extends HostNode {
+export class PopoverNode extends WidgetNode {
   readonly gtk: GtkPopover;
 
   constructor() {
@@ -7279,18 +7681,18 @@ export class PopoverNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return popoverSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<PopoverBin>`: a GtkPopoverBin. */
-export class PopoverBinNode extends HostNode {
+export class PopoverBinNode extends WidgetNode {
   readonly gtk: GtkPopoverBin;
 
   constructor() {
@@ -7304,18 +7706,21 @@ export class PopoverBinNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return popoverBinSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return popoverBinSlot(this.gtk, slot, widget);
+  }
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<PopoverMenu>`: a GtkPopoverMenu. */
-export class PopoverMenuNode extends HostNode {
+export class PopoverMenuNode extends WidgetNode {
   readonly gtk: GtkPopoverMenu;
 
   constructor() {
@@ -7329,18 +7734,18 @@ export class PopoverMenuNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return popoverMenuSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<PopoverMenuBar>`: a GtkPopoverMenuBar. */
-export class PopoverMenuBarNode extends HostNode {
+export class PopoverMenuBarNode extends WidgetNode {
   readonly gtk: GtkPopoverMenuBar;
 
   constructor() {
@@ -7357,7 +7762,7 @@ export class PopoverMenuBarNode extends HostNode {
 }
 
 /** `<ProgressBar>`: a GtkProgressBar. */
-export class ProgressBarNode extends HostNode {
+export class ProgressBarNode extends WidgetNode {
   readonly gtk: GtkProgressBar;
 
   constructor() {
@@ -7374,7 +7779,7 @@ export class ProgressBarNode extends HostNode {
 }
 
 /** `<Range>`: a GtkRange. */
-export class RangeNode extends HostNode {
+export class RangeNode extends WidgetNode {
   readonly gtk: GtkRange;
 
   constructor() {
@@ -7391,7 +7796,7 @@ export class RangeNode extends HostNode {
 }
 
 /** `<Revealer>`: a GtkRevealer. */
-export class RevealerNode extends HostNode {
+export class RevealerNode extends WidgetNode {
   readonly gtk: GtkRevealer;
 
   constructor() {
@@ -7405,18 +7810,18 @@ export class RevealerNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return revealerSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Scale>`: a GtkScale. */
-export class ScaleNode extends HostNode {
+export class ScaleNode extends WidgetNode {
   readonly gtk: GtkScale;
 
   constructor() {
@@ -7433,7 +7838,7 @@ export class ScaleNode extends HostNode {
 }
 
 /** `<ScaleButton>`: a GtkScaleButton. */
-export class ScaleButtonNode extends HostNode {
+export class ScaleButtonNode extends WidgetNode {
   readonly gtk: GtkScaleButton;
 
   constructor() {
@@ -7450,7 +7855,7 @@ export class ScaleButtonNode extends HostNode {
 }
 
 /** `<Scrollbar>`: a GtkScrollbar. */
-export class ScrollbarNode extends HostNode {
+export class ScrollbarNode extends WidgetNode {
   readonly gtk: GtkScrollbar;
 
   constructor() {
@@ -7467,7 +7872,7 @@ export class ScrollbarNode extends HostNode {
 }
 
 /** `<ScrolledWindow>`: a GtkScrolledWindow. */
-export class ScrolledWindowNode extends HostNode {
+export class ScrolledWindowNode extends WidgetNode {
   readonly gtk: GtkScrolledWindow;
 
   constructor() {
@@ -7481,18 +7886,18 @@ export class ScrolledWindowNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return scrolledWindowSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<SearchBar>`: a GtkSearchBar. */
-export class SearchBarNode extends HostNode {
+export class SearchBarNode extends WidgetNode {
   readonly gtk: GtkSearchBar;
 
   constructor() {
@@ -7506,18 +7911,18 @@ export class SearchBarNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return searchBarSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<SearchEntry>`: a GtkSearchEntry. */
-export class SearchEntryNode extends HostNode {
+export class SearchEntryNode extends WidgetNode {
   readonly gtk: GtkSearchEntry;
 
   constructor() {
@@ -7541,7 +7946,7 @@ export class SearchEntryNode extends HostNode {
 }
 
 /** `<Separator>`: a GtkSeparator. */
-export class SeparatorNode extends HostNode {
+export class SeparatorNode extends WidgetNode {
   readonly gtk: GtkSeparator;
 
   constructor() {
@@ -7558,7 +7963,7 @@ export class SeparatorNode extends HostNode {
 }
 
 /** `<SpinButton>`: a GtkSpinButton. */
-export class SpinButtonNode extends HostNode {
+export class SpinButtonNode extends WidgetNode {
   readonly gtk: GtkSpinButton;
 
   constructor() {
@@ -7584,7 +7989,7 @@ export class SpinButtonNode extends HostNode {
 }
 
 /** `<Spinner>`: a GtkSpinner. */
-export class SpinnerNode extends HostNode {
+export class SpinnerNode extends WidgetNode {
   readonly gtk: GtkSpinner;
 
   constructor() {
@@ -7601,7 +8006,7 @@ export class SpinnerNode extends HostNode {
 }
 
 /** `<Stack>`: a GtkStack. */
-export class StackNode extends HostNode {
+export class StackNode extends WidgetNode {
   readonly gtk: GtkStack;
 
   constructor() {
@@ -7618,7 +8023,7 @@ export class StackNode extends HostNode {
 }
 
 /** `<StackSidebar>`: a GtkStackSidebar. */
-export class StackSidebarNode extends HostNode {
+export class StackSidebarNode extends WidgetNode {
   readonly gtk: GtkStackSidebar;
 
   constructor() {
@@ -7635,7 +8040,7 @@ export class StackSidebarNode extends HostNode {
 }
 
 /** `<StackSwitcher>`: a GtkStackSwitcher. */
-export class StackSwitcherNode extends HostNode {
+export class StackSwitcherNode extends WidgetNode {
   readonly gtk: GtkStackSwitcher;
 
   constructor() {
@@ -7652,7 +8057,7 @@ export class StackSwitcherNode extends HostNode {
 }
 
 /** `<Switch>`: a GtkSwitch. */
-export class SwitchNode extends HostNode {
+export class SwitchNode extends WidgetNode {
   readonly gtk: GtkSwitch;
 
   constructor() {
@@ -7676,7 +8081,7 @@ export class SwitchNode extends HostNode {
 }
 
 /** `<Text>`: a GtkText. */
-export class TextNode extends HostNode {
+export class TextNode extends WidgetNode {
   readonly gtk: GtkText;
 
   constructor() {
@@ -7700,7 +8105,7 @@ export class TextNode extends HostNode {
 }
 
 /** `<TextView>`: a GtkTextView. */
-export class TextViewNode extends HostNode {
+export class TextViewNode extends WidgetNode {
   readonly gtk: GtkTextView;
 
   constructor() {
@@ -7717,7 +8122,7 @@ export class TextViewNode extends HostNode {
 }
 
 /** `<ToggleButton>`: a GtkToggleButton. */
-export class ToggleButtonNode extends HostNode {
+export class ToggleButtonNode extends WidgetNode {
   readonly gtk: GtkToggleButton;
 
   constructor() {
@@ -7738,18 +8143,18 @@ export class ToggleButtonNode extends HostNode {
     }
     return undefined;
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<TreeExpander>`: a GtkTreeExpander. */
-export class TreeExpanderNode extends HostNode {
+export class TreeExpanderNode extends WidgetNode {
   readonly gtk: GtkTreeExpander;
 
   constructor() {
@@ -7763,18 +8168,18 @@ export class TreeExpanderNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return treeExpanderSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Video>`: a GtkVideo. */
-export class VideoNode extends HostNode {
+export class VideoNode extends WidgetNode {
   readonly gtk: GtkVideo;
 
   constructor() {
@@ -7791,7 +8196,7 @@ export class VideoNode extends HostNode {
 }
 
 /** `<Viewport>`: a GtkViewport. */
-export class ViewportNode extends HostNode {
+export class ViewportNode extends WidgetNode {
   readonly gtk: GtkViewport;
 
   constructor() {
@@ -7805,18 +8210,18 @@ export class ViewportNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return viewportSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<Window>`: a GtkWindow. */
-export class WindowNode extends HostNode {
+export class WindowNode extends WidgetNode {
   readonly gtk: GtkWindow;
 
   constructor() {
@@ -7830,18 +8235,21 @@ export class WindowNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return windowSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return windowSlot(this.gtk, slot, widget);
+  }
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
 /** `<WindowControls>`: a GtkWindowControls. */
-export class WindowControlsNode extends HostNode {
+export class WindowControlsNode extends WidgetNode {
   readonly gtk: GtkWindowControls;
 
   constructor() {
@@ -7858,7 +8266,7 @@ export class WindowControlsNode extends HostNode {
 }
 
 /** `<WindowHandle>`: a GtkWindowHandle. */
-export class WindowHandleNode extends HostNode {
+export class WindowHandleNode extends WidgetNode {
   readonly gtk: GtkWindowHandle;
 
   constructor() {
@@ -7872,17 +8280,20 @@ export class WindowHandleNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return windowHandleSignal(this.gtk, key, slot);
   }
-  appendChild(child: HostNode): void {
+  protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
-  removeChild(child: HostNode): void {
+  protected unplace(child: WidgetNode): void {
     this.gtk.set_child(null);
     this.release(child);
   }
 }
 
-/** A new node for the host type `type` (`GtkButton`), or null when there is no such widget. */
+/**
+ * A new node for the host type `type` (`GtkButton`, or a slot element's
+ * `GtkPaned.StartChild`), or null when there is no such element.
+ */
 export function createNode(type: string): HostNode | null {
   switch (type) {
     case "GtkAboutDialog":
@@ -8029,6 +8440,18 @@ export function createNode(type: string): HostNode | null {
       return new WindowControlsNode();
     case "GtkWindowHandle":
       return new WindowHandleNode();
+    case "GtkWindow.Titlebar":
+    case "GtkCenterBox.CenterWidget":
+    case "GtkCenterBox.EndWidget":
+    case "GtkCenterBox.StartWidget":
+    case "GtkExpander.LabelWidget":
+    case "GtkFrame.LabelWidget":
+    case "GtkHeaderBar.TitleWidget":
+    case "GtkMenuButton.Popover":
+    case "GtkPaned.EndChild":
+    case "GtkPaned.StartChild":
+    case "GtkPopoverBin.Popover":
+      return new SlotNode(type);
   }
   return null;
 }

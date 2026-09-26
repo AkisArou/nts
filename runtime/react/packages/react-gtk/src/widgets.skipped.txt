@@ -24,21 +24,14 @@ GtkCellEditable.editing-canceled	no setter in the bindings
 GtkCellView.cell-area	construct-only: a change would need a new widget
 GtkCellView.cell-area-context	construct-only: a change would need a new widget
 GtkCellView.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
-GtkCenterBox.center-widget	a widget slot: placing a child there waits for slot elements
-GtkCenterBox.end-widget	a widget slot: placing a child there waits for slot elements
-GtkCenterBox.start-widget	a widget slot: placing a child there waits for slot elements
-GtkColorButton.show-editor	no setter in the bindings
 GtkColorChooser.rgba	deprecated
 GtkColorChooser.use-alpha	deprecated
 GtkColorChooser::color-activated	deprecated
-GtkColorChooserDialog.show-editor	no setter in the bindings
-GtkColorChooserWidget.show-editor	no setter in the bindings
 GtkColorDialogButton.dialog	removing it leaves its value: GIR gives no default
 GtkColorDialogButton.rgba	a Const<GdkRGBA>, which a JSX attribute does not carry yet
 GtkColumnView.model	a GtkSelectionModel | null, which a JSX attribute does not carry yet
 GtkComboBox.active-id	no setter in the bindings
 GtkComboBox.has-entry	construct-only: a change would need a new widget
-GtkComboBox.has-frame	no setter in the bindings
 GtkComboBox.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
 GtkComboBox::format-entry-text	no connect overload in the bindings
 GtkDialog.use-header-bar	construct-only: a change would need a new widget
@@ -46,40 +39,28 @@ GtkDialog::close	deprecated
 GtkDialog::response	deprecated
 GtkDropDown.expression	a GtkExpression | null, which a JSX attribute does not carry yet
 GtkDropDown.model	a GListModel | null, which a JSX attribute does not carry yet
-GtkEditableLabel.editing	no setter in the bindings
 GtkEntry.attributes	a PangoAttrList, which a JSX attribute does not carry yet
 GtkEntry.buffer	removing it leaves its value: GIR gives no default
 GtkEntry.completion	deprecated
-GtkEntry.enable-emoji-completion	no setter in the bindings
 GtkEntry.im-module	no setter in the bindings
 GtkEntry.input-hints	no setter in the bindings
-GtkEntry.invisible-char-set	no setter in the bindings
 GtkEntry.menu-entry-icon-primary-text	no setter in the bindings
 GtkEntry.menu-entry-icon-secondary-text	no setter in the bindings
-GtkEntry.primary-icon-activatable	no setter in the bindings
-GtkEntry.primary-icon-gicon	no setter in the bindings
+GtkEntry.primary-icon-gicon	a GIcon, which a JSX attribute does not carry yet
 GtkEntry.primary-icon-name	no setter in the bindings
-GtkEntry.primary-icon-paintable	no setter in the bindings
-GtkEntry.primary-icon-sensitive	no setter in the bindings
+GtkEntry.primary-icon-paintable	a GdkPaintable, which a JSX attribute does not carry yet
 GtkEntry.primary-icon-tooltip-markup	no setter in the bindings
 GtkEntry.primary-icon-tooltip-text	no setter in the bindings
-GtkEntry.secondary-icon-activatable	no setter in the bindings
-GtkEntry.secondary-icon-gicon	no setter in the bindings
+GtkEntry.secondary-icon-gicon	a GIcon, which a JSX attribute does not carry yet
 GtkEntry.secondary-icon-name	no setter in the bindings
-GtkEntry.secondary-icon-paintable	no setter in the bindings
-GtkEntry.secondary-icon-sensitive	no setter in the bindings
+GtkEntry.secondary-icon-paintable	a GdkPaintable, which a JSX attribute does not carry yet
 GtkEntry.secondary-icon-tooltip-markup	no setter in the bindings
 GtkEntry.secondary-icon-tooltip-text	no setter in the bindings
-GtkEntry.show-emoji-icon	no setter in the bindings
 GtkEntry.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
-GtkEntry.truncate-multiline	no setter in the bindings
-GtkExpander.label-widget	a widget slot: placing a child there waits for slot elements
 GtkFileChooser.action	deprecated
 GtkFileChooser.create-folders	deprecated
 GtkFileChooser.filter	deprecated
 GtkFileChooser.select-multiple	deprecated
-GtkFileChooserWidget.search-mode	no setter in the bindings
-GtkFlowBox.accept-unpaired-release	no setter in the bindings
 GtkFontChooser.font	deprecated
 GtkFontChooser.font-desc	deprecated
 GtkFontChooser.language	deprecated
@@ -90,26 +71,21 @@ GtkFontChooser::font-activated	deprecated
 GtkFontDialogButton.dialog	removing it leaves its value: GIR gives no default
 GtkFontDialogButton.font-desc	a Const<PangoFontDescription>, which a JSX attribute does not carry yet
 GtkFontDialogButton.language	a PangoLanguage | null, which a JSX attribute does not carry yet
-GtkFrame.label-widget	a widget slot: placing a child there waits for slot elements
 GtkGLArea.allowed-apis	no setter in the bindings
 GtkGLArea.use-es	deprecated
 GtkGLArea::create-context	its handler returns a GdkGLContext: not generated yet
 GtkGLArea::render	a handler argument JSX cannot type yet: GdkGLContext
 GtkGridView.model	a GtkSelectionModel | null, which a JSX attribute does not carry yet
-GtkHeaderBar.title-widget	a widget slot: placing a child there waits for slot elements
 GtkIconView.cell-area	construct-only: a change would need a new widget
 GtkIconView.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
 GtkImage.file	no setter in the bindings
 GtkImage.gicon	a GIcon, which a JSX attribute does not carry yet
 GtkImage.paintable	a GdkPaintable | null, which a JSX attribute does not carry yet
 GtkImage.resource	no setter in the bindings
-GtkImage.use-fallback	no setter in the bindings
 GtkInscription.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 GtkLabel.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 GtkLabel.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
 GtkLevelBar::offset-changed	no connect overload in the bindings
-GtkListBase.orientation	no setter in the bindings
-GtkListBox.accept-unpaired-release	no setter in the bindings
 GtkListView.model	a GtkSelectionModel | null, which a JSX attribute does not carry yet
 GtkLockButton.permission	deprecated
 GtkLockButton.text-lock	deprecated
@@ -117,26 +93,16 @@ GtkLockButton.text-unlock	deprecated
 GtkLockButton.tooltip-lock	deprecated
 GtkLockButton.tooltip-not-authorized	deprecated
 GtkLockButton.tooltip-unlock	deprecated
-GtkMenuButton.popover	a widget slot: placing a child there waits for slot elements
 GtkMessageDialog.buttons	construct-only: a change would need a new widget
-GtkMessageDialog.message-type	no setter in the bindings
 GtkMessageDialog.secondary-text	no setter in the bindings
-GtkMessageDialog.secondary-use-markup	no setter in the bindings
 GtkMessageDialog.text	no setter in the bindings
-GtkMessageDialog.use-markup	no setter in the bindings
-GtkNotebook.enable-popup	no setter in the bindings
 GtkNotebook::create-window	its handler returns a GtkNotebook | null: not generated yet
 GtkOverlay::get-child-position	a handler argument JSX cannot type yet: GtkWidget, GdkRectangle
-GtkPaned.end-child	a widget slot: placing a child there waits for slot elements
-GtkPaned.position-set	no setter in the bindings
-GtkPaned.start-child	a widget slot: placing a child there waits for slot elements
-GtkPasswordEntry.activates-default	no setter in the bindings
 GtkPasswordEntry.placeholder-text	no setter in the bindings
 GtkPicture.file	a GFile | null, which a JSX attribute does not carry yet
 GtkPicture.keep-aspect-ratio	deprecated
 GtkPicture.paintable	a GdkPaintable | null, which a JSX attribute does not carry yet
 GtkPopover.pointing-to	a Const<GdkRectangle> | null, which a JSX attribute does not carry yet
-GtkPopoverBin.popover	a widget slot: placing a child there waits for slot elements
 GtkPopoverMenu.flags	no setter in the bindings
 GtkPopoverMenu.visible-submenu	no setter in the bindings
 GtkPrintUnixDialog.current-page	no setter in the bindings
@@ -149,9 +115,6 @@ GtkPrintUnixDialog.support-selection	no setter in the bindings
 GtkRange.adjustment	removing it leaves its value: GIR gives no default
 GtkScaleButton.adjustment	removing it leaves its value: GIR gives no default
 GtkScaleButton.icons	a CStrings<"const">, which a JSX attribute does not carry yet
-GtkScrolledWindow.hscrollbar-policy	no setter in the bindings
-GtkScrolledWindow.vscrollbar-policy	no setter in the bindings
-GtkSearchEntry.activates-default	no setter in the bindings
 GtkSearchEntry.input-hints	no setter in the bindings
 GtkShortcutLabel.accelerator	deprecated
 GtkShortcutLabel.disabled-text	deprecated
@@ -181,7 +144,7 @@ GtkShortcutsWindow::close	deprecated
 GtkShortcutsWindow::search	deprecated
 GtkSpinButton.adjustment	removing it leaves its value: GIR gives no default
 GtkSpinButton::input	its handler returns a CNumber<"int">: not generated yet
-GtkStack.visible-child	a widget slot: placing a child there waits for slot elements
+GtkStack.visible-child	removing it leaves its value: GIR gives no default
 GtkStackSidebar.stack	removing it leaves its value: GIR gives no default
 GtkStatusbar::text-popped	deprecated
 GtkStatusbar::text-pushed	deprecated
@@ -189,24 +152,15 @@ GtkText.attributes	a PangoAttrList | null, which a JSX attribute does not carry 
 GtkText.buffer	removing it leaves its value: GIR gives no default
 GtkText.im-module	no setter in the bindings
 GtkText.input-hints	no setter in the bindings
-GtkText.invisible-char-set	no setter in the bindings
 GtkText.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
 GtkTextView.im-module	no setter in the bindings
 GtkTextView.input-hints	no setter in the bindings
 GtkTextView.tabs	a PangoTabArray, which a JSX attribute does not carry yet
-GtkTreeView.enable-grid-lines	no setter in the bindings
 GtkTreeView.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
 GtkVideo.file	a GFile | null, which a JSX attribute does not carry yet
 GtkVolumeButton.use-symbolic	deprecated
 GtkWidget.css-classes	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkWidget.css-name	construct-only: a change would need a new widget
-GtkWidget.height-request	no setter in the bindings
 GtkWidget.layout-manager	a Consumed<GtkLayoutManager> | null, which a JSX attribute does not carry yet
-GtkWidget.width-request	no setter in the bindings
-GtkWindow.default-height	no setter in the bindings
-GtkWindow.default-width	no setter in the bindings
 GtkWindow.display	removing it leaves its value: GIR gives no default
-GtkWindow.fullscreened	no setter in the bindings
-GtkWindow.maximized	no setter in the bindings
-GtkWindow.titlebar	a widget slot: placing a child there waits for slot elements
 GtkWindow::keys-changed	deprecated

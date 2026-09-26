@@ -17,8 +17,11 @@
 // when each is a widget, string, number, boolean or enum. A signal whose
 // handler returns GTK's "handled" boolean takes a handler that returns one;
 // with none, the widget's default runs. A prop with a getter also gets
-// `onNotify<Prop>`, called with the property's new value. What is left out is listed, with why, in
-// src/widgets.skipped.txt.
+// `onNotify<Prop>`, called with the property's new value. A widget-typed
+// property either names another widget (a Label's mnemonic widget: a prop
+// holding a ref's `current`) or places one (a Paned's start child: a slot
+// element, `<Paned.StartChild>`, whose child it holds). What is left out is
+// listed, with why, in src/widgets.skipped.txt.
 //
 // Each GIR class gets one function that sets its own props and hands any
 // other key to its parent's, so Widget's props are written once, not once per
@@ -325,6 +328,13 @@ interface Prop {
   reset: string | null;
 }
 
+/** A widget-typed property that places a child: filled by a slot element. */
+interface Slot {
+  jsx: string; // StartChild
+  hostType: string; // GtkPaned.StartChild
+  setter: string; // set_start_child
+}
+
 interface Signal {
   jsx: string; // onClicked
   name: string; // clicked
@@ -368,8 +378,21 @@ interface WidgetType {
   parent: WidgetType | null; // null for Widget
   props: Prop[];
   signals: Signal[];
+  slots: Slot[];
   children: ChildProtocol;
 }
+
+/** The nearest class in `t`'s chain, `t` included, with widget slots of its own. */
+function slotOwner(t: WidgetType): WidgetType | null {
+  let owner: WidgetType | null = t;
+  while (owner !== null && owner.slots.length === 0) {
+    owner = owner.parent;
+  }
+  return owner;
+}
+
+/** `panedSlot` for Paned: the lower-camel name of a class's functions. */
+const lower = (t: WidgetType): string => `${t.jsx.charAt(0).toLowerCase()}${t.jsx.slice(1)}`;
 
 const camel = (name: string): string => name.replace(/[-_](\w)/g, (_, c: string) => c.toUpperCase());
 const tsName = (girName: string): string => `Gtk${girName}`;
@@ -397,10 +420,10 @@ const controlledProps = new Map([
 
 // Widget-typed properties that name another widget rather than place one: an
 // app passes a ref's `current` (a host element's public instance is its
-// widget). The rest of the widget-typed ones place a child in a slot (a
-// Paned's start child, a window's titlebar), which a widget React has already
-// parented cannot fill: those wait for slot elements.
-const widgetReferences = new Set(["mnemonic-widget", "default-widget", "focus-widget", "key-capture-widget"]);
+// widget). A Stack's visible child is one of its children. The rest of the
+// widget-typed ones place a child in a slot (a Paned's start child, a
+// window's titlebar): a slot element, whose child React parents.
+const widgetReferences = new Set(["mnemonic-widget", "default-widget", "focus-widget", "key-capture-widget", "visible-child"]);
 
 // Children arrive as React children, never as a prop.
 const childProps = new Set(["child"]);
@@ -510,9 +533,17 @@ function model(gir: Gir, bindings: Bindings): Model {
     const ts = tsName(t.name);
     const props: Prop[] = [];
     const signals: Signal[] = [];
+    const slots: Slot[] = [];
+    // A class can redeclare a property of an interface it implements
+    // (ListBase's `orientation`, Orientable's): one prop, the class's.
+    const declared = new Set<string>();
     for (const source of ownSources(t)) {
       const sourceTs = tsName(source.name);
       for (const p of source.properties) {
+        if (declared.has(p.name)) {
+          continue;
+        }
+        declared.add(p.name);
         const where = `${sourceTs}.${p.name}`;
         const setter = p.setter ?? `set_${p.name.replace(/-/g, "_")}`;
         const type = bindings.setters.get(sourceTs)?.get(setter);
@@ -526,8 +557,11 @@ function model(gir: Gir, bindings: Bindings): Model {
           skipped.add(`${where}\tdeprecated`);
         } else if (type === undefined) {
           skipped.add(`${where}\tno setter in the bindings`);
-        } else if (value === null && /^GtkWidget( \| null)?$/.test(type)) {
-          skipped.add(`${where}\ta widget slot: placing a child there waits for slot elements`);
+        } else if (value === null && type === "GtkWidget | null") {
+          const jsx = camel(`-${p.name}`);
+          slots.push({ jsx, hostType: `${ts}.${jsx}`, setter });
+        } else if (value === null && type === "GtkWidget") {
+          skipped.add(`${where}\ta widget slot that cannot be emptied: a slot element's child can go`);
         } else if (value === null) {
           skipped.add(`${where}\ta ${type}, which a JSX attribute does not carry yet`);
         } else {
@@ -585,7 +619,7 @@ function model(gir: Gir, bindings: Bindings): Model {
         : takesChild
           ? "single"
           : "none";
-    const type: WidgetType = { gir: t, ts, jsx: t.name, parent, props, signals, children };
+    const type: WidgetType = { gir: t, ts, jsx: t.name, parent, props, signals, slots, children };
     types.set(t.name, type);
     return type;
   };
@@ -595,6 +629,13 @@ function model(gir: Gir, bindings: Bindings): Model {
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(typeOf)
     .filter((w) => !w.gir.abstract && !w.gir.deprecated && bindings.constructible.has(w.ts));
+  // A widget that places children by index would need to find a slot
+  // element's place among them (WidgetNode.insertBefore): none has slots.
+  for (const w of widgets) {
+    if ((w.children === "box" || w.children === "list") && slotOwner(w) !== null) {
+      throw new Error(`${w.ts} places children by index and has widget slots: WidgetNode.insertBefore would misplace one`);
+    }
+  }
   // Only the classes some widget's chain passes through.
   const used = new Set(widgets.flatMap((w) => [...chainOf(w.gir)].map((c) => c.name)));
   return {
@@ -621,7 +662,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line();
   line("__IMPORTS__");
   line('import type { HostComponent } from "shared/ReactHostComponent.ts";');
-  line('import { HostNode, insertAt, type SignalSlot } from "./HostNode.ts";');
+  line('import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";');
   line();
   line("// ---- props: what JSX checks -------------------------------------------------");
   line();
@@ -652,10 +693,23 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line("//");
   line("// Declared, never defined: the React stage lowers `<Button />` to");
   line('// `jsx("GtkButton", props)`, so a widget costs no component of its own.');
+  line("// A widget with slots names its slot elements as members:");
+  line('// `<Paned.StartChild>` lowers to `jsx("GtkPaned.StartChild", props)`.');
+  for (const t of m.types.filter((t) => t.slots.length > 0)) {
+    const inherited = t.parent === null ? null : slotOwner(t.parent);
+    line();
+    line(`/** \`<${t.jsx}>\`'s slot elements: each holds one child, which fills ${t.ts}'s property of that name. */`);
+    line(`export interface ${t.jsx}Slots${inherited === null ? "" : ` extends ${inherited.jsx}Slots`} {`);
+    for (const slot of t.slots) {
+      line(`  readonly ${slot.jsx}: HostComponent<"${slot.hostType}", HostProps>;`);
+    }
+    line("}");
+  }
   for (const w of m.widgets) {
+    const owner = slotOwner(w);
     line();
     line(`/** \`<${w.jsx}>\`: a ${w.ts}. */`);
-    line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${w.jsx}Props>;`);
+    line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${w.jsx}Props>${owner === null ? "" : ` & ${owner.jsx}Slots`};`);
   }
 
   line();
@@ -707,13 +761,30 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   }
 
   line();
+  line("// ---- filling widget slots, one function per class that has them ---------------");
+  for (const t of m.types.filter((t) => t.slots.length > 0)) {
+    const inherited = t.parent === null ? null : slotOwner(t.parent);
+    line();
+    line(`function ${lower(t)}Slot(gtk: ${t.ts}, slot: string, widget: GtkWidget | null): boolean {`);
+    line("  switch (slot) {");
+    for (const slot of t.slots) {
+      line(`    case "${slot.hostType}":`);
+      line(`      gtk.${slot.setter}(widget);`);
+      line("      return true;");
+    }
+    line("  }");
+    line(`  return ${inherited === null ? "false" : `${lower(inherited)}Slot(gtk, slot, widget)`};`);
+    line("}");
+  }
+
+  line();
   line("// ---- nodes ------------------------------------------------------------------");
   for (const w of m.widgets) {
     values.add(w.ts);
     const fn = `${w.jsx.charAt(0).toLowerCase()}${w.jsx.slice(1)}`;
     line();
     line(`/** \`<${w.jsx}>\`: a ${w.ts}. */`);
-    line(`export class ${w.jsx}Node extends HostNode {`);
+    line(`export class ${w.jsx}Node extends WidgetNode {`);
     line(`  readonly gtk: ${w.ts};`);
     line();
     line("  constructor() {");
@@ -727,6 +798,12 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     line("  connectSignal(key: string, slot: SignalSlot): boolean {");
     line(`    return ${fn}Signal(this.gtk, key, slot);`);
     line("  }");
+    const owner = slotOwner(w);
+    if (owner !== null) {
+      line("  fillSlot(slot: string, widget: GtkWidget | null): boolean {");
+      line(`    return ${lower(owner)}Slot(this.gtk, slot, widget);`);
+      line("  }");
+    }
     const controlled = [];
     for (let t: WidgetType | null = w; t !== null; t = t.parent) {
       controlled.push(...t.props.filter((p) => p.controlledBy !== undefined));
@@ -743,11 +820,11 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("  }");
     }
     if (w.children === "single") {
-      line("  appendChild(child: HostNode): void {");
+      line("  protected place(child: WidgetNode): void {");
       line("    this.holdOnly(child);");
       line("    this.gtk.set_child(child.widget);");
       line("  }");
-      line("  removeChild(child: HostNode): void {");
+      line("  protected unplace(child: WidgetNode): void {");
       line("    this.gtk.set_child(null);");
       line("    this.release(child);");
       line("  }");
@@ -755,18 +832,18 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("  // A list places a child at an index, and holds a child that is not a");
       line("  // row in a row it makes for it: React's order of the children gives the");
       line("  // index, and what the list holds for each is what moves or goes.");
-      line("  private readonly items: HostNode[] = [];");
+      line("  private readonly items: WidgetNode[] = [];");
       line("  private readonly placed: GtkWidget[] = [];");
-      line("  private held(child: HostNode): GtkWidget {");
+      line("  private held(child: WidgetNode): GtkWidget {");
       line("    const parent = child.widget.get_parent();");
       line("    return parent !== null && parent !== this.gtk ? parent : child.widget;");
       line("  }");
-      line("  appendChild(child: HostNode): void {");
+      line("  protected place(child: WidgetNode): void {");
       line("    this.gtk.append(child.widget);");
       line("    this.items.push(child);");
       line("    this.placed.push(this.held(child));");
       line("  }");
-      line("  insertBefore(child: HostNode, before: HostNode): void {");
+      line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
       line("    const at = this.items.indexOf(child);");
       line("    if (at >= 0) {");
       line("      // A move. A row the list made is its own: it goes when removed, so the");
@@ -783,7 +860,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("    insertAt(this.items, index, child);");
       line("    insertAt(this.placed, index, this.held(child));");
       line("  }");
-      line("  removeChild(child: HostNode): void {");
+      line("  protected unplace(child: WidgetNode): void {");
       line("    const at = this.items.indexOf(child);");
       line("    if (at >= 0) {");
       line("      this.gtk.remove(this.placed[at]!);");
@@ -792,10 +869,10 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("    }");
       line("  }");
     } else if (w.children === "box") {
-      line("  appendChild(child: HostNode): void {");
+      line("  protected place(child: WidgetNode): void {");
       line("    this.gtk.append(child.widget);");
       line("  }");
-      line("  insertBefore(child: HostNode, before: HostNode): void {");
+      line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
       line("    // GTK places a child after a sibling; React places it before one. A");
       line("    // child already here is a move -- a keyed list reordered.");
       line("    const after = before.widget.get_prev_sibling();");
@@ -807,7 +884,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("      this.gtk.insert_child_after(child.widget, after);");
       line("    }");
       line("  }");
-      line("  removeChild(child: HostNode): void {");
+      line("  protected unplace(child: WidgetNode): void {");
       line("    this.gtk.remove(child.widget);");
       line("  }");
     }
@@ -815,12 +892,23 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   }
 
   line();
-  line("/** A new node for the host type `type` (`GtkButton`), or null when there is no such widget. */");
+  line("/**");
+  line(" * A new node for the host type `type` (`GtkButton`, or a slot element's");
+  line(" * `GtkPaned.StartChild`), or null when there is no such element.");
+  line(" */");
   line("export function createNode(type: string): HostNode | null {");
   line("  switch (type) {");
   for (const w of m.widgets) {
     line(`    case "${w.ts}":`);
     line(`      return new ${w.jsx}Node();`);
+  }
+  for (const t of m.types) {
+    for (const slot of t.slots) {
+      line(`    case "${slot.hostType}":`);
+    }
+  }
+  if (m.types.some((t) => t.slots.length > 0)) {
+    line("      return new SlotNode(type);");
   }
   line("  }");
   line("  return null;");

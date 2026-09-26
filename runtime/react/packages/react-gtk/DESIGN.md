@@ -124,7 +124,7 @@ only if its setter does. A widget's child protocol is found from its methods:
 `set_child` taking a widget holds one child. A signal's handler takes the
 signal's arguments after the widget, typed as an app writes them
 (`onRowActivated?: (row: GtkListBoxRow) => void`, a `double` as `number`),
-read from the bindings' own `connect` overloads (155 signals on GTK 4.22, and 356 `notify` props).
+read from the bindings' own `connect` overloads (154 signals on GTK 4.22, and 420 `notify` props).
 A signal whose handlers answer whether they handled it (GTK's `gboolean`,
 as `close-request` does) takes a handler that returns a `boolean`; with the
 prop absent the answer is "not handled", so the widget's default runs.
@@ -154,12 +154,41 @@ against the object's GType, which is how a native build reads a GObject out
 of an erased value. An interface-typed prop (`GListModel`) is left out,
 because an interface has no value to check against. A widget-typed prop that
 names another widget (`mnemonicWidget`, `defaultWidget`, `focusWidget`,
-`keyCaptureWidget`) takes a ref's `current`: a host element's public
-instance is its widget. One that places a child in a slot (a Paned's
-`startChild`, a window's `titlebar`, a CenterBox's `startWidget`) is left out:
-a widget React has already parented cannot fill it, and it waits for slot
-elements. The other gaps are construct-only props, and
-signal arguments of types a JSX handler cannot name yet.
+`keyCaptureWidget`, and a Stack's `visibleChild`, one of its own children)
+takes a ref's `current`: a host element's public instance is its widget.
+
+**Slot elements.** A widget-typed prop that *places* a child (a Paned's
+start child, a window's titlebar, a Frame's label widget, a MenuButton's
+popover) is not a prop: a widget has to be made by React to be placed, and
+a prop's value is not rendered. It is a slot element, a member of its
+widget's component:
+
+```tsx
+<Paned>
+  <Paned.StartChild><Sidebar /></Paned.StartChild>
+  <Paned.EndChild><Content /></Paned.EndChild>
+</Paned>
+```
+
+`Paned.StartChild` is declared as a `HostComponent<"GtkPaned.StartChild", ...>`
+on a `PanedSlots` interface the Paned component also is, so it lowers to a
+host element like any widget, and its children are ordinary React children:
+a component, a conditional, a keyed swap. Its node is a `SlotNode`, which
+holds no widget: its one child fills the slot (`set_start_child`) once both
+are placed, and empties it when either goes. A slot element names its
+class, so `<Frame.LabelWidget>` inside an Expander is an error rather than
+the Expander's label, and a subclass inherits its parent's slots
+(`<ApplicationWindow.Titlebar>` is `GtkWindow.Titlebar`).
+
+The two kinds of node are placed by double dispatch: a parent asks its child
+to place itself (`child.placeIn(parent, before)`), so a widget goes among
+the children by the parent's protocol and a slot element fills its slot,
+with no test of which kind a child is. Only single-child widgets have slots,
+which the generator checks, so a slot element's place among the children
+never has to be found.
+
+The other gaps are construct-only props, and signal arguments of types a
+JSX handler cannot name yet.
 
 Regenerate after a GTK update, from a native program's generated bindings:
 `node tools/gen-widgets.ts ../../native/gtk/types/gir`.

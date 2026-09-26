@@ -44,6 +44,7 @@ controlled a typed flashed=false
 object true 42
 reference true
 decision 1 0 asked=1
+slot side,main side,none none,none titled=true
 work timer"
 
 mkdir -p "$out"

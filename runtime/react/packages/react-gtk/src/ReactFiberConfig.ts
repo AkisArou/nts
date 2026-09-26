@@ -3,7 +3,9 @@
 //
 // A host node is a class per kind of widget (src/widgets.ts, generated from
 // GIR): it holds the widget and what React needs beside it, the handlers its
-// signal props hold. GTK sees the widget; React sees the node.
+// signal props hold. GTK sees the widget; React sees the node. A slot element
+// (`<Paned.StartChild>`) is a node too, which holds no widget of its own
+// (HostNode.ts).
 
 export * from "react-reconciler/ReactFiberConfigWithNoHydration.ts";
 export * from "react-reconciler/ReactFiberConfigWithNoMicrotasks.ts";
@@ -17,18 +19,18 @@ export * from "react-reconciler/ReactFiberConfigWithNoViewTransition.ts";
 import { ReactContext } from "shared/ReactContext.ts";
 import type { GtkWidget, GtkWindow } from "c:Gtk-4.0";
 
-import { getCurrentUpdatePriority, HostNode, NoEventPriority, type Props } from "./HostNode.ts";
+import { getCurrentUpdatePriority, type HostNode, NoEventPriority, type Props, type WidgetNode } from "./HostNode.ts";
 import { cancelTimer, startTimer } from "./SchedulerHost.ts";
 import { createNode } from "./widgets.ts";
 
-export { getCurrentUpdatePriority, HostNode, setCurrentUpdatePriority, type Props } from "./HostNode.ts";
+export { getCurrentUpdatePriority, HostNode, setCurrentUpdatePriority, SlotNode, type Props, WidgetNode } from "./HostNode.ts";
 
 export type Type = string;
 
 /** The root: a window, which holds one child. */
 export class GtkContainer {
   readonly window: GtkWindow;
-  child: HostNode | null = null;
+  child: WidgetNode | null = null;
 
   constructor(window: GtkWindow) {
     this.window = window;
@@ -93,7 +95,7 @@ export function getChildHostContext(parentHostContext: HostContext, _type: strin
   return parentHostContext;
 }
 export function getPublicInstance(instance: HostNode): PublicInstance {
-  return instance.widget;
+  return instance.publicInstance();
 }
 export function prepareForCommit(_containerInfo: GtkContainer): object | null {
   return null;
@@ -137,11 +139,15 @@ export function appendChild(parentInstance: HostNode, child: HostNode): void {
   parentInstance.appendChild(child);
 }
 export function appendChildToContainer(container: GtkContainer, child: HostNode): void {
-  if (container.child !== null && container.child !== child) {
+  const widget = child.widgetNode();
+  if (widget === null) {
+    throw new Error(`<${child.name()}> goes directly inside its widget, not in a window's root.`);
+  }
+  if (container.child !== null && container.child !== widget) {
     throw new Error("A GTK window holds one child: wrap its children in a <Box>.");
   }
-  container.child = child;
-  container.window.set_child(child.widget);
+  container.child = widget;
+  container.window.set_child(widget.widget);
 }
 export function insertBefore(parentInstance: HostNode, child: HostNode, beforeChild: HostNode): void {
   parentInstance.insertBefore(child, beforeChild);
@@ -169,16 +175,19 @@ export function commitUpdate(instance: HostNode, _type: string, oldProps: Props,
   instance.applyProps(oldProps, newProps);
 }
 export function resetTextContent(instance: HostNode): void {
-  instance.setProp("label", undefined);
+  const widget = instance.widgetNode();
+  if (widget !== null) {
+    widget.setProp("label", undefined);
+  }
 }
 
 // Suspense and Activity hide what they do not show.
 export function hideInstance(instance: HostNode): void {
-  instance.widget.set_visible(false);
+  instance.setVisible(false);
 }
 export function hideTextInstance(_textInstance: HostNode): void {}
 export function unhideInstance(instance: HostNode, _props: Props): void {
-  instance.widget.set_visible(true);
+  instance.setVisible(true);
 }
 export function unhideTextInstance(_textInstance: HostNode, _text: string): void {}
 
