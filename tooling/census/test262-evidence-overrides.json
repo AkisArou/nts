@@ -1,0 +1,58 @@
+{
+  "//": [
+    "Codes that count as evidence of a SyntaxError although some valid JavaScript draws them,",
+    "because every positive that draws them is a known gap in the pinned tsgo's parser rather",
+    "than a sign the code is loose. Read by tooling/census/conformance262.mjs (judgeNegative).",
+    "",
+    "An entry applies only while all of these hold, and the run fails its audit otherwise:",
+    "  - it has a reason and the tsgo pin it was audited against, and that pin is the one the",
+    "    compiler under test reports (`nts version`: 'pinned tsgo X'). A gap is true of a",
+    "    version, not of tsgo: when the pin moves, re-audit every entry -- a fixed gap would",
+    "    otherwise keep negatives passing for the wrong reason.",
+    "  - every positive it lists is still in the suite;",
+    "  - in a whole test/language run, no positive it does NOT list draws the code.",
+    "Every run prints how many negatives pass only by an override, beside the pass count: an",
+    "override invisible in the summary becomes a threshold.",
+    "",
+    "Agreed with the compiler lane 2026-09-26, on the census of f8628b64."
+  ],
+  "overrides": [
+    {
+      "code": "TS1005",
+      "tsgo_pin": "7.0.2",
+      "reason": "tsgo parse gaps on valid JavaScript: Unicode 16/17 identifier characters (its identifier tables predate them), and `in` inside an initializer in a for-of destructuring head. 554 negatives draw TS1005 ('X' expected).",
+      "positives": [
+        "test/language/identifiers/part-unicode-16.0.0-escaped.js",
+        "test/language/identifiers/part-unicode-17.0.0-escaped.js",
+        "test/language/statements/for-of/dstr/array-elem-init-in.js"
+      ]
+    },
+    {
+      "code": "TS1109",
+      "tsgo_pin": "7.0.2",
+      "reason": "tsgo treats `await` as reserved at the top level of a script, where it is an ordinary identifier (`var await;`). 399 negatives draw TS1109 (Expression expected).",
+      "positives": [
+        "test/language/expressions/await/await-BindingIdentifier-in-global.js"
+      ]
+    },
+    {
+      "code": "TS1127",
+      "tsgo_pin": "7.0.2",
+      "reason": "tsgo's identifier tables predate Unicode 16 and 17, so identifier characters those versions added are an Invalid character. 93 negatives draw TS1127.",
+      "positives": [
+        "test/language/identifiers/part-unicode-16.0.0.js",
+        "test/language/identifiers/part-unicode-16.0.0-class-escaped.js",
+        "test/language/identifiers/part-unicode-17.0.0-class-escaped.js",
+        "test/language/identifiers/part-unicode-16.0.0-escaped.js",
+        "test/language/identifiers/part-unicode-16.0.0-class.js",
+        "test/language/identifiers/part-unicode-17.0.0-class.js",
+        "test/language/identifiers/part-unicode-17.0.0.js",
+        "test/language/identifiers/part-unicode-17.0.0-escaped.js",
+        "test/language/identifiers/start-unicode-16.0.0.js",
+        "test/language/identifiers/start-unicode-16.0.0-class-escaped.js",
+        "test/language/identifiers/start-unicode-17.0.0.js",
+        "test/language/identifiers/start-unicode-17.0.0-class-escaped.js"
+      ]
+    }
+  ]
+}

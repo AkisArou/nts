@@ -474,6 +474,17 @@ function classify(row) {
 
 const EVIDENCE_FILE = join(HERE, "test262-evidence-codes.json");
 
+// Codes that are evidence although valid JavaScript draws them, each because of
+// a named gap in the pinned tsgo's parser -- the file's header has the rules.
+const OVERRIDES_FILE = join(HERE, "test262-evidence-overrides.json");
+const OVERRIDES = existsSync(OVERRIDES_FILE) ? JSON.parse(readFileSync(OVERRIDES_FILE, "utf8")).overrides : [];
+/** The tsgo the compiler under test is pinned to, as `nts version` says. */
+const TSGO_PIN = /pinned tsgo (\S+)/.exec(execFileSync(PINNED, ["version"], { encoding: "utf8" }))?.[1] ?? "unknown";
+/** Codes whose override passed its audit this run; filled after the rows come back. */
+const overrideCodes = new Set();
+const overrideAudit = [];
+let passedByOverride = 0;
+
 function deriveValidJsCodes(rowsByPath) {
   const drawn = new Map();
   for (const c of cases) {
@@ -517,6 +528,11 @@ function judgeNegative(row, negative) {
   }
   const evidence = checker.filter((code) => !validJsCodes.has(code));
   if (evidence.length > 0) return { outcome: "pass", evidence };
+  const overridden = checker.filter((code) => overrideCodes.has(code));
+  if (overridden.length > 0) {
+    passedByOverride += 1;
+    return { outcome: "pass", evidence: overridden, byOverride: true };
+  }
   const first = (row.diagnostics ?? []).find((d) => d.code.startsWith("TS"));
   return {
     outcome: "refused",
@@ -555,6 +571,27 @@ if (derivesEvidence) {
   validJsCodes = new Map(Object.entries(JSON.parse(readFileSync(EVIDENCE_FILE, "utf8")).validJsCodes));
   evidenceNote = `${validJsCodes.size} TS code(s) drawn by valid JavaScript, read from test262-evidence-codes.json` +
     (partial ? "" : ` (a whole ${under} run, which never re-derives it)`);
+}
+
+// The override audit: each entry is applied only if it survives it.
+for (const entry of OVERRIDES) {
+  const faults = [];
+  if (!entry.reason) faults.push("no reason");
+  if (!entry.tsgo_pin) faults.push("no tsgo pin");
+  else if (entry.tsgo_pin !== TSGO_PIN) faults.push(`audited against tsgo ${entry.tsgo_pin}, the compiler is pinned to ${TSGO_PIN} -- re-audit it`);
+  const known = new Set(records.map((r) => r.path));
+  const gone = (entry.positives ?? []).filter((p) => !known.has(p));
+  if (under === "test/language" && gone.length > 0) faults.push(`names ${gone.length} positive(s) the suite does not have: ${gone.slice(0, 3).join(", ")}`);
+  if (derivesEvidence) {
+    const listed = new Set(entry.positives ?? []);
+    const unlisted = cases
+      .filter((c) => !c.record.negative && c.gap === null && !listed.has(c.record.path))
+      .filter((c) => (rows.get(c.record.path)?.diagnostics ?? []).some((d) => d.code === entry.code))
+      .map((c) => c.record.path);
+    if (unlisted.length > 0) faults.push(`drawn by ${unlisted.length} positive(s) it does not list: ${unlisted.slice(0, 3).join(", ")}`);
+  }
+  if (faults.length === 0) overrideCodes.add(entry.code);
+  overrideAudit.push({ code: entry.code, faults });
 }
 
 for (const c of cases) {
@@ -739,6 +776,11 @@ if (partial) {
 );
 say("  `pass` is strict-pass: one strict variant per file, never promoted to a file pass");
 say(`  negatives: ${evidenceNote}`);
+say(
+  `  negatives passing only by an evidence override: ${passedByOverride} ` +
+    `(${OVERRIDES.length} override(s) in test262-evidence-overrides.json, ${overrideCodes.size} applied, tsgo ${TSGO_PIN})`,
+);
+for (const a of overrideAudit.filter((x) => x.faults.length > 0)) say(`    OVERRIDE AUDIT FAILURE: ${a.code} -- ${a.faults.join("; ")}`);
 say();
 say(`  not attempted, by harness cause (${tally.unsupported} case(s)):`);
 for (const [cause, n] of count(cases.filter((c) => c.outcome === "unsupported"), (c) => c.cause.startsWith("include:") && c.cause.includes("+") ? "include:(several)" : c.cause).slice(0, sites)) {
@@ -786,6 +828,7 @@ const problems = [];
 if (summed !== population.length) problems.push(`outcomes sum to ${summed}, not the ${population.length} cases selected`);
 if (rows.size !== toAttempt.length) problems.push(`${toAttempt.length - rows.size} attempted case(s) came back with no row`);
 if (audit.withoutReason.length + audit.naming_nothing.length + audit.unknownKind.length > 0) problems.push("the exclusion audit failed");
+if (overrideAudit.some((a) => a.faults.length > 0)) problems.push("the evidence-override audit failed");
 if (comparison && (comparison.REGRESSED.length + comparison.MISSING.length + comparison.CHANGED.length + comparison["NEW FAIL"].length > 0)) {
   problems.push("the recorded outcomes changed; see above, then re-record with --record if intended");
 }
