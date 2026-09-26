@@ -181,17 +181,18 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
 }
 
 /// The interfaces a class implements: each one's table of the slots its
-/// methods fill, and the calls adding them to the class's `GType` (`%made`)
-/// once it is registered, below the `GType` function each is named by --
-/// declared once, as a parent's is, unless the program calls it itself.
+/// methods fill, and the call adding them all to the class's `GType`
+/// (`%made`) once it is registered -- in an order `GLib` accepts, which the
+/// runtime finds. Each `GType` function is declared once, as a parent's is,
+/// unless the program calls it itself.
 fn implementations(
     out: &mut String,
     program: &Program,
     (class, tables): (&ForeignClass, &[Vec<String>]),
     declared: &mut std::collections::BTreeSet<String>,
 ) -> String {
-    let mut calls = String::new();
     let name = &class.name;
+    let mut rows = Vec::new();
     for (at, (interface, slots)) in class.protocols.iter().zip(tables).enumerate() {
         // The lowering writes both words; a bare struct name has no `GType`
         // function to ask.
@@ -205,13 +206,13 @@ fn implementations(
             let _ = writeln!(out, "@nts_gobject_interface_{name}_{at} = internal constant [{} x {{ i64, ptr }}] [{}]", slots.len(), slots.join(", "));
             format!("@nts_gobject_interface_{name}_{at}")
         };
-        let _ = writeln!(
-            calls,
-            "  %interface{at} = call i64 @{get_type}()\n  call void @nts_gobject_add_interface(i64 %made, i64 %interface{at}, ptr {table}, i64 {})",
-            slots.len()
-        );
+        rows.push(format!("{{ ptr, ptr, i64 }} {{ ptr @{get_type}, ptr {table}, i64 {} }}", slots.len()));
     }
-    calls
+    if rows.is_empty() {
+        return String::new();
+    }
+    let _ = writeln!(out, "@nts_gobject_interfaces_{name} = internal constant [{} x {{ ptr, ptr, i64 }}] [{}]", rows.len(), rows.join(", "));
+    format!("  call void @nts_gobject_add_interfaces(i64 %made, ptr @nts_gobject_interfaces_{name}, i64 {})\n", rows.len())
 }
 
 /// The support files' functions the classes' registrations call, each declared
@@ -231,7 +232,7 @@ fn declarations(out: &mut String, classes: &[&ForeignClass]) {
         out.push_str("declare void @nts_gobject_set_properties(i64, ptr, i64)\n");
     }
     if classes.iter().any(|class| !class.protocols.is_empty()) {
-        out.push_str("declare void @nts_gobject_add_interface(i64, i64, ptr, i64)\n");
+        out.push_str("declare void @nts_gobject_add_interfaces(i64, ptr, i64)\n");
     }
 }
 

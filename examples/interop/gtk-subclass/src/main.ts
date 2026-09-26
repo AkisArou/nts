@@ -62,6 +62,8 @@
 //                 (`GListModelImplementation`): `add` calls the interface's
 //                 `items_changed` on `this`, which a handler hears; Gio's
 //                 `g_list_model_get_*` reach its `vfunc_`s
+//   dtls true true  `Dtls` implements three interfaces, each requiring the
+//                 next: registered in the order GLib accepts
 //   is C|B|label|button|none  `instanceof`, which asks the type system
 //                 (`g_type_check_instance_is_a`) for a class the program wrote
 //                 and for a binding's, and narrows: `C`'s field read after it
@@ -77,8 +79,16 @@ import {
   Orientation,
   type GtkOrientation,
 } from "c:Gtk-4.0";
-import { BindingFlags, GObject, g_object_bind_property, g_type_name_from_instance } from "c:GObject-2.0";
-import { type GListModel, type GListModelImplementation, g_list_model_get_n_items, g_list_model_get_object } from "c:Gio-2.0";
+import { BindingFlags, GObject, g_object_bind_property, g_type_from_name, g_type_is_a, g_type_name_from_instance } from "c:GObject-2.0";
+import {
+  type GDatagramBasedImplementation,
+  type GDtlsClientConnectionImplementation,
+  type GDtlsConnectionImplementation,
+  type GListModel,
+  type GListModelImplementation,
+  g_list_model_get_n_items,
+  g_list_model_get_object,
+} from "c:Gio-2.0";
 import type { CEnum, CNumber, Erased, Owned, Property, Ptr, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 import { sub_emit, sub_log } from "c:sub";
@@ -420,6 +430,17 @@ class Words extends GObject<{}, GListModelImplementation> {
   }
 }
 
+// Interfaces that require one another: `GDtlsClientConnection` needs
+// `GDtlsConnection`, which needs `GDatagramBased`, and GLib refuses one added
+// before what it requires -- the first of these sorts before the second.
+class Dtls extends GObject<{}, GDtlsClientConnectionImplementation | GDtlsConnectionImplementation | GDatagramBasedImplementation> {}
+
+function dtls(): string {
+  const type = Dtls.$gtype;
+  const is = (name: string): string => String(g_type_is_a(type, g_type_from_name(name)));
+  return "dtls " + is("GDtlsClientConnection") + " " + is("GDatagramBased");
+}
+
 function words(): string {
   const words = new Words();
   let heard = "";
@@ -468,6 +489,7 @@ function main(): void {
   sub_log("shy " + String(shy.shown) + " " + String(shy.get_visible()));
   chains();
   sub_log(words());
+  sub_log(dtls());
   sub_log("is " + [kind(new C({})), kind(new B({})), kind(new GtkLabel({})), kind(new GtkButton({})), kind(null)].join("|"));
 }
 

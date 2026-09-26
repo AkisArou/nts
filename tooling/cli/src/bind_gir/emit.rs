@@ -394,12 +394,19 @@ fn method(out: &mut String, function: &Function) {
 
 /// What a class the program writes implements an interface with
 /// (`class Model extends GObject<{}, GListModelImplementation>`): each of the
-/// interface's virtual functions, optional as C's are, and two phantom members
-/// for the compiler -- the interface struct and `GType` function it registers
-/// the class under, and the tag its instances then convert to.
+/// interface's virtual functions, optional as C's are, and three phantom
+/// members: the interface struct and `GType` function the compiler registers
+/// the class under, the tag its instances then convert to, and the
+/// interface's own methods, which they then have.
 fn implementation(out: &mut String, binding: &Binding, name: &str, tag: &str, own: &[&Function]) {
     let vfuncs: Vec<&Function> = own.iter().filter(|function| function.vfunc.is_some()).copied().collect();
-    let Some((structure, ..)) = vfuncs.first().and_then(|function| function.vfunc.as_ref()) else { return };
+    // An interface with no virtual functions (`GDtlsClientConnection`) is
+    // still implemented, by name: its struct is GObject's `{Type}Interface`,
+    // which no slot then names.
+    let structure = vfuncs
+        .first()
+        .and_then(|function| function.vfunc.as_ref())
+        .map_or_else(|| format!("{}Interface", tag.trim_start_matches('_')), |(structure, ..)| structure.clone());
     let Some(get_type) = binding.interface_types.get(tag.trim_start_matches('_')).or_else(|| binding.interface_types.get(name)) else {
         return;
     };

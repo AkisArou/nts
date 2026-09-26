@@ -498,32 +498,73 @@ size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
   return (size_t)data->type;
 }
 
-/* An interface a class the program wrote implements: the slots its methods
- * fill in the interface's table (`GListModelInterface`), which
- * `interface_init` writes as `class_init` writes the class's. */
+/* An interface a class the program wrote implements: its `GType` function,
+ * and the slots its methods fill in the interface's table
+ * (`GListModelInterface`), which `interface_init` writes as `class_init`
+ * writes the class's. */
 typedef struct {
+  size_t (*get_type)(void);
   const NtsGObjectSlot *slots;
   size_t count;
-} NtsGObjectInterfaceData;
+} NtsGObjectInterface;
 
 static void nts_gobject_interface_init(gpointer iface, gpointer data) {
-  const NtsGObjectInterfaceData *table = data;
+  const NtsGObjectInterface *table = data;
   for (size_t at = 0; at < table->count; at++) {
     memcpy((char *)iface + table->slots[at].offset, &table->slots[at].entry,
            sizeof table->slots[at].entry);
   }
 }
 
-void nts_gobject_add_interface(size_t type, size_t interface, const void *slots,
-                               size_t count) {
-  /* Lives as long as the type, which is as long as the program. */
-  NtsGObjectInterfaceData *data = g_new0(NtsGObjectInterfaceData, 1);
-  data->slots = slots;
-  data->count = count;
+/* Whether every interface `interface` requires is already on `type`: GLib
+ * refuses one added before its prerequisite (`GtkSelectionModel` before
+ * `GListModel`). */
+static gboolean nts_gobject_interface_ready(GType type, GType interface) {
+  guint count = 0;
+  GType *required = g_type_interface_prerequisites(interface, &count);
+  gboolean ready = TRUE;
+  for (guint at = 0; at < count && ready; at++) {
+    ready =
+        !G_TYPE_IS_INTERFACE(required[at]) || g_type_is_a(type, required[at]);
+  }
+  g_free(required);
+  return ready;
+}
+
+static void nts_gobject_add_interface(GType type,
+                                      const NtsGObjectInterface *interface) {
   GInterfaceInfo info = {0};
   info.interface_init = nts_gobject_interface_init;
-  info.interface_data = data;
-  g_type_add_interface_static((GType)type, (GType)interface, &info);
+  info.interface_data = (gpointer)interface;
+  g_type_add_interface_static(type, (GType)interface->get_type(), &info);
+}
+
+/* A class's interfaces, added in an order GLib accepts: each once its
+ * prerequisites are. When none left is ready, the class does not implement
+ * one's prerequisite: the first left is added anyway, for GLib's critical to
+ * name what is missing. The table lives as long as the program. */
+void nts_gobject_add_interfaces(size_t type, const void *interfaces,
+                                size_t count) {
+  const NtsGObjectInterface *table = interfaces;
+  gboolean *added = g_new0(gboolean, count);
+  for (size_t done = 0; done < count;) {
+    size_t next = count;
+    for (size_t at = 0; at < count && next == count; at++) {
+      if (!added[at] && nts_gobject_interface_ready(
+                            (GType)type, (GType)table[at].get_type())) {
+        next = at;
+      }
+    }
+    for (size_t at = 0; at < count && next == count; at++) {
+      if (!added[at]) {
+        next = at;
+      }
+    }
+    nts_gobject_add_interface((GType)type, &table[next]);
+    added[next] = TRUE;
+    done++;
+  }
+  g_free(added);
 }
 
 void nts_gobject_made(void *object) {

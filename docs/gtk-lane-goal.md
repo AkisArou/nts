@@ -763,7 +763,7 @@ const model: GListModel = new Words();
 - The lowering reads `__c_ifaces` into `ForeignClass.protocols`, the field
   Objective-C's adopted protocols use. A `vfunc_` whose binding's slot is in
   an implemented interface's struct overrides that slot. It fills that
-  interface's table, not the class's, and `nts_gobject_add_interface`
+  interface's table, not the class's, and `nts_gobject_add_interfaces`
   (`g_type_add_interface_static`) installs it right after the class is
   registered.
 - A method that overrides nothing is refused, as a class's is.

@@ -62,20 +62,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     let registered = registered(program);
     let wrote = !registered.is_empty();
     if wrote {
-        writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
-        writer.line(
-            origin,
-            "size_t nts_gobject_register(size_t parent, const char *name, const void *slots, size_t count, void *(*make_state)(void), void (*class_setup)(void *), void (*instance_setup)(void *));",
-        );
-        writer.line(origin, "void *nts_gobject_new(size_t type);");
-        writer.line(origin, "struct nts_gobject_slot { size_t offset; void (*entry)(void); };");
-        // Each class's `GType` function, before any class names it as a
-        // parent or a chain-up calls it. Not `static`: an `instanceof` calls it
-        // too, as the native function it is, and that call's prototype is
-        // printed with every other native's, above this.
-        for class in &registered {
-            writer.line(origin, format!("size_t {PROGRAM_GTYPE}{}(void);", class.name));
-        }
+        header(writer, origin, &registered);
     }
     for class in registered {
         let name = &class.name;
@@ -173,16 +160,38 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     Ok(())
 }
 
-/// The interfaces a class implements: each one's table of the slots its
-/// methods fill, and the calls adding them to the class's `GType` once it is
-/// registered, below the `GType` function each is named by.
-fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClass, tables: &[Vec<String>]) -> Result<String, Diagnostic> {
-    let mut calls = String::new();
-    if class.protocols.is_empty() {
-        return Ok(calls);
+/// What the classes' code below needs declared first: the support file's
+/// registration calls, the tables' types, and each class's `GType` function.
+fn header(writer: &mut CodeWriter, origin: &Origin, registered: &[&ForeignClass]) {
+    writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+    writer.line(
+        origin,
+        "size_t nts_gobject_register(size_t parent, const char *name, const void *slots, size_t count, void *(*make_state)(void), void (*class_setup)(void *), void (*instance_setup)(void *));",
+    );
+    writer.line(origin, "void *nts_gobject_new(size_t type);");
+    writer.line(origin, "struct nts_gobject_slot { size_t offset; void (*entry)(void); };");
+    if registered.iter().any(|class| !class.protocols.is_empty()) {
+        writer.line(origin, "void nts_gobject_add_interfaces(size_t type, const void *interfaces, size_t count);");
+        writer.line(origin, "struct nts_gobject_interface { size_t (*get_type)(void); const struct nts_gobject_slot *slots; size_t count; };");
     }
-    writer.line(origin, "void nts_gobject_add_interface(size_t type, size_t interface, const void *slots, size_t count);");
+    // Each class's `GType` function, before any class names it as a
+    // parent or a chain-up calls it. Not `static`: an `instanceof` calls it
+    // too, as the native function it is, and that call's prototype is
+    // printed with every other native's, above this.
+    for class in registered {
+        writer.line(origin, format!("size_t {PROGRAM_GTYPE}{}(void);", class.name));
+    }
+}
+
+/// The interfaces a class implements: each one's table of the slots its
+/// methods fill, and the call adding them all to the class's `GType` once it
+/// is registered -- in an order `GLib` accepts, which the runtime finds.
+fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClass, tables: &[Vec<String>]) -> Result<String, Diagnostic> {
+    if class.protocols.is_empty() {
+        return Ok(String::new());
+    }
     let name = &class.name;
+    let mut rows = Vec::new();
     for (at, (interface, slots)) in class.protocols.iter().zip(tables).enumerate() {
         let get_type = interface.split_whitespace().nth(1).ok_or_else(|| {
             Diagnostic::error("NTS2006", format!("an interface `{interface}` with no `GType` function"), origin.location)
@@ -194,9 +203,10 @@ fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClas
             writer.line(origin, format!("static const struct nts_gobject_slot nts_gobject_interface_{name}_{at}[] = {{ {} }};", slots.join(", ")));
             format!("nts_gobject_interface_{name}_{at}")
         };
-        let _ = write!(calls, " nts_gobject_add_interface(type, {get_type}(), {table}, {}u);", slots.len());
+        rows.push(format!("{{ {get_type}, {table}, {}u }}", slots.len()));
     }
-    Ok(calls)
+    writer.line(origin, format!("static const struct nts_gobject_interface nts_gobject_interfaces_{name}[] = {{ {} }};", rows.join(", ")));
+    Ok(format!(" nts_gobject_add_interfaces(type, nts_gobject_interfaces_{name}, {}u);", rows.len()))
 }
 
 /// Each `nts_gobject_child_{Class}_{index}` the program calls -- a read of a

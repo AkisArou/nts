@@ -258,22 +258,19 @@ declare module "c:types" {
   // converts to each (`__c_implements`, which a `GObjectInterface` reads);
   // and the list the compiler registers the class under (`__c_ifaces`).
   // `instanceof` reads the constructor with `any` for `Impl`, which
-  // implements nothing.
+  // implements nothing. A union of interfaces is all of them at once: a class
+  // extends an intersection, never a union.
   type Implementing<Impl> = [Impl] extends [never]
     ? unknown
     : 0 extends 1 & Impl
       ? unknown
-      : Impl &
-          ImplMethods<Impl> & {
+      : AllOf<Impl> &
+          AllOf<ImplMethods<Impl>> & {
             readonly __c_implements: { readonly [K in ImplTag<Impl>]: true };
             readonly __c_ifaces?: ImplIface<Impl>;
           };
-  // Every interface's methods at once: the union of them, intersected.
-  type ImplMethods<Impl> = (Impl extends { readonly __c_methods?: infer M } ? (methods: M) => void : never) extends (
-    methods: infer All,
-  ) => void
-    ? All
-    : never;
+  type AllOf<U> = (U extends unknown ? (all: U) => void : never) extends (all: infer All) => void ? All : never;
+  type ImplMethods<Impl> = Impl extends { readonly __c_methods?: infer M } ? M : never;
   type ImplTag<Impl> = Impl extends { readonly __c_tag?: infer Tag extends string } ? Tag : never;
   type ImplIface<Impl> = Impl extends { readonly __c_iface?: infer Iface extends string } ? Iface : never;
   // A field of a GObject class the program writes that is also a GObject
