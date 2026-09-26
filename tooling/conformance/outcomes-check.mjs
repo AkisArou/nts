@@ -32,6 +32,16 @@
 //          compiled program has nothing to print with, so the observations leave
 //          as the message of an uncaught `Observed`, and node's preload prints
 //          it in nts's own shape. A wrong answer is then two strings.
+//
+//          **Observations are reported only by `done()`.** `observe` collects;
+//          nothing leaves until `done()` throws. So a program that aborts part
+//          way reports *no* arm -- the controls observed before the abort
+//          included -- and its record is the abort itself. An aborting shape
+//          therefore gets a fixture of its own rather than an arm in another,
+//          where it would erase every arm beside it (a-repeat-too-long-aborts-
+//          instead-of-throwing is its own record for that reason). Arms that
+//          each produce a value can share one program, which is what lets one
+//          run answer several hypotheses at once.
 //   check  `nts check`, which differentially tests exported functions with
 //          scalar arguments against node. Its summary and disagreement lines
 //          are the record. **Its "declined" is not "agreed"**: an uncaught throw
