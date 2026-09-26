@@ -477,6 +477,8 @@ const childElements = new Map([
   ["Grid", { members: "GridChildren", elements: [["GtkGrid.Child", "GridChildNode"]], use: "<Grid.Child column row>" }],
   ["Stack", { members: "StackChildren", elements: [["GtkStack.Page", "StackPageNode"]], use: "<Stack.Page name>" }],
   ["Notebook", { members: "NotebookChildren", elements: [["GtkNotebook.Page", "NotebookPageNode"]], use: "<Notebook.Page tab>" }],
+  ["HeaderBar", { members: "HeaderBarChildren", elements: [["GtkHeaderBar.Start", "PackNode"], ["GtkHeaderBar.End", "PackNode"]], use: "<HeaderBar.Start> or <HeaderBar.End>" }],
+  ["ActionBar", { members: "ActionBarChildren", elements: [["GtkActionBar.Start", "PackNode"], ["GtkActionBar.End", "PackNode"]], use: "<ActionBar.Start> or <ActionBar.End>" }],
 ]);
 
 function valueKind(type: string, bindings: Bindings, reference = false): ValueKind | null {
@@ -729,7 +731,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line("__IMPORTS__");
   line('import type { HostComponent } from "shared/ReactHostComponent.ts";');
   line('import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";');
-  const childImports = [...childElements.values()].flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]);
+  const childImports = [...new Set([...childElements.values()].flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]))];
   line(`import { ${childImports.join(", ")} } from "./children.ts";`);
   line();
   line("// ---- props: what JSX checks -------------------------------------------------");

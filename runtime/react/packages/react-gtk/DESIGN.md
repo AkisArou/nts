@@ -213,6 +213,22 @@ its children. So the page it names selects itself when it is attached. A
 Stack keeps its pages in the order they were added: GtkStack cannot move
 one, so a page React moves goes last.
 
+A HeaderBar's or ActionBar's start and end are groups, which hold any
+number of widgets:
+
+```tsx
+<HeaderBar>
+  <HeaderBar.Start><Button label="Open" /><Button label="New" /></HeaderBar.Start>
+  <HeaderBar.TitleWidget><Label label="Files" /></HeaderBar.TitleWidget>
+  <HeaderBar.End><MenuButton /></HeaderBar.End>
+</HeaderBar>
+```
+
+Both groups read left to right in React's order, so an end, which GTK packs
+from the edge in, packs its children last first. Neither bar can move a
+packed child, so any change packs the group again (`PackNode`): a bar
+holds a handful.
+
 The two kinds of node are placed by double dispatch: a parent asks its child
 to place itself (`child.placeIn(parent, before)`), so a widget goes among
 the children by the parent's protocol and a slot element fills its slot,

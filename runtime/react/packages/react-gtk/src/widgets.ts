@@ -178,7 +178,7 @@ import {
 } from "c:Pango-1.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";
-import { type GridChildren, GridChildNode, type StackChildren, StackPageNode, type NotebookChildren, NotebookPageNode } from "./children.ts";
+import { type GridChildren, GridChildNode, type StackChildren, StackPageNode, type NotebookChildren, NotebookPageNode, type HeaderBarChildren, PackNode, type ActionBarChildren } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1563,7 +1563,7 @@ export interface PopoverBinSlots {
 export declare const AboutDialog: HostComponent<"GtkAboutDialog", AboutDialogProps> & WindowSlots;
 
 /** `<ActionBar>`: a GtkActionBar. */
-export declare const ActionBar: HostComponent<"GtkActionBar", ActionBarProps>;
+export declare const ActionBar: HostComponent<"GtkActionBar", ActionBarProps> & ActionBarChildren;
 
 /** `<ApplicationWindow>`: a GtkApplicationWindow. */
 export declare const ApplicationWindow: HostComponent<"GtkApplicationWindow", ApplicationWindowProps> & WindowSlots;
@@ -1641,7 +1641,7 @@ export declare const Grid: HostComponent<"GtkGrid", GridProps> & GridChildren;
 export declare const GridView: HostComponent<"GtkGridView", GridViewProps>;
 
 /** `<HeaderBar>`: a GtkHeaderBar. */
-export declare const HeaderBar: HostComponent<"GtkHeaderBar", HeaderBarProps> & HeaderBarSlots;
+export declare const HeaderBar: HostComponent<"GtkHeaderBar", HeaderBarProps> & HeaderBarSlots & HeaderBarChildren;
 
 /** `<Image>`: a GtkImage. */
 export declare const Image: HostComponent<"GtkImage", ImageProps>;
@@ -6865,6 +6865,9 @@ export class ActionBarNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return actionBarSignal(this.gtk, key, slot);
   }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<ActionBar> places a child through <ActionBar.Start> or <ActionBar.End>.");
+  }
 }
 
 /** `<ApplicationWindow>`: a GtkApplicationWindow. */
@@ -7496,6 +7499,9 @@ export class HeaderBarNode extends WidgetNode {
   }
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return headerBarSlot(this.gtk, slot, widget);
+  }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<HeaderBar> places a child through <HeaderBar.Start> or <HeaderBar.End>.");
   }
 }
 
@@ -8636,6 +8642,14 @@ export function createNode(type: string): HostNode | null {
       return new StackPageNode(type);
     case "GtkNotebook.Page":
       return new NotebookPageNode(type);
+    case "GtkHeaderBar.Start":
+      return new PackNode(type);
+    case "GtkHeaderBar.End":
+      return new PackNode(type);
+    case "GtkActionBar.Start":
+      return new PackNode(type);
+    case "GtkActionBar.End":
+      return new PackNode(type);
   }
   return null;
 }

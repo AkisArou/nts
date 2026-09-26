@@ -4,17 +4,19 @@
 //   <Grid><Grid.Child column={1} row={0}><Label /></Grid.Child></Grid>
 //   <Stack><Stack.Page name="files" title="Files"><FileList /></Stack.Page></Stack>
 //   <Notebook><Notebook.Page tab="Files"><FileList /></Notebook.Page></Notebook>
+//   <HeaderBar><HeaderBar.Start><Button /><Button /></HeaderBar.Start></HeaderBar>
 //
 // GIR says a Grid attaches at a cell and a Stack adds named pages, but not that
 // an app should say which, so these are written by hand; src/widgets.ts
 // declares them as members of their container's component (`Grid.Child`) and
 // creates them. Each is a PlacedNode (HostNode.ts): it attaches its one child
 // once both are placed, and finds its container as the GTK class it needs.
+// A bar's start and end are groups, which hold any number (PackNode).
 
-import { GtkGrid, GtkNotebook, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
+import { GtkActionBar, GtkGrid, GtkHeaderBar, GtkNotebook, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
-import { PlacedNode, type Props, type WidgetNode } from "./HostNode.ts";
+import { HostNode, insertAt, PlacedNode, type Props, type WidgetNode } from "./HostNode.ts";
 
 function numberProp(props: Props, key: string, fallback: number): number {
   const value = props[key];
@@ -178,5 +180,155 @@ export class NotebookPageNode extends PlacedNode {
       notebook.set_tab_label_text(widget, tab);
     }
     notebook.set_tab_reorderable(widget, this.props["reorderable"] === true);
+  }
+}
+
+// ---- HeaderBar and ActionBar ----------------------------------------------------------
+
+export interface PackProps {
+  children?: unknown;
+}
+
+export interface HeaderBarChildren {
+  /** `<HeaderBar.Start>`: its children, packed at the bar's start, left to right. */
+  readonly Start: HostComponent<"GtkHeaderBar.Start", PackProps>;
+  /** `<HeaderBar.End>`: its children, packed at the bar's end, left to right. */
+  readonly End: HostComponent<"GtkHeaderBar.End", PackProps>;
+}
+
+export interface ActionBarChildren {
+  /** `<ActionBar.Start>`: its children, packed at the bar's start, left to right. */
+  readonly Start: HostComponent<"GtkActionBar.Start", PackProps>;
+  /** `<ActionBar.End>`: its children, packed at the bar's end, left to right. */
+  readonly End: HostComponent<"GtkActionBar.End", PackProps>;
+}
+
+/**
+ * A bar's start or end (`GtkHeaderBar.Start`, `GtkActionBar.End`): a group
+ * of widgets packed there in the order React holds them, left to right. GTK
+ * packs an end from the edge in, so an end packs its children last first.
+ * Neither bar can move a packed child, so any change packs the group again;
+ * a bar holds a handful.
+ */
+export class PackNode extends HostNode {
+  private owner: WidgetNode | null = null;
+  private readonly items: WidgetNode[] = [];
+  private packed = false;
+
+  applyProps(_previous: Props | null, next: Props): void {
+    const children = next["children"];
+    if (typeof children === "string" || typeof children === "number") {
+      throw new Error(`<${this.name()}> cannot hold text: put it in a <Label>.`);
+    }
+  }
+
+  appendChild(child: HostNode): void {
+    const widget = this.itemOf(child);
+    this.unpack();
+    this.remove(widget);
+    this.items.push(widget);
+    this.pack();
+  }
+  insertBefore(child: HostNode, before: HostNode): void {
+    const widget = this.itemOf(child);
+    this.unpack();
+    this.remove(widget);
+    const at = this.items.indexOf(before.widgetNode() ?? widget);
+    insertAt(this.items, at < 0 ? this.items.length : at, widget);
+    this.pack();
+  }
+  removeChild(child: HostNode): void {
+    const widget = child.widgetNode();
+    if (widget !== null && this.items.indexOf(widget) >= 0) {
+      this.unpack();
+      this.remove(widget);
+      this.pack();
+    }
+  }
+
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    this.unpack();
+    this.owner = parent;
+    this.pack();
+  }
+  takeOutOf(parent: WidgetNode): void {
+    if (this.owner === parent) {
+      this.unpack();
+      this.owner = null;
+    }
+  }
+
+  private itemOf(child: HostNode): WidgetNode {
+    const widget = child.widgetNode();
+    if (widget === null) {
+      throw new Error(`<${child.name()}> goes directly inside its widget, not in <${this.name()}>.`);
+    }
+    return widget;
+  }
+
+  private remove(widget: WidgetNode): void {
+    const at = this.items.indexOf(widget);
+    if (at >= 0) {
+      this.items.splice(at, 1);
+    }
+  }
+
+  private pack(): void {
+    const owner = this.owner;
+    if (this.packed || owner === null) {
+      return;
+    }
+    const bar = owner.widget;
+    const end = this.type.endsWith(".End");
+    const count = this.items.length;
+    for (let i = 0; i < count; i++) {
+      const widget = this.items[end ? count - 1 - i : i]!.widget;
+      if (bar instanceof GtkHeaderBar) {
+        if (end) bar.pack_end(widget);
+        else bar.pack_start(widget);
+      } else if (bar instanceof GtkActionBar) {
+        if (end) bar.pack_end(widget);
+        else bar.pack_start(widget);
+      } else {
+        throw new Error(`<${this.name()}> goes directly inside a <${this.name().split(".")[0]}>, not a <${owner.name()}>.`);
+      }
+    }
+    this.packed = true;
+  }
+
+  private unpack(): void {
+    const owner = this.owner;
+    if (!this.packed || owner === null) {
+      return;
+    }
+    this.packed = false;
+    const bar = owner.widget;
+    for (let i = 0; i < this.items.length; i++) {
+      const widget = this.items[i]!.widget;
+      if (bar instanceof GtkHeaderBar) {
+        bar.remove(widget);
+      } else if (bar instanceof GtkActionBar) {
+        bar.remove(widget);
+      }
+    }
+  }
+
+  widgetNode(): WidgetNode | null {
+    return null;
+  }
+
+  shownWidget(): GtkWidget | null {
+    const first = this.items[0];
+    return first === undefined ? null : first.widget;
+  }
+
+  publicInstance(): GtkWidget {
+    throw new Error(`<${this.name()}> is a group of widgets: put the ref on one of them.`);
+  }
+
+  setVisible(visible: boolean): void {
+    for (let i = 0; i < this.items.length; i++) {
+      this.items[i]!.setVisible(visible);
+    }
   }
 }

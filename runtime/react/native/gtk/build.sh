@@ -48,6 +48,7 @@ interface true true true
 grid ab- a-b --b
 stack b B Bee
 notebook 0,1,2 two 2
+bar b1>b2 e1>e2 b0>b1 b1>-
 slot side,main side,none none,none titled=true
 work timer"
 

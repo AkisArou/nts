@@ -47,6 +47,9 @@
 //             page it names; a page's title updates in place
 //   notebook  Notebook.Page elements add pages with tab text, one inserted
 //             before another takes its place in the order, one removed goes
+//   bar       a HeaderBar's Start and End groups pack their children left to
+//             right in React's order (the end packed from the edge in); one
+//             inserted before another takes its place, one removed goes
 //   slot      slot elements fill a Paned's start and end children, their
 //             children placed first as React completes them; a child removed
 //             from its slot element empties the slot, and so does the slot
@@ -416,6 +419,36 @@ function main(): void {
     pageOrder += " " + String(pagesOf.get_n_pages());
   }
   react_gtk_log("notebook " + pageOrder);
+
+  const bar = createInstance("GtkHeaderBar", {}, container, 0, {});
+  const start = createInstance("GtkHeaderBar.Start", {}, container, 0, {});
+  const end = createInstance("GtkHeaderBar.End", {}, container, 0, {});
+  const packs: HostNode[] = [];
+  const packNames = ["b1", "b2", "e1", "e2", "b0"];
+  for (const text of packNames) {
+    packs.push(createInstance("GtkButton", { label: text }, container, 0, {}));
+  }
+  const nameOfPacked = (child: GtkWidget | null): string => {
+    for (let i = 0; i < packs.length; i++) {
+      if (child === widget(packs[i]!)) {
+        return packNames[i]!;
+      }
+    }
+    return child === null ? "-" : "?";
+  };
+  const after = (i: number): string => packNames[i]! + ">" + nameOfPacked(widget(packs[i]!).get_next_sibling());
+  appendInitialChild(start, packs[0]!);
+  appendInitialChild(start, packs[1]!);
+  appendInitialChild(end, packs[2]!);
+  appendInitialChild(end, packs[3]!);
+  appendInitialChild(bar, start);
+  appendInitialChild(bar, end);
+  let packing = after(0) + " " + after(2);
+  insertBefore(start, packs[4]!, packs[0]!);
+  packing += " " + after(4);
+  removeChild(start, packs[1]!);
+  packing += " " + after(0);
+  react_gtk_log("bar " + packing);
 
   const paned = createInstance("GtkPaned", {}, container, 0, {});
   const startSlot = createInstance("GtkPaned.StartChild", {}, container, 0, {});
