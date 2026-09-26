@@ -4,7 +4,7 @@
 
 import type { ClassComponentInstance } from "shared/ReactClassComponentInstance.ts";
 import type { RootState } from "./ReactFiberRoot.ts";
-import { defines, invoke } from "react-reconciler/ReactFiberClassComponentHost.ts";
+import { defines, derivedStateFromError, invoke } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentDidCatch } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableUpdaterTracking } from "shared/ReactFeatureFlags.ts";
@@ -71,10 +71,6 @@ import {
 } from "./ReactWorkTags.ts";
 
 // The parts of an error boundary class and its instance this module reads.
-interface ErrorBoundaryClass {
-  readonly getDerivedStateFromError?: unknown;
-}
-
 type ErrorBoundaryInstance = ClassComponentInstance;
 
 function createRootErrorUpdate(root: FiberRoot, errorInfo: CapturedValue, lane: Lane): Update {
@@ -107,8 +103,8 @@ function initializeClassErrorUpdate(
   fiber: Fiber,
   errorInfo: CapturedValue,
 ): void {
-  const getDerivedStateFromError = (fiber.type as ErrorBoundaryClass).getDerivedStateFromError;
-  if (typeof getDerivedStateFromError === "function") {
+  const getDerivedStateFromError = derivedStateFromError(fiber.type);
+  if (getDerivedStateFromError !== null) {
     const error = errorInfo.value;
     update.payload = () => {
       return getDerivedStateFromError(error);
@@ -588,11 +584,11 @@ function throwException(
       }
       case ClassComponent: {
         // Capture and retry
-        const ctor = workInProgress.type as ErrorBoundaryClass;
+        const ctor = workInProgress.type;
         const instance = workInProgress.stateNode as ErrorBoundaryInstance | null;
         if (
           (workInProgress.flags & DidCapture) === NoFlags &&
-          (typeof ctor.getDerivedStateFromError === "function" ||
+          (derivedStateFromError(ctor) !== null ||
             (instance !== null &&
               defines(ctor, instance, ComponentDidCatch) &&
               !isAlreadyFailedLegacyErrorBoundary(instance)))

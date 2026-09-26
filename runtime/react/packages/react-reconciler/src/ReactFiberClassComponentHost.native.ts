@@ -39,6 +39,13 @@ export function mergeState(ctor: unknown, prev: unknown, partial: unknown): unkn
   return merge(prev, partial);
 }
 
+export function derivedStateFromError(type: unknown): ((error: unknown) => unknown) | null {
+  if (!(type instanceof ClassComponentType)) {
+    return null;
+  }
+  return type.getDerivedStateFromError ?? null;
+}
+
 export function isClassComponentType(type: unknown): boolean {
   return type instanceof ClassComponentType;
 }

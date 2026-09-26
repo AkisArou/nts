@@ -52,6 +52,15 @@ export function mergeState(_ctor: unknown, prev: unknown, partial: unknown): unk
   return Object.assign({}, prev, partial);
 }
 
+/** The static `getDerivedStateFromError` of the class a fiber's `type` is, or null. */
+export function derivedStateFromError(type: unknown): ((error: unknown) => unknown) | null {
+  if (type instanceof ClassComponentType) {
+    return type.getDerivedStateFromError ?? null;
+  }
+  const method = (type as { readonly getDerivedStateFromError?: unknown }).getDerivedStateFromError;
+  return typeof method === "function" ? (method as (error: unknown) => unknown) : null;
+}
+
 /** Whether a fiber's `type` is a class component. */
 export function isClassComponentType(type: unknown): boolean {
   if (type instanceof ClassComponentType) {
