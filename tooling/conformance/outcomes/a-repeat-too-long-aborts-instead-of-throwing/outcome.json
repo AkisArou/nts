@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused: repeat produces a string longer than 2^32-1",
+  "node": "exit 1; nts: uncaught Observed: fits=ababab;too long=RangeError;",
+  "measured_with": "42825d77e95a84bc",
+  "source": "measured"
+}

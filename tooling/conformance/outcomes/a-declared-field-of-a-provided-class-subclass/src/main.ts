@@ -14,9 +14,16 @@
 //   an initialised field (`code = 5`)    true   -- only a declared-but-unassigned field
 //   reading `c.code`                     undefined, as node -- so the value is right
 //                                                  and only presence is wrong
+//   the same subclass with an explicit
+//   `constructor(m) { super(m) }`        true   -- only the *implicit* constructor
 // So the bit index is sound, and what is missing is marking the declared field
-// present at construction when the base comes from `builtin::error_fields` --
-// the constructor path for a provided base, the compiler lane's second hypothesis.
+// present at construction -- for a subclass of a provided class with **no
+// explicit constructor**. Located by the compiler lane: `initialisers_this_site_owes`
+// (lower.rs) owes the field initialisers of the chain *below* the class whose
+// constructor runs, by `take_while(|class| **class != declaring)` over the
+// reversed chain. With no constructor of its own the subclass runs the provided
+// base's, so it sits above that class, falls outside `owed`, and its presence
+// mask is never set.
 //
 // No reach into React's render path (its only optional class fields are on
 // ReactContext, none observed for presence); the fixture is the only witness.
@@ -35,6 +42,11 @@ c.code = 7;
 observe("Error subclass, after assignment", String("code" in c));
 class Typed extends TypeError { code?: number; }
 observe("TypeError subclass", String("code" in new Typed("t")));
+class Explicit extends Error {
+  code?: number;
+  constructor(m: string) { super(m); }
+}
+observe("Error subclass, explicit constructor", String("code" in new Explicit("x")));
 class Kept extends Error { code = 5; }
 observe("Error subclass, initialised field", String("code" in new Kept("k")));
 done();
