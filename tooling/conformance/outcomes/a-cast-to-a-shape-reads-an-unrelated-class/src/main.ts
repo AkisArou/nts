@@ -6,12 +6,15 @@
 // arm is how a `catch` binding arrives. Found by the React lane (their #5) and
 // confirmed independently by the compiler lane, whose probe this adapts.
 //
-// **Now recorded as the refusal it is on main.** 921606dbe refuses an `as` to a
-// type with fields on a value of unknown layout ("... would read them at that
-// type's offsets"), which is honest: the wrong lengths are gone. Recorded as the
-// refusal, so a regression that reads the offset again shows CHANGED and fails;
-// a checked unerase that answers -1 shows FIXED. The same refusal caught
-// `JSON.stringify`'s `toJSON` lookup reading offset 0 of an arbitrary object.
+// **Recorded as the wrong answer, which is what main does.** 921606dbe refused
+// an `as` to a type with fields, and f86cc4403 withdrew it: an object literal's
+// own type is anonymous too, and `examples/pushing-onto-an-array-of-erased-elements`
+// reads one back through exactly this syntax, correctly -- a control the refusal
+// broke. The two are statically indistinguishable, so the fix is a *checked*
+// unerase (a descriptor test at the read, aborting with a sentence), React's #2/#5.
+// On that day this flips to FIXED if the read answers -1, or CHANGED to an abort --
+// either is right; the lengths 2 and 5 below are not.
+
 class Unrelated {
   first = 11;
   second = 22;
