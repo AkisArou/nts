@@ -13562,6 +13562,27 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(read);
         }
+        // A binding's property read through its getter -- `row?.string`,
+        // `label?.label` -- on the receiver the chain found present, at the
+        // part of its type that is present: as `label.label` is, and not as a
+        // struct field, which a handle has no layout for.
+        if self.is_accessor_property(member) {
+            let method = self
+                .accessor(member, false)
+                .ok_or_else(|| self.unsupported(id, "a read of a native property no @ntsGet names a method for"))?;
+            let ty = self
+                .snapshot
+                .node_types
+                .get(&object)
+                .copied()
+                .ok_or_else(|| self.unsupported(id, &format!("a native property whose accessor `{method}` has no receiver type")))?;
+            let ty = self.present_part(ty).unwrap_or(ty);
+            if let [slot, name] = method.split_whitespace().collect::<Vec<_>>()[..] {
+                let slot: u32 = slot.parse().map_err(|_| self.unsupported(id, "@ntsGet or @ntsSet naming a slot that is not a number"))?;
+                return self.lower_slot_accessor(id, member, receiver, ty, (slot, name), None);
+            }
+            return self.lower_accessor_on(id, receiver, ty, &method, None);
+        }
         let name = self.literal_name(member).ok_or_else(|| self.unsupported(member, "a computed property name"))?;
         self.member_of(id, receiver, &name)
     }

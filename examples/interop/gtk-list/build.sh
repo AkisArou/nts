@@ -1,7 +1,9 @@
 #!/bin/sh
-# Build a list view over a model of a thousand rows under reference counting
-# and run it (see src/main.ts). `G_DEBUG=fatal-criticals` turns any GTK
-# complaint into an end; "bound nothing" would mean the factory never ran.
+# Build list views over models -- a store, a model the program writes, a
+# model sorted and filtered by TypeScript closures -- on C and LLVM, plain and
+# under reference counting, and run each (see src/main.ts).
+# `G_DEBUG=fatal-criticals` turns any GTK complaint into an end; "bound
+# nothing" would mean the factory never ran.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 out=${1:-"$root/target/interop-gtk-list"}
@@ -21,10 +23,20 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 
-mkdir -p "$out"
-"$nts" build "$source/tsconfig.json" --out "$out" --rc
-log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
-  timeout 30 "$root/examples/interop/with-display.sh" "$out/list/linux-gnu-x86_64/list" 2>/dev/null | tr '\n' ' ' || true)
-echo "log: $log"
-[ "$log" = "tasks 100 true task 0 range 1000000 first line 0 items 1000 bound rows bound tasks bound range " ] || { echo "FAILED gtk-list: expected tasks 100 true task 0 range 1000000 first line 0 items 1000 bound rows bound tasks bound range" >&2; exit 1; }
-echo "list views over a GListStore and over a model the program writes, rows bound by a factory: OK"
+expected="tasks 100 true task 0 range 1000000 first line 0 items 1000 sorted apple,banana,fig,kiwi,pear filtered apple,banana bound rows bound tasks bound range "
+for mode in plain rc; do
+  flag=""
+  [ "$mode" = rc ] && flag="--rc"
+  # shellcheck disable=SC2086
+  "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag
+  for product in list list-llvm; do
+    log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
+      timeout 30 "$root/examples/interop/with-display.sh" "$out/$mode/$product/linux-gnu-x86_64/$product" 2>/dev/null | tr '\n' ' ' || true)
+    echo "$product ($mode): $log"
+    if [ "$log" != "$expected" ]; then
+      echo "FAILED gtk-list: $product ($mode) expected $expected" >&2
+      exit 1
+    fi
+  done
+done
+echo "list views over a GListStore and over a model the program writes, sorted and filtered by TypeScript, on C and LLVM: OK"

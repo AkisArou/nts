@@ -921,6 +921,31 @@ gtk-actions' `dialog rejected Operation was cancelled`. `await
 dialog.choose(window, cancellable)` is rejected with GIO's error when a
 timer calls `cancellable.cancel()`, on C and LLVM, plain and `--rc`.
 
+### Sorting and filtering by TypeScript
+
+A `GtkCustomSorter` compares two `gpointer`s (`GCompareDataFunc`). GIR types
+that callback once for every use, so it cannot say that for a sorter they are
+list items, which are always GObjects. `set_sort_func` was refused as "a
+`gpointer`".
+
+- `COMPARES_ITEMS` in the binder lists the functions whose compare callback
+  receives items: the sorter's, and `GListStore`'s `sort`, `insert_sorted`
+  and `find_with_equal_func_full`. For those, the callback's parameters are
+  `Const<Erased<GObject>>`: GJS's overrides know the same thing.
+- `Const<Erased<H>>` is now `const void *` to the compiler, which dropped the
+  `Const` before. The witness compares the header's `gconstpointer`s.
+- The LLVM callback bridge passes one pointer as another, as the C bridge's
+  cast does.
+- An entry that `shadows` another is bound under that other's name, as GJS
+  binds it: `g_list_model_get_object` is `model.get_item(i)`.
+  `get_item` itself is not introspectable.
+- `x?.prop` on a handle is read through the property's getter. It was taken
+  for a struct field and refused.
+- Witness: gtk-list's `sorted apple,banana,fig,kiwi,pear filtered
+  apple,banana`: a sort model, and a filter model whose closure's captured
+  bound changes before `filter.changed`. gtk-list now runs on C and LLVM,
+  plain and `--rc`, where it ran C under `--rc` only.
+
 ### libadwaita, and what a props type says
 
 Adw-1 binds from GIR like any other namespace (12,342 functions), and

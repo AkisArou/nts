@@ -228,7 +228,10 @@ fn callables(owner: Node<'_, '_>) -> Vec<Callable> {
 
 fn callable(node: Node<'_, '_>, kind: CallableKind) -> Callable {
     Callable {
-        name: attribute(node, "name").unwrap_or_default().to_owned(),
+        // An entry that `shadows` another -- `g_list_model_get_object`
+        // shadows the unintrospectable `get_item` -- is bound under that
+        // other's name, as GJS binds it: `model.get_item(i)`.
+        name: attribute(node, "shadows").or_else(|| attribute(node, "name")).unwrap_or_default().to_owned(),
         c_identifier: c_attribute(node, "identifier").map(str::to_owned),
         kind,
         signature: signature(node),

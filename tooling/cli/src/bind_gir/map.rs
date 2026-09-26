@@ -408,7 +408,22 @@ struct Mapper<'a> {
     /// What the headers say: struct tags and enum signedness (see `facts`).
     facts: &'a super::facts::Facts,
     binding: Binding,
+    /// Mapping one of `COMPARES_ITEMS`: its compare callback's `gpointer`s are
+    /// a list model's items.
+    comparing_items: bool,
 }
+
+/// Functions whose `GCompareDataFunc` compares the items of a list model --
+/// always `GObject`s, which GIR, typing the callback once for every use, cannot
+/// say. GJS's overrides know it too. The callback's two `gpointer`s are
+/// `Erased<GObject>` for these: `sorter.set_sort_func((a, b) => ...)`.
+const COMPARES_ITEMS: [&str; 5] = [
+    "gtk_custom_sorter_new",
+    "gtk_custom_sorter_set_sort_func",
+    "g_list_store_sort",
+    "g_list_store_insert_sorted",
+    "g_list_store_find_with_equal_func_full",
+];
 
 /// Bind one namespace of `repository`.
 #[must_use]
@@ -430,6 +445,7 @@ pub(crate) fn bind<'a>(
         namespace,
         c_types,
         facts,
+        comparing_items: false,
         binding: Binding {
             module: module_of(namespace),
             headers: namespace.headers.clone(),
@@ -605,6 +621,21 @@ fn spelled_string(param: &Param, spelling: &str) -> Param {
 
 fn is_string(param: &Param) -> bool {
     matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8")
+}
+
+/// A compare callback's `gpointer` or `gconstpointer`, for a function in
+/// `COMPARES_ITEMS`, as the `GObject` it is: typed as GIR types a
+/// `GtkCustomFilterFunc`'s item, `GObject.Object` passed as `gpointer`.
+fn item_of_list(param: &Param) -> Option<Param> {
+    let TypeRef::Named { name, .. } = &param.ty else { return None };
+    if name != "gpointer" && name != "gconstpointer" {
+        return None;
+    }
+    let mut item = param.clone();
+    item.ty = TypeRef::Named { name: "GObject.Object".to_owned(), c_type: Some("gpointer".to_owned()) };
+    // A model's item is never NULL.
+    item.nullable = false;
+    Some(item)
 }
 
 /// How a property's value crosses `g_object_set`/`g_object_get`, as a
@@ -1059,6 +1090,7 @@ impl<'a> Mapper<'a> {
         if COUNTING.contains(&symbol.as_str()) {
             return Err(Reason::CountedByCompiler);
         }
+        self.comparing_items = COMPARES_ITEMS.contains(&symbol.as_str());
         let signature = &callable.signature;
         let mut parameters = Vec::new();
         let mut c_parameters = Vec::new();
@@ -2120,8 +2152,18 @@ impl<'a> Mapper<'a> {
             if matches!(&p.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename") {
                 return Err(Reason::StringInCallback);
             }
+            let item = self.comparing_items.then(|| item_of_list(p)).flatten();
+            let constant = item.is_some() && matches!(&p.ty, TypeRef::Named { c_type: Some(c), .. } if c.starts_with("gconst") || c.starts_with("const"));
+            let p = item.as_ref().unwrap_or(p);
             let mapped = self.typed(p)?;
-            let mapped = self.truth(p, mapped);
+            let mut mapped = self.truth(p, mapped);
+            // C's own spelling of the slot, `gconstpointer`, which the
+            // self-check compares: the item is still the handle it lends.
+            if constant {
+                mapped.c = Type::Pointer(Pointee::Const(Box::new(Pointee::Void)));
+                self.binding.brands.insert("Const");
+                mapped.ts = format!("Const<{}>", mapped.ts);
+            }
             c_parameters.push(mapped.c.clone());
             ts_parameters.push(format!("{}: {}", identifier(&p.name), mapped.ts));
         }

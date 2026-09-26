@@ -1234,7 +1234,8 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                     arguments.push(format!("ptr %s{at}"));
                     continue;
                 }
-                if from == to {
+                // One pointer as another is the same address, as C's cast says.
+                if from == to || matches!((&from, &to), (HirType::NativePointer(_), HirType::NativePointer(_))) {
                     arguments.push(format!("{to_ty} %a{at}"));
                 } else if to == HirType::Bool {
                     // A `gboolean` C passes, read as C reads it: any non-zero

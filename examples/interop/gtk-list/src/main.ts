@@ -12,7 +12,7 @@
 // The log:
 //   tasks 100 true task 0  the task store's count, that its item type is
 //                 `Task.$gtype`, and its first item read back through
-//                 `get_object` and `instanceof`
+//                 `get_item` and `instanceof`
 //   items 1000    the store's `get_n_items`, through `GListModel`
 //   bound rows    `bind` ran for the rows GTK laid out, each label filled
 //                 from its `GtkStringObject` -- read through checked casts
@@ -21,7 +21,19 @@
 //                 (`GListModelImplementation`): a million rows, none stored --
 //                 `vfunc_get_item` makes each as GTK asks for it
 //   bound range   and a view over it bound rows from what it made
+//   sorted apple,banana,fig,kiwi,pear filtered apple,banana  a sort model over a
+//                 `GtkCustomSorter` whose compare function is TypeScript --
+//                 its two items `GObject`s, as `GCompareDataFunc` does not say
+//                 -- under a filter model whose `GtkCustomFilter` closure
+//                 captures a bound, changed and announced with
+//                 `filter.changed`; each item read as `asGtkStringObject(x)?.string`
 import {
+  GtkCustomFilter,
+  GtkCustomSorter,
+  GtkFilterListModel,
+  GtkSortListModel,
+  GtkStringList,
+  Ordering,
   GtkApplication,
   GtkApplicationWindow,
   GtkBox,
@@ -53,7 +65,7 @@ function taskView(): { view: GtkListView; bound: () => number } {
     task.done = i % 3 === 0;
     store.append(task);
   }
-  const first = store.get_object(0);
+  const first = store.get_item(0);
   console.log("tasks " + String(store.get_n_items()) + " " + String(store.get_item_type() === Task.$gtype) + " " + (first instanceof Task ? first.title : "?"));
   const factory = new GtkSignalListItemFactory({});
   let bound = 0;
@@ -109,6 +121,31 @@ function stringView(model: GListModel): { view: GtkListView; bound: () => number
   return { view: new GtkListView({ model: new GtkSingleSelection({ model }), factory, vexpand: true }), bound: () => bound };
 }
 
+// Words sorted by a TypeScript compare function, then filtered by length.
+function sortedWords(): string {
+  const words = new GtkStringList({ strings: ["pear", "apple", "fig", "banana", "kiwi"] });
+  const sorter = new GtkCustomSorter({});
+  sorter.set_sort_func((a, b) => {
+    const x = asGtkStringObject(a)?.string ?? "";
+    const y = asGtkStringObject(b)?.string ?? "";
+    return x < y ? Ordering.SMALLER : x > y ? Ordering.LARGER : Ordering.EQUAL;
+  });
+  const sorted = new GtkSortListModel({ model: words, sorter });
+  let longer = 3;
+  const filter = new GtkCustomFilter({});
+  filter.set_filter_func((item) => (asGtkStringObject(item)?.string.length ?? 0) > longer);
+  const filtered = new GtkFilterListModel({ model: sorted, filter });
+  const read = (model: GListModel): string => {
+    const out: string[] = [];
+    for (let i = 0; i < model.get_n_items(); i++) out.push(asGtkStringObject(model.get_item(i))?.string ?? "?");
+    return out.join(",");
+  };
+  const all = read(sorted);
+  longer = 4;
+  filter.changed(0);
+  return "sorted " + all + " filtered " + read(filtered);
+}
+
 function open(application: GtkApplication): void {
   const store = new GListStore({ item_type: gtk_string_object_get_type() });
   // `GtkStringObject.new`, GJS's constructor on the class.
@@ -116,7 +153,7 @@ function open(application: GtkApplication): void {
   const rows = stringView(store);
   const tasks = taskView();
   const range = new Range();
-  const first = asGtkStringObject(range.get_object(0));
+  const first = asGtkStringObject(range.get_item(0));
   console.log("range " + String(range.get_n_items()) + " first " + (first !== null ? first.string : "?"));
   const lines = stringView(range);
   const column = new GtkBox({});
@@ -128,6 +165,7 @@ function open(application: GtkApplication): void {
   window.set_child(column);
   window.present();
   console.log("items " + String(store.get_n_items()));
+  console.log(sortedWords());
   g_timeout_add_full(0, 300, () => {
     console.log(rows.bound() > 0 ? "bound rows" : "bound nothing");
     console.log(tasks.bound() > 0 ? "bound tasks" : "bound no tasks");
