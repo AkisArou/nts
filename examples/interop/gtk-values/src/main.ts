@@ -39,7 +39,8 @@
 //                 reference of its own, and the button goes with the array
 //                 (`alive` without counting). The read retained managed
 //                 references only, so its release was one too many
-import { GtkButton, GtkLabel, GtkListBox, gtk_init } from "c:Gtk-4.0";
+import { GtkButton, GtkLabel, GtkListBox, GtkTextIter, gtk_init } from "c:Gtk-4.0";
+import { GdkRGBA } from "c:Gdk-4.0";
 import { sub_gone, sub_log, sub_watch } from "c:sub";
 
 function describe(x: unknown): string {
@@ -184,6 +185,24 @@ function kept(): string {
   return kept ? "kept" : "lost";
 }
 
+// Boxed records where any value may go: `instanceof` of the record asks the
+// box's GType, so a text iter -- a box too -- is not a colour, and a plain
+// object is neither.
+function boxed(value: unknown): string {
+  if (value instanceof GdkRGBA) return "rgba:" + value.to_string();
+  if (value instanceof GtkTextIter) return "iter";
+  return "other";
+}
+
+function boxes(): string {
+  const red = new GdkRGBA();
+  red.parse("red");
+  const values: unknown[] = [red, new GtkTextIter(), { a: 1 }, 3, null];
+  let told = "";
+  for (const value of values) told += boxed(value) + " ";
+  return told + (red instanceof GdkRGBA ? "typed" : "untyped");
+}
+
 function main(): void {
   gtk_init();
   const b = new GtkButton({ label: "b" });
@@ -217,6 +236,7 @@ function main(): void {
   sub_log("dropped " + dropped());
   sub_log("copies " + copies());
   sub_log(kept());
+  sub_log("boxes " + boxes());
 }
 
 main();

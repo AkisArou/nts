@@ -29251,6 +29251,9 @@ impl<'a> FuncBuilder<'a> {
         if let Some(asked) = self.lower_com_instanceof(id, lhs, symbol)? {
             return Ok(asked);
         }
+        if let Some(asked) = self.lower_boxed_instanceof(id, lhs, symbol)? {
+            return Ok(asked);
+        }
         // The class's *instance* type. The right operand names the constructor,
         // whose type is not the type of what `new` produces, so it is found by
         // the symbol both share -- and by the symbol rather than by the name,
@@ -49422,6 +49425,59 @@ impl<'a> FuncBuilder<'a> {
         self.terminate(Terminator::Jump { target: answered, args: vec![is_a] });
         self.switch_to(answered);
         Ok(Some(answer))
+    }
+
+    /// `value instanceof GdkRGBA` for a boxed record a binding declares: the
+    /// record whose construct signature (`new (): GdkRGBA`) makes one, by
+    /// `schema::boxed` of what it returns -- the reading the result path's
+    /// boxing uses. Of an erased value, the runtime answers
+    /// (`nts_gobject_is_boxed`: a box that `nts_gobject_boxed_free` frees, of
+    /// this `GType`);
+    /// of one already held as the box, it is whether it is there. `None` for
+    /// any other class.
+    fn lower_boxed_instanceof(&mut self, id: NodeId, lhs: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(record) = self.boxed_constructed(symbol) else { return Ok(None) };
+        let value = self.lower_expression(lhs)?;
+        let origin = self.origin(id);
+        match self.values[value.0 as usize].ty.clone() {
+            HirType::Erased => {
+                let gtype = self.call_foreign_named(id, &record.get_type, Vec::new())?;
+                Ok(Some(self.runtime_call("nts_gobject_is_boxed", vec![value, gtype], HirType::Bool, origin)))
+            }
+            HirType::Managed(ManagedType::Object(layout)) if layout == self.boxed_record_layout() => {
+                let null = self.push(OpKind::ConstNull, HirType::Managed(ManagedType::Object(layout)), origin.clone());
+                Ok(Some(self.push(OpKind::Binary { op: BinOp::Ne, lhs: value, rhs: null }, HirType::Bool, origin)))
+            }
+            _ => Err(self.unsupported(id, "an `instanceof` of a boxed record on a value that is neither erased nor a box")),
+        }
+    }
+
+    /// The boxed record a binding's value constructs (`export const GdkRGBA:
+    /// { new (): GdkRGBA }`): what its construct signature returns, when that
+    /// is a boxed record. `None` for anything else.
+    fn boxed_constructed(&self, symbol: nts_semantic_schema::SymbolId) -> Option<super::native::schema::BoxedRecord> {
+        let value = self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|declaration| self.kind_of(*declaration) == Some(syntax::VARIABLE_DECLARATION))?;
+        let mut pending = vec![value];
+        while let Some(at) = pending.pop() {
+            // Its return type, `GdkRGBA`: the one child whose recorded type
+            // is a boxed record. A construct signature has no signature type
+            // of its own in the snapshot.
+            if self.kind_of(at) == Some(syntax::CONSTRUCT_SIGNATURE) {
+                return self.children(at).into_iter().find_map(|child| {
+                    let ty = *self.snapshot.node_types.get(&child)?;
+                    super::native::schema::boxed(self.snapshot, ty)
+                });
+            }
+            pending.extend(self.children(at));
+        }
+        None
     }
 
     /// `x instanceof Button` for a Windows Runtime class: whether `x` is a COM

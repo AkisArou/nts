@@ -631,6 +631,15 @@ void *nts_gobject_boxed_copy(const void *boxed, size_t type) {
                        type);
 }
 
+bool nts_gobject_is_boxed(NtsValue value, size_t type) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsBoxed *box = (const NtsBoxed *)nts_value_reference(value);
+  return box != NULL && box->header.descriptor->kind == NTS_KIND_BOXED &&
+         box->free == nts_gobject_boxed_free && box->data == type;
+}
+
 /* `g_malloc0`, which is what `g_boxed_free` gives back for the records C
  * lets a caller allocate: since GLib 2.76 `g_slice` is `g_malloc`. */
 void *nts_gobject_boxed_new(size_t type, size_t size) {

@@ -203,6 +203,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_gobject_boxed", returns: "ptr", params: &["ptr", "i64"], attributes: &[] },
     Signature { name: "nts_gobject_boxed_copy", returns: "ptr", params: &["ptr", "i64"], attributes: &[] },
     Signature { name: "nts_gobject_boxed_new", returns: "ptr", params: &["i64", "i64"], attributes: &[] },
+    Signature { name: "nts_gobject_is_boxed", returns: "zeroext i1", params: &["i32", "i64", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_gobject_made", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_gobject_state", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_handle_check", returns: "void", params: &["i32", "i32"], attributes: &[] },

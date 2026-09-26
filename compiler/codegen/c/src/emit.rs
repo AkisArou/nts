@@ -569,7 +569,8 @@ impl Emitted {
         // includes; the source only where a signal is connected, since that is
         // what brings libgobject into the link.
         // Or registers a class of its own over one (`emit/gobject.rs`), or
-        // holds a boxed record (`nts_gobject_boxed`, `_copy`, `_new`).
+        // holds a boxed record (`nts_gobject_boxed`, `_copy`, `_new`), or asks
+        // whether a value is one (`nts_gobject_is_boxed`).
         let text = self.writer.text();
         // Or erases a `GObject` handle into a value (`NTS_TAG_HANDLE_GOBJECT`),
         // which the family's registration in that file is what counts. Or,
@@ -581,6 +582,7 @@ impl Emitted {
             || text.contains("nts_gobject_connect(")
             || text.contains("nts_gobject_register(")
             || text.contains("nts_gobject_boxed")
+            || text.contains("nts_gobject_is_boxed(")
             || text.contains("NTS_TAG_HANDLE_GOBJECT")
             || text.contains("nts_gobject_made(");
         if connects || self.witness.contains(GOBJECT_HEADER_NAME) {

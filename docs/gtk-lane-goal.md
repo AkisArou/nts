@@ -1219,6 +1219,14 @@ writes a list model as `new Gio.ListStore({ item_type: Task.$gtype })` over a
   and `instanceof GtkLabel` was refused.
 - **The narrowing** it gives the checker is honoured: `x` becomes `C`'s handle
   after the test. An `as` stays refused, because it is unchecked.
+- **`x instanceof GdkRGBA`** for a boxed record asks the value, not a
+  class: `nts_gobject_is_boxed(x, gdk_rgba_get_type())` is true of a box whose
+  free is GLib's and whose `GType` is the record's (`lower_boxed_instanceof`).
+  So a `GtkTextIter` — a box too — is not a colour, and a plain object is
+  neither. A value already typed as the record answers whether it is there.
+  Before this, the test was refused, as "no class for" the record. gtk-values'
+  `boxes` line asks it of a colour, a text iter, a plain object, a number and
+  `null`; with the `GType` comparison removed, the iter reads as a colour.
 - **`C.$gtype`** is `C`'s `GType`. The binder declares it on every class
   value, and a program class inherits it as a static but answers its own
   `nts_gobject_type_C`.

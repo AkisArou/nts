@@ -2177,6 +2177,14 @@ void nts_boxed_unlend(const void *box);
 void *nts_gobject_boxed(void *boxed, size_t type);
 void *nts_gobject_boxed_copy(const void *boxed, size_t type);
 void *nts_gobject_boxed_new(size_t type, size_t size);
+/* Whether `value` is a box of the program's holding a record of the boxed
+ * `GType` `type`: `value instanceof GdkRGBA`, of an erased value. One fact in
+ * three parts, and the middle one is load-bearing: the object is a box
+ * (`NTS_KIND_BOXED`); its `free` is `nts_gobject_boxed_free`, which is what
+ * says its `data` is a `GType` at all -- a box of another family keeps
+ * something else there; and that `GType` is `type`. Without the `free` test,
+ * any box whose word collided with a `GType` would answer yes. */
+NTS_READS_ONLY bool nts_gobject_is_boxed(NtsValue value, size_t type);
 /* A C string a foreign function returned, as a string: the copy is the
  * program's, and C's pointer is not kept. NULL is `null` -- for a binding
  * declared `string | null`. */

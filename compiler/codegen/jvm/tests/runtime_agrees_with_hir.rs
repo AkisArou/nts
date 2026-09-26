@@ -273,4 +273,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 114 for `nts_winrt_is`, `x instanceof Button` of a Windows Runtime value:
 /// Windows again.
-const REFUSED_FLOOR: usize = 114;
+///
+/// 115 for `nts_gobject_is_boxed`, `x instanceof GdkRGBA` of a boxed record:
+/// GTK, and native calls again.
+const REFUSED_FLOOR: usize = 115;
