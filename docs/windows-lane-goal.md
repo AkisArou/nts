@@ -208,11 +208,12 @@ the same vtable calls on the VM measured the behaviour first.
   which the floor never makes. The benchmark and its oracle are in
   `~/.cache/nts/windows/benches/winrt-crossings`; C# (CsWinRT) is not
   measured yet: the VM has no .NET SDK.
-- **Awaitable operations:** `await StorageFolder.GetFolderFromPathAsync(p)`
-  is the folder, and the operation stays an operation -- it answers
-  `as_IAsyncInfo()` afterwards, as C#'s `await` keeps it. Each
-  `IAsyncOperation<T>` and `IAsyncOperationWithProgress<T, P>` specialisation
-  declares `then`, naming with `@ntsCall` a function the binder writes into
+- **Awaitable operations and actions:** `await StorageFolder.
+  GetFolderFromPathAsync(p)` is the folder, and the operation stays an
+  operation -- it answers `as_IAsyncInfo()` afterwards, as C#'s `await` keeps
+  it; `await ThreadPool.RunAsync(f)` is `void`, as on a `Promise<void>`. Each
+  `IAsyncOperation<T>` and `IAsyncOperationWithProgress<T, P>` specialisation,
+  each `IAsyncActionWithProgress<P>`, and `IAsyncAction` itself declares `then`, naming with `@ntsCall` a function the binder writes into
   `<namespace>.values.ts`, which subscribes `Completed` (pending until it
   arrives) and decides by the status it is handed: `Completed` fulfils with
   `GetResults`, `Error` rejects with the operation's own error, and
@@ -224,9 +225,10 @@ the same vtable calls on the VM measured the behaviour first.
   A second `await` of one operation rejects with the operation's own refusal
   of a second `Completed` (0x80000018).
 - **Not yet:**
-  - `IAsyncAction` and `IAsyncActionWithProgress<P>` as thenables: an
-    operation's result is awaited as itself (below), an action's is still
-    written by hand as windows-winrt's `awaitAction` is.
+  - `then` on an operation whose result is a struct
+    (`IAsyncOperation<LoadMoreItemsResult>`): the struct is read into a native
+    local, which a callback cannot be handed, so the binder declares none and
+    `refused.txt` says so.
   - Arrays of anything but bytes, and arrays the callee allocates
     (`CopyToByteArray`, the `Get*Array` methods).
   - Generic delegates whose IID depends on the interface's own parameters
@@ -337,9 +339,8 @@ Application.Start(() => { new App(); });
 1. **W1 is closed.** One named gap: under LLVM on Win64, an exported
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
-2. **W2's rest** as listed above: actions as thenables, beside the
-   operations that are. **W3** is complete for the fixture's needs; next is
-   **W4**.
+2. **W2's rest** as listed above. **W3** is complete for the fixture's
+   needs; next is **W4**.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT. The surface is JavaScript-style, as the Windows
    Runtime's own JavaScript projection was: types in PascalCase, members in

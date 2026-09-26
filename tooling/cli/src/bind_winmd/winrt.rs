@@ -372,9 +372,10 @@ struct Writer<'a> {
     /// it is being written, which is what its own members naming it find.
     specialized: std::collections::BTreeMap<String, String>,
     /// Each async operation this module declares a `then` for, by its
-    /// specialisation's name, with its result as this module spells it: what
-    /// the values module's function for it is written from.
-    thens: std::collections::BTreeMap<String, String>,
+    /// specialisation's name, with its result as this module spells it --
+    /// `None` for an action, which completes with nothing: what the values
+    /// module's function for it is written from.
+    thens: std::collections::BTreeMap<String, Option<String>>,
     refused: Vec<(String, String)>,
     methods: usize,
 }
@@ -440,6 +441,11 @@ impl Writer<'_> {
                 .filter(|interface| self.generics.is_empty() || matches!(interface, Type::ClassName(named) if named.generics.is_empty()))
                 .collect();
             methods.push_str(&self.queries(name, &this, &required));
+        }
+        // `IAsyncAction` is not generic, so no specialisation declares its
+        // `then`: it is declared on the interface itself.
+        if self.namespace == "Windows.Foundation" && name == "IAsyncAction" {
+            methods.push_str(&self.then_declaration(name, None));
         }
         self.brands.insert("ComClass");
         let _ = writeln!(body, "  /** IID {iid} */");
@@ -1734,8 +1740,15 @@ impl Writer<'_> {
     /// operation whose result could not be spelled.
     fn then(&mut self, def: TypeDef, named: &windows_metadata::TypeName, alias: &str) -> Option<String> {
         let base = generic_base(&named.name);
-        if def.namespace() != "Windows.Foundation" || !matches!(base, "IAsyncOperation" | "IAsyncOperationWithProgress") {
+        if def.namespace() != "Windows.Foundation" {
             return None;
+        }
+        match base {
+            "IAsyncOperation" | "IAsyncOperationWithProgress" => {}
+            // An action's progress is its only argument; it completes with
+            // nothing.
+            "IAsyncActionWithProgress" => return Some(self.then_declaration(alias, None)),
+            _ => return None,
         }
         let argument = named.generics.first()?;
         // A struct result is read into a native local, whose address a
@@ -1751,7 +1764,15 @@ impl Writer<'_> {
             return None;
         }
         let result = self.type_argument(argument).ok()?;
-        self.thens.insert(alias.to_owned(), result.clone());
+        Some(self.then_declaration(alias, Some(result)))
+    }
+
+    /// The `then` declaration itself, recorded for the values module. An
+    /// action's callback takes `void`, which is what `await` on it is -- as
+    /// on a `Promise<void>`.
+    fn then_declaration(&mut self, alias: &str, result: Option<String>) -> String {
+        let value = result.clone().unwrap_or_else(|| "void".to_owned());
+        self.thens.insert(alias.to_owned(), result);
         let mut text = String::new();
         let _ = writeln!(text, "    /**");
         let _ = writeln!(text, "     * `await operation`: its result, or the error it completes with.");
@@ -1759,9 +1780,9 @@ impl Writer<'_> {
         let _ = writeln!(text, "     */");
         let _ = writeln!(
             text,
-            "    then(this: {alias}, onFulfilled: (value: {result}) => unknown, onRejected: (reason: unknown) => unknown): void;"
+            "    then(this: {alias}, onFulfilled: (value: {value}) => unknown, onRejected: (reason: unknown) => unknown): void;"
         );
-        Some(text)
+        text
     }
 
     /// The values module: one function for each `then` this module declares,
@@ -1784,10 +1805,13 @@ impl Writer<'_> {
         let mut functions = String::new();
         for (alias, result) in &self.thens {
             let function = then_function(alias);
+            let value = result.as_deref().unwrap_or("void");
+            // An action has no result to read: it completed, and that is all.
+            let fulfilled = if result.is_some() { "completed.GetResults()" } else { "undefined" };
             let _ = writeln!(functions);
             let _ = writeln!(functions, "export function {function}(");
             let _ = writeln!(functions, "  operation: {alias},");
-            let _ = writeln!(functions, "  onFulfilled: (value: {result}) => unknown,");
+            let _ = writeln!(functions, "  onFulfilled: (value: {value}) => unknown,");
             let _ = writeln!(functions, "  onRejected: (reason: unknown) => unknown,");
             let _ = writeln!(functions, "): void {{");
             let _ = writeln!(functions, "  nts_pending_begin();");
@@ -1795,7 +1819,7 @@ impl Writer<'_> {
             let _ = writeln!(functions, "    operation.put_Completed((completed, status) => {{");
             let _ = writeln!(functions, "      nts_pending_end();");
             let _ = writeln!(functions, "      if (status === AsyncStatus.Completed) {{");
-            let _ = writeln!(functions, "        onFulfilled(completed.GetResults());");
+            let _ = writeln!(functions, "        onFulfilled({fulfilled});");
             let _ = writeln!(functions, "        return;");
             let _ = writeln!(functions, "      }}");
             let _ = writeln!(functions, "      if (status === AsyncStatus.Canceled) {{");

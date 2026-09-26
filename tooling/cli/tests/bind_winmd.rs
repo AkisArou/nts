@@ -430,6 +430,17 @@ fn an_async_operation_is_awaitable_as_itself() {
     assert!(values.contains("import { AsyncStatus } from \"winrt:Windows.Foundation\";"), "{values}");
     let foundation = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
     assert!(foundation.contains("as_IAsyncInfo(this: IAsyncOperation<TResult>): IAsyncInfo;"), "{foundation}");
+    // An action completes with nothing: its callback takes `void`, which is
+    // what `await` on one is, and its function fulfils with `undefined`.
+    assert!(
+        foundation.contains(
+            "then(this: IAsyncAction, onFulfilled: (value: void) => unknown, onRejected: (reason: unknown) => unknown): void;"
+        ),
+        "{foundation}"
+    );
+    let foundation_values = std::fs::read_to_string(out.join("Windows.Foundation.values.ts")).unwrap();
+    assert!(foundation_values.contains("export function nts_then_IAsyncAction("), "{foundation_values}");
+    assert!(foundation_values.contains("onFulfilled(undefined);"), "{foundation_values}");
     let _ = std::fs::remove_dir_all(&out);
 }
 

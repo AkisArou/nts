@@ -77,10 +77,8 @@ import type { c_int64, c_uint, c_uint32 } from "c:types";
 import { GuidHelper, MemoryBuffer } from "winrt:Windows.Foundation";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
 import { ThreadPool } from "winrt:Windows.System.Threading";
-import type { IAsyncAction } from "winrt:Windows.Foundation";
 import { StorageFolder } from "winrt:Windows.Storage";
 import type { IAsyncOperationOfStorageFolder } from "winrt:Windows.Storage";
-import { nts_pending_begin, nts_pending_end } from "c:pending";
 import type { DateTime } from "winrt:Windows.Foundation";
 import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
 import { BitmapTransform } from "winrt:Windows.Graphics.Imaging";
@@ -292,34 +290,13 @@ function threaded(): void {
   }, 1000);
 }
 
-// Run as `winrt async`: an `IAsyncAction` as a Promise, written the way a
-// binding's generated one will be. The action's `Completed` comes from the
-// thread pool and is carried here; the operation is outstanding
-// (`nts_pending_begin`) from its start to its completion, which keeps the
-// program running until then, and a start that fails ends it as well. The
-// handler reads the action it is given rather than capturing it: the action
-// holds the handler, and a capture would make a cycle. `GetResults` answers
-// the action's own HRESULT, which a failed one throws.
-function awaitAction(action: IAsyncAction): Promise<number> {
-  return new Promise((resolve, reject) => {
-    nts_pending_begin();
-    try {
-      action.put_Completed((info, status) => {
-        nts_pending_end();
-        try {
-          info.GetResults();
-          resolve(status);
-        } catch (error) {
-          reject(error);
-        }
-      });
-    } catch (error) {
-      nts_pending_end();
-      reject(error);
-    }
-  });
-}
-
+// Run as `winrt async`: Windows Runtime async work awaited as itself, as C#
+// awaits it. Each operation and action's binding declares `then`, which
+// subscribes `Completed` from the thread pool, carried here: outstanding
+// (`nts_pending_begin`) from the subscription to the completion, which keeps
+// the program running until then. The handler reads the object it is given
+// rather than capturing it -- the object holds the handler, and a capture
+// would make a cycle -- and decides by the status it is handed.
 // A work item handed to the thread pool runs here, carried, and so after
 // its action has completed -- WinRT counts it done when its `Invoke`
 // returns -- which is why nothing here reads what it did. The second
@@ -336,12 +313,14 @@ async function failure(operation: IAsyncOperationOfStorageFolder): Promise<strin
 }
 
 async function awaited(): Promise<string> {
-  const status = await awaitAction(ThreadPool.RunAsync(() => {}));
+  const run = ThreadPool.RunAsync(() => {});
+  await run;
+  const status = run.as_IAsyncInfo().get_Status();
   const action = ThreadPool.RunAsync(() => {});
   action.put_Completed(() => {});
   let refused = "nothing";
   try {
-    await awaitAction(action);
+    await action;
   } catch (error) {
     refused = (error instanceof Error ? error.message : "not an Error").slice(0, 18);
   }
