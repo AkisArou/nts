@@ -44,6 +44,10 @@ import type { ByValue, Ptr, c_double } from "c:types";
 
 let presses = 0;
 let ticks = 0;
+// The last press whose timeout has fired, and how many ticks have waited
+// for it: see `tick`.
+let timedOut = 0;
+let waited = 0;
 
 // Logs `line` from a promise job: the `await` suspends, and what follows it
 // runs as a microtask.
@@ -68,7 +72,10 @@ class Controller extends NSObject implements NSWindowDelegate {
     const press = presses;
     console.log(`pressed ${press}`);
     void afterAJob(`micro ${press}`);
-    setTimeout(() => console.log(`timeout ${press}`), 0);
+    setTimeout(() => {
+      console.log(`timeout ${press}`);
+      timedOut = press;
+    }, 0);
     if (press === 1) {
       nested_while_readable();
     }
@@ -206,6 +213,16 @@ function main(): void {
   window.contentView?.addSubview(button);
 
   const tick = (timer: Timer): void => {
+    // Each step waits for the last press's timeout: the NSTimer and libuv's
+    // timer are two sources with no order between them, and on a slow Mac
+    // the next tick came first (`timeout 1` after `pressed 2`). Waiting makes
+    // the order the program's, not the scheduler's. Bounded, because under
+    // the control no timeout fires inside the loop at all.
+    if (timedOut < presses && waited < 20) {
+      waited++;
+      return;
+    }
+    waited = 0;
     ticks++;
     if (ticks <= 2) {
       button.performClick(null);
