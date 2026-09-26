@@ -3,14 +3,28 @@
     "Test262 cases excluded from conformance262.mjs's headline, beyond features.json's",
     "`inapplicable` class (which is read directly and must not be copied here).",
     "",
-    "Each entry: { kind: \"path\" | \"feature\", match, reason, authority }. A `path`",
+    "Each entry: { kind: \"path\" | \"feature\" | \"include\", match, reason, authority }. A `path`",
+    "matches a file or a directory prefix; an `include` matches a harness file the test declares.",
     "matches a file or a directory prefix. Excluded cases are still RUN: the exclusion",
     "only moves them out of the headline's denominator, and the report prints how many",
     "each entry covers and how many of those now pass (FIXED?).",
     "",
     "An entry naming a path the suite does not have fails the run. Adding one needs an",
     "authority -- a docs/ section that makes it a non-goal -- not a count that looks bad.",
-    "docs/eval.md is a possible design, not a non-goal, so eval-code is not excluded."
+    "docs/eval.md is a possible design, not a non-goal, so eval-code is not excluded.",
+    "",
+    "**The rule every entry follows: a documented non-goal leaves the in-scope denominator;",
+    "an undocumented gap stays in it.** Temporal's 4,603 test/built-ins cases stay in because",
+    "typescript.md never mentions Temporal; propertyHelper.js's cases leave because §13 names",
+    "property descriptors. A large, expensive include is not a precedent for excluding anything",
+    "expensive: the authority is the reason, never the size."
   ],
-  "exclusions": []
+  "exclusions": [
+    {
+      "kind": "include",
+      "match": "propertyHelper.js",
+      "reason": "The include exists to check property descriptors: verifyProperty reads Object.getOwnPropertyDescriptor and asserts writable/enumerable/configurable. Of the 4,789 tests including it, 4,622 call verifyProperty and 4,589 of those name a descriptor attribute -- so about 33 excluded cases may not be about descriptors, an error bar stated rather than smoothed. Unlike the feature exclusions these cases are NOT attempted (there is no stand-in: one could only refuse or invent descriptor answers), so the FIXED? check cannot fire for them; the entry's audit is that the pin still ships the include. Contrast Temporal, kept in the denominator because nothing documents it as a non-goal. 2,811 test/built-ins and 1,754 test/language cases, 2026-09-26.",
+      "authority": "docs/conformance/typescript.md §13, \"The metaobject protocol\" -- the rows \"property descriptors\" and \"Object.defineProperty, freeze, seal, preventExtensions\""
+    }
+  ]
 }

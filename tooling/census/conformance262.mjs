@@ -187,6 +187,25 @@ function machineState() {
   };
 }
 const machineAtStart = machineState();
+
+// **Refuse to start rather than be killed at case 19,000.** The DEGRADED check
+// sees paging; it cannot see the allocator failing outright, which on this box
+// arrives as the kernel or the session killing the process -- after the work is
+// lost, and out of band. A run needs roughly a worker's ordinary frontend (~0.2
+// GB) per job, plus room for one case to climb to the 6 GB cap, plus headroom
+// for everything else: below that, it does not begin.
+// `NTS_CENSUS_MIN_AVAILABLE_GB` overrides the figure for a machine that knows
+// better.
+const REQUIRED_GB = Number(process.env.NTS_CENSUS_MIN_AVAILABLE_GB ?? (jobs * 0.2 + MEMORY_CAP_KB / 1e6 + 2).toFixed(1));
+if (machineAtStart.available_gb < REQUIRED_GB) {
+  cannotMeasure(
+    `${machineAtStart.available_gb} GB available, and a run of ${jobs} worker(s) with a ` +
+      `${MEMORY_CAP_KB / 1e6} GB per-case cap wants ${REQUIRED_GB} GB before it starts. ` +
+      "Wait for the machine, or lower --jobs.",
+  );
+}
+/** The least memory seen while the run was going, sampled at each progress mark. */
+let lowestAvailableGb = machineAtStart.available_gb;
 const describeMachine = (m) =>
   `${m.available_gb} GB available, swap ${m.swap_used_gb}/${m.swap_total_gb} GB, load ${m.load[0]}/${m.load[1]} (1m/5m), ${m.cores} cores`;
 
@@ -262,7 +281,11 @@ const excludedBy = (record) =>
       ? record.features.includes(entry.match)
       : entry.kind === "path"
         ? record.path === entry.match || record.path.startsWith(entry.match.endsWith("/") ? entry.match : `${entry.match}/`)
-        : false,
+        : entry.kind === "include"
+          // A harness file the test declares in `includes:` -- for an include
+          // that exists to test something a documented non-goal forbids.
+          ? record.includes.includes(entry.match)
+          : false,
   );
 
 // The audit runs against the *whole* selection, not the sample: a sample that
@@ -270,13 +293,16 @@ const excludedBy = (record) =>
 const audit = { withoutReason: [], naming_nothing: [], unknownKind: [] };
 for (const entry of exclusions) {
   if (!entry.reason || !entry.authority) audit.withoutReason.push(entry.id);
-  if (entry.kind !== "feature" && entry.kind !== "path") audit.unknownKind.push(entry.id);
+  if (entry.kind !== "feature" && entry.kind !== "path" && entry.kind !== "include") audit.unknownKind.push(entry.id);
+  // An include exclusion names a harness file: stale when the pin no longer
+  // ships it, whichever directory this run measures.
+  else if (entry.kind === "include" && !existsSync(join(SUITE, "harness", entry.match))) audit.naming_nothing.push(entry.id);
   else if (!records.some((record) => excludedBy(record).includes(entry))) {
     // Only an error for exclusions that could name something under `under`:
     // a `built-ins` path is not stale because this run is `test/language`.
-    const inScope = entry.kind === "feature" || entry.match.startsWith(under);
+    const inScope = entry.kind !== "path" || entry.match.startsWith(under);
     if (inScope && entry.kind === "path") audit.naming_nothing.push(entry.id);
-    if (entry.kind === "feature" && inScope) entry.unseen = true;
+    if ((entry.kind === "feature" || entry.kind === "include") && inScope) entry.unseen = true;
   }
 }
 
@@ -378,16 +404,32 @@ async function runAll(all) {
         done += 1;
         if (done % 500 === 0) {
           const rate = done / ((Date.now() - started) / 1000);
+          lowestAvailableGb = Math.min(lowestAvailableGb, machineState().available_gb);
           process.stderr.write(`  ${done}/${paths.length} attempted (${rate.toFixed(1)}/s)\n`);
         }
         feed();
       });
       child.on("error", reject);
-      child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`worker ${index} exited ${code}`))));
+      // **A killed task looks like a finished one** unless it is said out loud:
+      // the kill notice is out of band, and a reader of a partial log sees
+      // whatever the partial says. A worker ended by a signal is reported as that,
+      // with the checkpoint to resume from, and the run exits 2 -- never a verdict.
+      child.on("exit", (code, signal) => {
+        if (code === 0) return resolve();
+        const how = signal ? `was killed by ${signal}${signal === "SIGKILL" ? " (the OOM killer, or a session reaping it)" : ""}` : `exited ${code}`;
+        reject(new Error(`worker ${index} ${how}`));
+      });
       feed();
     });
   if (paths.length > 0) {
-    await Promise.all(Array.from({ length: Math.min(jobs, paths.length) }, (_, index) => worker(index)));
+    try {
+      await Promise.all(Array.from({ length: Math.min(jobs, paths.length) }, (_, index) => worker(index)));
+    } catch (error) {
+      cannotMeasure(
+        `${error.message}; ${done} of ${paths.length} case(s) had come back` +
+          (rowsFile ? ` and are kept in ${rowsFile} -- rerun with --resume` : ""),
+      );
+    }
   }
   return results;
 }
@@ -746,8 +788,9 @@ say(`  machine at end:   ${describeMachine(machineAtEnd)}`);
 // whole run, is a judgement, printed beside the number it judges.
 const seconds = Math.max(1, (machineAtEnd.at - machineAtStart.at) / 1000);
 const pagingRate = (machineAtEnd.pages_swapped - machineAtStart.pages_swapped) / seconds;
+say(`  lowest available memory seen during the run: ${lowestAvailableGb} GB (needed ${REQUIRED_GB} to start)`);
 say(`  paging during the run: ${pagingRate.toFixed(1)} pages/s swapped in or out, over ${Math.round(seconds)} s`);
-if (pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.available_gb) < 4) {
+if (pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.available_gb, lowestAvailableGb) < 4) {
   say("  DEGRADED MACHINE: over 256 pages/s of swap traffic, or under 4 GB available at one end of the run --");
   say("  do not move a floor or re-derive the evidence set from this run");
 }
