@@ -37,7 +37,6 @@ import { ApplicationFlags, type GListModel, type GListModelImplementation, GList
 import { GObject } from "c:GObject-2.0";
 import type { CNumber, Erased, Owned, c_size_t } from "c:types";
 import { g_timeout_add_full } from "c:GLib-2.0";
-import { notes_log } from "c:notes";
 
 class Task extends GObject {
   title = "";
@@ -55,7 +54,7 @@ function taskView(): { view: GtkListView; bound: () => number } {
     store.append(task);
   }
   const first = store.get_object(0);
-  notes_log("tasks " + String(store.get_n_items()) + " " + String(store.get_item_type() === Task.$gtype) + " " + (first instanceof Task ? first.title : "?"));
+  console.log("tasks " + String(store.get_n_items()) + " " + String(store.get_item_type() === Task.$gtype) + " " + (first instanceof Task ? first.title : "?"));
   const factory = new GtkSignalListItemFactory({});
   let bound = 0;
   factory.connect("setup", (_factory, object) => {
@@ -118,7 +117,7 @@ function open(application: GtkApplication): void {
   const tasks = taskView();
   const range = new Range();
   const first = asGtkStringObject(range.get_object(0));
-  notes_log("range " + String(range.get_n_items()) + " first " + (first !== null ? first.string : "?"));
+  console.log("range " + String(range.get_n_items()) + " first " + (first !== null ? first.string : "?"));
   const lines = stringView(range);
   const column = new GtkBox({});
   column.append(rows.view);
@@ -128,11 +127,11 @@ function open(application: GtkApplication): void {
   window.set_default_size(300, 400);
   window.set_child(column);
   window.present();
-  notes_log("items " + String(store.get_n_items()));
+  console.log("items " + String(store.get_n_items()));
   g_timeout_add_full(0, 300, () => {
-    notes_log(rows.bound() > 0 ? "bound rows" : "bound nothing");
-    notes_log(tasks.bound() > 0 ? "bound tasks" : "bound no tasks");
-    notes_log(lines.bound() > 0 ? "bound range" : "bound no range");
+    console.log(rows.bound() > 0 ? "bound rows" : "bound nothing");
+    console.log(tasks.bound() > 0 ? "bound tasks" : "bound no tasks");
+    console.log(lines.bound() > 0 ? "bound range" : "bound no range");
     application.quit();
     return false;
   });

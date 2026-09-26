@@ -24,7 +24,6 @@ import {
   Orientation,
 } from "c:Gtk-4.0";
 import { ApplicationFlags, FileCreateFlags, g_data_input_stream_new, g_data_output_stream_new, g_file_new_for_path, type GFile } from "c:Gio-2.0";
-import { notes_emit, notes_log } from "c:notes";
 
 const PATH = "/tmp/nts-gtk-notes.txt";
 
@@ -84,7 +83,7 @@ async function open(application: GtkApplication): Promise<void> {
   const file = g_file_new_for_path(PATH);
   const notes = new Notes(file, list, status);
   for (const note of await load(file)) notes.show(note);
-  notes_log("loaded " + String(notes.notes.length));
+  console.log("loaded " + String(notes.notes.length));
 
   let added = "";
   add.connect("clicked", () => {
@@ -98,13 +97,13 @@ async function open(application: GtkApplication): Promise<void> {
   // Typed and added, as a person would.
   for (const text of ["milk", "bread", "tea"]) {
     entry.text = text;
-    notes_emit(add, "clicked");
+    add.emit("clicked");
   }
-  notes_log("added " + added);
-  notes_log("count " + status.label);
+  console.log("added " + added);
+  console.log("count " + status.label);
 
   await save(file, notes.notes);
-  notes_log("saved " + String(notes.notes.length));
+  console.log("saved " + String(notes.notes.length));
   application.quit();
 }
 

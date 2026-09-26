@@ -8,8 +8,6 @@ export default defineConfig({
     escape: app.linux({ entry: "./src/main.ts", backend: "c" }),
     "escape-llvm": app.linux({ entry: "./src/main.ts", backend: "llvm" }),
   },
-  // No `native`: the shim is `../native`, which the parent package -- whose
-  // `../types/sub.d.ts` this program includes -- already contributes.
   dependencies: {
     "linux-gnu": { from: "pkg-config", packages: ["gtk4"] },
   },

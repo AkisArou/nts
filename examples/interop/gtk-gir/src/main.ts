@@ -111,7 +111,6 @@ import { GdkRGBA } from "c:Gdk-4.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { CNumber, Ptr, c_char } from "c:types";
 import { local, stringFrom } from "c:memory";
-import { gir_emit, gir_log } from "c:gir-shim";
 import { asGtkBox, asGtkButton, asGtkLabel } from "../types/gir/Gtk-4.0.values.ts";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
@@ -136,36 +135,36 @@ function boxedRecords(): void {
   // `buffer` named again after its iterators' last use: an iterator points
   // into its buffer without counting it, and under `--rc` a buffer released
   // at its last use is gone before the offsets are read (docs/gtk-lane-goal.md).
-  gir_log(
+  console.log(
     "iter " + all + "|" + buffer.get_text(start, end, false) + " " + String(start.get_offset()) + " " + String(copy.get_offset()) + " " + String(buffer.get_char_count()),
   );
   // GJS's shape for storage the caller allocates: made and returned.
   const [first, last] = buffer.get_bounds();
-  gir_log("bounds " + String(first.get_offset()) + "-" + String(last.get_offset()) + " " + String(buffer.get_char_count()));
+  console.log("bounds " + String(first.get_offset()) + "-" + String(last.get_offset()) + " " + String(buffer.get_char_count()));
   const rgba = new GdkRGBA();
   const parsed = rgba.parse("#ff8000");
-  gir_log("rgba " + String(parsed) + " " + rgba.to_string());
+  console.log("rgba " + String(parsed) + " " + rgba.to_string());
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
   context.set_font_description(given);
   const lent = context.get_font_description();
-  gir_log("font " + (lent === null ? "none" : lent.get_family() ?? "none"));
+  console.log("font " + (lent === null ? "none" : lent.get_family() ?? "none"));
 }
 
 function outParameters(): void {
   const when = g_date_time_new_utc(2026, 9, 24, 0, 0, 0);
   if (when === null) {
-    gir_log("no-date");
+    console.log("no-date");
     return;
   }
   const year = local<CNumber<"int">>();
   const month = local<CNumber<"int">>();
   g_date_time_get_ymd(when, year, month, null);
-  gir_log("ymd=" + String(year[0]) + "-" + String(month[0]));
+  console.log("ymd=" + String(year[0]) + "-" + String(month[0]));
   // The same as GJS has it: the out values returned, in order.
   const [y, m, d] = when.get_ymd();
-  gir_log("values=" + String(y) + "/" + String(m) + "/" + String(d));
+  console.log("values=" + String(y) + "/" + String(m) + "/" + String(d));
   g_date_time_unref(when);
 
   // A string out of a slot: `char *` C wrote there, read by `stringFrom`
@@ -174,38 +173,38 @@ function outParameters(): void {
   pango_parse_markup("<b>bold</b> x", -1, 0, null, stripped);
   const markup = stringFrom(stripped[0]);
   g_free(stripped[0]);
-  gir_log("markup=" + (markup ?? "none") + "|" + (stringFrom(null) ?? "none"));
+  console.log("markup=" + (markup ?? "none") + "|" + (stringFrom(null) ?? "none"));
 
   const keys = g_key_file_new();
   const error = local<GError | null>();
   const text = "[a]\nk=5\n";
   const loaded = g_key_file_load_from_data(keys, text, text.length, KeyFileFlags.NONE, error);
   const k = g_key_file_get_integer(keys, "a", "k", error);
-  gir_log("keyfile " + String(loaded) + " " + String(k) + " " + (error[0] === null ? "no-error" : "error"));
+  console.log("keyfile " + String(loaded) + " " + String(k) + " " + (error[0] === null ? "no-error" : "error"));
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
   if (failure !== null) {
-    gir_log("error-set " + String(missing));
+    console.log("error-set " + String(missing));
     g_error_free(failure);
     error[0] = null;
   }
   // `@ntsThrows`: leave the slot out, and a failure is thrown.
   try {
     keys.get_integer("a", "absent");
-    gir_log("not-thrown");
+    console.log("not-thrown");
   } catch (e) {
-    gir_log((e as Error).message.length > 0 ? "thrown" : "thrown-empty");
+    console.log((e as Error).message.length > 0 ? "thrown" : "thrown-empty");
   }
   g_key_file_unref(keys);
 
-  gir_log("split=" + g_strsplit("a,b,c", ",", -1).join("|"));
+  console.log("split=" + g_strsplit("a,b,c", ",", -1).join("|"));
 
   // `subarray` starts one byte in, so a pointer to the buffer rather than the
   // view would hash "_ab" instead.
   const abc = new Uint8Array([0x5f, 0x61, 0x62, 0x63, 0x5f]).subarray(1, 4);
   // An enum member as it is: the parameter is `CEnum<GChecksumType, c_uint>`.
   const digest = g_compute_checksum_for_data(ChecksumType.SHA256, abc);
-  gir_log("sha256=" + (digest === null ? "none" : digest.slice(0, 8)));
+  console.log("sha256=" + (digest === null ? "none" : digest.slice(0, 8)));
 }
 
 // A handle, awaited: `query_info_async`'s `_finish` returns a `GFileInfo *`,
@@ -264,7 +263,7 @@ function absentArrays(): void {
   const direct = gtk_string_list_new(null);
   const constructed = new GtkStringList({ strings: null });
   const given = new GtkStringList({ strings: ["a", "b"] });
-  gir_log("lists " + String(direct.get_n_items()) + " " + String(constructed.get_n_items()) + " " + String(given.get_n_items()));
+  console.log("lists " + String(direct.get_n_items()) + " " + String(constructed.get_n_items()) + " " + String(given.get_n_items()));
 }
 
 // Bytes C hands back. A `GBytes`' own (transfer none) are copied, so the copy
@@ -303,7 +302,7 @@ function main(): void {
     // GJS's construction: `gtk_button_new`, then the setter of each
     // property the literal writes, in its order.
     const button = new GtkButton({ label: "press", has_frame: false });
-    gir_log("made " + String(button.label) + " " + String(button.has_frame));
+    console.log("made " + String(button.label) + " " + String(button.has_frame));
     // A `gpointer` result the caller owns that is a GObject
     // (`Owned<Erased<GObject>>`): adopted rather than referenced again, and
     // released once -- `fatal-criticals` under `--rc` would abort on a count
@@ -311,11 +310,11 @@ function main(): void {
     const group = g_signal_group_new(gtk_button_get_type());
     group.set_target(button);
     const target = group.dup_target();
-    gir_log("dup-target " + String(target === button));
+    console.log("dup-target " + String(target === button));
     // Not floating: the program's own reference, which `--rc` releases once.
     const buffer = new GtkEntryBuffer({ max_length: 2 });
     buffer.set_text("abc", -1);
-    gir_log("buffer " + buffer.text + " " + String(label.selectable));
+    console.log("buffer " + buffer.text + " " + String(label.selectable));
     // A signal passing a string, which GTK lends the handler for the call:
     // `inserted-text` (position, chars, n_chars) as GTK emits it.
     let inserted = "";
@@ -324,7 +323,7 @@ function main(): void {
     });
     buffer.set_text("", -1);
     buffer.insert_text(0, "x", -1);
-    gir_log("inserted " + inserted);
+    console.log("inserted " + inserted);
     // A detailed signal, as GJS connects one: `notify::label` runs for that
     // property's changes and no other's.
     let relabeled = 0;
@@ -334,8 +333,8 @@ function main(): void {
     label.set_label("one");
     label.set_selectable(false);
     label.set_label("two");
-    gir_log("relabeled " + String(relabeled));
-    gir_log(bytesOut());
+    console.log("relabeled " + String(relabeled));
+    console.log(bytesOut());
     // An interface's methods and properties on a class implementing it, as
     // GJS has them: `GtkEditable`'s on a `GtkEntry`, `GtkOrientable`'s on a
     // `GtkBox` -- each the C function taking the interface.
@@ -343,15 +342,15 @@ function main(): void {
     entry.set_text("typed");
     entry.text = entry.get_text() + "!";
     box.set_orientation(Orientation.HORIZONTAL);
-    gir_log("entry " + entry.text + " " + String(box.get_orientation()));
+    console.log("entry " + entry.text + " " + String(box.get_orientation()));
     // The function's own result first, then its out values.
     entry.select_region(1, 3);
     const [selected, start, end] = entry.get_selection_bounds();
-    gir_log("bounds " + String(selected) + " " + String(start) + " " + String(end));
+    console.log("bounds " + String(selected) + " " + String(start) + " " + String(end));
     // A checked downcast, for a handle known only as a widget.
     const widget: GtkWidget = box;
-    gir_log(asGtkBox(widget) === null ? "cast-failed" : "cast-ok");
-    gir_log(asGtkLabel(widget) === null ? "cast-null" : "cast-wrong");
+    console.log(asGtkBox(widget) === null ? "cast-failed" : "cast-ok");
+    console.log(asGtkLabel(widget) === null ? "cast-null" : "cast-wrong");
     // Methods on the handles: each is the C function it names, called with
     // the handle as its instance -- `box.append(label)` is
     // `gtk_box_append(box, label)`, and `window.present()` reaches
@@ -367,14 +366,14 @@ function main(): void {
     button.connect("clicked", (self) => {
       clicks++;
       order += "a";
-      gir_log(asGtkButton(self) === null ? "clicked-not-a-button" : "clicked " + String(clicks));
+      console.log(asGtkButton(self) === null ? "clicked-not-a-button" : "clicked " + String(clicks));
     });
-    gir_emit(button, "clicked");
-    gir_log("order=" + order);
+    button.emit("clicked");
+    console.log("order=" + order);
     // A `GSourceFunc` answers a `gboolean`, as GJS writes it: `false`
     // removes the source, `true` keeps it.
     g_idle_add_full(PRIORITY_DEFAULT, () => {
-      gir_log("idle");
+      console.log("idle");
       return false;
     });
     g_timeout_add_full(PRIORITY_DEFAULT, 10, () => {
@@ -383,7 +382,7 @@ function main(): void {
       // And the query answered, so the log does not depend on which of the
       // two a loaded machine finishes first.
       if (ticks < 3 || kind === -1 || folders === "") return true;
-      gir_log("label=" + label.label);
+      console.log("label=" + label.label);
       application.quit();
       return false;
     });
@@ -392,10 +391,10 @@ function main(): void {
   // GApplication parses it, so it holds only the program name: an option it
   // does not know would end the run.
   const status = application.run(["gir"]);
-  gir_log("status=" + String(status));
-  gir_log("ticks=" + String(ticks));
-  gir_log("kind=" + String(kind));
-  gir_log(folders);
+  console.log("status=" + String(status));
+  console.log("ticks=" + String(ticks));
+  console.log("kind=" + String(kind));
+  console.log(folders);
 }
 
 main();

@@ -9,7 +9,6 @@
 // `build.sh` expects this product to FAIL under `--rc`, and says so when it
 // starts passing (fixed, or the check went blind).
 import { GtkTextBuffer, GtkTextIter } from "c:Gtk-4.0";
-import { sub_log } from "c:sub";
 
 function startOf(text: string): GtkTextIter {
   const buffer = new GtkTextBuffer({});
@@ -23,7 +22,7 @@ function startOf(text: string): GtkTextIter {
 function main(): void {
   const start = startOf("hello world");
   start.forward_chars(6);
-  sub_log("escape " + String(start.get_offset()) + " " + String(start.get_char()));
+  console.log("escape " + String(start.get_offset()) + " " + String(start.get_char()));
 }
 
 main();
