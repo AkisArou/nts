@@ -18,6 +18,10 @@
 # - **LLVM:** `windowLlvm` is the same program through the LLVM backend, held
 #   to the same PE checks and the same output: its window procedure is a
 #   bridge the LLVM backend writes, and its `POINT` crosses as Win64's integer.
+# - **Both providers:** each product built without counting and under
+#   `--rc`, held to the same output. This is the one program with a real
+#   window and message loop, so a handle the counting provider released too
+#   early is noticed here by something other than a count.
 #
 # With no Windows reachable the run arm says so by name, and the rest still
 # count.
@@ -42,45 +46,53 @@ fi
 [ -f "$windows/x86_64/lib/libuv.a" ] ||
   NTS_WINDOWS_ROOT="$windows" "$root/tooling/windows/build-libuv.sh" x86_64 >/dev/null
 
-mkdir -p "$out"
-log="$out/build.log"
-NTS_WINDOWS_ROOT="$windows" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
-  { cat "$log" >&2; exit 1; }
-# The compiler's own refusals. The binder's summary lines ("129 refused (see
-# ...refused.txt)") are about the metadata, not this program.
-if grep -q -E "refused and are absent|NTS[0-9]{4}" "$log"; then
-  cat "$log" >&2
-  echo "windows-window: nts build refused part of the program and exited 0" >&2
-  exit 1
-fi
-
-for product in window windowLlvm; do
-  exe="$out/$product/windows-x86_64/$product.exe"
-  kind=$(file -b "$exe")
-  case $kind in
-    *PE32+*console*x86-64*) ;;
-    *) echo "windows-window: $exe is not an x86-64 console PE32+: $kind" >&2; exit 1 ;;
-  esac
-  foreign=$(llvm-objdump -p "$exe" | sed -n 's/^ *DLL Name: //p' | tr 'A-Z' 'a-z' |
-    grep -v -e '^api-ms-win-' -e '^kernel32.dll$' -e '^advapi32.dll$' -e '^user32.dll$' \
-      -e '^ws2_32.dll$' -e '^iphlpapi.dll$' -e '^userenv.dll$' -e '^dbghelp.dll$' \
-      -e '^ole32.dll$' -e '^shell32.dll$' -e '^psapi.dll$' || true)
-  if [ -n "$foreign" ]; then
-    echo "windows-window: loads DLLs a stock Windows does not have: $foreign" >&2
+# Both providers: the counting one releases each handle where the program
+# last holds it, and this is the one program with a real window and message
+# loop, where a handle released too early is noticed by something other than
+# a count.
+for provider in nogc rc; do
+  build="$out/$provider"
+  mkdir -p "$build"
+  log="$build/build.log"
+  flags=""
+  [ "$provider" = rc ] && flags="--rc"
+  # shellcheck disable=SC2086
+  NTS_WINDOWS_ROOT="$windows" "$nts" build "$source/tsconfig.json" --out "$build" $flags >"$log" 2>&1 ||
+    { cat "$log" >&2; exit 1; }
+  if grep -q -E "refused and are absent|NTS[0-9]{4}" "$log"; then
+    cat "$log" >&2
+    echo "windows-window: nts build refused part of the program and exited 0" >&2
     exit 1
   fi
-  echo "windows-x86_64: console PE32+ x86-64, Windows DLLs only"
 
-  set +e
-  "$root/tooling/windows/run.sh" "$exe" >"$out/windows-$product.txt"
-  status=$?
-  set -e
-  case $status in
-    0)
-      diff -u "$source/expected.txt" "$out/windows-$product.txt"
-      echo "windows-x86_64 ($product): closed by TypeScript inside the message loop, run on Windows"
-      ;;
-    77) echo "SKIP windows-x86_64: not run -- no Windows reachable (tooling/windows/vm.md)" ;;
-    *) echo "windows-window: $product exited $status on Windows" >&2; exit 1 ;;
-  esac
+  for product in window windowLlvm; do
+    exe="$build/$product/windows-x86_64/$product.exe"
+    kind=$(file -b "$exe")
+    case $kind in
+      *PE32+*console*x86-64*) ;;
+      *) echo "windows-window: $exe is not an x86-64 console PE32+: $kind" >&2; exit 1 ;;
+    esac
+    foreign=$(llvm-objdump -p "$exe" | sed -n 's/^ *DLL Name: //p' | tr 'A-Z' 'a-z' |
+      grep -v -e '^api-ms-win-' -e '^kernel32.dll$' -e '^advapi32.dll$' -e '^user32.dll$' \
+        -e '^ws2_32.dll$' -e '^iphlpapi.dll$' -e '^userenv.dll$' -e '^dbghelp.dll$' \
+        -e '^ole32.dll$' -e '^shell32.dll$' -e '^psapi.dll$' || true)
+    if [ -n "$foreign" ]; then
+      echo "windows-window: loads DLLs a stock Windows does not have: $foreign" >&2
+      exit 1
+    fi
+    echo "windows-x86_64 ($product, $provider): console PE32+ x86-64, Windows DLLs only"
+
+    set +e
+    "$root/tooling/windows/run.sh" "$exe" >"$build/windows-$product.txt"
+    status=$?
+    set -e
+    case $status in
+      0)
+        diff -u "$source/expected.txt" "$build/windows-$product.txt"
+        echo "windows-x86_64 ($product, $provider): closed by TypeScript inside the message loop, run on Windows"
+        ;;
+      77) echo "SKIP windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      *) echo "windows-window: $product ($provider) exited $status on Windows" >&2; exit 1 ;;
+    esac
+  done
 done
