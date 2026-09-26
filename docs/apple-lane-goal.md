@@ -1149,6 +1149,44 @@ correctness does not depend on arm64 running by luck.
 5. **A4:** the idiomatic layer, Swift in both directions, an `.app`, and a
    benchmark against NativeScript and Swift.
 
+6. **Decision needed: how a program gets its binding (measured
+   2026-09-26).** Today each fixture runs `nts bind-objc` with a list of
+   `--class` flags and commits the result. Swift's programmer writes
+   `import AppKit` and gets every class. S4 left the choice to a
+   measurement, and this is it: macos-window checked against its own
+   class-list binding, then against every class AppKit's symbol graph
+   declares.
+
+   | binding | size | `nts bind-objc` | `nts check` | peak memory |
+   |---|---|---|---|---|
+   | class list (13 classes) | 191 KB | -- | 0.97 s | 177 MB |
+   | all of AppKit (306 classes) | 768 KB | 3.1 s | 4.17 s | 326 MB |
+
+   The whole-framework binding typechecks cleanly; the 8 errors that run
+   reported were the program's own names from Foundation and CoreGraphics,
+   which the AppKit-only list left out. So whole frameworks work, and they
+   cost every check about 3.2 s and 150 MB for one framework of the three a
+   window uses.
+
+   The options:
+   - **Whole frameworks, generated once per SDK into the build cache.** It is
+     Swift's `import AppKit`, and costs about 4x on every check of every
+     program, most of which name a dozen classes.
+   - **Class lists in `nts.config`**, as the fixtures do now. It is cheap,
+     but every class a program touches has to be named twice: in the config
+     and in the import.
+   - **Recommended: the list derived from the program.** `nts build` reads
+     what the program imports from `objc:AppKit` (and the signatures those
+     classes mention, as `mentioned` already does), and generates that
+     binding into the build cache, keyed by the SDK and the name set. It is
+     Swift's `import AppKit` for the programmer, at the class list's cost for
+     the checker. No binding file is committed. Regeneration is a cache miss,
+     not a diff. The generator's own tests keep the committed fixtures as
+     their oracle.
+
+   The third changes the workflow: bindings stop being files in the
+   project. That is the user's call, and it is not built.
+
 ## Rules this lane keeps
 
 These come from `native-lane-goal.md` and the GTK lane: two arms per claim, one
