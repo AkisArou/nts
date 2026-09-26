@@ -5,8 +5,8 @@
 //
 // Port of upstream's ReactFiberCommitEffects.js (stable channel).
 
-import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
-import { ComponentDidMount } from "shared/ReactClassComponentType.ts";
+import { defines, invoke } from "react-reconciler/ReactFiberClassComponentHost.ts";
+import { ComponentDidMount, ComponentDidUpdate, ComponentWillUnmount, GetSnapshotBeforeUpdate } from "shared/ReactClassComponentType.ts";
 import { hostInstanceOf, hostNodeOf } from "./ReactFiberStateNode.ts";
 import type { Props } from "shared/ReactTypes.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
@@ -66,14 +66,7 @@ import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 // the props and state it rendered with, and the snapshot
 // getSnapshotBeforeUpdate returned, which React keeps on the instance until
 // componentDidUpdate receives it.
-export interface CommitClassInstance extends ClassInstance<unknown> {
-  props: unknown;
-  state: unknown;
-  getSnapshotBeforeUpdate(prevProps: unknown, prevState: unknown): unknown;
-  // JS object model: upstream stores the snapshot as an extra field on the
-  // user's instance.
-  __reactInternalSnapshotBeforeUpdate?: unknown;
-}
+export type CommitClassInstance = ClassInstance;
 
 // What a Profiler's props can hold.
 type ProfilerPhase = "mount" | "update" | "nested-update";
@@ -347,7 +340,7 @@ function callComponentDidMount(finishedWork: Fiber, instance: CommitClassInstanc
     runWithFiberInDEV(finishedWork, callComponentDidMountInDEV, finishedWork, instance);
   } else {
     try {
-      instance.componentDidMount();
+      invoke(instance, ComponentDidMount, undefined, undefined, undefined);
     } catch (error) {
       captureCommitPhaseError(finishedWork, finishedWork.return, error);
     }
@@ -372,7 +365,7 @@ function callComponentDidUpdate(
     );
   } else {
     try {
-      instance.componentDidUpdate(prevProps, prevState, instance.__reactInternalSnapshotBeforeUpdate);
+      invoke(instance, ComponentDidUpdate, prevProps, prevState, instance.__reactInternalSnapshotBeforeUpdate);
     } catch (error) {
       captureCommitPhaseError(finishedWork, finishedWork.return, error);
     }
@@ -499,7 +492,7 @@ if (isDevelopment) {
 }
 
 function callGetSnapshotBeforeUpdates(instance: CommitClassInstance, prevProps: unknown, prevState: unknown): unknown {
-  return instance.getSnapshotBeforeUpdate(prevProps, prevState);
+  return invoke(instance, GetSnapshotBeforeUpdate, prevProps, prevState, undefined);
 }
 
 export function commitClassSnapshot(finishedWork: Fiber, current: Fiber): void {
@@ -545,7 +538,7 @@ function callComponentWillUnmount(
     runWithFiberInDEV(current, callComponentWillUnmountInDEV, current, nearestMountedAncestor, instance);
   } else {
     try {
-      instance.componentWillUnmount();
+      invoke(instance, ComponentWillUnmount, undefined, undefined, undefined);
     } catch (error) {
       captureCommitPhaseError(current, nearestMountedAncestor, error);
     }

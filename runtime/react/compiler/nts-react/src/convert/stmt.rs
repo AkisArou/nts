@@ -468,7 +468,7 @@ impl Converter<'_> {
     /// A class member's kind (`method`, `property`, `accessor`, `constructor`
     /// or `other`), its name when it is written as an identifier or a
     /// string, whether it is static, whether a property holds a function,
-    /// and how many parameters a constructor takes.
+    /// and how many parameters a constructor or method takes.
     fn describe_member(&self, member: NodeId, into: &mut serde_json::Map<String, Value>) {
         let kind = match self.kind(member) {
             k::METHOD_DECLARATION => "method",
@@ -483,10 +483,13 @@ impl Converter<'_> {
         }
         into.insert("static".to_owned(), Value::from(self.has_modifier(member, k::STATIC_KEYWORD)));
         if kind == "property" {
-            let function = self.child(member, "initializer").is_some_and(|i| matches!(self.kind(i), k::ARROW_FUNCTION | k::FUNCTION_EXPRESSION));
-            into.insert("functionValued".to_owned(), Value::from(function));
+            let function = self.child(member, "initializer").filter(|i| matches!(self.kind(*i), k::ARROW_FUNCTION | k::FUNCTION_EXPRESSION));
+            into.insert("functionValued".to_owned(), Value::from(function.is_some()));
+            if let Some(function) = function {
+                into.insert("parameters".to_owned(), Value::from(self.list(function, "parameters").len()));
+            }
         }
-        if kind == "constructor" {
+        if matches!(kind, "constructor" | "method") {
             into.insert("parameters".to_owned(), Value::from(self.list(member, "parameters").len()));
         }
     }

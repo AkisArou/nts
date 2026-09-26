@@ -5,10 +5,20 @@
 
 import { ClassComponentType } from "shared/ReactClassComponentType.ts";
 import type { ClassComponentConstructor, ClassInstance } from "./ReactFiberClassComponent.ts";
+import type { ClassComponentInstance } from "shared/ReactClassComponentInstance.ts";
 import type { RootState } from "./ReactFiberRoot.ts";
+import type { Fiber } from "./ReactInternalTypes.ts";
 
 export function construct(ctor: ClassComponentConstructor, props: unknown, context: unknown): ClassInstance {
   return ctor.create(props, context) as ClassInstance;
+}
+
+// A method is called through the class's descriptor, which names the class:
+// the reconciler holds instances by their non-generic base, which declares
+// no methods, and never calls one directly.
+export function invoke(instance: object, lifecycle: number, a: unknown, b: unknown, c: unknown): unknown {
+  const fiber = (instance as ClassComponentInstance)._reactInternals as Fiber;
+  return (fiber.type as ClassComponentType).invoke(instance, lifecycle, a, b, c);
 }
 
 export function defines(ctor: unknown, _instance: object, lifecycle: number): boolean {

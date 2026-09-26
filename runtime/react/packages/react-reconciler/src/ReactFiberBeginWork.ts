@@ -2,6 +2,7 @@
 // queue, push contexts) and reconcile its children, or bail out when nothing
 // it depends on changed.
 
+import { Render } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import {
@@ -43,7 +44,7 @@ import { CacheContext, pushCacheProvider } from "./ReactFiberCacheComponent.ts";
 import type { ClassInstance as UserSpaceClassInstance } from "./ReactFiberCallUserSpace.ts";
 import { callComponentInDEV, callRenderInDEV } from "./ReactFiberCallUserSpace.ts";
 import type { ClassComponentConstructor, ClassInstance } from "./ReactFiberClassComponent.ts";
-import { construct, isClassComponentType } from "react-reconciler/ReactFiberClassComponentHost.ts";
+import { construct, invoke, isClassComponentType } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import {
   constructClassInstance,
   mountClassInstance,
@@ -1522,17 +1523,17 @@ function finishClassComponent(
       markComponentRenderStarted(workInProgress);
     }
     if (isDevelopment) {
-      nextChildren = callRenderInDEV(instance as UserSpaceClassInstance<unknown>);
+      nextChildren = callRenderInDEV(instance as UserSpaceClassInstance);
       if (workInProgress.mode & StrictLegacyMode) {
         setIsStrictModeForDevtools(true);
         try {
-          callRenderInDEV(instance as UserSpaceClassInstance<unknown>);
+          callRenderInDEV(instance as UserSpaceClassInstance);
         } finally {
           setIsStrictModeForDevtools(false);
         }
       }
     } else {
-      nextChildren = instance.render();
+      nextChildren = invoke(instance, Render, undefined, undefined, undefined);
     }
     if (enableSchedulingProfiler) {
       markComponentRenderStopped();

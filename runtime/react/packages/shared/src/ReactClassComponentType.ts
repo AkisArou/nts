@@ -22,6 +22,8 @@ export const ComponentWillUnmount = 1 << 9;
 export const GetSnapshotBeforeUpdate = 1 << 10;
 export const ComponentDidCatch = 1 << 11;
 export const GetChildContext = 1 << 12;
+// Not a presence bit: what `invoke` calls to render.
+export const Render = 1 << 13;
 
 export const lifecycleNames: readonly string[] = [
   "shouldComponentUpdate",
@@ -71,6 +73,13 @@ export class ClassComponentType {
   /** The class's constructor, as a closure that names the class. */
   readonly create: (props: unknown, context: unknown) => object;
   /**
+   * Calls the method `lifecycle` (a bit, or `Render`) on `instance`, an
+   * instance of this class, with as many of `a, b, c` as the method takes:
+   * a switch the stage writes over the methods the class defines, each
+   * called through the class's own type.
+   */
+  readonly invoke: (instance: object, lifecycle: number, a: unknown, b: unknown, c: unknown) => unknown;
+  /**
    * `setState`'s merge, `{ ...prev, ...partial }` over the class's own state
    * type, where upstream copies properties with `Object.assign`; null for a
    * class that declares no state type.
@@ -90,6 +99,7 @@ export class ClassComponentType {
   constructor(
     name: string,
     create: (props: unknown, context: unknown) => object,
+    invoke: (instance: object, lifecycle: number, a: unknown, b: unknown, c: unknown) => unknown,
     mergeState: ((prev: unknown, partial: unknown) => unknown) | null,
     lifecycles: number,
     isPure: boolean,
@@ -98,6 +108,7 @@ export class ClassComponentType {
     this.name = name;
     this.displayName = statics.displayName ?? undefined;
     this.create = create;
+    this.invoke = invoke;
     this.mergeState = mergeState;
     this.lifecycles = lifecycles;
     this.prototype = new ClassComponentPrototype(isPure);

@@ -1,5 +1,6 @@
 import type { Props, ReactContextBase } from "shared/ReactTypes.ts";
-import { construct, defines, mergeState } from "react-reconciler/ReactFiberClassComponentHost.ts";
+import type { ClassComponentInstance } from "shared/ReactClassComponentInstance.ts";
+import { construct, defines, invoke, mergeState } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import type { ClassComponentType } from "shared/ReactClassComponentType.ts";
 import { ComponentDidMount, ComponentDidUpdate, ComponentWillMount, ComponentWillReceiveProps, ComponentWillUpdate, GetSnapshotBeforeUpdate, ShouldComponentUpdate, UnsafeComponentWillMount, UnsafeComponentWillReceiveProps, UnsafeComponentWillUpdate } from "shared/ReactClassComponentType.ts";
 import { shallowEqual } from "shared/shallowEqual.ts";
@@ -38,35 +39,11 @@ import { requestUpdateLane, scheduleUpdateOnFiber } from "./ReactFiberWorkLoop.t
 import { markForceUpdateScheduled, markStateUpdateScheduled, setIsStrictModeForDevtools } from "./ReactFiberDevToolsHook.ts";
 import { startUpdateTimerByLane } from "./ReactProfilerTimer.ts";
 
-// A class component instance, as the reconciler uses it. User classes extend
-// `Component` from `react`. A class need not define a lifecycle: whether it
-// does is `defines(ctor, instance, lifecycle)`'s answer
-// (ReactFiberClassComponentHost), asked before each call, and the native
-// `Component` gives every lifecycle a body so that a call always has a target.
-export interface ClassInstance {
-  props: unknown;
-  state: unknown;
-  context: unknown;
-  refs: unknown;
-  updater: unknown;
-  render(): unknown;
-  shouldComponentUpdate(nextProps: unknown, nextState: unknown, nextContext: unknown): unknown;
-  componentWillMount(): void;
-  UNSAFE_componentWillMount(): void;
-  componentWillReceiveProps(nextProps: unknown, nextContext: unknown): void;
-  UNSAFE_componentWillReceiveProps(nextProps: unknown, nextContext: unknown): void;
-  componentWillUpdate(nextProps: unknown, nextState: unknown, nextContext: unknown): void;
-  UNSAFE_componentWillUpdate(nextProps: unknown, nextState: unknown, nextContext: unknown): void;
-  componentDidMount(): void;
-  componentDidUpdate(prevProps: unknown, prevState: unknown, snapshot: unknown): void;
-  componentWillUnmount(): void;
-  getSnapshotBeforeUpdate(prevProps: unknown, prevState: unknown): unknown;
-  componentDidCatch(error: unknown, errorInfo: { componentStack?: string | null }): void;
-  // Set by the reconciler: the fiber (see getInstance/setInstance), and in
-  // development a frozen placeholder upstream keeps for old tooling.
-  _reactInternals?: Fiber;
-  _reactInternalInstance?: unknown;
-}
+// A class component instance, as the reconciler holds it: the non-generic
+// base every class extends, whose fields sit at fixed places. Its methods are
+// reached through `invoke` (ReactFiberClassComponentHost), asked first whether
+// the class defines one with `defines`.
+export type ClassInstance = ClassComponentInstance;
 
 // A class component's constructor and its static members.
 export type ClassComponentConstructor = ClassComponentType;
@@ -264,13 +241,13 @@ function checkShouldComponentUpdate(
 ): boolean {
   const instance = workInProgress.stateNode as ClassInstance;
   if (defines(ctor, instance, ShouldComponentUpdate)) {
-    let shouldUpdate = instance.shouldComponentUpdate(newProps, newState, nextContext);
+    let shouldUpdate = invoke(instance, ShouldComponentUpdate, newProps, newState, nextContext);
     if (isDevelopment) {
       if (workInProgress.mode & StrictLegacyMode) {
         setIsStrictModeForDevtools(true);
         try {
           // Invoke the function an extra time to help detect side-effects.
-          shouldUpdate = instance.shouldComponentUpdate(newProps, newState, nextContext);
+          shouldUpdate = invoke(instance, ShouldComponentUpdate, newProps, newState, nextContext);
         } finally {
           setIsStrictModeForDevtools(false);
         }
@@ -531,7 +508,7 @@ function constructClassInstance(workInProgress: Fiber, ctor: ClassComponentConst
   // The instance needs access to the fiber so that it can schedule updates
   setInstance(instance, workInProgress);
   if (isDevelopment) {
-    instance._reactInternalInstance = fakeInternalInstance;
+    (instance as { _reactInternalInstance?: unknown })._reactInternalInstance = fakeInternalInstance;
   }
 
   if (isDevelopment) {
@@ -558,17 +535,17 @@ function constructClassInstance(workInProgress: Fiber, ctor: ClassComponentConst
       let foundWillMountName: string | null = null;
       let foundWillReceivePropsName: string | null = null;
       let foundWillUpdateName: string | null = null;
-      if (defines(ctor, instance, ComponentWillMount) && !isSuppressed(instance.componentWillMount)) {
+      if (defines(ctor, instance, ComponentWillMount) && !isSuppressed(membersOf(instance)["componentWillMount"] as object)) {
         foundWillMountName = "componentWillMount";
       } else if (defines(ctor, instance, UnsafeComponentWillMount)) {
         foundWillMountName = "UNSAFE_componentWillMount";
       }
-      if (defines(ctor, instance, ComponentWillReceiveProps) && !isSuppressed(instance.componentWillReceiveProps)) {
+      if (defines(ctor, instance, ComponentWillReceiveProps) && !isSuppressed(membersOf(instance)["componentWillReceiveProps"] as object)) {
         foundWillReceivePropsName = "componentWillReceiveProps";
       } else if (defines(ctor, instance, UnsafeComponentWillReceiveProps)) {
         foundWillReceivePropsName = "UNSAFE_componentWillReceiveProps";
       }
-      if (defines(ctor, instance, ComponentWillUpdate) && !isSuppressed(instance.componentWillUpdate)) {
+      if (defines(ctor, instance, ComponentWillUpdate) && !isSuppressed(membersOf(instance)["componentWillUpdate"] as object)) {
         foundWillUpdateName = "componentWillUpdate";
       } else if (defines(ctor, instance, UnsafeComponentWillUpdate)) {
         foundWillUpdateName = "UNSAFE_componentWillUpdate";
@@ -606,6 +583,11 @@ function constructClassInstance(workInProgress: Fiber, ctor: ClassComponentConst
 
 // react-lifecycles-compat marks its polyfilled lifecycles.
 // JS object model: a property on the method.
+// The legacy lifecycles a development warning reads as values, whatever the class defines.
+function legacyLifecyclesOf(instance: ClassInstance): Parameters<typeof ReactStrictModeWarnings.recordUnsafeLifecycleWarnings>[1] {
+  return instance as unknown as Parameters<typeof ReactStrictModeWarnings.recordUnsafeLifecycleWarnings>[1];
+}
+
 function isSuppressed(method: object): boolean {
   return (method as { __suppressDeprecationWarning?: unknown }).__suppressDeprecationWarning === true;
 }
@@ -614,10 +596,10 @@ function callComponentWillMount(workInProgress: Fiber, instance: ClassInstance):
   const oldState = instance.state;
 
   if (defines(workInProgress.type, instance, ComponentWillMount)) {
-    instance.componentWillMount();
+    invoke(instance, ComponentWillMount, undefined, undefined, undefined);
   }
   if (defines(workInProgress.type, instance, UnsafeComponentWillMount)) {
-    instance.UNSAFE_componentWillMount();
+    invoke(instance, UnsafeComponentWillMount, undefined, undefined, undefined);
   }
 
   if (oldState !== instance.state) {
@@ -641,10 +623,10 @@ function callComponentWillReceiveProps(
 ): void {
   const oldState = instance.state;
   if (defines(workInProgress.type, instance, ComponentWillReceiveProps)) {
-    instance.componentWillReceiveProps(newProps, nextContext);
+    invoke(instance, ComponentWillReceiveProps, newProps, nextContext, undefined);
   }
   if (defines(workInProgress.type, instance, UnsafeComponentWillReceiveProps)) {
-    instance.UNSAFE_componentWillReceiveProps(newProps, nextContext);
+    invoke(instance, UnsafeComponentWillReceiveProps, newProps, nextContext, undefined);
   }
 
   if (instance.state !== oldState) {
@@ -703,10 +685,10 @@ function mountClassInstance(workInProgress: Fiber, ctor: ClassComponentConstruct
     }
 
     if (workInProgress.mode & StrictLegacyMode) {
-      ReactStrictModeWarnings.recordLegacyContextWarning(workInProgress, instance);
+      ReactStrictModeWarnings.recordLegacyContextWarning(workInProgress, legacyLifecyclesOf(instance));
     }
 
-    ReactStrictModeWarnings.recordUnsafeLifecycleWarnings(workInProgress, instance);
+    ReactStrictModeWarnings.recordUnsafeLifecycleWarnings(workInProgress, legacyLifecyclesOf(instance));
   }
 
   instance.state = workInProgress.memoizedState;
@@ -818,10 +800,10 @@ function resumeMountClassInstance(
       (defines(ctor, instance, UnsafeComponentWillMount) || defines(ctor, instance, ComponentWillMount))
     ) {
       if (defines(ctor, instance, ComponentWillMount)) {
-        instance.componentWillMount();
+        invoke(instance, ComponentWillMount, undefined, undefined, undefined);
       }
       if (defines(ctor, instance, UnsafeComponentWillMount)) {
-        instance.UNSAFE_componentWillMount();
+        invoke(instance, UnsafeComponentWillMount, undefined, undefined, undefined);
       }
     }
     if (defines(ctor, instance, ComponentDidMount)) {
@@ -947,10 +929,10 @@ function updateClassInstance(
       (defines(ctor, instance, UnsafeComponentWillUpdate) || defines(ctor, instance, ComponentWillUpdate))
     ) {
       if (defines(ctor, instance, ComponentWillUpdate)) {
-        instance.componentWillUpdate(newProps, newState, nextContext);
+        invoke(instance, ComponentWillUpdate, newProps, newState, nextContext);
       }
       if (defines(ctor, instance, UnsafeComponentWillUpdate)) {
-        instance.UNSAFE_componentWillUpdate(newProps, newState, nextContext);
+        invoke(instance, UnsafeComponentWillUpdate, newProps, newState, nextContext);
       }
     }
     if (defines(ctor, instance, ComponentDidUpdate)) {

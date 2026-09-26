@@ -73,12 +73,28 @@ heritage reaches `Component` or `PureComponent` from `react`. A class
 extending another user class adds its own lifecycles to
 `Parent.$$type.lifecycles`.
 
-**The instance base declares every lifecycle.** The native `Component`
-(react/ReactBaseClasses.native.ts) gives each lifecycle a body, so a call
-compiles and dispatches to the override. Each body is upstream's behaviour
-when the method is absent, wherever upstream has one (`shouldComponentUpdate`
-returns true, and PureComponent's compares shallowly). The reconciler asks
-the mask, not the method, whether a class defines it.
+**The reconciler holds an instance by a non-generic base, and calls its
+methods through the descriptor.** `Component<P, S>` is monomorphised per
+`P, S`, so no single generic class is the one the reconciler could name.
+`shared/ReactClassComponentInstance.ts` stores what the reconciler reads
+(`props`, `state`, `context`, `refs`, `updater`, and its own two fields),
+erased and at fixed places. The native `Component<P, S>` extends it and
+redeclares `props` and `state` with their types (`declare`), so user code
+reads them typed and a `state = { ... }` initializer works.
+A method is never called on the instance natively. The descriptor's
+`invoke(instance, lifecycle, a, b, c)` is a switch the stage writes over the
+methods the class defines. Each is called on the instance as its own class,
+with as many arguments as it declares, each cast to the type it declares:
+
+```ts
+case 256:
+  return self.componentDidUpdate(_a as Parameters<Ticker["componentDidUpdate"]>[0], _b as Parameters<Ticker["componentDidUpdate"]>[1]);
+```
+
+A subclass defers what it does not define to `Parent.$$type.invoke`. So no
+override ever narrows an erased parameter. nts compiles that override and
+then crashes reading it, and will refuse it on TypeScript's own bivariance
+argument. The reconciler asks the mask whether to call at all.
 
 **State merges by type.** Upstream merges `setState`'s partial state
 with `Object.assign({}, prev, partial)`, a property walk nts does not
@@ -100,6 +116,7 @@ a `.native.ts` twin, bound like the other fork points:
 | `construct(ctor, props, context)` | `new ctor(props, context)`, or `ctor.create` for a descriptor | `ctor.create(props, context)` |
 | `defines(ctor, instance, Lifecycle.X)` | `typeof instance.x === "function"` | `(ctor.lifecycles & Lifecycle.X) !== 0` |
 | `isClassComponent(type)` | `shouldConstruct(type)`, or a descriptor | `type instanceof ClassComponentType` |
+| `invoke(instance, lifecycle, a, b, c)` | `instance.componentDidUpdate(a, b, c)`, with upstream's arity | the descriptor's `invoke`, found through the instance's fiber |
 | `mergeState(ctor, prev, partial)` | `Object.assign({}, prev, partial)` | the descriptor's `mergeState`, or the root's typed merge |
 
 The JavaScript build accepts both a class and a descriptor. That's what makes
@@ -122,25 +139,16 @@ the plain probe, which passes classes.
    The JSX oracle (`study/jsx-diff.cjs`) sets the descriptor aside only for
    names that are classes, and `fixtures/jsx-lowering/classes.tsx` holds a
    class, a subclass, a pure class and a function side by side.
-3. **In progress.** The native base class gives every lifecycle a body
-   (react/ReactBaseClasses.native.ts), which probe-agree's staged arm runs.
-   Control: a native `defines` that ignores the mask breaks `pureSkip`.
-   What remains is how the reconciler reaches those bodies. It holds an
-   instance through six interface views (`ClassInstance`,
-   `CommitClassInstance`, ...), and nts dispatches an interface call only to
-   classes that declare it. `Component<P, S>` is monomorphised per `P, S`, so
-   no single class is the one the reconciler names. The shape that fits is
-   the one contexts use: a non-generic base the reconciler holds, whose
-   lifecycles take erased parameters, which user classes override with
-   typed ones. nts compiles that override and crashes when it reads the
-   parameter (reported with a two-arm reduction), so this step waits on
-   that fix.
-   Measured with the three invalid-HIR defects worked around locally, the
-   probe emits, with 215 root refusals. Those on this path: the lifecycle
-   calls above, and `ctor.prototype && ...` (an object's truthiness). The
-   state merge is designed (above); its native form waits on the `Partial`
-   spread. probe-agree covers it with a two-field state, and a control that
-   replaces state instead of merging breaks classLifecycles.
+3. **Done, as far as the JavaScript run can show.** The instance base, the
+   descriptor's `invoke`, and all 20 method calls routed through the seam.
+   probe-agree's staged arm reaches every method through the closures the
+   stage wrote. Control: a native `invoke` that ignores the descriptor breaks
+   all ten class cases. The native census is next, once the probe emits
+   again. That waits on two invalid-HIR defects (literal key order, fewer
+   parameters), both reported, and a third already fixed on main.
+   Measured with them worked around locally, before this step: 215 root
+   refusals, and on this path the lifecycle calls (which `invoke` replaces)
+   and `ctor.prototype && ...` (an object's truthiness, reported).
 
 ## Left out
 

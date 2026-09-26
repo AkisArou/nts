@@ -17,6 +17,7 @@
 //! than running wrongly.
 
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 
 use react_compiler_ast::declarations::{ImportSpecifier, ModuleExportName};
 use react_compiler_ast::expressions::Expression;
@@ -133,6 +134,8 @@ impl ClassComponents {
 
         let mut own = 0u32;
         let mut named = Vec::new();
+        // The methods `invoke` calls, with how many parameters each declares.
+        let mut calls: Vec<(u32, String, u64)> = Vec::new();
         let mut statics = BTreeSet::new();
         let mut constructor_parameters = None;
         let mut declares_state = false;
@@ -153,11 +156,15 @@ impl ClassComponents {
                 continue;
             }
             let function = kind == "method" || m.get("functionValued").and_then(Value::as_bool) == Some(true);
+            let parameters = m.get("parameters").and_then(Value::as_u64).unwrap_or(0);
             if let Some(bit) = LIFECYCLES.iter().position(|l| *l == member_name)
                 && function
             {
                 own |= 1 << bit;
+                calls.push((1 << bit, member_name.clone(), parameters));
                 named.push(member_name);
+            } else if member_name == "render" && function {
+                calls.insert(0, (RENDER, member_name, parameters));
             }
         }
 
@@ -177,6 +184,10 @@ impl ClassComponents {
             .is_some_and(|n| n >= 2);
         let has_state = state_argument || declares_state || inherited_state;
         self.known.insert(name.clone(), Known { pure, statics: statics.clone(), takes_context, has_state });
+        let invoke = invoke_closure(&name, &calls, match &base {
+            Base::React { .. } => None,
+            Base::Class { name: parent, .. } => Some(parent.as_str()),
+        });
         let merge = if has_state {
             format!("(prev, partial) => ({{ ...(prev as {name}[\"state\"]), ...(partial as Partial<{name}[\"state\"]>) }})")
         } else {
@@ -193,10 +204,39 @@ impl ClassComponents {
         let statics_text: Vec<String> = statics.iter().map(|s| static_entry(&name, s)).collect();
         let statics_text = if statics_text.is_empty() { "{}".to_owned() } else { format!("{{ {} }}", statics_text.join(", ")) };
         Some(format!(
-            "\n  // The descriptor the native build holds for this class (written by the React stage).\n  static readonly $$type = new {runtime}(\n    {},\n    {create},\n    {merge},\n    {mask_comment}{lifecycles},\n    {pure},\n    {statics_text},\n  );\n",
+            "\n  // The descriptor the native build holds for this class (written by the React stage).\n  static readonly $$type = new {runtime}(\n    {},\n    {create},\n    {invoke},\n    {merge},\n    {mask_comment}{lifecycles},\n    {pure},\n    {statics_text},\n  );\n",
             quote_ascii(&name),
         ))
     }
+}
+
+/// What `invoke` is called with to render: shared/ReactClassComponentType.ts's `Render`.
+const RENDER: u32 = 1 << 13;
+
+/// The descriptor's `invoke`: each method `calls` names, called on the
+/// instance as the class it is, with as many of the erased arguments as it
+/// declares, each as the type it declares. What the class does not define
+/// is its parent's to answer, for a class extending another class component.
+fn invoke_closure(class: &str, calls: &[(u32, String, u64)], parent: Option<&str>) -> String {
+    let mut out = format!("(instance, lifecycle, _a, _b, _c) => {{\n      const self = instance as {class};\n      switch (lifecycle) {{\n");
+    for (bit, method, parameters) in calls {
+        let arguments: Vec<String> = ["_a", "_b", "_c"]
+            .iter()
+            .take(usize::try_from(*parameters).unwrap_or(0).min(3))
+            .enumerate()
+            .map(|(index, argument)| format!("{argument} as Parameters<{class}[\"{method}\"]>[{index}]"))
+            .collect();
+        let _ = write!(out, "        case {bit}:\n          return self.{method}({});\n", arguments.join(", "));
+    }
+    out.push_str("      }\n");
+    match parent {
+        Some(parent) => {
+            let _ = writeln!(out, "      return {parent}.$$type.invoke(instance, lifecycle, _a, _b, _c);");
+        }
+        None => out.push_str("      return undefined;\n"),
+    }
+    out.push_str("    }");
+    out
 }
 
 /// `Component` is a component base, and `PureComponent` a pure one.

@@ -2,8 +2,9 @@
 // thenable suspends to the nearest Suspense (or Activity/Offscreen) boundary,
 // and an error is captured by the nearest error boundary or the root.
 
+import type { ClassComponentInstance } from "shared/ReactClassComponentInstance.ts";
 import type { RootState } from "./ReactFiberRoot.ts";
-import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
+import { defines, invoke } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentDidCatch } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { disableLegacyMode, enableUpdaterTracking } from "shared/ReactFeatureFlags.ts";
@@ -74,9 +75,7 @@ interface ErrorBoundaryClass {
   readonly getDerivedStateFromError?: unknown;
 }
 
-interface ErrorBoundaryInstance {
-  componentDidCatch?: unknown;
-}
+type ErrorBoundaryInstance = ClassComponentInstance;
 
 function createRootErrorUpdate(root: FiberRoot, errorInfo: CapturedValue, lane: Lane): Update {
   const update = createUpdate(lane);
@@ -127,7 +126,7 @@ function initializeClassErrorUpdate(
   }
 
   const inst = fiber.stateNode as ErrorBoundaryInstance | null;
-  if (inst !== null && typeof inst.componentDidCatch === "function") {
+  if (inst !== null && defines(fiber.type, inst, ComponentDidCatch)) {
     // The update queue calls this with the instance as `this`.
     update.callback = function callback(this: ErrorBoundaryInstance) {
       if (isDevelopment) {
@@ -147,13 +146,11 @@ function initializeClassErrorUpdate(
         markLegacyErrorBoundaryAsFailed(this);
       }
       if (isDevelopment) {
-        callComponentDidCatchInDEV(this as UserSpaceClassInstance<unknown>, errorInfo);
+        callComponentDidCatchInDEV(this as UserSpaceClassInstance, errorInfo);
       } else {
         const error = errorInfo.value;
         const stack = errorInfo.stack;
-        (this.componentDidCatch as (this: ErrorBoundaryInstance, error: unknown, info: object) => void)(error, {
-          componentStack: stack !== null ? stack : "",
-        });
+        invoke(this, ComponentDidCatch, error, { componentStack: stack !== null ? stack : "" }, undefined);
       }
       if (isDevelopment) {
         if (typeof getDerivedStateFromError !== "function") {
