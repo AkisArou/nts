@@ -37,7 +37,9 @@
 // (PROPERTY_SIGNATURE), and this fix restored that distinction rather than
 // needing one built. That rests on reading the predicate -- an interface-typed
 // slot and an `in` on a union arm both refuse today -- so `cause`'s own fixture,
-// where `new Error("x")` is drivable, is where it gets measured.
+// where `new Error("x")` is drivable, is where it gets measured. Not yet: `in`
+// on a *provided* class refuses for every member (`"cause" in e`, `"message" in
+// e`, per the compiler lane on 2026-09-27), so that arm can only assert the refusal.
 class Box { tag?: number; }
 observe("plain class", String("tag" in new Box()));
 class Base { base = 1; }
