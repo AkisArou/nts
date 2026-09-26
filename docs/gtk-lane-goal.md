@@ -615,6 +615,46 @@ tally.connect("incremented", (self, by) => { /* self: Tally, by: number */ });
   registration disabled the C product dies on GTK's critical; the previous
   binary does not typecheck `inserted-text` (TS2769).
 
+### Properties a class declares
+
+GJS's `Properties`, written as a field:
+
+```ts
+class Note extends GObject {
+  title: Property<string> = "";
+  done: Property<boolean> = false;
+}
+```
+
+- `Property<T>` (`c:types`) is `T` with an optional brand, so the field is
+  read and written as any other, and is represented as `T`. At registration
+  each marked field is installed on the class's `GType` as ids 1..n, with
+  `EXPLICIT_NOTIFY`. A `number` (`G_TYPE_DOUBLE`), a `boolean`, a `string` or
+  a GObject.
+- Every write of the field notifies (`notify::title`) through
+  `nts_gobject_notify_{Class}_{i}`, which caches the property's spec. A
+  plain field does not.
+- `get_property`/`set_property` reach the field through compiled accessors
+  (`{Class}#get_{name}`, `{Class}#set_{name}`). A write through
+  `g_object_set` or `bind_property` is therefore the program's own write:
+  counted the same, and notified once. The accessors are listed in
+  `ForeignClass::entered()`, the functions a runtime calls with borrowed
+  arguments. Without that, the setter was taken to consume the string it
+  stores, and an rc run read it back freed.
+- **Detailed signals.** bind-gir types a signal GIR marks detailed as
+  `"notify"` or the template literal `notify::${string}`, so
+  `connect("notify::label", ...)` typechecks. GLib parses the detail.
+- **A widget without counting.** A never-free build takes the floating
+  reference of every GObject a binding constructs (`nts_gobject_made`).
+  Otherwise the first container owned it, and finalized it on letting go
+  while a name still held it (react-gtk's list). Under counting it does
+  nothing: the first retain is `g_object_ref_sink`. A construction through a
+  static constructor (`GtkLabel.new(...)`) does not call it yet.
+- Witnesses: gtk-subclass's `notes` arm (`notes title done weight title a b
+  true 2.5`), gtk-gir's `relabeled 2`, gtk-values' `kept`. Each is C and
+  LLVM, plain and `--rc`, and each has its failing control recorded in its
+  commit.
+
 ### A handle where any value may go
 
 `unknown`, an `unknown[]`, a `Map`'s key or value hold a GObject as the value
@@ -946,9 +986,9 @@ third family beside `Objc` and `Com`.
   `instance_init` and released in `finalize`, which chains up. The state
   object is a holder node for the cycle collector, so a closure a subclass
   keeps in a field is traced the way a connected handler already is.
-- An extension for what only GObject declares in `class_init`: signals,
-  built (below, "Signals a class declares"); properties
-  (`g_object_class_install_property`), later.
+- An extension for what only GObject declares in `class_init`: signals and
+  properties, both built (below, "Signals a class declares" and "Properties
+  a class declares").
 
 **What each backend emits for one class:**
 
