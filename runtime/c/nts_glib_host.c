@@ -32,6 +32,13 @@ static void nts_glib_watch(NtsGlibSource *self, bool watch) {
 
 static NtsGlibSource *nts_glib_source;
 
+/* The runtime's answer to "an iteration of the loop ended", where it has one:
+ * a signal, not a policy -- what an ended turn licenses (a full checkpoint,
+ * the collector's walk of what foreign objects let go of) is the runtime's to
+ * decide, in one place. Weak, so a runtime that does not listen links, and
+ * the host says so without knowing. */
+void nts_loop_turned(void) __attribute__((weak));
+
 /* Due now, or as soon as libuv's next timer is: that is the whole of what a
  * prepare answers. A task posted from compiled code starts libuv's idle handle,
  * which makes the timeout 0 -- so a queued task is picked up on the next
@@ -44,12 +51,19 @@ static NtsGlibSource *nts_glib_source;
  * first. So while one is on the stack the source is never ready and does not
  * even watch libuv's descriptor, which staying readable would make that
  * nested loop spin; the next prepare outside the callback watches it again. */
+/*
+ * And a prepare outside a callback is where a turn of the loop ends: once per
+ * iteration, before GLib polls and perhaps sleeps -- so the runtime hears of
+ * it then, bounding by turns rather than by entries whatever it defers. */
 static gboolean nts_glib_prepare(GSource *source, gint *timeout) {
   NtsGlibSource *self = (NtsGlibSource *)source;
   if (nts_in_callback()) {
     nts_glib_watch(self, false);
     *timeout = -1;
     return FALSE;
+  }
+  if (nts_loop_turned) {
+    nts_loop_turned();
   }
   nts_glib_watch(self, true);
   int due = nts_uv_host_backend_timeout();
