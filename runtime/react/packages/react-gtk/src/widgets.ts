@@ -7734,6 +7734,13 @@ export class MenuButtonNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return menuButtonSlot(this.gtk, slot, widget);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "active":
+        return this.gtk.get_active();
+    }
+    return undefined;
+  }
   protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
@@ -7758,6 +7765,13 @@ export class NotebookNode extends WidgetNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return notebookSignal(this.gtk, key, slot);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "page":
+        return this.gtk.get_current_page();
+    }
+    return undefined;
   }
   protected place(_child: WidgetNode): void {
     throw new Error("<Notebook> places a child through <Notebook.Page tab>.");
@@ -7806,6 +7820,13 @@ export class PanedNode extends WidgetNode {
   }
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return panedSlot(this.gtk, slot, widget);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "position":
+        return this.gtk.get_position();
+    }
+    return undefined;
   }
 }
 
@@ -8095,6 +8116,13 @@ export class SearchBarNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return searchBarSignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "searchModeEnabled":
+        return this.gtk.get_search_mode();
+    }
+    return undefined;
+  }
   protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
@@ -8203,6 +8231,13 @@ export class StackNode extends WidgetNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return stackSignal(this.gtk, key, slot);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "visibleChildName":
+        return this.gtk.get_visible_child_name();
+    }
+    return undefined;
   }
   protected place(_child: WidgetNode): void {
     throw new Error("<Stack> places a child through <Stack.Page name>.");

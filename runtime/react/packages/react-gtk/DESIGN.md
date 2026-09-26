@@ -137,7 +137,10 @@ DOM does not call `onChange` for the value it sets.
 
 **Controlled props.** The props a user changes (an Editable's `text`, a
 CheckButton's, ToggleButton's or Switch's `active`, a SpinButton's `value`,
-an Expander's `expanded`, a DropDown's `selected`) hold the widget when they
+an Expander's `expanded`, a DropDown's `selected`, a Stack's
+`visibleChildName` (which a StackSwitcher changes), a Notebook's `page`, a
+Paned's `position`, a MenuButton's `active`, a SearchBar's
+`searchModeEnabled`) hold the widget when they
 are given, as React DOM's `value` and `checked` do. When the user changes
 one, its onNotify handler runs. Then, once GTK's own change is over (from
 an idle source, since an Entry's edit notifies more than once), React's sync

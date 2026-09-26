@@ -457,6 +457,11 @@ const controlledProps = new Map([
   ["SpinButton", ["value"]],
   ["Expander", ["expanded"]],
   ["DropDown", ["selected"]],
+  ["Stack", ["visible-child-name"]],
+  ["Notebook", ["page"]],
+  ["Paned", ["position"]],
+  ["MenuButton", ["active"]],
+  ["SearchBar", ["search-mode-enabled"]],
 ]);
 
 // Widget-typed properties that name another widget rather than place one: an

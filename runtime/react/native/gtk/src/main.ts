@@ -45,6 +45,10 @@
 //   stack     Stack.Page elements add named, titled pages; the Stack's
 //             visibleChildName, applied before its pages existed, shows the
 //             page it names; a page's title updates in place
+//   switched  a Stack's visibleChildName is controlled: switched by the user
+//             (as a StackSwitcher does) it goes back to the page its props
+//             name when the app keeps its state; a Stack without the prop
+//             keeps what the user chose
 //   notebook  Notebook.Page elements add pages with tab text, one inserted
 //             before another takes its place in the order, one removed goes
 //   bar       a HeaderBar's Start and End groups pack their children left to
@@ -402,6 +406,24 @@ function main(): void {
   const titleBefore = titleOfB();
   commitUpdate(pageB, "GtkStack.Page", { name: "b", title: "B" }, { name: "b", title: "Bee" }, {});
   react_gtk_log("stack " + shown + " " + titleBefore + " " + titleOfB());
+
+  const free = createInstance("GtkStack", {}, container, 0, {});
+  for (const name of ["a", "b"]) {
+    const page = createInstance("GtkStack.Page", { name }, container, 0, {});
+    appendInitialChild(page, createInstance("GtkLabel", { label: name }, container, 0, {}));
+    appendInitialChild(free, page);
+  }
+  const visibleIn = (node: HostNode): string => (node instanceof StackNode ? String(node.gtk.get_visible_child_name()) : "not a stack");
+  // The app keeps its state: nothing is flushed, so the controlled one goes back.
+  setAfterEvent(() => {});
+  if (stack instanceof StackNode) {
+    stack.gtk.set_visible_child_name("a");
+  }
+  if (free instanceof StackNode) {
+    free.gtk.set_visible_child_name("b");
+  }
+  idle();
+  react_gtk_log("switched " + visibleIn(stack) + " " + visibleIn(free));
 
   const notebook = createInstance("GtkNotebook", {}, container, 0, {});
   const tabs: HostNode[] = [];
