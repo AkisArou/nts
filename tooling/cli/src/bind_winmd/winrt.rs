@@ -1012,7 +1012,8 @@ impl Writer<'_> {
         !spelled.is_empty() || !statics.is_empty()
     }
 
-    /// `Point`: a `Struct` of its fields in the metadata's order, tagged with
+    /// `Point`: a `Struct` of its fields in the metadata's order, camel-cased,
+    /// tagged with
     /// the C name the compiler defines it by -- nothing declares a Windows
     /// Runtime struct in a C header -- with the namespace kept, as an
     /// interface's tag keeps it. What a field cannot be yet refuses the struct.
@@ -1034,7 +1035,11 @@ impl Writer<'_> {
         let mut fields = Vec::new();
         for field in def.fields() {
             match self.field(&field.ty()) {
-                Ok(spelled) => fields.push(format!("{}: {spelled}", field.name())),
+                // Camel-cased, as the Windows Runtime's JavaScript
+                // projection named a struct's fields (`size.width`,
+                // `measure({ width: 100, height: 40 })`): nothing but the
+                // compiler defines the struct, so the C names are its own.
+                Ok(spelled) => fields.push(format!("{}: {spelled}", nts_core::hir::native::js_name(field.name()))),
                 Err(why) => {
                     self.refuse(name, &format!("a struct with a field `{}` that is {why}", field.name()));
                     return;

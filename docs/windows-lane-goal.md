@@ -398,8 +398,13 @@ Application.Start(() => { new App(); });
      object for the class's default interface (`nts_winrt_is`). Every
      interface's chain ends in `IInspectable`, so any object goes where
      any object is taken.
-   - Not yet: `for…of` over an `IIterable<T>` that is not a vector, and
-     struct fields (`size.Width`). Also started: a record a call takes by value may be
+   - **Struct fields in camelCase:** `button.desiredSize.width`,
+     `measure({ width: 1000, height: 1000 })`, as the JavaScript
+     projection named them. Nothing but the compiler defines a Windows
+     Runtime struct, so the C names are its own; Win32 structs keep their
+     C header's names, which the witness checks.
+   - Not yet: `for…of` over an `IIterable<T>` that is not a vector. Also
+     started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
    record stays `ByValue<T>`.

@@ -280,12 +280,12 @@ fn winrt_structs_cross_by_value() {
     let globalization = std::fs::read_to_string(out.join("Windows.Globalization.d.ts")).unwrap();
     let refused = std::fs::read_to_string(out.join("Windows.Graphics.Imaging.refused.txt")).unwrap();
     assert!(
-        imaging.contains("export type BitmapBounds = Struct<{ X: c_uint32; Y: c_uint32; Width: c_uint32; Height: c_uint32 }, \"Windows_Graphics_Imaging_BitmapBounds\">;"),
+        imaging.contains("export type BitmapBounds = Struct<{ x: c_uint32; y: c_uint32; width: c_uint32; height: c_uint32 }, \"Windows_Graphics_Imaging_BitmapBounds\">;"),
         "{imaging}"
     );
     assert!(imaging.contains("put_Bounds(this: IBitmapTransform, value: ByValue<BitmapBounds> | Fields<BitmapBounds>): void;"), "{imaging}");
     assert!(imaging.contains("get_Bounds(this: IBitmapTransform): ByValue<BitmapBounds>;"), "{imaging}");
-    assert!(foundation.contains("export type DateTime = Struct<{ UniversalTime: c_int64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
+    assert!(foundation.contains("export type DateTime = Struct<{ universalTime: c_int64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
     // `System.Guid`, which no `.winmd` defines, is `winrt:types`' struct; a
     // `ref const` struct is a `ConstPtr` to the caller's storage, lent.
     assert!(foundation.contains("function CreateNewGuid(): ByValue<Guid>;"), "{foundation}");

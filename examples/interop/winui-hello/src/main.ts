@@ -192,8 +192,8 @@ class App extends Application {
     // object itself: `QueryInterface` for `Button`'s interface.
     const isButton = window.content instanceof Button;
     // A record written as its fields, where the call takes one by value.
-    button.measure({ Width: 1000, Height: 1000 });
-    const desired = button.desiredSize.Width > 0;
+    button.measure({ width: 1000, height: 1000 });
+    const desired = button.desiredSize.width > 0;
     console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +

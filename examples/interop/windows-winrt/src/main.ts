@@ -97,22 +97,22 @@ import type { BitmapBounds } from "winrt:Windows.Graphics.Imaging";
 function structs(): string {
   const calendar = Calendar.create();
   const moment = local<DateTime>();
-  moment[0].UniversalTime = 132695712000000000n as c_int64;
+  moment[0].universalTime = 132695712000000000n as c_int64;
   calendar.SetDateTime(moment);
   const year = calendar.get_Year();
   calendar.AddDays(1);
   const later = calendar.GetDateTime();
-  const days = (later[0].UniversalTime - moment[0].UniversalTime) / 864000000000n;
+  const days = (later[0].universalTime - moment[0].universalTime) / 864000000000n;
   const transform = BitmapTransform.create();
   const bounds = local<BitmapBounds>();
-  bounds[0].X = 1 as c_uint32;
-  bounds[0].Y = 2 as c_uint32;
-  bounds[0].Width = 300 as c_uint32;
-  bounds[0].Height = 400 as c_uint32;
+  bounds[0].x = 1 as c_uint32;
+  bounds[0].y = 2 as c_uint32;
+  bounds[0].width = 300 as c_uint32;
+  bounds[0].height = 400 as c_uint32;
   transform.put_Bounds(bounds);
   const back = transform.get_Bounds();
-  return String(year) + "+" + String(days) + "d,bounds=" + String(back[0].X) + "," + String(back[0].Y) + "," +
-    String(back[0].Width) + "x" + String(back[0].Height);
+  return String(year) + "+" + String(days) + "d,bounds=" + String(back[0].x) + "," + String(back[0].y) + "," +
+    String(back[0].width) + "x" + String(back[0].height);
 }
 
 // `[out]` parameters, which a method answers as fields of its result beside
