@@ -557,22 +557,31 @@ export interface EntryProps extends WidgetProps {
   enableEmojiCompletion?: boolean;
   extraMenu?: GMenuModel | null;
   hasFrame?: boolean;
+  imModule?: string;
   inputPurpose?: GtkInputPurpose;
   invisibleChar?: number;
   invisibleCharSet?: boolean;
   maxLength?: number;
+  menuEntryIconPrimaryText?: string;
+  menuEntryIconSecondaryText?: string;
   overwriteMode?: boolean;
   placeholderText?: string | null;
   primaryIconActivatable?: boolean;
   primaryIconGicon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
+  primaryIconName?: string;
   primaryIconPaintable?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable;
   primaryIconSensitive?: boolean;
+  primaryIconTooltipMarkup?: string;
+  primaryIconTooltipText?: string;
   progressFraction?: number;
   progressPulseStep?: number;
   secondaryIconActivatable?: boolean;
   secondaryIconGicon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
+  secondaryIconName?: string;
   secondaryIconPaintable?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable;
   secondaryIconSensitive?: boolean;
+  secondaryIconTooltipMarkup?: string;
+  secondaryIconTooltipText?: string;
   showEmojiIcon?: boolean;
   truncateMultiline?: boolean;
   visibility?: boolean;
@@ -586,18 +595,27 @@ export interface EntryProps extends WidgetProps {
   onNotifyBuffer?: (value: GtkEntryBuffer) => void;
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
   onNotifyHasFrame?: (value: boolean) => void;
+  onNotifyImModule?: (value: string | null) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
   onNotifyInvisibleCharSet?: (value: boolean) => void;
   onNotifyMaxLength?: (value: number) => void;
+  onNotifyMenuEntryIconPrimaryText?: (value: string | null) => void;
+  onNotifyMenuEntryIconSecondaryText?: (value: string | null) => void;
   onNotifyOverwriteMode?: (value: boolean) => void;
   onNotifyPlaceholderText?: (value: string | null) => void;
   onNotifyPrimaryIconActivatable?: (value: boolean) => void;
+  onNotifyPrimaryIconName?: (value: string | null) => void;
   onNotifyPrimaryIconSensitive?: (value: boolean) => void;
+  onNotifyPrimaryIconTooltipMarkup?: (value: string | null) => void;
+  onNotifyPrimaryIconTooltipText?: (value: string | null) => void;
   onNotifyProgressFraction?: (value: number) => void;
   onNotifyProgressPulseStep?: (value: number) => void;
   onNotifySecondaryIconActivatable?: (value: boolean) => void;
+  onNotifySecondaryIconName?: (value: string | null) => void;
   onNotifySecondaryIconSensitive?: (value: boolean) => void;
+  onNotifySecondaryIconTooltipMarkup?: (value: string | null) => void;
+  onNotifySecondaryIconTooltipText?: (value: string | null) => void;
   onNotifyShowEmojiIcon?: (value: boolean) => void;
   onNotifyTruncateMultiline?: (value: boolean) => void;
   onNotifyVisibility?: (value: boolean) => void;
@@ -773,15 +791,19 @@ export interface HeaderBarProps extends WidgetProps {
 
 /** `<Image>`'s props: GtkImage's own properties and signals. */
 export interface ImageProps extends WidgetProps {
+  file?: string;
   gicon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
   iconName?: string | null;
   iconSize?: GtkIconSize;
   paintable?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable | null;
   pixelSize?: number;
+  resource?: string;
   useFallback?: boolean;
+  onNotifyFile?: (value: string | null) => void;
   onNotifyIconName?: (value: string | null) => void;
   onNotifyIconSize?: (value: GtkIconSize) => void;
   onNotifyPixelSize?: (value: number) => void;
+  onNotifyResource?: (value: string | null) => void;
   onNotifyUseFallback?: (value: boolean) => void;
 }
 
@@ -1017,6 +1039,7 @@ export interface PanedProps extends WidgetProps {
 export interface PasswordEntryProps extends WidgetProps {
   activatesDefault?: boolean;
   extraMenu?: GMenuModel | null;
+  placeholderText?: string;
   showPeekIcon?: boolean;
   editable?: boolean;
   enableUndo?: boolean;
@@ -1025,6 +1048,7 @@ export interface PasswordEntryProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyPlaceholderText?: (value: string | null) => void;
   onNotifyShowPeekIcon?: (value: boolean) => void;
   onActivate?: () => void;
   onNotifyEditable?: (value: boolean) => void;
@@ -1061,6 +1085,8 @@ export interface PopoverBinProps extends WidgetProps {
 /** `<PopoverMenu>`'s props: GtkPopoverMenu's own properties and signals. */
 export interface PopoverMenuProps extends PopoverProps {
   menuModel?: GMenuModel | null;
+  visibleSubmenu?: string;
+  onNotifyVisibleSubmenu?: (value: string | null) => void;
 }
 
 /** `<PopoverMenuBar>`'s props: GtkPopoverMenuBar's own properties and signals. */
@@ -1343,6 +1369,7 @@ export interface TextProps extends WidgetProps {
   buffer?: GtkEntryBuffer;
   enableEmojiCompletion?: boolean;
   extraMenu?: GMenuModel | null;
+  imModule?: string;
   inputPurpose?: GtkInputPurpose;
   invisibleChar?: number;
   invisibleCharSet?: boolean;
@@ -1361,6 +1388,7 @@ export interface TextProps extends WidgetProps {
   onNotifyActivatesDefault?: (value: boolean) => void;
   onNotifyBuffer?: (value: GtkEntryBuffer) => void;
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
+  onNotifyImModule?: (value: string | null) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
   onNotifyInvisibleCharSet?: (value: boolean) => void;
@@ -1400,6 +1428,7 @@ export interface TextViewProps extends WidgetProps {
   cursorVisible?: boolean;
   editable?: boolean;
   extraMenu?: GMenuModel | null;
+  imModule?: string;
   indent?: number;
   inputPurpose?: GtkInputPurpose;
   justification?: GtkJustification;
@@ -1421,6 +1450,7 @@ export interface TextViewProps extends WidgetProps {
   onNotifyBuffer?: (value: GtkTextBuffer) => void;
   onNotifyCursorVisible?: (value: boolean) => void;
   onNotifyEditable?: (value: boolean) => void;
+  onNotifyImModule?: (value: string | null) => void;
   onNotifyIndent?: (value: number) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyJustification?: (value: GtkJustification) => void;
@@ -3166,6 +3196,9 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "hasFrame":
       gtk.set_has_frame(typeof value === "boolean" ? value : true);
       return true;
+    case "imModule":
+      gtk.set_im_module(typeof value === "string" ? value : "");
+      return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
@@ -3177,6 +3210,12 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
       return true;
     case "maxLength":
       gtk.set_max_length(typeof value === "number" ? value : 0);
+      return true;
+    case "menuEntryIconPrimaryText":
+      gtk.set_menu_entry_icon_primary_text(typeof value === "string" ? value : "");
+      return true;
+    case "menuEntryIconSecondaryText":
+      gtk.set_menu_entry_icon_secondary_text(typeof value === "string" ? value : "");
       return true;
     case "overwriteMode":
       gtk.set_overwrite_mode(typeof value === "boolean" ? value : false);
@@ -3196,6 +3235,9 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
       else if (value instanceof GdkPixbuf) gtk.set_primary_icon_gicon(value);
       else if (value instanceof GdkTexture) gtk.set_primary_icon_gicon(value);
       return true;
+    case "primaryIconName":
+      gtk.set_primary_icon_name(typeof value === "string" ? value : "");
+      return true;
     case "primaryIconPaintable":
       if (value instanceof GdkTexture) gtk.set_primary_icon_paintable(value);
       else if (value instanceof GtkIconPaintable) gtk.set_primary_icon_paintable(value);
@@ -3205,6 +3247,12 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
       return true;
     case "primaryIconSensitive":
       gtk.set_primary_icon_sensitive(typeof value === "boolean" ? value : true);
+      return true;
+    case "primaryIconTooltipMarkup":
+      gtk.set_primary_icon_tooltip_markup(typeof value === "string" ? value : "");
+      return true;
+    case "primaryIconTooltipText":
+      gtk.set_primary_icon_tooltip_text(typeof value === "string" ? value : "");
       return true;
     case "progressFraction":
       gtk.set_progress_fraction(typeof value === "number" ? value : 0);
@@ -3224,6 +3272,9 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
       else if (value instanceof GdkPixbuf) gtk.set_secondary_icon_gicon(value);
       else if (value instanceof GdkTexture) gtk.set_secondary_icon_gicon(value);
       return true;
+    case "secondaryIconName":
+      gtk.set_secondary_icon_name(typeof value === "string" ? value : "");
+      return true;
     case "secondaryIconPaintable":
       if (value instanceof GdkTexture) gtk.set_secondary_icon_paintable(value);
       else if (value instanceof GtkIconPaintable) gtk.set_secondary_icon_paintable(value);
@@ -3233,6 +3284,12 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
       return true;
     case "secondaryIconSensitive":
       gtk.set_secondary_icon_sensitive(typeof value === "boolean" ? value : true);
+      return true;
+    case "secondaryIconTooltipMarkup":
+      gtk.set_secondary_icon_tooltip_markup(typeof value === "string" ? value : "");
+      return true;
+    case "secondaryIconTooltipText":
+      gtk.set_secondary_icon_tooltip_text(typeof value === "string" ? value : "");
       return true;
     case "showEmojiIcon":
       gtk.set_show_emoji_icon(typeof value === "boolean" ? value : false);
@@ -3287,6 +3344,11 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
       });
       return true;
+    case "onNotifyImModule":
+      gtk.connect("notify::im-module", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_im_module()));
+      });
+      return true;
     case "onNotifyInputPurpose":
       gtk.connect("notify::input-purpose", () => {
         slot.dispatch(() => (slot.handler as (value: GtkInputPurpose) => void)(gtk.get_input_purpose()));
@@ -3307,6 +3369,16 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_length()));
       });
       return true;
+    case "onNotifyMenuEntryIconPrimaryText":
+      gtk.connect("notify::menu-entry-icon-primary-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_menu_entry_icon_primary_text()));
+      });
+      return true;
+    case "onNotifyMenuEntryIconSecondaryText":
+      gtk.connect("notify::menu-entry-icon-secondary-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_menu_entry_icon_secondary_text()));
+      });
+      return true;
     case "onNotifyOverwriteMode":
       gtk.connect("notify::overwrite-mode", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_overwrite_mode()));
@@ -3322,9 +3394,24 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_primary_icon_activatable()));
       });
       return true;
+    case "onNotifyPrimaryIconName":
+      gtk.connect("notify::primary-icon-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_primary_icon_name()));
+      });
+      return true;
     case "onNotifyPrimaryIconSensitive":
       gtk.connect("notify::primary-icon-sensitive", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_primary_icon_sensitive()));
+      });
+      return true;
+    case "onNotifyPrimaryIconTooltipMarkup":
+      gtk.connect("notify::primary-icon-tooltip-markup", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_primary_icon_tooltip_markup()));
+      });
+      return true;
+    case "onNotifyPrimaryIconTooltipText":
+      gtk.connect("notify::primary-icon-tooltip-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_primary_icon_tooltip_text()));
       });
       return true;
     case "onNotifyProgressFraction":
@@ -3342,9 +3429,24 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_secondary_icon_activatable()));
       });
       return true;
+    case "onNotifySecondaryIconName":
+      gtk.connect("notify::secondary-icon-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_secondary_icon_name()));
+      });
+      return true;
     case "onNotifySecondaryIconSensitive":
       gtk.connect("notify::secondary-icon-sensitive", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_secondary_icon_sensitive()));
+      });
+      return true;
+    case "onNotifySecondaryIconTooltipMarkup":
+      gtk.connect("notify::secondary-icon-tooltip-markup", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_secondary_icon_tooltip_markup()));
+      });
+      return true;
+    case "onNotifySecondaryIconTooltipText":
+      gtk.connect("notify::secondary-icon-tooltip-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_secondary_icon_tooltip_text()));
       });
       return true;
     case "onNotifyShowEmojiIcon":
@@ -3989,6 +4091,9 @@ function headerBarSignal(gtk: GtkHeaderBar, key: string, slot: SignalSlot): bool
 
 function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
   switch (key) {
+    case "file":
+      gtk.set_file(typeof value === "string" ? value : "");
+      return true;
     case "gicon":
       if (value instanceof GBytesIcon) gtk.set_from_gicon(value);
       else if (value instanceof GEmblem) gtk.set_from_gicon(value);
@@ -4015,6 +4120,9 @@ function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
     case "pixelSize":
       gtk.set_pixel_size(typeof value === "number" ? value : -1);
       return true;
+    case "resource":
+      gtk.set_resource(typeof value === "string" ? value : "");
+      return true;
     case "useFallback":
       gtk.set_use_fallback(typeof value === "boolean" ? value : false);
       return true;
@@ -4024,6 +4132,11 @@ function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
 
 function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyFile":
+      gtk.connect("notify::file", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_file()));
+      });
+      return true;
     case "onNotifyIconName":
       gtk.connect("notify::icon-name", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_icon_name()));
@@ -4037,6 +4150,11 @@ function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boolean {
     case "onNotifyPixelSize":
       gtk.connect("notify::pixel-size", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_pixel_size()));
+      });
+      return true;
+    case "onNotifyResource":
+      gtk.connect("notify::resource", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_resource()));
       });
       return true;
     case "onNotifyUseFallback":
@@ -4905,6 +5023,9 @@ function passwordEntryProp(gtk: GtkPasswordEntry, key: string, value: unknown): 
     case "extraMenu":
       gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
       return true;
+    case "placeholderText":
+      gtk.set_placeholder_text(typeof value === "string" ? value : "");
+      return true;
     case "showPeekIcon":
       gtk.set_show_peek_icon(typeof value === "boolean" ? value : false);
       return true;
@@ -4935,6 +5056,11 @@ function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: SignalSlo
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyPlaceholderText":
+      gtk.connect("notify::placeholder-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_placeholder_text()));
       });
       return true;
     case "onNotifyShowPeekIcon":
@@ -5072,11 +5198,21 @@ function popoverMenuProp(gtk: GtkPopoverMenu, key: string, value: unknown): bool
     case "menuModel":
       gtk.set_menu_model(value instanceof GMenuModel ? value : null);
       return true;
+    case "visibleSubmenu":
+      gtk.set_visible_submenu(typeof value === "string" ? value : "");
+      return true;
   }
   return popoverProp(gtk, key, value);
 }
 
 function popoverMenuSignal(gtk: GtkPopoverMenu, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyVisibleSubmenu":
+      gtk.connect("notify::visible-submenu", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_visible_submenu()));
+      });
+      return true;
+  }
   return popoverSignal(gtk, key, slot);
 }
 
@@ -6108,6 +6244,9 @@ function textProp(gtk: GtkText, key: string, value: unknown): boolean {
     case "extraMenu":
       gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
       return true;
+    case "imModule":
+      gtk.set_im_module(typeof value === "string" ? value : "");
+      return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
@@ -6172,6 +6311,11 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
     case "onNotifyEnableEmojiCompletion":
       gtk.connect("notify::enable-emoji-completion", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_emoji_completion()));
+      });
+      return true;
+    case "onNotifyImModule":
+      gtk.connect("notify::im-module", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_im_module()));
       });
       return true;
     case "onNotifyInputPurpose":
@@ -6327,6 +6471,9 @@ function textViewProp(gtk: GtkTextView, key: string, value: unknown): boolean {
     case "extraMenu":
       gtk.set_extra_menu(value instanceof GMenuModel ? value : null);
       return true;
+    case "imModule":
+      gtk.set_im_module(typeof value === "string" ? value : "");
+      return true;
     case "indent":
       gtk.set_indent(typeof value === "number" ? value : 0);
       return true;
@@ -6404,6 +6551,11 @@ function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolea
     case "onNotifyEditable":
       gtk.connect("notify::editable", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyImModule":
+      gtk.connect("notify::im-module", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_im_module()));
       });
       return true;
     case "onNotifyIndent":
