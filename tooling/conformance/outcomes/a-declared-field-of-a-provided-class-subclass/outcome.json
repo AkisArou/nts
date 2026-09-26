@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: plain class=true;own-class subclass=true;Error subclass=false;Error subclass, read=undefined;Error subclass, after assignment=true;TypeError subclass=false;Error subclass, initialised field=true;",
+  "node": "exit 1; nts: uncaught Observed: plain class=true;own-class subclass=true;Error subclass=true;Error subclass, read=undefined;Error subclass, after assignment=true;TypeError subclass=true;Error subclass, initialised field=true;",
+  "measured_with": "42825d77e95a84bc",
+  "source": "measured"
+}
