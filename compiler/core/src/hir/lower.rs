@@ -29135,50 +29135,28 @@ impl<'a> FuncBuilder<'a> {
         decl
     }
 
-    /// The property declarations a member names: its symbol's, or -- for a
-    /// member of an instantiation (`list.size` on an `IVector<IInspectable>`),
-    /// whose symbol the checker made for the instantiation and records no
-    /// declaration of -- the declaration the receiver's type records for the
-    /// property of that name, through each part of an intersection.
+    /// The property declarations a member names, through its symbol: a
+    /// property signature or accessor, or a namespace's variable (a class's
+    /// static property), as the node its tags are on.
+    ///
+    /// A member of an instantiation (`list.size` on an `IVector<IInspectable>`)
+    /// once arrived with no declarations -- its symbol first interned from
+    /// the program's file, before the binding's was decoded -- and was read
+    /// through the receiver type's property records instead. The frontend
+    /// now remembers that declaration (f8628b64), so the symbol is the one
+    /// route.
     fn accessor_nodes(&self, member: NodeId) -> Vec<NodeId> {
-        // A class's static property is a variable of its namespace.
         let accessor = |decl: &NodeId| {
             matches!(
                 self.kind_of(*decl),
                 Some(syntax::PROPERTY_SIGNATURE | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR | syntax::VARIABLE_DECLARATION)
             )
         };
-        let declared: Vec<NodeId> = self
-            .node(member)
+        self.node(member)
             .symbol
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
             .map(|record| record.declarations.iter().copied().filter(accessor).map(|decl| self.tagged_statement(decl)).collect())
-            .unwrap_or_default();
-        if !declared.is_empty() {
-            return declared;
-        }
-        let Some(name) = self.literal_name(member) else { return Vec::new() };
-        let Some(receiver) = self
-            .node(member)
-            .parent
-            .filter(|access| self.kind_of(*access) == Some(syntax::PROPERTY_ACCESS_EXPRESSION))
-            .and_then(|access| self.children(access).first().copied())
-            .and_then(|object| self.snapshot.node_types.get(&object).copied())
-        else {
-            return Vec::new();
-        };
-        let mut found = Vec::new();
-        let mut pending = vec![receiver];
-        while let Some(ty) = pending.pop() {
-            match self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
-                Some(TypeKind::Intersection(parts)) => pending.extend(parts.iter().copied()),
-                Some(TypeKind::Object { properties }) => {
-                    found.extend(properties.iter().filter(|p| p.name == name).filter_map(|p| p.declaration).filter(accessor).map(|decl| self.tagged_statement(decl)));
-                }
-                _ => {}
-            }
-        }
-        found
+            .unwrap_or_default()
     }
 
     /// A read of a binding's property: `None` for any other member.
