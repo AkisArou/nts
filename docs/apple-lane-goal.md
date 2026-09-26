@@ -1040,6 +1040,27 @@ correctness does not depend on arm64 running by luck.
        read back as an `NSString`. Arguments and results are checked by
        macos-classes' `class-names` line: a literal, a variable, a
        concatenation, and nil.
+     - **Text input and notifications (2026-09-26): `ios-form`.** A text
+       field with a delegate the program writes, and a `NotificationCenter`
+       observer, a closure Foundation keeps until `removeObserver`. Its
+       Swift twin agrees. It took two surface features:
+       - **Constants.** Swift imports `UITextFieldTextDidChangeNotification`
+         as `UITextField.textDidChangeNotification`. bind-objc binds such a
+         constant as `/** @ntsSymbol NAME */ static get name(): T`, and
+         lowering reads it with `Convention::Variable`: `extern T NAME;` in
+         C, an external global in LLVM, never a call or a message.
+       - **Conformances.** `textField.insertText(_:)` is `UIKeyInput`'s. A
+         bound class that conforms, transitively, to a declared protocol
+         gets `export interface UITextField extends UIKeyInput {}`, which is
+         TypeScript's declaration merging.
+       - An Objective-C property read inside `try` is allowed: a message
+         cannot raise into TypeScript.
+     - **A Mac with no desktop session (2026-09-26).** After a reboot without
+       automatic login, the command-line examples run and the two that open a
+       window cannot. `run.sh --gui` asks, and they print `SKIP`, which is the
+       word the gate's interop step counts. Every Apple not-run line now says
+       `SKIP`. Before this, an unreachable Mac read as eleven examples built
+       and run.
      - Still C in each iOS fixture: `report`, the test's output.
        `console.log` is the node lane's runtime, which a native application
        does not link.
