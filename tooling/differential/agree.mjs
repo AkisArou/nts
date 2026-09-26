@@ -112,6 +112,8 @@ const WRONG = new Set([
   Outcome.DISAGREES, Outcome.ABORTED, Outcome.ALL_DECLINED, Outcome.BACKEND_DECLINED, Outcome.INVALID_HIR,
   Outcome.NO_TYPECHECK,
 ]);
+/** A refusal *caused by* another -- "because it calls", "this statement is skipped". */
+const CASCADE = /^ {2}refused: NTS100[35] /;
 /** Outcomes that compared something and found no difference. */
 const AGREEING = new Set([Outcome.AGREES, Outcome.PARTIAL]);
 
@@ -140,7 +142,11 @@ export function classify(status, out) {
     declined: count(/^(\d+) case\(s\) the compiled program declined/m),
     timeouts: count(/^(\d+) case\(s\) ran out of time/m),
     // Lowering's refusals: each one can take a function out of what is driven.
+    // `check` prints the cascades too, and `tooling/gate/example-refusals`
+    // counts roots only -- the same example reads 3 here and 1 there, by
+    // design, so both are kept and both are printed.
     refused: out.split("\n").filter((line) => line.startsWith("  refused: ")).length,
+    refusedRoots: out.split("\n").filter((line) => line.startsWith("  refused: ") && !CASCADE.test(line)).length,
     // What the two sides answered where they differ, verbatim: two runs that
     // disagree *differently* are two different answers. Not the harness's
     // own `node stopped part-way:`, which shares the `  node ` prefix.
@@ -212,7 +218,10 @@ export function describe(r) {
   if (r.expected > 0) parts.push(`${r.checked} of ${r.expected} compared`);
   if (r.declined > 0) parts.push(`${r.declined} declined`);
   if (r.timeouts > 0) parts.push(`${r.timeouts} timed out`);
-  if (r.refused > 0) parts.push(`${r.refused} refused in lowering`);
+  if (r.refused > 0) {
+    const cascades = r.refused - r.refusedRoots;
+    parts.push(`${r.refusedRoots} refused in lowering${cascades > 0 ? ` (${r.refused} with cascades)` : ""}`);
+  }
   if (r.oracleStopped > 0) parts.push("node stopped part-way");
   if (r.outcome === Outcome.NOT_MEASURED) parts.push(r.first);
   return parts.join(", ");
@@ -235,6 +244,12 @@ function selfTest() {
   const aborted = classify(1, "checked 3 cases across 1 function(s)\n  the compiled program aborted: f 1\nError: the compiled program aborted 1 time(s) for a reason that is not the program correctly declining its input\n");
   if (aborted.outcome !== Outcome.ABORTED || aborted.answers.length !== 1) return `an abort read as ${JSON.stringify(aborted)}`;
   const every = classify(1, "3 case(s) the compiled program declined -- ...\nchecked 0 of 3 cases; the rest were not reached\nError: no case was checked: all 3 declined, so the two sides were never compared.\n");
+  // Verbatim, from `examples/a-slot-typed-exactly-undefined`: one root, two cascades.
+  const cascaded = classify(0, "  refused: NTS1001 a call inside a `try` whose `throw` would not reach this handler\n" +
+    "  refused: NTS1003 `runner` cannot be compiled because it calls `Closure0#call`, and ...\n" +
+    "  refused: NTS1003 `awaitedThenRejected` cannot be compiled because it calls `runner`, and ...\n" +
+    "checked 87 cases across 3 function(s)\nagreed on every case\n");
+  if (cascaded.refused !== 3 || cascaded.refusedRoots !== 1) return `one root and two cascades read as ${cascaded.refusedRoots} of ${cascaded.refused}`;
   if (every.outcome !== Outcome.ALL_DECLINED) return `every case declined read as ${every.outcome}`;
   // Exit 0 without the verdict line is a run that stopped early, not agreement.
   if (classify(0, "checked 3 cases across 1 function(s)\n").outcome !== Outcome.NOT_MEASURED) return "a run with no verdict line read as measured";

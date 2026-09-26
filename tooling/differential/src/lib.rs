@@ -41,6 +41,8 @@ use nts_core::hir::facts::Facts;
 use nts_core::hir::{self, HirType};
 use nts_frontend_ts::TsgoApi;
 
+mod objects;
+
 /// Inputs chosen to hit the places TypeScript and C disagree.
 ///
 /// Zero with both signs, the `int32` and `uint32` boundaries either side, the
@@ -1558,17 +1560,24 @@ fn run_native(
     if counted {
         defines.push("-DNTS_PROVIDER_RC");
     }
+    // The runtime and the host are the same bytes in nearly every check, and
+    // compiling them was nearly all of one: see `objects`. The program and its
+    // driver are compiled here, every time.
+    let flags: Vec<&str> = ["-std=c11", "-O1", "-w"].into_iter().chain(defines.iter().copied()).collect();
+    let objects = sources
+        .iter()
+        .chain(std::iter::once(&host))
+        .map(|source| objects::object(source, &flags, &[dir], dir))
+        .collect::<Result<Vec<_>>>()?;
     let build = std::process::Command::new("clang")
-        .args(["-std=c11", "-O1", "-w"])
-        .args(&defines)
+        .args(&flags)
         .arg("-I")
         .arg(dir)
         .arg("-o")
         .arg(&binary)
         .arg(&main_path)
         .arg(&generated)
-        .args(&sources)
-        .arg(&host)
+        .args(&objects)
         .arg("-lm")
         .output()
         .context("running clang")?;

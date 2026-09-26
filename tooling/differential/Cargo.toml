@@ -16,6 +16,7 @@ nts-codegen-llvm.workspace = true
 nts-core.workspace = true
 nts-frontend-ts.workspace = true
 nts-semantic-schema.workspace = true
+xxhash-rust.workspace = true
 
 [lints]
 workspace = true

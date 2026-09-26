@@ -306,6 +306,7 @@ dependencies = [
  "nts-core",
  "nts-frontend-ts",
  "nts-semantic-schema",
+ "xxhash-rust",
 ]
 
 [[package]]
