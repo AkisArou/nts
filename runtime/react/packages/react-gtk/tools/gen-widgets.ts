@@ -279,8 +279,9 @@ function readBindings(dir: string): Bindings {
       continue;
     }
     // `new (props?: GtkButtonProps): GtkButton`, or with the signals a
-    // program class may declare: `new <Sig ...>(props?: ...): Signalled<GtkButton, Sig>`.
-    const constructor = /^ {4}new (?:<[^>]*>)?\(props\?: (\w+)Props\): (?:Signalled<(\w+), \w+>|(\w+));$/.exec(line);
+    // program class may declare, and the interfaces it may implement:
+    // `new <Sig ..., Impl ...>(props?: ...): Signalled<GtkButton, Sig, Impl>`.
+    const constructor = /^ {4}new (?:<[^>]*>)?\(props\?: (\w+)Props\): (?:Signalled<(\w+)(?:, \w+)+>|(\w+));$/.exec(line);
     const constructed = constructor === null ? undefined : (constructor[2] ?? constructor[3]);
     if (constructed !== undefined && constructor![1] === constructed) {
       constructible.add(constructed);
