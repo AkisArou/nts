@@ -30,6 +30,8 @@
 //             way (the flush is stubbed: no reconciler here)
 //   object    an object the app makes (a Scale's adjustment) passes through the
 //             props as itself, and the widget holds that object
+//   reference a widget named by another widget's prop (a Label's mnemonic
+//             widget), passed as a ref's `current` is: the other node's widget
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
@@ -283,6 +285,10 @@ function main(): void {
   const holds = scaled instanceof ScaleNode && scaled.gtk.get_adjustment() === adjustment;
   const at = scaled instanceof ScaleNode ? scaled.gtk.get_value() : -1;
   react_gtk_log("object " + String(holds) + " " + String(at));
+
+  const target = createInstance("GtkEntry", {}, container, 0, {});
+  const naming = createInstance("GtkLabel", { label: "_Name", useUnderline: true, mnemonicWidget: target.widget }, container, 0, {});
+  react_gtk_log("reference " + String(naming instanceof LabelNode && naming.gtk.get_mnemonic_widget() === target.widget));
 
   let asked = 0;
   const closeProps: Props = {

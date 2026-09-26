@@ -130,7 +130,7 @@ import {
   type GtkTreeViewColumn,
   GtkVideo,
   GtkViewport,
-  type GtkWidget,
+  GtkWidget,
   GtkWindow,
   GtkWindowControls,
   type GtkWindowGravity,
@@ -220,10 +220,12 @@ export interface WidgetProps extends HostProps {
 export interface WindowProps extends WidgetProps {
   application?: GtkApplication | null;
   decorated?: boolean;
+  defaultWidget?: GtkWidget | null;
   deletable?: boolean;
   destroyWithParent?: boolean;
   display?: GdkDisplay;
   focusVisible?: boolean;
+  focusWidget?: GtkWidget | null;
   gravity?: GtkWindowGravity;
   handleMenubarAccel?: boolean;
   hideOnClose?: boolean;
@@ -236,9 +238,11 @@ export interface WindowProps extends WidgetProps {
   transientFor?: GtkWindow | null;
   onNotifyApplication?: (value: GtkApplication | null) => void;
   onNotifyDecorated?: (value: boolean) => void;
+  onNotifyDefaultWidget?: (value: GtkWidget | null) => void;
   onNotifyDeletable?: (value: boolean) => void;
   onNotifyDestroyWithParent?: (value: boolean) => void;
   onNotifyFocusVisible?: (value: boolean) => void;
+  onNotifyFocusWidget?: (value: GtkWidget | null) => void;
   onNotifyGravity?: (value: GtkWindowGravity) => void;
   onNotifyHandleMenubarAccel?: (value: boolean) => void;
   onNotifyHideOnClose?: (value: boolean) => void;
@@ -472,6 +476,7 @@ export interface EditableLabelProps extends WidgetProps {
 export interface PopoverProps extends WidgetProps {
   autohide?: boolean;
   cascadePopdown?: boolean;
+  defaultWidget?: GtkWidget | null;
   hasArrow?: boolean;
   mnemonicsVisible?: boolean;
   position?: GtkPositionType;
@@ -727,6 +732,7 @@ export interface LabelProps extends WidgetProps {
   label?: string;
   lines?: number;
   maxWidthChars?: number;
+  mnemonicWidget?: GtkWidget | null;
   naturalWrapMode?: GtkNaturalWrapMode;
   selectable?: boolean;
   singleLineMode?: boolean;
@@ -742,6 +748,7 @@ export interface LabelProps extends WidgetProps {
   onNotifyLabel?: (value: string) => void;
   onNotifyLines?: (value: number) => void;
   onNotifyMaxWidthChars?: (value: number) => void;
+  onNotifyMnemonicWidget?: (value: GtkWidget | null) => void;
   onNotifyNaturalWrapMode?: (value: GtkNaturalWrapMode) => void;
   onNotifySelectable?: (value: boolean) => void;
   onNotifySingleLineMode?: (value: boolean) => void;
@@ -1085,8 +1092,10 @@ export interface ScrolledWindowProps extends WidgetProps {
 
 /** `<SearchBar>`'s props: GtkSearchBar's own properties and signals. */
 export interface SearchBarProps extends WidgetProps {
+  keyCaptureWidget?: GtkWidget | null;
   searchModeEnabled?: boolean;
   showCloseButton?: boolean;
+  onNotifyKeyCaptureWidget?: (value: GtkWidget | null) => void;
   onNotifySearchModeEnabled?: (value: boolean) => void;
   onNotifyShowCloseButton?: (value: boolean) => void;
 }
@@ -1094,6 +1103,7 @@ export interface SearchBarProps extends WidgetProps {
 /** `<SearchEntry>`'s props: GtkSearchEntry's own properties and signals. */
 export interface SearchEntryProps extends WidgetProps {
   inputPurpose?: GtkInputPurpose;
+  keyCaptureWidget?: GtkWidget | null;
   placeholderText?: string | null;
   searchDelay?: number;
   editable?: boolean;
@@ -1103,6 +1113,7 @@ export interface SearchEntryProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
+  onNotifyKeyCaptureWidget?: (value: GtkWidget | null) => void;
   onNotifyPlaceholderText?: (value: string | null) => void;
   onNotifySearchDelay?: (value: number) => void;
   onActivate?: () => void;
@@ -1880,6 +1891,9 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
     case "decorated":
       gtk.set_decorated(typeof value === "boolean" ? value : true);
       return true;
+    case "defaultWidget":
+      gtk.set_default_widget(value instanceof GtkWidget ? value : null);
+      return true;
     case "deletable":
       gtk.set_deletable(typeof value === "boolean" ? value : true);
       return true;
@@ -1891,6 +1905,9 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
       return true;
     case "focusVisible":
       gtk.set_focus_visible(typeof value === "boolean" ? value : true);
+      return true;
+    case "focusWidget":
+      gtk.set_focus(value instanceof GtkWidget ? value : null);
       return true;
     case "gravity":
       gtk.set_gravity(typeof value === "number" ? value as GtkWindowGravity : 9 as GtkWindowGravity);
@@ -1938,6 +1955,11 @@ function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_decorated()));
       });
       return true;
+    case "onNotifyDefaultWidget":
+      gtk.connect("notify::default-widget", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWidget | null) => void)(gtk.get_default_widget()));
+      });
+      return true;
     case "onNotifyDeletable":
       gtk.connect("notify::deletable", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_deletable()));
@@ -1951,6 +1973,11 @@ function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
     case "onNotifyFocusVisible":
       gtk.connect("notify::focus-visible", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_focus_visible()));
+      });
+      return true;
+    case "onNotifyFocusWidget":
+      gtk.connect("notify::focus-widget", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWidget | null) => void)(gtk.get_focus()));
       });
       return true;
     case "onNotifyGravity":
@@ -2803,6 +2830,9 @@ function popoverProp(gtk: GtkPopover, key: string, value: unknown): boolean {
       return true;
     case "cascadePopdown":
       gtk.set_cascade_popdown(typeof value === "boolean" ? value : false);
+      return true;
+    case "defaultWidget":
+      gtk.set_default_widget(value instanceof GtkWidget ? value : null);
       return true;
     case "hasArrow":
       gtk.set_has_arrow(typeof value === "boolean" ? value : true);
@@ -3735,6 +3765,9 @@ function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
     case "maxWidthChars":
       gtk.set_max_width_chars(typeof value === "number" ? value : -1);
       return true;
+    case "mnemonicWidget":
+      gtk.set_mnemonic_widget(value instanceof GtkWidget ? value : null);
+      return true;
     case "naturalWrapMode":
       gtk.set_natural_wrap_mode(typeof value === "number" ? value as GtkNaturalWrapMode : 0 as GtkNaturalWrapMode);
       return true;
@@ -3794,6 +3827,11 @@ function labelSignal(gtk: GtkLabel, key: string, slot: SignalSlot): boolean {
     case "onNotifyMaxWidthChars":
       gtk.connect("notify::max-width-chars", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_width_chars()));
+      });
+      return true;
+    case "onNotifyMnemonicWidget":
+      gtk.connect("notify::mnemonic-widget", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWidget | null) => void)(gtk.get_mnemonic_widget()));
       });
       return true;
     case "onNotifyNaturalWrapMode":
@@ -5057,6 +5095,9 @@ function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalS
 
 function searchBarProp(gtk: GtkSearchBar, key: string, value: unknown): boolean {
   switch (key) {
+    case "keyCaptureWidget":
+      gtk.set_key_capture_widget(value instanceof GtkWidget ? value : null);
+      return true;
     case "searchModeEnabled":
       gtk.set_search_mode(typeof value === "boolean" ? value : false);
       return true;
@@ -5069,6 +5110,11 @@ function searchBarProp(gtk: GtkSearchBar, key: string, value: unknown): boolean 
 
 function searchBarSignal(gtk: GtkSearchBar, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyKeyCaptureWidget":
+      gtk.connect("notify::key-capture-widget", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWidget | null) => void)(gtk.get_key_capture_widget()));
+      });
+      return true;
     case "onNotifySearchModeEnabled":
       gtk.connect("notify::search-mode-enabled", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_search_mode()));
@@ -5087,6 +5133,9 @@ function searchEntryProp(gtk: GtkSearchEntry, key: string, value: unknown): bool
   switch (key) {
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
+      return true;
+    case "keyCaptureWidget":
+      gtk.set_key_capture_widget(value instanceof GtkWidget ? value : null);
       return true;
     case "placeholderText":
       gtk.set_placeholder_text(typeof value === "string" ? value : null);
@@ -5121,6 +5170,11 @@ function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): 
     case "onNotifyInputPurpose":
       gtk.connect("notify::input-purpose", () => {
         slot.dispatch(() => (slot.handler as (value: GtkInputPurpose) => void)(gtk.get_input_purpose()));
+      });
+      return true;
+    case "onNotifyKeyCaptureWidget":
+      gtk.connect("notify::key-capture-widget", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWidget | null) => void)(gtk.get_key_capture_widget()));
       });
       return true;
     case "onNotifyPlaceholderText":

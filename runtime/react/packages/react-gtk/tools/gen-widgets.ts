@@ -395,10 +395,17 @@ const controlledProps = new Map([
   ["DropDown", ["selected"]],
 ]);
 
+// Widget-typed properties that name another widget rather than place one: an
+// app passes a ref's `current` (a host element's public instance is its
+// widget). The rest of the widget-typed ones place a child in a slot (a
+// Paned's start child, a window's titlebar), which a widget React has already
+// parented cannot fill: those wait for slot elements.
+const widgetReferences = new Set(["mnemonic-widget", "default-widget", "focus-widget", "key-capture-widget"]);
+
 // Children arrive as React children, never as a prop.
 const childProps = new Set(["child"]);
 
-function valueKind(type: string, classes: Set<string>): ValueKind | null {
+function valueKind(type: string, classes: Set<string>, reference = false): ValueKind | null {
   if (type === "string" || type === "string | null") {
     return { kind: "string", nullable: type.endsWith("null") };
   }
@@ -417,7 +424,7 @@ function valueKind(type: string, classes: Set<string>): ValueKind | null {
   // boxed Pango type, a handle of another kind.
   const object = /^((?:Gtk|Gdk|G)[A-Z]\w+)( \| null)?$/.exec(type);
   // A class, since the narrowing is `instanceof`: an interface has no value.
-  if (object !== null && object[1] !== "GtkWidget" && classes.has(object[1]!)) {
+  if (object !== null && (object[1] !== "GtkWidget" || reference) && classes.has(object[1]!)) {
     return { kind: "object", type: object[1]!, nullable: object[2] !== undefined };
   }
   return null;
@@ -512,13 +519,15 @@ function model(gir: Gir, bindings: Bindings): Model {
         if (childProps.has(p.name) || !p.writable) {
           continue;
         }
-        const value = type === undefined ? null : valueKind(type, bindings.classes);
+        const value = type === undefined ? null : valueKind(type, bindings.classes, widgetReferences.has(p.name));
         if (p.constructOnly) {
           skipped.add(`${where}\tconstruct-only: a change would need a new widget`);
         } else if (p.deprecated) {
           skipped.add(`${where}\tdeprecated`);
         } else if (type === undefined) {
           skipped.add(`${where}\tno setter in the bindings`);
+        } else if (value === null && /^GtkWidget( \| null)?$/.test(type)) {
+          skipped.add(`${where}\ta widget slot: placing a child there waits for slot elements`);
         } else if (value === null) {
           skipped.add(`${where}\ta ${type}, which a JSX attribute does not carry yet`);
         } else {

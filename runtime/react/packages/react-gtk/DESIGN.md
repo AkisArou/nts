@@ -152,9 +152,13 @@ the app makes (an adjustment, a model, a list-item factory, a menu) when its
 type is a class: it is read back from the props with `instanceof`, a check
 against the object's GType, which is how a native build reads a GObject out
 of an erased value. An interface-typed prop (`GListModel`) is left out,
-because an interface has no value to check against, and so is a
-widget-typed one (`mnemonicWidget`), because a widget belongs to React and
-an app would need a ref to it. The other gaps are construct-only props, and
+because an interface has no value to check against. A widget-typed prop that
+names another widget (`mnemonicWidget`, `defaultWidget`, `focusWidget`,
+`keyCaptureWidget`) takes a ref's `current`: a host element's public
+instance is its widget. One that places a child in a slot (a Paned's
+`startChild`, a window's `titlebar`, a CenterBox's `startWidget`) is left out:
+a widget React has already parented cannot fill it, and it waits for slot
+elements. The other gaps are construct-only props, and
 signal arguments of types a JSX handler cannot name yet.
 
 Regenerate after a GTK update, from a native program's generated bindings:
