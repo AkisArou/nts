@@ -24,6 +24,10 @@
 //   notify    a property changed from GTK's side (an Entry's text, as typing
 //             changes it) reaches its onNotify handler with the new value;
 //             React's own write of the prop does not
+//   controlled  a controlled Entry's text, changed by the user: put back to
+//             the props' value when the app keeps it, kept when the app's
+//             flush commits it, without passing through the old value on the
+//             way (the flush is stubbed: no reconciler here)
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
@@ -37,7 +41,7 @@
 //   timer     a timer fired, and a cancelled one did not
 
 import { gtk_init, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
-import { g_main_loop_new } from "c:GLib-2.0";
+import { g_main_context_iteration, g_main_loop_new } from "c:GLib-2.0";
 import { react_gtk_emit, react_gtk_emit_decision, react_gtk_emit_double, react_gtk_log } from "c:react-gtk-shim";
 import {
   appendChildToContainer,
@@ -53,6 +57,7 @@ import {
   type HostNode,
   type Props,
 } from "../../../packages/react-gtk/src/ReactFiberConfig.ts";
+import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
 import { BoxNode, ButtonNode, EntryNode, FrameNode, LabelNode, ListBoxNode } from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
 
@@ -90,6 +95,13 @@ function rows(list: HostNode, nodes: HostNode[], names: string[]): string {
     }
   }
   return out;
+}
+
+// Runs what the main loop has ready: controlled props are put back from it.
+function idle(): void {
+  while (g_main_context_iteration(null, false)) {
+    // until nothing is ready
+  }
 }
 
 function frame(node: HostNode): string {
@@ -223,6 +235,44 @@ function main(): void {
     entry.gtk.set_text("typed");
   }
   react_gtk_log("notify " + before + ">" + typed);
+  idle();
+
+  const entryText = (node: HostNode): string => (node instanceof EntryNode ? node.gtk.get_text() : "not an entry");
+  // The app keeps its state: nothing is flushed, so the text goes back.
+  setAfterEvent(() => {});
+  const heldEntry = createInstance("GtkEntry", { text: "a" }, container, 0, {});
+  if (heldEntry instanceof EntryNode) {
+    heldEntry.gtk.set_text("typed");
+  }
+  idle();
+  const rejected = entryText(heldEntry);
+  // The app takes the new text: its flush commits it, so it stays.
+  let taken = "";
+  const acceptProps: Props = {
+    text: "a",
+    onNotifyText: (value: string) => {
+      taken = value;
+    },
+  };
+  const accepting = createInstance("GtkEntry", acceptProps, container, 0, {});
+  setAfterEvent(() => {
+    commitUpdate(accepting, "GtkEntry", acceptProps, { text: taken, onNotifyText: acceptProps["onNotifyText"] }, {});
+  });
+  // Whether the accepted text ever showed the old one on its way: the
+  // restore runs after the flush, so it must not.
+  let flashed = false;
+  if (accepting instanceof EntryNode) {
+    accepting.gtk.set_text("typed");
+    const widget = accepting.gtk;
+    widget.connect("notify::text", () => {
+      if (widget.get_text() === "a") {
+        flashed = true;
+      }
+    });
+  }
+  idle();
+  setAfterEvent(() => {});
+  react_gtk_log("controlled " + rejected + " " + entryText(accepting) + " flashed=" + String(flashed));
 
   let asked = 0;
   const closeProps: Props = {

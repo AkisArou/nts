@@ -127,6 +127,19 @@ a controlled prop needs to hear. A handler hears the user and not React:
 nothing is dispatched while props are applied, so setting `text` or
 `active` from props does not call `onNotifyText` or `onToggled`, as React
 DOM does not call `onChange` for the value it sets.
+
+**Controlled props.** The props a user changes (an Editable's `text`, a
+CheckButton's, ToggleButton's or Switch's `active`, a SpinButton's `value`,
+an Expander's `expanded`, a DropDown's `selected`) hold the widget when they
+are given, as React DOM's `value` and `checked` do. When the user changes
+one, its onNotify handler runs. Then, once GTK's own change is over (from
+an idle source, since an Entry's edit notifies more than once), React's sync
+work is flushed and the widget is put back to what the props say. An app
+that took the new value into state has committed it by then, so it stays,
+without passing through the old one. The flush is a hook the root installs
+(`setAfterEvent(flushSyncWork)`), so the host does not import the
+reconciler. The list is kept by hand in the generator: GIR does not say
+which properties input changes.
 `src/widgets.skipped.txt` lists what is left out and why. The main gaps are
 object-valued props, construct-only props, and signal arguments of types a
 JSX handler cannot name yet.
@@ -143,7 +156,7 @@ Regenerate after a GTK update, from a native program's generated bindings:
    natively.
 2. Props and signals generated from GIR for every widget class. Done for
    props with scalar values, and signals with scalar or widget arguments.
-3. `ListBox` (done, with `FlowBox`), `Entry` with controlled `text`, and the
-   rest of the common widgets.
+3. `ListBox` (done, with `FlowBox`), `Entry` with controlled `text` (done,
+   with the other controlled props), and the rest of the common widgets.
 4. A benchmark against GJS on the same app, which the GTK lane's goal already
    names.

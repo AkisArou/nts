@@ -300,6 +300,8 @@ type ValueKind =
 interface Prop {
   jsx: string; // hasFrame
   setter: string; // set_has_frame
+  /** For a controlled prop, the getter that reads the widget's own value. */
+  controlledBy?: string;
   value: ValueKind;
   /** The value that restores GTK's default when the prop is removed, or null when there is none to say. */
   reset: string | null;
@@ -359,6 +361,20 @@ const tsName = (girName: string): string => `Gtk${girName}`;
 const rowAccessors = new Map([
   ["ListBox", "get_row_at_index"],
   ["FlowBox", "get_child_at_index"],
+]);
+
+// The props a user changes, by the GIR type that declares them: a prop given
+// to one holds it, as React DOM's `value` and `checked` do (HostNode's
+// `readControlled`). Hand-kept: GIR does not say which properties input
+// changes.
+const controlledProps = new Map([
+  ["Editable", ["text"]],
+  ["CheckButton", ["active"]],
+  ["ToggleButton", ["active"]],
+  ["Switch", ["active"]],
+  ["SpinButton", ["value"]],
+  ["Expander", ["expanded"]],
+  ["DropDown", ["selected"]],
 ]);
 
 // Children arrive as React children, never as a prop.
@@ -475,12 +491,13 @@ function model(gir: Gir, bindings: Bindings): Model {
           if (reset === null) {
             skipped.add(`${where}\tremoving it leaves its value: GIR gives no default`);
           }
-          props.push({ jsx: camel(p.name), setter, value, reset });
           // `onNotifyText`: the property changed, from any side, and here is
           // its new value -- what a controlled prop needs to hear.
           const getter = p.getter ?? `get_${p.name.replace(/-/g, "_")}`;
           const read = bindings.getters.get(sourceTs)?.get(getter);
           const readType = p.readable && read !== undefined ? handlerType(read, handlerTypes) : null;
+          const controlled = readType !== null && controlledProps.get(source.name)?.includes(p.name) === true;
+          props.push({ jsx: camel(p.name), setter, value, reset, ...(controlled ? { controlledBy: getter } : {}) });
           if (readType !== null) {
             signals.push({
               jsx: `onNotify${camel(`-${p.name}`)}`,
@@ -663,6 +680,21 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     line("  connectSignal(key: string, slot: SignalSlot): boolean {");
     line(`    return ${fn}Signal(this.gtk, key, slot);`);
     line("  }");
+    const controlled = [];
+    for (let t: WidgetType | null = w; t !== null; t = t.parent) {
+      controlled.push(...t.props.filter((p) => p.controlledBy !== undefined));
+    }
+    if (controlled.length > 0) {
+      line("  readControlled(key: string): unknown {");
+      line("    switch (key) {");
+      for (const p of controlled) {
+        line(`      case "${p.jsx}":`);
+        line(`        return this.gtk.${p.controlledBy}();`);
+      }
+      line("    }");
+      line("    return undefined;");
+      line("  }");
+    }
     if (w.children === "single") {
       line("  appendChild(child: HostNode): void {");
       line("    this.holdOnly(child);");

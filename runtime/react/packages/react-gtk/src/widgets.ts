@@ -6000,6 +6000,13 @@ export class CheckButtonNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return checkButtonSignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "active":
+        return this.gtk.get_active();
+    }
+    return undefined;
+  }
   appendChild(child: HostNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
@@ -6101,6 +6108,13 @@ export class DropDownNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return dropDownSignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "selected":
+        return this.gtk.get_selected();
+    }
+    return undefined;
+  }
 }
 
 /** `<EditableLabel>`: a GtkEditableLabel. */
@@ -6117,6 +6131,13 @@ export class EditableLabelNode extends HostNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return editableLabelSignal(this.gtk, key, slot);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "text":
+        return this.gtk.get_text();
+    }
+    return undefined;
   }
 }
 
@@ -6160,6 +6181,13 @@ export class EntryNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return entrySignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "text":
+        return this.gtk.get_text();
+    }
+    return undefined;
+  }
 }
 
 /** `<Expander>`: a GtkExpander. */
@@ -6176,6 +6204,13 @@ export class ExpanderNode extends HostNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return expanderSignal(this.gtk, key, slot);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "expanded":
+        return this.gtk.get_expanded();
+    }
+    return undefined;
   }
   appendChild(child: HostNode): void {
     this.holdOnly(child);
@@ -6727,6 +6762,13 @@ export class PasswordEntryNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return passwordEntrySignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "text":
+        return this.gtk.get_text();
+    }
+    return undefined;
+  }
 }
 
 /** `<Picture>`: a GtkPicture. */
@@ -7013,6 +7055,13 @@ export class SearchEntryNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return searchEntrySignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "text":
+        return this.gtk.get_text();
+    }
+    return undefined;
+  }
 }
 
 /** `<Separator>`: a GtkSeparator. */
@@ -7046,6 +7095,15 @@ export class SpinButtonNode extends HostNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return spinButtonSignal(this.gtk, key, slot);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "value":
+        return this.gtk.get_value();
+      case "text":
+        return this.gtk.get_text();
+    }
+    return undefined;
   }
 }
 
@@ -7132,6 +7190,13 @@ export class SwitchNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return switchSignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "active":
+        return this.gtk.get_active();
+    }
+    return undefined;
+  }
 }
 
 /** `<Text>`: a GtkText. */
@@ -7148,6 +7213,13 @@ export class TextNode extends HostNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return textSignal(this.gtk, key, slot);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "text":
+        return this.gtk.get_text();
+    }
+    return undefined;
   }
 }
 
@@ -7182,6 +7254,13 @@ export class ToggleButtonNode extends HostNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return toggleButtonSignal(this.gtk, key, slot);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "active":
+        return this.gtk.get_active();
+    }
+    return undefined;
   }
   appendChild(child: HostNode): void {
     this.holdOnly(child);

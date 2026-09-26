@@ -40,6 +40,7 @@ single true
 argument 2.5@2
 list a,b,c a,d,b,c c,a,d,b c,a,d
 notify none>typed
+controlled a typed flashed=false
 decision 1 0 asked=1
 work timer"
 
