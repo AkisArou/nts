@@ -258,10 +258,11 @@ async function learnKind(): Promise<void> {
 }
 
 // `null` for a lent array that admits it -- `CStrings | null` -- which C is
-// passed as NULL, called directly and through a construct property.
+// passed as NULL, called directly; and a construct property left out, which
+// the constructor is passed as NULL.
 function absentArrays(): void {
   const direct = gtk_string_list_new(null);
-  const constructed = new GtkStringList({ strings: null });
+  const constructed = new GtkStringList({});
   const given = new GtkStringList({ strings: ["a", "b"] });
   console.log("lists " + String(direct.get_n_items()) + " " + String(constructed.get_n_items()) + " " + String(given.get_n_items()));
 }

@@ -29514,8 +29514,18 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_native_construct(&mut self, id: NodeId, construct: &str) -> Result<ValueId, Diagnostic> {
-        let mut names = construct.split_whitespace();
-        let head = names.next().ok_or_else(|| self.unsupported(id, "@ntsConstruct naming no function"))?;
+        let construct = self.chosen_constructor(id, construct);
+        // The head is `g_simple_action_new(name, parameter_type?)` whole,
+        // spaces in its list included; a `GType` function may follow it.
+        let (head, rest) = match (construct.find('('), construct.find(')')) {
+            (Some(open), Some(close)) if open < close => (&construct[..=close], &construct[close + 1..]),
+            _ => construct.trim().split_once(char::is_whitespace).unwrap_or((construct.trim(), "")),
+        };
+        let head = head.trim();
+        if head.is_empty() {
+            return Err(self.unsupported(id, "@ntsConstruct naming no function"));
+        }
+        let names = rest.split_whitespace();
         // `g_list_store_new(item_type)`: a class with construct-only
         // properties is made by the constructor that takes them, each the
         // literal's own; the rest are set as for any other.
@@ -29535,16 +29545,60 @@ impl<'a> FuncBuilder<'a> {
         // literal is known here, so no object is built -- then the
         // constructor, then a setter for each value it did not take.
         let written = self.constructed_properties(id)?;
-        let mut arguments = names.map(|name| self.call_foreign_named(id, name, Vec::new())).collect::<Result<Vec<_>, _>>()?;
+        let mut arguments =
+            names.map(|name| self.call_foreign_named(id, name, Vec::new()).map(Some)).collect::<Result<Vec<_>, _>>()?;
+        // `parameter_type?`: a nullable parameter, NULL where the literal
+        // leaves it out.
         for name in &from {
-            let written = written.iter().find(|written| written.name == *name).ok_or_else(|| {
-                self.unsupported(id, &format!("a handle constructed without `{name}`, which its constructor takes"))
-            })?;
-            arguments.push(written.value);
+            let (name, nullable) = name.strip_suffix('?').map_or((*name, false), |name| (name, true));
+            match written.iter().find(|written| written.name == name) {
+                Some(written) => arguments.push(Some(written.value)),
+                None if nullable => arguments.push(None),
+                None => return Err(self.unsupported(id, &format!("a handle constructed without `{name}`, which its constructor takes"))),
+            }
         }
-        let handle = self.call_foreign_named(id, function, arguments)?;
+        let from: Vec<&str> = from.iter().map(|name| name.trim_end_matches('?')).collect();
+        let handle = self.call_foreign_named_absent(id, function, arguments)?;
         self.set_constructed(id, handle, ty, &written, &from)?;
         Ok(handle)
+    }
+
+    /// Of a binding's constructors (`g_simple_action_new(name,
+    /// parameter_type?) | g_simple_action_new_stateful(name, parameter_type?,
+    /// state)`), the one GJS would call: of those whose required properties
+    /// the literal writes, the one taking the most of what it writes, the
+    /// fewest-taking first on a tie. A props object passed through, whose
+    /// keys are not known here, gets the first.
+    fn chosen_constructor<'c>(&self, id: NodeId, construct: &'c str) -> &'c str {
+        let alternatives: Vec<&str> = construct.split(" | ").collect();
+        let [first, ..] = alternatives.as_slice() else { return construct };
+        if alternatives.len() == 1 {
+            return construct;
+        }
+        let written: Vec<String> = match self.arguments_of(id).as_slice() {
+            [literal] if self.kind_of(*literal) == Some(syntax::OBJECT_LITERAL_EXPRESSION) => {
+                self.children(*literal).into_iter().filter_map(|property| self.member_name(property)).collect()
+            }
+            _ => return first,
+        };
+        let taken = |alternative: &str| -> Vec<String> {
+            alternative
+                .split_once('(')
+                .map(|(_, rest)| rest.trim_end().trim_end_matches(')').split(',').map(|name| name.trim().to_owned()).filter(|name| !name.is_empty()).collect())
+                .unwrap_or_default()
+        };
+        let mut best: Option<(&str, usize)> = None;
+        for alternative in &alternatives {
+            let names = taken(alternative);
+            if !names.iter().filter(|name| !name.ends_with('?')).all(|name| written.contains(name)) {
+                continue;
+            }
+            let covered = names.iter().filter(|name| written.contains(&name.trim_end_matches('?').to_owned())).count();
+            if best.is_none_or(|(_, most)| covered > most) {
+                best = Some((alternative, covered));
+            }
+        }
+        best.map_or(first, |(alternative, _)| alternative)
     }
 
     /// The properties a handle's `new` is given.
@@ -29755,6 +29809,13 @@ impl<'a> FuncBuilder<'a> {
     /// are in the program, and a C name is one function wherever it is
     /// declared.
     fn call_foreign_named(&mut self, id: NodeId, function: &str, arguments: Vec<ValueId>) -> Result<ValueId, Diagnostic> {
+        self.call_foreign_named_absent(id, function, arguments.into_iter().map(Some).collect())
+    }
+
+    /// As [`Self::call_foreign_named`], where an argument may be absent: a
+    /// nullable parameter a construction's props left out, passed as the
+    /// NULL its own type represents.
+    fn call_foreign_named_absent(&mut self, id: NodeId, function: &str, arguments: Vec<Option<ValueId>>) -> Result<ValueId, Diagnostic> {
         let declaration = self
             .snapshot
             .symbols
@@ -29779,11 +29840,28 @@ impl<'a> FuncBuilder<'a> {
         let Callee::Native(target) = &callee else {
             return Err(self.unsupported(id, &format!("a tag naming `{function}`, which is not foreign")));
         };
+        let origin = self.origin(id);
+        let mut given = Vec::with_capacity(arguments.len());
+        for (at, argument) in arguments.into_iter().enumerate() {
+            let value = if let Some(value) = argument {
+                value
+            } else {
+                let ty = record
+                    .parameters
+                    .get(at)
+                    // As a `null` written there is: the parameter as passed.
+                    .and_then(|parameter| self.represent_passed(parameter.ty))
+                    // A handle, or an array lent to C: what a `null` there is.
+                    .filter(|ty| ty.is_managed() || matches!(ty, HirType::NativePointer(_)))
+                    .ok_or_else(|| self.unsupported(id, &format!("`{function}` left without an argument that is not a nullable reference")))?;
+                self.push(OpKind::ConstNull, ty, origin.clone())
+            };
+            given.push(value);
+        }
         // The parameters past `arguments` by their `@ntsDefault`s, as a call
         // leaving them out gets them.
-        let written = arguments.len();
-        let mut arguments = arguments;
-        let origin = self.origin(id);
+        let written = given.len();
+        let mut arguments = given;
         let outer = self.omitting_for.replace((target.clone(), 0));
         let defaults = (written..record.parameters.len()).map(|at| self.omitted_by_default(at, &origin)).collect::<Option<Vec<_>>>();
         self.omitting_for = outer;

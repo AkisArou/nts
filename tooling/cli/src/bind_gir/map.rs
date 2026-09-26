@@ -79,6 +79,10 @@ pub(crate) struct Constructor {
     /// constructor takes, in its order: `g_list_store_new(item_type)`, which
     /// `new GListStore({ item_type })` calls with the literal's.
     pub(crate) from: Vec<String>,
+    /// The class's other constructors that take only properties, by fewest
+    /// taken: `new GSimpleAction({ name })` is `g_simple_action_new`, and one
+    /// that also writes `state` is `g_simple_action_new_stateful`.
+    pub(crate) alternatives: Vec<(String, Vec<String>)>,
 }
 
 /// A property as the binding names it (`icon_name`), and the methods GIR
@@ -324,10 +328,11 @@ fn static_of(callable: &Callable, owner: Option<&Class>) -> Option<(String, Stri
         .map(|class| (class, callable.name.clone()))
 }
 
-/// The properties a constructor takes, where the class has construct-only
-/// ones this constructor covers and every parameter is a property of the
-/// class by name -- `g_list_store_new(item_type)` for `item-type`. `None`
-/// otherwise.
+/// The properties a constructor takes, where every parameter is a property
+/// of the class by name and one is construct-only -- `g_list_store_new(
+/// item_type)` for `item-type`. `None` otherwise. A construct-only property
+/// no constructor chosen takes has no setter either, so a props object
+/// cannot name it; the constructor that does is called as itself.
 fn constructs_from(class: &Class, callable: &Callable) -> Option<Vec<String>> {
     let name = |property: &str| identifier(&property.replace('-', "_"));
     let construct_only: Vec<String> = class.properties.iter().filter(|p| p.construct_only).map(|p| name(&p.name)).collect();
@@ -336,7 +341,7 @@ fn constructs_from(class: &Class, callable: &Callable) -> Option<Vec<String>> {
     }
     let taken: Vec<String> = callable.signature.parameters.iter().map(|p| identifier(&p.name)).collect();
     let known = |taken: &String| class.properties.iter().any(|p| name(&p.name) == *taken);
-    (taken.iter().all(known) && construct_only.iter().all(|c| taken.contains(c))).then_some(taken)
+    (taken.iter().all(known) && construct_only.iter().any(|c| taken.contains(c))).then_some(taken)
 }
 
 /// The module name a namespace binds as: `c:Gtk-4.0`.
@@ -445,13 +450,30 @@ pub(crate) fn bind<'a>(
                     && let Some(class) = owner
                     && let Some(c_type) = class.c_type.clone()
                 {
-                    if let Some(from) = constructs_from(class, callable) {
-                        mapper.binding.constructors.insert(c_type, Constructor { function: function.name.clone(), get_type: None, from });
+                    // One that throws is no `new`: it could not report why.
+                    if let Some(from) = constructs_from(class, callable).filter(|_| function.throws.is_none()) {
+                        // Each, the one taking the fewest first: which a
+                        // construction calls is the lowering's, by what its
+                        // literal writes.
+                        let made = Constructor { function: function.name.clone(), get_type: None, from, alternatives: Vec::new() };
+                        match mapper.binding.constructors.get_mut(&c_type) {
+                            Some(first) if !first.from.is_empty() => {
+                                let mut all = std::mem::take(&mut first.alternatives);
+                                all.push((first.function.clone(), first.from.clone()));
+                                all.push((made.function, made.from));
+                                all.sort_by_key(|(_, from)| from.len());
+                                let (function, from) = all.remove(0);
+                                *first = Constructor { function, get_type: None, from, alternatives: all };
+                            }
+                            _ => {
+                                mapper.binding.constructors.insert(c_type, made);
+                            }
+                        }
                     } else if callable.name == "new"
                         && callable.signature.parameters.is_empty()
                         && !class.properties.iter().any(|p| p.construct_only)
                     {
-                        mapper.binding.constructors.insert(c_type, Constructor { function: function.name.clone(), get_type: None, from: Vec::new() });
+                        mapper.binding.constructors.insert(c_type, Constructor { function: function.name.clone(), get_type: None, from: Vec::new(), alternatives: Vec::new() });
                     }
                 }
                 mapper.binding.functions.push(function);
@@ -676,7 +698,7 @@ impl<'a> Mapper<'a> {
                 if !class.is_abstract && self.counted(self.namespace, class) {
                     match self.construct(class, c_type) {
                         Ok(view) => {
-                            let constructor = Constructor { function: view.name.clone(), get_type: Some(get_type.clone()), from: Vec::new() };
+                            let constructor = Constructor { function: view.name.clone(), get_type: Some(get_type.clone()), from: Vec::new(), alternatives: Vec::new() };
                             self.binding.constructors.insert(c_type.clone(), constructor);
                             self.binding.functions.push(view);
                         }

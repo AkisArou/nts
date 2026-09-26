@@ -817,6 +817,33 @@ tag or an absence and aborts otherwise, naming a box as its own case.
   before the delete -- and its `temporary` arm, a button made in `m.set`'s
   argument list, is the one that read `held alive` before the rule.
 
+### Construct-only properties: the constructor the literal chooses
+
+A construct-only property has no setter, so `new X({ ... })` sets it through
+a C constructor that takes it. The binder used to pick one per class. It had
+to take *every* construct-only property, so `new GSimpleAction({ name })`
+failed to type-check: the only constructor that qualified was
+`new_stateful(name, parameter_type, state)`.
+
+- `@ntsConstruct` now lists each constructor whose parameters are all
+  properties, fewest first: `g_simple_action_new(name, parameter_type?) |
+  g_simple_action_new_stateful(name, parameter_type?, state)`.
+- A property is required only where every constructor takes it and none
+  accepts NULL. A nullable one is optional with no `| null`, and absent is
+  the NULL passed, as for a setter's.
+- The lowering calls, for a literal, the constructor whose required
+  properties the literal writes and which takes the most of what it
+  writes. `{ name }` gets `g_simple_action_new`, `{ name, state }` gets
+  `new_stateful`. A props object passed through gets the first.
+- A constructor that throws is never one of these.
+- Across Gtk-4.0's closure, 17 classes changed. Most were constructible only
+  through `g_object_new` with no way to set a construct-only property, so
+  they made a broken object: `GSettings` with no schema, a `GdkPixbuf` with
+  no size, `GPropertyAction`, `GtkIconPaintable`.
+- Witness: gtk-actions, C and LLVM, plain and `--rc`. It has actions, a
+  stateful action toggled through the application, a `GMenu`, an
+  accelerator and a `GtkCssProvider`.
+
 ### libadwaita, and what a props type says
 
 Adw-1 binds from GIR like any other namespace (12,342 functions), and

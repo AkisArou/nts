@@ -3,7 +3,7 @@
 
 use std::fmt::Write;
 
-use super::map::{Binding, Function, Mapped, Shape, TypeDecl};
+use super::map::{Binding, Constructor, Function, Mapped, Shape, TypeDecl};
 
 /// The module's head: what wrote it, its headers, and the types it imports.
 fn preamble(binding: &Binding, command: &str) -> String {
@@ -248,17 +248,15 @@ fn construction(
     if bases.is_empty() {
         out.push_str("    readonly __c_props?: never;\n");
     }
-    // What the constructor takes, required, at its parameter's type; and
-    // every other property a setter writes, optional.
-    let constructor = binding.constructors.get(name);
-    let from = constructor.map(|c| c.from.as_slice()).unwrap_or_default();
-    let taking = constructor.and_then(|c| binding.functions.iter().find(|f| f.name == c.function));
-    if let Some(taking) = taking {
-        for property in from {
-            if let Some((_, mapped)) = taking.parameters.iter().find(|(given, _)| given == property) {
-                let _ = writeln!(out, "    {property}: {};", mapped.ts);
-            }
-        }
+    // What the constructors take, at their parameters' types: required
+    // where every one takes it and it is not nullable, optional otherwise
+    // (NULL, or another constructor, where it is left out); and every other
+    // property a setter writes, optional.
+    let taken = constructor_properties(binding, binding.constructors.get(name));
+    let from: Vec<String> = taken.iter().map(|(property, ..)| property.clone()).collect();
+    for (property, ts, required) in &taken {
+        let optional = if *required { "" } else { "?" };
+        let _ = writeln!(out, "    {property}{optional}: {ts};");
     }
     for property in binding.properties.get(name).into_iter().flatten() {
         if from.contains(&property.name) {
@@ -290,12 +288,14 @@ fn construction(
     let kept = |function: &str| binding.functions.iter().find(|f| f.name == function && f.throws.is_none());
     let construct = binding.constructors.get(name).and_then(|constructor| {
         let tag = match (kept(&constructor.function), &constructor.get_type) {
-            (Some(_), None) if !constructor.from.is_empty() => format!("{}({})", constructor.function, constructor.from.join(", ")),
+            (Some(_), None) if !constructor.from.is_empty() => constructor_tag(binding, constructor)?,
             (Some(new), None) if new.parameters.is_empty() => constructor.function.clone(),
             (Some(_), Some(get_type)) if kept(get_type).is_some() => format!("{} {get_type}", constructor.function),
             _ => return None,
         };
-        let optional = if constructor.from.is_empty() { "?" } else { "" };
+        // Optional where nothing in it is required.
+        let required = constructor_properties(binding, Some(constructor)).iter().any(|(_, _, required)| *required);
+        let optional = if required { "" } else { "?" };
         let (generic, made) = made_by(name, gtype.is_some());
         Some(format!("    /**\n     * @ntsConstruct {tag}\n     */\n    new {generic}(props{optional}: {name}Props): {made};\n"))
     });
@@ -967,6 +967,71 @@ fn promise_wrapper(out: &mut String, start: &Function, finish: &Function) {
         finish = finish.symbol,
         result = finish.result.ts,
     );
+}
+
+/// A property a constructor takes: its name, type as a props object writes
+/// it, and whether the constructor accepts NULL for it.
+type Taken<'a> = (&'a str, &'a str, bool);
+
+/// Each constructor that takes only properties, kept by the self-check, the
+/// fewest-taking first: `(function, [(property, ts, nullable)])`.
+fn property_constructors<'a>(binding: &'a Binding, constructor: &'a Constructor) -> Vec<(&'a str, Vec<Taken<'a>>)> {
+    std::iter::once((&constructor.function, &constructor.from))
+        .chain(constructor.alternatives.iter().map(|(function, from)| (function, from)))
+        .filter(|(_, from)| !from.is_empty())
+        .filter_map(|(function, from)| {
+            let new = binding.functions.iter().find(|f| &f.name == function && f.throws.is_none())?;
+            let taken = from
+                .iter()
+                .map(|property| {
+                    let (_, mapped) = new.parameters.iter().find(|(given, _)| given == property)?;
+                    // As a setter's: given or not, absent the NULL passed, so
+                    // no `| null` (see `construction`).
+                    let nullable = mapped.ts.ends_with(" | null");
+                    Some((property.as_str(), mapped.ts.trim_end_matches(" | null"), nullable))
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some((function.as_str(), taken))
+        })
+        .collect()
+}
+
+/// The properties a class's constructors take, in the order they first
+/// appear: `(property, ts, required)`, required where every constructor
+/// takes it and none as nullable.
+fn constructor_properties(binding: &Binding, constructor: Option<&Constructor>) -> Vec<(String, String, bool)> {
+    let Some(constructor) = constructor else { return Vec::new() };
+    let all = property_constructors(binding, constructor);
+    let mut properties: Vec<(String, String, bool)> = Vec::new();
+    for (_, taken) in &all {
+        for (property, ts, _) in taken {
+            if properties.iter().any(|(seen, ..)| seen == property) {
+                continue;
+            }
+            let required = all.iter().all(|(_, other)| other.iter().any(|(p, _, nullable)| p == property && !nullable));
+            properties.push(((*property).to_owned(), (*ts).to_owned(), required));
+        }
+    }
+    properties
+}
+
+/// `@ntsConstruct`'s constructors, each with the properties it takes --
+/// `?` where nullable, NULL when left out -- joined by ` | `:
+/// `g_simple_action_new(name, parameter_type?) | g_simple_action_new_stateful(name, parameter_type?, state)`.
+fn constructor_tag(binding: &Binding, constructor: &Constructor) -> Option<String> {
+    let all = property_constructors(binding, constructor);
+    if all.is_empty() {
+        return None;
+    }
+    let each: Vec<String> = all
+        .iter()
+        .map(|(function, taken)| {
+            let names: Vec<String> =
+                taken.iter().map(|(property, _, nullable)| if *nullable { format!("{property}?") } else { (*property).to_owned() }).collect();
+            format!("{function}({})", names.join(", "))
+        })
+        .collect();
+    Some(each.join(" | "))
 }
 
 #[cfg(test)]
