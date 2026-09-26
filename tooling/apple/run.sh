@@ -14,13 +14,16 @@
 # NTS_APPLE_SSH names the ssh destination (default `nts-mac`, an alias in
 # ~/.ssh/config; vm.md has the stanza). Exit 77 means "no Mac reachable", which
 # is not a failure of the artifact: callers print SKIP for it, exactly as
-# gtk-hello does without xvfb. Every other status is the artifact's own.
+# gtk-hello does without xvfb. 124 is a run that outlasted NTS_APPLE_TIMEOUT.
+# Every other status is the artifact's own.
 #
 # The compiler never runs on the Mac. Only the artifact crosses.
 set -uo pipefail
 
 dest="${NTS_APPLE_SSH:-nts-mac}"
-ssh_opts=(-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new)
+# A Mac that stops answering mid-run -- the VM rebooted under a run on
+# 2026-09-26 -- ends the connection within a minute rather than never.
+ssh_opts=(-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
 reachable() { ssh "${ssh_opts[@]}" "$dest" true >/dev/null 2>&1; }
 
@@ -64,4 +67,11 @@ fi
 # and the program receives one empty argument it was never given.
 quoted=""
 [[ $# -eq 0 ]] || quoted=$(printf ' %q' "$@")
-ssh "${ssh_opts[@]}" "$dest" "cd $remote && chmod +x ./$name && env$environment ./$name$quoted"
+# A run that never ends is the one outcome a caller cannot report, so one
+# that outlasts NTS_APPLE_TIMEOUT seconds (default 600) is ended, says so,
+# and exits 124.
+limit="${NTS_APPLE_TIMEOUT:-600}"
+timeout -k 10 "$limit" ssh "${ssh_opts[@]}" "$dest" "cd $remote && chmod +x ./$name && env$environment ./$name$quoted"
+status=$?
+[[ $status -ne 124 ]] || echo "run.sh: $name did not finish on the Mac in $limit s (NTS_APPLE_TIMEOUT)" >&2
+exit "$status"
