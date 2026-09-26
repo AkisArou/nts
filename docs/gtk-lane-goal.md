@@ -713,12 +713,54 @@ class Panel extends GtkBox {
   (`nts_gobject_child_{Class}_{i}`), borrowed from the template.
 - The template's `class` names the registered type, `Nts_{Class}`, as GJS's
   default is `Gjs_{Class}`.
+- A template's `<signal handler="onPressed">` is the class's method of that
+  name. It is registered with `gtk_widget_class_bind_template_callback_full`
+  through an entry point that takes the signal's arguments and then the
+  instance (`nts_gobject_callback_{Class}_{i}`). A handler that is no method
+  of the class is refused (NTS1001). Witness: gtk-subclass's `pressed 1 p`.
 - v1: a template on a class over a binding's class. A chain with another
-  templated or fielded program class below it is not supported yet, nor are
-  `<signal handler>` callbacks in the template.
+  templated or fielded program class below it is not supported yet.
 - Before this, a `declare`d field compiled into a state field nothing set,
   and reading it failed GTK's assertion. Witness: gtk-subclass's `panel from
   the template true`.
+
+### Interfaces a class implements
+
+```ts
+class Words extends GObject<{}, GListModelImplementation> {
+  vfunc_get_n_items(): CNumber<"uint"> { return 3; }
+  vfunc_get_item_type(): c_size_t { return gtk_label_get_type(); }
+  vfunc_get_item(position: CNumber<"uint">): Owned<Erased<GObject>> | null { ... }
+}
+const model: GListModel = new Words();
+```
+
+- The second type argument of a binding's constructor (`new <Sig, Impl>`),
+  one `{Name}Implementation` or a union of them, is what the class
+  implements. The binder emits one per GIR interface with a `GType`
+  function. It carries the interface's `vfunc_` methods as optional ones,
+  so C's default fills a slot the class leaves alone, and three markers:
+  - `__c_iface`, the interface struct and `GType` function, which the
+    compiler registers by;
+  - `__c_tag`, which makes the instance convert to the interface;
+  - `__c_methods`, the interface's own methods, so `words.get_n_items()`
+    reads.
+- `Signalled<T, Sig, Impl>` intersects all of it (`Implementing` in
+  `c:types`). An override is then checked against the interface's signature.
+  `instanceof` reads the constructor with `any` for `Impl`, which implements
+  nothing.
+- The lowering reads `__c_ifaces` into `ForeignClass.protocols`, the field
+  Objective-C's adopted protocols use. A `vfunc_` whose binding's slot is in
+  an implemented interface's struct overrides that slot. It fills that
+  interface's table, not the class's, and `nts_gobject_add_interface`
+  (`g_type_add_interface_static`) installs it right after the class is
+  registered.
+- A method that overrides nothing is refused, as a class's is.
+- `get_item` is transfer full. The label a TypeScript method returns leaves
+  with the one reference it was made with, balanced under `--rc`.
+- Witness: gtk-subclass's `words 3 beta true`. The count, and a label made
+  by our method, both come through Gio's own `g_list_model_get_*`, on C and
+  LLVM, plain and `--rc`.
 
 ### A handle where any value may go
 

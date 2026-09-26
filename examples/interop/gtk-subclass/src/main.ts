@@ -63,12 +63,14 @@ import {
   GtkWidget,
   type GtkButtonProps,
   gtk_init,
+  gtk_label_get_type,
   gtk_widget_measure,
   Orientation,
   type GtkOrientation,
 } from "c:Gtk-4.0";
 import { BindingFlags, GObject, g_object_bind_property, g_type_name_from_instance } from "c:GObject-2.0";
-import type { CEnum, CNumber, Property, Ptr, c_uint } from "c:types";
+import { type GListModel, type GListModelImplementation, g_list_model_get_n_items, g_list_model_get_object } from "c:Gio-2.0";
+import type { CEnum, CNumber, Erased, Owned, Property, Ptr, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 import { sub_emit, sub_log } from "c:sub";
 
@@ -339,6 +341,29 @@ function kind(widget: GtkWidget | null): string {
   return "none";
 }
 
+// A class implementing a GObject interface (`GListModelImplementation`): its
+// `vfunc_` methods fill `GListModelInterface`, not the class struct, and the
+// instance converts to a `GListModel`, which Gio's own functions call through.
+class Words extends GObject<{}, GListModelImplementation> {
+  readonly words: string[] = ["alpha", "beta", "gamma"];
+  vfunc_get_n_items(): CNumber<"uint"> {
+    return this.words.length;
+  }
+  vfunc_get_item_type(): c_size_t {
+    return gtk_label_get_type();
+  }
+  vfunc_get_item(position: CNumber<"uint">): Owned<Erased<GObject>> | null {
+    return position < this.words.length ? new GtkLabel({ label: this.words[position] }) : null;
+  }
+}
+
+function words(): string {
+  const model: GListModel = new Words();
+  const second = g_list_model_get_object(model, 1);
+  const label = second instanceof GtkLabel ? second.label : "?";
+  return "words " + String(g_list_model_get_n_items(model)) + " " + label + " " + String(g_list_model_get_object(model, 3) === null);
+}
+
 function main(): void {
   gtk_init();
   const counter = new Counter({ label: "0" });
@@ -371,6 +396,7 @@ function main(): void {
   shy.set_visible(true);
   sub_log("shy " + String(shy.shown) + " " + String(shy.get_visible()));
   chains();
+  sub_log(words());
   sub_log("is " + [kind(new C({})), kind(new B({})), kind(new GtkLabel({})), kind(new GtkButton({})), kind(null)].join("|"));
 }
 

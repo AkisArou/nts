@@ -490,6 +490,34 @@ size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
   return (size_t)data->type;
 }
 
+/* An interface a class the program wrote implements: the slots its methods
+ * fill in the interface's table (`GListModelInterface`), which
+ * `interface_init` writes as `class_init` writes the class's. */
+typedef struct {
+  const NtsGObjectSlot *slots;
+  size_t count;
+} NtsGObjectInterfaceData;
+
+static void nts_gobject_interface_init(gpointer iface, gpointer data) {
+  const NtsGObjectInterfaceData *table = data;
+  for (size_t at = 0; at < table->count; at++) {
+    memcpy((char *)iface + table->slots[at].offset, &table->slots[at].entry,
+           sizeof table->slots[at].entry);
+  }
+}
+
+void nts_gobject_add_interface(size_t type, size_t interface, const void *slots,
+                               size_t count) {
+  /* Lives as long as the type, which is as long as the program. */
+  NtsGObjectInterfaceData *data = g_new0(NtsGObjectInterfaceData, 1);
+  data->slots = slots;
+  data->count = count;
+  GInterfaceInfo info = {0};
+  info.interface_init = nts_gobject_interface_init;
+  info.interface_data = data;
+  g_type_add_interface_static((GType)type, (GType)interface, &info);
+}
+
 void nts_gobject_made(void *object) {
 #ifndef NTS_PROVIDER_RC
   if (object != NULL && g_object_is_floating(object)) {

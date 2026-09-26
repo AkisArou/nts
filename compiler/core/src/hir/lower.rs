@@ -6378,13 +6378,60 @@ fn register_gobject_class(
         name,
         superclass: parent,
         methods,
-        protocols: Vec::new(),
+        protocols: gobject_interfaces(snapshot, class),
         state,
         composition: None,
         signals,
         properties,
         template,
     });
+}
+
+/// The signature a binding declares a virtual function with: a class's is a
+/// method, an interface's an optional one (`vfunc_get_item?(...)`, as C leaves
+/// a slot it does not fill to the default), typed with `undefined` beside it.
+fn vfunc_declaration_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<&nts_semantic_schema::SignatureRecord> {
+    if let Some(signature) = super::generics::declared_signature(snapshot, declaration) {
+        return Some(signature);
+    }
+    let kind = |ty: nts_semantic_schema::TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+    let Some(TypeKind::Union(parts)) = snapshot.node_types.get(&declaration).and_then(|ty| kind(*ty)) else { return None };
+    let mut functions = parts.iter().filter_map(|part| match kind(*part) {
+        Some(TypeKind::Function(signature)) => Some(*signature),
+        _ => None,
+    });
+    let signature = functions.next()?;
+    if functions.next().is_some() || !parts.iter().all(|part| matches!(kind(*part), Some(TypeKind::Function(_) | TypeKind::Undefined))) {
+        return None;
+    }
+    snapshot.signatures.get(signature.0 as usize)
+}
+
+/// The interfaces a class implements (`extends GObject<{}, GListModelImplementation>`),
+/// read off its instance type's `__c_ifaces` (see `Signalled` in `c:types`):
+/// each as its interface struct and `GType` function, `GListModelInterface
+/// g_list_model_get_type`, sorted. A subclass carries its parent's, and adds
+/// them again, which `GLib` answers with a copy of the parent's table for it
+/// to override in.
+fn gobject_interfaces(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<String> {
+    let kind = |ty: nts_semantic_schema::TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+    let Some(instance) = instance_type_of(snapshot, class) else { return Vec::new() };
+    let Some(declared) = super::native::schema::property(snapshot, instance, "___c_ifaces") else { return Vec::new() };
+    // Optional, so `"A" | "B" | undefined`.
+    let parts = match kind(declared.ty) {
+        Some(TypeKind::Union(parts)) => parts.clone(),
+        _ => vec![declared.ty],
+    };
+    let mut interfaces: Vec<String> = parts
+        .into_iter()
+        .filter_map(|part| match kind(part) {
+            Some(TypeKind::Literal(LiteralValue::String(text))) => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    interfaces.sort();
+    interfaces.dedup();
+    interfaces
 }
 
 /// The names a template's `<signal>` elements give as their handlers, in the
@@ -14806,10 +14853,12 @@ impl<'a> FuncBuilder<'a> {
         let Some(super::native::Pointee::Opaque(handle)) = receiver else {
             return Err(self.unsupported(member, "a virtual function of a class whose instances are not a GObject handle"));
         };
-        let (declaration, slot) = self.overridden_vfunc(&handle, &name).ok_or_else(|| {
-            self.unsupported(member, &format!("`{name}`, which overrides no virtual function of `{}` or its ancestors", handle.tag))
+        let interfaces = gobject_interfaces(self.snapshot, class);
+        let (declaration, slot) = self.overridden_vfunc(&handle, &interfaces, &name).ok_or_else(|| {
+            let implemented = if interfaces.is_empty() { "" } else { ", the interfaces it implements," };
+            self.unsupported(member, &format!("`{name}`, which overrides no virtual function of `{}`{implemented} or its ancestors", handle.tag))
         })?;
-        let signature = super::generics::declared_signature(self.snapshot, declaration)
+        let signature = vfunc_declaration_signature(self.snapshot, declaration)
             .cloned()
             .ok_or_else(|| self.unsupported(member, "a virtual function with no signature"))?;
         let this = signature
@@ -14872,8 +14921,11 @@ impl<'a> FuncBuilder<'a> {
     /// are `handle` inherits: the declaration a binding writes on the nearest
     /// ancestor that has one, and its slot (`GtkButtonClass clicked`). A
     /// binding declares a class as a type, not a class, so this is found by
-    /// the method's own `this`, whose tag is on the handle's chain.
-    fn overridden_vfunc(&self, handle: &super::native::Handle, name: &str) -> Option<(NodeId, String)> {
+    /// the method's own `this`, whose tag is on the handle's chain -- or by
+    /// its slot, one of an interface's the class implements (`interfaces`,
+    /// `GListModelInterface g_list_model_get_type`), which wins over a
+    /// class's slot of the same name.
+    fn overridden_vfunc(&self, handle: &super::native::Handle, interfaces: &[String], name: &str) -> Option<(NodeId, String)> {
         let chain: Vec<&str> = handle.ancestors.iter().map(String::as_str).chain(std::iter::once(handle.tag.as_str())).collect();
         self.snapshot
             .nodes
@@ -14885,6 +14937,10 @@ impl<'a> FuncBuilder<'a> {
                 let declaration = NodeId(u32::try_from(at).ok()?);
                 if self.member_name(declaration).as_deref() != Some(name) {
                     return None;
+                }
+                let structure = slot.split_whitespace().next()?;
+                if interfaces.iter().any(|interface| interface.split_whitespace().next() == Some(structure)) {
+                    return Some((chain.len(), declaration, slot));
                 }
                 let this = super::generics::declared_signature(self.snapshot, declaration)?.this_type?;
                 let Some(super::native::Pointee::Opaque(owner)) = super::native::pointer(self.snapshot, this) else {

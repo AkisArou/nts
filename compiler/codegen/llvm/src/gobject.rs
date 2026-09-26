@@ -92,6 +92,9 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     for class in classes {
         let name = &class.name;
         let mut slots = Vec::new();
+        // One table per interface the class implements, filled by the
+        // methods whose slot is in that interface's struct.
+        let mut interfaces: Vec<Vec<String>> = vec![Vec::new(); class.protocols.len()];
         for (at, method) in class.methods.iter().enumerate() {
             let Some(compiled) = program.funcs.iter().find(|func| func.name == method.function) else {
                 let missing = "a GObject virtual function whose compiled function this program does not define";
@@ -107,7 +110,12 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
                 .ok_or_else(|| refuse(compiled, "a GObject virtual function whose slot has no offset"))?;
             let entry = format!("nts_gobject_{name}_{at}");
             entry_point(&mut out, platform, &entry, method, compiled)?;
-            slots.push(format!("{{ i64, ptr }} {{ i64 {offset}, ptr @{entry} }}"));
+            let structure = method.selector().split_whitespace().next();
+            let table = match class.protocols.iter().position(|interface| interface.split_whitespace().next() == structure) {
+                Some(interface) => &mut interfaces[interface],
+                None => &mut slots,
+            };
+            table.push(format!("{{ i64, ptr }} {{ i64 {offset}, ptr @{entry} }}"));
         }
         let table = if slots.is_empty() {
             "null".to_owned()
@@ -139,6 +147,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         // Its signals, added to the type the moment it exists.
         let hooks = template(&mut out, program, platform, class)?;
         let mut signals = registrations(&mut out, class);
+        signals.push_str(&implementations(&mut out, program, (class, &interfaces), &mut parents));
         if let Some(table) = properties(&mut out, program, class)? {
             let _ = writeln!(signals, "  call void @nts_gobject_set_properties(i64 %made, ptr {table}, i64 {})", class.properties.len());
         }
@@ -171,8 +180,40 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     Ok(out)
 }
 
-/// The support files' functions the classes' registrations call, each declared
-/// once, and only where a class calls it.
+/// The interfaces a class implements: each one's table of the slots its
+/// methods fill, and the calls adding them to the class's `GType` (`%made`)
+/// once it is registered, below the `GType` function each is named by --
+/// declared once, as a parent's is, unless the program calls it itself.
+fn implementations(
+    out: &mut String,
+    program: &Program,
+    (class, tables): (&ForeignClass, &[Vec<String>]),
+    declared: &mut std::collections::BTreeSet<String>,
+) -> String {
+    let mut calls = String::new();
+    let name = &class.name;
+    for (at, (interface, slots)) in class.protocols.iter().zip(tables).enumerate() {
+        // The lowering writes both words; a bare struct name has no `GType`
+        // function to ask.
+        let Some(get_type) = interface.split_whitespace().nth(1) else { continue };
+        if !called(program, get_type) && declared.insert(get_type.to_owned()) {
+            let _ = writeln!(out, "declare i64 @{get_type}()");
+        }
+        let table = if slots.is_empty() {
+            "null".to_owned()
+        } else {
+            let _ = writeln!(out, "@nts_gobject_interface_{name}_{at} = internal constant [{} x {{ i64, ptr }}] [{}]", slots.len(), slots.join(", "));
+            format!("@nts_gobject_interface_{name}_{at}")
+        };
+        let _ = writeln!(
+            calls,
+            "  %interface{at} = call i64 @{get_type}()\n  call void @nts_gobject_add_interface(i64 %made, i64 %interface{at}, ptr {table}, i64 {})",
+            slots.len()
+        );
+    }
+    calls
+}
+
 /// The support files' functions the classes' registrations call, each declared
 /// once, and only where a class calls it.
 fn declarations(out: &mut String, classes: &[&ForeignClass]) {
@@ -188,6 +229,9 @@ fn declarations(out: &mut String, classes: &[&ForeignClass]) {
     }
     if classes.iter().any(|class| !class.properties.is_empty()) {
         out.push_str("declare void @nts_gobject_set_properties(i64, ptr, i64)\n");
+    }
+    if classes.iter().any(|class| !class.protocols.is_empty()) {
+        out.push_str("declare void @nts_gobject_add_interface(i64, i64, ptr, i64)\n");
     }
 }
 
@@ -554,7 +598,10 @@ fn entry_point(out: &mut String, platform: Platform, entry: &str, method: &Forei
         let _ = writeln!(out, "define internal {want_ty} @{entry}({}) nounwind {{", parameters.join(", "));
         out.push_str(&body);
         let _ = writeln!(out, "  call void @nts_callback_enter()\n  %r = {call}\n  call void @nts_callback_leave()");
-        if have == want {
+        // And back: the method's `GtkLabel *` as the slot's `gpointer`
+        // (`GListModelInterface get_item`) is the same pointer.
+        let handles = matches!((&have, &want), (HirType::NativePointer(_), HirType::NativePointer(_)));
+        if have == want || handles {
             let _ = writeln!(out, "  ret {want_ty} %r\n}}");
         } else {
             let instruction = conversion(&have, &want, compiled)?;

@@ -52,6 +52,9 @@ pub(crate) struct Binding {
     pub(crate) refused: Vec<(String, Reason)>,
     /// Classes with a checked downcast helper.
     pub(crate) casts: Vec<Cast>,
+    /// Each `GObject` interface's `GType` function, by its C type: what a
+    /// program class implementing it (`{Name}Implementation`) registers with.
+    pub(crate) interface_types: BTreeMap<String, String>,
     /// Each class's properties, by the class's C type. Which become a
     /// property of the class's methods is the emitter's call, since it depends
     /// on which of those methods the self-check kept.
@@ -652,6 +655,11 @@ impl<'a> Mapper<'a> {
                 self.binding.imports.entry(module.clone()).or_default().insert(format!("{name}Props"));
             }
             self.binding.brands.insert("Class");
+            if let Some(get_type) = &class.get_type
+                && class.interface
+            {
+                self.binding.interface_types.insert(c_type.clone(), get_type.clone());
+            }
             if let Some(get_type) = &class.get_type
                 && !class.interface
                 && self.reaches_type_instance(class)

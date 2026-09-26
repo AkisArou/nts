@@ -247,9 +247,35 @@ declare module "c:types" {
      */
     emit<S extends ClassChain, K extends keyof Sig & string>(this: S, detailed_signal: K, ...args: SignalArgs<Sig[K]>): void;
   }
-  // A class's instance type with the signals a subclass adds: itself where
-  // it adds none, so a binding's own errors read as they did.
-  export type Signalled<T, Sig extends SignalMap> = {} extends Sig ? T : T & WithSignals<Sig>;
+  // A class's instance type with the signals a subclass adds, and the
+  // interfaces it implements (`Impl`, a `{Name}Implementation` or a union of
+  // them): itself where it adds neither, so a binding's own errors read as
+  // they did.
+  export type Signalled<T, Sig extends SignalMap, Impl = never> = ({} extends Sig ? T : T & WithSignals<Sig>) &
+    Implementing<Impl>;
+  // What implementing interfaces makes an instance: the interfaces' optional
+  // `vfunc_` methods, which an override is checked against; something that
+  // converts to each (`__c_implements`, which a `GObjectInterface` reads);
+  // and the list the compiler registers the class under (`__c_ifaces`).
+  // `instanceof` reads the constructor with `any` for `Impl`, which
+  // implements nothing.
+  type Implementing<Impl> = [Impl] extends [never]
+    ? unknown
+    : 0 extends 1 & Impl
+      ? unknown
+      : Impl &
+          ImplMethods<Impl> & {
+            readonly __c_implements: { readonly [K in ImplTag<Impl>]: true };
+            readonly __c_ifaces?: ImplIface<Impl>;
+          };
+  // Every interface's methods at once: the union of them, intersected.
+  type ImplMethods<Impl> = (Impl extends { readonly __c_methods?: infer M } ? (methods: M) => void : never) extends (
+    methods: infer All,
+  ) => void
+    ? All
+    : never;
+  type ImplTag<Impl> = Impl extends { readonly __c_tag?: infer Tag extends string } ? Tag : never;
+  type ImplIface<Impl> = Impl extends { readonly __c_iface?: infer Iface extends string } ? Iface : never;
   // A field of a GObject class the program writes that is also a GObject
   // property, GJS's `Properties`: `done: Property<boolean> = false` is a
   // field the class reads and writes as any other, installed on the class's

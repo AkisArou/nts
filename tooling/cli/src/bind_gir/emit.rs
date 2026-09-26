@@ -78,6 +78,9 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     accessor(&mut out, &own, &property.name, property.getter.as_deref(), property.setter.as_deref());
                 }
                 out.push_str("  }\n");
+                if *interface && *counted {
+                    implementation(&mut out, binding, name, tag, &own);
+                }
                 // An interface's methods are its implementers' too:
                 // `entry.get_text()` is `gtk_editable_get_text`.
                 let merged = implements.iter().fold(String::new(), |mut merged, (interface, _)| {
@@ -338,7 +341,7 @@ fn construction(
 /// see `Signalled` in `c:types`), and the class itself for anything else.
 fn made_by(name: &str, gobject: bool) -> (&'static str, String) {
     if gobject {
-        ("<Sig extends SignalMap = {}>", format!("Signalled<{name}, Sig>"))
+        ("<Sig extends SignalMap = {}, Impl = never>", format!("Signalled<{name}, Sig, Impl>"))
     } else {
         ("", name.to_owned())
     }
@@ -387,6 +390,30 @@ fn method(out: &mut String, function: &Function) {
         parameters.map(|(name, mapped)| parameter(function, &defaulted, name, &mapped.ts)).collect();
     let this = std::iter::once(format!("this: {}", instance.ts)).chain(rest).collect::<Vec<_>>().join(", ");
     let _ = writeln!(out, "    {name}({this}): {};", function.result.ts);
+}
+
+/// What a class the program writes implements an interface with
+/// (`class Model extends GObject<{}, GListModelImplementation>`): each of the
+/// interface's virtual functions, optional as C's are, and two phantom members
+/// for the compiler -- the interface struct and `GType` function it registers
+/// the class under, and the tag its instances then convert to.
+fn implementation(out: &mut String, binding: &Binding, name: &str, tag: &str, own: &[&Function]) {
+    let vfuncs: Vec<&Function> = own.iter().filter(|function| function.vfunc.is_some()).copied().collect();
+    let Some((structure, ..)) = vfuncs.first().and_then(|function| function.vfunc.as_ref()) else { return };
+    let Some(get_type) = binding.interface_types.get(tag.trim_start_matches('_')).or_else(|| binding.interface_types.get(name)) else {
+        return;
+    };
+    let _ = writeln!(out, "  export interface {name}Implementation {{");
+    let _ = writeln!(out, "    readonly __c_iface?: \"{structure} {get_type}\";");
+    let _ = writeln!(out, "    readonly __c_tag?: \"{tag}\";");
+    let _ = writeln!(out, "    readonly __c_methods?: {name}Methods;");
+    for function in vfuncs {
+        let mut member = String::new();
+        method(&mut member, function);
+        // Optional, as C leaves a slot it does not fill to the default.
+        let _ = write!(out, "{}", member.replacen("(this: ", "?(this: ", 1));
+    }
+    out.push_str("  }\n");
 }
 
 /// The `_async` methods with a `_finish` that reads only their result: each

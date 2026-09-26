@@ -80,6 +80,9 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     for class in registered {
         let name = &class.name;
         let mut slots = Vec::new();
+        // One table per interface the class implements, filled by the
+        // methods whose slot is in that interface's struct.
+        let mut interfaces: Vec<Vec<String>> = vec![Vec::new(); class.protocols.len()];
         for (at, method) in class.methods.iter().enumerate() {
             let compiled = program
                 .funcs
@@ -112,7 +115,12 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 format!("nts_callback_enter(); {returns} r = ({returns}){call}; nts_callback_leave(); return r;")
             };
             writer.line(origin, format!("static {returns} {entry}({}) {{ {body} }}", parameters.join(", ")));
-            slots.push(format!("{{ {offset}u, (void (*)(void)){entry} }}"));
+            let structure = method.selector().split_whitespace().next();
+            let table = match class.protocols.iter().position(|interface| interface.split_whitespace().next() == structure) {
+                Some(interface) => &mut interfaces[interface],
+                None => &mut slots,
+            };
+            table.push(format!("{{ {offset}u, (void (*)(void)){entry} }}"));
         }
         let table = if slots.is_empty() {
             "0".to_owned()
@@ -135,6 +143,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         if !signals.is_empty() {
             writer.line(origin, "unsigned nts_gobject_add_signal(size_t type, const char *name, const char *kinds);");
         }
+        signals.push_str(&implementations(writer, origin, class, &interfaces)?);
         if let Some(table) = properties(writer, origin, program, class)? {
             let _ = write!(signals, " nts_gobject_set_properties(type, {table}, {}u);", class.properties.len());
         }
@@ -162,6 +171,32 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     let wrote = children(writer, origin, program, wrote);
     emits(writer, origin, program, wrote);
     Ok(())
+}
+
+/// The interfaces a class implements: each one's table of the slots its
+/// methods fill, and the calls adding them to the class's `GType` once it is
+/// registered, below the `GType` function each is named by.
+fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClass, tables: &[Vec<String>]) -> Result<String, Diagnostic> {
+    let mut calls = String::new();
+    if class.protocols.is_empty() {
+        return Ok(calls);
+    }
+    writer.line(origin, "void nts_gobject_add_interface(size_t type, size_t interface, const void *slots, size_t count);");
+    let name = &class.name;
+    for (at, (interface, slots)) in class.protocols.iter().zip(tables).enumerate() {
+        let get_type = interface.split_whitespace().nth(1).ok_or_else(|| {
+            Diagnostic::error("NTS2006", format!("an interface `{interface}` with no `GType` function"), origin.location)
+        })?;
+        writer.line(origin, format!("size_t {get_type}(void);"));
+        let table = if slots.is_empty() {
+            "0".to_owned()
+        } else {
+            writer.line(origin, format!("static const struct nts_gobject_slot nts_gobject_interface_{name}_{at}[] = {{ {} }};", slots.join(", ")));
+            format!("nts_gobject_interface_{name}_{at}")
+        };
+        let _ = write!(calls, " nts_gobject_add_interface(type, {get_type}(), {table}, {}u);", slots.len());
+    }
+    Ok(calls)
 }
 
 /// Each `nts_gobject_child_{Class}_{index}` the program calls -- a read of a

@@ -2186,6 +2186,10 @@ pub struct ForeignClass {
     pub methods: Vec<ForeignMethod>,
     /// The protocols it adopts (`implements NSWindowDelegate`), by the name
     /// the runtime knows each by, so `conformsToProtocol:` answers for them.
+    /// For a `GObject` class, the interfaces it implements, each as its
+    /// interface struct and `GType` function (`GListModelInterface
+    /// g_list_model_get_type`): a method whose slot names that struct fills
+    /// the interface's table, not the class's.
     pub protocols: Vec<String>,
     /// For a class that declares fields, the function making the object that
     /// holds them (`Controller#state`), which registration hands the runtime.
