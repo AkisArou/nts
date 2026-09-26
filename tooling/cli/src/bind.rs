@@ -398,23 +398,95 @@ fn compiler() -> std::process::Command {
     command
 }
 
+/// Whether a failed probe is about the **environment** rather than about the code.
+///
+/// **"clang refused this translation unit" and "clang could not run" are two
+/// facts, and they were one sentence.** On 2026-09-26 the Windows lane's gate
+/// went red at `tests` on
+/// `objects_are_reused_but_never_when_a_header_changed` -- "clang refused the
+/// probe translation unit" -- and the same commit passed alone in the same tree
+/// and in their worktree. Three lanes were building, swap was at 12-13 GB of 19,
+/// and a clang that cannot fork or cannot allocate reports as a refused
+/// translation unit. I guessed a shared temp path and told them so; that was
+/// wrong (`CARGO_TARGET_TMPDIR` is per target directory and each fixture name
+/// has one test), and the remaining explanation is resource exhaustion.
+///
+/// So the two are told apart and the environmental one is **retried**, which is
+/// the same answer as `ETXTBSY` in `tooling/cli/tests/build.rs`: the sibling
+/// mechanism, from the same night, in the other direction.
+///
+/// **Which way this guard fails matters and is chosen deliberately.** A real
+/// rejection misread as environmental would be retried and then reported --
+/// slower, with the stderr still printed in full, so nothing is hidden. An
+/// environmental failure misread as a rejection is the spurious red that cost
+/// two gate runs. So the classification is allowed to be generous, and the final
+/// message carries both the reading and clang's own output either way.
+fn why_clang_could_not_run(output: &std::process::Output, stderr: &str) -> Option<&'static str> {
+    // No exit code at all means a signal on unix, which clang never does to
+    // itself for bad input: the OOM killer does it, and so does a crash.
+    if output.status.code().is_none() {
+        return Some("it was killed rather than exiting");
+    }
+    let said = stderr.to_ascii_lowercase();
+    for (marker, why) in [
+        ("out of memory", "the machine was out of memory"),
+        ("cannot allocate memory", "an allocation failed"),
+        ("resource temporarily unavailable", "the machine could not fork"),
+        ("no space left on device", "the filesystem was full"),
+        ("text file busy", "the compiler was being written while it ran"),
+        ("too many open files", "the process ran out of descriptors"),
+    ] {
+        if said.contains(marker) {
+            return Some(why);
+        }
+    }
+    // A clang that rejects code always says why. A nonzero exit with nothing on
+    // stderr is the driver failing, not a diagnosis -- and it is the shape that
+    // reads most like a compiler bug when it is reported as one.
+    if stderr.trim().is_empty() {
+        return Some("it printed no diagnostic");
+    }
+    None
+}
+
 fn clang(probe: &std::path::Path, extra: &[String], cc1: &[&str]) -> Result<String> {
-    let mut command = compiler();
-    command.args(["-std=c11", "-fsyntax-only"]);
-    for flag in cc1 {
-        command.arg("-Xclang").arg(flag);
+    const ATTEMPTS: u64 = 5;
+    // Built per attempt, because a `Command` cannot be run twice and this one is
+    // retried -- see [`why_clang_could_not_run`].
+    let run = || -> Result<std::process::Output> {
+        let mut command = compiler();
+        command.args(["-std=c11", "-fsyntax-only"]);
+        for flag in cc1 {
+            command.arg("-Xclang").arg(flag);
+        }
+        command.args(extra).arg(probe);
+        command.output().context("running clang")
+    };
+    let mut attempt: u64 = 1;
+    loop {
+        let output = run()?;
+        // A header clang cannot find is a nonzero exit here, which is the
+        // property this route was chosen for. libclang would have parsed on and
+        // answered.
+        if output.status.success() {
+            return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        let Some(why) = why_clang_could_not_run(&output, &stderr) else {
+            bail!("clang refused the probe translation unit:\n{stderr}");
+        };
+        if attempt >= ATTEMPTS {
+            bail!(
+                "clang could not run -- {why} -- on {ATTEMPTS} attempts. \
+                 This is the machine rather than the headers; what it printed \
+                 was:\n{stderr}"
+            );
+        }
+        // Backing off rather than hammering: what it is waiting for is another
+        // build finishing, which takes seconds and not milliseconds.
+        std::thread::sleep(std::time::Duration::from_millis(200 * attempt));
+        attempt += 1;
     }
-    command.args(extra).arg(probe);
-    let output = command.output().context("running clang")?;
-    // A header clang cannot find is a nonzero exit here, which is the property
-    // this route was chosen for. libclang would have parsed on and answered.
-    if !output.status.success() {
-        bail!(
-            "clang refused the probe translation unit:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 fn tempdir() -> Result<std::path::PathBuf> {
@@ -1738,6 +1810,66 @@ impl Binding {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    /// A failure that is about the machine, told from one that is about the code.
+    ///
+    /// **The classifier is the whole change, so it is tested against real exit
+    /// statuses rather than hand-built ones.** A guard nobody reaches reads as
+    /// protection, and this one only ever runs on a box that is already in
+    /// trouble -- which is the worst place to discover it never fired.
+    #[test]
+    fn a_machine_failure_is_told_from_a_rejected_translation_unit() {
+        let ran = |script: &str| {
+            std::process::Command::new("sh")
+                .args(["-c", script])
+                .output()
+                .expect("sh is available")
+        };
+
+        // A diagnosis: clang says why, and that is a fact about the code.
+        let said = ran("echo 'probe.c:1:1: error: unknown type name' >&2; exit 1");
+        let stderr = String::from_utf8_lossy(&said.stderr).into_owned();
+        assert_eq!(
+            why_clang_could_not_run(&said, &stderr),
+            None,
+            "a diagnostic on stderr is a rejection, not an environment failure"
+        );
+
+        // Killed. No exit code at all, which clang never does to itself for bad
+        // input -- the OOM killer does, and this is the shape that took two gate
+        // runs red while three lanes built.
+        let killed = ran("kill -9 $$");
+        assert_eq!(
+            why_clang_could_not_run(&killed, ""),
+            Some("it was killed rather than exiting"),
+            "status was {:?}",
+            killed.status
+        );
+
+        // Nonzero with nothing said. The driver failed; there is no diagnosis to
+        // report, and reporting one anyway is what read like a compiler bug.
+        let silent = ran("exit 1");
+        assert_eq!(
+            why_clang_could_not_run(&silent, ""),
+            Some("it printed no diagnostic")
+        );
+
+        // And the markers, which are why the stderr is read at all: clang can
+        // exit 1 with a perfectly ordinary code path and still be telling you
+        // about the machine.
+        let oom = ran("echo 'LLVM ERROR: out of memory' >&2; exit 1");
+        let stderr = String::from_utf8_lossy(&oom.stderr).into_owned();
+        assert_eq!(
+            why_clang_could_not_run(&oom, &stderr),
+            Some("the machine was out of memory")
+        );
+        let forked = ran("echo 'clang: error: unable to execute command: Resource temporarily unavailable' >&2; exit 1");
+        let stderr = String::from_utf8_lossy(&forked.stderr).into_owned();
+        assert_eq!(
+            why_clang_could_not_run(&forked, &stderr),
+            Some("the machine could not fork")
+        );
+    }
 
     /// Real output, kept verbatim. The parser reads indentation, so a
     /// paraphrase would test a format clang does not produce -- and the first
