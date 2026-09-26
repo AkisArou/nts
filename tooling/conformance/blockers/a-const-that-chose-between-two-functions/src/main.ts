@@ -19,7 +19,20 @@
 // naming it is a guess. `direct_callee` trusted it unless the name was a *local*
 // binding, and a module-scope `const` has no `bindings` entry, so nothing objected.
 // It now also distrusts a name whose declaring variable's initializer **chose**:
-// anything but a single identifier.
+// anything but a single identifier, or a conditional nothing has decided.
+//
+// **`use(x)` compiles again, and correctly, and that is not this fixture going
+// stale.** `const yes = true` makes the condition's checker type the *literal*
+// `true`, so the initializer names exactly one function and the call is direct --
+// to `second`, the arm the condition reaches, rather than to whichever candidate
+// the checker kept. What still refuses is the **export** `chose`: a global holding
+// a function, which is the gap named below and is a different sentence about the
+// same line. The refusal this fixture records is that one.
+//
+// Its run-time sibling is `blockers/an-imported-const-that-chose-at-run-time`,
+// where the condition is a call and nothing can decide it, one module out; and
+// `examples/a-re-exported-const-that-chose` is the decided case as a fixture that
+// *runs*, which disagrees with node on any compiler built before 2026-09-26.
 //
 // # The controls, each differing in one thing
 //

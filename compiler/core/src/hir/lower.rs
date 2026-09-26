@@ -3573,6 +3573,26 @@ fn ambient_handle(kind: nts_semantic_schema::VariableKind, initialized: bool, ty
     })
 }
 
+/// What a name's initializer settles about which function the name holds.
+///
+/// See [`FuncBuilder::initializer_settles`], which is the only thing that makes
+/// one, and [`FuncBuilder::direct_callee`], which is why the three cases are
+/// not two.
+#[derive(Debug, Clone, Copy)]
+enum Settled {
+    /// The name is not declared by a variable -- a function declaration, an
+    /// import specifier, a parameter. The question belongs to whoever declared
+    /// it, and the checker's resolved callee is as good as it ever was.
+    NotAVariable,
+    /// A variable whose initializer does not name a function: a call, a member
+    /// read, a closure, or a conditional nothing has decided. **The checker's
+    /// resolved callee is a coincidence here** -- two functions of one shape are
+    /// one type and it kept one of them.
+    Unsettled,
+    /// A variable that names exactly one function declaration, and this is it.
+    Names(NodeId),
+}
+
 /// Whether a module-scope variable can be a global, and why not.
 ///
 /// One decision in three questions, together because the walk that asks them is
@@ -3705,6 +3725,14 @@ fn closure_typed_global(
             nts_semantic_schema::VariableKind::Let => !reassigned_anywhere(probe, name_node),
             _ => false,
         })
+        // Through a conditional the checker has already decided, for the same
+        // reason `initializer_settles` looks through one: `const f = DEV ? (x) =>
+        // … : (y) => …` holds one closure, and which one is not a run-time
+        // question. Without this the two paths disagree -- a decided choice
+        // between two *declarations* would call directly while a decided choice
+        // between two *arrows* refused -- and nothing about the slot explains the
+        // difference.
+        .map(|node| probe.decided_arm(node))
         .filter(|node| {
             matches!(
                 probe.kind_of(*node),
@@ -47491,42 +47519,220 @@ impl<'a> FuncBuilder<'a> {
     /// -- the honest sibling it should have had all along.
     fn direct_callee(&self, resolved: Option<NodeId>, callee_node: NodeId) -> Option<NodeId> {
         let symbol = self.node(callee_node).symbol;
-        let locally_bound = symbol.is_some_and(|symbol| self.bindings.contains_key(&symbol.0));
-        let initializer_chose = symbol.is_some_and(|symbol| self.initializer_chose(symbol.0));
-        resolved.filter(|declaration| {
-            !locally_bound
-                && !initializer_chose
-                && self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)
-        })
+        if symbol.is_some_and(|symbol| self.bindings.contains_key(&symbol.0)) {
+            return None;
+        }
+        match symbol.map_or(Settled::NotAVariable, |symbol| self.initializer_settles(symbol.0)) {
+            // **The arm, not the checker's guess.** Where the initializer chose
+            // and the choice is decided, the one candidate is computable here
+            // and `resolved` is still whichever of the two the checker kept --
+            // so trusting it would answer the same wrong question with a nicer
+            // reason.
+            Settled::Names(declaration) => Some(declaration),
+            Settled::Unsettled => None,
+            Settled::NotAVariable => resolved
+                .filter(|declaration| self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)),
+        }
     }
 
-    /// Whether a name is declared by a variable whose initializer *chose* among
-    /// values rather than naming one.
+    /// What a name's initializer settles about which function the name holds.
     ///
     /// The test is the initializer's **shape**, not how many functions it could
     /// have meant: by the time a signature reaches here the checker has already
     /// collapsed identical candidates into one type, so counting them here would
-    /// count one. A single identifier names exactly what it names; a conditional,
-    /// a call, or anything else is a choice made at run time, and a declaration
-    /// the checker kept is not the answer to it.
+    /// count one. A single identifier names exactly what it names; a call, or a
+    /// member read, is a choice made at run time, and a declaration the checker
+    /// kept is not the answer to it.
+    ///
+    /// **A conditional the checker has already decided is a name.** `const jsx =
+    /// isDevelopment ? jsxDEV : jsxProd` with `export const isDevelopment =
+    /// false` is one function, statically -- the checker types the condition as
+    /// the *literal* `false`, which is the same fact [`Self::statically_decided`]
+    /// folds an `if` on. Reading only the shape counted it as a choice, so every
+    /// `isDevelopment ?` in a program was distrusted and the call fell through to
+    /// the value path, where `storable` refuses it. That is one arm of React's
+    /// jsx runtime and, by their count, of every compiled component with it.
+    ///
+    /// Three answers rather than a bool, because the caller has two different
+    /// questions and the middle one is the trap: `Unsettled` means *distrust the
+    /// checker's callee*, and `Names` means *use this one instead of it*. A
+    /// predicate could only say the first, which is why the decided case could
+    /// not be expressed as "not a choice" -- the arm has to come back with it.
     ///
     /// See [`Self::direct_callee`] for what this costs and why it is shaped this
     /// way.
-    fn initializer_chose(&self, symbol: u32) -> bool {
-        let Some(record) = self.snapshot.symbols.get(symbol as usize) else {
-            return false;
+    fn initializer_settles(&self, symbol: u32) -> Settled {
+        let Some(record) = self.aliased_to(symbol) else {
+            return Settled::NotAVariable;
         };
-        record.declarations.iter().any(|at| {
-            self.kind_of(*at) == Some(syntax::VARIABLE_DECLARATION)
+        let mut settled = Settled::NotAVariable;
+        for at in &record.declarations {
+            if self.kind_of(*at) != Some(syntax::VARIABLE_DECLARATION) {
+                continue;
+            }
+            let Some(initializer) = self
+                .children(*at)
+                .into_iter()
+                .skip(1)
+                .rfind(|child| self.kind_of(*child) != Some(syntax::QUESTION_TOKEN))
+            else {
+                continue;
+            };
+            // Two declarations of one name cannot both settle it, and a name
+            // reassigned elsewhere is not settled by either -- `reassigned_anywhere`
+            // is what asks that, one caller up. `Unsettled` wins a disagreement
+            // for the reason the whole guard exists: it is the answer that
+            // refuses rather than the one that emits.
+            // **A name something else writes is not settled by its
+            // initializer.** `let f = flag ? a : b; f = c;` has an initializer
+            // that names one function and a slot that holds another by the time
+            // it is called, and a static call to the arm would be a wrong answer
+            // of exactly the kind this guard exists to prevent. `const` cannot
+            // be written again, which is the cheap answer and the common one;
+            // the walk is only paid for a `let`, and it is the same walk
+            // `closure_typed_global` makes for the same reason one scope out.
+            let writable = matches!(self.variable_kind(*at), Some(kind) if kind != nts_semantic_schema::VariableKind::Const);
+            if writable
                 && self
                     .children(*at)
-                    .into_iter()
-                    .skip(1)
-                    .rfind(|child| self.kind_of(*child) != Some(syntax::QUESTION_TOKEN))
-                    .is_some_and(|initializer| {
-                        self.kind_of(initializer) != Some(syntax::IDENTIFIER)
-                    })
-        })
+                    .first()
+                    .is_none_or(|name| reassigned_anywhere(self, *name))
+            {
+                return Settled::Unsettled;
+            }
+            match self.named_function(self.decided_arm(initializer)) {
+                Some(declaration) if matches!(settled, Settled::NotAVariable) => {
+                    settled = Settled::Names(declaration);
+                },
+                _ => return Settled::Unsettled,
+            }
+        }
+        settled
+    }
+
+    /// `const`, `let` or `var`, read where a *declaration* is in hand.
+    ///
+    /// The kind is on the declaration **list**, not on the declaration -- the same
+    /// read `lower_variable_statement` and `hoists_out_of` make, which is why this
+    /// exists rather than a second walk to find the flags.
+    ///
+    /// **Not the immediate parent.** A declaration's parent is the list's
+    /// `NodeKind::List` of children, and `kind_of` answers `None` for a list -- so
+    /// the first version of this returned `None` for every declaration, which read
+    /// as "not writable" and let a reassigned `let` be static-called. The probe
+    /// that found it (`let f = yes ? a : b; f = b;`) answered `call a` and
+    /// disagreed with node on 27 of 29 cases, where the compiler before this
+    /// change *refused*. A guard that cannot fire is worse than no guard: it is a
+    /// sentence claiming protection.
+    fn variable_kind(&self, declaration: NodeId) -> Option<nts_semantic_schema::VariableKind> {
+        let mut at = self.node(declaration).parent;
+        for _ in 0..4 {
+            let parent = at?;
+            if self.kind_of(parent) == Some(syntax::VARIABLE_DECLARATION_LIST) {
+                return Some(nts_semantic_schema::VariableKind::from_flags(self.node(parent).flags));
+            }
+            at = self.node(parent).parent;
+        }
+        None
+    }
+
+    /// A symbol, through any import or re-export that stands for it.
+    ///
+    /// **Without this hop the guard in [`Self::direct_callee`] stops at the module
+    /// boundary, and the wrong answer it exists to prevent survives there.**
+    /// Measured, on this compiler before the hop:
+    ///
+    /// ```ts
+    /// // pick.ts
+    /// export const flag = false;
+    /// export const pick = flag ? first : second;
+    /// // reexport.ts -- export { pick } from "./pick.ts";
+    /// // main.ts
+    /// import { pick } from "./reexport.ts";
+    /// export function use(x: number): number { return pick(x); }
+    /// ```
+    ///
+    /// `use` emitted `call first(%0)` and **27 of 29 cases disagreed with node**.
+    /// `97584f66`'s doc says an import is deliberately untouched, "so a
+    /// cross-module call keeps its direct callee" -- which is right for an
+    /// imported *function*, whose alias target is a function declaration, and
+    /// wrong for an imported *variable*, whose target is the very thing that has
+    /// to be asked about. Following the alias keeps the first and repairs the
+    /// second: the question is asked of whatever declares the name, wherever that
+    /// is.
+    ///
+    /// It is also the shape that matters most in practice. React's jsx runtime
+    /// publishes `jsx` through `export { jsx, jsxs } from "./jsx/ReactJSXElement.ts"`
+    /// and every compiled component calls it through that re-export, so the
+    /// same-module case the guard already covered is the one nobody writes.
+    ///
+    /// One hop is enough -- the frontend follows re-export chains to the end, as
+    /// `entry_exports` says a few hundred lines up. Bounded anyway, because a
+    /// precondition that lives in a comment expires without anything failing.
+    fn aliased_to(&self, symbol: u32) -> Option<&nts_semantic_schema::SymbolRecord> {
+        let mut at = symbol;
+        for _ in 0..8 {
+            let record = self.snapshot.symbols.get(at as usize)?;
+            match record.aliased {
+                Some(to) if to.0 != at => at = to.0,
+                _ => return Some(record),
+            }
+        }
+        self.snapshot.symbols.get(at as usize)
+    }
+
+    /// The arm a conditional the checker has already decided actually reaches.
+    ///
+    /// Returns its argument when there is nothing to decide, so a caller can ask
+    /// without first knowing whether it has a conditional in hand.
+    ///
+    /// `child_slots` rather than filtering the punctuation out of `children`,
+    /// because `lower_conditional` reads the arms that way and a second spelling
+    /// of "which child is `whenFalse`" is a second thing to get wrong. Nested
+    /// conditionals resolve to the end -- `a ? b : c ? d : e` with both tests
+    /// decided is one name -- and the loop is bounded because every step moves
+    /// strictly into a child.
+    fn decided_arm(&self, at: NodeId) -> NodeId {
+        let mut at = at;
+        while self.kind_of(at) == Some(syntax::CONDITIONAL_EXPRESSION) {
+            let Some([Some(condition), _, Some(when_true), _, Some(when_false)]) =
+                self.child_slots::<5>(at)
+            else {
+                break;
+            };
+            let Some(known) = self.statically_decided(condition) else {
+                break;
+            };
+            at = if known { when_true } else { when_false };
+        }
+        at
+    }
+
+    /// The function declaration an expression *names*, if it is a bare name of
+    /// one.
+    ///
+    /// Through the alias, for the reason [`Self::aliased_to`] gives: `const f =
+    /// imported` names a function whose declaration is in another file, and the
+    /// symbol written here is an import specifier. **Without the hop this answers
+    /// `None`, which is `Unsettled`, which refuses a call that was correct
+    /// before** -- the one direction this change must not go, since `const kept =
+    /// second` compiling is what the sibling blocker's `aliased` control exists to
+    /// hold.
+    ///
+    /// Not a chain of variables: `const g = f; const h = g;` leaves `h` unsettled,
+    /// because `g`'s declaration is a variable rather than a function. Following
+    /// that would be right and is not needed by anything yet -- and an unsettled
+    /// name refuses, which is the direction a missing case should fail in.
+    fn named_function(&self, at: NodeId) -> Option<NodeId> {
+        if self.kind_of(at) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
+        let symbol = self.node(at).symbol?;
+        self.aliased_to(symbol.0)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|at| self.kind_of(*at) == Some(syntax::FUNCTION_DECLARATION))
     }
 
     /// The name a declaration declares.
