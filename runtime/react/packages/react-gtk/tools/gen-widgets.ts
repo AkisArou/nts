@@ -103,6 +103,9 @@ interface GirSignal {
 
 interface GirType {
   name: string;
+  /** The GIR namespace (`Gtk`, `Adw`), and its C prefix, which a TypeScript name carries: `GtkButton`. */
+  namespace: string;
+  prefix: string;
   kind: "class" | "interface";
   parent: string | undefined;
   abstract: boolean;
@@ -115,12 +118,17 @@ interface GirType {
 
 interface Gir {
   version: string;
+  /** Every class and interface of the namespaces read, by qualified name: `Gtk.Widget`. */
   types: Map<string, GirType>;
   /** Every enum and flags member's value, by its C identifier, across namespaces. */
   members: Map<string, number>;
 }
 
-function readGir(): Gir {
+/** `Gtk.Widget` for Gtk's Widget: how GIR names a type from another namespace, and the key it is kept under. */
+const qualified = (t: GirType): string => `${t.namespace}.${t.name}`;
+
+/** Reads `namespaces` (`Gtk-4.0`, `Adw-1`) and what they include; the version is the last one's. */
+function readGir(namespaces: string[]): Gir {
   const types = new Map<string, GirType>();
   const members = new Map<string, number>();
   const seen = new Set<string>();
@@ -136,6 +144,8 @@ function readGir(): Gir {
       load(`${include.attrs.get("name")}-${include.attrs.get("version")}.gir`, false);
     }
     const namespace = child(repository, "namespace")!;
+    const name = namespace.attrs.get("name")!;
+    const prefix = namespace.attrs.get("c:identifier-prefixes") ?? name;
     for (const element of namespace.children) {
       if (element.name === "enumeration" || element.name === "bitfield") {
         for (const member of element.children.filter((c) => c.name === "member")) {
@@ -143,27 +153,35 @@ function readGir(): Gir {
         }
       }
       if (primary && (element.name === "class" || element.name === "interface")) {
-        types.set(element.attrs.get("name")!, readType(element));
+        const type = readType(element, name, prefix);
+        types.set(qualified(type), type);
       }
     }
     if (primary) {
       version = namespace.attrs.get("version") ?? "";
     }
   };
-  load("Gtk-4.0.gir", true);
+  for (const file of namespaces) {
+    load(`${file}.gir`, true);
+  }
   return { version, types, members };
 }
 
-function readType(element: XmlElement): GirType {
+function readType(element: XmlElement, namespace: string, prefix: string): GirType {
   const flag = (e: XmlElement, name: string): boolean => e.attrs.get(name) === "1";
   const children = (name: string): XmlElement[] => element.children.filter((c) => c.name === name);
+  // GIR names a type of its own namespace bare, and another's qualified.
+  const qualify = (name: string): string => (name.includes(".") ? name : `${namespace}.${name}`);
+  const parent = element.attrs.get("parent");
   return {
     name: element.attrs.get("name")!,
+    namespace,
+    prefix,
     kind: element.name === "class" ? "class" : "interface",
-    parent: element.attrs.get("parent"),
+    parent: parent === undefined ? undefined : qualify(parent),
     abstract: flag(element, "abstract"),
     deprecated: flag(element, "deprecated"),
-    implements: children("implements").map((c) => c.attrs.get("name")!),
+    implements: children("implements").map((c) => qualify(c.attrs.get("name")!)),
     properties: children("property").map((p) => ({
       name: p.attrs.get("name")!,
       writable: flag(p, "writable"),
@@ -271,7 +289,8 @@ function readBindings(dir: string): Bindings {
     }
     return value;
   };
-  for (const line of readFileSync(join(dir, "Gtk-4.0.d.ts"), "utf8").split("\n")) {
+  const files = readdirSync(dir).filter((name) => name.endsWith(".d.ts"));
+  for (const line of files.flatMap((file) => readFileSync(join(dir, file), "utf8").split("\n"))) {
     const imports = /^ {2}import type \{ (.+) \} from "(c:[\w.-]+)";$/.exec(line);
     if (imports !== null) {
       imports[1]!.split(", ").forEach((name) => modules.set(name, imports[2]!));
@@ -436,17 +455,21 @@ function slotOwner(t: WidgetType): WidgetType | null {
   return owner;
 }
 
+/** "a" or "an", as `name` is said: "a GtkButton", "an AdwHeaderBar". */
+const article = (name: string): string => (/^[AEIOU]/.test(name) ? "an" : "a");
+
 /** `panedSlot` for Paned: the lower-camel name of a class's functions. */
 const lower = (t: WidgetType): string => `${t.jsx.charAt(0).toLowerCase()}${t.jsx.slice(1)}`;
 
 const camel = (name: string): string => name.replace(/[-_](\w)/g, (_, c: string) => c.toUpperCase());
-const tsName = (girName: string): string => `Gtk${girName}`;
+/** A type's TypeScript name: its C name, `GtkButton`. */
+const tsName = (t: GirType): string => `${t.prefix}${t.name}`;
 
 // A list container's accessor for the row it made for a child, by index: a
 // moved child is taken back out of it before the row goes.
 const rowAccessors = new Map([
-  ["ListBox", "get_row_at_index"],
-  ["FlowBox", "get_child_at_index"],
+  ["Gtk.ListBox", "get_row_at_index"],
+  ["Gtk.FlowBox", "get_child_at_index"],
 ]);
 
 // The props a user changes, by the GIR type that declares them: a prop given
@@ -454,18 +477,18 @@ const rowAccessors = new Map([
 // `readControlled`). Hand-kept: GIR does not say which properties input
 // changes.
 const controlledProps = new Map([
-  ["Editable", ["text"]],
-  ["CheckButton", ["active"]],
-  ["ToggleButton", ["active"]],
-  ["Switch", ["active"]],
-  ["SpinButton", ["value"]],
-  ["Expander", ["expanded"]],
-  ["DropDown", ["selected"]],
-  ["Stack", ["visible-child-name"]],
-  ["Notebook", ["page"]],
-  ["Paned", ["position"]],
-  ["MenuButton", ["active"]],
-  ["SearchBar", ["search-mode-enabled"]],
+  ["Gtk.Editable", ["text"]],
+  ["Gtk.CheckButton", ["active"]],
+  ["Gtk.ToggleButton", ["active"]],
+  ["Gtk.Switch", ["active"]],
+  ["Gtk.SpinButton", ["value"]],
+  ["Gtk.Expander", ["expanded"]],
+  ["Gtk.DropDown", ["selected"]],
+  ["Gtk.Stack", ["visible-child-name"]],
+  ["Gtk.Notebook", ["page"]],
+  ["Gtk.Paned", ["position"]],
+  ["Gtk.MenuButton", ["active"]],
+  ["Gtk.SearchBar", ["search-mode-enabled"]],
 ]);
 
 // Widget-typed properties that name another widget rather than place one: an
@@ -484,20 +507,20 @@ const childProps = new Set(["child"]);
 // its child: GTK warns and selects nothing, and the child selects itself when
 // it is attached (src/children.ts). So such a prop is set only when the child
 // exists, and removing it leaves the selection as it is.
-const childNamingProps = new Map([["Stack", new Map([["visible-child-name", "get_child_by_name"]])]]);
+const childNamingProps = new Map([["Gtk.Stack", new Map([["visible-child-name", "get_child_by_name"]])]]);
 
 // Containers that place a child with parameters of its own, through a child
 // element written by hand in src/children.ts: the members their component
 // has, each element's host type and node class, and what to say to a widget
 // placed in the container directly.
 const childElements = new Map([
-  ["Grid", { members: "GridChildren", elements: [["GtkGrid.Child", "GridChildNode"]], use: "<Grid.Child column row>" }],
-  ["Stack", { members: "StackChildren", elements: [["GtkStack.Page", "StackPageNode"]], use: "<Stack.Page name>" }],
-  ["Notebook", { members: "NotebookChildren", elements: [["GtkNotebook.Page", "NotebookPageNode"]], use: "<Notebook.Page tab>" }],
-  ["HeaderBar", { members: "HeaderBarChildren", elements: [["GtkHeaderBar.Start", "PackNode"], ["GtkHeaderBar.End", "PackNode"]], use: "<HeaderBar.Start> or <HeaderBar.End>" }],
-  ["ActionBar", { members: "ActionBarChildren", elements: [["GtkActionBar.Start", "PackNode"], ["GtkActionBar.End", "PackNode"]], use: "<ActionBar.Start> or <ActionBar.End>" }],
-  ["Overlay", { members: "OverlayChildren", elements: [["GtkOverlay.Layer", "OverlayLayerNode"]], use: "<Overlay.Layer>" }],
-  ["Fixed", { members: "FixedChildren", elements: [["GtkFixed.Child", "FixedChildNode"]], use: "<Fixed.Child x y>" }],
+  ["Gtk.Grid", { members: "GridChildren", elements: [["GtkGrid.Child", "GridChildNode"]], use: "<Grid.Child column row>" }],
+  ["Gtk.Stack", { members: "StackChildren", elements: [["GtkStack.Page", "StackPageNode"]], use: "<Stack.Page name>" }],
+  ["Gtk.Notebook", { members: "NotebookChildren", elements: [["GtkNotebook.Page", "NotebookPageNode"]], use: "<Notebook.Page tab>" }],
+  ["Gtk.HeaderBar", { members: "HeaderBarChildren", elements: [["GtkHeaderBar.Start", "PackNode"], ["GtkHeaderBar.End", "PackNode"]], use: "<HeaderBar.Start> or <HeaderBar.End>" }],
+  ["Gtk.ActionBar", { members: "ActionBarChildren", elements: [["GtkActionBar.Start", "PackNode"], ["GtkActionBar.End", "PackNode"]], use: "<ActionBar.Start> or <ActionBar.End>" }],
+  ["Gtk.Overlay", { members: "OverlayChildren", elements: [["GtkOverlay.Layer", "OverlayLayerNode"]], use: "<Overlay.Layer>" }],
+  ["Gtk.Fixed", { members: "FixedChildren", elements: [["GtkFixed.Child", "FixedChildNode"]], use: "<Fixed.Child x y>" }],
 ]);
 
 function valueKind(type: string, bindings: Bindings, reference = false): ValueKind | null {
@@ -598,7 +621,8 @@ interface Model {
   skipped: string[];
 }
 
-function model(gir: Gir, bindings: Bindings): Model {
+/** The model of `target`'s widgets (`Gtk`, `Adw`), whose chains may pass through other namespaces. */
+function model(gir: Gir, bindings: Bindings, target: string): Model {
   const skipped = new Set<string>();
   // The types handler parameters name, for the generated file to import.
   const handlerTypes = new Set<string>();
@@ -608,7 +632,7 @@ function model(gir: Gir, bindings: Bindings): Model {
       yield t;
     }
   };
-  const isWidget = (t: GirType): boolean => [...chainOf(t)].some((c) => c.name === "Widget");
+  const isWidget = (t: GirType): boolean => [...chainOf(t)].some((c) => qualified(c) === "Gtk.Widget");
 
   // A class's own props and signals are its own and those of each interface
   // it is the first in its chain to implement.
@@ -619,12 +643,18 @@ function model(gir: Gir, bindings: Bindings): Model {
 
   const types = new Map<string, WidgetType>();
   const typeOf = (t: GirType): WidgetType => {
-    const existing = types.get(t.name);
+    const existing = types.get(qualified(t));
     if (existing !== undefined) {
       return existing;
     }
-    const parent = t.name === "Widget" ? null : typeOf(parentOf(t)!);
-    const ts = tsName(t.name);
+    const parent = qualified(t) === "Gtk.Widget" ? null : typeOf(parentOf(t)!);
+    // What another namespace's class leaves out is listed with that namespace.
+    const skip = (entry: string): void => {
+      if (t.namespace === target) {
+        skipped.add(entry);
+      }
+    };
+    const ts = tsName(t);
     const props: Prop[] = [];
     const signals: Signal[] = [];
     const slots: Slot[] = [];
@@ -632,7 +662,7 @@ function model(gir: Gir, bindings: Bindings): Model {
     // (ListBase's `orientation`, Orientable's): one prop, the class's.
     const declared = new Set<string>();
     for (const source of ownSources(t)) {
-      const sourceTs = tsName(source.name);
+      const sourceTs = tsName(source);
       for (const p of source.properties) {
         if (declared.has(p.name)) {
           continue;
@@ -646,32 +676,32 @@ function model(gir: Gir, bindings: Bindings): Model {
         }
         const value = type === undefined ? null : valueKind(type, bindings, widgetReferences.has(p.name));
         if (p.constructOnly) {
-          skipped.add(`${where}\tconstruct-only: a change would need a new widget`);
+          skip(`${where}\tconstruct-only: a change would need a new widget`);
         } else if (p.deprecated) {
-          skipped.add(`${where}\tdeprecated`);
+          skip(`${where}\tdeprecated`);
         } else if (type === undefined) {
-          skipped.add(`${where}\tno setter in the bindings`);
+          skip(`${where}\tno setter in the bindings`);
         } else if (value === null && type === "GtkWidget | null") {
           const jsx = camel(`-${p.name}`);
           slots.push({ jsx, hostType: `${ts}.${jsx}`, setter });
         } else if (value === null && type === "GtkWidget") {
-          skipped.add(`${where}\ta widget slot that cannot be emptied: a slot element's child can go`);
+          skip(`${where}\ta widget slot that cannot be emptied: a slot element's child can go`);
         } else if (value === null && bindings.implementers.get(type.replace(/ \| null$/, ""))?.length === 0) {
-          skipped.add(`${where}\ta ${type}: an interface only classes the bindings do not declare implement`);
+          skip(`${where}\ta ${type}: an interface only classes the bindings do not declare implement`);
         } else if (value === null) {
-          skipped.add(`${where}\ta ${type}, which a JSX attribute does not carry yet`);
+          skip(`${where}\ta ${type}, which a JSX attribute does not carry yet`);
         } else {
           const reset = resetValue(value, p.defaultValue, gir.members);
           if (reset === null) {
-            skipped.add(`${where}\tremoving it leaves its value: GIR gives no default`);
+            skip(`${where}\tremoving it leaves its value: GIR gives no default`);
           }
           // `onNotifyText`: the property changed, from any side, and here is
           // its new value -- what a controlled prop needs to hear.
           const getter = p.getter ?? `get_${p.name.replace(/-/g, "_")}`;
           const read = bindings.getters.get(sourceTs)?.get(getter);
           const readType = p.readable && read !== undefined ? handlerType(read, handlerTypes) : null;
-          const controlled = readType !== null && controlledProps.get(source.name)?.includes(p.name) === true;
-          const namesChildBy = childNamingProps.get(source.name)?.get(p.name);
+          const controlled = readType !== null && controlledProps.get(qualified(source))?.includes(p.name) === true;
+          const namesChildBy = childNamingProps.get(qualified(source))?.get(p.name);
           props.push({
             jsx: camel(p.name),
             setter,
@@ -696,13 +726,13 @@ function model(gir: Gir, bindings: Bindings): Model {
         const signature = bindings.signals.get(sourceTs)?.get(s.name);
         const params = signature?.params.map((p) => ({ name: p.name, type: handlerType(p.type, handlerTypes) }));
         if (s.deprecated) {
-          skipped.add(`${where}\tdeprecated`);
+          skip(`${where}\tdeprecated`);
         } else if (signature === undefined || params === undefined) {
-          skipped.add(`${where}\tno connect overload in the bindings`);
+          skip(`${where}\tno connect overload in the bindings`);
         } else if (signature.returns !== "void" && !/^CBool<\w+>$/.test(signature.returns)) {
-          skipped.add(`${where}\tits handler returns a ${signature.returns}: not generated yet`);
+          skip(`${where}\tits handler returns a ${signature.returns}: not generated yet`);
         } else if (params.some((p) => p.type === null)) {
-          skipped.add(`${where}\ta handler argument JSX cannot type yet: ${signature.params.map((p) => p.type).join(", ")}`);
+          skip(`${where}\ta handler argument JSX cannot type yet: ${signature.params.map((p) => p.type).join(", ")}`);
         } else {
           signals.push({
             jsx: `on${camel(`-${s.name}`)}`,
@@ -715,21 +745,21 @@ function model(gir: Gir, bindings: Bindings): Model {
     }
     const chain = [...chainOf(t)];
     const has = (method: string): boolean => chain.some((c) => c.methods.has(method));
-    const takesChild = chain.some((c) => bindings.setters.get(tsName(c.name))?.get("set_child") === "GtkWidget | null");
+    const takesChild = chain.some((c) => bindings.setters.get(tsName(c))?.get("set_child") === "GtkWidget | null");
     const children: ChildProtocol = ["append", "remove", "insert_child_after", "reorder_child_after"].every(has)
       ? "box"
-      : ["append", "remove", "insert"].every(has) && rowAccessors.has(t.name)
+      : ["append", "remove", "insert"].every(has) && rowAccessors.has(qualified(t))
         ? "list"
         : takesChild
           ? "single"
           : "none";
     const type: WidgetType = { gir: t, ts, jsx: t.name, parent, props, signals, slots, children };
-    types.set(t.name, type);
+    types.set(qualified(t), type);
     return type;
   };
 
   const widgets = [...gir.types.values()]
-    .filter((t) => t.kind === "class" && isWidget(t))
+    .filter((t) => t.namespace === target && t.kind === "class" && isWidget(t))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(typeOf)
     .filter((w) => !w.gir.abstract && !w.gir.deprecated && bindings.constructible.has(w.ts));
@@ -741,9 +771,9 @@ function model(gir: Gir, bindings: Bindings): Model {
     }
   }
   // Only the classes some widget's chain passes through.
-  const used = new Set(widgets.flatMap((w) => [...chainOf(w.gir)].map((c) => c.name)));
+  const used = new Set(widgets.flatMap((w) => [...chainOf(w.gir)].map(qualified)));
   return {
-    types: [...types.values()].filter((t) => used.has(t.gir.name)),
+    types: [...types.values()].filter((t) => used.has(qualified(t.gir))),
     widgets,
     modules: bindings.modules,
     handlerTypes,
@@ -753,43 +783,79 @@ function model(gir: Gir, bindings: Bindings): Model {
 
 // ---- output ------------------------------------------------------------------
 
-function emit(gir: Gir, m: Model, gtkVersion: string): string {
+/** What a generated file is of: a GIR namespace, the library it names, and where the file goes. */
+interface Target {
+  namespace: string; // Gtk, Adw
+  gir: string; // Gtk-4.0
+  library: string; // GTK
+  version: string; // 4.22.5
+  /** From the package directory: `src/widgets.ts` for Gtk, `src/adw/widgets.ts` for another. */
+  dir: string;
+}
+
+function emit(m: Model, target: Target): string {
   const out: string[] = [];
   const line = (text = ""): void => {
     out.push(text);
   };
   const values = new Set<string>();
   const types = new Set<string>(m.handlerTypes);
+  // Gtk's file defines what every widget shares; another namespace's builds on
+  // it, naming Gtk's classes' props, functions and slots through `Gtk.`.
+  const gtk = target.namespace === "Gtk";
+  const local = (t: WidgetType): boolean => t.gir.namespace === target.namespace;
+  const ref = (t: WidgetType, name: string): string => (local(t) ? name : `${t.gir.namespace}.${name}`);
+  const hostProps = gtk ? "HostProps" : "Gtk.HostProps";
+  // A node class names its namespace outside Gtk (\`AdwHeaderBarNode\`, as its
+  // host type is \`AdwHeaderBar\`), so a program importing both modules'
+  // nodes needs no aliases.
+  const nodeClass = (w: WidgetType): string => `${gtk ? "" : target.namespace}${w.jsx}Node`;
+  const hostNode = gtk ? "./HostNode.ts" : "../HostNode.ts";
+  // What the file takes from HostNode.ts, as it uses it (noUnusedLocals).
+  const needs = new Set<string>(["type HostNode", "type SignalSlot", "WidgetNode"]);
 
-  line(`// Generated by tools/gen-widgets.ts from GTK ${gtkVersion} (Gtk-${gir.version}.gir) and`);
+  line(`// Generated by tools/gen-widgets.ts from ${target.library} ${target.version} (${target.gir}.gir) and`);
   line("// its bindings. Edit the generator, not this file.");
   line();
   line("__IMPORTS__");
+  if (!gtk) {
+    line('import * as Gtk from "../widgets.ts";');
+  }
   line('import type { HostComponent } from "shared/ReactHostComponent.ts";');
-  line('import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "./HostNode.ts";');
-  const childImports = [...new Set([...childElements.values()].flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]))];
-  line(`import { ${childImports.join(", ")} } from "./children.ts";`);
-  line('import type { ControllerProps } from "./controllers.ts";');
+  line("__HOST_NODE__");
+  if (gtk) {
+    const childImports = [...new Set([...childElements.values()].flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]))];
+    line(`import { ${childImports.join(", ")} } from "./children.ts";`);
+    line('import type { ControllerProps } from "./controllers.ts";');
+  }
   line();
   line("// ---- props: what JSX checks -------------------------------------------------");
-  line();
-  line("export interface HostProps {");
-  line("  children?: unknown;");
-  line("}");
-  for (const t of m.types) {
+  if (gtk) {
+    line();
+    line("export interface HostProps {");
+    line("  children?: unknown;");
+    line("}");
+  }
+  for (const t of m.types.filter(local)) {
     line();
     line(`/** \`<${t.jsx}>\`'s props: ${t.ts}'s own properties and signals. */`);
     // Every widget takes the input props, whose controllers GTK adds to any
     // widget (src/controllers.ts); slot and child elements do not.
-    line(`export interface ${t.jsx}Props extends ${t.parent === null ? "HostProps, ControllerProps" : `${t.parent.jsx}Props`} {`);
+    line(`export interface ${t.jsx}Props extends ${t.parent === null ? "HostProps, ControllerProps" : ref(t.parent, `${t.parent.jsx}Props`)} {`);
     for (const p of t.props) {
       if (p.value.kind === "enum") {
         types.add(p.value.type);
       } else if (p.value.kind === "object") {
         // Values: `instanceof` checks against them.
         p.value.classes.forEach((c) => values.add(c));
+      } else if (p.value.kind === "strings") {
+        needs.add("stringsOf");
       }
-      line(`  ${p.jsx}?: ${propType(p.value)};`);
+      // A class can redeclare an ancestor's property with a wider type
+      // (AdwPreferencesPage's `name` takes null where GtkWidget's does not):
+      // its props keep the ancestor's type so they still extend its props,
+      // and the value reaches the class's own setter, first in its switch.
+      line(`  ${p.jsx}?: ${inheritedPropType(t, p.jsx) ?? propType(p.value)};`);
     }
     for (const s of t.signals) {
       line(`  ${s.jsx}?: ${handlerSignature(s)};`);
@@ -804,32 +870,32 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line('// `jsx("GtkButton", props)`, so a widget costs no component of its own.');
   line("// A widget with slots names its slot elements as members:");
   line('// `<Paned.StartChild>` lowers to `jsx("GtkPaned.StartChild", props)`.');
-  for (const t of m.types.filter((t) => t.slots.length > 0)) {
+  for (const t of m.types.filter((t) => local(t) && t.slots.length > 0)) {
     const inherited = t.parent === null ? null : slotOwner(t.parent);
     line();
     line(`/** \`<${t.jsx}>\`'s slot elements: each holds one child, which fills ${t.ts}'s property of that name. */`);
-    line(`export interface ${t.jsx}Slots${inherited === null ? "" : ` extends ${inherited.jsx}Slots`} {`);
+    line(`export interface ${t.jsx}Slots${inherited === null ? "" : ` extends ${ref(inherited, `${inherited.jsx}Slots`)}`} {`);
     for (const slot of t.slots) {
-      line(`  readonly ${slot.jsx}: HostComponent<"${slot.hostType}", HostProps>;`);
+      line(`  readonly ${slot.jsx}: HostComponent<"${slot.hostType}", ${hostProps}>;`);
     }
     line("}");
   }
   for (const w of m.widgets) {
     const owner = slotOwner(w);
     line();
-    line(`/** \`<${w.jsx}>\`: a ${w.ts}. */`);
-    const members = [owner === null ? null : `${owner.jsx}Slots`, childElements.get(w.jsx)?.members ?? null].filter((m) => m !== null);
+    line(`/** \`<${w.jsx}>\`: ${article(w.ts)} ${w.ts}. */`);
+    const members = [owner === null ? null : ref(owner, `${owner.jsx}Slots`), childElements.get(qualified(w.gir))?.members ?? null].filter((m) => m !== null);
     line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${w.jsx}Props>${members.map((m) => ` & ${m}`).join("")};`);
   }
 
   line();
   line("// ---- setting props, one function per class ------------------------------------");
-  for (const t of m.types) {
+  for (const t of m.types.filter(local)) {
     types.add(t.ts);
-    const parentCall = (args: string): string => (t.parent === null ? "false" : `${t.parent.jsx.charAt(0).toLowerCase()}${t.parent.jsx.slice(1)}Prop(${args})`);
-    const fn = `${t.jsx.charAt(0).toLowerCase()}${t.jsx.slice(1)}`;
+    const parentCall = (args: string): string => (t.parent === null ? "false" : `${ref(t.parent, `${lower(t.parent)}Prop`)}(${args})`);
+    const fn = lower(t);
     line();
-    line(`function ${fn}Prop(gtk: ${t.ts}, key: string, value: unknown): boolean {`);
+    line(`export function ${fn}Prop(gtk: ${t.ts}, key: string, value: unknown): boolean {`);
     if (t.props.length > 0) {
       line("  switch (key) {");
       for (const p of t.props) {
@@ -842,7 +908,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     line(`  return ${parentCall("gtk, key, value")};`);
     line("}");
     line();
-    line(`function ${fn}Signal(gtk: ${t.ts}, key: string, slot: SignalSlot): boolean {`);
+    line(`export function ${fn}Signal(gtk: ${t.ts}, key: string, slot: SignalSlot): boolean {`);
     if (t.signals.length > 0) {
       line("  switch (key) {");
       for (const s of t.signals) {
@@ -872,10 +938,11 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
 
   line();
   line("// ---- filling widget slots, one function per class that has them ---------------");
-  for (const t of m.types.filter((t) => t.slots.length > 0)) {
+  for (const t of m.types.filter((t) => local(t) && t.slots.length > 0)) {
     const inherited = t.parent === null ? null : slotOwner(t.parent);
+    types.add("GtkWidget");
     line();
-    line(`function ${lower(t)}Slot(gtk: ${t.ts}, slot: string, widget: GtkWidget | null): boolean {`);
+    line(`export function ${lower(t)}Slot(gtk: ${t.ts}, slot: string, widget: GtkWidget | null): boolean {`);
     line("  switch (slot) {");
     for (const slot of t.slots) {
       line(`    case "${slot.hostType}":`);
@@ -883,7 +950,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("      return true;");
     }
     line("  }");
-    line(`  return ${inherited === null ? "false" : `${lower(inherited)}Slot(gtk, slot, widget)`};`);
+    line(`  return ${inherited === null ? "false" : `${ref(inherited, `${lower(inherited)}Slot`)}(gtk, slot, widget)`};`);
     line("}");
   }
 
@@ -893,8 +960,8 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     values.add(w.ts);
     const fn = `${w.jsx.charAt(0).toLowerCase()}${w.jsx.slice(1)}`;
     line();
-    line(`/** \`<${w.jsx}>\`: a ${w.ts}. */`);
-    line(`export class ${w.jsx}Node extends WidgetNode {`);
+    line(`/** \`<${w.jsx}>\`: ${article(w.ts)} ${w.ts}. */`);
+    line(`export class ${nodeClass(w)} extends WidgetNode {`);
     line(`  readonly gtk: ${w.ts};`);
     line();
     line("  constructor() {");
@@ -910,8 +977,9 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     line("  }");
     const owner = slotOwner(w);
     if (owner !== null) {
+      types.add("GtkWidget");
       line("  fillSlot(slot: string, widget: GtkWidget | null): boolean {");
-      line(`    return ${lower(owner)}Slot(this.gtk, slot, widget);`);
+      line(`    return ${ref(owner, `${lower(owner)}Slot`)}(this.gtk, slot, widget);`);
       line("  }");
     }
     const controlled = [];
@@ -932,7 +1000,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     // Child elements place themselves, beside the widget's own protocol if it
     // has one (an Overlay's main child and its layers); a widget with none
     // says which element to use.
-    const elements = childElements.get(w.jsx);
+    const elements = childElements.get(qualified(w.gir));
     if (elements !== undefined && w.children === "none") {
       line("  protected place(_child: WidgetNode): void {");
       line(`    throw new Error("<${w.jsx}> places a child through ${elements.use}.");`);
@@ -948,6 +1016,8 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("    this.release(child);");
       line("  }");
     } else if (w.children === "list") {
+      needs.add("insertAt");
+      types.add("GtkWidget");
       line("  // A list places a child at an index, and holds a child that is not a");
       line("  // row in a row it makes for it: React's order of the children gives the");
       line("  // index, and what the list holds for each is what moves or goes.");
@@ -968,7 +1038,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("      // A move. A row the list made is its own: it goes when removed, so the");
       line("      // child is taken back out of it first, and placed anew.");
       line("      if (this.placed[at] !== child.widget) {");
-      line(`        this.gtk.${rowAccessors.get(w.jsx)}(at)!.set_child(null);`);
+      line(`        this.gtk.${rowAccessors.get(qualified(w.gir))}(at)!.set_child(null);`);
       line("      }");
       line("      this.gtk.remove(this.placed[at]!);");
       line("      this.items.splice(at, 1);");
@@ -1019,17 +1089,19 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line("  switch (type) {");
   for (const w of m.widgets) {
     line(`    case "${w.ts}":`);
-    line(`      return new ${w.jsx}Node();`);
+    line(`      return new ${nodeClass(w)}();`);
   }
-  for (const t of m.types) {
+  const ownSlots = m.types.filter((t) => local(t) && t.slots.length > 0);
+  for (const t of ownSlots) {
     for (const slot of t.slots) {
       line(`    case "${slot.hostType}":`);
     }
   }
-  if (m.types.some((t) => t.slots.length > 0)) {
+  if (ownSlots.length > 0) {
+    needs.add("SlotNode");
     line("      return new SlotNode(type);");
   }
-  for (const c of childElements.values()) {
+  for (const c of gtk ? childElements.values() : []) {
     for (const [hostType, node] of c.elements) {
       line(`    case "${hostType}":`);
       line(`      return new ${node}(type);`);
@@ -1050,7 +1122,22 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     byModule.set(module, names);
   }
   const imports = [...byModule.keys()].sort().map((module) => `import {\n${byModule.get(module)!.map((n) => `  ${n},`).join("\n")}\n} from "${module}";`);
-  return out.join("\n").replace("__IMPORTS__", imports.join("\n"));
+  const fromHostNode = ["type HostNode", "insertAt", "type SignalSlot", "SlotNode", "stringsOf", "WidgetNode"].filter((n) => needs.has(n));
+  return out
+    .join("\n")
+    .replace("__IMPORTS__", imports.join("\n"))
+    .replace("__HOST_NODE__", `import { ${fromHostNode.join(", ")} } from "${hostNode}";`);
+}
+
+/** The type an ancestor of `t` declares its prop `jsx` with, or null when none does. */
+function inheritedPropType(t: WidgetType, jsx: string): string | null {
+  for (let ancestor = t.parent; ancestor !== null; ancestor = ancestor.parent) {
+    const declared = ancestor.props.find((p) => p.jsx === jsx);
+    if (declared !== undefined) {
+      return propType(declared.value);
+    }
+  }
+  return null;
 }
 
 /** The type of a signal prop's handler: `(row: GtkListBoxRow) => void`. */
@@ -1110,17 +1197,30 @@ function assign(p: Prop): string {
 // ---- main --------------------------------------------------------------------
 
 const args = process.argv.slice(2);
-const bindingsDir = args.find((a) => !a.startsWith("--"));
-if (bindingsDir === undefined) {
-  console.error("usage: node tools/gen-widgets.ts <bindings dir> [--check]");
+const bindingsDir = args.find((a) => !a.startsWith("--") && args[args.indexOf(a) - 1] !== "--namespace");
+const namespaceAt = args.indexOf("--namespace");
+const girName = namespaceAt >= 0 ? args[namespaceAt + 1] : "Gtk-4.0";
+// The namespaces react-gtk generates widgets for: GTK's own, and libraries of
+// widgets built on it, each its own module that an app opts into.
+const targets = new Map([
+  ["Gtk-4.0", { namespace: "Gtk", library: "GTK", pkgConfig: "gtk4", dir: "src", reads: ["Gtk-4.0"] }],
+  ["Adw-1", { namespace: "Adw", library: "libadwaita", pkgConfig: "libadwaita-1", dir: "src/adw", reads: ["Gtk-4.0", "Adw-1"] }],
+]);
+const known = girName === undefined ? undefined : targets.get(girName);
+if (bindingsDir === undefined || known === undefined) {
+  console.error(`usage: node tools/gen-widgets.ts <bindings dir> [--namespace ${[...targets.keys()].join("|")}] [--check]`);
   process.exit(2);
 }
-const gir = readGir();
-const m = model(gir, readBindings(bindingsDir));
-const gtkVersion = execFileSync("pkg-config", ["--modversion", "gtk4"], { encoding: "utf8" }).trim();
+const version = execFileSync("pkg-config", ["--modversion", known.pkgConfig], { encoding: "utf8" }).trim();
+const target: Target = { namespace: known.namespace, gir: girName!, library: known.library, version, dir: known.dir };
+const gir = readGir(known.reads);
+const m = model(gir, readBindings(bindingsDir), target.namespace);
 const files = new Map([
-  [join(packageDir, "src/widgets.ts"), emit(gir, m, gtkVersion)],
-  [join(packageDir, "src/widgets.skipped.txt"), `# What tools/gen-widgets.ts left out of src/widgets.ts, and why (GTK ${gtkVersion}).\n${m.skipped.join("\n")}\n`],
+  [join(packageDir, target.dir, "widgets.ts"), emit(m, target)],
+  [
+    join(packageDir, target.dir, "widgets.skipped.txt"),
+    `# What tools/gen-widgets.ts left out of ${target.dir}/widgets.ts, and why (${target.library} ${version}).\n${m.skipped.join("\n")}\n`,
+  ],
 ]);
 let stale = false;
 for (const [path, text] of files) {
@@ -1134,6 +1234,7 @@ for (const [path, text] of files) {
 if (stale) {
   process.exit(1);
 }
-const props = m.types.reduce((n, t) => n + t.props.length, 0);
-const signals = m.types.reduce((n, t) => n + t.signals.length, 0);
-console.log(`${m.widgets.length} widgets over ${m.types.length} classes: ${props} props, ${signals} signals; ${m.skipped.length} left out`);
+const own = m.types.filter((t) => t.gir.namespace === target.namespace);
+const props = own.reduce((n, t) => n + t.props.length, 0);
+const signals = own.reduce((n, t) => n + t.signals.length, 0);
+console.log(`${m.widgets.length} widgets over ${own.length} classes: ${props} props, ${signals} signals; ${m.skipped.length} left out`);

@@ -24,9 +24,12 @@ import {
 import { ConcurrentRoot } from "react-reconciler/ReactRootTags.ts";
 
 import { setAfterEvent } from "./HostNode.ts";
+import type { WidgetSet } from "./HostNode.ts";
 import { ApplicationRoot, type HostRoot, WindowRoot } from "./HostRoot.ts";
 
 export interface RootOptions {
+  /** Widgets beyond GTK's the root creates: `[adw]` from `react-gtk/adw`. */
+  widgets?: readonly WidgetSet[];
   onUncaughtError?: (error: unknown, errorInfo: ErrorInfo) => void;
   onCaughtError?: (error: unknown, errorInfo: ErrorInfo) => void;
   onRecoverableError?: (error: unknown, errorInfo: ErrorInfo) => void;
@@ -65,7 +68,7 @@ export class Root {
 /** A root in `window`, which holds what it renders. */
 export function createRoot(window: GtkWindow, options: RootOptions = {}): Root {
   setAfterEvent(flushSyncWork);
-  return new Root(new WindowRoot(window), options);
+  return new Root(new WindowRoot(window, options.widgets ?? []), options);
 }
 
 /**
@@ -75,5 +78,5 @@ export function createRoot(window: GtkWindow, options: RootOptions = {}): Root {
  */
 export function createApplicationRoot(application: GtkApplication, options: RootOptions = {}): Root {
   setAfterEvent(flushSyncWork);
-  return new Root(new ApplicationRoot(application), options);
+  return new Root(new ApplicationRoot(application, options.widgets ?? []), options);
 }

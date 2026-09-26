@@ -351,7 +351,49 @@ The other gaps are construct-only props, and signal arguments of types a
 JSX handler cannot name yet.
 
 Regenerate after a GTK update, from a native program's generated bindings:
-`node tools/gen-widgets.ts ../../native/gtk/types/gir`.
+`node tools/gen-widgets.ts ../../native/gtk/types/gir`. Each driver's
+`build.sh` fails when the generated file is stale for the bindings its build
+just wrote.
+
+## libadwaita: react-gtk/adw
+
+libadwaita's widgets are a module of their own, `react-gtk/adw`, generated
+from Adw-1.gir by the same generator (`--namespace Adw-1`, into `src/adw/`).
+An Adw widget's props extend the GTK class it derives from
+(`ApplicationWindowProps extends Gtk.ApplicationWindowProps`), and setting
+one falls through to GTK's function for that class, so an Adw widget takes
+every prop, signal, slot and input prop its GTK ancestors do. A property an
+Adw class redeclares with a wider type (AdwPreferencesPage's `name`) keeps
+its ancestor's type in the props, so the interfaces still extend.
+
+```tsx
+import { ApplicationWindow, HeaderBar, ToolbarView, adw } from "react-gtk/adw";
+
+createApplicationRoot(app, { widgets: [adw] }).render(
+  <ApplicationWindow title="Hello">
+    <ApplicationWindow.Content>
+      <ToolbarView>...</ToolbarView>
+    </ApplicationWindow.Content>
+  </ApplicationWindow>,
+);
+```
+
+**A root creates only the widget sets it is given.** GTK's widgets always,
+then each `WidgetSet` in its options' `widgets`. So an app that never imports
+`react-gtk/adw` never links libadwaita, and a root's `createInstance` asks
+its own sets. There is no registry every module adds itself to on import.
+The JSX names are libadwaita's without the `Adw` prefix, as GTK's are
+without `Gtk`: an app that uses both imports one set under other names. The
+node classes carry the namespace (`AdwHeaderBarNode`, for the host type
+`AdwHeaderBar`), so a program importing both modules' nodes needs no aliases.
+
+`native/adw` drives it as `native/gtk` drives GTK: an Adw prop and an
+inherited GTK one, the ApplicationWindow's `Content` slot, a signal, an
+EntryRow's controlled `text` (from GTK's Editable), an AdwApplication's
+root, and a root without the set creating no Adw widget. It runs with the
+desktop's settings shut out (an empty `XDG_CONFIG_HOME`, `GDK_DEBUG=no-portals`),
+since libadwaita warns about a dark colour scheme it reads through the
+settings portal.
 
 ## Lists: a row per item, rendered by React (designed, not built)
 
@@ -406,6 +448,7 @@ checked in JavaScript, where react-gtk does not run.
    with the other controlled props), and the rest of the common widgets.
 4. Containers that place with parameters (Grid, Stack, Notebook, the bars'
    groups, Overlay, Fixed) and slot elements: done.
-5. Lists rendered by React (above): designed, waiting on a native render.
-6. A benchmark against GJS on the same app, which the GTK lane's goal already
+5. libadwaita as `react-gtk/adw` (above): generated, and driven on real widgets.
+6. Lists rendered by React (above): designed, waiting on a native render.
+7. A benchmark against GJS on the same app, which the GTK lane's goal already
    names.

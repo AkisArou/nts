@@ -196,6 +196,23 @@ export function insertAt<T>(items: T[], index: number, item: T): void {
 
 // ---- the nodes --------------------------------------------------------------------
 
+/**
+ * A module of widgets beyond GTK's own that an app opts into (`react-gtk/adw`):
+ * it creates the nodes for its host types. A root is given the sets it uses,
+ * so an app that uses none links none of their libraries.
+ */
+export class WidgetSet {
+  /** What an app imports it as: `adw`. */
+  readonly name: string;
+  /** A new node for `type` (`AdwHeaderBar`), or null when the set has no such widget. */
+  readonly createNode: (type: string) => HostNode | null;
+
+  constructor(name: string, createNode: (type: string) => HostNode | null) {
+    this.name = name;
+    this.createNode = createNode;
+  }
+}
+
 /** What React holds for a host element: the host config's `Instance`. */
 export abstract class HostNode {
   /** The host type React created it for: `GtkButton`, `GtkPaned.StartChild`. */

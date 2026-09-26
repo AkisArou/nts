@@ -10,9 +10,32 @@
 
 import type { GtkApplication, GtkWindow } from "c:Gtk-4.0";
 
-import type { HostNode, WidgetNode } from "./HostNode.ts";
+import type { HostNode, WidgetNode, WidgetSet } from "./HostNode.ts";
+import { createNode } from "./widgets.ts";
 
 export abstract class HostRoot {
+  // The widget sets beyond GTK's this root creates from (`adw`).
+  private readonly widgets: readonly WidgetSet[];
+
+  constructor(widgets: readonly WidgetSet[]) {
+    this.widgets = widgets;
+  }
+
+  /** A new node for the host type `type`: GTK's widgets first, then each set's; null if none has it. */
+  createNode(type: string): HostNode | null {
+    const node = createNode(type);
+    if (node !== null) {
+      return node;
+    }
+    for (let i = 0; i < this.widgets.length; i++) {
+      const made = this.widgets[i]!.createNode(type);
+      if (made !== null) {
+        return made;
+      }
+    }
+    return null;
+  }
+
   /** Places `child` at the root. */
   abstract appendChild(child: HostNode): void;
   /** Places `child` before `before`, a child already at the root. */
@@ -37,8 +60,8 @@ export class WindowRoot extends HostRoot {
   readonly window: GtkWindow;
   private child: WidgetNode | null = null;
 
-  constructor(window: GtkWindow) {
-    super();
+  constructor(window: GtkWindow, widgets: readonly WidgetSet[]) {
+    super(widgets);
     this.window = window;
   }
 
@@ -86,8 +109,8 @@ export class WindowRoot extends HostRoot {
 export class ApplicationRoot extends HostRoot {
   readonly application: GtkApplication;
 
-  constructor(application: GtkApplication) {
-    super();
+  constructor(application: GtkApplication, widgets: readonly WidgetSet[]) {
+    super(widgets);
     this.application = application;
   }
 

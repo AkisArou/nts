@@ -1813,7 +1813,7 @@ export declare const WindowHandle: HostComponent<"GtkWindowHandle", WindowHandle
 
 // ---- setting props, one function per class ------------------------------------
 
-function widgetProp(gtk: GtkWidget, key: string, value: unknown): boolean {
+export function widgetProp(gtk: GtkWidget, key: string, value: unknown): boolean {
   switch (key) {
     case "canFocus":
       gtk.set_can_focus(typeof value === "boolean" ? value : true);
@@ -1903,7 +1903,7 @@ function widgetProp(gtk: GtkWidget, key: string, value: unknown): boolean {
   return false;
 }
 
-function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boolean {
+export function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyCanFocus":
       gtk.connect("notify::can-focus", () => {
@@ -2084,7 +2084,7 @@ function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boolean {
   return false;
 }
 
-function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
+export function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
   switch (key) {
     case "application":
       gtk.set_application(value instanceof GtkApplication ? value : null);
@@ -2156,7 +2156,7 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
+export function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyApplication":
       gtk.connect("notify::application", () => {
@@ -2264,7 +2264,7 @@ function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function aboutDialogProp(gtk: GtkAboutDialog, key: string, value: unknown): boolean {
+export function aboutDialogProp(gtk: GtkAboutDialog, key: string, value: unknown): boolean {
   switch (key) {
     case "artists":
       gtk.set_artists(stringsOf(value) ?? []);
@@ -2323,7 +2323,7 @@ function aboutDialogProp(gtk: GtkAboutDialog, key: string, value: unknown): bool
   return windowProp(gtk, key, value);
 }
 
-function aboutDialogSignal(gtk: GtkAboutDialog, key: string, slot: SignalSlot): boolean {
+export function aboutDialogSignal(gtk: GtkAboutDialog, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyComments":
       gtk.connect("notify::comments", () => {
@@ -2392,7 +2392,7 @@ function aboutDialogSignal(gtk: GtkAboutDialog, key: string, slot: SignalSlot): 
   return windowSignal(gtk, key, slot);
 }
 
-function actionBarProp(gtk: GtkActionBar, key: string, value: unknown): boolean {
+export function actionBarProp(gtk: GtkActionBar, key: string, value: unknown): boolean {
   switch (key) {
     case "revealed":
       gtk.set_revealed(typeof value === "boolean" ? value : true);
@@ -2401,7 +2401,7 @@ function actionBarProp(gtk: GtkActionBar, key: string, value: unknown): boolean 
   return widgetProp(gtk, key, value);
 }
 
-function actionBarSignal(gtk: GtkActionBar, key: string, slot: SignalSlot): boolean {
+export function actionBarSignal(gtk: GtkActionBar, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyRevealed":
       gtk.connect("notify::revealed", () => {
@@ -2412,7 +2412,7 @@ function actionBarSignal(gtk: GtkActionBar, key: string, slot: SignalSlot): bool
   return widgetSignal(gtk, key, slot);
 }
 
-function applicationWindowProp(gtk: GtkApplicationWindow, key: string, value: unknown): boolean {
+export function applicationWindowProp(gtk: GtkApplicationWindow, key: string, value: unknown): boolean {
   switch (key) {
     case "showMenubar":
       gtk.set_show_menubar(typeof value === "boolean" ? value : false);
@@ -2421,7 +2421,7 @@ function applicationWindowProp(gtk: GtkApplicationWindow, key: string, value: un
   return windowProp(gtk, key, value);
 }
 
-function applicationWindowSignal(gtk: GtkApplicationWindow, key: string, slot: SignalSlot): boolean {
+export function applicationWindowSignal(gtk: GtkApplicationWindow, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyShowMenubar":
       gtk.connect("notify::show-menubar", () => {
@@ -2432,7 +2432,7 @@ function applicationWindowSignal(gtk: GtkApplicationWindow, key: string, slot: S
   return windowSignal(gtk, key, slot);
 }
 
-function aspectFrameProp(gtk: GtkAspectFrame, key: string, value: unknown): boolean {
+export function aspectFrameProp(gtk: GtkAspectFrame, key: string, value: unknown): boolean {
   switch (key) {
     case "obeyChild":
       gtk.set_obey_child(typeof value === "boolean" ? value : true);
@@ -2450,7 +2450,7 @@ function aspectFrameProp(gtk: GtkAspectFrame, key: string, value: unknown): bool
   return widgetProp(gtk, key, value);
 }
 
-function aspectFrameSignal(gtk: GtkAspectFrame, key: string, slot: SignalSlot): boolean {
+export function aspectFrameSignal(gtk: GtkAspectFrame, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyObeyChild":
       gtk.connect("notify::obey-child", () => {
@@ -2476,7 +2476,7 @@ function aspectFrameSignal(gtk: GtkAspectFrame, key: string, slot: SignalSlot): 
   return widgetSignal(gtk, key, slot);
 }
 
-function boxProp(gtk: GtkBox, key: string, value: unknown): boolean {
+export function boxProp(gtk: GtkBox, key: string, value: unknown): boolean {
   switch (key) {
     case "baselineChild":
       gtk.set_baseline_child(typeof value === "number" ? value : -1);
@@ -2497,7 +2497,7 @@ function boxProp(gtk: GtkBox, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function boxSignal(gtk: GtkBox, key: string, slot: SignalSlot): boolean {
+export function boxSignal(gtk: GtkBox, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyBaselineChild":
       gtk.connect("notify::baseline-child", () => {
@@ -2528,7 +2528,7 @@ function boxSignal(gtk: GtkBox, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function buttonProp(gtk: GtkButton, key: string, value: unknown): boolean {
+export function buttonProp(gtk: GtkButton, key: string, value: unknown): boolean {
   switch (key) {
     case "canShrink":
       gtk.set_can_shrink(typeof value === "boolean" ? value : false);
@@ -2552,7 +2552,7 @@ function buttonProp(gtk: GtkButton, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function buttonSignal(gtk: GtkButton, key: string, slot: SignalSlot): boolean {
+export function buttonSignal(gtk: GtkButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyCanShrink":
       gtk.connect("notify::can-shrink", () => {
@@ -2594,7 +2594,7 @@ function buttonSignal(gtk: GtkButton, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function calendarProp(gtk: GtkCalendar, key: string, value: unknown): boolean {
+export function calendarProp(gtk: GtkCalendar, key: string, value: unknown): boolean {
   switch (key) {
     case "showDayNames":
       gtk.set_show_day_names(typeof value === "boolean" ? value : true);
@@ -2609,7 +2609,7 @@ function calendarProp(gtk: GtkCalendar, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function calendarSignal(gtk: GtkCalendar, key: string, slot: SignalSlot): boolean {
+export function calendarSignal(gtk: GtkCalendar, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyShowDayNames":
       gtk.connect("notify::show-day-names", () => {
@@ -2645,7 +2645,7 @@ function calendarSignal(gtk: GtkCalendar, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function centerBoxProp(gtk: GtkCenterBox, key: string, value: unknown): boolean {
+export function centerBoxProp(gtk: GtkCenterBox, key: string, value: unknown): boolean {
   switch (key) {
     case "baselinePosition":
       gtk.set_baseline_position(typeof value === "number" ? value as GtkBaselinePosition : 1 as GtkBaselinePosition);
@@ -2660,7 +2660,7 @@ function centerBoxProp(gtk: GtkCenterBox, key: string, value: unknown): boolean 
   return widgetProp(gtk, key, value);
 }
 
-function centerBoxSignal(gtk: GtkCenterBox, key: string, slot: SignalSlot): boolean {
+export function centerBoxSignal(gtk: GtkCenterBox, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyBaselinePosition":
       gtk.connect("notify::baseline-position", () => {
@@ -2681,7 +2681,7 @@ function centerBoxSignal(gtk: GtkCenterBox, key: string, slot: SignalSlot): bool
   return widgetSignal(gtk, key, slot);
 }
 
-function checkButtonProp(gtk: GtkCheckButton, key: string, value: unknown): boolean {
+export function checkButtonProp(gtk: GtkCheckButton, key: string, value: unknown): boolean {
   switch (key) {
     case "active":
       gtk.set_active(typeof value === "boolean" ? value : false);
@@ -2705,7 +2705,7 @@ function checkButtonProp(gtk: GtkCheckButton, key: string, value: unknown): bool
   return widgetProp(gtk, key, value);
 }
 
-function checkButtonSignal(gtk: GtkCheckButton, key: string, slot: SignalSlot): boolean {
+export function checkButtonSignal(gtk: GtkCheckButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActive":
       gtk.connect("notify::active", () => {
@@ -2742,7 +2742,7 @@ function checkButtonSignal(gtk: GtkCheckButton, key: string, slot: SignalSlot): 
   return widgetSignal(gtk, key, slot);
 }
 
-function colorDialogButtonProp(gtk: GtkColorDialogButton, key: string, value: unknown): boolean {
+export function colorDialogButtonProp(gtk: GtkColorDialogButton, key: string, value: unknown): boolean {
   switch (key) {
     case "dialog":
       if (value instanceof GtkColorDialog) gtk.set_dialog(value);
@@ -2751,7 +2751,7 @@ function colorDialogButtonProp(gtk: GtkColorDialogButton, key: string, value: un
   return widgetProp(gtk, key, value);
 }
 
-function colorDialogButtonSignal(gtk: GtkColorDialogButton, key: string, slot: SignalSlot): boolean {
+export function colorDialogButtonSignal(gtk: GtkColorDialogButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyDialog":
       gtk.connect("notify::dialog", () => {
@@ -2765,7 +2765,7 @@ function colorDialogButtonSignal(gtk: GtkColorDialogButton, key: string, slot: S
   return widgetSignal(gtk, key, slot);
 }
 
-function columnViewProp(gtk: GtkColumnView, key: string, value: unknown): boolean {
+export function columnViewProp(gtk: GtkColumnView, key: string, value: unknown): boolean {
   switch (key) {
     case "enableRubberband":
       gtk.set_enable_rubberband(typeof value === "boolean" ? value : false);
@@ -2813,7 +2813,7 @@ function columnViewProp(gtk: GtkColumnView, key: string, value: unknown): boolea
   return widgetProp(gtk, key, value);
 }
 
-function columnViewSignal(gtk: GtkColumnView, key: string, slot: SignalSlot): boolean {
+export function columnViewSignal(gtk: GtkColumnView, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyEnableRubberband":
       gtk.connect("notify::enable-rubberband", () => {
@@ -2889,15 +2889,15 @@ function columnViewSignal(gtk: GtkColumnView, key: string, slot: SignalSlot): bo
   return widgetSignal(gtk, key, slot);
 }
 
-function dragIconProp(gtk: GtkDragIcon, key: string, value: unknown): boolean {
+export function dragIconProp(gtk: GtkDragIcon, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function dragIconSignal(gtk: GtkDragIcon, key: string, slot: SignalSlot): boolean {
+export function dragIconSignal(gtk: GtkDragIcon, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function drawingAreaProp(gtk: GtkDrawingArea, key: string, value: unknown): boolean {
+export function drawingAreaProp(gtk: GtkDrawingArea, key: string, value: unknown): boolean {
   switch (key) {
     case "contentHeight":
       gtk.set_content_height(typeof value === "number" ? value : 0);
@@ -2909,7 +2909,7 @@ function drawingAreaProp(gtk: GtkDrawingArea, key: string, value: unknown): bool
   return widgetProp(gtk, key, value);
 }
 
-function drawingAreaSignal(gtk: GtkDrawingArea, key: string, slot: SignalSlot): boolean {
+export function drawingAreaSignal(gtk: GtkDrawingArea, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyContentHeight":
       gtk.connect("notify::content-height", () => {
@@ -2930,7 +2930,7 @@ function drawingAreaSignal(gtk: GtkDrawingArea, key: string, slot: SignalSlot): 
   return widgetSignal(gtk, key, slot);
 }
 
-function dropDownProp(gtk: GtkDropDown, key: string, value: unknown): boolean {
+export function dropDownProp(gtk: GtkDropDown, key: string, value: unknown): boolean {
   switch (key) {
     case "enableSearch":
       gtk.set_enable_search(typeof value === "boolean" ? value : false);
@@ -2979,7 +2979,7 @@ function dropDownProp(gtk: GtkDropDown, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function dropDownSignal(gtk: GtkDropDown, key: string, slot: SignalSlot): boolean {
+export function dropDownSignal(gtk: GtkDropDown, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyEnableSearch":
       gtk.connect("notify::enable-search", () => {
@@ -3023,7 +3023,7 @@ function dropDownSignal(gtk: GtkDropDown, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function editableLabelProp(gtk: GtkEditableLabel, key: string, value: unknown): boolean {
+export function editableLabelProp(gtk: GtkEditableLabel, key: string, value: unknown): boolean {
   switch (key) {
     case "editing":
       gtk.set_editing(typeof value === "boolean" ? value : false);
@@ -3050,7 +3050,7 @@ function editableLabelProp(gtk: GtkEditableLabel, key: string, value: unknown): 
   return widgetProp(gtk, key, value);
 }
 
-function editableLabelSignal(gtk: GtkEditableLabel, key: string, slot: SignalSlot): boolean {
+export function editableLabelSignal(gtk: GtkEditableLabel, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyEditing":
       gtk.connect("notify::editing", () => {
@@ -3104,7 +3104,7 @@ function editableLabelSignal(gtk: GtkEditableLabel, key: string, slot: SignalSlo
   return widgetSignal(gtk, key, slot);
 }
 
-function popoverProp(gtk: GtkPopover, key: string, value: unknown): boolean {
+export function popoverProp(gtk: GtkPopover, key: string, value: unknown): boolean {
   switch (key) {
     case "autohide":
       gtk.set_autohide(typeof value === "boolean" ? value : true);
@@ -3128,7 +3128,7 @@ function popoverProp(gtk: GtkPopover, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function popoverSignal(gtk: GtkPopover, key: string, slot: SignalSlot): boolean {
+export function popoverSignal(gtk: GtkPopover, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAutohide":
       gtk.connect("notify::autohide", () => {
@@ -3165,11 +3165,11 @@ function popoverSignal(gtk: GtkPopover, key: string, slot: SignalSlot): boolean 
   return widgetSignal(gtk, key, slot);
 }
 
-function emojiChooserProp(gtk: GtkEmojiChooser, key: string, value: unknown): boolean {
+export function emojiChooserProp(gtk: GtkEmojiChooser, key: string, value: unknown): boolean {
   return popoverProp(gtk, key, value);
 }
 
-function emojiChooserSignal(gtk: GtkEmojiChooser, key: string, slot: SignalSlot): boolean {
+export function emojiChooserSignal(gtk: GtkEmojiChooser, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onEmojiPicked":
       gtk.connect("emoji-picked", (_self, _text) => {
@@ -3180,7 +3180,7 @@ function emojiChooserSignal(gtk: GtkEmojiChooser, key: string, slot: SignalSlot)
   return popoverSignal(gtk, key, slot);
 }
 
-function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
+export function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
   switch (key) {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
@@ -3323,7 +3323,7 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
+export function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
@@ -3531,7 +3531,7 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function expanderProp(gtk: GtkExpander, key: string, value: unknown): boolean {
+export function expanderProp(gtk: GtkExpander, key: string, value: unknown): boolean {
   switch (key) {
     case "expanded":
       gtk.set_expanded(typeof value === "boolean" ? value : false);
@@ -3552,7 +3552,7 @@ function expanderProp(gtk: GtkExpander, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function expanderSignal(gtk: GtkExpander, key: string, slot: SignalSlot): boolean {
+export function expanderSignal(gtk: GtkExpander, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyExpanded":
       gtk.connect("notify::expanded", () => {
@@ -3586,15 +3586,15 @@ function expanderSignal(gtk: GtkExpander, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function fixedProp(gtk: GtkFixed, key: string, value: unknown): boolean {
+export function fixedProp(gtk: GtkFixed, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function fixedSignal(gtk: GtkFixed, key: string, slot: SignalSlot): boolean {
+export function fixedSignal(gtk: GtkFixed, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function flowBoxProp(gtk: GtkFlowBox, key: string, value: unknown): boolean {
+export function flowBoxProp(gtk: GtkFlowBox, key: string, value: unknown): boolean {
   switch (key) {
     case "acceptUnpairedRelease":
       gtk.set_accept_unpaired_release(typeof value === "boolean" ? value : false);
@@ -3627,7 +3627,7 @@ function flowBoxProp(gtk: GtkFlowBox, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function flowBoxSignal(gtk: GtkFlowBox, key: string, slot: SignalSlot): boolean {
+export function flowBoxSignal(gtk: GtkFlowBox, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAcceptUnpairedRelease":
       gtk.connect("notify::accept-unpaired-release", () => {
@@ -3701,11 +3701,11 @@ function flowBoxSignal(gtk: GtkFlowBox, key: string, slot: SignalSlot): boolean 
   return widgetSignal(gtk, key, slot);
 }
 
-function flowBoxChildProp(gtk: GtkFlowBoxChild, key: string, value: unknown): boolean {
+export function flowBoxChildProp(gtk: GtkFlowBoxChild, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function flowBoxChildSignal(gtk: GtkFlowBoxChild, key: string, slot: SignalSlot): boolean {
+export function flowBoxChildSignal(gtk: GtkFlowBoxChild, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
@@ -3714,7 +3714,7 @@ function flowBoxChildSignal(gtk: GtkFlowBoxChild, key: string, slot: SignalSlot)
   return widgetSignal(gtk, key, slot);
 }
 
-function fontDialogButtonProp(gtk: GtkFontDialogButton, key: string, value: unknown): boolean {
+export function fontDialogButtonProp(gtk: GtkFontDialogButton, key: string, value: unknown): boolean {
   switch (key) {
     case "dialog":
       if (value instanceof GtkFontDialog) gtk.set_dialog(value);
@@ -3735,7 +3735,7 @@ function fontDialogButtonProp(gtk: GtkFontDialogButton, key: string, value: unkn
   return widgetProp(gtk, key, value);
 }
 
-function fontDialogButtonSignal(gtk: GtkFontDialogButton, key: string, slot: SignalSlot): boolean {
+export function fontDialogButtonSignal(gtk: GtkFontDialogButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyDialog":
       gtk.connect("notify::dialog", () => {
@@ -3769,7 +3769,7 @@ function fontDialogButtonSignal(gtk: GtkFontDialogButton, key: string, slot: Sig
   return widgetSignal(gtk, key, slot);
 }
 
-function frameProp(gtk: GtkFrame, key: string, value: unknown): boolean {
+export function frameProp(gtk: GtkFrame, key: string, value: unknown): boolean {
   switch (key) {
     case "label":
       gtk.set_label(typeof value === "string" ? value : null);
@@ -3781,7 +3781,7 @@ function frameProp(gtk: GtkFrame, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function frameSignal(gtk: GtkFrame, key: string, slot: SignalSlot): boolean {
+export function frameSignal(gtk: GtkFrame, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyLabel":
       gtk.connect("notify::label", () => {
@@ -3797,7 +3797,7 @@ function frameSignal(gtk: GtkFrame, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function gLAreaProp(gtk: GtkGLArea, key: string, value: unknown): boolean {
+export function gLAreaProp(gtk: GtkGLArea, key: string, value: unknown): boolean {
   switch (key) {
     case "autoRender":
       gtk.set_auto_render(typeof value === "boolean" ? value : true);
@@ -3812,7 +3812,7 @@ function gLAreaProp(gtk: GtkGLArea, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function gLAreaSignal(gtk: GtkGLArea, key: string, slot: SignalSlot): boolean {
+export function gLAreaSignal(gtk: GtkGLArea, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAutoRender":
       gtk.connect("notify::auto-render", () => {
@@ -3838,7 +3838,7 @@ function gLAreaSignal(gtk: GtkGLArea, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function graphicsOffloadProp(gtk: GtkGraphicsOffload, key: string, value: unknown): boolean {
+export function graphicsOffloadProp(gtk: GtkGraphicsOffload, key: string, value: unknown): boolean {
   switch (key) {
     case "blackBackground":
       gtk.set_black_background(typeof value === "boolean" ? value : false);
@@ -3850,7 +3850,7 @@ function graphicsOffloadProp(gtk: GtkGraphicsOffload, key: string, value: unknow
   return widgetProp(gtk, key, value);
 }
 
-function graphicsOffloadSignal(gtk: GtkGraphicsOffload, key: string, slot: SignalSlot): boolean {
+export function graphicsOffloadSignal(gtk: GtkGraphicsOffload, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyBlackBackground":
       gtk.connect("notify::black-background", () => {
@@ -3866,7 +3866,7 @@ function graphicsOffloadSignal(gtk: GtkGraphicsOffload, key: string, slot: Signa
   return widgetSignal(gtk, key, slot);
 }
 
-function gridProp(gtk: GtkGrid, key: string, value: unknown): boolean {
+export function gridProp(gtk: GtkGrid, key: string, value: unknown): boolean {
   switch (key) {
     case "baselineRow":
       gtk.set_baseline_row(typeof value === "number" ? value : 0);
@@ -3890,7 +3890,7 @@ function gridProp(gtk: GtkGrid, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function gridSignal(gtk: GtkGrid, key: string, slot: SignalSlot): boolean {
+export function gridSignal(gtk: GtkGrid, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyBaselineRow":
       gtk.connect("notify::baseline-row", () => {
@@ -3926,7 +3926,7 @@ function gridSignal(gtk: GtkGrid, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function listBaseProp(gtk: GtkListBase, key: string, value: unknown): boolean {
+export function listBaseProp(gtk: GtkListBase, key: string, value: unknown): boolean {
   switch (key) {
     case "orientation":
       gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 1 as GtkOrientation);
@@ -3947,7 +3947,7 @@ function listBaseProp(gtk: GtkListBase, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function listBaseSignal(gtk: GtkListBase, key: string, slot: SignalSlot): boolean {
+export function listBaseSignal(gtk: GtkListBase, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyOrientation":
       gtk.connect("notify::orientation", () => {
@@ -3978,7 +3978,7 @@ function listBaseSignal(gtk: GtkListBase, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function gridViewProp(gtk: GtkGridView, key: string, value: unknown): boolean {
+export function gridViewProp(gtk: GtkGridView, key: string, value: unknown): boolean {
   switch (key) {
     case "enableRubberband":
       gtk.set_enable_rubberband(typeof value === "boolean" ? value : false);
@@ -4008,7 +4008,7 @@ function gridViewProp(gtk: GtkGridView, key: string, value: unknown): boolean {
   return listBaseProp(gtk, key, value);
 }
 
-function gridViewSignal(gtk: GtkGridView, key: string, slot: SignalSlot): boolean {
+export function gridViewSignal(gtk: GtkGridView, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyEnableRubberband":
       gtk.connect("notify::enable-rubberband", () => {
@@ -4054,7 +4054,7 @@ function gridViewSignal(gtk: GtkGridView, key: string, slot: SignalSlot): boolea
   return listBaseSignal(gtk, key, slot);
 }
 
-function headerBarProp(gtk: GtkHeaderBar, key: string, value: unknown): boolean {
+export function headerBarProp(gtk: GtkHeaderBar, key: string, value: unknown): boolean {
   switch (key) {
     case "decorationLayout":
       gtk.set_decoration_layout(typeof value === "string" ? value : null);
@@ -4069,7 +4069,7 @@ function headerBarProp(gtk: GtkHeaderBar, key: string, value: unknown): boolean 
   return widgetProp(gtk, key, value);
 }
 
-function headerBarSignal(gtk: GtkHeaderBar, key: string, slot: SignalSlot): boolean {
+export function headerBarSignal(gtk: GtkHeaderBar, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyDecorationLayout":
       gtk.connect("notify::decoration-layout", () => {
@@ -4090,7 +4090,7 @@ function headerBarSignal(gtk: GtkHeaderBar, key: string, slot: SignalSlot): bool
   return widgetSignal(gtk, key, slot);
 }
 
-function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
+export function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
   switch (key) {
     case "file":
       gtk.set_file(typeof value === "string" ? value : "");
@@ -4131,7 +4131,7 @@ function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boolean {
+export function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyFile":
       gtk.connect("notify::file", () => {
@@ -4167,7 +4167,7 @@ function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function inscriptionProp(gtk: GtkInscription, key: string, value: unknown): boolean {
+export function inscriptionProp(gtk: GtkInscription, key: string, value: unknown): boolean {
   switch (key) {
     case "markup":
       gtk.set_markup(typeof value === "string" ? value : null);
@@ -4203,7 +4203,7 @@ function inscriptionProp(gtk: GtkInscription, key: string, value: unknown): bool
   return widgetProp(gtk, key, value);
 }
 
-function inscriptionSignal(gtk: GtkInscription, key: string, slot: SignalSlot): boolean {
+export function inscriptionSignal(gtk: GtkInscription, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyMinChars":
       gtk.connect("notify::min-chars", () => {
@@ -4254,7 +4254,7 @@ function inscriptionSignal(gtk: GtkInscription, key: string, slot: SignalSlot): 
   return widgetSignal(gtk, key, slot);
 }
 
-function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
+export function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
   switch (key) {
     case "ellipsize":
       gtk.set_ellipsize(typeof value === "number" ? value as PangoEllipsizeMode : 0 as PangoEllipsizeMode);
@@ -4311,7 +4311,7 @@ function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function labelSignal(gtk: GtkLabel, key: string, slot: SignalSlot): boolean {
+export function labelSignal(gtk: GtkLabel, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyEllipsize":
       gtk.connect("notify::ellipsize", () => {
@@ -4411,7 +4411,7 @@ function labelSignal(gtk: GtkLabel, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function levelBarProp(gtk: GtkLevelBar, key: string, value: unknown): boolean {
+export function levelBarProp(gtk: GtkLevelBar, key: string, value: unknown): boolean {
   switch (key) {
     case "inverted":
       gtk.set_inverted(typeof value === "boolean" ? value : false);
@@ -4435,7 +4435,7 @@ function levelBarProp(gtk: GtkLevelBar, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function levelBarSignal(gtk: GtkLevelBar, key: string, slot: SignalSlot): boolean {
+export function levelBarSignal(gtk: GtkLevelBar, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyInverted":
       gtk.connect("notify::inverted", () => {
@@ -4471,7 +4471,7 @@ function levelBarSignal(gtk: GtkLevelBar, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function linkButtonProp(gtk: GtkLinkButton, key: string, value: unknown): boolean {
+export function linkButtonProp(gtk: GtkLinkButton, key: string, value: unknown): boolean {
   switch (key) {
     case "uri":
       gtk.set_uri(typeof value === "string" ? value : "");
@@ -4483,7 +4483,7 @@ function linkButtonProp(gtk: GtkLinkButton, key: string, value: unknown): boolea
   return buttonProp(gtk, key, value);
 }
 
-function linkButtonSignal(gtk: GtkLinkButton, key: string, slot: SignalSlot): boolean {
+export function linkButtonSignal(gtk: GtkLinkButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyUri":
       gtk.connect("notify::uri", () => {
@@ -4502,7 +4502,7 @@ function linkButtonSignal(gtk: GtkLinkButton, key: string, slot: SignalSlot): bo
   return buttonSignal(gtk, key, slot);
 }
 
-function listBoxProp(gtk: GtkListBox, key: string, value: unknown): boolean {
+export function listBoxProp(gtk: GtkListBox, key: string, value: unknown): boolean {
   switch (key) {
     case "acceptUnpairedRelease":
       gtk.set_accept_unpaired_release(typeof value === "boolean" ? value : false);
@@ -4523,7 +4523,7 @@ function listBoxProp(gtk: GtkListBox, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function listBoxSignal(gtk: GtkListBox, key: string, slot: SignalSlot): boolean {
+export function listBoxSignal(gtk: GtkListBox, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAcceptUnpairedRelease":
       gtk.connect("notify::accept-unpaired-release", () => {
@@ -4584,7 +4584,7 @@ function listBoxSignal(gtk: GtkListBox, key: string, slot: SignalSlot): boolean 
   return widgetSignal(gtk, key, slot);
 }
 
-function listBoxRowProp(gtk: GtkListBoxRow, key: string, value: unknown): boolean {
+export function listBoxRowProp(gtk: GtkListBoxRow, key: string, value: unknown): boolean {
   switch (key) {
     case "activatable":
       gtk.set_activatable(typeof value === "boolean" ? value : true);
@@ -4599,7 +4599,7 @@ function listBoxRowProp(gtk: GtkListBoxRow, key: string, value: unknown): boolea
   return widgetProp(gtk, key, value);
 }
 
-function listBoxRowSignal(gtk: GtkListBoxRow, key: string, slot: SignalSlot): boolean {
+export function listBoxRowSignal(gtk: GtkListBoxRow, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActivatable":
       gtk.connect("notify::activatable", () => {
@@ -4623,7 +4623,7 @@ function listBoxRowSignal(gtk: GtkListBoxRow, key: string, slot: SignalSlot): bo
   return widgetSignal(gtk, key, slot);
 }
 
-function listViewProp(gtk: GtkListView, key: string, value: unknown): boolean {
+export function listViewProp(gtk: GtkListView, key: string, value: unknown): boolean {
   switch (key) {
     case "enableRubberband":
       gtk.set_enable_rubberband(typeof value === "boolean" ? value : false);
@@ -4653,7 +4653,7 @@ function listViewProp(gtk: GtkListView, key: string, value: unknown): boolean {
   return listBaseProp(gtk, key, value);
 }
 
-function listViewSignal(gtk: GtkListView, key: string, slot: SignalSlot): boolean {
+export function listViewSignal(gtk: GtkListView, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyEnableRubberband":
       gtk.connect("notify::enable-rubberband", () => {
@@ -4699,7 +4699,7 @@ function listViewSignal(gtk: GtkListView, key: string, slot: SignalSlot): boolea
   return listBaseSignal(gtk, key, slot);
 }
 
-function mediaControlsProp(gtk: GtkMediaControls, key: string, value: unknown): boolean {
+export function mediaControlsProp(gtk: GtkMediaControls, key: string, value: unknown): boolean {
   switch (key) {
     case "mediaStream":
       gtk.set_media_stream(value instanceof GtkMediaStream ? value : null);
@@ -4708,7 +4708,7 @@ function mediaControlsProp(gtk: GtkMediaControls, key: string, value: unknown): 
   return widgetProp(gtk, key, value);
 }
 
-function mediaControlsSignal(gtk: GtkMediaControls, key: string, slot: SignalSlot): boolean {
+export function mediaControlsSignal(gtk: GtkMediaControls, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyMediaStream":
       gtk.connect("notify::media-stream", () => {
@@ -4719,7 +4719,7 @@ function mediaControlsSignal(gtk: GtkMediaControls, key: string, slot: SignalSlo
   return widgetSignal(gtk, key, slot);
 }
 
-function menuButtonProp(gtk: GtkMenuButton, key: string, value: unknown): boolean {
+export function menuButtonProp(gtk: GtkMenuButton, key: string, value: unknown): boolean {
   switch (key) {
     case "active":
       gtk.set_active(typeof value === "boolean" ? value : false);
@@ -4755,7 +4755,7 @@ function menuButtonProp(gtk: GtkMenuButton, key: string, value: unknown): boolea
   return widgetProp(gtk, key, value);
 }
 
-function menuButtonSignal(gtk: GtkMenuButton, key: string, slot: SignalSlot): boolean {
+export function menuButtonSignal(gtk: GtkMenuButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActive":
       gtk.connect("notify::active", () => {
@@ -4809,7 +4809,7 @@ function menuButtonSignal(gtk: GtkMenuButton, key: string, slot: SignalSlot): bo
   return widgetSignal(gtk, key, slot);
 }
 
-function notebookProp(gtk: GtkNotebook, key: string, value: unknown): boolean {
+export function notebookProp(gtk: GtkNotebook, key: string, value: unknown): boolean {
   switch (key) {
     case "enablePopup":
       gtk.set_enable_popup(typeof value === "boolean" ? value : false);
@@ -4836,7 +4836,7 @@ function notebookProp(gtk: GtkNotebook, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function notebookSignal(gtk: GtkNotebook, key: string, slot: SignalSlot): boolean {
+export function notebookSignal(gtk: GtkNotebook, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyEnablePopup":
       gtk.connect("notify::enable-popup", () => {
@@ -4914,15 +4914,15 @@ function notebookSignal(gtk: GtkNotebook, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function overlayProp(gtk: GtkOverlay, key: string, value: unknown): boolean {
+export function overlayProp(gtk: GtkOverlay, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function overlaySignal(gtk: GtkOverlay, key: string, slot: SignalSlot): boolean {
+export function overlaySignal(gtk: GtkOverlay, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function panedProp(gtk: GtkPaned, key: string, value: unknown): boolean {
+export function panedProp(gtk: GtkPaned, key: string, value: unknown): boolean {
   switch (key) {
     case "position":
       gtk.set_position(typeof value === "number" ? value : 0);
@@ -4952,7 +4952,7 @@ function panedProp(gtk: GtkPaned, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function panedSignal(gtk: GtkPaned, key: string, slot: SignalSlot): boolean {
+export function panedSignal(gtk: GtkPaned, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyPosition":
       gtk.connect("notify::position", () => {
@@ -5016,7 +5016,7 @@ function panedSignal(gtk: GtkPaned, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function passwordEntryProp(gtk: GtkPasswordEntry, key: string, value: unknown): boolean {
+export function passwordEntryProp(gtk: GtkPasswordEntry, key: string, value: unknown): boolean {
   switch (key) {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
@@ -5052,7 +5052,7 @@ function passwordEntryProp(gtk: GtkPasswordEntry, key: string, value: unknown): 
   return widgetProp(gtk, key, value);
 }
 
-function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: SignalSlot): boolean {
+export function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
@@ -5119,7 +5119,7 @@ function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: SignalSlo
   return widgetSignal(gtk, key, slot);
 }
 
-function pictureProp(gtk: GtkPicture, key: string, value: unknown): boolean {
+export function pictureProp(gtk: GtkPicture, key: string, value: unknown): boolean {
   switch (key) {
     case "alternativeText":
       gtk.set_alternative_text(typeof value === "string" ? value : null);
@@ -5145,7 +5145,7 @@ function pictureProp(gtk: GtkPicture, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function pictureSignal(gtk: GtkPicture, key: string, slot: SignalSlot): boolean {
+export function pictureSignal(gtk: GtkPicture, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAlternativeText":
       gtk.connect("notify::alternative-text", () => {
@@ -5171,7 +5171,7 @@ function pictureSignal(gtk: GtkPicture, key: string, slot: SignalSlot): boolean 
   return widgetSignal(gtk, key, slot);
 }
 
-function popoverBinProp(gtk: GtkPopoverBin, key: string, value: unknown): boolean {
+export function popoverBinProp(gtk: GtkPopoverBin, key: string, value: unknown): boolean {
   switch (key) {
     case "handleInput":
       gtk.set_handle_input(typeof value === "boolean" ? value : false);
@@ -5183,7 +5183,7 @@ function popoverBinProp(gtk: GtkPopoverBin, key: string, value: unknown): boolea
   return widgetProp(gtk, key, value);
 }
 
-function popoverBinSignal(gtk: GtkPopoverBin, key: string, slot: SignalSlot): boolean {
+export function popoverBinSignal(gtk: GtkPopoverBin, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyHandleInput":
       gtk.connect("notify::handle-input", () => {
@@ -5194,7 +5194,7 @@ function popoverBinSignal(gtk: GtkPopoverBin, key: string, slot: SignalSlot): bo
   return widgetSignal(gtk, key, slot);
 }
 
-function popoverMenuProp(gtk: GtkPopoverMenu, key: string, value: unknown): boolean {
+export function popoverMenuProp(gtk: GtkPopoverMenu, key: string, value: unknown): boolean {
   switch (key) {
     case "menuModel":
       gtk.set_menu_model(value instanceof GMenuModel ? value : null);
@@ -5206,7 +5206,7 @@ function popoverMenuProp(gtk: GtkPopoverMenu, key: string, value: unknown): bool
   return popoverProp(gtk, key, value);
 }
 
-function popoverMenuSignal(gtk: GtkPopoverMenu, key: string, slot: SignalSlot): boolean {
+export function popoverMenuSignal(gtk: GtkPopoverMenu, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyVisibleSubmenu":
       gtk.connect("notify::visible-submenu", () => {
@@ -5217,7 +5217,7 @@ function popoverMenuSignal(gtk: GtkPopoverMenu, key: string, slot: SignalSlot): 
   return popoverSignal(gtk, key, slot);
 }
 
-function popoverMenuBarProp(gtk: GtkPopoverMenuBar, key: string, value: unknown): boolean {
+export function popoverMenuBarProp(gtk: GtkPopoverMenuBar, key: string, value: unknown): boolean {
   switch (key) {
     case "menuModel":
       gtk.set_menu_model(value instanceof GMenuModel ? value : null);
@@ -5226,11 +5226,11 @@ function popoverMenuBarProp(gtk: GtkPopoverMenuBar, key: string, value: unknown)
   return widgetProp(gtk, key, value);
 }
 
-function popoverMenuBarSignal(gtk: GtkPopoverMenuBar, key: string, slot: SignalSlot): boolean {
+export function popoverMenuBarSignal(gtk: GtkPopoverMenuBar, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function progressBarProp(gtk: GtkProgressBar, key: string, value: unknown): boolean {
+export function progressBarProp(gtk: GtkProgressBar, key: string, value: unknown): boolean {
   switch (key) {
     case "ellipsize":
       gtk.set_ellipsize(typeof value === "number" ? value as PangoEllipsizeMode : 0 as PangoEllipsizeMode);
@@ -5257,7 +5257,7 @@ function progressBarProp(gtk: GtkProgressBar, key: string, value: unknown): bool
   return widgetProp(gtk, key, value);
 }
 
-function progressBarSignal(gtk: GtkProgressBar, key: string, slot: SignalSlot): boolean {
+export function progressBarSignal(gtk: GtkProgressBar, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyEllipsize":
       gtk.connect("notify::ellipsize", () => {
@@ -5298,7 +5298,7 @@ function progressBarSignal(gtk: GtkProgressBar, key: string, slot: SignalSlot): 
   return widgetSignal(gtk, key, slot);
 }
 
-function rangeProp(gtk: GtkRange, key: string, value: unknown): boolean {
+export function rangeProp(gtk: GtkRange, key: string, value: unknown): boolean {
   switch (key) {
     case "adjustment":
       if (value instanceof GtkAdjustment) gtk.set_adjustment(value);
@@ -5325,7 +5325,7 @@ function rangeProp(gtk: GtkRange, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function rangeSignal(gtk: GtkRange, key: string, slot: SignalSlot): boolean {
+export function rangeSignal(gtk: GtkRange, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAdjustment":
       gtk.connect("notify::adjustment", () => {
@@ -5382,7 +5382,7 @@ function rangeSignal(gtk: GtkRange, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function revealerProp(gtk: GtkRevealer, key: string, value: unknown): boolean {
+export function revealerProp(gtk: GtkRevealer, key: string, value: unknown): boolean {
   switch (key) {
     case "revealChild":
       gtk.set_reveal_child(typeof value === "boolean" ? value : false);
@@ -5397,7 +5397,7 @@ function revealerProp(gtk: GtkRevealer, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function revealerSignal(gtk: GtkRevealer, key: string, slot: SignalSlot): boolean {
+export function revealerSignal(gtk: GtkRevealer, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyRevealChild":
       gtk.connect("notify::reveal-child", () => {
@@ -5418,7 +5418,7 @@ function revealerSignal(gtk: GtkRevealer, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function scaleProp(gtk: GtkScale, key: string, value: unknown): boolean {
+export function scaleProp(gtk: GtkScale, key: string, value: unknown): boolean {
   switch (key) {
     case "digits":
       gtk.set_digits(typeof value === "number" ? value : 1);
@@ -5436,7 +5436,7 @@ function scaleProp(gtk: GtkScale, key: string, value: unknown): boolean {
   return rangeProp(gtk, key, value);
 }
 
-function scaleSignal(gtk: GtkScale, key: string, slot: SignalSlot): boolean {
+export function scaleSignal(gtk: GtkScale, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyDigits":
       gtk.connect("notify::digits", () => {
@@ -5462,7 +5462,7 @@ function scaleSignal(gtk: GtkScale, key: string, slot: SignalSlot): boolean {
   return rangeSignal(gtk, key, slot);
 }
 
-function scaleButtonProp(gtk: GtkScaleButton, key: string, value: unknown): boolean {
+export function scaleButtonProp(gtk: GtkScaleButton, key: string, value: unknown): boolean {
   switch (key) {
     case "adjustment":
       if (value instanceof GtkAdjustment) gtk.set_adjustment(value);
@@ -5483,7 +5483,7 @@ function scaleButtonProp(gtk: GtkScaleButton, key: string, value: unknown): bool
   return widgetProp(gtk, key, value);
 }
 
-function scaleButtonSignal(gtk: GtkScaleButton, key: string, slot: SignalSlot): boolean {
+export function scaleButtonSignal(gtk: GtkScaleButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAdjustment":
       gtk.connect("notify::adjustment", () => {
@@ -5520,7 +5520,7 @@ function scaleButtonSignal(gtk: GtkScaleButton, key: string, slot: SignalSlot): 
   return widgetSignal(gtk, key, slot);
 }
 
-function scrollbarProp(gtk: GtkScrollbar, key: string, value: unknown): boolean {
+export function scrollbarProp(gtk: GtkScrollbar, key: string, value: unknown): boolean {
   switch (key) {
     case "adjustment":
       gtk.set_adjustment(value instanceof GtkAdjustment ? value : null);
@@ -5532,7 +5532,7 @@ function scrollbarProp(gtk: GtkScrollbar, key: string, value: unknown): boolean 
   return widgetProp(gtk, key, value);
 }
 
-function scrollbarSignal(gtk: GtkScrollbar, key: string, slot: SignalSlot): boolean {
+export function scrollbarSignal(gtk: GtkScrollbar, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAdjustment":
       gtk.connect("notify::adjustment", () => {
@@ -5548,7 +5548,7 @@ function scrollbarSignal(gtk: GtkScrollbar, key: string, slot: SignalSlot): bool
   return widgetSignal(gtk, key, slot);
 }
 
-function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown): boolean {
+export function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown): boolean {
   switch (key) {
     case "hadjustment":
       gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
@@ -5596,7 +5596,7 @@ function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown)
   return widgetProp(gtk, key, value);
 }
 
-function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalSlot): boolean {
+export function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyHadjustment":
       gtk.connect("notify::hadjustment", () => {
@@ -5690,7 +5690,7 @@ function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalS
   return widgetSignal(gtk, key, slot);
 }
 
-function searchBarProp(gtk: GtkSearchBar, key: string, value: unknown): boolean {
+export function searchBarProp(gtk: GtkSearchBar, key: string, value: unknown): boolean {
   switch (key) {
     case "keyCaptureWidget":
       gtk.set_key_capture_widget(value instanceof GtkWidget ? value : null);
@@ -5705,7 +5705,7 @@ function searchBarProp(gtk: GtkSearchBar, key: string, value: unknown): boolean 
   return widgetProp(gtk, key, value);
 }
 
-function searchBarSignal(gtk: GtkSearchBar, key: string, slot: SignalSlot): boolean {
+export function searchBarSignal(gtk: GtkSearchBar, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyKeyCaptureWidget":
       gtk.connect("notify::key-capture-widget", () => {
@@ -5726,7 +5726,7 @@ function searchBarSignal(gtk: GtkSearchBar, key: string, slot: SignalSlot): bool
   return widgetSignal(gtk, key, slot);
 }
 
-function searchEntryProp(gtk: GtkSearchEntry, key: string, value: unknown): boolean {
+export function searchEntryProp(gtk: GtkSearchEntry, key: string, value: unknown): boolean {
   switch (key) {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
@@ -5765,7 +5765,7 @@ function searchEntryProp(gtk: GtkSearchEntry, key: string, value: unknown): bool
   return widgetProp(gtk, key, value);
 }
 
-function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): boolean {
+export function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
@@ -5857,7 +5857,7 @@ function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): 
   return widgetSignal(gtk, key, slot);
 }
 
-function separatorProp(gtk: GtkSeparator, key: string, value: unknown): boolean {
+export function separatorProp(gtk: GtkSeparator, key: string, value: unknown): boolean {
   switch (key) {
     case "orientation":
       gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
@@ -5866,7 +5866,7 @@ function separatorProp(gtk: GtkSeparator, key: string, value: unknown): boolean 
   return widgetProp(gtk, key, value);
 }
 
-function separatorSignal(gtk: GtkSeparator, key: string, slot: SignalSlot): boolean {
+export function separatorSignal(gtk: GtkSeparator, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyOrientation":
       gtk.connect("notify::orientation", () => {
@@ -5877,7 +5877,7 @@ function separatorSignal(gtk: GtkSeparator, key: string, slot: SignalSlot): bool
   return widgetSignal(gtk, key, slot);
 }
 
-function spinButtonProp(gtk: GtkSpinButton, key: string, value: unknown): boolean {
+export function spinButtonProp(gtk: GtkSpinButton, key: string, value: unknown): boolean {
   switch (key) {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
@@ -5931,7 +5931,7 @@ function spinButtonProp(gtk: GtkSpinButton, key: string, value: unknown): boolea
   return widgetProp(gtk, key, value);
 }
 
-function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): boolean {
+export function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
@@ -6053,7 +6053,7 @@ function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): bo
   return widgetSignal(gtk, key, slot);
 }
 
-function spinnerProp(gtk: GtkSpinner, key: string, value: unknown): boolean {
+export function spinnerProp(gtk: GtkSpinner, key: string, value: unknown): boolean {
   switch (key) {
     case "spinning":
       gtk.set_spinning(typeof value === "boolean" ? value : false);
@@ -6062,7 +6062,7 @@ function spinnerProp(gtk: GtkSpinner, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function spinnerSignal(gtk: GtkSpinner, key: string, slot: SignalSlot): boolean {
+export function spinnerSignal(gtk: GtkSpinner, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifySpinning":
       gtk.connect("notify::spinning", () => {
@@ -6073,7 +6073,7 @@ function spinnerSignal(gtk: GtkSpinner, key: string, slot: SignalSlot): boolean 
   return widgetSignal(gtk, key, slot);
 }
 
-function stackProp(gtk: GtkStack, key: string, value: unknown): boolean {
+export function stackProp(gtk: GtkStack, key: string, value: unknown): boolean {
   switch (key) {
     case "hhomogeneous":
       gtk.set_hhomogeneous(typeof value === "boolean" ? value : true);
@@ -6100,7 +6100,7 @@ function stackProp(gtk: GtkStack, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function stackSignal(gtk: GtkStack, key: string, slot: SignalSlot): boolean {
+export function stackSignal(gtk: GtkStack, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyHhomogeneous":
       gtk.connect("notify::hhomogeneous", () => {
@@ -6141,7 +6141,7 @@ function stackSignal(gtk: GtkStack, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function stackSidebarProp(gtk: GtkStackSidebar, key: string, value: unknown): boolean {
+export function stackSidebarProp(gtk: GtkStackSidebar, key: string, value: unknown): boolean {
   switch (key) {
     case "stack":
       if (value instanceof GtkStack) gtk.set_stack(value);
@@ -6150,7 +6150,7 @@ function stackSidebarProp(gtk: GtkStackSidebar, key: string, value: unknown): bo
   return widgetProp(gtk, key, value);
 }
 
-function stackSidebarSignal(gtk: GtkStackSidebar, key: string, slot: SignalSlot): boolean {
+export function stackSidebarSignal(gtk: GtkStackSidebar, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyStack":
       gtk.connect("notify::stack", () => {
@@ -6161,7 +6161,7 @@ function stackSidebarSignal(gtk: GtkStackSidebar, key: string, slot: SignalSlot)
   return widgetSignal(gtk, key, slot);
 }
 
-function stackSwitcherProp(gtk: GtkStackSwitcher, key: string, value: unknown): boolean {
+export function stackSwitcherProp(gtk: GtkStackSwitcher, key: string, value: unknown): boolean {
   switch (key) {
     case "stack":
       gtk.set_stack(value instanceof GtkStack ? value : null);
@@ -6173,7 +6173,7 @@ function stackSwitcherProp(gtk: GtkStackSwitcher, key: string, value: unknown): 
   return widgetProp(gtk, key, value);
 }
 
-function stackSwitcherSignal(gtk: GtkStackSwitcher, key: string, slot: SignalSlot): boolean {
+export function stackSwitcherSignal(gtk: GtkStackSwitcher, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyStack":
       gtk.connect("notify::stack", () => {
@@ -6189,7 +6189,7 @@ function stackSwitcherSignal(gtk: GtkStackSwitcher, key: string, slot: SignalSlo
   return widgetSignal(gtk, key, slot);
 }
 
-function switchProp(gtk: GtkSwitch, key: string, value: unknown): boolean {
+export function switchProp(gtk: GtkSwitch, key: string, value: unknown): boolean {
   switch (key) {
     case "active":
       gtk.set_active(typeof value === "boolean" ? value : false);
@@ -6204,7 +6204,7 @@ function switchProp(gtk: GtkSwitch, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function switchSignal(gtk: GtkSwitch, key: string, slot: SignalSlot): boolean {
+export function switchSignal(gtk: GtkSwitch, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActive":
       gtk.connect("notify::active", () => {
@@ -6231,7 +6231,7 @@ function switchSignal(gtk: GtkSwitch, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function textProp(gtk: GtkText, key: string, value: unknown): boolean {
+export function textProp(gtk: GtkText, key: string, value: unknown): boolean {
   switch (key) {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
@@ -6297,7 +6297,7 @@ function textProp(gtk: GtkText, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
+export function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
@@ -6452,7 +6452,7 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function textViewProp(gtk: GtkTextView, key: string, value: unknown): boolean {
+export function textViewProp(gtk: GtkTextView, key: string, value: unknown): boolean {
   switch (key) {
     case "acceptsTab":
       gtk.set_accepts_tab(typeof value === "boolean" ? value : true);
@@ -6527,7 +6527,7 @@ function textViewProp(gtk: GtkTextView, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolean {
+export function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAcceptsTab":
       gtk.connect("notify::accepts-tab", () => {
@@ -6700,7 +6700,7 @@ function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function toggleButtonProp(gtk: GtkToggleButton, key: string, value: unknown): boolean {
+export function toggleButtonProp(gtk: GtkToggleButton, key: string, value: unknown): boolean {
   switch (key) {
     case "active":
       gtk.set_active(typeof value === "boolean" ? value : false);
@@ -6712,7 +6712,7 @@ function toggleButtonProp(gtk: GtkToggleButton, key: string, value: unknown): bo
   return buttonProp(gtk, key, value);
 }
 
-function toggleButtonSignal(gtk: GtkToggleButton, key: string, slot: SignalSlot): boolean {
+export function toggleButtonSignal(gtk: GtkToggleButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyActive":
       gtk.connect("notify::active", () => {
@@ -6726,7 +6726,7 @@ function toggleButtonSignal(gtk: GtkToggleButton, key: string, slot: SignalSlot)
   return buttonSignal(gtk, key, slot);
 }
 
-function treeExpanderProp(gtk: GtkTreeExpander, key: string, value: unknown): boolean {
+export function treeExpanderProp(gtk: GtkTreeExpander, key: string, value: unknown): boolean {
   switch (key) {
     case "hideExpander":
       gtk.set_hide_expander(typeof value === "boolean" ? value : false);
@@ -6744,7 +6744,7 @@ function treeExpanderProp(gtk: GtkTreeExpander, key: string, value: unknown): bo
   return widgetProp(gtk, key, value);
 }
 
-function treeExpanderSignal(gtk: GtkTreeExpander, key: string, slot: SignalSlot): boolean {
+export function treeExpanderSignal(gtk: GtkTreeExpander, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyHideExpander":
       gtk.connect("notify::hide-expander", () => {
@@ -6770,7 +6770,7 @@ function treeExpanderSignal(gtk: GtkTreeExpander, key: string, slot: SignalSlot)
   return widgetSignal(gtk, key, slot);
 }
 
-function videoProp(gtk: GtkVideo, key: string, value: unknown): boolean {
+export function videoProp(gtk: GtkVideo, key: string, value: unknown): boolean {
   switch (key) {
     case "autoplay":
       gtk.set_autoplay(typeof value === "boolean" ? value : false);
@@ -6788,7 +6788,7 @@ function videoProp(gtk: GtkVideo, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function videoSignal(gtk: GtkVideo, key: string, slot: SignalSlot): boolean {
+export function videoSignal(gtk: GtkVideo, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyAutoplay":
       gtk.connect("notify::autoplay", () => {
@@ -6814,7 +6814,7 @@ function videoSignal(gtk: GtkVideo, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
-function viewportProp(gtk: GtkViewport, key: string, value: unknown): boolean {
+export function viewportProp(gtk: GtkViewport, key: string, value: unknown): boolean {
   switch (key) {
     case "scrollToFocus":
       gtk.set_scroll_to_focus(typeof value === "boolean" ? value : true);
@@ -6835,7 +6835,7 @@ function viewportProp(gtk: GtkViewport, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function viewportSignal(gtk: GtkViewport, key: string, slot: SignalSlot): boolean {
+export function viewportSignal(gtk: GtkViewport, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyScrollToFocus":
       gtk.connect("notify::scroll-to-focus", () => {
@@ -6866,7 +6866,7 @@ function viewportSignal(gtk: GtkViewport, key: string, slot: SignalSlot): boolea
   return widgetSignal(gtk, key, slot);
 }
 
-function windowControlsProp(gtk: GtkWindowControls, key: string, value: unknown): boolean {
+export function windowControlsProp(gtk: GtkWindowControls, key: string, value: unknown): boolean {
   switch (key) {
     case "decorationLayout":
       gtk.set_decoration_layout(typeof value === "string" ? value : null);
@@ -6881,7 +6881,7 @@ function windowControlsProp(gtk: GtkWindowControls, key: string, value: unknown)
   return widgetProp(gtk, key, value);
 }
 
-function windowControlsSignal(gtk: GtkWindowControls, key: string, slot: SignalSlot): boolean {
+export function windowControlsSignal(gtk: GtkWindowControls, key: string, slot: SignalSlot): boolean {
   switch (key) {
     case "onNotifyDecorationLayout":
       gtk.connect("notify::decoration-layout", () => {
@@ -6902,17 +6902,17 @@ function windowControlsSignal(gtk: GtkWindowControls, key: string, slot: SignalS
   return widgetSignal(gtk, key, slot);
 }
 
-function windowHandleProp(gtk: GtkWindowHandle, key: string, value: unknown): boolean {
+export function windowHandleProp(gtk: GtkWindowHandle, key: string, value: unknown): boolean {
   return widgetProp(gtk, key, value);
 }
 
-function windowHandleSignal(gtk: GtkWindowHandle, key: string, slot: SignalSlot): boolean {
+export function windowHandleSignal(gtk: GtkWindowHandle, key: string, slot: SignalSlot): boolean {
   return widgetSignal(gtk, key, slot);
 }
 
 // ---- filling widget slots, one function per class that has them ---------------
 
-function windowSlot(gtk: GtkWindow, slot: string, widget: GtkWidget | null): boolean {
+export function windowSlot(gtk: GtkWindow, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "GtkWindow.Titlebar":
       gtk.set_titlebar(widget);
@@ -6921,7 +6921,7 @@ function windowSlot(gtk: GtkWindow, slot: string, widget: GtkWidget | null): boo
   return false;
 }
 
-function centerBoxSlot(gtk: GtkCenterBox, slot: string, widget: GtkWidget | null): boolean {
+export function centerBoxSlot(gtk: GtkCenterBox, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "GtkCenterBox.CenterWidget":
       gtk.set_center_widget(widget);
@@ -6936,7 +6936,7 @@ function centerBoxSlot(gtk: GtkCenterBox, slot: string, widget: GtkWidget | null
   return false;
 }
 
-function expanderSlot(gtk: GtkExpander, slot: string, widget: GtkWidget | null): boolean {
+export function expanderSlot(gtk: GtkExpander, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "GtkExpander.LabelWidget":
       gtk.set_label_widget(widget);
@@ -6945,7 +6945,7 @@ function expanderSlot(gtk: GtkExpander, slot: string, widget: GtkWidget | null):
   return false;
 }
 
-function frameSlot(gtk: GtkFrame, slot: string, widget: GtkWidget | null): boolean {
+export function frameSlot(gtk: GtkFrame, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "GtkFrame.LabelWidget":
       gtk.set_label_widget(widget);
@@ -6954,7 +6954,7 @@ function frameSlot(gtk: GtkFrame, slot: string, widget: GtkWidget | null): boole
   return false;
 }
 
-function headerBarSlot(gtk: GtkHeaderBar, slot: string, widget: GtkWidget | null): boolean {
+export function headerBarSlot(gtk: GtkHeaderBar, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "GtkHeaderBar.TitleWidget":
       gtk.set_title_widget(widget);
@@ -6963,7 +6963,7 @@ function headerBarSlot(gtk: GtkHeaderBar, slot: string, widget: GtkWidget | null
   return false;
 }
 
-function menuButtonSlot(gtk: GtkMenuButton, slot: string, widget: GtkWidget | null): boolean {
+export function menuButtonSlot(gtk: GtkMenuButton, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "GtkMenuButton.Popover":
       gtk.set_popover(widget);
@@ -6972,7 +6972,7 @@ function menuButtonSlot(gtk: GtkMenuButton, slot: string, widget: GtkWidget | nu
   return false;
 }
 
-function panedSlot(gtk: GtkPaned, slot: string, widget: GtkWidget | null): boolean {
+export function panedSlot(gtk: GtkPaned, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "GtkPaned.EndChild":
       gtk.set_end_child(widget);
@@ -6984,7 +6984,7 @@ function panedSlot(gtk: GtkPaned, slot: string, widget: GtkWidget | null): boole
   return false;
 }
 
-function popoverBinSlot(gtk: GtkPopoverBin, slot: string, widget: GtkWidget | null): boolean {
+export function popoverBinSlot(gtk: GtkPopoverBin, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "GtkPopoverBin.Popover":
       gtk.set_popover(widget);

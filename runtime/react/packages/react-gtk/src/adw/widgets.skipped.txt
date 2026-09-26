@@ -1,0 +1,117 @@
+# What tools/gen-widgets.ts left out of src/adw/widgets.ts, and why (libadwaita 1.9.4).
+AdwAboutDialog.appdata-resource-path	construct-only: a change would need a new widget
+AdwAboutWindow.application-icon	deprecated
+AdwAboutWindow.application-name	deprecated
+AdwAboutWindow.artists	deprecated
+AdwAboutWindow.comments	deprecated
+AdwAboutWindow.copyright	deprecated
+AdwAboutWindow.debug-info	deprecated
+AdwAboutWindow.debug-info-filename	deprecated
+AdwAboutWindow.designers	deprecated
+AdwAboutWindow.developer-name	deprecated
+AdwAboutWindow.developers	deprecated
+AdwAboutWindow.documenters	deprecated
+AdwAboutWindow.issue-url	deprecated
+AdwAboutWindow.license	deprecated
+AdwAboutWindow.license-type	deprecated
+AdwAboutWindow.release-notes	deprecated
+AdwAboutWindow.release-notes-version	deprecated
+AdwAboutWindow.support-url	deprecated
+AdwAboutWindow.translator-credits	deprecated
+AdwAboutWindow.version	deprecated
+AdwAboutWindow.website	deprecated
+AdwAboutWindow::activate-link	deprecated
+AdwActionRow.icon-name	deprecated
+AdwAlertDialog::response	no connect overload in the bindings
+AdwCarousel.scroll-params	a AdwSpringParams, which a JSX attribute does not carry yet
+AdwCarouselIndicatorDots.carousel	a AdwCarousel | null, which a JSX attribute does not carry yet
+AdwCarouselIndicatorLines.carousel	a AdwCarousel | null, which a JSX attribute does not carry yet
+AdwComboRow.expression	a GtkExpression | null, which a JSX attribute does not carry yet
+AdwEntryRow.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
+AdwEntryRow.input-hints	no setter in the bindings
+AdwExpanderRow.icon-name	deprecated
+AdwFlap.content	deprecated
+AdwFlap.flap	deprecated
+AdwFlap.flap-position	deprecated
+AdwFlap.fold-duration	deprecated
+AdwFlap.fold-policy	deprecated
+AdwFlap.fold-threshold-policy	deprecated
+AdwFlap.locked	deprecated
+AdwFlap.modal	deprecated
+AdwFlap.reveal-flap	deprecated
+AdwFlap.reveal-params	deprecated
+AdwFlap.separator	deprecated
+AdwFlap.swipe-to-close	deprecated
+AdwFlap.swipe-to-open	deprecated
+AdwFlap.transition-type	deprecated
+AdwInlineViewSwitcher.stack	a AdwViewStack | null, which a JSX attribute does not carry yet
+AdwLayoutSlot.id	construct-only: a change would need a new widget
+AdwLeaflet.can-navigate-back	deprecated
+AdwLeaflet.can-navigate-forward	deprecated
+AdwLeaflet.can-unfold	deprecated
+AdwLeaflet.child-transition-params	deprecated
+AdwLeaflet.fold-threshold-policy	deprecated
+AdwLeaflet.homogeneous	deprecated
+AdwLeaflet.mode-transition-duration	deprecated
+AdwLeaflet.transition-type	deprecated
+AdwLeaflet.visible-child	deprecated
+AdwLeaflet.visible-child-name	deprecated
+AdwMessageDialog.body	deprecated
+AdwMessageDialog.body-use-markup	deprecated
+AdwMessageDialog.close-response	deprecated
+AdwMessageDialog.default-response	deprecated
+AdwMessageDialog.extra-child	deprecated
+AdwMessageDialog.heading	deprecated
+AdwMessageDialog.heading-use-markup	deprecated
+AdwMessageDialog::response	deprecated
+AdwMultiLayoutView.layout	a AdwLayout, which a JSX attribute does not carry yet
+AdwNavigationSplitView.content	a AdwNavigationPage | null, which a JSX attribute does not carry yet
+AdwNavigationSplitView.sidebar	a AdwNavigationPage | null, which a JSX attribute does not carry yet
+AdwNavigationView::get-next-page	its handler returns a AdwNavigationPage | null: not generated yet
+AdwNavigationView::popped	a handler argument JSX cannot type yet: AdwNavigationPage
+AdwPreferencesDialog.visible-page	a AdwPreferencesPage, which a JSX attribute does not carry yet
+AdwPreferencesPage.banner	a AdwBanner | null, which a JSX attribute does not carry yet
+AdwPreferencesWindow.can-navigate-back	deprecated
+AdwPreferencesWindow.search-enabled	deprecated
+AdwPreferencesWindow.visible-page	deprecated
+AdwPreferencesWindow.visible-page-name	deprecated
+AdwSidebar::drop	a handler argument JSX cannot type yet: CNumber<"uint">, GValue, CEnum<GdkDragAction, c_uint>
+AdwSidebar::drop-enter	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
+AdwSidebar::drop-value-loaded	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
+AdwSidebar::setup-menu	a handler argument JSX cannot type yet: AdwSidebarItem | null
+AdwSpinRow::input	its handler returns a CNumber<"int">: not generated yet
+AdwSqueezer.allow-none	deprecated
+AdwSqueezer.homogeneous	deprecated
+AdwSqueezer.interpolate-size	deprecated
+AdwSqueezer.switch-threshold-policy	deprecated
+AdwSqueezer.transition-duration	deprecated
+AdwSqueezer.transition-type	deprecated
+AdwSqueezer.xalign	deprecated
+AdwSqueezer.yalign	deprecated
+AdwTabBar.view	a AdwTabView | null, which a JSX attribute does not carry yet
+AdwTabBar::extra-drag-drop	a handler argument JSX cannot type yet: AdwTabPage, GValue
+AdwTabBar::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
+AdwTabButton.view	a AdwTabView | null, which a JSX attribute does not carry yet
+AdwTabOverview.view	a AdwTabView | null, which a JSX attribute does not carry yet
+AdwTabOverview::create-tab	its handler returns a AdwTabPage: not generated yet
+AdwTabOverview::extra-drag-drop	a handler argument JSX cannot type yet: AdwTabPage, GValue
+AdwTabOverview::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
+AdwTabView.default-icon	removing it leaves its value: GIR gives no default
+AdwTabView.selected-page	a AdwTabPage, which a JSX attribute does not carry yet
+AdwTabView.shortcuts	no setter in the bindings
+AdwTabView::close-page	a handler argument JSX cannot type yet: AdwTabPage
+AdwTabView::create-window	its handler returns a AdwTabView | null: not generated yet
+AdwTabView::indicator-activated	a handler argument JSX cannot type yet: AdwTabPage
+AdwTabView::page-attached	a handler argument JSX cannot type yet: AdwTabPage, CNumber<"int">
+AdwTabView::page-detached	a handler argument JSX cannot type yet: AdwTabPage, CNumber<"int">
+AdwTabView::page-reordered	a handler argument JSX cannot type yet: AdwTabPage, CNumber<"int">
+AdwTabView::setup-menu	a handler argument JSX cannot type yet: AdwTabPage | null
+AdwViewStack.visible-child	removing it leaves its value: GIR gives no default
+AdwViewSwitcher.stack	a AdwViewStack | null, which a JSX attribute does not carry yet
+AdwViewSwitcherBar.stack	a AdwViewStack | null, which a JSX attribute does not carry yet
+AdwViewSwitcherSidebar.stack	a AdwViewStack | null, which a JSX attribute does not carry yet
+AdwViewSwitcherTitle.stack	deprecated
+AdwViewSwitcherTitle.subtitle	deprecated
+AdwViewSwitcherTitle.title	deprecated
+AdwViewSwitcherTitle.view-switcher-enabled	deprecated
+GtkActionable.action-target	no setter in the bindings

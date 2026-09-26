@@ -207,7 +207,7 @@ function frame(node: HostNode): string {
 
 function main(): void {
   gtk_init();
-  const container = new WindowRoot(new GtkWindow());
+  const container = new WindowRoot(new GtkWindow(), []);
   const root = createInstance("GtkBox", { spacing: 6 }, container, 0, {});
   const label = createInstance("GtkLabel", { children: "hello" }, container, 0, {});
   let clicks = "";
@@ -622,7 +622,7 @@ function main(): void {
   );
 
   // A popover opens inside a shown window, as an app's is.
-  const popped = new WindowRoot(new GtkWindow());
+  const popped = new WindowRoot(new GtkWindow(), []);
   const anchor = createInstance("GtkBox", {}, popped, 0, {});
   appendChildToContainer(popped, anchor);
   popped.window.present();
@@ -645,7 +645,7 @@ function main(): void {
 
   const application = new GtkApplication({ application_id: "org.nts.ReactGtk", flags: ApplicationFlags.NON_UNIQUE });
   application.register(null, null);
-  const appRoot = new ApplicationRoot(application);
+  const appRoot = new ApplicationRoot(application, []);
   const appWindow = createInstance("GtkApplicationWindow", { title: "App" }, appRoot, 0, {});
   const appWantsMount = finalizeInitialChildren(appWindow, "GtkApplicationWindow", { title: "App" }, 0);
   appendChildToContainer(appRoot, appWindow);

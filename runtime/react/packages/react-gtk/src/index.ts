@@ -9,3 +9,4 @@
 
 export * from "./widgets.ts";
 export { createApplicationRoot, createRoot, Root, type RootOptions } from "./client.ts";
+export { WidgetSet } from "./HostNode.ts";

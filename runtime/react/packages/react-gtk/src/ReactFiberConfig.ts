@@ -22,7 +22,6 @@ import type { GtkWidget } from "c:Gtk-4.0";
 import { getCurrentUpdatePriority, type HostNode, NoEventPriority, type Props, type WidgetNode } from "./HostNode.ts";
 import type { HostRoot } from "./HostRoot.ts";
 import { cancelTimer, startTimer } from "./SchedulerHost.ts";
-import { createNode } from "./widgets.ts";
 
 export { getCurrentUpdatePriority, HostNode, setCurrentUpdatePriority, SlotNode, type Props, WidgetNode } from "./HostNode.ts";
 export { ApplicationRoot, HostRoot, WindowRoot } from "./HostRoot.ts";
@@ -101,10 +100,14 @@ export function shouldSetTextContent(_type: string, props: Props): boolean {
   return typeof children === "string" || typeof children === "number";
 }
 
-export function createInstance(type: string, props: Props, _root: HostRoot, _hostContext: HostContext, _handle: object): HostNode {
-  const node = createNode(type);
+export function createInstance(type: string, props: Props, root: HostRoot, _hostContext: HostContext, _handle: object): HostNode {
+  const node = root.createNode(type);
   if (node === null) {
-    throw new Error(`react-gtk has no <${type.startsWith("Gtk") ? type.slice(3) : type}>.`);
+    throw new Error(
+      type.startsWith("Gtk")
+        ? `react-gtk has no <${type.slice(3)}>.`
+        : `No widget set of this root has <${type}>: pass its set (\`widgets: [adw]\`) to createRoot.`,
+    );
   }
   node.applyProps(null, props);
   return node;
