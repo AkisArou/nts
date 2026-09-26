@@ -195,6 +195,8 @@ own takes it through an element that carries them:
 <Grid><Grid.Child column={1} row={0}><Label /></Grid.Child></Grid>
 <Stack visibleChildName={page}><Stack.Page name="files" title="Files"><Files /></Stack.Page></Stack>
 <Notebook><Notebook.Page tab="Files"><Files /></Notebook.Page></Notebook>
+<Overlay><Picture /><Overlay.Layer><Spinner /></Overlay.Layer></Overlay>
+<Fixed><Fixed.Child x={12} y={40}><Label /></Fixed.Child></Fixed>
 ```
 
 A slot element and a child element are the same kind of node, a
@@ -203,7 +205,9 @@ a protocol of its own, once both are placed, and detaches it when either
 goes. A slot element fills a property; `<Grid.Child>` attaches at its cell
 and moves when its cell changes; `<Stack.Page>` adds a named, titled page
 and updates it in place; `<Notebook.Page>` inserts a page before the next
-one React knows of. GIR describes none of this, so these are written by
+one React knows of; `<Overlay.Layer>` draws over the Overlay's main child,
+which the Overlay holds as its one ordinary child; `<Fixed.Child>` puts its
+child at a position and moves it there. GIR describes none of this, so these are written by
 hand (`src/children.ts`) and the generator only declares them as members
 and creates them. A widget placed in such a container directly is an error
 that names the element to use. A container's prop that selects a child

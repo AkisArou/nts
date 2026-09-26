@@ -50,6 +50,10 @@
 //   bar       a HeaderBar's Start and End groups pack their children left to
 //             right in React's order (the end packed from the edge in); one
 //             inserted before another takes its place, one removed goes
+//   overlay   an Overlay holds its main child as its one child and an
+//             Overlay.Layer's child over it; the layer's `measure` updates in
+//             place; the layer removed leaves the Overlay
+//   fixed     a Fixed.Child puts its child at its position and moves it
 //   slot      slot elements fill a Paned's start and end children, their
 //             children placed first as React completes them; a child removed
 //             from its slot element empties the slot, and so does the slot
@@ -89,12 +93,14 @@ import {
   ButtonNode,
   DropDownNode,
   EntryNode,
+  FixedNode,
   FrameNode,
   GridNode,
   LabelNode,
   ListBoxNode,
   ListViewNode,
   NotebookNode,
+  OverlayNode,
   PanedNode,
   ScaleNode,
   StackNode,
@@ -449,6 +455,50 @@ function main(): void {
   removeChild(start, packs[1]!);
   packing += " " + after(0);
   react_gtk_log("bar " + packing);
+
+  const overlay = createInstance("GtkOverlay", {}, container, 0, {});
+  const underneath = createInstance("GtkLabel", { label: "main" }, container, 0, {});
+  const layer = createInstance("GtkOverlay.Layer", { measure: true }, container, 0, {});
+  const over = createInstance("GtkLabel", { label: "over" }, container, 0, {});
+  appendInitialChild(layer, over);
+  appendInitialChild(overlay, underneath);
+  appendInitialChild(overlay, layer);
+  const layered = overlay instanceof OverlayNode ? overlay.gtk : null;
+  let layering = "not an overlay";
+  if (layered !== null) {
+    layering =
+      String(layered.get_child() === widget(underneath)) +
+      " " +
+      String(widget(over).get_parent() === widget(overlay)) +
+      " " +
+      String(layered.get_measure_overlay(widget(over)));
+    commitUpdate(layer, "GtkOverlay.Layer", { measure: true }, { measure: false }, {});
+    layering += ">" + String(layered.get_measure_overlay(widget(over)));
+    removeChild(overlay, layer);
+    layering += " " + String(widget(over).get_parent() === null);
+  }
+  react_gtk_log("overlay " + layering);
+
+  const fixed = createInstance("GtkFixed", {}, container, 0, {});
+  const spot = createInstance("GtkFixed.Child", { x: 12, y: 40 }, container, 0, {});
+  const pinned = createInstance("GtkLabel", { label: "pinned" }, container, 0, {});
+  appendInitialChild(spot, pinned);
+  appendInitialChild(fixed, spot);
+  const positioned = fixed instanceof FixedNode ? fixed.gtk : null;
+  // Where the Fixed has put its child: its transform, set by `put` and
+  // `move` at once (the position GTK reports waits for a layout).
+  const placedAt = (): string => {
+    const transform = positioned === null ? null : positioned.get_child_transform(widget(pinned));
+    if (transform === null) {
+      return "none";
+    }
+    const [x, y] = transform.to_translate();
+    return String(x) + "," + String(y);
+  };
+  let position = placedAt();
+  commitUpdate(spot, "GtkFixed.Child", { x: 12, y: 40 }, { x: 5, y: 40 }, {});
+  position += ">" + placedAt();
+  react_gtk_log("fixed " + position);
 
   const paned = createInstance("GtkPaned", {}, container, 0, {});
   const startSlot = createInstance("GtkPaned.StartChild", {}, container, 0, {});

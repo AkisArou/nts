@@ -479,6 +479,8 @@ const childElements = new Map([
   ["Notebook", { members: "NotebookChildren", elements: [["GtkNotebook.Page", "NotebookPageNode"]], use: "<Notebook.Page tab>" }],
   ["HeaderBar", { members: "HeaderBarChildren", elements: [["GtkHeaderBar.Start", "PackNode"], ["GtkHeaderBar.End", "PackNode"]], use: "<HeaderBar.Start> or <HeaderBar.End>" }],
   ["ActionBar", { members: "ActionBarChildren", elements: [["GtkActionBar.Start", "PackNode"], ["GtkActionBar.End", "PackNode"]], use: "<ActionBar.Start> or <ActionBar.End>" }],
+  ["Overlay", { members: "OverlayChildren", elements: [["GtkOverlay.Layer", "OverlayLayerNode"]], use: "<Overlay.Layer>" }],
+  ["Fixed", { members: "FixedChildren", elements: [["GtkFixed.Child", "FixedChildNode"]], use: "<Fixed.Child x y>" }],
 ]);
 
 function valueKind(type: string, bindings: Bindings, reference = false): ValueKind | null {
@@ -890,11 +892,11 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("    return undefined;");
       line("  }");
     }
+    // Child elements place themselves, beside the widget's own protocol if it
+    // has one (an Overlay's main child and its layers); a widget with none
+    // says which element to use.
     const elements = childElements.get(w.jsx);
-    if (elements !== undefined) {
-      if (w.children !== "none") {
-        throw new Error(`${w.ts} has a child protocol of its own and child elements: which places a child?`);
-      }
+    if (elements !== undefined && w.children === "none") {
       line("  protected place(_child: WidgetNode): void {");
       line(`    throw new Error("<${w.jsx}> places a child through ${elements.use}.");`);
       line("  }");

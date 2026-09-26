@@ -5,6 +5,8 @@
 //   <Stack><Stack.Page name="files" title="Files"><FileList /></Stack.Page></Stack>
 //   <Notebook><Notebook.Page tab="Files"><FileList /></Notebook.Page></Notebook>
 //   <HeaderBar><HeaderBar.Start><Button /><Button /></HeaderBar.Start></HeaderBar>
+//   <Overlay><Picture /><Overlay.Layer><Spinner /></Overlay.Layer></Overlay>
+//   <Fixed><Fixed.Child x={12} y={40}><Label /></Fixed.Child></Fixed>
 //
 // GIR says a Grid attaches at a cell and a Stack adds named pages, but not that
 // an app should say which, so these are written by hand; src/widgets.ts
@@ -13,7 +15,7 @@
 // once both are placed, and finds its container as the GTK class it needs.
 // A bar's start and end are groups, which hold any number (PackNode).
 
-import { GtkActionBar, GtkGrid, GtkHeaderBar, GtkNotebook, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
+import { GtkActionBar, GtkFixed, GtkGrid, GtkHeaderBar, GtkNotebook, GtkOverlay, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { HostNode, insertAt, PlacedNode, type Props, type WidgetNode } from "./HostNode.ts";
@@ -180,6 +182,92 @@ export class NotebookPageNode extends PlacedNode {
       notebook.set_tab_label_text(widget, tab);
     }
     notebook.set_tab_reorderable(widget, this.props["reorderable"] === true);
+  }
+}
+
+// ---- Overlay ---------------------------------------------------------------------------
+
+export interface OverlayLayerProps {
+  /** Whether the layer counts toward the Overlay's size, as its main child does. */
+  measure?: boolean;
+  /** Whether the layer is clipped to the Overlay's main child. */
+  clip?: boolean;
+  children?: unknown;
+}
+
+export interface OverlayChildren {
+  /** `<Overlay.Layer>`: its one child, drawn over the Overlay's main child. */
+  readonly Layer: HostComponent<"GtkOverlay.Layer", OverlayLayerProps>;
+}
+
+/**
+ * A layer over an Overlay's main child, which the Overlay holds as its one
+ * ordinary child. Layers stack in the order they were added: GtkOverlay
+ * cannot move one, so a layer React moves goes on top.
+ */
+export class OverlayLayerNode extends PlacedNode {
+  protected attach(owner: WidgetNode, widget: GtkWidget): void {
+    const overlay = owner.widget;
+    if (!(overlay instanceof GtkOverlay)) {
+      throw misplaced("Overlay.Layer", "Overlay", owner);
+    }
+    overlay.add_overlay(widget);
+    this.describe(overlay, widget);
+  }
+  protected detach(owner: WidgetNode, widget: GtkWidget): void {
+    const overlay = owner.widget;
+    if (overlay instanceof GtkOverlay) {
+      overlay.remove_overlay(widget);
+    }
+  }
+  protected update(owner: WidgetNode, widget: GtkWidget): void {
+    const overlay = owner.widget;
+    if (overlay instanceof GtkOverlay) {
+      this.describe(overlay, widget);
+    }
+  }
+
+  private describe(overlay: GtkOverlay, widget: GtkWidget): void {
+    overlay.set_measure_overlay(widget, this.props["measure"] === true);
+    overlay.set_clip_overlay(widget, this.props["clip"] === true);
+  }
+}
+
+// ---- Fixed -----------------------------------------------------------------------------
+
+export interface FixedChildProps {
+  /** The child's left edge, in pixels from the Fixed's: 0 by default. */
+  x?: number;
+  /** The child's top edge: 0 by default. */
+  y?: number;
+  children?: unknown;
+}
+
+export interface FixedChildren {
+  /** `<Fixed.Child x y>`: its one child, at that position in the Fixed. */
+  readonly Child: HostComponent<"GtkFixed.Child", FixedChildProps>;
+}
+
+/** A child of a Fixed at a position, moved in place when it changes. */
+export class FixedChildNode extends PlacedNode {
+  protected attach(owner: WidgetNode, widget: GtkWidget): void {
+    const fixed = owner.widget;
+    if (!(fixed instanceof GtkFixed)) {
+      throw misplaced("Fixed.Child", "Fixed", owner);
+    }
+    fixed.put(widget, numberProp(this.props, "x", 0), numberProp(this.props, "y", 0));
+  }
+  protected detach(owner: WidgetNode, widget: GtkWidget): void {
+    const fixed = owner.widget;
+    if (fixed instanceof GtkFixed) {
+      fixed.remove(widget);
+    }
+  }
+  protected update(owner: WidgetNode, widget: GtkWidget): void {
+    const fixed = owner.widget;
+    if (fixed instanceof GtkFixed) {
+      fixed.move(widget, numberProp(this.props, "x", 0), numberProp(this.props, "y", 0));
+    }
   }
 }
 

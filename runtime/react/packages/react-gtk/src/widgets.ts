@@ -178,7 +178,7 @@ import {
 } from "c:Pango-1.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";
-import { type GridChildren, GridChildNode, type StackChildren, StackPageNode, type NotebookChildren, NotebookPageNode, type HeaderBarChildren, PackNode, type ActionBarChildren } from "./children.ts";
+import { type GridChildren, GridChildNode, type StackChildren, StackPageNode, type NotebookChildren, NotebookPageNode, type HeaderBarChildren, PackNode, type ActionBarChildren, type OverlayChildren, OverlayLayerNode, type FixedChildren, FixedChildNode } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1614,7 +1614,7 @@ export declare const Entry: HostComponent<"GtkEntry", EntryProps>;
 export declare const Expander: HostComponent<"GtkExpander", ExpanderProps> & ExpanderSlots;
 
 /** `<Fixed>`: a GtkFixed. */
-export declare const Fixed: HostComponent<"GtkFixed", FixedProps>;
+export declare const Fixed: HostComponent<"GtkFixed", FixedProps> & FixedChildren;
 
 /** `<FlowBox>`: a GtkFlowBox. */
 export declare const FlowBox: HostComponent<"GtkFlowBox", FlowBoxProps>;
@@ -1677,7 +1677,7 @@ export declare const MenuButton: HostComponent<"GtkMenuButton", MenuButtonProps>
 export declare const Notebook: HostComponent<"GtkNotebook", NotebookProps> & NotebookChildren;
 
 /** `<Overlay>`: a GtkOverlay. */
-export declare const Overlay: HostComponent<"GtkOverlay", OverlayProps>;
+export declare const Overlay: HostComponent<"GtkOverlay", OverlayProps> & OverlayChildren;
 
 /** `<Paned>`: a GtkPaned. */
 export declare const Paned: HostComponent<"GtkPaned", PanedProps> & PanedSlots;
@@ -7275,6 +7275,9 @@ export class FixedNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return fixedSignal(this.gtk, key, slot);
   }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<Fixed> places a child through <Fixed.Child x y>.");
+  }
 }
 
 /** `<FlowBox>`: a GtkFlowBox. */
@@ -8650,6 +8653,10 @@ export function createNode(type: string): HostNode | null {
       return new PackNode(type);
     case "GtkActionBar.End":
       return new PackNode(type);
+    case "GtkOverlay.Layer":
+      return new OverlayLayerNode(type);
+    case "GtkFixed.Child":
+      return new FixedChildNode(type);
   }
   return null;
 }
