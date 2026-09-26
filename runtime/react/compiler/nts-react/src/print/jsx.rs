@@ -12,6 +12,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
+use react_compiler_ast::common::BaseNode;
 use react_compiler_ast::expressions::Expression;
 use react_compiler_ast::jsx::{
     JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXChild, JSXElement, JSXElementName,
@@ -90,7 +91,7 @@ impl Printer<'_> {
             opening.attributes.iter().enumerate().filter(|(at, _)| Some(*at) != key_at).map(|(_, attribute)| attribute).collect();
         let children = self.jsx_children_lowered(&element.children);
         self.jsx_call(&children);
-        self.jsx_tag(&opening.name);
+        self.jsx_tag(&opening.name, &element.base);
         self.write(", ");
         self.jsx_props(&attributes, &children);
         if let Some(key) = key {
@@ -125,7 +126,7 @@ impl Printer<'_> {
     fn jsx_create_element(&mut self, element: &JSXElement) {
         self.jsx_imports.create_element = true;
         self.write("_createElement(");
-        self.jsx_tag(&element.opening_element.name);
+        self.jsx_tag(&element.opening_element.name, &element.base);
         self.write(", ");
         let attributes: Vec<&JSXAttributeItem> = element.opening_element.attributes.iter().collect();
         if attributes.is_empty() {
@@ -142,7 +143,7 @@ impl Printer<'_> {
 
     /// A tag: an intrinsic name as a string, `a:b` as a string, anything else
     /// as the expression it names.
-    fn jsx_tag(&mut self, name: &JSXElementName) {
+    fn jsx_tag(&mut self, name: &JSXElementName, element: &BaseNode) {
         match name {
             JSXElementName::JSXIdentifier(i) if is_intrinsic(&i.name) => self.write(&quote(&i.name.encode_utf16().collect::<Vec<_>>())),
             JSXElementName::JSXIdentifier(i) => {
@@ -155,7 +156,8 @@ impl Printer<'_> {
                 self.jsx_class_type(self.original_id(&i.base));
             }
             JSXElementName::JSXMemberExpression(m) => {
-                if let Some(host) = self.jsx_host_type(self.original_id(&m.base)) {
+                let node = self.original_id(&m.base).or_else(|| self.original_tag_id(element));
+                if let Some(host) = self.jsx_host_type(node) {
                     self.write(&quote(&host.encode_utf16().collect::<Vec<_>>()));
                     return;
                 }
@@ -167,6 +169,16 @@ impl Printer<'_> {
                 self.write(&quote(&text.encode_utf16().collect::<Vec<_>>()));
             }
         }
+    }
+
+    /// The tag of the element the user wrote where `element` is. The compiler
+    /// rebuilds a member tag (`<Paned.StartChild>`) with no node id and no
+    /// span of its own, while the element around it keeps its span.
+    fn original_tag_id(&self, element: &BaseNode) -> Option<u32> {
+        self.originals_at(element)
+            .iter()
+            .find_map(|node| node.get("openingElement")?.get("name")?.get("_nodeId")?.as_u64())
+            .and_then(|id| u32::try_from(id).ok())
     }
 
     /// The host type a tag declared as a `HostComponent<"GtkButton", Props>`
