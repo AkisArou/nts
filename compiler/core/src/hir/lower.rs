@@ -32309,8 +32309,78 @@ impl<'a> FuncBuilder<'a> {
     fn statically_decided(&self, condition: NodeId) -> Option<bool> {
         let ty = self.snapshot.node_types.get(&condition)?;
         match &self.snapshot.types.get(ty.0 as usize)?.kind {
-            TypeKind::Literal(LiteralValue::Boolean(known)) => Some(*known),
+            TypeKind::Literal(LiteralValue::Boolean(known)) => {
+                (!self.reads_a_binding_that_can_change(condition)).then_some(*known)
+            },
             _ => None,
+        }
+    }
+
+    /// Whether an expression reads a binding whose value can change after the
+    /// checker typed it.
+    ///
+    /// **The checker's narrowed literal type is not a fact about a mutable
+    /// binding.** TypeScript's control-flow analysis does not see an assignment
+    /// made inside a closure, so
+    ///
+    /// ```ts
+    /// let called = false;
+    /// const guard = (): void => { if (called) return; called = true; ... };
+    /// twice(guard);
+    /// if (called) { ... }          // the checker still says `false`
+    /// ```
+    ///
+    /// types `called` as the literal `false` at the `if`, having watched nothing
+    /// assign it in the enclosing function. Folding on that answer takes the
+    /// wrong arm, and `examples/captured-by-reference` disagrees with node on 28
+    /// cases -- which it did from the day `folded_branch` landed until this guard,
+    /// silently, because a refusal census cannot see a program that compiles and
+    /// answers wrongly.
+    ///
+    /// A `const` is safe and is what every fold this is meant to keep reads:
+    /// `isDevelopment` in React's development guard, and the `w` of `!!w &&
+    /// w.writable !== false` in `Writable#get writable`. A `let`, a `var` and a
+    /// parameter are not -- a parameter because a closure can assign one too, and
+    /// refusing costs nothing since a parameter typed as a boolean *literal* is
+    /// vanishingly rare.
+    ///
+    /// The whole subtree rather than the node itself, because the condition is
+    /// usually an expression around the binding rather than the binding: `!flag`,
+    /// `flag && other`, `!!w`.
+    fn reads_a_binding_that_can_change(&self, id: NodeId) -> bool {
+        if self.kind_of(id) == Some(syntax::IDENTIFIER)
+            && let Some(symbol) = self.node(id).symbol
+            && let Some(record) = self.snapshot.symbols.get(symbol.0 as usize)
+            && record
+                .declarations
+                .iter()
+                .any(|at| self.binding_can_be_written(*at))
+        {
+            return true;
+        }
+        self.children(id)
+            .into_iter()
+            .any(|child| self.reads_a_binding_that_can_change(child))
+    }
+
+    /// Whether a declaration binds a name something can assign to.
+    ///
+    /// The `let`/`var` answer comes from the **list's** flags and not the
+    /// declaration's, which is the mistake a guard written for this one construct
+    /// over already made: a declaration's immediate parent is the list's
+    /// `NodeKind::List`, for which `kind_of` answers `None`, so every declaration
+    /// looked non-writable and the guard could not fire. A guard that cannot fire
+    /// is worse than no guard, because it reads as protection.
+    fn binding_can_be_written(&self, at: NodeId) -> bool {
+        match self.kind_of(at) {
+            Some(syntax::PARAMETER) => true,
+            Some(syntax::VARIABLE_DECLARATION) => self
+                .ancestor(at, syntax::VARIABLE_DECLARATION_LIST)
+                .is_some_and(|list| {
+                    nts_semantic_schema::VariableKind::from_flags(self.node(list).flags)
+                        != nts_semantic_schema::VariableKind::Const
+                }),
+            _ => false,
         }
     }
 
