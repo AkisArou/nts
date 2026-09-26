@@ -390,7 +390,7 @@ fn objc_tag(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<&str> {
 }
 
 /// The class declaration a symbol names, through an import.
-fn class_declaration(snapshot: &SemanticSnapshot, symbol: SymbolId) -> Option<NodeId> {
+pub(crate) fn class_declaration(snapshot: &SemanticSnapshot, symbol: SymbolId) -> Option<NodeId> {
     let mut record = snapshot.symbols.get(symbol.0 as usize)?;
     while let Some(aliased) = record.aliased {
         record = snapshot.symbols.get(aliased.0 as usize)?;

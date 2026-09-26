@@ -67,6 +67,10 @@
 //   direction 2  `emit` of a binding's signal with a parameter, the enum
 //                 `RTL`, which the program's handler hears; every `clicked`
 //                 above is `emit` too, with none
+//   badge Nts_Badge 2  `Badge`, written in its own module and imported: `new`
+//                 through the import makes the class's own instance, whose
+//                 fields `hit` counts. It made the parent, a `GtkLabel`
+//                 with no fields to read, before `new` followed the import
 //   is C|B|label|button|none  `instanceof`, which asks the type system
 //                 (`g_type_check_instance_is_a`) for a class the program wrote
 //                 and for a binding's, and narrows: `C`'s field read after it
@@ -95,6 +99,7 @@ import {
 } from "c:Gio-2.0";
 import type { CEnum, CNumber, Erased, Owned, Property, Ptr, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
+import { Badge } from "./badge.ts";
 
 class Counter extends GtkButton {
   // Fields: an object of the program's own that the instance holds, made by
@@ -517,6 +522,9 @@ function main(): void {
   console.log(words());
   console.log(dtls());
   console.log(direction());
+  const badge = new Badge({ label: "b" });
+  badge.hit();
+  console.log("badge " + g_type_name_from_instance(badge) + " " + String(badge.hit()));
   console.log("is " + [kind(new C({})), kind(new B({})), kind(new GtkLabel({})), kind(new GtkButton({})), kind(null)].join("|"));
 }
 

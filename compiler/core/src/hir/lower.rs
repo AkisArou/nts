@@ -6775,11 +6775,7 @@ fn program_superclass(snapshot: &SemanticSnapshot, class: NodeId) -> Option<Node
         .filter(|child| probe.kind_of(*child) == Some(syntax::HERITAGE_CLAUSE))
         .flat_map(|clause| probe.children(clause))
         .find_map(|expression| probe.children(expression).first().copied())?;
-    let mut record = snapshot.symbols.get(probe.node(base).symbol?.0 as usize)?;
-    while let Some(aliased) = record.aliased {
-        record = snapshot.symbols.get(aliased.0 as usize)?;
-    }
-    record.declarations.iter().copied().find(|declaration| probe.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION))
+    super::native::schema::class_declaration(snapshot, probe.node(base).symbol?)
 }
 
 /// The names a template's `<signal>` elements give as their handlers, in the
@@ -30648,10 +30644,9 @@ impl<'a> FuncBuilder<'a> {
     /// not), then a setter for each property. `None` for any other `new`.
     fn gobject_new(&mut self, id: NodeId) -> Option<Result<ValueId, Diagnostic>> {
         let callee = *self.children(id).first()?;
-        let symbol = self.node(callee).symbol?;
-        let class = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().copied().find(|declaration| {
-            self.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION)
-        })?;
+        // Through an import: `new EntryView()` of a class another module
+        // wrote names the import's symbol, not the class's.
+        let class = super::native::schema::class_declaration(self.snapshot, self.node(callee).symbol?)?;
         if super::native::gobject_parent(self.snapshot, class).is_none() {
             // A class of the program's over a handle that nothing registers
             // (`lower_class` refuses it): its `new` would resolve to the
