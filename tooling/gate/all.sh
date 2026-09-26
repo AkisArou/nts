@@ -1909,6 +1909,9 @@ step "clippy"  lint
 interop() {
   ran=0
   skipped=0
+  # Every skip's own words, so the summary below can count them rather than
+  # name a cause it does not know.
+  reasons=$(mktemp)
   # `project` rather than `name`: `step()` holds the step's own name in `name`,
   # `sh` has no function scope, and this loop assigned over it on every
   # iteration. So the step's failure line -- which was fixed once already, to
@@ -1924,17 +1927,35 @@ interop() {
     rm -rf "$out"
     if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" sh "$script" "$out" 2>&1); then
       case $output in
-        *SKIP*) skipped=$((skipped + 1)); printf '  %-16s skipped: %s\n' "$project" \
-                  "$(printf '%s' "$output" | grep -m1 SKIP)" ;;
+        *SKIP*) skipped=$((skipped + 1))
+                why=$(printf '%s' "$output" | grep -m1 SKIP)
+                printf '  %-16s skipped: %s\n' "$project" "$why"
+                printf '%s\n' "$why" >> "$reasons" ;;
         *) ran=$((ran + 1)); printf '  %-16s ok\n' "$project" ;;
       esac
     else
       printf '  %-16s FAILED\n' "$project"
       printf '%s\n' "$output" | tail -20 | sed 's/^/      /'
+      # Cleaned on the way out too: /tmp on this box runs out of *inodes* before
+      # it runs out of bytes, and a step that leaks one file per red run is the
+      # kind of thing that is only noticed as something else failing.
+      rm -f "$reasons"
       return 1
     fi
   done
-  printf '  %s built and ran, %s skipped for a missing toolchain\n' "$ran" "$skipped"
+  # **The reason is counted, not asserted.** This line said "skipped for a
+  # missing toolchain" while the skips above it said what they meant: on
+  # 2026-09-26 two macOS examples skipped for a missing *desktop session* and
+  # the summary called it a toolchain. A right count with a wrong reason
+  # attached is worse than a bare count, because the reason is what a reader
+  # acts on.
+  if [ "$skipped" -gt 0 ]; then
+    printf '  %s built and ran, %s skipped:\n' "$ran" "$skipped"
+    sort "$reasons" | uniq -c | sed 's/^/     /'
+  else
+    printf '  %s built and ran, %s skipped\n' "$ran" "$skipped"
+  fi
+  rm -f "$reasons"
   # A floor, so a project that stops being built is noticed rather than
   # quietly dropping out of the loop.
   #

@@ -58,6 +58,44 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const FIXTURES = join(HERE, "blockers");
 
+/**
+ * Where `node_api.h` and `uv.h` are, or one sentence saying they are nowhere.
+ *
+ * **A harness that cannot find its headers and a fixture that does not link
+ * report the same thing**, and only one of them is about the compiler. On
+ * 2026-09-26 the Apple lane saw this directory report *16 needing a person*,
+ * every one DID NOT LINK with `'node_api.h' file not found`, where it had been
+ * 231/231 an hour earlier. Nothing about any fixture had changed: the include
+ * directory those three clang invocations name is `third_party/node`, which is
+ * an untracked local clone, so any tree without it -- a fresh worktree, a
+ * machine that has not bootstrapped -- turns every fixture into a verdict about
+ * a header.
+ *
+ * `tooling/conformance/build.sh` has answered this correctly for months, with a
+ * candidate list and `exit 2` when none of them has the file. This is that,
+ * here, plus the node-gyp cache, which is the one location on this box that is
+ * neither untracked nor in `/tmp` -- and `/tmp` is where the copy that
+ * disappeared was.
+ */
+const napiInclude = () => {
+  const candidates = [
+    process.env.NTS_NAPI_INCLUDE,
+    join(ROOT, "third_party/node/src"),
+    join(ROOT, "node_modules/node-api-headers/include"),
+    "/usr/include/node",
+  ].filter((p) => p !== undefined && p !== "");
+  const found = candidates.find((p) => existsSync(join(p, "node_api.h")));
+  if (found !== undefined) return found;
+  console.error(
+    "nts: the Node-API headers are missing, so no fixture was judged.\n" +
+      "  looked for node_api.h in:\n" +
+      candidates.map((p) => `    ${p}`).join("\n") +
+      "\n  run tooling/bootstrap/bootstrap.sh, or set NTS_NAPI_INCLUDE.",
+  );
+  process.exit(2);
+};
+const NAPI = napiInclude();
+
 const compiler = process.env.NTS_COMPILER ?? process.env.NTS_BIN ??
   join(ROOT, "target/release/nts");
 if (!existsSync(compiler)) {
@@ -349,7 +387,7 @@ for (const name of names) {
       "-include", join(ROOT, "runtime/node/internal/shared.h"),
       "-I", join(ROOT, "runtime/c"),
       "-I", join(ROOT, "runtime/node/internal"),
-      "-I", join(ROOT, "third_party/node/src"),
+      "-I", NAPI,
       "-I", join(ROOT, "third_party/node/deps/uv/include"),
       "-o", "/dev/null",
     ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
@@ -401,7 +439,7 @@ for (const name of names) {
     const link = spawnSync("clang", [
       "-std=c11", "-O0", "-D_GNU_SOURCE", "-fPIC", "-shared", "-fvisibility=hidden",
       "-I", dir,
-      "-I", join(ROOT, "third_party/node/src"),
+      "-I", NAPI,
       "-I", join(ROOT, "third_party/node/deps/uv/include"),
       "-I", join(ROOT, "runtime/node/internal"),
       "-o", addon, ...sources, ...internal, "-luv", "-lm",
@@ -469,7 +507,7 @@ for (const name of names) {
         "-include", join(ROOT, "runtime/node/internal/shared.h"),
         "-I", join(ROOT, "runtime/c"),
         "-I", join(ROOT, "runtime/node/internal"),
-        "-I", join(ROOT, "third_party/node/src"),
+        "-I", NAPI,
         "-I", join(ROOT, "third_party/node/deps/uv/include"),
         "-o", "/dev/null",
       ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
