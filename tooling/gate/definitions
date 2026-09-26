@@ -1,0 +1,37 @@
+# Functions the compiler emits per corpus module: the number `profile`'s
+# refusal ceiling cannot see. Read by tooling/census/definitions.mjs, which
+# counts `nts hir --prepared`'s func lines against each row.
+#
+# A count that went UP is progress: raise the row (or rerun with --record) and
+# say why in the commit. A count that went DOWN fails the gate -- code stopped
+# being emitted, even if refusals went down with it. Lower a row only with the
+# reason in the commit message.
+#
+# module definitions
+runtime/node/assert 1667
+runtime/node/async_hooks 283
+runtime/node/buffer 373
+runtime/node/child_process 2067
+runtime/node/cluster 2173
+runtime/node/console 1729
+runtime/node/dgram 2129
+runtime/node/diagnostics_channel 273
+runtime/node/dns 298
+runtime/node/events 1644
+runtime/node/fs 2516
+runtime/node/http 2480
+runtime/node/net 2120
+runtime/node/os 396
+runtime/node/path 267
+runtime/node/process 2530
+runtime/node/punycode 23
+runtime/node/querystring 394
+runtime/node/readline 1901
+runtime/node/stream 2078
+runtime/node/string_decoder 383
+runtime/node/timers 321
+runtime/node/tty 2
+runtime/node/url 579
+runtime/node/util 1691
+runtime/node/zlib 2090
+runtime/web-platform 1881

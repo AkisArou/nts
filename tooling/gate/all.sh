@@ -1897,6 +1897,23 @@ phantoms() {
   return $status
 }
 
+# How many functions the compiler emits, per runtime/node module and
+# runtime/web-platform, against tooling/gate/definitions -- the number the
+# `profile` refusal ceiling cannot see. A change can take refusals *and*
+# definitions down together, which is reach going backwards reading as a win:
+# the raising-copies change of 2026-09-26 was -434 refusals and -369
+# definitions, found by counting by hand; this step reports it as
+# "runtime/node/http: 2480 -> 2440, -40". Down fails; up prints a note (raise
+# the row). Counted from `hir --prepared`, reconciled against each module's
+# own summary, and a module that emits nothing fails rather than reading as
+# zero. See tooling/census/definitions.mjs. About 2 min 15 s at four workers.
+definitions() {
+  out=$(node tooling/census/definitions.mjs 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^$/'
+  return $status
+}
+
 step "build"   cargo build --release
 step "clippy"  lint
 # Every interop project, built the way its README says and then run.
@@ -2050,6 +2067,7 @@ step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases
 step "outcomes" outcomes
 step "phantoms" phantoms
+step "definitions" definitions
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly
