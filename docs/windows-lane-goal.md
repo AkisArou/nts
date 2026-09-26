@@ -368,9 +368,17 @@ Application.Start(() => { new App(); });
      interface, calls its `add_`, and keeps the token by the object's
      `IUnknown`, the event and the function's closure. So a function added
      twice is added once, and a removal finds its token.
-   - Not yet: generic interfaces (`IVector`), static properties, struct
-     fields (`size.Width`), and strings boxed where a slot takes
-     `IInspectable`. Also started: a record a call takes by value may be
+   - **A generic interface's own surface:** `children.size`,
+     `list.getAt(i)`, `map.lookup(k)`, as `{Name}Members<T>` beside its
+     `Methods`, on the instantiation's own table. Events on a generic
+     interface (`IObservableMap`'s `mapchanged`) stay on its `add_`.
+   - **Listeners that outlive their objects.** The listener table keeps a
+     weak reference to each object, so a new object made at a dead one's
+     address adds its own listener rather than finding the old entry.
+     winui-hello's `rebuilt` arm measured 8 of 20 skipped without it.
+   - Not yet: `for…of` over an `IIterable<T>`, static properties, struct
+     fields (`size.Width`), strings boxed where a slot takes `IInspectable`,
+     and `instanceof` of a COM value in `unknown`. Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
    record stays `ByValue<T>`.
