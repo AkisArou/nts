@@ -46023,7 +46023,39 @@ impl<'a> FuncBuilder<'a> {
         // Methods did not have this because a method call takes its name from
         // the hierarchy rather than from the declaration; a plain function has
         // only the declaration to ask.
-        let defined = target.callee.is_some_and(|declaration| self.defines(declaration));
+        // **Asked of the declaration this call actually names**, which is
+        // `direct_callee`'s answer and not the checker's raw one. They differ for
+        // a name that *holds* a function: for a call through a variable whose type
+        // is a function type, `target.callee` is the annotation -- a
+        // `FUNCTION_TYPE` node, which has no body -- while `declaration` is the
+        // function the initializer names, which may well have one.
+        //
+        // Asking the wrong one made `defined` false for every such call and sent
+        // it down the *native* path, where the name it had already resolved
+        // (`declaration`'s, not the annotation's) was treated as a C symbol:
+        //
+        //     const jsx: (t: number, k: number) => number = prod;
+        //     jsx(1, 10)
+        //
+        //     foreign function `prod`'s parameter `t` (which wants a c_int or
+        //     c_double brand, a boolean, or a string), a type with no native ABI
+        //
+        // -- a C ABI refused for a TypeScript function defined two lines up. The
+        // React lane reported it from `export const jsx = isDevelopment ? jsxDEV
+        // : jsxProd`, the last thing between their entry points and compiling.
+        //
+        // **The native path is still right when the resolved declaration has no
+        // body**, which is the case that makes this a one-line change rather than
+        // a new rule: `export const now: () => Timestamp = nts_hrtime_ns` in
+        // `runtime/node/internal/time.ts` resolves to a `declare`d helper and
+        // must stay a call to `nts_hrtime_ns`. Both readings agree there and
+        // always did; only a resolved declaration *with* a body was answered
+        // wrongly.
+        //
+        // The mistake is this function's own: `direct_callee` arrived with
+        // `97584f66` and `61ada67e` and `defined` was left asking the question it
+        // had asked before there was anything better to ask.
+        let defined = declaration.is_some_and(|declaration| self.defines(declaration));
 
         // A callee with no declaration in the compiled set at all. A `declare
         // function` the *program* wrote is an FFI import and stays external --
