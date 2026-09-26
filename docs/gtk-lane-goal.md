@@ -258,6 +258,33 @@ managed parameter), and **0** that are the bindings'. The first run found
 four -- `Owned<Erased<GObject>>` results -- and a binary from before their
 fix still reports them.
 
+### Aliases, and bytes out of C
+
+GIR's `<alias>` elements are now the types they name. `GLib.Quark` is a
+`guint32`, and the same goes for `Pid`, `DateYear` and HarfBuzz's
+`codepoint_t`, `bool_t`, `tag_t` and the rest, each spelled in C as the
+parameter spells it, for the self-check to compile against the typedef.
+`time_t` and `guintptr` joined the scalar table. In gtk-gir's binding set the
+refusals went 2054 -> 1855, and "a type this binder does not know" 415 -> 80.
+The rest are `cairo`, which no `.gir` on this machine describes, and a few
+structs. The gir sweep over the eight core namespaces swept 73 more
+functions, with 0 type errors and 0 refused.
+
+**Not yet: bytes C hands back.** `g_bytes_get_data` (a result array with an
+out length), and `g_file_load_contents` with its `_finish` (an out
+`char **` with an out length, transfer full), are still refused, so a
+program cannot read a file's bytes through GIR, only its lines
+(`GDataInputStream`). The binder alone cannot bind them.
+
+- The values wrapper could copy with `bytesFrom` and free with `g_free`.
+  But `bytesFrom` takes a `c_uint8` pointer, while C spells these
+  `gconstpointer` and `char **`, and the witness compares prototypes
+  exactly.
+- What they need is the compiler's own: a byte-array result or out slot whose
+  length is another out slot, converted as `Counted<CBytes<Q>>` is on the
+  way in (`nts_view_from_bytes`, with the free the transfer asks for). That
+  is a role on the native function, so the design is shared.
+
 ### Boxed records
 
 `GtkTextIter`, `GdkRGBA`, `PangoFontDescription`: a GIR record with a
