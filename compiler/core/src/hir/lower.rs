@@ -6038,6 +6038,7 @@ fn register_objc_class(
         composition: None,
         signals: Vec::new(),
         properties: Vec::new(),
+        template: None,
     });
 }
 
@@ -6230,7 +6231,54 @@ fn register_gobject_class(
         composition: None,
         signals,
         properties,
+        template: gobject_template(snapshot, class),
     });
+}
+
+/// The template a class is built from -- `static readonly template`, whose
+/// type is the literal the checker kept -- and the children it names: each
+/// `declare`d field of a `GObject` handle type, by its name as the child's id.
+/// `None` for a class with no template.
+fn gobject_template(snapshot: &SemanticSnapshot, class: NodeId) -> Option<super::Template> {
+    let probe = FuncBuilder::probe(snapshot);
+    let xml = probe.children(class).into_iter().find_map(|member| {
+        if probe.kind_of(member) != Some(syntax::PROPERTY_DECLARATION) || !is_static_member(snapshot, member) {
+            return None;
+        }
+        let named = probe.children(member).into_iter().any(|child| {
+            probe.kind_of(child) == Some(syntax::IDENTIFIER) && probe.node(child).text.as_deref() == Some("template")
+        });
+        if !named {
+            return None;
+        }
+        match &snapshot.types.get(snapshot.node_types.get(&member)?.0 as usize)?.kind {
+            TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+            _ => None,
+        }
+    })?;
+    Some(super::Template { xml, children: template_children(snapshot, class).into_iter().map(|(name, _)| name).collect() })
+}
+
+/// The children a class's template names: its own `declare`d fields of a
+/// `GObject` handle type, with each one's type.
+fn template_children(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<(String, nts_semantic_schema::TypeId)> {
+    let Some(instance) = instance_type_of(snapshot, class) else { return Vec::new() };
+    let Some(TypeKind::Object { properties }) = snapshot.types.get(instance.0 as usize).map(|record| &record.kind) else {
+        return Vec::new();
+    };
+    properties
+        .iter()
+        .filter(|field| field.own && field.kind == MemberKind::Field)
+        .filter(|field| {
+            field.declaration.and_then(|node| snapshot.nodes.get(node.0 as usize)).is_some_and(|node| {
+                node.modifiers.contains(nts_semantic_schema::DeclarationModifiers::DECLARE)
+            })
+        })
+        .filter(|field| {
+            matches!(super::native::pointer(snapshot, field.ty), Some(super::native::Pointee::Opaque(ref handle)) if handle.family == super::native::Family::GObject)
+        })
+        .map(|field| (field.name.clone(), field.ty))
+        .collect()
 }
 
 /// The fields a class declares as `GObject` properties (`Property<T>` in
@@ -6507,6 +6555,7 @@ fn register_com_class(
         composition: Some(composition),
         signals: Vec::new(),
         properties: Vec::new(),
+        template: None,
     });
 }
 
@@ -15378,6 +15427,39 @@ impl<'a> FuncBuilder<'a> {
             self.terminate(Terminator::Return(Some(value)));
             Ok(self.finish(format!("{name}#get_{property}"), params, field_ty, origin, false))
         }
+    }
+
+    /// `this.title`, where `title` is a child the receiver's class template
+    /// names (`declare readonly title: GtkLabel`): the template's own, which
+    /// `nts_gobject_child_{Class}_{i}` lends -- the template holds it for as
+    /// long as the widget lives. `None` for any other member.
+    fn template_child(&mut self, access: NodeId, receiver: ValueId, member: &str) -> Option<ValueId> {
+        let HirType::NativePointer(pointee) = self.values[receiver.0 as usize].ty.clone() else { return None };
+        let node = *self.children(access).first()?;
+        let ty = self.class_behind(*self.snapshot.node_types.get(&node)?);
+        let symbol = self.snapshot.types.get(ty.0 as usize)?.symbol?;
+        let class = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().copied().find(|d| {
+            self.kind_of(*d) == Some(syntax::CLASS_DECLARATION)
+        })?;
+        super::native::gobject_parent(self.snapshot, class)?;
+        gobject_template(self.snapshot, class)?;
+        let children = template_children(self.snapshot, class);
+        let at = children.iter().position(|(name, _)| name == member)?;
+        let child = super::native::pointer(self.snapshot, children[at].1)?;
+        let name = foreign_class_name(self.snapshot, class)?;
+        let read = synthesized(
+            &super::Template::child_thunk(&name, at),
+            vec![super::native::Type::Pointer(pointee)],
+            super::native::Type::Pointer(child.clone()),
+            None,
+            Vec::new(),
+        );
+        let origin = self.origin(access);
+        Some(self.push(
+            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(read)), args: vec![receiver], frame: None },
+            HirType::NativePointer(child),
+            origin,
+        ))
     }
 
     /// The state of the class the program writes that the receiver of
@@ -39172,6 +39254,9 @@ impl<'a> FuncBuilder<'a> {
         // The other half of the iterator-result decision, and the half that
         // makes the first one honest. See `refuse_unguarded_iterator_value`.
         self.refuse_unguarded_iterator_value(id, value, member_name)?;
+        if let Some(child) = self.template_child(id, value, member_name) {
+            return Ok(child);
+        }
         if let Some(place) = self.program_objc_instance_place(id, value, member_name)? {
             return self.read_place(id, &place);
         }

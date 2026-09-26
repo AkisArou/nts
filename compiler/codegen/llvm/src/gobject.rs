@@ -67,7 +67,10 @@ pub(super) fn is_chain(name: &str) -> bool {
 /// signal's emit -- which the program therefore must not also declare: LLVM
 /// refuses a definition of a name already declared.
 pub(super) fn defined_here(name: &str) -> bool {
-    is_chain(name) || name.starts_with("nts_gobject_emit_") || name.starts_with("nts_gobject_notify_")
+    is_chain(name)
+        || name.starts_with("nts_gobject_emit_")
+        || name.starts_with("nts_gobject_notify_")
+        || name.starts_with("nts_gobject_child_")
 }
 
 pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
@@ -77,6 +80,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     let mut out = chains(program, platform, &mut parents)?;
     out.push_str(&emits(program, platform)?);
     out.push_str(&notifies(program));
+    out.push_str(&children(program));
     let classes = registered(program);
     if classes.is_empty() {
         return Ok(out);
@@ -84,7 +88,10 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     if !callbacks_declared {
         out.push_str("declare void @nts_callback_enter()\ndeclare void @nts_callback_leave()\n");
     }
-    out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
+    out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr, ptr, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
+    if classes.iter().any(|class| class.template.is_some()) {
+        out.push_str("declare void @nts_gtk_class_template(ptr, ptr, i64, ptr, i64)\ndeclare void @nts_gtk_init_template(ptr)\n");
+    }
     if classes.iter().any(|class| !class.signals.is_empty()) {
         out.push_str("declare i32 @nts_gobject_add_signal(i64, ptr, ptr)\n");
     }
@@ -139,6 +146,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             None => "null".to_owned(),
         };
         // Its signals, added to the type the moment it exists.
+        let hooks = template(&mut out, class);
         let mut signals = registrations(&mut out, class);
         if let Some(table) = properties(&mut out, program, class)? {
             let _ = writeln!(signals, "  call void @nts_gobject_set_properties(i64 %made, ptr {table}, i64 {})", class.properties.len());
@@ -155,7 +163,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
              entry:\n  %cached = load i64, ptr @nts_gobject_type_{name}.cache\n  %none = icmp eq i64 %cached, 0\n\
              \x20 br i1 %none, label %register, label %done\n\
              register:\n  %parent = call i64 @{parent}()\n\
-             \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @nts_gobject_name_{name}, ptr {table}, i64 {}, ptr {make_state})\n\
+             \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @nts_gobject_name_{name}, ptr {table}, i64 {}, ptr {make_state}, {hooks})\n\
              {signals}\
              \x20 store i64 %made, ptr @nts_gobject_type_{name}.cache\n  br label %done\n\
              done:\n  %type = phi i64 [ %cached, %entry ], [ %made, %register ]\n  ret i64 %type\n}}",
@@ -170,6 +178,68 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         }
     }
     Ok(out)
+}
+
+/// A class's template: the `class_setup` hook setting it and binding each
+/// child it names, and `nts_gtk_init_template` for each instance
+/// (`nts_gtk.c`). The two hook arguments registration passes.
+fn template(out: &mut String, class: &ForeignClass) -> String {
+    let Some(template) = &class.template else { return "ptr null, ptr null".to_owned() };
+    let name = &class.name;
+    bytes_constant(out, &format!("nts_gobject_template_{name}"), &template.xml);
+    let mut names = Vec::new();
+    for (at, child) in template.children.iter().enumerate() {
+        bytes_constant(out, &format!("nts_gobject_child_name_{name}_{at}"), child);
+        names.push(format!("ptr @nts_gobject_child_name_{name}_{at}"));
+    }
+    let table = if names.is_empty() {
+        "null".to_owned()
+    } else {
+        let _ = writeln!(out, "@nts_gobject_children_{name} = internal constant [{} x ptr] [{}]", names.len(), names.join(", "));
+        format!("@nts_gobject_children_{name}")
+    };
+    let _ = writeln!(
+        out,
+        "define internal void @nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n  call void @nts_gtk_class_template(ptr %klass, ptr @nts_gobject_template_{name}, i64 {}, ptr {table}, i64 {})\n  ret void\n}}",
+        template.xml.len(),
+        names.len()
+    );
+    format!("ptr @nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template")
+}
+
+/// Each `nts_gobject_child_{Class}_{index}` the program calls, defined as
+/// `gtk_widget_get_template_child` by the child's id, which lends it.
+fn children(program: &Program) -> String {
+    let mut out = String::new();
+    let mut done = std::collections::BTreeSet::new();
+    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_child_") => Some(target),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((class, index)) = target.name.trim_start_matches("nts_gobject_child_").rsplit_once('_') else { continue };
+        let Some(id) = program
+            .foreign_classes
+            .iter()
+            .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
+            .and_then(|foreign| foreign.template.as_ref())
+            .and_then(|template| template.children.get(index.parse::<usize>().ok()?))
+        else {
+            continue;
+        };
+        if done.len() == 1 {
+            out.push_str("declare ptr @nts_gtk_template_child(ptr, i64, ptr)\n");
+        }
+        let thunk = &target.name;
+        bytes_constant(&mut out, &format!("{thunk}.id"), id);
+        let _ = writeln!(
+            out,
+            "define ptr @{thunk}(ptr %self) nounwind {{\n  %type = call i64 @{PROGRAM_GTYPE}{class}()\n  %child = call ptr @nts_gtk_template_child(ptr %self, i64 %type, ptr @{thunk}.id)\n  ret ptr %child\n}}"
+        );
+    }
+    out
 }
 
 /// The calls adding a class's signals to its `GType` (`%made`), one per

@@ -2201,6 +2201,25 @@ pub struct ForeignClass {
     /// installed on its `GType` in order, as ids 1..n. Empty for every other
     /// family.
     pub properties: Vec<ForeignProperty>,
+    /// A `GtkWidget` class built from a template (`static readonly template`):
+    /// the XML, and the id of each child the class names with a `declare`d
+    /// field, in order -- what `nts_gobject_child_{Class}_{i}` reads.
+    pub template: Option<Template>,
+}
+
+/// A class's template and the children it names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Template {
+    pub xml: String,
+    pub children: Vec<String>,
+}
+
+impl Template {
+    /// The C function reading the child at `index` a template names.
+    #[must_use]
+    pub fn child_thunk(class: &str, index: usize) -> String {
+        format!("nts_gobject_child_{class}_{index}")
+    }
 }
 
 /// One property a `GObject` class the program writes declares: its name, its

@@ -71,6 +71,11 @@ pub const GOBJECT_HEADER_NAME: &str = "nts_gobject.h";
 pub const GOBJECT_HEADER: &str = include_str!("../../../../runtime/c/nts_gobject.h");
 pub const GOBJECT_SOURCE_NAME: &str = "nts_gobject.c";
 pub const GOBJECT_SOURCE: &str = include_str!("../../../../runtime/c/nts_gobject.c");
+/// What a program's `GObject` classes need of GTK itself -- a class built from a
+/// template -- apart from `nts_gobject.c`, so a program using `GObject` without
+/// GTK links none of it. Compiled where the program calls it (`nts_gtk_`).
+pub const GTK_SOURCE_NAME: &str = "nts_gtk.c";
+pub const GTK_SOURCE: &str = include_str!("../../../../runtime/c/nts_gtk.c");
 /// The Windows Runtime at the boundary: HSTRING, COM counts, activation.
 pub const WINRT_SOURCE_NAME: &str = "nts_winrt.c";
 pub const WINRT_SOURCE: &str = include_str!("../../../../runtime/c/nts_winrt.c");
@@ -568,7 +573,9 @@ impl Emitted {
         // never-free, keeps a `GObject` a call handed it (`nts_gobject_made`,
         // `hir::floating`): a program that makes a widget and connects nothing
         // failed to link without this.
-        let connects = text.contains("nts_gobject_connect(")
+        // A template's class registers through `nts_gobject.c` too.
+        let connects = text.contains("nts_gtk_")
+            || text.contains("nts_gobject_connect(")
             || text.contains("nts_gobject_register(")
             || text.contains("nts_gobject_boxed")
             || text.contains("NTS_TAG_HANDLE_GOBJECT")
@@ -578,6 +585,9 @@ impl Emitted {
         }
         if connects {
             files.push(Support { name: GOBJECT_SOURCE_NAME, contents: GOBJECT_SOURCE, compiled: true });
+        }
+        if text.contains("nts_gtk_") {
+            files.push(Support { name: GTK_SOURCE_NAME, contents: GTK_SOURCE, compiled: true });
         }
         // Where the program calls the Windows Runtime's helpers, whichever
         // backend renders it: both lower the same calls.

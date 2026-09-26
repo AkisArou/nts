@@ -240,6 +240,12 @@ typedef struct NtsGObjectClassData {
   void *(*make_state)(void);
   const struct NtsGObjectClassData *owner;
   size_t state_offset;
+  /* What only the program can say of its class, which `class_init` and
+   * `instance_init` run: a template (`gtk_widget_class_set_template`, and
+   * `gtk_widget_init_template` for each instance), set up by the GTK support
+   * file the program links when it declares one. Either may be NULL. */
+  void (*class_setup)(void *klass);
+  void (*instance_setup)(void *instance);
   void (*parent_finalize)(GObject *object);
 } NtsGObjectClassData;
 
@@ -407,6 +413,9 @@ static void nts_gobject_class_init(gpointer klass, gpointer data) {
   if (table->property_count > 0) {
     nts_gobject_install_properties(G_OBJECT_CLASS(klass), table);
   }
+  if (table->class_setup) {
+    table->class_setup(klass);
+  }
   if (table->owner == table) {
     GObjectClass *object_class = G_OBJECT_CLASS(klass);
     table->parent_finalize =
@@ -421,11 +430,20 @@ static void nts_gobject_class_init(gpointer klass, gpointer data) {
 static void nts_gobject_instance_init(GTypeInstance *instance,
                                       gpointer g_class) {
   NtsGObjectClassData *class = nts_gobject_class_of(G_TYPE_FROM_CLASS(g_class));
-  *nts_gobject_state_slot(instance, class->owner) = class->make_state();
+  if (class->owner) {
+    *nts_gobject_state_slot(instance, class->owner) = class->make_state();
+  }
+  /* The template's children, made before the constructor's body runs, as
+   * GTK's own `instance_init` makes them. */
+  if (class->instance_setup) {
+    class->instance_setup(instance);
+  }
 }
 
 size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
-                            size_t count, void *(*make_state)(void)) {
+                            size_t count, void *(*make_state)(void),
+                            void (*class_setup)(void *),
+                            void (*instance_setup)(void *)) {
   GTypeQuery query;
   g_type_query((GType)parent, &query);
   if (query.type == 0) {
@@ -437,6 +455,8 @@ size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
   data->slots = slots;
   data->count = count;
   data->make_state = make_state;
+  data->class_setup = class_setup;
+  data->instance_setup = instance_setup;
   GTypeInfo info = {0};
   info.class_size = (guint16)query.class_size;
   info.class_init = nts_gobject_class_init;
@@ -458,6 +478,9 @@ size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
     data->owner = data;
     data->state_offset = (query.instance_size + align - 1) / align * align;
     info.instance_size = (guint16)(data->state_offset + sizeof(void *));
+    info.instance_init = nts_gobject_instance_init;
+  } else if (instance_setup) {
+    /* A template and no fields: the instance still needs its children. */
     info.instance_init = nts_gobject_instance_init;
   }
   data->type = g_type_register_static((GType)parent, name, &info, 0);

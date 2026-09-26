@@ -65,7 +65,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
         writer.line(
             origin,
-            "size_t nts_gobject_register(size_t parent, const char *name, const void *slots, size_t count, void *(*make_state)(void));",
+            "size_t nts_gobject_register(size_t parent, const char *name, const void *slots, size_t count, void *(*make_state)(void), void (*class_setup)(void *), void (*instance_setup)(void *));",
         );
         writer.line(origin, "void *nts_gobject_new(size_t type);");
         writer.line(origin, "struct nts_gobject_slot { size_t offset; void (*entry)(void); };");
@@ -130,6 +130,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         }
         // Its signals, added to the type the moment it exists: before any
         // instance can be made or connected to.
+        let hooks = template(writer, origin, class);
         let mut signals = registrations(class);
         if !signals.is_empty() {
             writer.line(origin, "unsigned nts_gobject_add_signal(size_t type, const char *name, const char *kinds);");
@@ -141,7 +142,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             origin,
             format!(
                 "size_t nts_gobject_type_{name}(void) {{ static size_t type = 0; if (type == 0) {{ \
-                 type = nts_gobject_register({parent}(), \"Nts_{name}\", {table}, {}u, {make_state});{signals} }} return type; }}",
+                 type = nts_gobject_register({parent}(), \"Nts_{name}\", {table}, {}u, {make_state}, {hooks});{signals} }} return type; }}",
                 slots.len()
             ),
         );
@@ -158,8 +159,52 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     }
     let wrote = chains(writer, origin, program, wrote)?;
     let wrote = notifies(writer, origin, program, wrote);
+    let wrote = children(writer, origin, program, wrote);
     emits(writer, origin, program, wrote);
     Ok(())
+}
+
+/// Each `nts_gobject_child_{Class}_{index}` the program calls -- a read of a
+/// child the class's template names -- defined as `gtk_widget_get_template_child`
+/// by the child's id, which lends it.
+fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
+    let mut done = std::collections::BTreeSet::new();
+    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_child_") => Some(target),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((class, index)) = target.name.trim_start_matches("nts_gobject_child_").rsplit_once('_') else { continue };
+        let Some(id) = program
+            .foreign_classes
+            .iter()
+            .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
+            .and_then(|foreign| foreign.template.as_ref())
+            .and_then(|template| template.children.get(index.parse::<usize>().ok()?))
+        else {
+            continue;
+        };
+        if !wrote {
+            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            wrote = true;
+        }
+        if done.len() == 1 {
+            writer.line(origin, "void *nts_gtk_template_child(void *widget, size_t type, const char *id);");
+        }
+        let returns = target.result.c_type();
+        let instance = target.parameters.first().map_or_else(|| "void *".into(), Type::c_type);
+        writer.line(
+            origin,
+            format!(
+                "{returns} {}({instance} a0) {{ return ({returns})nts_gtk_template_child(a0, {PROGRAM_GTYPE}{class}(), {}); }}",
+                target.name,
+                c_string(id)
+            ),
+        );
+    }
+    wrote
 }
 
 /// Each `nts_gobject_notify_{Class}_{index}` the program calls -- a write of
@@ -192,6 +237,33 @@ fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
         );
     }
     wrote
+}
+
+/// A class's template (`static readonly template`): `class_init` sets it and
+/// binds each child the class names, and `instance_init` makes the children
+/// (`nts_gtk.c`). The two hooks registration passes, `0, 0` without one.
+fn template(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClass) -> String {
+    let Some(template) = &class.template else { return "0, 0".to_owned() };
+    let name = &class.name;
+    writer.line(origin, "void nts_gtk_class_template(void *klass, const char *xml, size_t length, const char *const *children, size_t count);");
+    writer.line(origin, "void nts_gtk_init_template(void *instance);");
+    let children: Vec<String> = template.children.iter().map(|child| c_string(child)).collect();
+    let table = if children.is_empty() {
+        "0".to_owned()
+    } else {
+        writer.line(origin, format!("static const char *const nts_gobject_children_{name}[] = {{ {} }};", children.join(", ")));
+        format!("nts_gobject_children_{name}")
+    };
+    writer.line(
+        origin,
+        format!(
+            "static void nts_gobject_class_setup_{name}(void *klass) {{ nts_gtk_class_template(klass, {}, {}u, {table}, {}u); }}",
+            c_string(&template.xml),
+            template.xml.len(),
+            children.len()
+        ),
+    );
+    format!("nts_gobject_class_setup_{name}, nts_gtk_init_template")
 }
 
 /// The maker of a class's fields, entered and left as an entry point is, or

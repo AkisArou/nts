@@ -32,6 +32,11 @@
 //                 its name -- `plain`, a field only, does not -- and
 //                 `bind_property` reads `title` through `get_property`, then
 //                 writes `b` back through `set_property`, which notifies too
+//   panel from the template true  `Panel` is built from a template (`static
+//                 readonly template`): the label its template makes is the
+//                 widget's first child, and the `declare`d field `title` reads
+//                 it by its id (`gtk_widget_get_template_child`). Without the
+//                 template's registration the field read NULL, a critical
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
@@ -50,6 +55,7 @@
 //                 (`g_type_check_instance_is_a`) for a class the program wrote
 //                 and for a binding's, and narrows: `C`'s field read after it
 import {
+  GtkBox,
   GtkButton,
   GtkLabel,
   GtkWidget,
@@ -187,6 +193,27 @@ function notes(): string {
   return "notes" + seen + " " + synced + " " + note.title + " " + String(note.done) + " " + String(note.weight);
 }
 
+// A class built from a template, GJS's `Template` and `InternalChildren`: the
+// template makes the children, and a `declare`d field names one by its id.
+class Panel extends GtkBox {
+  static readonly template = `<interface>
+  <template class="Nts_Panel" parent="GtkBox">
+    <child>
+      <object class="GtkLabel" id="title">
+        <property name="label">from the template</property>
+      </object>
+    </child>
+  </template>
+</interface>`;
+  declare readonly title: GtkLabel;
+}
+
+function panel(): string {
+  const made = new Panel({});
+  const first = made.get_first_child();
+  return "panel " + (made.title.label ?? "") + " " + String(first === made.title);
+}
+
 class Square extends GtkWidget {
   vfunc_measure(
     orientation: CEnum<GtkOrientation, c_uint>,
@@ -310,6 +337,7 @@ function main(): void {
   sub_log(framed());
   sub_log(tally());
   sub_log(notes());
+  sub_log(panel());
 
   const square = new Square({});
   const width = local<CNumber<"int">>();

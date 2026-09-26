@@ -37,9 +37,15 @@ gulong nts_gobject_connect(gpointer instance, const gchar *detailed_signal,
  * function making the object that holds them, its initialisers run. The
  * instance is then one pointer larger than the parent's, holding that object,
  * made by `instance_init` and given back by `finalize` -- which chains to the
- * parent's -- and `nts_gobject_state` (in `nts_runtime.h`) reads it. */
+ * parent's -- and `nts_gobject_state` (in `nts_runtime.h`) reads it.
+ *
+ * `class_setup` and `instance_setup`, either NULL, are what `class_init` and
+ * `instance_init` run for the class beyond that: a template's
+ * (`nts_gtk_class_template`, `nts_gtk_init_template` in `nts_gtk.c`). */
 size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
-                            size_t count, void *(*make_state)(void));
+                            size_t count, void *(*make_state)(void),
+                            void (*class_setup)(void *),
+                            void (*instance_setup)(void *));
 
 /* The parent class's implementation of a virtual function, for chaining up
  * (`super.vfunc_clicked()`): the function pointer at `offset` in the class
