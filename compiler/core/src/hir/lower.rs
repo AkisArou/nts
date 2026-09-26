@@ -37853,6 +37853,25 @@ impl<'a> FuncBuilder<'a> {
                 .or_else(|| self.provided_error_base(type_id));
             if let Some(provided) = provided {
                 self.initialize_error(id, object, &provided, &arguments)?;
+                // **And then this site's own declarations**, which the sibling
+                // below already says it owes: "nothing runs but this, so this
+                // site owes the whole chain". A provided error is built inline
+                // rather than by a constructor, so a class descending from one
+                // and declaring none of its own has no function anywhere that
+                // would run its field initialisers -- and this arm used to
+                // return before reaching them.
+                //
+                // `class Coded extends Error { code = 5 }` read `code` as **0**
+                // where node reads 5, and `"code" in new Coded("b")` was false
+                // where node says true: not one defect about presence but the
+                // declarations never running at all. An explicit constructor hid
+                // it, because then `hierarchy.constructor` answers the subclass
+                // and the ordinary path runs.
+                //
+                // After the inline construction, because that is where the
+                // language puts a subclass's field initialisers: `super(...)`
+                // first, then its own.
+                self.initialize_fields(id, object, type_id, owed)?;
                 return Ok(object);
             }
             if !arguments.is_empty() {
