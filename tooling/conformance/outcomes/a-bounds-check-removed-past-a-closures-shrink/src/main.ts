@@ -7,6 +7,13 @@
 // The control, the same shrink with no closure, keeps the check: the runtime
 // refuses `index 5 is outside [0, 0)` (a runtime refusal, not this defect).
 //
+// **It needs a field allocated with a known length** (`items = [1..8]`), so that
+// `lengths` has a fact to remove a check against. A field grown from `[]` (or
+// assigned from a parameter) has no such fact and keeps its check -- measured:
+// the same closure shrink on `items: number[] = []` pushed to eight aborts with
+// `index 5 is outside [0, 0)`. A reproduction written that way sees nothing and
+// looks fixed; it is not.
+//
 // **The cause (compiler lane's reading, this fixture its witness):**
 // `fields::lengths` records a `(layout, field)` as changing length only when a
 // `FieldGet` of it appears directly in a call's argument list, and its answer
