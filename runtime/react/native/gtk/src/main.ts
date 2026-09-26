@@ -39,6 +39,14 @@
 //             model, a DropDown's list model) takes each class that
 //             implements it, as itself; one that does not (an adjustment)
 //             leaves the model unset
+//   grid      Grid.Child elements attach their children at their cells; a
+//             child element whose column changes moves its child; one
+//             removed takes its child out
+//   stack     Stack.Page elements add named, titled pages; the Stack's
+//             visibleChildName, applied before its pages existed, shows the
+//             page it names; a page's title updates in place
+//   notebook  Notebook.Page elements add pages with tab text, one inserted
+//             before another takes its place in the order, one removed goes
 //   slot      slot elements fill a Paned's start and end children, their
 //             children placed first as React completes them; a child removed
 //             from its slot element empties the slot, and so does the slot
@@ -73,7 +81,21 @@ import {
   type Props,
 } from "../../../packages/react-gtk/src/ReactFiberConfig.ts";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
-import { BoxNode, ButtonNode, DropDownNode, EntryNode, FrameNode, LabelNode, ListBoxNode, ListViewNode, PanedNode, ScaleNode } from "../../../packages/react-gtk/src/widgets.ts";
+import {
+  BoxNode,
+  ButtonNode,
+  DropDownNode,
+  EntryNode,
+  FrameNode,
+  GridNode,
+  LabelNode,
+  ListBoxNode,
+  ListViewNode,
+  NotebookNode,
+  PanedNode,
+  ScaleNode,
+  StackNode,
+} from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
 
 // The widget a node shows: what a ref to it holds.
@@ -333,6 +355,67 @@ function main(): void {
       " " +
       String(refused instanceof ListViewNode && refused.gtk.get_model() === null),
   );
+
+  const grid = createInstance("GtkGrid", {}, container, 0, {});
+  const cellA = createInstance("GtkGrid.Child", { column: 0, row: 0 }, container, 0, {});
+  const cellB = createInstance("GtkGrid.Child", { column: 1, row: 0 }, container, 0, {});
+  const inA = createInstance("GtkLabel", { label: "a" }, container, 0, {});
+  const inB = createInstance("GtkLabel", { label: "b" }, container, 0, {});
+  appendInitialChild(cellA, inA);
+  appendInitialChild(cellB, inB);
+  appendInitialChild(grid, cellA);
+  appendInitialChild(grid, cellB);
+  const cellAt = (column: number): string => {
+    if (!(grid instanceof GridNode)) {
+      return "not a grid";
+    }
+    const child = grid.gtk.get_child_at(column, 0);
+    return child === null ? "-" : child === widget(inA) ? "a" : child === widget(inB) ? "b" : "?";
+  };
+  let cells = cellAt(0) + cellAt(1) + cellAt(2);
+  commitUpdate(cellB, "GtkGrid.Child", { column: 1, row: 0 }, { column: 2, row: 0 }, {});
+  cells += " " + cellAt(0) + cellAt(1) + cellAt(2);
+  removeChild(grid, cellA);
+  cells += " " + cellAt(0) + cellAt(1) + cellAt(2);
+  react_gtk_log("grid " + cells);
+
+  const stack = createInstance("GtkStack", { visibleChildName: "b" }, container, 0, {});
+  const pageA = createInstance("GtkStack.Page", { name: "a", title: "A" }, container, 0, {});
+  const pageB = createInstance("GtkStack.Page", { name: "b", title: "B" }, container, 0, {});
+  const onA = createInstance("GtkLabel", { label: "a" }, container, 0, {});
+  const onB = createInstance("GtkLabel", { label: "b" }, container, 0, {});
+  appendInitialChild(pageA, onA);
+  appendInitialChild(pageB, onB);
+  appendInitialChild(stack, pageA);
+  appendInitialChild(stack, pageB);
+  const titleOfB = (): string => (stack instanceof StackNode ? String(stack.gtk.get_page(widget(onB)).get_title()) : "not a stack");
+  const shown = stack instanceof StackNode ? String(stack.gtk.get_visible_child_name()) : "not a stack";
+  const titleBefore = titleOfB();
+  commitUpdate(pageB, "GtkStack.Page", { name: "b", title: "B" }, { name: "b", title: "Bee" }, {});
+  react_gtk_log("stack " + shown + " " + titleBefore + " " + titleOfB());
+
+  const notebook = createInstance("GtkNotebook", {}, container, 0, {});
+  const tabs: HostNode[] = [];
+  const pages: HostNode[] = [];
+  for (const tab of ["one", "two", "three"]) {
+    const page = createInstance("GtkNotebook.Page", { tab }, container, 0, {});
+    const content = createInstance("GtkLabel", { label: tab }, container, 0, {});
+    appendInitialChild(page, content);
+    tabs.push(page);
+    pages.push(content);
+  }
+  appendInitialChild(notebook, tabs[0]!);
+  appendInitialChild(notebook, tabs[2]!);
+  insertBefore(notebook, tabs[1]!, tabs[2]!);
+  let pageOrder = "not a notebook";
+  const pagesOf = notebook instanceof NotebookNode ? notebook.gtk : null;
+  if (pagesOf !== null) {
+    pageOrder = pages.map((p) => String(pagesOf.page_num(widget(p)))).join(",");
+    pageOrder += " " + String(pagesOf.get_tab_label_text(widget(pages[1]!)));
+    removeChild(notebook, tabs[0]!);
+    pageOrder += " " + String(pagesOf.get_n_pages());
+  }
+  react_gtk_log("notebook " + pageOrder);
 
   const paned = createInstance("GtkPaned", {}, container, 0, {});
   const startSlot = createInstance("GtkPaned.StartChild", {}, container, 0, {});

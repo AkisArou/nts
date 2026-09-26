@@ -178,6 +178,7 @@ import {
 } from "c:Pango-1.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";
+import { type GridChildren, GridChildNode, type StackChildren, StackPageNode, type NotebookChildren, NotebookPageNode } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1634,7 +1635,7 @@ export declare const GLArea: HostComponent<"GtkGLArea", GLAreaProps>;
 export declare const GraphicsOffload: HostComponent<"GtkGraphicsOffload", GraphicsOffloadProps>;
 
 /** `<Grid>`: a GtkGrid. */
-export declare const Grid: HostComponent<"GtkGrid", GridProps>;
+export declare const Grid: HostComponent<"GtkGrid", GridProps> & GridChildren;
 
 /** `<GridView>`: a GtkGridView. */
 export declare const GridView: HostComponent<"GtkGridView", GridViewProps>;
@@ -1673,7 +1674,7 @@ export declare const MediaControls: HostComponent<"GtkMediaControls", MediaContr
 export declare const MenuButton: HostComponent<"GtkMenuButton", MenuButtonProps> & MenuButtonSlots;
 
 /** `<Notebook>`: a GtkNotebook. */
-export declare const Notebook: HostComponent<"GtkNotebook", NotebookProps>;
+export declare const Notebook: HostComponent<"GtkNotebook", NotebookProps> & NotebookChildren;
 
 /** `<Overlay>`: a GtkOverlay. */
 export declare const Overlay: HostComponent<"GtkOverlay", OverlayProps>;
@@ -1736,7 +1737,7 @@ export declare const SpinButton: HostComponent<"GtkSpinButton", SpinButtonProps>
 export declare const Spinner: HostComponent<"GtkSpinner", SpinnerProps>;
 
 /** `<Stack>`: a GtkStack. */
-export declare const Stack: HostComponent<"GtkStack", StackProps>;
+export declare const Stack: HostComponent<"GtkStack", StackProps> & StackChildren;
 
 /** `<StackSidebar>`: a GtkStackSidebar. */
 export declare const StackSidebar: HostComponent<"GtkStackSidebar", StackSidebarProps>;
@@ -7456,6 +7457,9 @@ export class GridNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return gridSignal(this.gtk, key, slot);
   }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<Grid> places a child through <Grid.Child column row>.");
+  }
 }
 
 /** `<GridView>`: a GtkGridView. */
@@ -7745,6 +7749,9 @@ export class NotebookNode extends WidgetNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return notebookSignal(this.gtk, key, slot);
+  }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<Notebook> places a child through <Notebook.Page tab>.");
   }
 }
 
@@ -8188,6 +8195,9 @@ export class StackNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return stackSignal(this.gtk, key, slot);
   }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<Stack> places a child through <Stack.Page name>.");
+  }
 }
 
 /** `<StackSidebar>`: a GtkStackSidebar. */
@@ -8620,6 +8630,12 @@ export function createNode(type: string): HostNode | null {
     case "GtkPaned.StartChild":
     case "GtkPopoverBin.Popover":
       return new SlotNode(type);
+    case "GtkGrid.Child":
+      return new GridChildNode(type);
+    case "GtkStack.Page":
+      return new StackPageNode(type);
+    case "GtkNotebook.Page":
+      return new NotebookPageNode(type);
   }
   return null;
 }

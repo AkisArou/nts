@@ -469,6 +469,16 @@ const widgetReferences = new Set(["mnemonic-widget", "default-widget", "focus-wi
 // Children arrive as React children, never as a prop.
 const childProps = new Set(["child"]);
 
+// Containers that place a child with parameters of its own, through a child
+// element written by hand in src/children.ts: the members their component
+// has, each element's host type and node class, and what to say to a widget
+// placed in the container directly.
+const childElements = new Map([
+  ["Grid", { members: "GridChildren", elements: [["GtkGrid.Child", "GridChildNode"]], use: "<Grid.Child column row>" }],
+  ["Stack", { members: "StackChildren", elements: [["GtkStack.Page", "StackPageNode"]], use: "<Stack.Page name>" }],
+  ["Notebook", { members: "NotebookChildren", elements: [["GtkNotebook.Page", "NotebookPageNode"]], use: "<Notebook.Page tab>" }],
+]);
+
 function valueKind(type: string, bindings: Bindings, reference = false): ValueKind | null {
   if (type === "string" || type === "string | null") {
     return { kind: "string", nullable: type.endsWith("null") };
@@ -719,6 +729,8 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line("__IMPORTS__");
   line('import type { HostComponent } from "shared/ReactHostComponent.ts";');
   line('import { type HostNode, insertAt, type SignalSlot, SlotNode, WidgetNode } from "./HostNode.ts";');
+  const childImports = [...childElements.values()].flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]);
+  line(`import { ${childImports.join(", ")} } from "./children.ts";`);
   line();
   line("// ---- props: what JSX checks -------------------------------------------------");
   line();
@@ -765,7 +777,8 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
     const owner = slotOwner(w);
     line();
     line(`/** \`<${w.jsx}>\`: a ${w.ts}. */`);
-    line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${w.jsx}Props>${owner === null ? "" : ` & ${owner.jsx}Slots`};`);
+    const members = [owner === null ? null : `${owner.jsx}Slots`, childElements.get(w.jsx)?.members ?? null].filter((m) => m !== null);
+    line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${w.jsx}Props>${members.map((m) => ` & ${m}`).join("")};`);
   }
 
   line();
@@ -875,6 +888,15 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("    return undefined;");
       line("  }");
     }
+    const elements = childElements.get(w.jsx);
+    if (elements !== undefined) {
+      if (w.children !== "none") {
+        throw new Error(`${w.ts} has a child protocol of its own and child elements: which places a child?`);
+      }
+      line("  protected place(_child: WidgetNode): void {");
+      line(`    throw new Error("<${w.jsx}> places a child through ${elements.use}.");`);
+      line("  }");
+    }
     if (w.children === "single") {
       line("  protected place(child: WidgetNode): void {");
       line("    this.holdOnly(child);");
@@ -965,6 +987,12 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   }
   if (m.types.some((t) => t.slots.length > 0)) {
     line("      return new SlotNode(type);");
+  }
+  for (const c of childElements.values()) {
+    for (const [hostType, node] of c.elements) {
+      line(`    case "${hostType}":`);
+      line(`      return new ${node}(type);`);
+    }
   }
   line("  }");
   line("  return null;");

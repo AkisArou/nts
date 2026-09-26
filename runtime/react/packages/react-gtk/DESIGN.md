@@ -188,6 +188,31 @@ class, so `<Frame.LabelWidget>` inside an Expander is an error rather than
 the Expander's label, and a subclass inherits its parent's slots
 (`<ApplicationWindow.Titlebar>` is `GtkWindow.Titlebar`).
 
+**Child elements.** A container that places a child with parameters of its
+own takes it through an element that carries them:
+
+```tsx
+<Grid><Grid.Child column={1} row={0}><Label /></Grid.Child></Grid>
+<Stack visibleChildName={page}><Stack.Page name="files" title="Files"><Files /></Stack.Page></Stack>
+<Notebook><Notebook.Page tab="Files"><Files /></Notebook.Page></Notebook>
+```
+
+A slot element and a child element are the same kind of node, a
+`PlacedNode`: it holds one widget and attaches it to the widget it is in by
+a protocol of its own, once both are placed, and detaches it when either
+goes. A slot element fills a property; `<Grid.Child>` attaches at its cell
+and moves when its cell changes; `<Stack.Page>` adds a named, titled page
+and updates it in place; `<Notebook.Page>` inserts a page before the next
+one React knows of. GIR describes none of this, so these are written by
+hand (`src/children.ts`) and the generator only declares them as members
+and creates them. A widget placed in such a container directly is an error
+that names the element to use. A container's prop that selects a child
+(a Stack's `visibleChildName`, a Notebook's `page`) is applied before the
+container has children, since React sets a node's props before placing
+its children. So the page it names selects itself when it is attached. A
+Stack keeps its pages in the order they were added: GtkStack cannot move
+one, so a page React moves goes last.
+
 The two kinds of node are placed by double dispatch: a parent asks its child
 to place itself (`child.placeIn(parent, before)`), so a widget goes among
 the children by the parent's protocol and a slot element fills its slot,

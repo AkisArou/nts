@@ -3,10 +3,12 @@
 //   WidgetNode  a widget: `<Button>`. src/widgets.ts generates a subclass per
 //               GTK widget, which knows its own props, signals and how it
 //               holds children; WidgetNode is what they share.
-//   SlotNode    a slot element: `<Paned.StartChild>`, which places its one
-//               child in a widget-typed property of the widget it is in (a
-//               Paned's start child, a window's titlebar) rather than among
-//               that widget's children.
+//   PlacedNode  an element that holds one widget and places it in the
+//               widget it is in by a protocol of its own, rather than among
+//               that widget's children: a slot element (`<Paned.StartChild>`,
+//               SlotNode) fills a widget-typed property, and a child element
+//               (`<Grid.Child column row>`, src/children.ts) places it with
+//               parameters of its own.
 //
 // A WidgetNode holds the widget as a GtkWidget, which is all a parent or the
 // window needs. Each subclass also holds it typed as what it is, in its own
@@ -204,6 +206,9 @@ export abstract class HostNode {
   /** What a ref to the element holds: a widget. */
   abstract publicInstance(): GtkWidget;
 
+  /** The widget GTK shows for this element: its own, or a placed element's child's; null for an empty one. */
+  abstract shownWidget(): GtkWidget | null;
+
   /** Shows or hides what the element shows, as Suspense and Activity do. */
   abstract setVisible(visible: boolean): void;
 
@@ -255,12 +260,21 @@ export abstract class WidgetNode extends HostNode {
     return this.widget;
   }
 
+  shownWidget(): GtkWidget | null {
+    return this.widget;
+  }
+
   setVisible(visible: boolean): void {
     this.widget.set_visible(visible);
   }
 
   widgetNode(): WidgetNode | null {
     return this;
+  }
+
+  /** The prop `key` as last applied: a child element reads its container's (a Stack's `visibleChildName`). */
+  prop(key: string): unknown {
+    return this.props === null ? undefined : this.props[key];
   }
   /** Applies `next`, the props after `previous` (null on creation). */
   applyProps(previous: Props | null, next: Props): void {
@@ -428,19 +442,31 @@ export abstract class WidgetNode extends HostNode {
 }
 
 /**
- * A slot element, `<Paned.StartChild>`: its one child fills the widget slot
- * its host type names, in the widget the element is in. The child arrives
- * before the element is placed (React completes children first), so each
- * side fills the slot once both are there, and empties it when either goes.
+ * An element that holds one widget and places it in the widget it is in, by
+ * a protocol of its own: `attach` and `detach`. The child arrives before the
+ * element is placed (React completes children first), so it is attached once
+ * both are there, and detached when either goes. A change of the element's
+ * props detaches and attaches again unless the element can update in place.
  */
-export class SlotNode extends HostNode {
-  private owner: WidgetNode | null = null;
-  private child: WidgetNode | null = null;
+export abstract class PlacedNode extends HostNode {
+  protected owner: WidgetNode | null = null;
+  protected child: WidgetNode | null = null;
+  // The element after this one among its owner's children, or null: where a
+  // protocol with an order (a Notebook's pages) places it.
+  protected before: HostNode | null = null;
+  protected props: Props = {};
+  private attached = false;
 
-  applyProps(_previous: Props | null, next: Props): void {
+  applyProps(previous: Props | null, next: Props): void {
     const children = next["children"];
     if (typeof children === "string" || typeof children === "number") {
       throw new Error(`<${this.name()}> cannot hold text: put it in a <Label>.`);
+    }
+    this.props = next;
+    const owner = this.owner;
+    const child = this.child;
+    if (previous !== null && this.attached && owner !== null && child !== null) {
+      this.update(owner, child.widget);
     }
   }
 
@@ -453,49 +479,74 @@ export class SlotNode extends HostNode {
       throw new Error(`<${this.name()}> holds one child at most.`);
     }
     this.child = widget;
-    this.fill();
+    this.put();
   }
   insertBefore(child: HostNode, _before: HostNode): void {
     this.appendChild(child);
   }
   removeChild(child: HostNode): void {
     if (this.child === child) {
+      this.take();
       this.child = null;
-      this.fill();
     }
   }
 
-  // A slot element's place among its parent's children is no place in GTK:
-  // it fills the slot, wherever it is.
-  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+  placeIn(parent: WidgetNode, before: HostNode | null): void {
+    // Placed again, it is moving: out first, then in at its new place.
+    this.take();
     this.owner = parent;
-    this.fill();
+    this.before = before;
+    this.put();
   }
   takeOutOf(parent: WidgetNode): void {
     if (this.owner === parent) {
-      parent.fillSlot(this.type, null);
+      this.take();
       this.owner = null;
     }
+  }
+
+  private put(): void {
+    const owner = this.owner;
+    const child = this.child;
+    if (!this.attached && owner !== null && child !== null) {
+      this.attach(owner, child.widget);
+      this.attached = true;
+    }
+  }
+  private take(): void {
+    const owner = this.owner;
+    const child = this.child;
+    if (this.attached && owner !== null && child !== null) {
+      this.attached = false;
+      this.detach(owner, child.widget);
+    }
+  }
+
+  /** Puts `widget` in `owner`. */
+  protected abstract attach(owner: WidgetNode, widget: GtkWidget): void;
+  /** Takes `widget` back out of `owner`. */
+  protected abstract detach(owner: WidgetNode, widget: GtkWidget): void;
+  /** The element's props changed while its child is in `owner`. */
+  protected update(owner: WidgetNode, widget: GtkWidget): void {
+    this.detach(owner, widget);
+    this.attach(owner, widget);
   }
 
   widgetNode(): WidgetNode | null {
     return null;
   }
 
-  private fill(): void {
-    const owner = this.owner;
+  shownWidget(): GtkWidget | null {
     const child = this.child;
-    if (owner !== null && !owner.fillSlot(this.type, child === null ? null : child.widget)) {
-      throw new Error(`<${owner.name()}> has no slot <${this.name()}>.`);
-    }
+    return child === null ? null : child.widget;
   }
 
   publicInstance(): GtkWidget {
-    const child = this.child;
-    if (child === null) {
+    const widget = this.shownWidget();
+    if (widget === null) {
       throw new Error(`<${this.name()}> is empty: a ref to it has no widget.`);
     }
-    return child.widget;
+    return widget;
   }
 
   setVisible(visible: boolean): void {
@@ -503,5 +554,21 @@ export class SlotNode extends HostNode {
     if (child !== null) {
       child.setVisible(visible);
     }
+  }
+}
+
+/**
+ * A slot element, `<Paned.StartChild>`: its child fills the widget slot its
+ * host type names, in the widget the element is in. Where it sits among that
+ * widget's children is no place in GTK.
+ */
+export class SlotNode extends PlacedNode {
+  protected attach(owner: WidgetNode, widget: GtkWidget): void {
+    if (!owner.fillSlot(this.type, widget)) {
+      throw new Error(`<${owner.name()}> has no slot <${this.name()}>.`);
+    }
+  }
+  protected detach(owner: WidgetNode, _widget: GtkWidget): void {
+    owner.fillSlot(this.type, null);
   }
 }

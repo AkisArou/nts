@@ -45,6 +45,9 @@ object true 42
 reference true
 decision 1 0 asked=1
 interface true true true
+grid ab- a-b --b
+stack b B Bee
+notebook 0,1,2 two 2
 slot side,main side,none none,none titled=true
 work timer"
 
