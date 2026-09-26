@@ -139,7 +139,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren } from "./children.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1088,7 +1088,7 @@ export declare const ToggleGroup: HostComponent<"AdwToggleGroup", ToggleGroupPro
 export declare const ToolbarView: HostComponent<"AdwToolbarView", ToolbarViewProps> & ToolbarViewSlots & ToolbarViewChildren;
 
 /** `<ViewStack>`: an AdwViewStack. */
-export declare const ViewStack: HostComponent<"AdwViewStack", ViewStackProps>;
+export declare const ViewStack: HostComponent<"AdwViewStack", ViewStackProps> & ViewStackChildren;
 
 /** `<ViewSwitcher>`: an AdwViewSwitcher. */
 export declare const ViewSwitcher: HostComponent<"AdwViewSwitcher", ViewSwitcherProps>;
@@ -3541,7 +3541,7 @@ export function viewStackProp(gtk: AdwViewStack, key: string, value: unknown): b
       if (value instanceof GtkWidget) gtk.set_visible_child(value);
       return true;
     case "visibleChildName":
-      gtk.set_visible_child_name(typeof value === "string" ? value : "");
+      if (typeof value === "string" && gtk.get_child_by_name(value) !== null) gtk.set_visible_child_name(value);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -5062,6 +5062,16 @@ export class AdwViewStackNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return viewStackSignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "visibleChildName":
+        return this.gtk.get_visible_child_name();
+    }
+    return undefined;
+  }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<ViewStack> places a child through <ViewStack.Page name title>.");
+  }
 }
 
 /** `<ViewSwitcher>`: an AdwViewSwitcher. */
@@ -5337,6 +5347,8 @@ export function createNode(type: string): HostNode | null {
       return new AdwGroupNode(type);
     case "AdwExpanderRow.Suffix":
       return new AdwGroupNode(type);
+    case "AdwViewStack.Page":
+      return new ViewStackPageNode(type);
   }
   return null;
 }

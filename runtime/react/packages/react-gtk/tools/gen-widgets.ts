@@ -517,6 +517,7 @@ const controlledProps = new Map([
   ["Gtk.Paned", ["position"]],
   ["Gtk.MenuButton", ["active"]],
   ["Gtk.SearchBar", ["search-mode-enabled"]],
+  ["Adw.ViewStack", ["visible-child-name"]],
 ]);
 
 // Widget-typed properties that name another widget rather than place one: an
@@ -535,7 +536,10 @@ const childProps = new Set(["child"]);
 // its child: GTK warns and selects nothing, and the child selects itself when
 // it is attached (src/children.ts). So such a prop is set only when the child
 // exists, and removing it leaves the selection as it is.
-const childNamingProps = new Map([["Gtk.Stack", new Map([["visible-child-name", "get_child_by_name"]])]]);
+const childNamingProps = new Map([
+  ["Gtk.Stack", new Map([["visible-child-name", "get_child_by_name"]])],
+  ["Adw.ViewStack", new Map([["visible-child-name", "get_child_by_name"]])],
+]);
 
 // Containers that place a child with parameters of its own, or in groups,
 // through elements written by hand in each module's children.ts (src/, and
@@ -554,6 +558,7 @@ const childElements = new Map([
   ["Adw.ToolbarView", { members: "ToolbarViewChildren", elements: [["AdwToolbarView.Top", "AdwGroupNode"], ["AdwToolbarView.Bottom", "AdwGroupNode"]], use: "<ToolbarView.Top> or <ToolbarView.Bottom>" }],
   ["Adw.ActionRow", { members: "ActionRowChildren", elements: [["AdwActionRow.Prefix", "AdwGroupNode"], ["AdwActionRow.Suffix", "AdwGroupNode"]], use: "<ActionRow.Prefix> or <ActionRow.Suffix>" }],
   ["Adw.ExpanderRow", { members: "ExpanderRowChildren", elements: [["AdwExpanderRow.Prefix", "AdwGroupNode"], ["AdwExpanderRow.Suffix", "AdwGroupNode"]], use: "<ExpanderRow.Prefix> or <ExpanderRow.Suffix>" }],
+  ["Adw.ViewStack", { members: "ViewStackChildren", elements: [["AdwViewStack.Page", "ViewStackPageNode"]], use: "<ViewStack.Page name title>" }],
 ]);
 
 /** The elements `t` takes: its own class's, or the nearest ancestor's with some. */

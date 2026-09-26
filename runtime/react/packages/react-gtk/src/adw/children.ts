@@ -5,15 +5,18 @@
 //   <HeaderBar><HeaderBar.Start><Button /></HeaderBar.Start></HeaderBar>
 //   <ToolbarView><ToolbarView.Top><HeaderBar /></ToolbarView.Top>...</ToolbarView>
 //   <ActionRow title="Wi-Fi"><ActionRow.Suffix><Switch /></ActionRow.Suffix></ActionRow>
+//   <ViewStack><ViewStack.Page name="inbox" title="Inbox" iconName="mail-symbolic">...</ViewStack.Page></ViewStack>
 //
 // Each is a GroupNode with a placement of libadwaita's, so GTK's module never
 // names an Adw class. A row's subclasses (a SwitchRow is an ActionRow) take
 // their ancestor's groups.
 
-import { AdwActionRow, AdwExpanderRow, AdwHeaderBar, AdwToolbarView } from "c:Adw-1";
+import { AdwActionRow, AdwExpanderRow, AdwHeaderBar, AdwToolbarView, AdwViewStack, type AdwViewStackPage } from "c:Adw-1";
+import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { GroupNode, GroupPlacement, type PackProps } from "../children.ts";
+import { PlacedNode, type WidgetNode } from "../HostNode.ts";
 
 export interface HeaderBarChildren {
   /** `<HeaderBar.Start>`: its children, packed at the bar's start, left to right. */
@@ -121,5 +124,70 @@ function placementOf(type: string): GroupPlacement {
 export class AdwGroupNode extends GroupNode {
   constructor(type: string) {
     super(type, placementOf(type));
+  }
+}
+
+// ---- ViewStack -------------------------------------------------------------------------
+
+export interface ViewStackPageProps {
+  /** The page's name: what the ViewStack's `visibleChildName` selects. */
+  name?: string;
+  /** The page's title, as a ViewSwitcher shows it. */
+  title?: string;
+  iconName?: string;
+  needsAttention?: boolean;
+  /** A count a ViewSwitcher shows on the page's button: 0 for none. */
+  badgeNumber?: number;
+  children?: unknown;
+}
+
+export interface ViewStackChildren {
+  /** `<ViewStack.Page name title iconName>`: its one child, a page of the ViewStack. */
+  readonly Page: HostComponent<"AdwViewStack.Page", ViewStackPageProps>;
+}
+
+/**
+ * A page of a ViewStack, as GTK's Stack.Page is of a Stack (../children.ts):
+ * added with its name, title and icon, described again in place when they
+ * change, and selecting itself when the ViewStack's `visibleChildName`,
+ * applied before its pages existed, names it.
+ */
+export class ViewStackPageNode extends PlacedNode {
+  protected attach(owner: WidgetNode, widget: GtkWidget): void {
+    const stack = owner.widget;
+    if (!(stack instanceof AdwViewStack)) {
+      throw new Error(`<ViewStack.Page> goes directly inside a <ViewStack>, not a <${owner.name()}>.`);
+    }
+    this.describe(stack.add(widget));
+    const name = this.props["name"];
+    if (typeof name === "string" && owner.prop("visibleChildName") === name) {
+      stack.set_visible_child(widget);
+    }
+  }
+  protected detach(owner: WidgetNode, widget: GtkWidget): void {
+    const stack = owner.widget;
+    if (stack instanceof AdwViewStack) {
+      stack.remove(widget);
+    }
+  }
+  protected update(owner: WidgetNode, widget: GtkWidget): void {
+    const stack = owner.widget;
+    if (stack instanceof AdwViewStack) {
+      this.describe(stack.get_page(widget));
+    }
+  }
+
+  private describe(page: AdwViewStackPage): void {
+    const props = this.props;
+    const text = (key: string): string | null => {
+      const value = props[key];
+      return typeof value === "string" ? value : null;
+    };
+    page.set_name(text("name"));
+    page.set_title(text("title"));
+    page.set_icon_name(text("iconName"));
+    page.set_needs_attention(props["needsAttention"] === true);
+    const badge = props["badgeNumber"];
+    page.set_badge_number(typeof badge === "number" ? badge : 0);
   }
 }

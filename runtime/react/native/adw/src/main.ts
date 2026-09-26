@@ -19,6 +19,10 @@
 //             slot its content
 //   row       an ActionRow's Prefix and Suffix groups, and an ExpanderRow's
 //             Prefix, place their widgets left to right in React's order
+//   viewstack ViewStack.Page elements add named, titled pages; the
+//             ViewStack's visibleChildName, applied before its pages existed,
+//             shows the page it names; a title updates in place; switched from
+//             GTK's side, the controlled page goes back to the props' one
 //   unknown   a root without the adw set creates no Adw widget
 //   reset     removing the Adw prop restores libadwaita's default, and
 //             removing the inherited GTK one clears it
@@ -32,6 +36,7 @@ import {
   AdwHeaderBar,
   AdwPreferencesGroup,
   AdwToolbarView,
+  AdwViewStack,
 } from "c:Adw-1";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { g_main_context_iteration } from "c:GLib-2.0";
@@ -194,6 +199,28 @@ function main(): void {
   appendInitialChild(expander, expanderPrefix);
   const expanderOrder = widget(e1).get_next_sibling() === widget(e2) ? "e1>e2" : "e1>?";
   react_gtk_log("row " + sideNames[0]! + ">" + nextOf(0) + " " + sideNames[2]! + ">" + nextOf(2) + " " + expanderOrder);
+
+  const stack = createInstance("AdwViewStack", { visibleChildName: "b" }, root, 0, {});
+  const pageA = createInstance("AdwViewStack.Page", { name: "a", title: "A" }, root, 0, {});
+  const pageB = createInstance("AdwViewStack.Page", { name: "b", title: "B" }, root, 0, {});
+  const onA = createInstance("GtkLabel", { label: "a" }, root, 0, {});
+  const onB = createInstance("GtkLabel", { label: "b" }, root, 0, {});
+  appendInitialChild(pageA, onA);
+  appendInitialChild(pageB, onB);
+  appendInitialChild(stack, pageA);
+  appendInitialChild(stack, pageB);
+  const stackWidget = widget(stack);
+  const views = stackWidget instanceof AdwViewStack ? stackWidget : null;
+  let viewing = "not a view stack";
+  if (views !== null) {
+    viewing = String(views.get_visible_child_name()) + " " + String(views.get_page(widget(onB)).get_title());
+    commitUpdate(pageB, "AdwViewStack.Page", { name: "b", title: "B" }, { name: "b", title: "Bee" }, {});
+    viewing += ">" + String(views.get_page(widget(onB)).get_title());
+    views.set_visible_child_name("a");
+    idle();
+    viewing += " switched=" + String(views.get_visible_child_name());
+  }
+  react_gtk_log("viewstack " + viewing);
 
   const application = new AdwApplication({ application_id: "org.nts.ReactAdw", flags: ApplicationFlags.NON_UNIQUE });
   application.register(null, null);

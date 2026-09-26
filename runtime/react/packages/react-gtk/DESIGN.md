@@ -401,6 +401,9 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   core never names an Adw class. Which side of a row fills from its far edge
   was measured, not assumed: an ActionRow prepends its prefixes, and an
   ExpanderRow appends them.
+- A ViewStack's pages are `<ViewStack.Page name title iconName badgeNumber>`,
+  as GTK's Stack's are, and its `visibleChildName` is controlled and set only
+  once the page it names exists.
 - A container's subclasses take its elements (a SwitchRow is an ActionRow).
 - libadwaita's rows take children only through their groups (GtkListBoxRow's
   `set_child` would replace the row's own layout), and its windows only
