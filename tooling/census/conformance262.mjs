@@ -527,8 +527,14 @@ const cases = population.map((record) => {
 const toAttempt = cases.filter((c) => c.gap === null).map((c) => c.record.path);
 const rows = await runAll(toAttempt);
 
+// **Derived from `test/language` only.** A built-ins run has its own positives,
+// but the set means "what valid JavaScript draws from the *checker*", and the
+// language directory is where the syntax lives; a built-ins run that rewrote it
+// would move the judging of 4,122 language negatives as a side effect of
+// measuring `Array.prototype`. Other directories read the committed set.
+const derivesEvidence = !partial && under === "test/language";
 let evidenceNote;
-if (!partial) {
+if (derivesEvidence) {
   validJsCodes = deriveValidJsCodes(rows);
   const was = existsSync(EVIDENCE_FILE) ? JSON.parse(readFileSync(EVIDENCE_FILE, "utf8")).validJsCodes : null;
   const added = was ? [...validJsCodes.keys()].filter((k) => !(k in was)) : [];
@@ -536,9 +542,10 @@ if (!partial) {
   evidenceNote = `${validJsCodes.size} TS code(s) drawn by valid JavaScript, derived from this run` +
     (was ? `; against the committed set: +${added.length} [${added.join(" ")}], -${removed.length} [${removed.join(" ")}]` : "; no committed set to compare");
 } else {
-  if (!existsSync(EVIDENCE_FILE)) cannotMeasure("a partial run judges negatives against test262-evidence-codes.json, and there is none; run the whole directory with --record first");
+  if (!existsSync(EVIDENCE_FILE)) cannotMeasure("this run judges negatives against test262-evidence-codes.json, and there is none; run the whole of test/language with --record first");
   validJsCodes = new Map(Object.entries(JSON.parse(readFileSync(EVIDENCE_FILE, "utf8")).validJsCodes));
-  evidenceNote = `${validJsCodes.size} TS code(s) drawn by valid JavaScript, read from test262-evidence-codes.json`;
+  evidenceNote = `${validJsCodes.size} TS code(s) drawn by valid JavaScript, read from test262-evidence-codes.json` +
+    (partial ? "" : ` (a whole ${under} run, which never re-derives it)`);
 }
 
 for (const c of cases) {
@@ -617,7 +624,7 @@ const exclusionReport = exclusions.map((entry) => {
 
 const recordedRow = (c) => `${c.record.path}\t${c.outcome}\t${c.outcome === "fail" ? c.detail : ""}`;
 const ranRows = cases.filter((c) => c.outcome === "pass" || c.outcome === "fail");
-if (recordFile && !partial) {
+if (recordFile && derivesEvidence) {
   writeFileSync(
     EVIDENCE_FILE,
     `${JSON.stringify({
