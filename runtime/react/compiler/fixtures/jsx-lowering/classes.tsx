@@ -1,6 +1,7 @@
 // Class components as tags: a class lowers to its descriptor, `Panel.$$type`,
 // and a function component beside it stays itself. The class extending
-// another class component inherits its lifecycles.
+// another class component inherits its lifecycles. `Page` is a component the
+// compiler compiles, so its tags come from the compiled output.
 import { Component, PureComponent } from "react";
 
 export class Panel extends Component<{ title: string; children?: unknown }> {
@@ -30,7 +31,7 @@ function Caption({ text }: { text: string }) {
   return <i>{text}</i>;
 }
 
-export function page(n: number) {
+export function Page({ n }: { n: number }) {
   return (
     <Panel title="Page">
       <Badge n={n} />

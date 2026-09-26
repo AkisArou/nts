@@ -428,6 +428,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line("// its bindings. Edit the generator, not this file.");
   line();
   line("__IMPORTS__");
+  line('import type { HostComponent } from "shared/ReactHostComponent.ts";');
   line('import { HostNode, type SignalSlot } from "./HostNode.ts";');
   line();
   line("// ---- props: what JSX checks -------------------------------------------------");
@@ -449,6 +450,17 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line(`  ${s.jsx}?: () => void;`);
     }
     line("}");
+  }
+
+  line();
+  line("// ---- components: what JSX names ----------------------------------------------");
+  line("//");
+  line("// Declared, never defined: the React stage lowers `<Button />` to");
+  line('// `jsx("GtkButton", props)`, so a widget costs no component of its own.');
+  for (const w of m.widgets) {
+    line();
+    line(`/** \`<${w.jsx}>\`: a ${w.ts}. */`);
+    line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${w.jsx}Props>;`);
   }
 
   line();

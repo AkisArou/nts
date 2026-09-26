@@ -146,19 +146,36 @@ impl Printer<'_> {
         match name {
             JSXElementName::JSXIdentifier(i) if is_intrinsic(&i.name) => self.write(&quote(&i.name.encode_utf16().collect::<Vec<_>>())),
             JSXElementName::JSXIdentifier(i) => {
+                if let Some(host) = self.jsx_host_type(self.original_id(&i.base)) {
+                    self.write(&quote(&host.encode_utf16().collect::<Vec<_>>()));
+                    return;
+                }
                 let name = self.name(&i.base, &i.name).to_owned();
                 self.write(&name);
-                self.jsx_class_type(i.base.node_id);
+                self.jsx_class_type(self.original_id(&i.base));
             }
             JSXElementName::JSXMemberExpression(m) => {
+                if let Some(host) = self.jsx_host_type(self.original_id(&m.base)) {
+                    self.write(&quote(&host.encode_utf16().collect::<Vec<_>>()));
+                    return;
+                }
                 self.jsx_member_tag(m);
-                self.jsx_class_type(m.base.node_id);
+                self.jsx_class_type(self.original_id(&m.base));
             }
             JSXElementName::JSXNamespacedName(n) => {
                 let text = format!("{}:{}", n.namespace.name, n.name.name);
                 self.write(&quote(&text.encode_utf16().collect::<Vec<_>>()));
             }
         }
+    }
+
+    /// The host type a tag declared as a `HostComponent<"GtkButton", Props>`
+    /// lowers to (shared/ReactHostComponent.ts): the tag is then a string,
+    /// as React knows a host element, and no component of its own.
+    fn jsx_host_type(&mut self, node: Option<u32>) -> Option<String> {
+        let printed = self.types.type_at(node?)?;
+        let rest = printed.strip_prefix("HostComponent<\"").or_else(|| printed.split_once(").HostComponent<\"").map(|(_, rest)| rest))?;
+        rest.split_once('"').map(|(host, _)| host.to_owned())
     }
 
     /// A tag that is a class names its descriptor, the class's `$$type`

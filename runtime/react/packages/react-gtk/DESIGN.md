@@ -8,12 +8,13 @@ exceptions across calls in nts (see ../../README.md, Status).
 
 ```tsx
 import { useState } from "react";
-import { ApplicationWindow, Box, Button, Label } from "react-gtk";
+import { Orientation } from "c:Gtk-4.0";
+import { Box, Button, Label } from "react-gtk";
 
 function Counter() {
   const [count, setCount] = useState(0);
   return (
-    <Box orientation="vertical" spacing={6}>
+    <Box orientation={Orientation.VERTICAL} spacing={6}>
       <Label label={`Clicked ${count} times`} />
       <Button label="Add" onClicked={() => setCount((c) => c + 1)} />
     </Box>
@@ -73,30 +74,32 @@ and GObjects (a closure capturing a widget, connected to that widget) are the
 case the GTK lane's `gtk-cycles` design already collects. `detachDeletedInstance`
 disconnects the trampolines.
 
-## Typing, the one open question
+## Typing
 
 TypeScript must check `<Button label="x" onClicked={...} />` against
 `ButtonProps`, and the reconciler must create a host fiber for it without an
 extra component layer per widget. Upstream React recognises a host element by
-a string `type`. Three ways to reconcile those:
+a string `type`.
 
-1. **The lane's JSX pass lowers it.** `react-gtk` declares
-   `Button(props: ButtonProps): ReactElement` for the checker. Our JSX pass
-   (M3), which already knows `react-gtk`'s exports, emits
-   `jsx("GtkButton", props)`. There is no runtime cost, but `Button` is only
-   meaningful in JSX.
-2. **A thin function component per widget** that returns
-   `createElement("GtkButton", props)`. Plain TypeScript, and it works without
-   the JSX pass, but it costs one extra fiber per widget: exactly the overhead a
-   native renderer exists to avoid.
-3. **A typed token.** `Button` is a string at run time, with a
-   type-level-only props brand. The brand would be an intersection type, which
-   nts has no layout for, so this is out unless nts erases brands.
+**Each widget is declared as a host component, and the React stage lowers
+its tag.** `src/widgets.ts` declares, and never defines,
 
-The recommendation is option 1, with option 2 as a fallback where the pass
-does not run. Types are generated from the same GIR data bind-gir reads: one
-props type per widget class, with properties by inheritance
-(`GtkWidget` → `GtkButton`) and signals with their handler signatures.
+```ts
+export declare const Button: HostComponent<"GtkButton", ButtonProps>;
+```
+
+(`shared/ReactHostComponent.ts`). A tag whose checker type is a
+`HostComponent<"GtkButton", ...>` lowers to `jsx("GtkButton", props)`, so
+the element is a host element, as a string type makes it in React DOM, and
+costs no component. The stage asks the checker, so the mechanism belongs to
+no one renderer: any host can declare its components this way. There is no
+run-time value to reach by another route: `Button` used outside JSX has
+nothing behind it, and a native build refuses it.
+
+The two alternatives this replaced: a thin function component per widget
+(one extra fiber per widget, which a native renderer exists to avoid), and a
+string token with a type-level brand (an intersection type, which nts has no
+layout for).
 
 ## Generated from GIR
 

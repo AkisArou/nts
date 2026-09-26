@@ -463,6 +463,15 @@ impl Printer<'_> {
         span_of_base(base, self.source).and_then(|span| self.by_span.get(&span)).map_or(&[], Vec::as_slice)
     }
 
+    /// The tsgo node `base` is: its own id, or, for a node the compiler
+    /// generated from one the user wrote, the id of the original node with
+    /// its span -- how a checker question about compiled code is asked.
+    fn original_id(&self, base: &BaseNode) -> Option<u32> {
+        base.node_id.or_else(|| {
+            self.originals_at(base).iter().find_map(|node| node.get("_nodeId").and_then(Value::as_u64)).and_then(|id| u32::try_from(id).ok())
+        })
+    }
+
     /// The source text of `key` (an annotation, type parameters, a return
     /// type) on the original node spanning `base`'s span, if it has one.
     fn original_part(&self, base: &BaseNode, key: &str) -> Option<String> {

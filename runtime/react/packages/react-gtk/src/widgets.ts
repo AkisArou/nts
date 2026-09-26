@@ -108,6 +108,7 @@ import {
   type PangoEllipsizeMode,
   type PangoWrapMode,
 } from "c:Pango-1.0";
+import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { HostNode, type SignalSlot } from "./HostNode.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
@@ -850,6 +851,227 @@ export interface WindowControlsProps extends WidgetProps {
 /** `<WindowHandle>`'s props: GtkWindowHandle's own properties and signals. */
 export interface WindowHandleProps extends WidgetProps {
 }
+
+// ---- components: what JSX names ----------------------------------------------
+//
+// Declared, never defined: the React stage lowers `<Button />` to
+// `jsx("GtkButton", props)`, so a widget costs no component of its own.
+
+/** `<AboutDialog>`: a GtkAboutDialog. */
+export declare const AboutDialog: HostComponent<"GtkAboutDialog", AboutDialogProps>;
+
+/** `<ActionBar>`: a GtkActionBar. */
+export declare const ActionBar: HostComponent<"GtkActionBar", ActionBarProps>;
+
+/** `<ApplicationWindow>`: a GtkApplicationWindow. */
+export declare const ApplicationWindow: HostComponent<"GtkApplicationWindow", ApplicationWindowProps>;
+
+/** `<AspectFrame>`: a GtkAspectFrame. */
+export declare const AspectFrame: HostComponent<"GtkAspectFrame", AspectFrameProps>;
+
+/** `<Box>`: a GtkBox. */
+export declare const Box: HostComponent<"GtkBox", BoxProps>;
+
+/** `<Button>`: a GtkButton. */
+export declare const Button: HostComponent<"GtkButton", ButtonProps>;
+
+/** `<Calendar>`: a GtkCalendar. */
+export declare const Calendar: HostComponent<"GtkCalendar", CalendarProps>;
+
+/** `<CenterBox>`: a GtkCenterBox. */
+export declare const CenterBox: HostComponent<"GtkCenterBox", CenterBoxProps>;
+
+/** `<CheckButton>`: a GtkCheckButton. */
+export declare const CheckButton: HostComponent<"GtkCheckButton", CheckButtonProps>;
+
+/** `<ColorDialogButton>`: a GtkColorDialogButton. */
+export declare const ColorDialogButton: HostComponent<"GtkColorDialogButton", ColorDialogButtonProps>;
+
+/** `<ColumnView>`: a GtkColumnView. */
+export declare const ColumnView: HostComponent<"GtkColumnView", ColumnViewProps>;
+
+/** `<DragIcon>`: a GtkDragIcon. */
+export declare const DragIcon: HostComponent<"GtkDragIcon", DragIconProps>;
+
+/** `<DrawingArea>`: a GtkDrawingArea. */
+export declare const DrawingArea: HostComponent<"GtkDrawingArea", DrawingAreaProps>;
+
+/** `<DropDown>`: a GtkDropDown. */
+export declare const DropDown: HostComponent<"GtkDropDown", DropDownProps>;
+
+/** `<EditableLabel>`: a GtkEditableLabel. */
+export declare const EditableLabel: HostComponent<"GtkEditableLabel", EditableLabelProps>;
+
+/** `<EmojiChooser>`: a GtkEmojiChooser. */
+export declare const EmojiChooser: HostComponent<"GtkEmojiChooser", EmojiChooserProps>;
+
+/** `<Entry>`: a GtkEntry. */
+export declare const Entry: HostComponent<"GtkEntry", EntryProps>;
+
+/** `<Expander>`: a GtkExpander. */
+export declare const Expander: HostComponent<"GtkExpander", ExpanderProps>;
+
+/** `<Fixed>`: a GtkFixed. */
+export declare const Fixed: HostComponent<"GtkFixed", FixedProps>;
+
+/** `<FlowBox>`: a GtkFlowBox. */
+export declare const FlowBox: HostComponent<"GtkFlowBox", FlowBoxProps>;
+
+/** `<FlowBoxChild>`: a GtkFlowBoxChild. */
+export declare const FlowBoxChild: HostComponent<"GtkFlowBoxChild", FlowBoxChildProps>;
+
+/** `<FontDialogButton>`: a GtkFontDialogButton. */
+export declare const FontDialogButton: HostComponent<"GtkFontDialogButton", FontDialogButtonProps>;
+
+/** `<Frame>`: a GtkFrame. */
+export declare const Frame: HostComponent<"GtkFrame", FrameProps>;
+
+/** `<GLArea>`: a GtkGLArea. */
+export declare const GLArea: HostComponent<"GtkGLArea", GLAreaProps>;
+
+/** `<GraphicsOffload>`: a GtkGraphicsOffload. */
+export declare const GraphicsOffload: HostComponent<"GtkGraphicsOffload", GraphicsOffloadProps>;
+
+/** `<Grid>`: a GtkGrid. */
+export declare const Grid: HostComponent<"GtkGrid", GridProps>;
+
+/** `<GridView>`: a GtkGridView. */
+export declare const GridView: HostComponent<"GtkGridView", GridViewProps>;
+
+/** `<HeaderBar>`: a GtkHeaderBar. */
+export declare const HeaderBar: HostComponent<"GtkHeaderBar", HeaderBarProps>;
+
+/** `<Image>`: a GtkImage. */
+export declare const Image: HostComponent<"GtkImage", ImageProps>;
+
+/** `<Inscription>`: a GtkInscription. */
+export declare const Inscription: HostComponent<"GtkInscription", InscriptionProps>;
+
+/** `<Label>`: a GtkLabel. */
+export declare const Label: HostComponent<"GtkLabel", LabelProps>;
+
+/** `<LevelBar>`: a GtkLevelBar. */
+export declare const LevelBar: HostComponent<"GtkLevelBar", LevelBarProps>;
+
+/** `<LinkButton>`: a GtkLinkButton. */
+export declare const LinkButton: HostComponent<"GtkLinkButton", LinkButtonProps>;
+
+/** `<ListBox>`: a GtkListBox. */
+export declare const ListBox: HostComponent<"GtkListBox", ListBoxProps>;
+
+/** `<ListBoxRow>`: a GtkListBoxRow. */
+export declare const ListBoxRow: HostComponent<"GtkListBoxRow", ListBoxRowProps>;
+
+/** `<ListView>`: a GtkListView. */
+export declare const ListView: HostComponent<"GtkListView", ListViewProps>;
+
+/** `<MediaControls>`: a GtkMediaControls. */
+export declare const MediaControls: HostComponent<"GtkMediaControls", MediaControlsProps>;
+
+/** `<MenuButton>`: a GtkMenuButton. */
+export declare const MenuButton: HostComponent<"GtkMenuButton", MenuButtonProps>;
+
+/** `<Notebook>`: a GtkNotebook. */
+export declare const Notebook: HostComponent<"GtkNotebook", NotebookProps>;
+
+/** `<Overlay>`: a GtkOverlay. */
+export declare const Overlay: HostComponent<"GtkOverlay", OverlayProps>;
+
+/** `<Paned>`: a GtkPaned. */
+export declare const Paned: HostComponent<"GtkPaned", PanedProps>;
+
+/** `<PasswordEntry>`: a GtkPasswordEntry. */
+export declare const PasswordEntry: HostComponent<"GtkPasswordEntry", PasswordEntryProps>;
+
+/** `<Picture>`: a GtkPicture. */
+export declare const Picture: HostComponent<"GtkPicture", PictureProps>;
+
+/** `<Popover>`: a GtkPopover. */
+export declare const Popover: HostComponent<"GtkPopover", PopoverProps>;
+
+/** `<PopoverBin>`: a GtkPopoverBin. */
+export declare const PopoverBin: HostComponent<"GtkPopoverBin", PopoverBinProps>;
+
+/** `<PopoverMenu>`: a GtkPopoverMenu. */
+export declare const PopoverMenu: HostComponent<"GtkPopoverMenu", PopoverMenuProps>;
+
+/** `<PopoverMenuBar>`: a GtkPopoverMenuBar. */
+export declare const PopoverMenuBar: HostComponent<"GtkPopoverMenuBar", PopoverMenuBarProps>;
+
+/** `<ProgressBar>`: a GtkProgressBar. */
+export declare const ProgressBar: HostComponent<"GtkProgressBar", ProgressBarProps>;
+
+/** `<Range>`: a GtkRange. */
+export declare const Range: HostComponent<"GtkRange", RangeProps>;
+
+/** `<Revealer>`: a GtkRevealer. */
+export declare const Revealer: HostComponent<"GtkRevealer", RevealerProps>;
+
+/** `<Scale>`: a GtkScale. */
+export declare const Scale: HostComponent<"GtkScale", ScaleProps>;
+
+/** `<ScaleButton>`: a GtkScaleButton. */
+export declare const ScaleButton: HostComponent<"GtkScaleButton", ScaleButtonProps>;
+
+/** `<Scrollbar>`: a GtkScrollbar. */
+export declare const Scrollbar: HostComponent<"GtkScrollbar", ScrollbarProps>;
+
+/** `<ScrolledWindow>`: a GtkScrolledWindow. */
+export declare const ScrolledWindow: HostComponent<"GtkScrolledWindow", ScrolledWindowProps>;
+
+/** `<SearchBar>`: a GtkSearchBar. */
+export declare const SearchBar: HostComponent<"GtkSearchBar", SearchBarProps>;
+
+/** `<SearchEntry>`: a GtkSearchEntry. */
+export declare const SearchEntry: HostComponent<"GtkSearchEntry", SearchEntryProps>;
+
+/** `<Separator>`: a GtkSeparator. */
+export declare const Separator: HostComponent<"GtkSeparator", SeparatorProps>;
+
+/** `<SpinButton>`: a GtkSpinButton. */
+export declare const SpinButton: HostComponent<"GtkSpinButton", SpinButtonProps>;
+
+/** `<Spinner>`: a GtkSpinner. */
+export declare const Spinner: HostComponent<"GtkSpinner", SpinnerProps>;
+
+/** `<Stack>`: a GtkStack. */
+export declare const Stack: HostComponent<"GtkStack", StackProps>;
+
+/** `<StackSidebar>`: a GtkStackSidebar. */
+export declare const StackSidebar: HostComponent<"GtkStackSidebar", StackSidebarProps>;
+
+/** `<StackSwitcher>`: a GtkStackSwitcher. */
+export declare const StackSwitcher: HostComponent<"GtkStackSwitcher", StackSwitcherProps>;
+
+/** `<Switch>`: a GtkSwitch. */
+export declare const Switch: HostComponent<"GtkSwitch", SwitchProps>;
+
+/** `<Text>`: a GtkText. */
+export declare const Text: HostComponent<"GtkText", TextProps>;
+
+/** `<TextView>`: a GtkTextView. */
+export declare const TextView: HostComponent<"GtkTextView", TextViewProps>;
+
+/** `<ToggleButton>`: a GtkToggleButton. */
+export declare const ToggleButton: HostComponent<"GtkToggleButton", ToggleButtonProps>;
+
+/** `<TreeExpander>`: a GtkTreeExpander. */
+export declare const TreeExpander: HostComponent<"GtkTreeExpander", TreeExpanderProps>;
+
+/** `<Video>`: a GtkVideo. */
+export declare const Video: HostComponent<"GtkVideo", VideoProps>;
+
+/** `<Viewport>`: a GtkViewport. */
+export declare const Viewport: HostComponent<"GtkViewport", ViewportProps>;
+
+/** `<Window>`: a GtkWindow. */
+export declare const Window: HostComponent<"GtkWindow", WindowProps>;
+
+/** `<WindowControls>`: a GtkWindowControls. */
+export declare const WindowControls: HostComponent<"GtkWindowControls", WindowControlsProps>;
+
+/** `<WindowHandle>`: a GtkWindowHandle. */
+export declare const WindowHandle: HostComponent<"GtkWindowHandle", WindowHandleProps>;
 
 // ---- setting props, one function per class ------------------------------------
 

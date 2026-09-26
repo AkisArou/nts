@@ -146,3 +146,29 @@ fn a_typed_cache_that_does_not_typecheck_steps_down_to_the_array_before_giving_t
     assert_eq!(report.lock().unwrap()[&path].fell_back, vec![first.span]);
 }
 
+
+#[test]
+fn a_host_component_tag_lowers_to_its_host_type() {
+    if tsgo().is_none() {
+        return;
+    }
+    let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/host-components/tsconfig.json").canonicalize_utf8().expect("checked in");
+    let mut session = Session::open(&project).unwrap();
+    let path = session.own_sources().unwrap().into_iter().find(|p| p.file_name() == Some("app.tsx")).unwrap();
+    let tree = session.file(&path).unwrap();
+    let code = std::fs::read_to_string(&path).unwrap();
+    let input = TransformInput { path: &path, text: &code, tree: &tree };
+
+    let (mut transform, _) = ReactTransform::new(stage::default_options());
+    let lowered = transform.transform(&input, &mut SessionTypes { session: &mut session, path: &path, tree: &tree }).expect("app.tsx is rewritten");
+    for host in ["\"GtkBox\"", "\"GtkLabel\"", "\"GtkButton\""] {
+        assert!(lowered.contains(&format!("_jsx(\"{}", &host[1..])) || lowered.contains(&format!("_jsxs({host}")), "{host} in {lowered}");
+    }
+    assert!(!lowered.contains("_jsx(Button") && !lowered.contains("_jsxs(Box"), "no tag is a component: {lowered}");
+
+    // The control: without the checker's answer a tag is the name it was
+    // written as.
+    let (mut blind, _) = ReactTransform::new(stage::default_options());
+    let written = blind.transform(&input, &mut NoTypes).expect("app.tsx is rewritten");
+    assert!(written.contains("_jsx(Button") && !written.contains("\"GtkButton\""), "{written}");
+}

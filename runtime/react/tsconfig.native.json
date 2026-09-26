@@ -64,6 +64,12 @@
       ],
       "react-reconciler/*": [
         "./packages/react-reconciler/src/*"
+      ],
+      "react-gtk": [
+        "./packages/react-gtk/src/index.ts"
+      ],
+      "react-gtk/*": [
+        "./packages/react-gtk/src/*"
       ]
     }
   }
