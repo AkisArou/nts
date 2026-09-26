@@ -6434,6 +6434,23 @@ fn gobject_interfaces(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<String>
     interfaces
 }
 
+/// The class the program wrote that `class` extends (`class Wide extends
+/// Panel`): `None` over a binding's class, or none.
+fn program_superclass(snapshot: &SemanticSnapshot, class: NodeId) -> Option<NodeId> {
+    let probe = FuncBuilder::probe(snapshot);
+    let base = probe
+        .children(class)
+        .into_iter()
+        .filter(|child| probe.kind_of(*child) == Some(syntax::HERITAGE_CLAUSE))
+        .flat_map(|clause| probe.children(clause))
+        .find_map(|expression| probe.children(expression).first().copied())?;
+    let mut record = snapshot.symbols.get(probe.node(base).symbol?.0 as usize)?;
+    while let Some(aliased) = record.aliased {
+        record = snapshot.symbols.get(aliased.0 as usize)?;
+    }
+    record.declarations.iter().copied().find(|declaration| probe.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION))
+}
+
 /// The names a template's `<signal>` elements give as their handlers, in the
 /// order they appear.
 fn template_handlers(xml: &str) -> Vec<String> {
@@ -6451,7 +6468,8 @@ fn template_handlers(xml: &str) -> Vec<String> {
 }
 
 /// The template a class is built from -- `static readonly template`, whose
-/// type is the literal the checker kept -- and the children it names: each
+/// type is the literal the checker kept, or whose initialiser is one -- and
+/// the children it names: each
 /// `declare`d field of a `GObject` handle type, by its name as the child's id.
 /// `None` for a class with no template.
 fn gobject_template(snapshot: &SemanticSnapshot, class: NodeId) -> Option<super::Template> {
@@ -6466,10 +6484,19 @@ fn gobject_template(snapshot: &SemanticSnapshot, class: NodeId) -> Option<super:
         if !named {
             return None;
         }
-        match &snapshot.types.get(snapshot.node_types.get(&member)?.0 as usize)?.kind {
-            TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
-            _ => None,
+        if let Some(TypeKind::Literal(LiteralValue::String(text))) =
+            snapshot.node_types.get(&member).and_then(|ty| snapshot.types.get(ty.0 as usize)).map(|record| &record.kind)
+        {
+            return Some(text.clone());
         }
+        // Written `template: string`, as a class over one with a template
+        // has to, since its literal type would not extend the parent's: the
+        // literal it is initialised with.
+        probe.children(member).into_iter().find_map(|child| {
+            matches!(probe.kind_of(child), Some(syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL | syntax::STRING_LITERAL))
+                .then(|| probe.node(child).text.clone())
+                .flatten()
+        })
     })?;
     Some(super::Template {
         xml,
@@ -15830,8 +15857,9 @@ impl<'a> FuncBuilder<'a> {
         None
     }
 
-    /// `this.title`, where `title` is a child the receiver's class template
-    /// names (`declare readonly title: GtkLabel`): the template's own, which
+    /// `this.title`, where `title` is a child the template of the receiver's
+    /// class, or of a class the program wrote below it, names (`declare
+    /// readonly title: GtkLabel`): the template's own, which
     /// `nts_gobject_child_{Class}_{i}` lends -- the template holds it for as
     /// long as the widget lives. `None` for any other member.
     fn template_child(&mut self, access: NodeId, receiver: ValueId, member: &str) -> Option<ValueId> {
@@ -15843,10 +15871,23 @@ impl<'a> FuncBuilder<'a> {
             self.kind_of(*d) == Some(syntax::CLASS_DECLARATION)
         })?;
         super::native::gobject_parent(self.snapshot, class)?;
-        gobject_template(self.snapshot, class)?;
-        let children = template_children(self.snapshot, class);
-        let at = children.iter().position(|(name, _)| name == member)?;
-        let child = super::native::pointer(self.snapshot, children[at].1)?;
+        // The class whose template names it: `Wide extends Panel` reads
+        // `title` from `Panel`'s. Bounded: a chain is as long as the classes
+        // written.
+        let mut class = class;
+        let mut found = None;
+        for _ in 0..64 {
+            if gobject_template(self.snapshot, class).is_some() {
+                let children = template_children(self.snapshot, class);
+                if let Some(at) = children.iter().position(|(name, _)| name == member) {
+                    found = Some((at, children[at].1));
+                    break;
+                }
+            }
+            class = program_superclass(self.snapshot, class)?;
+        }
+        let (at, child) = found?;
+        let child = super::native::pointer(self.snapshot, child)?;
         let name = foreign_class_name(self.snapshot, class)?;
         let read = synthesized(
             &super::Template::child_thunk(&name, at),

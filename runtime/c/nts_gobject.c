@@ -424,19 +424,26 @@ static void nts_gobject_class_init(gpointer klass, gpointer data) {
   }
 }
 
-/* `instance_init` for the class that owns the slot: the fields of the class
- * being made -- `g_class` is the instance's, not this one's -- hold their
- * initial values by the time `new` returns, as JavaScript's do. */
+/* `instance_init`, for the class that owns the slot and for each class with
+ * a template. GLib runs every ancestor's in turn with `instance->g_class` set
+ * to that ancestor's class, so `G_TYPE_FROM_INSTANCE` names the class whose
+ * `instance_init` this is, and `g_class` the class being made. */
 static void nts_gobject_instance_init(GTypeInstance *instance,
                                       gpointer g_class) {
-  NtsGObjectClassData *class = nts_gobject_class_of(G_TYPE_FROM_CLASS(g_class));
-  if (class->owner) {
-    *nts_gobject_state_slot(instance, class->owner) = class->make_state();
+  NtsGObjectClassData *running =
+      nts_gobject_class_of(G_TYPE_FROM_INSTANCE(instance));
+  NtsGObjectClassData *made = nts_gobject_class_of(G_TYPE_FROM_CLASS(g_class));
+  /* The fields of the class being made, by its own maker, once: at the
+   * owner's `instance_init`. They hold their initial values by the time
+   * `new` returns, as JavaScript's do. */
+  if (running->owner == running && made->owner == running) {
+    *nts_gobject_state_slot(instance, running) = made->make_state();
   }
-  /* The template's children, made before the constructor's body runs, as
-   * GTK's own `instance_init` makes them. */
-  if (class->instance_setup) {
-    class->instance_setup(instance);
+  /* This class's template's children, made before the constructor's body
+   * runs, as GTK's own `instance_init` makes them -- a parent's by the
+   * parent's `instance_init`, before this one. */
+  if (running->instance_setup) {
+    running->instance_setup(instance);
   }
 }
 
@@ -479,8 +486,9 @@ size_t nts_gobject_register(size_t parent, const char *name, const void *slots,
     data->state_offset = (query.instance_size + align - 1) / align * align;
     info.instance_size = (guint16)(data->state_offset + sizeof(void *));
     info.instance_init = nts_gobject_instance_init;
-  } else if (instance_setup) {
-    /* A template and no fields: the instance still needs its children. */
+  }
+  /* A template, wherever the fields are: the instance needs its children. */
+  if (instance_setup) {
     info.instance_init = nts_gobject_instance_init;
   }
   data->type = g_type_register_static((GType)parent, name, &info, 0);

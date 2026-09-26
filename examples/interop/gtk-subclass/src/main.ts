@@ -39,6 +39,11 @@
 //                 template's registration the field read NULL, a critical
 //   pressed 1 p   the template's button, clicked: its `<signal handler>` is
 //                 the class's `onPressed`, called with the button and `this`
+//   wide from the template 5 pressed 1  `Wide`, over `Panel` with fields of
+//                 its own: `Panel`'s template still builds its children, and
+//                 its handler still reaches the method
+//   tall head foot true  `Tall`, with a template over `Card`'s: both build,
+//                 the parent's children first
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
@@ -227,6 +232,54 @@ class Panel extends GtkBox {
   }
 }
 
+// A class over a class with a template: GTK builds `Panel`'s children in
+// `Panel`'s `instance_init`, and `title` is read from `Panel`'s template.
+class Wide extends Panel {
+  extra = 5;
+}
+
+function wide(): string {
+  const made = new Wide({});
+  const before = "wide " + (made.title.label ?? "") + " " + String(made.extra);
+  sub_emit(made.press, "clicked");
+  return before + " pressed " + String(made.pressed);
+}
+
+// Two templates in one chain, each class's children made by its own
+// `instance_init`, the parent's first. Written `template: string`: a literal
+// type would not extend the parent's.
+class Card extends GtkBox {
+  static readonly template: string = `<interface>
+  <template class="Nts_Card" parent="GtkBox">
+    <child>
+      <object class="GtkLabel" id="heading">
+        <property name="label">head</property>
+      </object>
+    </child>
+  </template>
+</interface>`;
+  declare readonly heading: GtkLabel;
+}
+
+class Tall extends Card {
+  static override readonly template: string = `<interface>
+  <template class="Nts_Tall" parent="Nts_Card">
+    <child>
+      <object class="GtkLabel" id="footer">
+        <property name="label">foot</property>
+      </object>
+    </child>
+  </template>
+</interface>`;
+  declare readonly footer: GtkLabel;
+}
+
+function tall(): string {
+  const made = new Tall({});
+  const order = made.get_first_child() === made.heading && made.get_last_child() === made.footer;
+  return "tall " + (made.heading.label ?? "") + " " + (made.footer.label ?? "") + " " + String(order);
+}
+
 function panel(): string {
   const made = new Panel({});
   const first = made.get_first_child();
@@ -382,6 +435,8 @@ function main(): void {
   sub_log(tally());
   sub_log(notes());
   sub_log(panel());
+  sub_log(wide());
+  sub_log(tall());
 
   const square = new Square({});
   const width = local<CNumber<"int">>();
