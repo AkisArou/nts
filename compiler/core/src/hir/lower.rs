@@ -16539,6 +16539,53 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(value);
         }
+        // **An `as` to an object type is not a narrowing, and reading through it
+        // is a wrong answer rather than an unchecked one.** An `Unerase` checks
+        // the *tag* -- that this is a reference -- and not which class, so the
+        // fields are then read at the asserted type's offsets whatever the value
+        // actually is.
+        //
+        // Measured, 58 of 58 cases disagreeing with node
+        // (`outcomes/a-cast-to-a-shape-reads-an-unrelated-class`):
+        //
+        //     const thing: object = new Unrelated(`x${n}`);
+        //     const held = thing as { stack?: string };
+        //     return typeof held.stack === "string" ? held.stack.length : -1;
+        //
+        // node answers `-1`; this answered `2` and `5`, the lengths of
+        // `Unrelated`'s own `label` read at the shape's offset. The HIR says it
+        // plainly: `unerase %6 : managed<obj#14>` then `field.get %15.0`.
+        //
+        // **The policy is already written three arms above, for native pointers**
+        // -- "an `as` asserts unchecked, and stays refused",
+        // `a_class_downcast_by_assertion_is_refused` -- and the managed side was
+        // the one that did not have it. A *narrowing* still unerases: after
+        // `x instanceof C` the branch has established the class, and a `Map<string,
+        // C>`'s element type is the checker's answer rather than an assertion.
+        // This is only the assertion.
+        //
+        // The `{}` guard above is the same lie one step over, and its comment
+        // records that the JVM was the only backend that could see it. Here the
+        // JVM would throw a `ClassCastException` where C and LLVM answer from the
+        // wrong offsets, which is the same asymmetry and the reason this refuses on
+        // all three rather than being left to the checked-cast lane to notice.
+        //
+        // A **checked** unerase -- a descriptor test at the read, aborting with a
+        // sentence, Java's bridge-method shape -- is the eventual answer and is its
+        // own change. Refusing first because a refusal costs one function and this
+        // costs a wrong answer in every program that pokes at an `unknown`.
+        if matches!(self.kind_of(id), Some(syntax::AS_EXPRESSION))
+            && matches!(&want, HirType::Managed(ManagedType::Object(_)))
+        {
+            return Err(self.unsupported(
+                id,
+                concat!(
+                    "a value of unknown layout asserted with `as` to a type that has ",
+                    "fields, which would read them at that type's offsets without ",
+                    "checking the value is one",
+                ),
+            ));
+        }
         // Narrowed to a `bigint`, which an erased value provably is not.
         //
         // An `NtsValue` carries one of eight tags -- undefined, boolean, number,
