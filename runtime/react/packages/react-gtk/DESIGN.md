@@ -151,8 +151,16 @@ which properties input changes.
 the app makes (an adjustment, a model, a list-item factory, a menu) when its
 type is a class: it is read back from the props with `instanceof`, a check
 against the object's GType, which is how a native build reads a GObject out
-of an erased value. An interface-typed prop (`GListModel`) is left out,
-because an interface has no value to check against. A widget-typed prop that
+of an erased value. An interface has no value to check against, so an
+interface-typed prop takes the classes the bindings declare that implement
+it, topmost only: a ListView's `model` is a `GtkSingleSelection`, a
+`GtkMultiSelection` or a `GtkNoSelection`, and a DropDown's is any of the
+list models (`GListStore`, `GtkStringList`, the filter and sort models). The
+prop is typed as that union, so an app's own implementation is refused where
+it is written rather than dropped where it is read. Each class is checked in
+turn and passed on narrowed to itself; one conditional over them all would
+have a union of handle types, which a native build has no representation
+for. An interface only private classes implement (`GFile`) stays out. A widget-typed prop that
 names another widget (`mnemonicWidget`, `defaultWidget`, `focusWidget`,
 `keyCaptureWidget`, and a Stack's `visibleChild`, one of its own children)
 takes a ref's `current`: a host element's public instance is its widget.

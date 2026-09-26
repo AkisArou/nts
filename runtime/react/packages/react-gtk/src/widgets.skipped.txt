@@ -2,7 +2,6 @@
 GtkAboutDialog.artists	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkAboutDialog.authors	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkAboutDialog.documenters	a CStrings<"const">, which a JSX attribute does not carry yet
-GtkAboutDialog.logo	a GdkPaintable | null, which a JSX attribute does not carry yet
 GtkAccessible.accessible-role	no setter in the bindings
 GtkActionable.action-target	no setter in the bindings
 GtkAppChooser.content-type	construct-only: a change would need a new widget
@@ -23,22 +22,18 @@ GtkCalendar.year	deprecated
 GtkCellEditable.editing-canceled	no setter in the bindings
 GtkCellView.cell-area	construct-only: a change would need a new widget
 GtkCellView.cell-area-context	construct-only: a change would need a new widget
-GtkCellView.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
 GtkColorChooser.rgba	deprecated
 GtkColorChooser.use-alpha	deprecated
 GtkColorChooser::color-activated	deprecated
 GtkColorDialogButton.dialog	removing it leaves its value: GIR gives no default
 GtkColorDialogButton.rgba	a Const<GdkRGBA>, which a JSX attribute does not carry yet
-GtkColumnView.model	a GtkSelectionModel | null, which a JSX attribute does not carry yet
 GtkComboBox.active-id	no setter in the bindings
 GtkComboBox.has-entry	construct-only: a change would need a new widget
-GtkComboBox.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
 GtkComboBox::format-entry-text	no connect overload in the bindings
 GtkDialog.use-header-bar	construct-only: a change would need a new widget
 GtkDialog::close	deprecated
 GtkDialog::response	deprecated
 GtkDropDown.expression	a GtkExpression | null, which a JSX attribute does not carry yet
-GtkDropDown.model	a GListModel | null, which a JSX attribute does not carry yet
 GtkEntry.attributes	a PangoAttrList, which a JSX attribute does not carry yet
 GtkEntry.buffer	removing it leaves its value: GIR gives no default
 GtkEntry.completion	deprecated
@@ -46,14 +41,14 @@ GtkEntry.im-module	no setter in the bindings
 GtkEntry.input-hints	no setter in the bindings
 GtkEntry.menu-entry-icon-primary-text	no setter in the bindings
 GtkEntry.menu-entry-icon-secondary-text	no setter in the bindings
-GtkEntry.primary-icon-gicon	a GIcon, which a JSX attribute does not carry yet
+GtkEntry.primary-icon-gicon	removing it leaves its value: GIR gives no default
 GtkEntry.primary-icon-name	no setter in the bindings
-GtkEntry.primary-icon-paintable	a GdkPaintable, which a JSX attribute does not carry yet
+GtkEntry.primary-icon-paintable	removing it leaves its value: GIR gives no default
 GtkEntry.primary-icon-tooltip-markup	no setter in the bindings
 GtkEntry.primary-icon-tooltip-text	no setter in the bindings
-GtkEntry.secondary-icon-gicon	a GIcon, which a JSX attribute does not carry yet
+GtkEntry.secondary-icon-gicon	removing it leaves its value: GIR gives no default
 GtkEntry.secondary-icon-name	no setter in the bindings
-GtkEntry.secondary-icon-paintable	a GdkPaintable, which a JSX attribute does not carry yet
+GtkEntry.secondary-icon-paintable	removing it leaves its value: GIR gives no default
 GtkEntry.secondary-icon-tooltip-markup	no setter in the bindings
 GtkEntry.secondary-icon-tooltip-text	no setter in the bindings
 GtkEntry.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
@@ -75,18 +70,14 @@ GtkGLArea.allowed-apis	no setter in the bindings
 GtkGLArea.use-es	deprecated
 GtkGLArea::create-context	its handler returns a GdkGLContext: not generated yet
 GtkGLArea::render	a handler argument JSX cannot type yet: GdkGLContext
-GtkGridView.model	a GtkSelectionModel | null, which a JSX attribute does not carry yet
 GtkIconView.cell-area	construct-only: a change would need a new widget
-GtkIconView.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
 GtkImage.file	no setter in the bindings
-GtkImage.gicon	a GIcon, which a JSX attribute does not carry yet
-GtkImage.paintable	a GdkPaintable | null, which a JSX attribute does not carry yet
+GtkImage.gicon	removing it leaves its value: GIR gives no default
 GtkImage.resource	no setter in the bindings
 GtkInscription.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 GtkLabel.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 GtkLabel.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
 GtkLevelBar::offset-changed	no connect overload in the bindings
-GtkListView.model	a GtkSelectionModel | null, which a JSX attribute does not carry yet
 GtkLockButton.permission	deprecated
 GtkLockButton.text-lock	deprecated
 GtkLockButton.text-unlock	deprecated
@@ -99,9 +90,8 @@ GtkMessageDialog.text	no setter in the bindings
 GtkNotebook::create-window	its handler returns a GtkNotebook | null: not generated yet
 GtkOverlay::get-child-position	a handler argument JSX cannot type yet: GtkWidget, GdkRectangle
 GtkPasswordEntry.placeholder-text	no setter in the bindings
-GtkPicture.file	a GFile | null, which a JSX attribute does not carry yet
+GtkPicture.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkPicture.keep-aspect-ratio	deprecated
-GtkPicture.paintable	a GdkPaintable | null, which a JSX attribute does not carry yet
 GtkPopover.pointing-to	a Const<GdkRectangle> | null, which a JSX attribute does not carry yet
 GtkPopoverMenu.flags	no setter in the bindings
 GtkPopoverMenu.visible-submenu	no setter in the bindings
@@ -156,8 +146,7 @@ GtkText.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
 GtkTextView.im-module	no setter in the bindings
 GtkTextView.input-hints	no setter in the bindings
 GtkTextView.tabs	a PangoTabArray, which a JSX attribute does not carry yet
-GtkTreeView.model	a GtkTreeModel | null, which a JSX attribute does not carry yet
-GtkVideo.file	a GFile | null, which a JSX attribute does not carry yet
+GtkVideo.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkVolumeButton.use-symbolic	deprecated
 GtkWidget.css-classes	a CStrings<"const">, which a JSX attribute does not carry yet
 GtkWidget.css-name	construct-only: a change would need a new widget

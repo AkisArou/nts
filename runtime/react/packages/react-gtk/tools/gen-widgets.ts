@@ -201,6 +201,13 @@ interface Bindings {
   classes: Set<string>;
   /** The module each type from another namespace comes from: `PangoWrapMode` → `c:Pango-1.0`. */
   modules: Map<string, string>;
+  /**
+   * For each GObject interface, the classes with a constructor that implement
+   * it, topmost only (a subclass is an `instanceof` its parent): what a value
+   * of that interface can be checked against. Empty for one only private
+   * classes implement (`GFile`).
+   */
+  implementers: Map<string, string[]>;
 }
 
 /** A signal handler's parameters after the widget, and what it returns, as bind-gir typed them. */
@@ -296,9 +303,34 @@ function readBindings(dir: string): Bindings {
     }
   }
   const classes = new Set(constructible);
+  // Each GObject class's parent and the interfaces it implements, inherited
+  // ones included: `GObjectClass<"_GtkSingleSelection", GObject, "_GListModel" | ...>`.
+  const gobjectClasses = new Map<string, { parent: string; implements: string[] }>();
+  const interfaces = new Set<string>();
   for (const file of readdirSync(dir).filter((name) => name.endsWith(".d.ts"))) {
+    let module: string | undefined;
     for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
-      const made = /^ {4}new (?:<[^>]*>)?\(props\?: \w+Props\): (?:Signalled<(\w+)(?:, \w+)+>|(\w+));$/.exec(line);
+      const declared = /^declare module "(c:[\w.-]+)" \{$/.exec(line);
+      if (declared !== null) {
+        module = declared[1]!;
+        continue;
+      }
+      const gobjectClass = /^ {2}export type (\w+) = GObjectClass<"_\w+", (\w+)(?:, ([^>]+))?>/.exec(line);
+      if (gobjectClass !== null) {
+        const implemented = (gobjectClass[3] ?? "").split("|").map((tag) => tag.trim().replace(/^"_|"$/g, "")).filter((tag) => tag !== "");
+        gobjectClasses.set(gobjectClass[1]!, { parent: gobjectClass[2]!, implements: implemented });
+      }
+      const gobjectInterface = /^ {2}export type (\w+) = GObjectInterface</.exec(line);
+      if (gobjectInterface !== null) {
+        interfaces.add(gobjectInterface[1]!);
+      }
+      const exported = /^ {2}export (?:type|const|interface|function) (\w+)/.exec(line);
+      if (exported !== null && module !== undefined && !modules.has(exported[1]!)) {
+        modules.set(exported[1]!, module);
+      }
+      // Props can be required, when a construct-only one has no default
+      // (`GListStore`'s item type): still a class `instanceof` can check.
+      const made = /^ {4}new (?:<[^>]*>)?\(props\??: \w+Props\): (?:Signalled<(\w+)(?:, \w+)+>|(\w+));$/.exec(line);
       const abstract = /^ {2}export const (\w+): \(abstract new /.exec(line);
       const name = made?.[1] ?? made?.[2] ?? abstract?.[1];
       if (name !== undefined) {
@@ -306,14 +338,23 @@ function readBindings(dir: string): Bindings {
       }
     }
   }
-  return { setters, getters, signals, constructible, classes, modules };
+  const implementers = new Map<string, string[]>();
+  for (const name of interfaces) {
+    const implementing = (c: string): boolean => classes.has(c) && gobjectClasses.get(c)?.implements.includes(name) === true;
+    const all = [...gobjectClasses.keys()].filter(implementing);
+    // Topmost: a class whose parent also implements it is covered by the parent's check.
+    implementers.set(name, all.filter((c) => !implementing(gobjectClasses.get(c)!.parent)).sort());
+  }
+  return { setters, getters, signals, constructible, classes, modules, implementers };
 }
 
 // ---- the model ---------------------------------------------------------------
 
 type ValueKind =
   | { kind: "string"; nullable: boolean }
-  | { kind: "object"; type: string; nullable: boolean }
+  // `classes` are what `instanceof` checks: the type itself for a class, the
+  // classes that implement it for an interface.
+  | { kind: "object"; type: string; classes: string[]; nullable: boolean }
   | { kind: "boolean" }
   | { kind: "number" }
   | { kind: "enum"; type: string };
@@ -428,7 +469,7 @@ const widgetReferences = new Set(["mnemonic-widget", "default-widget", "focus-wi
 // Children arrive as React children, never as a prop.
 const childProps = new Set(["child"]);
 
-function valueKind(type: string, classes: Set<string>, reference = false): ValueKind | null {
+function valueKind(type: string, bindings: Bindings, reference = false): ValueKind | null {
   if (type === "string" || type === "string | null") {
     return { kind: "string", nullable: type.endsWith("null") };
   }
@@ -446,9 +487,22 @@ function valueKind(type: string, classes: Set<string>, reference = false): Value
   // Not a widget, which React makes and an app would need a ref to; not a
   // boxed Pango type, a handle of another kind.
   const object = /^((?:Gtk|Gdk|G)[A-Z]\w+)( \| null)?$/.exec(type);
-  // A class, since the narrowing is `instanceof`: an interface has no value.
-  if (object !== null && (object[1] !== "GtkWidget" || reference) && classes.has(object[1]!)) {
-    return { kind: "object", type: object[1]!, nullable: object[2] !== undefined };
+  if (object === null || (object[1] === "GtkWidget" && !reference)) {
+    return null;
+  }
+  const name = object[1]!;
+  const nullable = object[2] !== undefined;
+  // A class is checked with `instanceof`. An interface has no value to check
+  // against, so a value of one is one of the classes that implement it
+  // (a ListView's model is a GtkSingleSelection, a GtkMultiSelection or a
+  // GtkNoSelection), and the prop is typed as those: an app's own
+  // implementation is refused where it is written, not dropped where it is read.
+  if (bindings.classes.has(name)) {
+    return { kind: "object", type: name, classes: [name], nullable };
+  }
+  const implementers = bindings.implementers.get(name);
+  if (implementers !== undefined && implementers.length > 0) {
+    return { kind: "object", type: name, classes: implementers, nullable };
   }
   return null;
 }
@@ -550,7 +604,7 @@ function model(gir: Gir, bindings: Bindings): Model {
         if (childProps.has(p.name) || !p.writable) {
           continue;
         }
-        const value = type === undefined ? null : valueKind(type, bindings.classes, widgetReferences.has(p.name));
+        const value = type === undefined ? null : valueKind(type, bindings, widgetReferences.has(p.name));
         if (p.constructOnly) {
           skipped.add(`${where}\tconstruct-only: a change would need a new widget`);
         } else if (p.deprecated) {
@@ -562,6 +616,8 @@ function model(gir: Gir, bindings: Bindings): Model {
           slots.push({ jsx, hostType: `${ts}.${jsx}`, setter });
         } else if (value === null && type === "GtkWidget") {
           skipped.add(`${where}\ta widget slot that cannot be emptied: a slot element's child can go`);
+        } else if (value === null && bindings.implementers.get(type.replace(/ \| null$/, ""))?.length === 0) {
+          skipped.add(`${where}\ta ${type}: an interface only classes the bindings do not declare implement`);
         } else if (value === null) {
           skipped.add(`${where}\ta ${type}, which a JSX attribute does not carry yet`);
         } else {
@@ -677,8 +733,8 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       if (p.value.kind === "enum") {
         types.add(p.value.type);
       } else if (p.value.kind === "object") {
-        // A value: `instanceof` checks against it.
-        values.add(p.value.type);
+        // Values: `instanceof` checks against them.
+        p.value.classes.forEach((c) => values.add(c));
       }
       line(`  ${p.jsx}?: ${propType(p.value)};`);
     }
@@ -939,8 +995,10 @@ function propType(value: ValueKind): string {
       return value.nullable ? "string | null" : "string";
     case "enum":
       return value.type;
-    case "object":
-      return value.nullable ? `${value.type} | null` : value.type;
+    case "object": {
+      const union = value.classes.join(" | ");
+      return value.nullable ? `${union} | null` : union;
+    }
     default:
       return value.kind;
   }
@@ -951,9 +1009,17 @@ function assign(p: Prop): string {
   if (p.value.kind === "object") {
     // A checked narrowing, which a native build reads a GObject back from an
     // erased value by (its GType); an assertion it does not.
-    return p.reset === null
-      ? `if (value instanceof ${p.value.type}) gtk.${p.setter}(value);`
-      : `gtk.${p.setter}(value instanceof ${p.value.type} ? value : null);`;
+    if (p.value.classes.length === 1) {
+      return p.reset === null
+        ? `if (value instanceof ${p.value.type}) gtk.${p.setter}(value);`
+        : `gtk.${p.setter}(value instanceof ${p.value.type} ? value : null);`;
+    }
+    // One call per implementing class, each with the value narrowed to that
+    // class, which the setter's interface parameter accepts. Not one
+    // conditional: its type would be a union of the classes, one value of
+    // several handle types.
+    const calls = p.value.classes.map((c) => `if (value instanceof ${c}) gtk.${p.setter}(value);`);
+    return (p.reset === null ? calls : [...calls, `gtk.${p.setter}(null);`]).join("\n      else ");
   }
   const test = p.value.kind === "enum" ? "number" : p.value.kind;
   const valueOf = p.value.kind === "enum" ? `value as ${p.value.type}` : "value";

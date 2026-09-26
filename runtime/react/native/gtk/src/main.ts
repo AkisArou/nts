@@ -35,6 +35,10 @@
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
+//   interface a prop typed as a GObject interface (a ListView's selection
+//             model, a DropDown's list model) takes each class that
+//             implements it, as itself; one that does not (an adjustment)
+//             leaves the model unset
 //   slot      slot elements fill a Paned's start and end children, their
 //             children placed first as React completes them; a child removed
 //             from its slot element empties the slot, and so does the slot
@@ -50,7 +54,7 @@
 //   work      a slice of scheduler work posted to GLib ran
 //   timer     a timer fired, and a cancelled one did not
 
-import { gtk_init, GtkAdjustment, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
+import { gtk_init, GtkAdjustment, GtkSingleSelection, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { g_main_context_iteration, g_main_loop_new } from "c:GLib-2.0";
 import { react_gtk_emit, react_gtk_emit_decision, react_gtk_emit_double, react_gtk_log } from "c:react-gtk-shim";
 import {
@@ -69,7 +73,7 @@ import {
   type Props,
 } from "../../../packages/react-gtk/src/ReactFiberConfig.ts";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
-import { BoxNode, ButtonNode, EntryNode, FrameNode, LabelNode, ListBoxNode, PanedNode, ScaleNode } from "../../../packages/react-gtk/src/widgets.ts";
+import { BoxNode, ButtonNode, DropDownNode, EntryNode, FrameNode, LabelNode, ListBoxNode, ListViewNode, PanedNode, ScaleNode } from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
 
 // The widget a node shows: what a ref to it holds.
@@ -314,6 +318,21 @@ function main(): void {
   commitUpdate(closing, "GtkWindow", closeProps, {}, {});
   const released = react_gtk_emit_decision(widget(closing), "close-request");
   react_gtk_log("decision " + String(kept) + " " + String(released) + " asked=" + String(asked));
+
+  const strings = new GtkStringList();
+  strings.append("one");
+  const selection = new GtkSingleSelection({ model: strings });
+  const listed = createInstance("GtkListView", { model: selection }, container, 0, {});
+  const dropped = createInstance("GtkDropDown", { model: strings }, container, 0, {});
+  const refused = createInstance("GtkListView", { model: new GtkAdjustment() }, container, 0, {});
+  react_gtk_log(
+    "interface " +
+      String(listed instanceof ListViewNode && listed.gtk.get_model() === selection) +
+      " " +
+      String(dropped instanceof DropDownNode && dropped.gtk.get_model() === strings) +
+      " " +
+      String(refused instanceof ListViewNode && refused.gtk.get_model() === null),
+  );
 
   const paned = createInstance("GtkPaned", {}, container, 0, {});
   const startSlot = createInstance("GtkPaned.StartChild", {}, container, 0, {});

@@ -4,9 +4,19 @@
 import {
   GdkCursor,
   GdkDisplay,
+  GdkTexture,
 } from "c:Gdk-4.0";
 import {
+  GdkPixbuf,
+} from "c:GdkPixbuf-2.0";
+import {
+  GBytesIcon,
+  GEmblem,
+  GEmblemedIcon,
+  GFileIcon,
+  GListStore,
   GMenuModel,
+  GThemedIcon,
 } from "c:Gio-2.0";
 import {
   GtkAboutDialog,
@@ -18,6 +28,7 @@ import {
   type GtkArrowType,
   GtkAspectFrame,
   type GtkBaselinePosition,
+  GtkBookmarkList,
   GtkBox,
   GtkButton,
   GtkCalendar,
@@ -30,6 +41,7 @@ import {
   type GtkCornerType,
   type GtkDeleteType,
   type GtkDirectionType,
+  GtkDirectoryList,
   GtkDragIcon,
   GtkDrawingArea,
   GtkDropDown,
@@ -39,7 +51,9 @@ import {
   GtkEntryBuffer,
   type GtkEntryIconPosition,
   GtkExpander,
+  GtkFilterListModel,
   GtkFixed,
+  GtkFlattenListModel,
   GtkFlowBox,
   GtkFlowBoxChild,
   GtkFontDialog,
@@ -52,6 +66,7 @@ import {
   GtkGrid,
   GtkGridView,
   GtkHeaderBar,
+  GtkIconPaintable,
   type GtkIconSize,
   GtkImage,
   type GtkInputPurpose,
@@ -69,12 +84,17 @@ import {
   GtkListItemFactory,
   type GtkListTabBehavior,
   GtkListView,
+  GtkMapListModel,
   GtkMediaControls,
   GtkMediaStream,
   GtkMenuButton,
   type GtkMessageType,
   type GtkMovementStep,
+  GtkMultiFilter,
+  GtkMultiSelection,
+  GtkMultiSorter,
   type GtkNaturalWrapMode,
+  GtkNoSelection,
   GtkNotebook,
   type GtkNotebookTab,
   type GtkOrientation,
@@ -103,9 +123,15 @@ import {
   GtkScrolledWindow,
   GtkSearchBar,
   GtkSearchEntry,
+  GtkSelectionFilterModel,
   type GtkSelectionMode,
+  type GtkSelectionModel,
   type GtkSensitivityType,
   GtkSeparator,
+  GtkShortcutController,
+  GtkSingleSelection,
+  GtkSliceListModel,
+  GtkSortListModel,
   GtkSpinButton,
   type GtkSpinButtonUpdatePolicy,
   GtkSpinner,
@@ -115,6 +141,8 @@ import {
   type GtkStackTransitionType,
   type GtkStateFlags,
   type GtkStringFilterMatchMode,
+  GtkStringList,
+  GtkSvg,
   GtkSwitch,
   GtkText,
   GtkTextBuffer,
@@ -126,13 +154,16 @@ import {
   type GtkTooltip,
   GtkTreeExpander,
   type GtkTreeIter,
+  GtkTreeListModel,
   GtkTreeListRow,
+  type GtkTreeModel,
   type GtkTreePath,
   type GtkTreeViewColumn,
   type GtkTreeViewGridLines,
   GtkVideo,
   GtkViewport,
   GtkWidget,
+  GtkWidgetPaintable,
   GtkWindow,
   GtkWindowControls,
   type GtkWindowGravity,
@@ -141,6 +172,8 @@ import {
 } from "c:Gtk-4.0";
 import {
   type PangoEllipsizeMode,
+  PangoFontFamily,
+  PangoFontMap,
   type PangoWrapMode,
 } from "c:Pango-1.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
@@ -276,6 +309,7 @@ export interface AboutDialogProps extends WindowProps {
   copyright?: string | null;
   license?: string | null;
   licenseType?: GtkLicense;
+  logo?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable | null;
   logoIconName?: string | null;
   programName?: string | null;
   systemInformation?: string | null;
@@ -408,6 +442,7 @@ export interface ColorDialogButtonProps extends WidgetProps {
 export interface ColumnViewProps extends WidgetProps {
   enableRubberband?: boolean;
   headerFactory?: GtkListItemFactory | null;
+  model?: GtkMultiSelection | GtkNoSelection | GtkSingleSelection | null;
   reorderable?: boolean;
   rowFactory?: GtkListItemFactory | null;
   showColumnSeparators?: boolean;
@@ -420,6 +455,7 @@ export interface ColumnViewProps extends WidgetProps {
   vscrollPolicy?: GtkScrollablePolicy;
   onNotifyEnableRubberband?: (value: boolean) => void;
   onNotifyHeaderFactory?: (value: GtkListItemFactory | null) => void;
+  onNotifyModel?: (value: GtkSelectionModel | null) => void;
   onNotifyReorderable?: (value: boolean) => void;
   onNotifyRowFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyShowColumnSeparators?: (value: boolean) => void;
@@ -452,6 +488,7 @@ export interface DropDownProps extends WidgetProps {
   factory?: GtkListItemFactory | null;
   headerFactory?: GtkListItemFactory | null;
   listFactory?: GtkListItemFactory | null;
+  model?: GListStore | GtkBookmarkList | GtkDirectoryList | GtkFilterListModel | GtkFlattenListModel | GtkMapListModel | GtkMultiFilter | GtkMultiSelection | GtkMultiSorter | GtkNoSelection | GtkSelectionFilterModel | GtkShortcutController | GtkSingleSelection | GtkSliceListModel | GtkSortListModel | GtkStringList | GtkTreeListModel | PangoFontFamily | PangoFontMap | null;
   searchMatchMode?: GtkStringFilterMatchMode;
   selected?: number;
   showArrow?: boolean;
@@ -522,10 +559,14 @@ export interface EntryProps extends WidgetProps {
   overwriteMode?: boolean;
   placeholderText?: string | null;
   primaryIconActivatable?: boolean;
+  primaryIconGicon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
+  primaryIconPaintable?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable;
   primaryIconSensitive?: boolean;
   progressFraction?: number;
   progressPulseStep?: number;
   secondaryIconActivatable?: boolean;
+  secondaryIconGicon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
+  secondaryIconPaintable?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable;
   secondaryIconSensitive?: boolean;
   showEmojiIcon?: boolean;
   truncateMultiline?: boolean;
@@ -702,12 +743,14 @@ export interface GridViewProps extends ListBaseProps {
   factory?: GtkListItemFactory | null;
   maxColumns?: number;
   minColumns?: number;
+  model?: GtkMultiSelection | GtkNoSelection | GtkSingleSelection | null;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
   onNotifyEnableRubberband?: (value: boolean) => void;
   onNotifyFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyMaxColumns?: (value: number) => void;
   onNotifyMinColumns?: (value: number) => void;
+  onNotifyModel?: (value: GtkSelectionModel | null) => void;
   onNotifySingleClickActivate?: (value: boolean) => void;
   onNotifyTabBehavior?: (value: GtkListTabBehavior) => void;
   onActivate?: (position: number) => void;
@@ -725,8 +768,10 @@ export interface HeaderBarProps extends WidgetProps {
 
 /** `<Image>`'s props: GtkImage's own properties and signals. */
 export interface ImageProps extends WidgetProps {
+  gicon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
   iconName?: string | null;
   iconSize?: GtkIconSize;
+  paintable?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable | null;
   pixelSize?: number;
   useFallback?: boolean;
   onNotifyIconName?: (value: string | null) => void;
@@ -862,12 +907,14 @@ export interface ListViewProps extends ListBaseProps {
   enableRubberband?: boolean;
   factory?: GtkListItemFactory | null;
   headerFactory?: GtkListItemFactory | null;
+  model?: GtkMultiSelection | GtkNoSelection | GtkSingleSelection | null;
   showSeparators?: boolean;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
   onNotifyEnableRubberband?: (value: boolean) => void;
   onNotifyFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyHeaderFactory?: (value: GtkListItemFactory | null) => void;
+  onNotifyModel?: (value: GtkSelectionModel | null) => void;
   onNotifyShowSeparators?: (value: boolean) => void;
   onNotifySingleClickActivate?: (value: boolean) => void;
   onNotifyTabBehavior?: (value: GtkListTabBehavior) => void;
@@ -992,6 +1039,7 @@ export interface PictureProps extends WidgetProps {
   canShrink?: boolean;
   contentFit?: GtkContentFit;
   isolateContents?: boolean;
+  paintable?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable | null;
   onNotifyAlternativeText?: (value: string | null) => void;
   onNotifyCanShrink?: (value: boolean) => void;
   onNotifyContentFit?: (value: GtkContentFit) => void;
@@ -2190,6 +2238,14 @@ function aboutDialogProp(gtk: GtkAboutDialog, key: string, value: unknown): bool
     case "licenseType":
       gtk.set_license_type(typeof value === "number" ? value as GtkLicense : 0 as GtkLicense);
       return true;
+    case "logo":
+      if (value instanceof GdkTexture) gtk.set_logo(value);
+      else if (value instanceof GtkIconPaintable) gtk.set_logo(value);
+      else if (value instanceof GtkMediaStream) gtk.set_logo(value);
+      else if (value instanceof GtkSvg) gtk.set_logo(value);
+      else if (value instanceof GtkWidgetPaintable) gtk.set_logo(value);
+      else gtk.set_logo(null);
+      return true;
     case "logoIconName":
       gtk.set_logo_icon_name(typeof value === "string" ? value : null);
       return true;
@@ -2668,6 +2724,12 @@ function columnViewProp(gtk: GtkColumnView, key: string, value: unknown): boolea
     case "headerFactory":
       gtk.set_header_factory(value instanceof GtkListItemFactory ? value : null);
       return true;
+    case "model":
+      if (value instanceof GtkMultiSelection) gtk.set_model(value);
+      else if (value instanceof GtkNoSelection) gtk.set_model(value);
+      else if (value instanceof GtkSingleSelection) gtk.set_model(value);
+      else gtk.set_model(null);
+      return true;
     case "reorderable":
       gtk.set_reorderable(typeof value === "boolean" ? value : true);
       return true;
@@ -2712,6 +2774,11 @@ function columnViewSignal(gtk: GtkColumnView, key: string, slot: SignalSlot): bo
     case "onNotifyHeaderFactory":
       gtk.connect("notify::header-factory", () => {
         slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_header_factory()));
+      });
+      return true;
+    case "onNotifyModel":
+      gtk.connect("notify::model", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkSelectionModel | null) => void)(gtk.get_model()));
       });
       return true;
     case "onNotifyReorderable":
@@ -2827,6 +2894,28 @@ function dropDownProp(gtk: GtkDropDown, key: string, value: unknown): boolean {
       return true;
     case "listFactory":
       gtk.set_list_factory(value instanceof GtkListItemFactory ? value : null);
+      return true;
+    case "model":
+      if (value instanceof GListStore) gtk.set_model(value);
+      else if (value instanceof GtkBookmarkList) gtk.set_model(value);
+      else if (value instanceof GtkDirectoryList) gtk.set_model(value);
+      else if (value instanceof GtkFilterListModel) gtk.set_model(value);
+      else if (value instanceof GtkFlattenListModel) gtk.set_model(value);
+      else if (value instanceof GtkMapListModel) gtk.set_model(value);
+      else if (value instanceof GtkMultiFilter) gtk.set_model(value);
+      else if (value instanceof GtkMultiSelection) gtk.set_model(value);
+      else if (value instanceof GtkMultiSorter) gtk.set_model(value);
+      else if (value instanceof GtkNoSelection) gtk.set_model(value);
+      else if (value instanceof GtkSelectionFilterModel) gtk.set_model(value);
+      else if (value instanceof GtkShortcutController) gtk.set_model(value);
+      else if (value instanceof GtkSingleSelection) gtk.set_model(value);
+      else if (value instanceof GtkSliceListModel) gtk.set_model(value);
+      else if (value instanceof GtkSortListModel) gtk.set_model(value);
+      else if (value instanceof GtkStringList) gtk.set_model(value);
+      else if (value instanceof GtkTreeListModel) gtk.set_model(value);
+      else if (value instanceof PangoFontFamily) gtk.set_model(value);
+      else if (value instanceof PangoFontMap) gtk.set_model(value);
+      else gtk.set_model(null);
       return true;
     case "searchMatchMode":
       gtk.set_search_match_mode(typeof value === "number" ? value as GtkStringFilterMatchMode : 2 as GtkStringFilterMatchMode);
@@ -3080,6 +3169,22 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "primaryIconActivatable":
       gtk.set_primary_icon_activatable(typeof value === "boolean" ? value : true);
       return true;
+    case "primaryIconGicon":
+      if (value instanceof GBytesIcon) gtk.set_primary_icon_gicon(value);
+      else if (value instanceof GEmblem) gtk.set_primary_icon_gicon(value);
+      else if (value instanceof GEmblemedIcon) gtk.set_primary_icon_gicon(value);
+      else if (value instanceof GFileIcon) gtk.set_primary_icon_gicon(value);
+      else if (value instanceof GThemedIcon) gtk.set_primary_icon_gicon(value);
+      else if (value instanceof GdkPixbuf) gtk.set_primary_icon_gicon(value);
+      else if (value instanceof GdkTexture) gtk.set_primary_icon_gicon(value);
+      return true;
+    case "primaryIconPaintable":
+      if (value instanceof GdkTexture) gtk.set_primary_icon_paintable(value);
+      else if (value instanceof GtkIconPaintable) gtk.set_primary_icon_paintable(value);
+      else if (value instanceof GtkMediaStream) gtk.set_primary_icon_paintable(value);
+      else if (value instanceof GtkSvg) gtk.set_primary_icon_paintable(value);
+      else if (value instanceof GtkWidgetPaintable) gtk.set_primary_icon_paintable(value);
+      return true;
     case "primaryIconSensitive":
       gtk.set_primary_icon_sensitive(typeof value === "boolean" ? value : true);
       return true;
@@ -3091,6 +3196,22 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
       return true;
     case "secondaryIconActivatable":
       gtk.set_secondary_icon_activatable(typeof value === "boolean" ? value : true);
+      return true;
+    case "secondaryIconGicon":
+      if (value instanceof GBytesIcon) gtk.set_secondary_icon_gicon(value);
+      else if (value instanceof GEmblem) gtk.set_secondary_icon_gicon(value);
+      else if (value instanceof GEmblemedIcon) gtk.set_secondary_icon_gicon(value);
+      else if (value instanceof GFileIcon) gtk.set_secondary_icon_gicon(value);
+      else if (value instanceof GThemedIcon) gtk.set_secondary_icon_gicon(value);
+      else if (value instanceof GdkPixbuf) gtk.set_secondary_icon_gicon(value);
+      else if (value instanceof GdkTexture) gtk.set_secondary_icon_gicon(value);
+      return true;
+    case "secondaryIconPaintable":
+      if (value instanceof GdkTexture) gtk.set_secondary_icon_paintable(value);
+      else if (value instanceof GtkIconPaintable) gtk.set_secondary_icon_paintable(value);
+      else if (value instanceof GtkMediaStream) gtk.set_secondary_icon_paintable(value);
+      else if (value instanceof GtkSvg) gtk.set_secondary_icon_paintable(value);
+      else if (value instanceof GtkWidgetPaintable) gtk.set_secondary_icon_paintable(value);
       return true;
     case "secondaryIconSensitive":
       gtk.set_secondary_icon_sensitive(typeof value === "boolean" ? value : true);
@@ -3750,6 +3871,12 @@ function gridViewProp(gtk: GtkGridView, key: string, value: unknown): boolean {
     case "minColumns":
       gtk.set_min_columns(typeof value === "number" ? value : 1);
       return true;
+    case "model":
+      if (value instanceof GtkMultiSelection) gtk.set_model(value);
+      else if (value instanceof GtkNoSelection) gtk.set_model(value);
+      else if (value instanceof GtkSingleSelection) gtk.set_model(value);
+      else gtk.set_model(null);
+      return true;
     case "singleClickActivate":
       gtk.set_single_click_activate(typeof value === "boolean" ? value : false);
       return true;
@@ -3780,6 +3907,11 @@ function gridViewSignal(gtk: GtkGridView, key: string, slot: SignalSlot): boolea
     case "onNotifyMinColumns":
       gtk.connect("notify::min-columns", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_columns()));
+      });
+      return true;
+    case "onNotifyModel":
+      gtk.connect("notify::model", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkSelectionModel | null) => void)(gtk.get_model()));
       });
       return true;
     case "onNotifySingleClickActivate":
@@ -3839,11 +3971,28 @@ function headerBarSignal(gtk: GtkHeaderBar, key: string, slot: SignalSlot): bool
 
 function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
   switch (key) {
+    case "gicon":
+      if (value instanceof GBytesIcon) gtk.set_from_gicon(value);
+      else if (value instanceof GEmblem) gtk.set_from_gicon(value);
+      else if (value instanceof GEmblemedIcon) gtk.set_from_gicon(value);
+      else if (value instanceof GFileIcon) gtk.set_from_gicon(value);
+      else if (value instanceof GThemedIcon) gtk.set_from_gicon(value);
+      else if (value instanceof GdkPixbuf) gtk.set_from_gicon(value);
+      else if (value instanceof GdkTexture) gtk.set_from_gicon(value);
+      return true;
     case "iconName":
       gtk.set_from_icon_name(typeof value === "string" ? value : null);
       return true;
     case "iconSize":
       gtk.set_icon_size(typeof value === "number" ? value as GtkIconSize : 0 as GtkIconSize);
+      return true;
+    case "paintable":
+      if (value instanceof GdkTexture) gtk.set_from_paintable(value);
+      else if (value instanceof GtkIconPaintable) gtk.set_from_paintable(value);
+      else if (value instanceof GtkMediaStream) gtk.set_from_paintable(value);
+      else if (value instanceof GtkSvg) gtk.set_from_paintable(value);
+      else if (value instanceof GtkWidgetPaintable) gtk.set_from_paintable(value);
+      else gtk.set_from_paintable(null);
       return true;
     case "pixelSize":
       gtk.set_pixel_size(typeof value === "number" ? value : -1);
@@ -4348,6 +4497,12 @@ function listViewProp(gtk: GtkListView, key: string, value: unknown): boolean {
     case "headerFactory":
       gtk.set_header_factory(value instanceof GtkListItemFactory ? value : null);
       return true;
+    case "model":
+      if (value instanceof GtkMultiSelection) gtk.set_model(value);
+      else if (value instanceof GtkNoSelection) gtk.set_model(value);
+      else if (value instanceof GtkSingleSelection) gtk.set_model(value);
+      else gtk.set_model(null);
+      return true;
     case "showSeparators":
       gtk.set_show_separators(typeof value === "boolean" ? value : false);
       return true;
@@ -4376,6 +4531,11 @@ function listViewSignal(gtk: GtkListView, key: string, slot: SignalSlot): boolea
     case "onNotifyHeaderFactory":
       gtk.connect("notify::header-factory", () => {
         slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_header_factory()));
+      });
+      return true;
+    case "onNotifyModel":
+      gtk.connect("notify::model", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkSelectionModel | null) => void)(gtk.get_model()));
       });
       return true;
     case "onNotifyShowSeparators":
@@ -4827,6 +4987,14 @@ function pictureProp(gtk: GtkPicture, key: string, value: unknown): boolean {
       return true;
     case "isolateContents":
       gtk.set_isolate_contents(typeof value === "boolean" ? value : true);
+      return true;
+    case "paintable":
+      if (value instanceof GdkTexture) gtk.set_paintable(value);
+      else if (value instanceof GtkIconPaintable) gtk.set_paintable(value);
+      else if (value instanceof GtkMediaStream) gtk.set_paintable(value);
+      else if (value instanceof GtkSvg) gtk.set_paintable(value);
+      else if (value instanceof GtkWidgetPaintable) gtk.set_paintable(value);
+      else gtk.set_paintable(null);
       return true;
   }
   return widgetProp(gtk, key, value);
