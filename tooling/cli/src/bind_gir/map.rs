@@ -36,6 +36,9 @@ type Implemented = (String, String);
 
 /// What a signal's view calls: `g_signal_connect_data`, keeping the closure.
 pub(crate) const CONNECT: &str = "nts_gobject_connect";
+/// What a signal's `emit` view names: no C function, but a thunk the
+/// compiler defines per signal, which emits by the signal's id.
+pub(crate) const EMIT: &str = "nts_gobject_emit";
 
 /// One namespace's binding, ready to write.
 #[derive(Debug, Default)]
@@ -464,7 +467,7 @@ pub(crate) fn bind<'a>(
         for signal in &class.signals {
             let label = format!("{}::{}", class.c_type.as_deref().unwrap_or(&class.name), signal.name);
             match mapper.signal(class, signal) {
-                Ok(connect) => {
+                Ok((connect, emit)) => {
                     // `connect_after`: the same call with `G_CONNECT_AFTER`.
                     let after = Function {
                         name: connect.name.replacen("_connect_", "_connect_after_", 1),
@@ -473,6 +476,7 @@ pub(crate) fn bind<'a>(
                         ..connect.clone()
                     };
                     mapper.binding.functions.extend([connect, after]);
+                    mapper.binding.functions.extend(emit);
                 }
                 Err(reason) => mapper.binding.refused.push((label, reason)),
             }
@@ -1451,7 +1455,12 @@ impl<'a> Mapper<'a> {
     /// destroy function a `GClosureNotify`. The handler's
     /// own signature is GIR's: the instance first, the signal's parameters,
     /// and the `user_data` last, where the bridge takes the closure from.
-    fn signal(&mut self, class: &'a Class, signal: &super::model::Signal) -> Result<Function, Reason> {
+    ///
+    /// With it, for a signal that returns nothing, the view `emit` is:
+    /// `button.emit("clicked")`, GJS's spelling, the signal's parameters
+    /// after its name. A signal with a result has none, since `g_signal_emit`
+    /// would write it through a location the view does not take.
+    fn signal(&mut self, class: &'a Class, signal: &super::model::Signal) -> Result<(Function, Option<Function>), Reason> {
         let c_type = class.c_type.clone().ok_or_else(|| Reason::Unknown(class.name.clone()))?;
         if !self.binding.headers.iter().any(|header| header == nts_codegen_c::GOBJECT_HEADER_NAME) {
             self.binding.headers.push(nts_codegen_c::GOBJECT_HEADER_NAME.to_owned());
@@ -1465,6 +1474,7 @@ impl<'a> Mapper<'a> {
         let local = c_type.clone();
         self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "CNumber"]);
         let mut ts_parameters = vec![format!("self: {local}")];
+        let mut emitted = Vec::new();
         for param in &signal.signature.parameters {
             // A UTF-8 string GLib passes the handler, lent for the call: the
             // handler's bridge copies it (`native::abi_type`). A `filename`
@@ -1472,6 +1482,8 @@ impl<'a> Mapper<'a> {
             if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8") {
                 let ts = if param.nullable { "string | null" } else { "string" };
                 ts_parameters.push(format!("{}: {ts}", identifier(&param.name)));
+                let c = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))));
+                emitted.push((identifier(&param.name), Mapped { shape: Shape::Other, ts: ts.to_owned(), c }));
                 continue;
             }
             if matches!(&param.ty, TypeRef::Named { name, .. } if name == "filename") {
@@ -1481,6 +1493,7 @@ impl<'a> Mapper<'a> {
             let mapped = self.typed(&param)?;
             let mapped = self.truth(&param, mapped);
             ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
+            emitted.push((identifier(&param.name), mapped));
         }
         let result = match &signal.signature.result.ty {
             TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
@@ -1514,7 +1527,7 @@ impl<'a> Mapper<'a> {
             self.namespace.symbol_prefix,
             signal.name.replace('-', "_")
         );
-        Ok(Function {
+        let connect = Function {
             name,
             symbol: CONNECT.to_owned(),
             parameters: vec![
@@ -1552,7 +1565,12 @@ impl<'a> Mapper<'a> {
             method_only: true,
             statics: None,
             vfunc: None,
-        })
+        };
+        if result.c != Type::Void {
+            return Ok((connect, None));
+        }
+        let emit = emit_view(&connect, &signal.name, emitted);
+        Ok((connect, Some(emit)))
     }
 
     /// A signal parameter with its C type filled in where GIR left it out:
@@ -1974,6 +1992,29 @@ fn get_type_function(get_type: &str) -> Function {
 /// `"notify"` or the template literal `notify::${string}` -- so
 /// `connect("notify::label", ...)` typechecks and reaches `GLib`, which parses
 /// the detail, as written.
+/// A signal's `emit` view, made from its `connect`: the instance and the
+/// signal's plain name -- a detail (`notify::label`) would be part of the
+/// thunk's -- then the signal's parameters, and no result.
+fn emit_view(connect: &Function, signal: &str, emitted: Vec<(String, Mapped)>) -> Function {
+    let mut parameters = connect.parameters[..2].to_vec();
+    parameters[1].1.ts = format!("\"{signal}\"");
+    let mut c_parameters = connect.c_parameters[..2].to_vec();
+    for (name, mapped) in emitted {
+        c_parameters.push(mapped.c.clone());
+        parameters.push((name, mapped));
+    }
+    Function {
+        name: connect.name.replacen("_connect_", "_emit_", 1),
+        symbol: EMIT.to_owned(),
+        parameters,
+        result: Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
+        c_parameters,
+        method: connect.method.as_ref().map(|(class, _)| (class.clone(), "emit".to_owned())),
+        omissible: BTreeMap::new(),
+        ..connect.clone()
+    }
+}
+
 fn detailed_name(signal: &super::model::Signal) -> String {
     if signal.detailed {
         format!("\"{0}\" | `{0}::${{string}}`", signal.name)

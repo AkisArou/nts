@@ -635,6 +635,20 @@ tally.connect("incremented", (self, by) => { /* self: Tally, by: number */ });
   backend defines as `g_signal_emit` by id, looked up on the instance's type
   once per thunk and cached. No name is parsed per emit, and the program
   makes no variadic call.
+- **A binding's own signal is emitted the same way**, `button.emit("clicked")`
+  as GJS writes it.
+  - The binder writes an `emit` view beside each signal's `connect`, but only
+    for a signal that returns nothing: one with a result would need the
+    location `g_signal_emit` writes it through.
+  - Its thunk is named by its parameters' C types
+    (`nts_gobject_emit_gUInt__direction_changed`), so two classes'
+    same-named signals of different shapes are two thunks. Every pointer is
+    `void *`, so one thunk prints one prototype.
+  - The self-check skips the view, since no header declares the thunk.
+  - This retired the C `emit` shims. gtk-subclass is now TypeScript only: it
+    logs with `console.log`, and its `native/` is gone.
+  - Witness: every `clicked` in gtk-subclass, and `direction 2`, an enum
+    through `g_signal_emit` that the program's handler hears.
 - **connect** is `nts_gobject_connect`, as for a binding's signal, with the
   instance typed `void *` at every call, as the C function takes it.
 - **Strings in a handler.** A callback bridge takes a `string` parameter: C's

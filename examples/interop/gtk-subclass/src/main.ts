@@ -64,6 +64,9 @@
 //                 `g_list_model_get_*` reach its `vfunc_`s
 //   dtls true true  `Dtls` implements three interfaces, each requiring the
 //                 next: registered in the order GLib accepts
+//   direction 2  `emit` of a binding's signal with a parameter, the enum
+//                 `RTL`, which the program's handler hears; every `clicked`
+//                 above is `emit` too, with none
 //   is C|B|label|button|none  `instanceof`, which asks the type system
 //                 (`g_type_check_instance_is_a`) for a class the program wrote
 //                 and for a binding's, and narrows: `C`'s field read after it
@@ -77,6 +80,7 @@ import {
   gtk_label_get_type,
   gtk_widget_measure,
   Orientation,
+  TextDirection,
   type GtkOrientation,
 } from "c:Gtk-4.0";
 import { BindingFlags, GObject, g_object_bind_property, g_type_from_name, g_type_is_a, g_type_name_from_instance } from "c:GObject-2.0";
@@ -91,7 +95,6 @@ import {
 } from "c:Gio-2.0";
 import type { CEnum, CNumber, Erased, Owned, Property, Ptr, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
-import { sub_emit, sub_log } from "c:sub";
 
 class Counter extends GtkButton {
   // Fields: an object of the program's own that the instance holds, made by
@@ -107,7 +110,7 @@ class Counter extends GtkButton {
     this.count++;
     this.seen.push(this.label ?? "");
     this.set_label((this.label ?? "") + this.suffix());
-    sub_log("clicked " + (this.label ?? ""));
+    console.log("clicked " + (this.label ?? ""));
   }
 }
 
@@ -120,7 +123,7 @@ class Greeter extends GtkButton {
     super({ label: "hi " + name });
     this.greeting = "hello " + name;
     this.connect("clicked", () => {
-      sub_log(this.greeting + " from " + (this.label ?? ""));
+      console.log(this.greeting + " from " + (this.label ?? ""));
     });
   }
 }
@@ -255,7 +258,7 @@ class Wide extends Panel {
 function wide(): string {
   const made = new Wide({});
   const before = "wide " + (made.title.label ?? "") + " " + String(made.extra);
-  sub_emit(made.press, "clicked");
+  made.press.emit("clicked");
   return before + " pressed " + String(made.pressed);
 }
 
@@ -298,7 +301,7 @@ function panel(): string {
   const made = new Panel({});
   const first = made.get_first_child();
   const before = "panel " + (made.title.label ?? "") + " " + String(first === made.title);
-  sub_emit(made.press, "clicked");
+  made.press.emit("clicked");
   return before + " pressed " + String(made.pressed) + " " + (made.title.label ?? "");
 }
 
@@ -341,7 +344,7 @@ class A extends GtkButton {
     return this.a;
   }
   vfunc_clicked(): void {
-    sub_log("A " + String(this.bumpA()));
+    console.log("A " + String(this.bumpA()));
   }
 }
 
@@ -350,7 +353,7 @@ class B extends A {
   vfunc_clicked(): void {
     this.b++;
     super.vfunc_clicked();
-    sub_log("B " + String(this.b) + " " + String(this.a));
+    console.log("B " + String(this.b) + " " + String(this.a));
   }
 }
 
@@ -359,7 +362,7 @@ class C extends B {
   vfunc_clicked(): void {
     this.c++;
     super.vfunc_clicked();
-    sub_log("C " + String(this.c) + " " + String(this.b) + " " + String(this.a));
+    console.log("C " + String(this.c) + " " + String(this.b) + " " + String(this.a));
   }
 }
 
@@ -370,13 +373,13 @@ class P extends GtkButton {
 class Q extends P {
   vfunc_clicked(): void {
     this.p++;
-    sub_log("Q " + String(this.p));
+    console.log("Q " + String(this.p));
   }
 }
 
 class R extends GtkButton {
   vfunc_clicked(): void {
-    sub_log("R");
+    console.log("R");
   }
 }
 
@@ -385,19 +388,19 @@ class S extends R {
   vfunc_clicked(): void {
     this.s++;
     super.vfunc_clicked();
-    sub_log("S " + String(this.s));
+    console.log("S " + String(this.s));
   }
 }
 
 function chains(): void {
   const c = new C({ label: "c" });
-  sub_emit(c, "clicked");
-  sub_emit(c, "clicked");
-  sub_log(g_type_name_from_instance(c) + " " + String(c.a) + " " + String(c.b) + " " + String(c.c));
+  c.emit("clicked");
+  c.emit("clicked");
+  console.log(g_type_name_from_instance(c) + " " + String(c.a) + " " + String(c.b) + " " + String(c.c));
   const q = new Q({ label: "q" });
-  sub_emit(q, "clicked");
+  q.emit("clicked");
   const s = new S({ label: "s" });
-  sub_emit(s, "clicked");
+  s.emit("clicked");
 }
 
 function kind(widget: GtkWidget | null): string {
@@ -441,6 +444,18 @@ function dtls(): string {
   return "dtls " + is("GDtlsClientConnection") + " " + is("GDatagramBased");
 }
 
+// A binding's own signal emitted with its parameters, GJS's `emit`: an enum
+// through `g_signal_emit`, heard by a handler of the program's.
+function direction(): string {
+  const label = new GtkLabel({ label: "d" });
+  let heard = -1;
+  label.connect("direction-changed", (_self, previous) => {
+    heard = previous;
+  });
+  label.emit("direction-changed", TextDirection.RTL);
+  return "direction " + String(heard);
+}
+
 function words(): string {
   const words = new Words();
   let heard = "";
@@ -457,40 +472,41 @@ function words(): string {
 function main(): void {
   gtk_init();
   const counter = new Counter({ label: "0" });
-  sub_emit(counter, "clicked");
-  sub_emit(counter, "clicked");
-  sub_log("type " + g_type_name_from_instance(counter));
-  sub_log("count " + String(counter.count) + " seen " + counter.seen.join("|"));
+  counter.emit("clicked");
+  counter.emit("clicked");
+  console.log("type " + g_type_name_from_instance(counter));
+  console.log("count " + String(counter.count) + " seen " + counter.seen.join("|"));
   const plain = new GtkButton({ label: "p" });
-  sub_emit(plain, "clicked");
-  sub_log("plain " + (plain.label ?? ""));
+  plain.emit("clicked");
+  console.log("plain " + (plain.label ?? ""));
 
   const greeter = new Greeter("ada");
-  sub_emit(greeter, "clicked");
-  sub_log("greeter " + g_type_name_from_instance(greeter));
-  sub_log(framed());
-  sub_log(tally());
-  sub_log(notes());
-  sub_log(panel());
-  sub_log(wide());
-  sub_log(tall());
+  greeter.emit("clicked");
+  console.log("greeter " + g_type_name_from_instance(greeter));
+  console.log(framed());
+  console.log(tally());
+  console.log(notes());
+  console.log(panel());
+  console.log(wide());
+  console.log(tall());
 
   const square = new Square({});
   const width = local<CNumber<"int">>();
   const height = local<CNumber<"int">>();
   gtk_widget_measure(square, Orientation.HORIZONTAL, -1, width);
   gtk_widget_measure(square, Orientation.VERTICAL, -1, height);
-  sub_log("measure " + String(width[0]) + " " + String(height[0]));
-  sub_log("square " + g_type_name_from_instance(square));
+  console.log("measure " + String(width[0]) + " " + String(height[0]));
+  console.log("square " + g_type_name_from_instance(square));
 
   const shy = new Shy({ label: "s" });
   shy.set_visible(false);
   shy.set_visible(true);
-  sub_log("shy " + String(shy.shown) + " " + String(shy.get_visible()));
+  console.log("shy " + String(shy.shown) + " " + String(shy.get_visible()));
   chains();
-  sub_log(words());
-  sub_log(dtls());
-  sub_log("is " + [kind(new C({})), kind(new B({})), kind(new GtkLabel({})), kind(new GtkButton({})), kind(null)].join("|"));
+  console.log(words());
+  console.log(dtls());
+  console.log(direction());
+  console.log("is " + [kind(new C({})), kind(new B({})), kind(new GtkLabel({})), kind(new GtkButton({})), kind(null)].join("|"));
 }
 
 main();

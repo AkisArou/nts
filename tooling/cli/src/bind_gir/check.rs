@@ -138,6 +138,11 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
         };
         let result = function.result.c.c_type_expanded();
         let symbol = &function.symbol;
+        // A signal's `emit` names a thunk the compiler defines, which no
+        // header declares.
+        if symbol == super::map::EMIT {
+            continue;
+        }
         // A virtual function is its class struct's member, whose type is the
         // pointer this compares against.
         if let Some((class_struct, member, offset)) = &function.vfunc {

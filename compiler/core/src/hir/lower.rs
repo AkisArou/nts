@@ -6407,6 +6407,26 @@ fn vfunc_declaration_signature(snapshot: &SemanticSnapshot, declaration: NodeId)
     snapshot.signatures.get(signature.0 as usize)
 }
 
+/// What names the `emit` thunk of a binding's own signal: `g`, then each
+/// parameter's C type -- `p` a pointer, `B` a `bool`, a scalar by its name
+/// (`Int32`) -- where a program's signal is named by its kinds (`d`, `b`, `s`,
+/// `o`). A record passed by value has no place in `g_signal_emit`'s varargs.
+fn binding_signal_kinds(parameters: &[super::native::Type]) -> Result<String, String> {
+    use std::fmt::Write as _;
+    let mut kinds = String::from("g");
+    for parameter in parameters {
+        match parameter {
+            super::native::Type::Pointer(_) => kinds.push('p'),
+            super::native::Type::Bool => kinds.push('B'),
+            super::native::Type::Scalar(scalar) => {
+                let _ = write!(kinds, "{scalar:?}");
+            }
+            other => return Err(format!("`emit` of a signal with a parameter of C type {other:?}")),
+        }
+    }
+    Ok(kinds)
+}
+
 /// The interfaces a class implements (`extends GObject<{}, GListModelImplementation>`),
 /// read off its instance type's `__c_ifaces` (see `Signalled` in `c:types`):
 /// each as its interface struct and `GType` function, `GListModelInterface
@@ -45533,17 +45553,20 @@ impl<'a> FuncBuilder<'a> {
             .or_else(|| self.snapshot.node_types.get(&receiver_node).map(|ty| self.class_behind(self.present_part(*ty).unwrap_or(*ty))))
             .ok_or_else(|| self.unsupported(id, "`emit` with no receiver type"))?;
         let declared = signals_of_type(self.snapshot, this_ty).map_err(|why| self.unsupported(id, &why))?;
-        let kinds = declared
-            .iter()
-            .find(|declared| declared.name == signal)
-            .map(|declared| declared.kinds.clone())
-            .ok_or_else(|| self.unsupported(*name_node, &format!("`emit` of `{signal}`, which no class the program wrote declares")))?;
+        let kinds = declared.iter().find(|declared| declared.name == signal).map(|declared| declared.kinds.clone());
         // `this`, then each of the signal's parameters in place of the name
-        // and the rest: the thunk's own signature.
+        // and the rest: the thunk's own signature. A signal a class the
+        // program wrote declares has them as `WithSignals`'s rest; a
+        // binding's own (`button.emit("clicked")`) as its view's parameters
+        // after the name.
         let rest_ty = with_this.parameters.last().filter(|p| p.rest).map(|p| p.ty);
-        let Some(TypeKind::Tuple(elements)) = rest_ty.and_then(|ty| self.snapshot.types.get(ty.0 as usize)).map(|record| record.kind.clone())
-        else {
-            return Err(self.unsupported(id, "`emit` whose arguments are not a signal's parameters"));
+        let elements = match rest_ty.and_then(|ty| self.snapshot.types.get(ty.0 as usize)).map(|record| &record.kind) {
+            Some(TypeKind::Tuple(elements)) if kinds.is_some() => elements.clone(),
+            _ if kinds.is_none() && rest_ty.is_none() => with_this.parameters.iter().skip(1).map(|p| p.ty).collect(),
+            _ if kinds.is_none() => {
+                return Err(self.unsupported(*name_node, &format!("`emit` of `{signal}`, which neither a class the program wrote nor a binding declares")));
+            }
+            _ => return Err(self.unsupported(id, "`emit` whose arguments are not a signal's parameters")),
         };
         with_this.parameters =
             vec![nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this_ty, optional: false, rest: false }];
@@ -45559,6 +45582,20 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "`emit` that is not foreign"));
         };
         let thunk = std::sync::Arc::make_mut(&mut target);
+        // A binding's signal, named by its parameters' C types, so two
+        // classes' same-named signals of different shapes are two thunks --
+        // and every pointer is `void *`, so every call of one prints one
+        // prototype, whichever class it names.
+        let kinds = if let Some(kinds) = kinds {
+            kinds
+        } else {
+            for parameter in &mut thunk.parameters {
+                if matches!(parameter, super::native::Type::Pointer(_)) {
+                    *parameter = super::native::Type::Pointer(super::native::Pointee::Void);
+                }
+            }
+            binding_signal_kinds(&thunk.parameters[1..]).map_err(|why| self.unsupported(id, &why))?
+        };
         thunk.name = super::ForeignSignal::emit_thunk(&signal, &kinds);
         thunk.declared_at = None;
         // Each argument as written, then converted to the thunk's parameter
