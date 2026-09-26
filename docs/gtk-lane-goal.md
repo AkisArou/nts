@@ -280,10 +280,25 @@ program cannot read a file's bytes through GIR, only its lines
   But `bytesFrom` takes a `c_uint8` pointer, while C spells these
   `gconstpointer` and `char **`, and the witness compares prototypes
   exactly.
-- What they need is the compiler's own: a byte-array result or out slot whose
-  length is another out slot, converted as `Counted<CBytes<Q>>` is on the
-  way in (`nts_view_from_bytes`, with the free the transfer asks for). That
-  is a role on the native function, so the design is shared.
+- What they need is the compiler's own, and the design is agreed with
+  MainClaude:
+  - **Extend `Role::Length { array }`**, the pairing an inbound array and its
+    count already use, rather than a parallel role. `prepend_receiver` keeps
+    its indices, and two spellings of one fact would disagree first there.
+  - **The conversion is `nts_view_from_bytes`**, which exists
+    (`bytesFrom`), so there is no new runtime helper.
+  - **The transfer is a field, not a baked-in `g_free`.**
+    `g_bytes_get_data` is transfer none: the bytes are the `GBytes`', and the
+    copy is what lets the view outlive them. `g_file_load_contents` is
+    transfer full, and is freed after the copy.
+  - **Convert only when the call succeeded.** On failure `contents` and
+    `length` are untouched, and reading an uninitialised `gsize` as a length
+    is the worst failure available here.
+  - Fixtures: a view read after its `GBytes` is freed, and the transfer-full
+    arm under `--rc`.
+  - Windows' `Role::Box`/`Lent::Box` lands beside it: read that shape
+    first, so that "what the program sees is not what C has" is spelled
+    once.
 
 ### Boxed records
 
@@ -684,6 +699,34 @@ class Note extends GObject {
   true 2.5`), gtk-gir's `relabeled 2`, gtk-values' `kept`. Each is C and
   LLVM, plain and `--rc`, and each has its failing control recorded in its
   commit.
+
+### A class built from a template
+
+GJS's `Template` and `InternalChildren`, as a class writes them:
+
+```ts
+class Panel extends GtkBox {
+  static readonly template = `<interface><template class="Nts_Panel" parent="GtkBox">...`;
+  declare readonly title: GtkLabel;   // the child with id "title"
+}
+```
+
+- The template is the static field's literal type. The children are the
+  class's own `declare`d GObject-handle fields, each named by its id.
+- Registration takes two hooks (`class_setup`, `instance_setup`):
+  `class_init` sets the template and binds each child, and `instance_init`
+  makes the children, including for a class without fields. The GTK calls
+  are in `nts_gtk.c`, linked only by a program that declares a template.
+- `panel.title` is `gtk_widget_get_template_child` by id
+  (`nts_gobject_child_{Class}_{i}`), borrowed from the template.
+- The template's `class` names the registered type, `Nts_{Class}`, as GJS's
+  default is `Gjs_{Class}`.
+- v1: a template on a class over a binding's class. A chain with another
+  templated or fielded program class below it is not supported yet, nor are
+  `<signal handler>` callbacks in the template.
+- Before this, a `declare`d field compiled into a state field nothing set,
+  and reading it failed GTK's assertion. Witness: gtk-subclass's `panel from
+  the template true`.
 
 ### A handle where any value may go
 
