@@ -138,7 +138,16 @@ function materialise(name, sources, mode) {
   return dir;
 }
 
-const env = () => ({ ...process.env, NTS_NO_SNAPSHOT_CACHE: "1", NTS_TSGO: join(ROOT, "target/tsgo") });
+// `NTS_TSGO` from the caller when it names one: `tooling/gate/pinned.sh` runs the
+// gate in a worktree with no `target/` of its own and passes the main tree's
+// tsgo. This line used to set it *after* spreading `process.env`, so the
+// tree-local path won, pointed at nothing, and every pinned gate failed this
+// step at its self-check.
+const env = () => ({
+  ...process.env,
+  NTS_NO_SNAPSHOT_CACHE: "1",
+  NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"),
+});
 const CASCADE = new Set(["NTS1003", "NTS1005"]);
 const rootLine = (d) => `${d.code} ${d.raw}`;
 
@@ -290,6 +299,14 @@ for (const name of chosen) {
 console.log(`  compiler ${NTS} (sha256:${FINGERPRINT})`);
 const broken = selfCheck();
 if (broken) {
+  // **"The harness could not start the frontend" is not "the records moved".**
+  // Both used to arrive as one verdict; only the second is about the compiler,
+  // and a gate reader should not have to open the JSON to tell them apart.
+  if (/frontend transport failed|could not start/.test(broken)) {
+    console.log(`  NOT MEASURED: the frontend (tsgo) could not be started -- NTS_TSGO=${env().NTS_TSGO}`);
+    console.log("  this is the harness's environment, not a fact about the compiler or the records");
+    process.exit(2);
+  }
   console.log(`  NOT MEASURED: self-check failed -- ${broken}`);
   console.log("  a harness that cannot tell agreement from disagreement cannot hold a record");
   process.exit(2);
