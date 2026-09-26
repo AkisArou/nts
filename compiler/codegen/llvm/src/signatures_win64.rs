@@ -316,6 +316,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_promise_reject", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_reject_value", returns: "void", params: &["ptr", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_promise_reject_with", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_promise_resolve_value", returns: "void", params: &["ptr", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_promise_state", returns: "double", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_promise_subscribe", returns: "void", params: &["ptr", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_promise_value", returns: "void", params: &["ptr dead_on_unwind writable sret({ i32, i64 }) align 8", "ptr"], attributes: &[] },

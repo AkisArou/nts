@@ -1650,6 +1650,12 @@ fn read_settled(
         HirType::Managed(_) => "nts_promise_reference",
         // A C handle, from the promise's slot for one.
         HirType::NativePointer(_) => "nts_promise_pointer",
+        // `await x` with `x: unknown`, which the tag describes and no reader
+        // chosen from a type can. It fell to the number arm, so every such
+        // `await` read its value as a double: a number agreed by coincidence,
+        // a string aborted with "read a number from a promise holding
+        // something else" in C and was `typeof` "number" on the JVM.
+        HirType::Erased => "nts_promise_value",
         _ => "nts_promise_number",
     };
     let value = build.push(

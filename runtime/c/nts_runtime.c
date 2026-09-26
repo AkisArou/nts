@@ -9218,6 +9218,15 @@ void nts_promise_adopt(NtsPromise *outer, NtsPromise *inner) {
       (NtsTask){nts_adoption_begin, nts_adoption_drop, adoption});
 }
 
+void nts_promise_resolve_value(NtsPromise *promise, NtsValue value) {
+  nts_promise_require_owner("nts_promise_resolve_value");
+  if (nts_is_promise(value)) {
+    nts_promise_adopt(promise, (NtsPromise *)nts_value_reference(value));
+    return;
+  }
+  nts_promise_fulfill_value(promise, value);
+}
+
 bool nts_promise_claim(NtsPromise *promise, uint32_t pair) {
   nts_promise_require_owner("nts_promise_claim");
   if (promise->resolutions != pair) {

@@ -291,6 +291,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_promise_reject", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_reject_value", returns: "void", params: &["ptr", "[2 x i64]"], attributes: &[] },
     Signature { name: "nts_promise_reject_with", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_promise_resolve_value", returns: "void", params: &["ptr", "[2 x i64]"], attributes: &[] },
     Signature { name: "nts_promise_state", returns: "double", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_promise_subscribe", returns: "void", params: &["ptr", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_promise_value", returns: "[2 x i64]", params: &["ptr"], attributes: &[] },

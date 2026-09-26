@@ -58,6 +58,17 @@ public final class NtsPromise {
     public static void fulfillValue(NtsPromise promise, NtsValue value) {
         settle(promise, FULFILLED, value);
     }
+    /**
+     * Resolve with a value whose kind is known only at run time: a promise is
+     * adopted, anything else fulfils. See {@code nts_promise_resolve_value}.
+     */
+    public static void resolveValue(NtsPromise promise, NtsValue value) {
+        if (NtsValue.isPromise(value)) {
+            adopt(promise, (NtsPromise) value.ref);
+            return;
+        }
+        fulfillValue(promise, value);
+    }
     public static void reject(NtsPromise promise, Object reason) {
         if (promise.state == PENDING) { settle(promise, REJECTED, NtsValue.ofObject(reason)); }
     }

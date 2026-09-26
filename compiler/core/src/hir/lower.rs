@@ -25004,8 +25004,15 @@ impl<'a> FuncBuilder<'a> {
             // as a double. The argument was right and one helper short: the
             // third one exists, all three backends already emit it, and it
             // needs no tag because the value carries its own.
+            //
+            // **Resolved, not fulfilled.** An erased value can hold a promise,
+            // and resolving with a promise adopts it -- the arm above that
+            // does so is chosen from the type, and here only the tag knows.
+            // Fulfilling stored the inner promise *as* the payload, and a
+            // reader expecting a number found a promise and aborted where node
+            // answers the inner's value.
             (HirType::Erased, Some(value)) => {
-                ("nts_promise_fulfill_value", vec![result.promise, value])
+                ("nts_promise_resolve_value", vec![result.promise, value])
             }
         };
         Ok(self.runtime_call(helper, args, HirType::Void, origin))

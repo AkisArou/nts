@@ -3744,6 +3744,16 @@ void nts_promise_adopt(NtsPromise *outer, NtsPromise *inner);
  * is one field in the padding where a flag per pair would be an allocation per
  * pair. */
 bool nts_promise_claim(NtsPromise *promise, uint32_t pair);
+/* Resolve with a value whose kind is known only at run time: the
+ * specification's promise resolve function, for the one case the compiler
+ * cannot decide from a type. A promise is adopted, exactly as
+ * `nts_promise_adopt` adopts one whose type says so; anything else fulfils.
+ *
+ * `nts_promise_fulfill_value` is the store and stays one. This is what
+ * `await x` with `x: unknown` means, and it used to be the store: the outer
+ * promise was fulfilled *with* the inner one, and the reader that expected a
+ * number found a promise and aborted. Node awaits the inner. */
+void nts_promise_resolve_value(NtsPromise *promise, NtsValue value);
 
 /* --- Combinators (docs/async.md 5b) ----------------------------------------
  *

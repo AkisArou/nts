@@ -739,6 +739,9 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_promise_fulfill_value" => {
             (types::PROMISE, "fulfillValue", "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V")
         }
+        "nts_promise_resolve_value" => {
+            (types::PROMISE, "resolveValue", "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V")
+        }
         "nts_promise_reject" => {
             (types::PROMISE, "reject", "(Lnts/rt/NtsPromise;Ljava/lang/Object;)V")
         }
