@@ -84,7 +84,7 @@ export function changedHookOrder(start: number): string {
   let reported = "none";
   const container = new TestContainer();
   const root = createContainer(container, ConcurrentRoot, null, false, false, "", (error: unknown) => {
-    reported = String(error);
+    reported = error instanceof Error ? error.message : "a non-error";
   }, ignoreError, ignoreError, () => {}, null);
   updateContainer(<Swapping flipped={false} start={start} />, root, null, null);
   drainHost();
@@ -155,11 +155,11 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
   state: BoundaryState = { error: null };
 
   static getDerivedStateFromError(error: unknown): BoundaryState {
-    return { error: error instanceof Error ? error.message : String(error) };
+    return { error: error instanceof Error ? error.message : "a non-error" };
   }
 
   componentDidCatch(error: unknown): void {
-    this.props.note("caught " + (error instanceof Error ? error.message : String(error)));
+    this.props.note("caught " + (error instanceof Error ? error.message : "a non-error"));
   }
 
   render() {
