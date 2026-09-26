@@ -1806,7 +1806,7 @@ test262() {
 # is not seen) and 1 when the outcomes do not reconcile or a recorded case
 # changed; a missing `pass-count:` line is a run that said nothing, and fails
 # rather than reading as zero.
-TEST262_LANGUAGE_PASS_FLOOR=4485
+TEST262_LANGUAGE_PASS_FLOOR=4503
 test262_cases() {
   if [ ! -d third_party/test262/.git ]; then
     echo "  no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
