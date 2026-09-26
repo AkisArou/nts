@@ -88,7 +88,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { availableParallelism, homedir } from "node:os";
+import { availableParallelism, homedir, loadavg } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -148,6 +148,39 @@ const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
 // Runtime objects compiled once and kept across runs; `attempt262.mjs`'s
 // `withCachedObjects` says why this is the same program and how it is keyed.
 const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".cache/nts/c-objects");
+/**
+ * What the machine was doing, from `/proc/meminfo` and the load average --
+ * taken at the start and the end, and printed with the result.
+ *
+ * **A full-corpus number taken under swap is not the same measurement as one
+ * taken idle**, and nothing in a record would say which it is: timeouts and
+ * the memory cap fire more, the object cache races more, and a floor set from
+ * a degraded run is one every other lane then has to clear. This file has
+ * already been OOM-killed three times on this box. The state is part of the
+ * claim, so it is in the output.
+ */
+function machineState() {
+  const info = Object.fromEntries(
+    readFileSync("/proc/meminfo", "utf8")
+      .split("\n")
+      .map((line) => /^(\w+):\s+(\d+)/.exec(line))
+      .filter(Boolean)
+      .map(([, key, kb]) => [key, Number(kb)]),
+  );
+  const gb = (kb) => (kb / 1024 / 1024).toFixed(1);
+  const [one, five] = loadavg();
+  return {
+    available_gb: Number(gb(info.MemAvailable ?? 0)),
+    swap_used_gb: Number(gb((info.SwapTotal ?? 0) - (info.SwapFree ?? 0))),
+    swap_total_gb: Number(gb(info.SwapTotal ?? 0)),
+    load: [Number(one.toFixed(1)), Number(five.toFixed(1))],
+    cores: availableParallelism(),
+  };
+}
+const machineAtStart = machineState();
+const describeMachine = (m) =>
+  `${m.available_gb} GB available, swap ${m.swap_used_gb}/${m.swap_total_gb} GB, load ${m.load[0]}/${m.load[1]} (1m/5m), ${m.cores} cores`;
+
 const HARNESS_HASH = createHash("sha256").update(HARNESS).update(HARNESS_THROWS).update(HARNESS_DONOTEVALUATE).digest("hex").slice(0, 16);
 const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE };
 
@@ -591,6 +624,7 @@ if (recordFile && !partial) {
       "//": "TS codes that valid JavaScript draws: the positive test/language cases of the last full conformance262 run. A negative-parse case rejected only by these is 'refused', not 'pass'. Written by --record; see judgeNegative.",
       compiler: FINGERPRINT,
       harness: HARNESS_HASH,
+      machine: { start: machineAtStart, end: machineState(), jobs },
       validJsCodes: Object.fromEntries([...validJsCodes].sort((a, b) => a[0].localeCompare(b[0]))),
     }, null, 2)}\n`,
   );
@@ -600,6 +634,7 @@ if (recordFile) {
     recordFile,
     `# Test262 ${under} cases that ran, and what each did. Written by\n` +
       `# tooling/census/conformance262.mjs --record; compared by --check.\n` +
+      `# compiler ${FINGERPRINT}, harness ${HARNESS_HASH}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
       ranRows.map(recordedRow).sort().join("\n") + "\n",
   );
 }
@@ -645,6 +680,16 @@ const say = (line = "") => out.push(line);
 
 say(`  pin ${pin}`);
 say(`  compiler ${NTS} (sha256:${FINGERPRINT}), harness sha256:${HARNESS_HASH}`);
+const machineAtEnd = machineState();
+say(`  machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)`);
+say(`  machine at end:   ${describeMachine(machineAtEnd)}`);
+// Named, not judged: a threshold would be a guess. A swap-heavy run says so on
+// its own line, where a reader deciding whether to move a floor will see it.
+if (Math.max(machineAtStart.swap_used_gb, machineAtEnd.swap_used_gb) > machineAtStart.swap_total_gb / 2 ||
+    Math.min(machineAtStart.available_gb, machineAtEnd.available_gb) < 4) {
+  say("  DEGRADED MACHINE: more than half of swap in use or under 4 GB available at one end of the run --");
+  say("  do not move a floor or re-derive the evidence set from this run");
+}
 say(`  runtime objects: ${objectTally.hit} cached, ${objectTally.miss} compiled (${OBJECT_CACHE})`);
 say(`  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, refused ${checks.refused}`);
 say(
@@ -726,7 +771,7 @@ console.log(out.join("\n"));
 
 if (jsonFile) {
   writeFileSync(jsonFile, JSON.stringify({
-    pin, compiler: NTS, fingerprint: FINGERPRINT, under, selected: records.length, population: population.length,
+    pin, compiler: NTS, fingerprint: FINGERPRINT, under, machine: { start: machineAtStart, end: machineAtEnd, jobs }, selected: records.length, population: population.length,
     attempted: toAttempt.length, checks, tally, inScope: inScope.length, inScopePass, excluded: excludedCases.length,
     rankSole, rankFirst, rankAny, rankNamed, exclusions: exclusionReport, comparison, problems,
   }, null, 2));
