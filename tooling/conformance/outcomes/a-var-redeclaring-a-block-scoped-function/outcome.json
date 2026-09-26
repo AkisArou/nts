@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: ran=yes;",
+  "node": "exit 1; nts: uncaught SyntaxError: Identifier 'f' has already been declared",
+  "measured_with": "cb5ba64c52ba7e99",
+  "source": "measured"
+}

@@ -215,8 +215,14 @@ function runNode(dir) {
     { encoding: "utf8", timeout: 30_000, cwd: dir },
   );
   if (ran.signal) return `node ${ran.signal}`;
-  const uncaught = (ran.stderr ?? "").split("\n").find((l) => l.startsWith("nts: uncaught "));
-  return `exit ${ran.status}${uncaught ? `; ${uncaught}` : ""}`;
+  const lines = (ran.stderr ?? "").split("\n");
+  const uncaught = lines.find((l) => l.startsWith("nts: uncaught "));
+  if (uncaught) return `exit ${ran.status}; ${uncaught}`;
+  // A program node refuses to *load* never reaches the preload's handler: an
+  // early error is thrown before any code runs. Its `SyntaxError: ...` line is
+  // the answer -- the one a test of an early error exists to compare with.
+  const early = lines.find((l) => /^\w*Error(?: \[\w+\])?: /.test(l));
+  return `exit ${ran.status}${early ? `; before running: ${early.trim()}` : ""}`;
 }
 
 /** `nts check`: the lines that decide, verbatim, declined ones included. */
