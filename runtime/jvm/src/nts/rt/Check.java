@@ -1,7 +1,9 @@
 package nts.rt;
 
 import java.io.BufferedReader;
+import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -11,6 +13,27 @@ public final class Check {
     private Check() {}
     private static final String PROGRAM = "nts.gen.Program";
     private static final char[] HEX = "0123456789abcdef".toCharArray();
+    /**
+     * Where result lines go, when the collector named a file.
+     *
+     * <p><b>A subject and its instrument must not share a channel.</b> Results
+     * used to go to stdout beside whatever the program itself printed, and they
+     * were told apart by <i>shape</i> -- a name, a case number, a value. As of
+     * 2026-09-26 a compiled program can write stdout on purpose, so
+     * {@code console.log("twice at 7")} is indistinguishable from a result: a
+     * subject can duplicate, hide or invent its own cases, by accident, by
+     * logging a label with a number in it. With a file only this class writes,
+     * "every line is compared" holds by construction instead of by a pattern
+     * continuing to hold.
+     *
+     * <p>A file rather than fd 3 because Java has no portable third descriptor
+     * and neither does mingw, while a path works on every lane. Absent the
+     * variable, results go to stdout exactly as before, so the old collector
+     * still reads this harness.
+     */
+    private static PrintStream results;
+    /** Cases answered in this run, for the {@code done} line. */
+    private static long answered;
     private static final class Plan {
         final Method method;
         final String[] parameters;
@@ -28,6 +51,19 @@ public final class Check {
             System.err.println("nts: refused: Check needs a cases file"); System.exit(2);
         }
         long from = argv.length > 1 ? Long.parseLong(argv[1]) : 0L;
+        String into = System.getenv("NTS_DIFF_RESULTS");
+        if (into != null) {
+            // Append, because the collector deletes the file before each spawn
+            // and a run that restarts from a later case continues the same one.
+            // **Refused rather than fallen back on**: writing results to stdout
+            // when a file was asked for is the ambiguity this exists to remove,
+            // and it would look like a pass.
+            try { results = new PrintStream(new FileOutputStream(into, true), true, "UTF-8"); }
+            catch (java.io.IOException unopened) {
+                System.err.println("nts: refused: cannot write results to " + into);
+                System.exit(2);
+            }
+        }
         try { run(argv[0], from); }
         catch (Throwable failure) {
             System.out.flush();
@@ -67,9 +103,17 @@ public final class Check {
             long index = 0;
             for (String line = reader.readLine(); line != null; line = reader.readLine()) {
                 if (line.isEmpty()) { continue; }
-                if (index++ >= from) { one(program, plans, line); }
+                if (index++ >= from) { one(program, plans, line); ++answered; }
             }
         }
+        // **The marker, and it is what makes truncation visible.** A run that
+        // aborts after three cases leaves a file with three good lines and
+        // nothing saying it ended early -- which is exactly what a passing
+        // three-case run looks like. So the collector requires this line and
+        // treats a file without one as a crash. Written only on the path where
+        // the loop completed: a throw goes to `main`'s catch and exits non-zero
+        // without it, which is the whole point.
+        if (results != null) { results.println("done " + answered); }
     }
     private static void one(Class<?> program, Map<String, Map<String, Plan>> plans, String line) throws Exception {
         String[] parts = line.split(" ");
@@ -99,13 +143,18 @@ public final class Check {
             if (!NtsEnv.step(NtsEnv.current())) { break; }
             --budget;
         }
-        if (budget == 0) { System.out.println(name + " " + at + " starved"); return; }
+        if (budget == 0) { say(name + " " + at + " starved"); return; }
         NtsValue value = NtsPromise.value(promise);
-        if (!NtsPromise.isSettled(promise)) { System.out.println(name + " " + at + " pending"); }
-        else if (NtsPromise.isRejected(promise)) { System.out.println(name + " " + at + " rejected"); }
+        if (!NtsPromise.isSettled(promise)) { say(name + " " + at + " pending"); }
+        else if (NtsPromise.isRejected(promise)) { say(name + " " + at + " rejected"); }
         else if (value.tag == NtsValue.NUMBER) { show(name, at, value.num); }
         else if (value.tag == NtsValue.STRING) { showString(name, at, (String) value.ref); }
-        else { System.out.println(name + " " + at + " undefined"); }
+        else { say(name + " " + at + " undefined"); }
+    }
+    /** One result line, to the results file when there is one and stdout otherwise. */
+    private static void say(String line) {
+        if (results == null) { System.out.println(line); System.out.flush(); return; }
+        results.println(line);
     }
     private static Class<?> typeOf(String descriptor) {
         switch (descriptor) {
@@ -149,14 +198,13 @@ public final class Check {
         // `nts_str_relative_at` gave the backend something that legitimately
         // answers nothing.
         if (value == null) {
-            System.out.println(name + " " + at + " undefined");
-            System.out.flush();
+            say(name + " " + at + " undefined");
             return;
         }
         StringBuilder out = new StringBuilder();
         out.append(name).append(' ').append(at).append(" str ").append(value.length());
         for (int i = 0; i < value.length(); ++i) { out.append(',').append((int) value.charAt(i)); }
-        System.out.println(out); System.out.flush();
+        say(out.toString());
     }
     private static double widen(String returns, Object result) {
         if (result == null) { return 0.0; }
@@ -169,6 +217,6 @@ public final class Check {
             long bits = Double.doubleToRawLongBits(value);
             for (int shift = 60; shift >= 0; shift -= 4) { out.append(HEX[(int) (bits >>> shift) & 15]); }
         }
-        System.out.println(out); System.out.flush();
+        say(out.toString());
     }
 }
