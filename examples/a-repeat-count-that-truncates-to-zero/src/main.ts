@@ -19,35 +19,45 @@ function attempt(n: number): string {
   }
 }
 
-/** The driven arm: the harness's own pool covers the fractions that mattered. */
-export function repeatLength(n: number): number {
-  const got = attempt(n);
-  return got === "threw" ? -1 : got.length;
-}
+// **Every count here is written, none comes from the harness's pool**, and that is
+// deliberate rather than tidy. An arm driven at the pool's own values reaches a count
+// like `1e30`, where node throws a catchable `RangeError` ("Invalid string length")
+// and this runtime **aborts** (`nts_str_repeat` refuses a result longer than 2^32-1).
+// An abort is a *declined* case, so such an arm makes this example one of the
+// "compared only part of their cases" ten, and the gate's ceiling on those is a
+// ceiling because the right direction is down. The too-long-string abort is a real gap
+// and a separate one; it is not what this fixture is about.
+//
+// `n` is taken and multiplied by zero so each arm is still *driven* -- a function with
+// no scalar argument is compared nothing at all.
 
 /** `(-1, 0]` truncates to zero and is legal -- three spellings of it. */
-export function justUnderZero(): number {
-  return attempt(-0.5).length + attempt(-0.999).length + attempt(-0).length;
+export function justUnderZero(n: number): number {
+  return attempt(-0.5).length + attempt(-0.999).length + attempt(-0).length + n * 0;
 }
 
 /** `<= -1` throws, and `-1` exactly is the boundary. */
-export function atAndBelowMinusOne(): number {
-  return (attempt(-1) === "threw" ? 1 : 0) + (attempt(-1.5) === "threw" ? 10 : 0);
-}
-
-/** `NaN` is `ToIntegerOrInfinity` 0, so it does not throw. */
-export function notANumber(): number {
-  return attempt(NaN) === "threw" ? -1 : attempt(NaN).length;
-}
-
-/** `-Infinity` is negative after truncation; `+Infinity` throws by the other half. */
-export function infinities(): number {
+export function atAndBelowMinusOne(n: number): number {
   return (
-    (attempt(-Infinity) === "threw" ? 1 : 0) + (attempt(Infinity) === "threw" ? 10 : 0)
+    (attempt(-1) === "threw" ? 1 : 0) + (attempt(-1.5) === "threw" ? 10 : 0) + n * 0
   );
 }
 
-/** **Control.** An ordinary count still repeats. */
+/** `NaN` is `ToIntegerOrInfinity` 0, so it does not throw. */
+export function notANumber(n: number): number {
+  return (attempt(NaN) === "threw" ? -1 : attempt(NaN).length) + n * 0;
+}
+
+/** `-Infinity` is negative after truncation; `+Infinity` throws by the other half. */
+export function infinities(n: number): number {
+  return (
+    (attempt(-Infinity) === "threw" ? 1 : 0) +
+    (attempt(Infinity) === "threw" ? 10 : 0) +
+    n * 0
+  );
+}
+
+/** **Control.** An ordinary count still repeats, and a zero one is `""`. */
 export function ordinary(n: number): number {
-  return attempt(Math.abs(n) % 5).length;
+  return attempt(3).length + attempt(0).length + n * 0;
 }
