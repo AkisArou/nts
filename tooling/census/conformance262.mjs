@@ -94,7 +94,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.mjs";
-import { HARNESS, HARNESS_THROWS, pinCompiler } from "./project.mjs";
+import { HARNESS, HARNESS_DONOTEVALUATE, HARNESS_THROWS, pinCompiler } from "./project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -148,7 +148,7 @@ const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
 // Runtime objects compiled once and kept across runs; `attempt262.mjs`'s
 // `withCachedObjects` says why this is the same program and how it is keyed.
 const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".cache/nts/c-objects");
-const HARNESS_HASH = createHash("sha256").update(HARNESS).update(HARNESS_THROWS).digest("hex").slice(0, 16);
+const HARNESS_HASH = createHash("sha256").update(HARNESS).update(HARNESS_THROWS).update(HARNESS_DONOTEVALUATE).digest("hex").slice(0, 16);
 const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE };
 
 // --- the population --------------------------------------------------------
@@ -251,7 +251,9 @@ const FRONTMATTER = /\/\*---([\s\S]*?)---\*\//;
 
 function harnessGap(record, source) {
   if (record.schedule !== "planned") return `scope:${record.reason ?? record.schedule}`;
-  if (record.negative) return `negative:${record.negative.phase} (negative verdicts are not judged yet)`;
+  // Parse and runtime negatives are judged (see `judgeNegative`); resolution is
+  // module loading, and modules are out of this lane.
+  if (record.negative?.phase === "resolution") return "negative:resolution (module loading is not in this lane)";
   if (record.includes.length > 0) return `include:${[...record.includes].sort().join("+")}`;
   const meta = FRONTMATTER.exec(source)?.[1] ?? "";
   const flags = /^\s*flags:\s*\[([^\]]*)\]/m.exec(meta)?.[1] ?? "";
@@ -395,6 +397,92 @@ function classify(row) {
   }
 }
 
+// --- negative tests, phase-exact ---------------------------------------------
+//
+// `docs/conformance/test262.md`: "a generic compiler refusal cannot satisfy an
+// expected JavaScript exception; an expected SyntaxError cannot be satisfied by
+// a runtime TypeError." So a negative test is never judged by *whether* the
+// compiler said no, only by *how*.
+//
+// **parse** (4,122 planned under `test/language`, every one `SyntaxError`):
+//
+//   fail     the checker accepted the program -- no TS diagnostic at all. An
+//            early SyntaxError went undetected; whether lowering then refused
+//            or the program ran does not matter, the phase that had to reject
+//            it did not. **The serious one**, as for positives.
+//   pass     rejected by at least one *evidence code*: a TS code that no
+//            attempted positive case -- valid JavaScript -- draws anywhere in
+//            the corpus. A code valid JS can draw says nothing about syntax.
+//   refused  rejected, but only by codes valid JS also draws (`TS2304`,
+//            `TS7006`, ...): the compiler said no, for a reason that is not
+//            evidence of the right one. Cause-keyed `negative:`.
+//
+// A pass is still weaker than test262's: TypeScript prints no location, so the
+// evidence code is not shown to be *about* the construct under test -- only to
+// be one that valid JavaScript never provokes. The evidence set is printed
+// with every run and kept in `test262-evidence-codes.json`, so the rule is
+// auditable and its drift is visible.
+//
+// **runtime** (23): pass only if the program ran and threw exactly
+// `negative.error_type`; completing, or throwing anything else, is a fail.
+//
+// The set is derived from the positives *of this run* when the run is whole;
+// a sample or a recorded run reads the committed file, because its positives
+// are too few to say what valid JavaScript draws.
+
+const EVIDENCE_FILE = join(HERE, "test262-evidence-codes.json");
+
+function deriveValidJsCodes(rowsByPath) {
+  const drawn = new Map();
+  for (const c of cases) {
+    if (c.record.negative || c.gap !== null) continue;
+    const row = rowsByPath.get(c.record.path);
+    for (const code of new Set((row?.diagnostics ?? []).map((d) => d.code).filter((k) => k.startsWith("TS")))) {
+      drawn.set(code, (drawn.get(code) ?? 0) + 1);
+    }
+  }
+  return drawn;
+}
+
+let validJsCodes = null;
+
+function judgeNegative(row, negative) {
+  if (["timeout", "memory-cap", "frontend-crash", "infrastructure-error", "crash"].includes(row.bucket)) {
+    return classify(row);
+  }
+  if (negative.phase === "runtime") {
+    if (row.bucket === "threw") {
+      return row.thrown === negative.error_type
+        ? { outcome: "pass" }
+        : { outcome: "fail", cause: `negative:runtime threw ${row.thrown}, expected ${negative.error_type}`, detail: row.message ?? `uncaught ${row.thrown}` };
+    }
+    if (row.bucket === "strict-pass") {
+      return { outcome: "fail", cause: `negative:runtime completed, expected ${negative.error_type}`, detail: "completed" };
+    }
+    return classify(row);
+  }
+  const checker = [...new Set((row.diagnostics ?? []).map((d) => d.code).filter((k) => k.startsWith("TS")))];
+  if (checker.length === 0) {
+    const how = row.bucket === "strict-pass" ? "ran to completion"
+      : row.bucket === "threw" ? `ran and threw ${row.thrown}`
+      : row.bucket === "invalid-hir" ? "reached invalid HIR"
+      : `was refused later (${row.why ?? row.bucket})`;
+    return {
+      outcome: "fail",
+      cause: `negative:parse accepted -- ${how}`,
+      detail: `accepted: ${how}`,
+    };
+  }
+  const evidence = checker.filter((code) => !validJsCodes.has(code));
+  if (evidence.length > 0) return { outcome: "pass", evidence };
+  const first = (row.diagnostics ?? []).find((d) => d.code.startsWith("TS"));
+  return {
+    outcome: "refused",
+    cause: `negative: rejected only by codes valid JS also draws -- ${first.code} ${first.message}`,
+    roots: [],
+  };
+}
+
 // --- the run -----------------------------------------------------------------
 
 const checks = selfChecks(SCRATCH, TOOLS, cannotMeasure);
@@ -406,6 +494,20 @@ const cases = population.map((record) => {
 const toAttempt = cases.filter((c) => c.gap === null).map((c) => c.record.path);
 const rows = await runAll(toAttempt);
 
+let evidenceNote;
+if (!partial) {
+  validJsCodes = deriveValidJsCodes(rows);
+  const was = existsSync(EVIDENCE_FILE) ? JSON.parse(readFileSync(EVIDENCE_FILE, "utf8")).validJsCodes : null;
+  const added = was ? [...validJsCodes.keys()].filter((k) => !(k in was)) : [];
+  const removed = was ? Object.keys(was).filter((k) => !validJsCodes.has(k)) : [];
+  evidenceNote = `${validJsCodes.size} TS code(s) drawn by valid JavaScript, derived from this run` +
+    (was ? `; against the committed set: +${added.length} [${added.join(" ")}], -${removed.length} [${removed.join(" ")}]` : "; no committed set to compare");
+} else {
+  if (!existsSync(EVIDENCE_FILE)) cannotMeasure("a partial run judges negatives against test262-evidence-codes.json, and there is none; run the whole directory with --record first");
+  validJsCodes = new Map(Object.entries(JSON.parse(readFileSync(EVIDENCE_FILE, "utf8")).validJsCodes));
+  evidenceNote = `${validJsCodes.size} TS code(s) drawn by valid JavaScript, read from test262-evidence-codes.json`;
+}
+
 for (const c of cases) {
   if (c.gap !== null) {
     Object.assign(c, { outcome: "unsupported", cause: c.gap });
@@ -416,7 +518,7 @@ for (const c of cases) {
     Object.assign(c, { outcome: "no-verdict", cause: "no row came back for this case" });
     continue;
   }
-  Object.assign(c, classify(row));
+  Object.assign(c, c.record.negative ? judgeNegative(row, c.record.negative) : classify(row));
   if (row.diagnostics) c.named = [...new Set(row.diagnostics.flatMap((d) => d.named))];
 }
 
@@ -449,6 +551,7 @@ const rankSole = count(
   (c) => c.cause,
 );
 const family = (c) => {
+  if (c.cause.startsWith("negative:")) return "negative test, rejected by no evidence code";
   const code = c.roots[0]?.code ?? "";
   return code.startsWith("TS") ? "checker (TS)" : code.startsWith("NTS1") ? "lowering (NTS1xxx)" : code.startsWith("NTS2") ? "backend/verifier (NTS2xxx)" : "other";
 };
@@ -481,6 +584,17 @@ const exclusionReport = exclusions.map((entry) => {
 
 const recordedRow = (c) => `${c.record.path}\t${c.outcome}\t${c.outcome === "fail" ? c.detail : ""}`;
 const ranRows = cases.filter((c) => c.outcome === "pass" || c.outcome === "fail");
+if (recordFile && !partial) {
+  writeFileSync(
+    EVIDENCE_FILE,
+    `${JSON.stringify({
+      "//": "TS codes that valid JavaScript draws: the positive test/language cases of the last full conformance262 run. A negative-parse case rejected only by these is 'refused', not 'pass'. Written by --record; see judgeNegative.",
+      compiler: FINGERPRINT,
+      harness: HARNESS_HASH,
+      validJsCodes: Object.fromEntries([...validJsCodes].sort((a, b) => a[0].localeCompare(b[0]))),
+    }, null, 2)}\n`,
+  );
+}
 if (recordFile) {
   writeFileSync(
     recordFile,
@@ -555,6 +669,7 @@ if (partial) {
     `${tally.pass} of ${population.length} (${pct(tally.pass, population.length)}) with nothing excluded`,
 );
 say("  `pass` is strict-pass: one strict variant per file, never promoted to a file pass");
+say(`  negatives: ${evidenceNote}`);
 say();
 say(`  not attempted, by harness cause (${tally.unsupported} case(s)):`);
 for (const [cause, n] of count(cases.filter((c) => c.outcome === "unsupported"), (c) => c.cause.startsWith("include:") && c.cause.includes("+") ? "include:(several)" : c.cause).slice(0, sites)) {

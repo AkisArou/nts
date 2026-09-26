@@ -19,12 +19,24 @@ export const HARNESS = readFileSync(join(HERE, "harness.ts"), "utf8");
 /** `assert.throws`, spliced in only for a test that calls it; the file says why. */
 export const HARNESS_THROWS = readFileSync(join(HERE, "harness-throws.ts"), "utf8");
 
-/** The stand-in one test receives: `HARNESS`, plus `throws` if the test calls it. */
+/** `$DONOTEVALUATE`, spliced in only for a test that names it; the file says why. */
+export const HARNESS_DONOTEVALUATE = readFileSync(join(HERE, "harness-donotevaluate.ts"), "utf8");
+
+/**
+ * The stand-in one test receives: `HARNESS`, plus `throws` if the test calls it,
+ * plus `$DONOTEVALUATE` if it names it. Per test, as test262 includes harness
+ * files per test -- a member that refuses must not reach a test that does not
+ * use it (`harness-throws.ts` records what that cost).
+ */
 export function harnessFor(body) {
-  if (!/\bassert\.throws\s*\(/.test(body)) return HARNESS;
-  const opening = "class assert {\n";
-  if (!HARNESS.includes(opening)) throw new Error("harness.ts has no `class assert {` line to splice throws into");
-  return HARNESS.replace(opening, opening + HARNESS_THROWS);
+  let harness = HARNESS;
+  if (/\bassert\.throws\s*\(/.test(body)) {
+    const opening = "class assert {\n";
+    if (!harness.includes(opening)) throw new Error("harness.ts has no `class assert {` line to splice throws into");
+    harness = harness.replace(opening, opening + HARNESS_THROWS);
+  }
+  if (/\$DONOTEVALUATE\b/.test(body)) harness = harness + HARNESS_DONOTEVALUATE;
+  return harness;
 }
 
 /**
