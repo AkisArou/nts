@@ -19,7 +19,6 @@ import {
   NSDictionary,
   NSNotification,
   NSObject,
-  NSString,
   NotificationCenter,
   UIApplication,
   UIApplicationMain,
@@ -44,7 +43,7 @@ class Form extends NSObject implements UITextFieldDelegate {
 }
 
 function typed(field: UITextField, text: string): void {
-  field.insertText(new NSString({ string: text }));
+  field.insertText(text);
 }
 
 class AppDelegate extends UIResponder implements UIApplicationDelegate {

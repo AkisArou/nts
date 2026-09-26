@@ -1086,6 +1086,15 @@ impl<'a> Model<'a> {
         let mut parameters = Vec::new();
         for (at, parameter) in parameters_of(decl).into_iter().enumerate() {
             let spelled = self.spell(adopter, parameter.get("type").ok_or("a parameter with no type")?, Position::Block)?;
+            // Swift's `String` parameter of a requirement: the entry point
+            // copies the runtime's `NSString` in (`lent_ns_string`), and a
+            // message sending it bridges a `string` out. An array or a
+            // dictionary still crosses as the object it is.
+            let spelled = match spelled.as_str() {
+                "NSString" => "string".to_owned(),
+                "NSString | null" => "string | null".to_owned(),
+                _ => spelled,
+            };
             let name = named(parameter).filter(|n| !n.is_empty() && !reserved(n)).unwrap_or_else(|| format!("arg{at}"));
             parameters.push(format!("{name}: {spelled}"));
         }
@@ -2981,7 +2990,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             "  /** @ntsProtocol ShapeDelegate */\n  export interface ShapeWatching extends NSObject {\n\
              \x20   /** @ntsSelector shapeDidMove: */\n    shapeDidMove(shape: Shape): void;\n\
              \x20   /** @ntsSelector shapeDidRename: */\n    shapeDidRename?(shape: Shape): void;\n\
-             \x20   /** @ntsSelector shape:didRenameTo: */\n    shapeDidRenameTo?(shape: Shape, name: NSString): void;\n\
+             \x20   /** @ntsSelector shape:didRenameTo: */\n    shapeDidRenameTo?(shape: Shape, name: string): void;\n\
              \x20   /** @ntsSelector shape:shouldHide: */\n    shapeShouldHide?(shape: Shape, hide: boolean): boolean;\n",
             "+classSide: a class-side requirement",
             "@property size: a property requirement",

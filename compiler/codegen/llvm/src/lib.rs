@@ -1423,6 +1423,9 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
     let mut parameters = Vec::new();
     let mut arguments = Vec::new();
     let mut body = String::new();
+    // An `NSString` argument copied into the program's string once the call
+    // has been entered, and given back before it is left.
+    let (mut copies, mut releases) = (String::new(), String::new());
     // How each argument arrives: a record by value by the platform's
     // convention, the rest as themselves.
     let Some(plan) = aggregate::plan(0, &method.signature.parameters, &method.signature.result, platform) else {
@@ -1450,7 +1453,11 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
         }
         let to = compiled.params[if slot == 0 { 0 } else { slot - 1 }].ty.clone();
         let to_ty = ty_of(&to, compiled)?;
-        if from == to {
+        if nts_core::hir::native::lent_ns_string(foreign, &to) {
+            let _ = writeln!(copies, "  %s{slot} = call ptr @nts_string_of_nsstring(ptr %a{slot})");
+            let _ = writeln!(releases, "  call void @nts_release(ptr %s{slot})");
+            arguments.push(format!("ptr %s{slot}"));
+        } else if from == to {
             arguments.push(format!("{to_ty} %a{slot}"));
         } else if to == HirType::Bool {
             let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));
@@ -1464,6 +1471,9 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
     // The record goes back as the convention says: through the `sret`
     // pointer the caller passed, which the compiled method writes directly,
     // or loaded from a slot of the entry point's in its registers' types.
+    if record_out && !copies.is_empty() {
+        return Err(refuse(compiled, "an Objective-C method answering a record by value and taking a string, which the C backend builds"));
+    }
     if let (true, Some(passing)) = (record_out, &plan.result) {
         let nts_core::hir::native::Type::Record(record) = &*method.signature.result else { unreachable!() };
         let (size, align) = aggregate::extent_of(record, platform)
@@ -1495,12 +1505,12 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
     if want == HirType::Void {
         let _ = writeln!(out, "define internal void @{imp}({}) nounwind {{", parameters.join(", "));
         out.push_str(&body);
-        let _ = writeln!(out, "  call void @nts_callback_enter()\n  {call}\n  call void @nts_callback_leave()\n  ret void\n}}");
+        let _ = writeln!(out, "  call void @nts_callback_enter()\n{copies}  {call}\n{releases}  call void @nts_callback_leave()\n  ret void\n}}");
     } else {
         let want_ty = ty_of(&want, compiled)?;
         let _ = writeln!(out, "define internal {want_ty} @{imp}({}) nounwind {{", parameters.join(", "));
         out.push_str(&body);
-        let _ = writeln!(out, "  call void @nts_callback_enter()\n  %r = {call}\n  call void @nts_callback_leave()");
+        let _ = writeln!(out, "  call void @nts_callback_enter()\n{copies}  %r = {call}\n{releases}  call void @nts_callback_leave()");
         if have == want {
             let _ = writeln!(out, "  ret {want_ty} %r\n}}");
         } else {
@@ -2042,6 +2052,25 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
     // call (`com::delegates`), and no operation names either.
     if !nts_codegen_common::com::delegate_signatures(program).is_empty() {
         for helper in ["nts_is_owner_thread", "nts_com_carry"] {
+            let helper = helper.to_owned();
+            if !seen.contains(&helper)
+                && let Some(line) = declaration(&helper, platform)
+            {
+                seen.push(helper);
+                lines.push(line);
+            }
+        }
+    }
+    // An Objective-C entry point copies an `NSString` argument into the
+    // program's string and gives it back after the call (`imp`), and no
+    // operation names either.
+    let lends_ns_strings = program.foreign_classes.iter().flat_map(|class| &class.methods).any(|method| {
+        method.signature.parameters.iter().any(|ty| {
+            matches!(ty, nts_core::hir::native::Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if *handle == nts_core::hir::native::Handle::ns_string())
+        })
+    });
+    if lends_ns_strings {
+        for helper in ["nts_string_of_nsstring", "nts_release"] {
             let helper = helper.to_owned();
             if !seen.contains(&helper)
                 && let Some(line) = declaration(&helper, platform)

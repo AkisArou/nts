@@ -2095,7 +2095,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector application:handleOpenURL: */
     applicationHandleOpen?(application: UIApplication, url: NSURL): boolean;
     /** @ntsSelector application:openURL:sourceApplication:annotation: */
-    applicationOpen?(application: UIApplication, url: NSURL, sourceApplication: NSString | null, annotation: NSObject): boolean;
+    applicationOpen?(application: UIApplication, url: NSURL, sourceApplication: string | null, annotation: NSObject): boolean;
     /** @ntsSelector application:openURL:options: */
     applicationOpenURLOptions?(app: UIApplication, url: NSURL, options: NSDictionary): boolean;
     /** @ntsSelector applicationDidReceiveMemoryWarning: */
@@ -2133,7 +2133,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector application:supportedInterfaceOrientationsForWindow: */
     applicationSupportedInterfaceOrientationsFor?(application: UIApplication, window: UIWindow | null): CEnum<UIInterfaceOrientationMask | 0, UInt>;
     /** @ntsSelector application:shouldAllowExtensionPointIdentifier: */
-    applicationShouldAllowExtensionPointIdentifier?(application: UIApplication, extensionPointIdentifier: NSString): boolean;
+    applicationShouldAllowExtensionPointIdentifier?(application: UIApplication, extensionPointIdentifier: string): boolean;
     /** @ntsSelector application:viewControllerWithRestorationIdentifierPath:coder: */
     applicationViewControllerWithRestorationIdentifierPath?(application: UIApplication, identifierComponents: NSArray, coder: NSCoder): UIViewController | null;
     /** @ntsSelector application:shouldSaveSecureApplicationState: */
@@ -2149,9 +2149,9 @@ declare module "objc:UIKit" {
     /** @ntsSelector application:shouldRestoreApplicationState: */
     applicationShouldRestoreApplicationState?(application: UIApplication, coder: NSCoder): boolean;
     /** @ntsSelector application:willContinueUserActivityWithType: */
-    applicationWillContinueUserActivityWithType?(application: UIApplication, userActivityType: NSString): boolean;
+    applicationWillContinueUserActivityWithType?(application: UIApplication, userActivityType: string): boolean;
     /** @ntsSelector application:didFailToContinueUserActivityWithType:error: */
-    applicationDidFailToContinueUserActivityWithType?(application: UIApplication, userActivityType: NSString, error: NSError): void;
+    applicationDidFailToContinueUserActivityWithType?(application: UIApplication, userActivityType: string, error: NSError): void;
     /** @ntsSelector application:didUpdateUserActivity: */
     applicationDidUpdate?(application: UIApplication, userActivity: NSUserActivity): void;
     /** @ntsSelector application:userDidAcceptCloudKitShareWithMetadata: */
@@ -2180,7 +2180,7 @@ declare module "objc:UIKit" {
   /** @ntsProtocol UIKeyInput */
   export interface UIKeyInput extends NSObject {
     /** @ntsSelector insertText: */
-    insertText(text: NSString): void;
+    insertText(text: string): void;
     /** @ntsSelector deleteBackward */
     deleteBackward(): void;
     // Not bound, each for the reason given:
@@ -2200,9 +2200,9 @@ declare module "objc:UIKit" {
     /** @ntsSelector textFieldDidEndEditing:reason: */
     textFieldDidEndEditingReason?(textField: UITextField, reason: CEnum<UITextField.DidEndEditingReason, Int>): void;
     /** @ntsSelector textField:shouldChangeCharactersInRange:replacementString: */
-    textFieldShouldChangeCharactersIn?(textField: UITextField, range: ByValue<NSRange>, string: NSString): boolean;
+    textFieldShouldChangeCharactersIn?(textField: UITextField, range: ByValue<NSRange>, string: string): boolean;
     /** @ntsSelector textField:shouldChangeCharactersInRanges:replacementString: */
-    textFieldShouldChangeCharactersInRanges?(textField: UITextField, ranges: NSArray, string: NSString): boolean;
+    textFieldShouldChangeCharactersInRanges?(textField: UITextField, ranges: NSArray, string: string): boolean;
     /** @ntsSelector textFieldDidChangeSelection: */
     textFieldDidChangeSelection?(textField: UITextField): void;
     /** @ntsSelector textFieldShouldClear: */

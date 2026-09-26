@@ -3818,19 +3818,19 @@ declare module "objc:AppKit" {
     /** @ntsSelector application:openURLs: */
     applicationOpen?(application: NSApplication, urls: NSArray): void;
     /** @ntsSelector application:openFile: */
-    applicationOpenFile?(sender: NSApplication, filename: NSString): boolean;
+    applicationOpenFile?(sender: NSApplication, filename: string): boolean;
     /** @ntsSelector application:openFiles: */
     applicationOpenFiles?(sender: NSApplication, filenames: NSArray): void;
     /** @ntsSelector application:openTempFile: */
-    applicationOpenTempFile?(sender: NSApplication, filename: NSString): boolean;
+    applicationOpenTempFile?(sender: NSApplication, filename: string): boolean;
     /** @ntsSelector applicationShouldOpenUntitledFile: */
     applicationShouldOpenUntitledFile?(sender: NSApplication): boolean;
     /** @ntsSelector applicationOpenUntitledFile: */
     applicationOpenUntitledFile?(sender: NSApplication): boolean;
     /** @ntsSelector application:openFileWithoutUI: */
-    applicationOpenFileWithoutUI?(sender: NSObject, filename: NSString): boolean;
+    applicationOpenFileWithoutUI?(sender: NSObject, filename: string): boolean;
     /** @ntsSelector application:printFile: */
-    applicationPrintFile?(sender: NSApplication, filename: NSString): boolean;
+    applicationPrintFile?(sender: NSApplication, filename: string): boolean;
     /** @ntsSelector application:printFiles:withSettings:showPrintPanels: */
     applicationPrintFiles?(application: NSApplication, fileNames: NSArray, printSettings: NSDictionary, showPrintPanels: boolean): CEnum<NSApplication.PrintReply, UInt>;
     /** @ntsSelector applicationShouldTerminateAfterLastWindowClosed: */
@@ -3856,15 +3856,15 @@ declare module "objc:AppKit" {
     /** @ntsSelector application:didDecodeRestorableState: */
     applicationDidDecodeRestorableState?(app: NSApplication, coder: NSCoder): void;
     /** @ntsSelector application:willContinueUserActivityWithType: */
-    applicationWillContinueUserActivityWithType?(application: NSApplication, userActivityType: NSString): boolean;
+    applicationWillContinueUserActivityWithType?(application: NSApplication, userActivityType: string): boolean;
     /** @ntsSelector application:didFailToContinueUserActivityWithType:error: */
-    applicationDidFailToContinueUserActivityWithType?(application: NSApplication, userActivityType: NSString, error: NSError): void;
+    applicationDidFailToContinueUserActivityWithType?(application: NSApplication, userActivityType: string, error: NSError): void;
     /** @ntsSelector application:didUpdateUserActivity: */
     applicationDidUpdateUserActivity?(application: NSApplication, userActivity: NSUserActivity): void;
     /** @ntsSelector application:userDidAcceptCloudKitShareWithMetadata: */
     applicationUserDidAcceptCloudKitShareWith?(application: NSApplication, metadata: CKShareMetadata): void;
     /** @ntsSelector application:delegateHandlesKey: */
-    applicationDelegateHandlesKey?(sender: NSApplication, key: NSString): boolean;
+    applicationDelegateHandlesKey?(sender: NSApplication, key: string): boolean;
     /** @ntsSelector applicationShouldAutomaticallyLocalizeKeyEquivalents: */
     applicationShouldAutomaticallyLocalizeKeyEquivalents?(application: NSApplication): boolean;
     /** @ntsSelector applicationWillFinishLaunching: */

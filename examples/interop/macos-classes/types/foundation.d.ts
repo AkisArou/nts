@@ -197,7 +197,7 @@ declare module "objc:Foundation" {
    */
   export interface NSXMLParserDelegate {
     /** @ntsSelector parser:didStartElement:namespaceURI:qualifiedName:attributes: */
-    parserDidStartElement?(parser: NSObject, elementName: NSString, namespaceURI: NSString | null, qualifiedName: NSString | null, attributes: NSObject): void;
+    parserDidStartElement?(parser: NSObject, elementName: string, namespaceURI: string | null, qualifiedName: string | null, attributes: NSObject): void;
   }
 
   /** @ntsClass NSXMLParser */

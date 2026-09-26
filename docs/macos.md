@@ -124,6 +124,10 @@ class Notes extends NSObject implements NSTableViewDataSource {
 - `super.draw(dirtyRect)`, `super.alignmentRect(labels)` and `super(...)` in
   a constructor are messages to the superclass.
 - `instanceof` asks `isKindOfClass:`, and narrows.
+- A `string` parameter is Swift's `String` one: the runtime passes an
+  `NSString`, and the method receives a copy of its text. A protocol's
+  requirement is bound that way, so a delegate reads
+  `parser(_:didStartElement:...)`'s `elementName` as a `string`.
 - A method whose arguments no Objective-C message could carry, such as
   `append(item: string)`, is Swift's method without `@objc`. The runtime is
   not told of it, and only the program calls it. A protocol's method, an

@@ -1721,9 +1721,31 @@ impl Type {
 /// `const char *` a `string` parameter is in the callback's C signature
 /// ([`abi_type`]), where the compiled function takes a string. Both backends'
 /// bridges ask this, and copy the string in for the call.
+///
+/// Its sibling [`lent_ns_string`] must agree about *when*: both copy after
+/// `nts_callback_enter` and release after the call, before
+/// `nts_callback_leave`. The compiled function borrows the copy, and a
+/// store of it takes its own count (`own::Summaries::consumes` leaves
+/// every entered and dispatched function out), so a string kept past the
+/// call outlives the release.
 #[must_use]
 pub fn lent_string(foreign: &Type, compiled: &super::HirType) -> bool {
     *foreign == Encoding::Utf8.c_type() && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
+}
+
+/// Whether an Objective-C entry point's argument is an `NSString` the runtime
+/// lends: the `NSString *` a `string` parameter is in the method's C
+/// signature ([`imp_signature`]), where the compiled method takes a string.
+/// Both backends' entry points ask this, and copy the text in for the call,
+/// as Swift's `String` parameter of an `@objc` method is bridged -- inside
+/// the same `nts_callback_enter`/`nts_callback_leave` bracket as
+/// [`lent_string`]'s copy, released after the call as that one is.
+/// macos-classes' `kept` line keeps one past the call and reads it after.
+/// With the ownership exclusion disabled it read `yz yz`: freed and reused.
+#[must_use]
+pub fn lent_ns_string(foreign: &Type, compiled: &super::HirType) -> bool {
+    matches!(foreign, Type::Pointer(Pointee::Opaque(handle)) if *handle == Handle::ns_string())
+        && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
 }
 
 /// `string` or `string | null`: what a callback's bridge reads from a lent
@@ -2146,8 +2168,13 @@ pub(crate) fn imp_signature(
                 .then_some(Type::Scalar(Scalar::Double))
         })
     };
+    // A `string` parameter is the `NSString *` the runtime passes, copied
+    // into the program's string where the entry point calls the method
+    // (`lent_ns_string`). A result is not: answering one would be an
+    // `NSString` the method made, which the runtime takes at +0.
     let passable = |name: &str, ty: TypeId| {
         ty_of(ty)
+            .or_else(|| is_c_string_parameter(snapshot, ty).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
             .filter(|ty| *ty != Type::Void)
             .ok_or_else(|| format!("parameter `{name}`, whose type has no C type the runtime could pass"))
     };

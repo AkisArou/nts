@@ -8,12 +8,14 @@ static __weak id watched;
 /* Swift's `class Elements: NSObject, XMLParserDelegate`. */
 @interface Elements : NSObject <NSXMLParserDelegate>
 @property NSMutableString *names;
+@property(copy) NSString *last;
 @end
 @implementation Elements
 - (void)parser:(NSXMLParser *)parser didStartElement:(NSString *)name namespaceURI:(NSString *)uri qualifiedName:(NSString *)qname attributes:(NSDictionary *)attributes {
   if (!self.names) self.names = [NSMutableString string];
   if (self.names.length) [self.names appendString:@","];
   [self.names appendString:name];
+  self.last = name;
 }
 @end
 /* Swift's `class Tally: NSObject { var count = 0 ... }`: stored properties,
@@ -304,6 +306,13 @@ int main(void) {
     BOOL ok = [parser parse];
     printf("parsed %s %s %s\n", ok ? "true" : "false", elements.names.UTF8String,
            class_conformsToProtocol([Elements class], @protocol(NSXMLParserDelegate)) ? "adopted" : "not adopted");
+    @autoreleasepool {
+      NSString *first = elements.last;
+      NSXMLParser *second = [[NSXMLParser alloc] initWithData:[@"<x><yz/></x>" dataUsingEncoding:NSUTF8StringEncoding]];
+      second.delegate = elements;
+      [second parse];
+      printf("kept %s %s\n", first.UTF8String, elements.last.UTF8String);
+    }
     @autoreleasepool {
       printf("fields %s\n", tallied().UTF8String);
     }

@@ -936,3 +936,43 @@ fn a_constant_is_the_extern_variable_read() {
     assert!(!text.contains("sel_registerName(\"systemClockDidChange\")"), "a constant was sent as a message:\n{text}");
     assert!(text.contains("nts_string_of_nsstring(v"), "the NSString constant was not copied into a string:\n{text}");
 }
+
+/// Swift's `String` parameter of an `@objc` method: the runtime passes an
+/// `NSString *`, and the entry point copies it into the program's string for
+/// the call and gives the copy back after it, as a callback bridge does a C
+/// string's. The method is registered with the object type `@` in that slot.
+#[test]
+fn a_string_parameter_is_the_nsstring_the_runtime_lends() {
+    let binding = r#"/**
+ * @ntsFramework Foundation
+ */
+declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+  }
+}
+"#;
+    let source = "import { NSObject } from \"objc:Foundation\";\n\
+                  let seen = \"\";\n\
+                  class Reader extends NSObject {\n  read(text: string, more: string | null): void { seen = text + (more ?? \"\"); }\n}\n\
+                  export function run(): number {\n  return new Reader() === null ? 0 : seen.length;\n}\n";
+    let Some((_, prepared)) = prepare("objc-string-parameter", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for expected in [
+        "struct NSString * a2, struct NSString * a3",
+        "NtsString *s2 = nts_string_of_nsstring(a2);",
+        "NtsString *s3 = nts_string_of_nsstring(a3);",
+        "nts_release((NtsHeader *)s2); nts_release((NtsHeader *)s3);",
+        "{ \"read::\", ",
+    ] {
+        assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+    }
+}

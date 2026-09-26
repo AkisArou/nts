@@ -271,8 +271,15 @@ let elements = "";
 // Swift's `class Elements: NSObject, XMLParserDelegate`: the parser sends the
 // protocol's five-argument selector, which only the protocol can name.
 class Elements extends NSObject implements NSXMLParserDelegate {
-  parserDidStartElement(parser: NSObject, elementName: NSString, namespaceURI: NSString | null, qualifiedName: NSString | null, attributes: NSObject): void {
-    elements += (elements === "" ? "" : ",") + elementName.appending("");
+  // The last element's name, kept past the call that handed it over.
+  last = "";
+
+  // Swift's `elementName: String`: the runtime's `NSString`, copied into
+  // the program's string where the method is entered. The entry point gives
+  // its copy back once the method returns, so `last` holds its own count.
+  parserDidStartElement(parser: NSObject, elementName: string, namespaceURI: string | null, qualifiedName: string | null, attributes: NSObject): void {
+    elements += (elements === "" ? "" : ",") + elementName;
+    this.last = elementName;
   }
 }
 
@@ -292,7 +299,29 @@ function parsed(): string {
   const parser = new XMLParser({ data });
   const delegate = new Elements();
   parser.delegate = delegate;
-  return `${parser.parse()} ${elements} ${adopted("Elements", "NSXMLParserDelegate")}`;
+  const line = `${parser.parse()} ${elements} ${adopted("Elements", "NSXMLParserDelegate")}`;
+  kept = delegate;
+  return line;
+}
+
+let kept: Elements | null = null;
+
+// The name `parserDidStartElement` stored, read after the parse that passed
+// it has returned, and again after a second parse with other names.
+function keptNames(): string {
+  const delegate = kept;
+  if (delegate === null) {
+    return "none";
+  }
+  const first = delegate.last;
+  const data = new NSString("<x><yz/></x>").data({ using: 4 });
+  if (data === null) {
+    return "no data";
+  }
+  const parser = new XMLParser({ data });
+  parser.delegate = delegate;
+  parser.parse();
+  return `${first} ${delegate.last}`;
 }
 
 function optional(operation: NSOperation | null): string {
@@ -408,6 +437,7 @@ function main(): void {
   );
 
   report(`parsed ${parsed()}`);
+  report(`kept ${keptNames()}`);
   // `dealloc` gave the fields back: as many of the program's objects are
   // alive after as before, the array the fields held included.
   const before = live_objects();

@@ -19,6 +19,7 @@
 //! and not required to be: every send runs on the program's owner thread, as
 //! every other call does.
 
+use std::fmt::Write as _;
 use super::{c_identifier, c_type_of, CodeWriter, Diagnostic, Origin, Program};
 use nts_codegen_common::objc::{
     block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol, lookups,
@@ -128,6 +129,7 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             }
             let mut parameters = Vec::new();
             let mut arguments = Vec::new();
+            let (mut copies, mut releases) = (String::new(), String::new());
             for (slot, ty) in method.signature.parameters.iter().enumerate() {
                 parameters.push(format!("{} a{slot}", ty.c_type()));
                 // `_cmd` is the runtime's; the compiled method never reads it.
@@ -135,6 +137,15 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                     continue;
                 }
                 let want = compiled.params[if slot == 0 { 0 } else { slot - 1 }].clone();
+                // An `NSString` the runtime lends, where the method takes a
+                // string: copied in for the call and given back after it, as
+                // a callback bridge does a C string's.
+                if nts_core::hir::native::lent_ns_string(ty, &want.ty) {
+                    let _ = write!(copies, " NtsString *s{slot} = nts_string_of_nsstring(a{slot});");
+                    let _ = write!(releases, " nts_release((NtsHeader *)s{slot});");
+                    arguments.push(format!("s{slot}"));
+                    continue;
+                }
                 // A record arrives by value and the compiled method reads it
                 // through its address, as every `ByValue<T>` is carried.
                 let by_value = if matches!(ty, Type::Record(_)) { "&" } else { "" };
@@ -147,11 +158,11 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             let symbol = nts_codegen_common::objc::imp_symbol(&class.name, at);
             let result = method.signature.result.c_type();
             let body = if record_out {
-                format!("{result} r; nts_callback_enter(); {call}; nts_callback_leave(); return r;")
+                format!("{result} r; nts_callback_enter();{copies} {call};{releases} nts_callback_leave(); return r;")
             } else if matches!(*method.signature.result, Type::Void) {
-                format!("nts_callback_enter(); {call}; nts_callback_leave();")
+                format!("nts_callback_enter();{copies} {call};{releases} nts_callback_leave();")
             } else {
-                format!("nts_callback_enter(); {result} r = ({result}){call}; nts_callback_leave(); return r;")
+                format!("nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return r;")
             };
             writer.line(origin, format!("static {result} {symbol}({}) {{ {body} }}", parameters.join(", ")));
             rows.push(format!(

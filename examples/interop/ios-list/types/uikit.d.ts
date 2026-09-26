@@ -2575,7 +2575,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector application:handleOpenURL: */
     applicationHandleOpen?(application: UIApplication, url: NSURL): boolean;
     /** @ntsSelector application:openURL:sourceApplication:annotation: */
-    applicationOpen?(application: UIApplication, url: NSURL, sourceApplication: NSString | null, annotation: NSObject): boolean;
+    applicationOpen?(application: UIApplication, url: NSURL, sourceApplication: string | null, annotation: NSObject): boolean;
     /** @ntsSelector application:openURL:options: */
     applicationOpenURLOptions?(app: UIApplication, url: NSURL, options: NSDictionary): boolean;
     /** @ntsSelector applicationDidReceiveMemoryWarning: */
@@ -2613,7 +2613,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector application:supportedInterfaceOrientationsForWindow: */
     applicationSupportedInterfaceOrientationsFor?(application: UIApplication, window: UIWindow | null): CEnum<UIInterfaceOrientationMask | 0, UInt>;
     /** @ntsSelector application:shouldAllowExtensionPointIdentifier: */
-    applicationShouldAllowExtensionPointIdentifier?(application: UIApplication, extensionPointIdentifier: NSString): boolean;
+    applicationShouldAllowExtensionPointIdentifier?(application: UIApplication, extensionPointIdentifier: string): boolean;
     /** @ntsSelector application:viewControllerWithRestorationIdentifierPath:coder: */
     applicationViewControllerWithRestorationIdentifierPath?(application: UIApplication, identifierComponents: NSArray, coder: NSCoder): UIViewController | null;
     /** @ntsSelector application:shouldSaveSecureApplicationState: */
@@ -2629,9 +2629,9 @@ declare module "objc:UIKit" {
     /** @ntsSelector application:shouldRestoreApplicationState: */
     applicationShouldRestoreApplicationState?(application: UIApplication, coder: NSCoder): boolean;
     /** @ntsSelector application:willContinueUserActivityWithType: */
-    applicationWillContinueUserActivityWithType?(application: UIApplication, userActivityType: NSString): boolean;
+    applicationWillContinueUserActivityWithType?(application: UIApplication, userActivityType: string): boolean;
     /** @ntsSelector application:didFailToContinueUserActivityWithType:error: */
-    applicationDidFailToContinueUserActivityWithType?(application: UIApplication, userActivityType: NSString, error: NSError): void;
+    applicationDidFailToContinueUserActivityWithType?(application: UIApplication, userActivityType: string, error: NSError): void;
     /** @ntsSelector application:didUpdateUserActivity: */
     applicationDidUpdate?(application: UIApplication, userActivity: NSUserActivity): void;
     /** @ntsSelector application:userDidAcceptCloudKitShareWithMetadata: */
@@ -2676,7 +2676,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector sectionIndexTitlesForTableView: */
     sectionIndexTitles?(tableView: UITableView): NSArray | null;
     /** @ntsSelector tableView:sectionForSectionIndexTitle:atIndex: */
-    tableViewSectionForSectionIndexTitle?(tableView: UITableView, title: NSString, index: Int): Int;
+    tableViewSectionForSectionIndexTitle?(tableView: UITableView, title: string, index: Int): Int;
     /** @ntsSelector tableView:commitEditingStyle:forRowAtIndexPath: */
     tableViewCommit?(tableView: UITableView, editingStyle: CEnum<UITableViewCell.EditingStyle, Int>, indexPath: NSIndexPath): void;
     /** @ntsSelector tableView:moveRowAtIndexPath:toIndexPath: */
