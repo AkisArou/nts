@@ -380,7 +380,12 @@ Application.Start(() => { new App(); });
      and `Array.from(list)`, walked by count as an array is: `GetAt(i)`
      while `i < get_Size()`, with no iterator object and no query
      (`@ntsIterate` on the vector's `[Symbol.iterator]`).
-   - Not yet: `for…of` over an `IIterable<T>` that is not a vector, static properties, struct
+   - **Static properties:** `ApplicationLanguages.languages`,
+     `ApplicationLanguages.primaryLanguageOverride = "fr"`, as variables of
+     the class's namespace (`let` where it is written as read, `const`
+     otherwise), called through the statics factory's slots. A name that is
+     a reserved word (`try`) stays its `get_X()`.
+   - Not yet: `for…of` over an `IIterable<T>` that is not a vector, struct
      fields (`size.Width`), strings boxed where a slot takes `IInspectable`,
      and `instanceof` of a COM value in `unknown`. Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`

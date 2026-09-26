@@ -248,7 +248,7 @@ function run(): string {
   const list = JsonValue.Parse("[1, 2.5, true]");
   const made = JsonValue.CreateBooleanValue(true);
   const bools = made.Stringify() + "," + String(made.GetBoolean()) + "," + String(JsonValue.Parse("false").GetBoolean());
-  const languages = ApplicationLanguages.get_Languages();
+  const languages = ApplicationLanguages.languages;
   const first = languages.getAt(0);
   const tags = (languages.size >= 1 ? "some" : "none") + "," + (first.includes("-") ? "tagged" : first);
   const vector = JsonArray.Parse("[1, 2.5, true]").as_IVector();

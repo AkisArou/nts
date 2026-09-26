@@ -29118,18 +29118,41 @@ impl<'a> FuncBuilder<'a> {
             .collect()
     }
 
+    /// The node a declaration's tags are on: a variable's statement, whose
+    /// comment its `JSDoc` is (`let ticks: T;` under `@ntsGet …`), and any
+    /// other declaration itself.
+    fn tagged_statement(&self, decl: NodeId) -> NodeId {
+        if self.kind_of(decl) != Some(syntax::VARIABLE_DECLARATION) {
+            return decl;
+        }
+        let mut at = self.node(decl).parent;
+        while let Some(node) = at {
+            if self.kind_of(node) == Some(syntax::VARIABLE_STATEMENT) {
+                return node;
+            }
+            at = self.node(node).parent;
+        }
+        decl
+    }
+
     /// The property declarations a member names: its symbol's, or -- for a
     /// member of an instantiation (`list.size` on an `IVector<IInspectable>`),
     /// whose symbol the checker made for the instantiation and records no
     /// declaration of -- the declaration the receiver's type records for the
     /// property of that name, through each part of an intersection.
     fn accessor_nodes(&self, member: NodeId) -> Vec<NodeId> {
-        let accessor = |decl: &NodeId| matches!(self.kind_of(*decl), Some(syntax::PROPERTY_SIGNATURE | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR));
+        // A class's static property is a variable of its namespace.
+        let accessor = |decl: &NodeId| {
+            matches!(
+                self.kind_of(*decl),
+                Some(syntax::PROPERTY_SIGNATURE | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR | syntax::VARIABLE_DECLARATION)
+            )
+        };
         let declared: Vec<NodeId> = self
             .node(member)
             .symbol
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-            .map(|record| record.declarations.iter().copied().filter(accessor).collect())
+            .map(|record| record.declarations.iter().copied().filter(accessor).map(|decl| self.tagged_statement(decl)).collect())
             .unwrap_or_default();
         if !declared.is_empty() {
             return declared;
@@ -29150,7 +29173,7 @@ impl<'a> FuncBuilder<'a> {
             match self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
                 Some(TypeKind::Intersection(parts)) => pending.extend(parts.iter().copied()),
                 Some(TypeKind::Object { properties }) => {
-                    found.extend(properties.iter().filter(|p| p.name == name).filter_map(|p| p.declaration).filter(accessor));
+                    found.extend(properties.iter().filter(|p| p.name == name).filter_map(|p| p.declaration).filter(accessor).map(|decl| self.tagged_statement(decl)));
                 }
                 _ => {}
             }
@@ -29191,12 +29214,73 @@ impl<'a> FuncBuilder<'a> {
         let ty = self.snapshot.node_types.get(&object).copied().ok_or_else(|| {
             self.unsupported(id, &format!("a native property whose accessor `{method}` has no receiver type"))
         })?;
-        let receiver = self.lower_expression(object)?;
         if let [slot, name] = method.split_whitespace().collect::<Vec<_>>()[..] {
             let slot: u32 = slot.parse().map_err(|_| self.unsupported(id, "@ntsGet or @ntsSet naming a slot that is not a number"))?;
+            // A static property: its class's factory is the receiver, and the
+            // namespace written before it is no value.
+            if self.accessor_nodes(member).iter().any(|decl| self.kind_of(*decl) == Some(syntax::VARIABLE_STATEMENT)) {
+                return self.lower_static_accessor(id, member, (slot, name), value);
+            }
+            let receiver = self.lower_expression(object)?;
             return self.lower_slot_accessor(id, member, receiver, ty, (slot, name), value);
         }
+        let receiver = self.lower_expression(object)?;
         self.lower_accessor_on(id, receiver, ty, method, value)
+    }
+
+    /// `ApplicationLanguages.languages`, and an assignment to a writable one:
+    /// a Windows Runtime class's static property, a variable of its namespace
+    /// (`@ntsGet 8 get_Languages`, `@ntsFactory …`), called through the slot
+    /// of its class's statics factory as a static method is.
+    fn lower_static_accessor(
+        &mut self,
+        id: NodeId,
+        member: NodeId,
+        (slot, name): (u32, &str),
+        value: Option<ValueId>,
+    ) -> Result<ValueId, Diagnostic> {
+        let write = value.is_some();
+        let declaration = self
+            .accessor_nodes(member)
+            .into_iter()
+            .find(|decl| self.node(*decl).native.as_deref().is_some_and(|n| if write { n.set.is_some() } else { n.get.is_some() }))
+            .ok_or_else(|| self.unsupported(id, "a Windows Runtime static property with no declaration"))?;
+        // The property's type, which its name is typed as where it is read
+        // and where it is written.
+        let ty = self.snapshot.node_types.get(&member).copied().ok_or_else(|| self.unsupported(id, "a Windows Runtime static property with no type"))?;
+        let (parameters, return_type) = match value {
+            Some(_) => (vec![nts_semantic_schema::ParameterRecord { name: "value".to_owned(), ty, optional: false, rest: false }], self.void_type()?),
+            None => (Vec::new(), ty),
+        };
+        let signature = nts_semantic_schema::SignatureRecord {
+            parameters,
+            return_type,
+            type_parameters: Vec::new(),
+            is_construct: false,
+            type_predicate: None,
+            this_type: None,
+        };
+        self.forced_slot = Some((slot, name.to_owned()));
+        let callee = self.native_callee(id, Some(declaration), name.to_owned(), &signature);
+        self.forced_slot = None;
+        let callee = callee?;
+        let Callee::Native(target) = &callee else {
+            return Err(self.unsupported(id, "a Windows Runtime static property whose slot is not a native call"));
+        };
+        let target = target.clone();
+        let args = match value {
+            // After the factory, which is the receiver.
+            Some(value) => match target.parameters.get(1) {
+                Some(parameter) => vec![self.coerce(value, &parameter.representation(), id)?],
+                None => vec![value],
+            },
+            None => Vec::new(),
+        };
+        // Called on the class's factory, as a static method is.
+        let receiver = target.vtable.as_ref().and_then(|vtable| vtable.factory.clone()).map(|factory| self.factory_receiver(&factory, id));
+        let count = args.len();
+        let (args, lent) = self.native_arguments(id, &target, args, count, receiver)?;
+        self.finish_call_typed(id, callee, args, lent, Some(declaration), None)
     }
 
     /// `button.content` and `button.content = value` for a Windows Runtime
@@ -46086,10 +46170,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(decl) = declaration {
             native.frameworks = self.declared_names(call, decl, LinkTag::FRAMEWORK)?;
             native.libraries = self.declared_names(call, decl, LinkTag::LIBRARY)?;
-            native.vtable = match &self.forced_slot {
-                Some((slot, method)) => Some(super::native::Vtable { slot: *slot, method: method.clone(), factory: None }),
-                None => self.vtable_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?,
-            };
+            native.vtable = self.slot_of(call, decl, signature, selector.is_some() || symbol_tagged(self, decl), &mut native)?;
         }
         self.make_call(call, declaration, &mut native, signature, (selector, class_send))?;
         self.refuse_unbridged(call, &native)?;
@@ -46161,6 +46242,29 @@ impl<'a> FuncBuilder<'a> {
     /// slot and a method cannot be edited apart: `@ntsVtable 7 Parse` on
     /// `Parse` is refused rather than a quiet call to `TryParse`. What the
     /// slot *is* is the metadata's, and `bind-winmd` writes both from it.
+    /// The slot a call goes through: the one the lowering forces -- a
+    /// property's getter or setter, `super.m()` in an override -- or the one
+    /// the declaration's `@ntsVtable` names. A forced slot of a static
+    /// property is its class's factory's, whose receiver the call supplies,
+    /// as a static method's is.
+    fn slot_of(
+        &self,
+        call: NodeId,
+        decl: NodeId,
+        signature: &nts_semantic_schema::SignatureRecord,
+        otherwise_bound: bool,
+        native: &mut super::native::Function,
+    ) -> Result<Option<super::native::Vtable>, Diagnostic> {
+        let Some((slot, method)) = &self.forced_slot else {
+            return self.vtable_of(call, decl, signature, otherwise_bound, native);
+        };
+        let factory = self.factory_of(call, decl)?;
+        if factory.is_some() {
+            native.prepend_receiver(super::native::Type::Pointer(super::native::Pointee::Void));
+        }
+        Ok(Some(super::native::Vtable { slot: *slot, method: method.clone(), factory }))
+    }
+
     fn vtable_of(
         &self,
         call: NodeId,
@@ -46205,19 +46309,7 @@ impl<'a> FuncBuilder<'a> {
         if native.variadic.is_some() || native.convention != super::native::Convention::C {
             return Err(self.unsupported(call, "@ntsVtable on a variadic or non-C function"));
         }
-        let factory = match tags.and_then(|n| n.factory.as_deref()) {
-            None => None,
-            Some(text) => {
-                let words: Vec<&str> = text.split_whitespace().collect();
-                let [class, iid] = words.as_slice() else {
-                    return Err(self.unsupported(call, "@ntsFactory names the runtime class and the interface ID, as in `@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C`"));
-                };
-                if !super::native::is_interface_id(iid) {
-                    return Err(self.unsupported(call, "@ntsFactory with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
-                }
-                Some(super::native::Factory { class: (*class).to_owned(), iid: iid.trim_matches(['{', '}']).to_owned() })
-            }
-        };
+        let factory = self.factory_of(call, decl)?;
         let method_of_instance = self.is_native_instance_method(decl, signature);
         match (&factory, method_of_instance) {
             (None, false) => {
@@ -46231,6 +46323,21 @@ impl<'a> FuncBuilder<'a> {
             (None, true) => {}
         }
         Ok(Some(super::native::Vtable { slot, method: (*method).to_owned(), factory }))
+    }
+
+    /// What a declaration's `@ntsFactory` names: the runtime class whose
+    /// activation factory, as the interface the IID names, is a static's
+    /// receiver.
+    fn factory_of(&self, call: NodeId, decl: NodeId) -> Result<Option<super::native::Factory>, Diagnostic> {
+        let Some(text) = self.node(decl).native.as_deref().and_then(|n| n.factory.as_deref()) else { return Ok(None) };
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let [class, iid] = words.as_slice() else {
+            return Err(self.unsupported(call, "@ntsFactory names the runtime class and the interface ID, as in `@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C`"));
+        };
+        if !super::native::is_interface_id(iid) {
+            return Err(self.unsupported(call, "@ntsFactory with an interface ID that is not 8-4-4-4-12 hexadecimal digits"));
+        }
+        Ok(Some(super::native::Factory { class: (*class).to_owned(), iid: iid.trim_matches(['{', '}']).to_owned() }))
     }
 
     /// `@ntsQuery`: the receiver as the COM interface the IID names, which is

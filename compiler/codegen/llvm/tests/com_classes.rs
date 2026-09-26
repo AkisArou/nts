@@ -915,3 +915,39 @@ fn a_vector_is_walked_by_count_through_its_own_table() {
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 }
+
+/// A class's static property as `bind-winmd` writes it: a variable of its
+/// namespace, read and written through its statics factory's slots.
+const STATICS: &str = r#"declare module "winrt:Test.Statics" {
+  import type { CNumber } from "c:types";
+  export namespace Clock {
+    /**
+     * @ntsGet 6 get_Ticks
+     * @ntsSet 7 put_Ticks
+     * @ntsFactory Test.Statics.Clock 0B0B0B0B-1111-2222-3333-444444444444
+     */
+    let ticks: CNumber<"int32">;
+  }
+}
+"#;
+
+/// `Clock.ticks` and `Clock.ticks = n`: the getter's and the setter's slot
+/// on the class's statics factory, which the call supplies as a static
+/// method's receiver -- the namespace written before it is no value.
+#[test]
+fn a_static_property_is_called_on_its_factory() {
+    let source = "import { Clock } from \"winrt:Test.Statics\";\nexport function tick(): number {\n  Clock.ticks = Clock.ticks + 1;\n  return Clock.ticks;\n}\n";
+    let Some((dir, prepared)) = prepare_with("statics", STATICS, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("nts_winrt_factory("), "not on the factory:\n{text}");
+    assert!(text.contains("[6])(") && text.contains("[7])("), "not the getter's and setter's slots:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+}

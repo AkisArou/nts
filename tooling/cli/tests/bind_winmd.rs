@@ -293,6 +293,16 @@ fn winrt_structs_cross_by_value() {
         "{foundation}"
     );
     assert!(globalization.contains("SetDateTime(this: ICalendar, value: ByValue<DateTime> | Fields<DateTime>): void;"), "{globalization}");
+    // A class's static property: a variable of its namespace, `let` where it
+    // is written as it is read, `const` where it is only read.
+    assert!(
+        globalization.contains("     * @ntsGet 6 get_PrimaryLanguageOverride\n     * @ntsSet 7 put_PrimaryLanguageOverride\n     * @ntsFactory Windows.Globalization.ApplicationLanguages 75B40847-0A4C-4A92-9565-FD63C95F7AED\n     */\n    let primaryLanguageOverride: HString;"),
+        "no writable static property"
+    );
+    assert!(
+        globalization.contains("     * @ntsGet 8 get_Languages\n     * @ntsFactory Windows.Globalization.ApplicationLanguages 75B40847-0A4C-4A92-9565-FD63C95F7AED\n     */\n    const languages: IVectorView<HString>;"),
+        "no read-only static property"
+    );
     // A class whose default interface is an instantiation is bound as it,
     // and named where a method answers it.
     assert!(imaging.contains("export type BitmapPropertySet = IMap<HString, IBitmapTypedValue> & BitmapPropertySetInterfaces & BitmapPropertySetMembers;"), "{imaging}");

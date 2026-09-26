@@ -432,6 +432,9 @@ fn carries_native_attributes(kind: NodeKind) -> bool {
                 | nts_semantic_schema::syntax::CONSTRUCTOR
                 | nts_semantic_schema::syntax::MODULE_DECLARATION
                 | nts_semantic_schema::syntax::SOURCE_FILE
+                // `let ticks: T;` in a namespace: a Windows Runtime class's
+                // static property, whose comment is the statement's.
+                | nts_semantic_schema::syntax::VARIABLE_STATEMENT
         )
     )
 }

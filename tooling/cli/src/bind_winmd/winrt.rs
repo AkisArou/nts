@@ -540,6 +540,45 @@ impl Writer<'_> {
         }
     }
 
+    /// A class's static property, from its statics' `get_X` and `put_X`: a
+    /// variable of the class's namespace, read and written through the
+    /// factory's slots (`@ntsGet`, `@ntsSet`, `@ntsFactory`) -- `let` where
+    /// the setter takes what the getter answers, `const` where there is no
+    /// setter or it takes another type, which its `put_X()` still writes.
+    /// `None` for one whose type this cannot spell.
+    fn static_property(
+        &mut self,
+        getter: windows_metadata::reader::MethodDef,
+        get_slot: usize,
+        setter: Option<(usize, windows_metadata::reader::MethodDef)>,
+        factory: &str,
+    ) -> Option<String> {
+        let read = getter.signature(&[]);
+        if !read.types.is_empty() {
+            return None;
+        }
+        let answered = self.spell(&read.return_type, false).ok()?;
+        let writable = setter.and_then(|(slot, put)| {
+            let written = put.signature(&[]);
+            let [ty] = written.types.as_slice() else { return None };
+            (self.spell(ty, true).ok()? == answered).then_some(slot)
+        });
+        let property = method_name(getter);
+        let property = property.strip_prefix("get_")?.to_owned();
+        let name = nts_core::hir::native::js_name(&property);
+        if is_reserved(&name) {
+            return None;
+        }
+        let mut text = format!("    /**\n     * @ntsGet {get_slot} get_{property}\n");
+        if let Some(slot) = writable {
+            let _ = writeln!(text, "     * @ntsSet {slot} put_{property}");
+        }
+        let _ = writeln!(text, "     * @ntsFactory {factory}\n     */");
+        let keyword = if writable.is_some() { "let" } else { "const" };
+        let _ = writeln!(text, "    {keyword} {name}: {answered};");
+        Some(text)
+    }
+
     /// The idiomatic surface of a class, as the Windows Runtime's JavaScript
     /// projection wrote it: `{Class}Members`, extending its base class's, with
     /// every member of the interfaces the class itself declares in camelCase
@@ -914,13 +953,31 @@ impl Writer<'_> {
                 continue;
             };
             let Some(iid) = iid(statics_def) else { continue };
-            for (index, method) in statics_def.methods().enumerate() {
+            let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = statics_def.methods().enumerate().map(|(index, method)| (6 + index, method)).collect();
+            for &(slot, method) in &methods {
                 let receiver = if composable {
                     Receiver::Composable { class: &class_name, iid: &iid }
                 } else {
                     Receiver::Factory { class: &class_name, iid: &iid }
                 };
-                self.static_member(name, method, 6 + index, receiver, &mut statics);
+                // A property of the class itself, `ApplicationLanguages.
+                // languages`: a variable of its namespace, beside the ABI's
+                // `get_Languages()`, and in place of a camelCase alias of it.
+                let abi = method_name(method);
+                if !composable && (abi.starts_with("get_") || abi.starts_with("put_")) {
+                    if let Ok(text) = self.method(method, slot, receiver) {
+                        statics.push_str(&text);
+                        self.methods += 1;
+                    }
+                    if let Some(property) = abi.strip_prefix("get_") {
+                        let setter = methods.iter().find(|(_, m)| method_name(*m) == format!("put_{property}")).copied();
+                        if let Some(text) = self.static_property(method, slot, setter, &format!("{class_name} {iid}")) {
+                            statics.push_str(&text);
+                        }
+                    }
+                    continue;
+                }
+                self.static_member(name, method, slot, receiver, &mut statics);
             }
         }
         let others = self.answered_interfaces(def);
@@ -1812,10 +1869,20 @@ fn iid(def: TypeDef) -> Option<String> {
 
 /// A parameter name TypeScript accepts.
 fn safe(name: &str) -> String {
-    match name {
-        "default" | "function" | "class" | "delete" | "new" | "in" | "var" | "this" | "enum" | "with" | "switch" | "case" => {
-            format!("{name}_")
-        }
-        _ => name.to_owned(),
-    }
+    if is_reserved(name) { format!("{name}_") } else { name.to_owned() }
+}
+
+/// A word no binding may be named: JavaScript's reserved words, and the
+/// strict-mode ones a module is always in. A parameter so named is renamed
+/// ([`safe`]); a static property so named stays its `get_X()`, since the
+/// program reads it by that name.
+fn is_reserved(name: &str) -> bool {
+    matches!(
+        name,
+        "break" | "case" | "catch" | "class" | "const" | "continue" | "debugger" | "default" | "delete" | "do" | "else" | "enum"
+            | "export" | "extends" | "false" | "finally" | "for" | "function" | "if" | "import" | "in" | "instanceof" | "new"
+            | "null" | "return" | "super" | "switch" | "this" | "throw" | "true" | "try" | "typeof" | "var" | "void" | "while"
+            | "with" | "implements" | "interface" | "let" | "package" | "private" | "protected" | "public" | "static" | "yield"
+            | "await"
+    )
 }
