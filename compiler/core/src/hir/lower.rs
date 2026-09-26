@@ -38175,11 +38175,47 @@ impl<'a> FuncBuilder<'a> {
             }
         };
 
-        if !settler.rejects {
-            return self.settle(id, &settler.result, value).map(Some);
+        // **Only while the pair is unspent.** The specification gives
+        // `resolve` and `reject` one `alreadyResolved` flag between them, and
+        // it is not the same as being settled: `resolve(p)` with a promise
+        // leaves this one pending until `p` settles, and a `resolve(v)` or
+        // `reject(e)` in that window is ignored. The settle helpers refuse only
+        // a promise that has already settled, so without this
+        // `r(later); r(1)` answered 1 where node waits for `later`.
+        //
+        // The argument is evaluated first either way, as a call's arguments
+        // are before the callee runs. An executor's pair is the promise's
+        // first, numbered 0 -- see `nts_promise_claim`.
+        let origin = self.origin(id);
+        let pair = self.push(
+            OpKind::ConstInt(0),
+            HirType::Int { bits: 32, signed: false },
+            origin.clone(),
+        );
+        let live = self.runtime_call(
+            "nts_promise_claim",
+            vec![settler.result.promise, pair],
+            HirType::Bool,
+            origin.clone(),
+        );
+        let settles = self.new_block();
+        let join = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: live,
+            then_target: settles,
+            then_args: Vec::new(),
+            else_target: join,
+            else_args: Vec::new(),
+        });
+        self.switch_to(settles);
+        if settler.rejects {
+            self.reject_with(id, settler.result.promise, value)?;
+        } else {
+            self.settle(id, &settler.result, value)?;
         }
-
-        self.reject_with(id, settler.result.promise, value).map(Some)
+        self.terminate(Terminator::Jump { target: join, args: Vec::new() });
+        self.switch_to(join);
+        Ok(Some(self.push(OpKind::ConstUndefined, HirType::Void, origin)))
     }
 
     /// Reject `promise` with `reason`, or refuse.

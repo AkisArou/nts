@@ -8713,7 +8713,7 @@ static void nts_promise_schedule(NtsPromise *promise) {
   }
 }
 
-static void nts_promise_settle(NtsPromise *promise, uint32_t state) {
+static void nts_promise_settle(NtsPromise *promise, uint8_t state) {
   promise->state = state;
   nts_promise_schedule(promise);
 }
@@ -9216,6 +9216,24 @@ void nts_promise_adopt(NtsPromise *outer, NtsPromise *inner) {
   nts_retain((NtsHeader *)inner);
   nts_enqueue_microtask(
       (NtsTask){nts_adoption_begin, nts_adoption_drop, adoption});
+}
+
+bool nts_promise_claim(NtsPromise *promise, uint32_t pair) {
+  nts_promise_require_owner("nts_promise_claim");
+  if (promise->resolutions != pair) {
+    return false;
+  }
+  /* Each use is at least one microtask of thenable after thenable resolving
+   * one promise, so this is out of reach of any program that finishes -- and
+   * wrapping would make the executor's pair live again, which is a wrong
+   * answer where stopping is only a refusal. */
+  if (pair == UINT32_MAX) {
+    fprintf(stderr, "nts: a promise resolved through more than %u thenables\n",
+            (unsigned)UINT32_MAX);
+    abort();
+  }
+  promise->resolutions = pair + 1;
+  return true;
 }
 
 /* --- Timers, as a program calls them (docs/async.md 8, phase C) -------------

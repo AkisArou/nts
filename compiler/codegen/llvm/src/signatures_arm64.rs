@@ -273,6 +273,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_presence_set_fn", returns: "void", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_promise_adopt", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_all", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_promise_claim", returns: "zeroext i1", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_number", returns: "void", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_pointer", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_fulfill_reference", returns: "void", params: &["ptr", "ptr"], attributes: &[] },

@@ -3515,7 +3515,8 @@ typedef struct NtsReaction {
 
 typedef struct NtsPromise {
   NtsHeader header;
-  uint32_t state; /* NTS_PROMISE_* */
+  /* NTS_PROMISE_*. A byte, so `resolutions` fits in the padding below. */
+  uint8_t state;
   /* Settled with a C handle -- `await file.query_info_async(...)`'s
    * `GFileInfo *` -- held in `value.as.native` under the `UNDEFINED` tag. Not
    * a value tag of its own: the tag space is full by construction, and a tag
@@ -3533,6 +3534,18 @@ typedef struct NtsPromise {
    *
    * In the padding beside `native`, so a promise is no larger for it. */
   bool handled;
+  /* How many times a pair of its resolving functions has been used: the
+   * specification's `alreadyResolved`, counted per promise rather than stored
+   * per pair. See `nts_promise_claim`.
+   *
+   * 32 bits is four billion resolving pairs for one promise, each a microtask
+   * of thenable resolving thenable, which no program that finishes reaches.
+   * `nts_promise_claim` aborts at the limit rather than wrapping, so that
+   * "cannot happen" is not what correctness rests on, and so this is not a
+   * reason to widen it.
+   *
+   * In the padding after `handled`, so a promise is no larger for it. */
+  uint32_t resolutions;
   /* What it settled with, whatever that turned out to be.
    *
    * One representation for every fulfilment path: a number, a reference and
@@ -3713,6 +3726,24 @@ void nts_promise_reject_value(NtsPromise *promise, NtsValue reason);
 /* Settle `outer` with whatever `inner` settles to, two microtasks later.
  * `async function f() { return g(); }` -- see the definition for why two. */
 void nts_promise_adopt(NtsPromise *outer, NtsPromise *inner);
+/* Whether the resolving functions numbered `pair` may still resolve `promise`,
+ * spending them if so. A `resolve` or `reject` asks this before it settles.
+ *
+ * The specification gives each pair of resolving functions a shared
+ * `alreadyResolved` flag, and it is a different thing from being settled:
+ * `resolve(p)` with a promise or thenable leaves the promise pending until
+ * `p` settles, and a second `resolve(v)` in that window must be ignored. The
+ * fulfilment helpers above only refuse a promise that has already settled, so
+ * without this `new Promise(r => { r(later); r(1); })` answered 1 where node
+ * waits for `later`.
+ *
+ * Counted per promise rather than stored per pair, because at most one pair of
+ * a promise is live at a time. The executor's pair is 0 and is live until
+ * used. A thenable job makes the next pair, numbered by the count after that
+ * use. So a pair is live exactly when its number equals `resolutions`, which
+ * is one field in the padding where a flag per pair would be an allocation per
+ * pair. */
+bool nts_promise_claim(NtsPromise *promise, uint32_t pair);
 
 /* --- Combinators (docs/async.md 5b) ----------------------------------------
  *

@@ -4,6 +4,12 @@ package nts.rt;
 public final class NtsPromise {
     private static final int PENDING = 0, FULFILLED = 1, REJECTED = 2;
     private int state;
+    /**
+     * How many times a pair of its resolving functions has been used: the
+     * specification's {@code alreadyResolved}, counted per promise. See
+     * {@link #claim} and {@code nts_promise_claim} in {@code runtime/c}.
+     */
+    private int resolutions;
     private NtsValue settled = NtsValue.UNDEFINED_VALUE;
     // Zero or one waiter needs no backing array; the common await case is inline.
     private NtsResumable first;
@@ -135,6 +141,21 @@ public final class NtsPromise {
         public void resume() {
             settle(outer, inner.state, inner.settled);
         }
+    }
+    /**
+     * Whether the resolving functions numbered {@code pair} may still resolve
+     * {@code promise}, spending them if so. {@code pair} is unsigned, as the
+     * C runtime's {@code uint32_t} is; see {@code nts_promise_claim} for why a
+     * count per promise is the spec's flag per pair.
+     */
+    public static boolean claim(NtsPromise promise, int pair) {
+        if (promise.resolutions != pair) { return false; }
+        if (pair == -1) {
+            throw new IllegalStateException(
+                "nts: a promise resolved through more than 4294967295 thenables");
+        }
+        promise.resolutions = pair + 1;
+        return true;
     }
     public static boolean isRejected(NtsPromise promise) { return promise.state == REJECTED; }
     public static boolean isSettled(NtsPromise promise) { return promise.state != PENDING; }
