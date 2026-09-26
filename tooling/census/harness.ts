@@ -63,22 +63,39 @@ class Test262Error {
   constructor(public readonly message: string) {}
 }
 
-class assert {
-  static sameValue(actual: number, expected: number, message?: string): void;
-  static sameValue(actual: string, expected: string, message?: string): void;
-  static sameValue(actual: boolean, expected: boolean, message?: string): void;
-  static sameValue<T>(actual: T, expected: T, message?: string): void;
-  static sameValue(actual: unknown, expected: unknown, message?: string): void {
+/**
+ * `assert(condition)` -- the harness's base entry, and **callable**: a function
+ * merged with the namespace below, so `assert(x)` and `assert.sameValue(a, b)`
+ * both resolve, each to a plain function. This was a class until 2026-09-26,
+ * which is not callable, and every test calling `assert(cond)` -- 2,167 in
+ * `test/built-ins`, 715 in `test/language` -- was `unsupported` on
+ * `TS2348 ... typeof assert is not callable`. A namespace holding `export const`
+ * refuses ("a module declaration, which has code in it"); one holding only
+ * function declarations is merged by the checker and lowers to direct calls,
+ * which the compiler lane measured before this was written.
+ */
+function assert(mustBeTrue: boolean, message?: string): void {
+  if (mustBeTrue !== true) {
+    throw new Test262Error(message ?? "assert");
+  }
+}
+
+namespace assert {
+  export function sameValue(actual: number, expected: number, message?: string): void;
+  export function sameValue(actual: string, expected: string, message?: string): void;
+  export function sameValue(actual: boolean, expected: boolean, message?: string): void;
+  export function sameValue<T>(actual: T, expected: T, message?: string): void;
+  export function sameValue(actual: unknown, expected: unknown, message?: string): void {
     if (!assert.isSameValue(actual, expected)) {
       throw new Test262Error(message ?? "sameValue");
     }
   }
 
-  static notSameValue(actual: number, expected: number, message?: string): void;
-  static notSameValue(actual: string, expected: string, message?: string): void;
-  static notSameValue(actual: boolean, expected: boolean, message?: string): void;
-  static notSameValue<T>(actual: T, expected: T, message?: string): void;
-  static notSameValue(actual: unknown, expected: unknown, message?: string): void {
+  export function notSameValue(actual: number, expected: number, message?: string): void;
+  export function notSameValue(actual: string, expected: string, message?: string): void;
+  export function notSameValue(actual: boolean, expected: boolean, message?: string): void;
+  export function notSameValue<T>(actual: T, expected: T, message?: string): void;
+  export function notSameValue(actual: unknown, expected: unknown, message?: string): void {
     if (assert.isSameValue(actual, expected)) {
       throw new Test262Error(message ?? "notSameValue");
     }
@@ -102,7 +119,7 @@ class assert {
    * reasoned about, which is the whole point of a stand-in: the shipped harness
    * is the specification of what this has to mean.
    */
-  static isSameValue(a: unknown, b: unknown): boolean {
+  export function isSameValue(a: unknown, b: unknown): boolean {
     if (a === b) {
       // The zeros are `===` and are not the same value. `1 / +0` is `Infinity`
       // and `1 / -0` is `-Infinity`, which is how they are told apart.

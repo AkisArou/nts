@@ -31,8 +31,8 @@ export const HARNESS_DONOTEVALUATE = readFileSync(join(HERE, "harness-donotevalu
 export function harnessFor(body) {
   let harness = HARNESS;
   if (/\bassert\.throws\s*\(/.test(body)) {
-    const opening = "class assert {\n";
-    if (!harness.includes(opening)) throw new Error("harness.ts has no `class assert {` line to splice throws into");
+    const opening = "namespace assert {\n";
+    if (!harness.includes(opening)) throw new Error("harness.ts has no `namespace assert {` line to splice throws into");
     harness = harness.replace(opening, opening + HARNESS_THROWS);
   }
   if (/\$DONOTEVALUATE\b/.test(body)) harness = harness + HARNESS_DONOTEVALUATE;

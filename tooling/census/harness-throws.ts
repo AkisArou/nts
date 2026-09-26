@@ -1,4 +1,4 @@
-  // `assert.throws(Ctor, fn)`, spliced into `class assert` by `project.mjs` --
+  // `assert.throws(Ctor, fn)`, spliced into `namespace assert` by `project.mjs` --
   // **only for a test that calls it**. Pass only if `fn` throws an instance of
   // `Ctor`; transcribed from `harness/assert.js` down to what this stand-in can
   // say (the constructor check is `instanceof`, the messages differ). `expected`
@@ -16,7 +16,7 @@
   // The 3,229 `test/language` cases that call it are then *refused at a harness
   // line* -- one cause, ranked once -- and the day the raising copy exists they
   // start running with no change here.
-  static throws(expected: new (message: string) => unknown, fn: () => void, message?: string): void {
+  export function throws(expected: new (message: string) => unknown, fn: () => void, message?: string): void {
     let threw = false;
     try {
       fn();

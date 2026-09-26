@@ -308,7 +308,7 @@ function harnessGap(record, source) {
 /**
  * A checker error that names the stand-in rather than the test.
  *
- * `class assert` is not callable, so a test calling `assert(cond)` -- the
+ * `assert` was a class, not callable, so a test calling `assert(cond)` -- the
  * harness's base entry -- reports `typeof assert` is not callable; a member the
  * stand-in lacks reports it does not exist on `typeof assert`. Both are ours.
  */
