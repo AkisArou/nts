@@ -3122,7 +3122,7 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             {
                 continue;
             }
-            let mut pending: Vec<NodeId> = probe.children(*declaration);
+            let mut pending: Vec<NodeId> = children_that_run(probe, *declaration);
             while let Some(at) = pending.pop() {
                 let kind = probe.kind_of(at);
                 if nested(kind) {
@@ -3174,7 +3174,7 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
                             // Precision first, then the rule.
                     );
                 }
-                pending.extend(probe.children(at));
+                pending.extend(children_that_run(probe, at));
             }
         }
         if !reached.is_empty() {
@@ -5390,6 +5390,46 @@ fn record_structural_call(
 /// parameter's symbol, so `actual` sees it the same way. A nested *function
 /// declaration* is a function of its own with its own copies, and a class's
 /// methods are lowered by the class.
+/// The children of a node that can actually run.
+///
+/// **`if (isDevelopment)` is a dead branch and the raise analysis walked it.** The
+/// React lane's port writes every DEV call that way -- `export const isDevelopment =
+/// false` in `shared/Build.native.ts`, whose checker type is the literal `false` --
+/// and after `1962b826c` named the leaf, **nine** `try`s in
+/// `ReactFiberCommitEffects.ts` turned out to be refused because of
+/// `runWithFiberInDEV`, a generic reached only from inside such a branch. Production
+/// never calls it.
+///
+/// `lower_if` has pruned these since `folded_branch`, so the *code* was never
+/// emitted; what walked in anyway were the analyses that decide whether a `try` can
+/// be given a handler. So a program was refused for a call it does not make.
+///
+/// `statically_decided` is the same primitive `folded_branch` reads, deliberately:
+/// two derivations of "is this branch dead" would let the analysis and the lowering
+/// disagree about which half of an `if` exists. Where it answers `None` every child
+/// is kept, so the analyses stay conservative -- being *less* precise than the
+/// lowering is safe here, being more precise is not.
+fn children_that_run(probe: &FuncBuilder, id: NodeId) -> Vec<NodeId> {
+    let children = probe.children(id);
+    if probe.kind_of(id) != Some(syntax::IF_STATEMENT) {
+        return children;
+    }
+    // The condition is kept either way: `if (check())` decides nothing about the
+    // call inside it, which runs whichever branch is taken.
+    match children.as_slice() {
+        [condition, then_branch, rest @ ..] => match probe.statically_decided(*condition) {
+            Some(true) => vec![*condition, *then_branch],
+            Some(false) => {
+                let mut kept = vec![*condition];
+                kept.extend(rest.iter().copied());
+                kept
+            },
+            None => children,
+        },
+        _ => children,
+    }
+}
+
 fn calls_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId> {
     fn walk(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
         match probe.kind_of(id) {
@@ -5402,13 +5442,13 @@ fn calls_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId>
             Some(syntax::CALL_EXPRESSION) => into.push(id),
             _ => {}
         }
-        for child in &probe.node(id).children {
-            walk(probe, *child, into);
+        for child in children_that_run(probe, id) {
+            walk(probe, child, into);
         }
     }
     let mut calls = Vec::new();
-    for child in &probe.node(declaration).children {
-        walk(probe, *child, &mut calls);
+    for child in children_that_run(probe, declaration) {
+        walk(probe, child, &mut calls);
     }
     calls
 }
@@ -16574,8 +16614,26 @@ impl<'a> FuncBuilder<'a> {
         // sentence, Java's bridge-method shape -- is the eventual answer and is its
         // own change. Refusing first because a refusal costs one function and this
         // costs a wrong answer in every program that pokes at an `unknown`.
+        // **Anonymous shapes only, and the narrowing was forced by a test.** The
+        // first version refused every `as` to an object type, and
+        // `a_reported_c_error_is_thrown_on_both_backends` failed on
+        // `(e as Error).message` inside a `catch` -- the commonest idiom in
+        // TypeScript, and one where the value usually *is* an `Error`.
+        //
+        // A **named** class is a layout values really have, and on the JVM the
+        // assertion is a `checkcast` that throws rather than reads. An **anonymous**
+        // shape is a type no class is: an unerase to `{ stack?: string }` can only
+        // be a lie unless the value is an object literal of exactly that shape, and
+        // every wrong answer measured was of that kind -- `{ stack?: string }`,
+        // `{ toJSON?: unknown }`, `{ sourceMap?: unknown }`. So the line is drawn
+        // where the evidence is, and it is the same line the `{}` guard above draws
+        // with `named(...).is_none()`.
+        //
+        // The named case stays unchecked and stays a hazard; the checked unerase is
+        // what answers it, for both halves at once.
         if matches!(self.kind_of(id), Some(syntax::AS_EXPRESSION))
-            && matches!(&want, HirType::Managed(ManagedType::Object(_)))
+            && let HirType::Managed(ManagedType::Object(object)) = &want
+            && named(self.snapshot, *object).is_none()
         {
             return Err(self.unsupported(
                 id,
