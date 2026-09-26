@@ -53,6 +53,17 @@ void *nts_gobject_parent_slot(size_t parent, size_t offset);
 unsigned nts_gobject_add_signal(size_t type, const char *name,
                                 const char *kinds);
 
+/* The properties a class the program writes declares (`Property<T>` in
+ * `c:types`), handed over once `type` is registered and before anything
+ * makes its class: `{ name, kind, get, set }` per property, `kind` as a
+ * signal's, which `class_init` installs as ids 1..count. */
+void nts_gobject_set_properties(size_t type, const void *properties,
+                                size_t count);
+
+/* The `GParamSpec` of the property at `index` among those `type` declares,
+ * which a write of its field notifies by. */
+void *nts_gobject_property_spec(size_t type, unsigned index);
+
 /* The id of the signal `name` on the instance's type, which an emit thunk
  * keeps in `cache` -- the type it last looked on, then the id -- so a lookup
  * runs once per type and not once per emit. */

@@ -250,6 +250,13 @@ declare module "c:types" {
   // A class's instance type with the signals a subclass adds: itself where
   // it adds none, so a binding's own errors read as they did.
   export type Signalled<T, Sig extends SignalMap> = {} extends Sig ? T : T & WithSignals<Sig>;
+  // A field of a GObject class the program writes that is also a GObject
+  // property, GJS's `Properties`: `done: Property<boolean> = false` is a
+  // field the class reads and writes as any other, installed on the class's
+  // `GType` as `done`, so `g_object_get`, `bind_property` and `notify::done`
+  // see it; each write notifies. A `number` (`G_TYPE_DOUBLE`), a `boolean`,
+  // a `string` or a GObject class's handle.
+  export type Property<T> = T & { readonly __c_property?: true };
   // A GLib boxed record -- a C struct GLib copies and frees by its `GType`
   // (`g_boxed_copy`, `g_boxed_free`): `GtkTextIter`, `GdkRGBA`. The program
   // holds one by reference, as JavaScript holds any object, in a box of its

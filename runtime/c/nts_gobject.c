@@ -219,10 +219,24 @@ typedef struct NtsGObjectSlot {
  * and `finalize`. GObject calls every class's `instance_init` with the
  * *instance's* class, and inherits `finalize`, so a slot per class would make
  * the state twice and give it back by a lookup that finds the child again. */
+/* A property a class the program writes declares (`Property<T>` in
+ * `c:types`): its name, its kind -- `d` a `double`, `b` a `gboolean`, `s` a
+ * UTF-8 string, `o` a `GObject` -- and the compiled functions reading and
+ * writing its field, typed by the kind. */
+typedef struct NtsGObjectProperty {
+  const char *name;
+  char kind;
+  void (*get)(void);
+  void (*set)(void);
+} NtsGObjectProperty;
+
 typedef struct NtsGObjectClassData {
   GType type;
   const NtsGObjectSlot *slots;
   size_t count;
+  const NtsGObjectProperty *properties;
+  size_t property_count;
+  GParamSpec **pspecs;
   void *(*make_state)(void);
   const struct NtsGObjectClassData *owner;
   size_t state_offset;
@@ -266,11 +280,132 @@ static void nts_gobject_finalize(GObject *object) {
   owner->parent_finalize(object);
 }
 
+/* The registered class that installed `pspec`: a property's id is its
+ * owner's, whichever class the instance is. */
+static const NtsGObjectProperty *nts_gobject_property_of(GParamSpec *pspec,
+                                                         guint id) {
+  for (size_t at = 0; at < nts_gobject_class_count; at++) {
+    const NtsGObjectClassData *class = nts_gobject_classes[at];
+    if (class->type == pspec->owner_type && id >= 1 &&
+        id <= class->property_count) {
+      return &class->properties[id - 1];
+    }
+  }
+  return NULL;
+}
+
+static void nts_gobject_get_property(GObject *object, guint id, GValue *value,
+                                     GParamSpec *pspec) {
+  const NtsGObjectProperty *property = nts_gobject_property_of(pspec, id);
+  if (!property) {
+    G_OBJECT_WARN_INVALID_PROPERTY_ID(object, id, pspec);
+    return;
+  }
+  switch (property->kind) {
+  case 'd':
+    g_value_set_double(value, ((double (*)(void *))property->get)(object));
+    break;
+  case 'b':
+    g_value_set_boolean(value, ((bool (*)(void *))property->get)(object));
+    break;
+  case 's': {
+    /* The getter answers a string the caller owns, copied into the value
+     * and given back. */
+    NtsString *text = ((NtsString * (*)(void *)) property->get)(object);
+    const char *c = nts_string_to_cstring(text);
+    g_value_set_string(value, c);
+    nts_cstring_release(text, c);
+    nts_release((NtsHeader *)text);
+    break;
+  }
+  default: {
+    void *held = ((void *(*)(void *))property->get)(object);
+#ifdef NTS_PROVIDER_RC
+    /* Under counting the getter's answer is a reference the caller owns,
+     * which the value takes over; without, it is borrowed. */
+    g_value_take_object(value, held);
+#else
+    g_value_set_object(value, held);
+#endif
+    break;
+  }
+  }
+}
+
+static void nts_gobject_set_property(GObject *object, guint id,
+                                     const GValue *value, GParamSpec *pspec) {
+  const NtsGObjectProperty *property = nts_gobject_property_of(pspec, id);
+  if (!property) {
+    G_OBJECT_WARN_INVALID_PROPERTY_ID(object, id, pspec);
+    return;
+  }
+  switch (property->kind) {
+  case 'd':
+    ((void (*)(void *, double))property->set)(object,
+                                              g_value_get_double(value));
+    break;
+  case 'b':
+    ((void (*)(void *, bool))property->set)(object,
+                                            g_value_get_boolean(value) != 0);
+    break;
+  case 's': {
+    /* GObject's absent string is NULL, which a `string` field cannot hold:
+     * it is written as the empty string, the property's default. */
+    const char *c = g_value_get_string(value);
+    NtsString *text = nts_string_from_utf8(c ? c : "", c ? strlen(c) : 0);
+    ((void (*)(void *, NtsString *))property->set)(object, text);
+    nts_release((NtsHeader *)text);
+    break;
+  }
+  default:
+    ((void (*)(void *, void *))property->set)(object,
+                                              g_value_get_object(value));
+    break;
+  }
+}
+
+/* Each property's `GParamSpec`, installed in `class_init` with the ids
+ * 1..count. Written with `EXPLICIT_NOTIFY`: the field's own writes notify,
+ * `g_object_set`'s among them, so GObject does not notify a second time. */
+static void nts_gobject_install_properties(GObjectClass *object_class,
+                                           NtsGObjectClassData *table) {
+  GParamFlags flags =
+      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS;
+  table->pspecs = g_new0(GParamSpec *, table->property_count);
+  object_class->get_property = nts_gobject_get_property;
+  object_class->set_property = nts_gobject_set_property;
+  for (size_t at = 0; at < table->property_count; at++) {
+    const NtsGObjectProperty *property = &table->properties[at];
+    GParamSpec *spec;
+    switch (property->kind) {
+    case 'd':
+      spec = g_param_spec_double(property->name, NULL, NULL, -G_MAXDOUBLE,
+                                 G_MAXDOUBLE, 0.0, flags);
+      break;
+    case 'b':
+      spec = g_param_spec_boolean(property->name, NULL, NULL, FALSE, flags);
+      break;
+    case 's':
+      spec = g_param_spec_string(property->name, NULL, NULL, "", flags);
+      break;
+    default:
+      spec =
+          g_param_spec_object(property->name, NULL, NULL, G_TYPE_OBJECT, flags);
+      break;
+    }
+    table->pspecs[at] = spec;
+    g_object_class_install_property(object_class, (guint)(at + 1), spec);
+  }
+}
+
 static void nts_gobject_class_init(gpointer klass, gpointer data) {
   NtsGObjectClassData *table = data;
   for (size_t at = 0; at < table->count; at++) {
     memcpy((char *)klass + table->slots[at].offset, &table->slots[at].entry,
            sizeof table->slots[at].entry);
+  }
+  if (table->property_count > 0) {
+    nts_gobject_install_properties(G_OBJECT_CLASS(klass), table);
   }
   if (table->owner == table) {
     GObjectClass *object_class = G_OBJECT_CLASS(klass);
@@ -340,6 +475,31 @@ void nts_gobject_made(void *object) {
 #else
   (void)object;
 #endif
+}
+
+void nts_gobject_set_properties(size_t type, const void *properties,
+                                size_t count) {
+  for (size_t at = 0; at < nts_gobject_class_count; at++) {
+    if (nts_gobject_classes[at]->type == (GType)type) {
+      nts_gobject_classes[at]->properties = properties;
+      nts_gobject_classes[at]->property_count = count;
+      return;
+    }
+  }
+}
+
+void *nts_gobject_property_spec(size_t type, unsigned index) {
+  /* The class's own, which `class_init` made: a reference to it makes it. */
+  gpointer klass = g_type_class_ref((GType)type);
+  g_type_class_unref(klass);
+  for (size_t at = 0; at < nts_gobject_class_count; at++) {
+    const NtsGObjectClassData *class = nts_gobject_classes[at];
+    if (class->type == (GType)type && class->pspecs &&
+        index < class->property_count) {
+      return class->pspecs[index];
+    }
+  }
+  return NULL;
 }
 
 void *nts_gobject_state(void *instance) {

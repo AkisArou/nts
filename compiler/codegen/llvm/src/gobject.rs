@@ -67,7 +67,7 @@ pub(super) fn is_chain(name: &str) -> bool {
 /// signal's emit -- which the program therefore must not also declare: LLVM
 /// refuses a definition of a name already declared.
 pub(super) fn defined_here(name: &str) -> bool {
-    is_chain(name) || name.starts_with("nts_gobject_emit_")
+    is_chain(name) || name.starts_with("nts_gobject_emit_") || name.starts_with("nts_gobject_notify_")
 }
 
 pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
@@ -76,6 +76,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     let mut parents = std::collections::BTreeSet::new();
     let mut out = chains(program, platform, &mut parents)?;
     out.push_str(&emits(program, platform)?);
+    out.push_str(&notifies(program));
     let classes = registered(program);
     if classes.is_empty() {
         return Ok(out);
@@ -86,6 +87,9 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
     if classes.iter().any(|class| !class.signals.is_empty()) {
         out.push_str("declare i32 @nts_gobject_add_signal(i64, ptr, ptr)\n");
+    }
+    if classes.iter().any(|class| !class.properties.is_empty()) {
+        out.push_str("declare void @nts_gobject_set_properties(i64, ptr, i64)\n");
     }
     for class in classes {
         let name = &class.name;
@@ -135,14 +139,9 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             None => "null".to_owned(),
         };
         // Its signals, added to the type the moment it exists.
-        let mut signals = String::new();
-        for (at, signal) in class.signals.iter().enumerate() {
-            bytes_constant(&mut out, &format!("nts_gobject_signal_{name}_{at}"), &signal.name);
-            bytes_constant(&mut out, &format!("nts_gobject_kinds_{name}_{at}"), &signal.kinds);
-            let _ = writeln!(
-                signals,
-                "  call i32 @nts_gobject_add_signal(i64 %made, ptr @nts_gobject_signal_{name}_{at}, ptr @nts_gobject_kinds_{name}_{at})"
-            );
+        let mut signals = registrations(&mut out, class);
+        if let Some(table) = properties(&mut out, program, class)? {
+            let _ = writeln!(signals, "  call void @nts_gobject_set_properties(i64 %made, ptr {table}, i64 {})", class.properties.len());
         }
         // A parent the program wrote is defined here, not declared.
         let parent = &class.superclass;
@@ -171,6 +170,99 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         }
     }
     Ok(out)
+}
+
+/// The calls adding a class's signals to its `GType` (`%made`), one per
+/// signal, with the constants they name written to `out`.
+fn registrations(out: &mut String, class: &ForeignClass) -> String {
+    let name = &class.name;
+    let mut calls = String::new();
+    for (at, signal) in class.signals.iter().enumerate() {
+        bytes_constant(out, &format!("nts_gobject_signal_{name}_{at}"), &signal.name);
+        bytes_constant(out, &format!("nts_gobject_kinds_{name}_{at}"), &signal.kinds);
+        let _ = writeln!(
+            calls,
+            "  call i32 @nts_gobject_add_signal(i64 %made, ptr @nts_gobject_signal_{name}_{at}, ptr @nts_gobject_kinds_{name}_{at})"
+        );
+    }
+    calls
+}
+
+/// A class's properties as the runtime's `get_property` and `set_property`
+/// reach them: a wrapper per accessor, entered and left as an entry point is,
+/// and the `{ name, kind, get, set }` table registration hands over. `None`
+/// for a class with none.
+fn properties(out: &mut String, program: &Program, class: &ForeignClass) -> Result<Option<String>, Diagnostic> {
+    if class.properties.is_empty() {
+        return Ok(None);
+    }
+    let name = &class.name;
+    let mut rows = Vec::new();
+    for (at, property) in class.properties.iter().enumerate() {
+        let find = |wanted: &str| program.funcs.iter().find(|func| func.name == wanted);
+        let (Some(get), Some(set)) = (find(&property.getter), find(&property.setter)) else {
+            let missing = "a GObject property whose accessor this program does not define";
+            return match program.funcs.first() {
+                Some(func) => Err(refuse(func, missing)),
+                None => Ok(None),
+            };
+        };
+        let value = ty_of(&get.return_type, get)?;
+        let _ = writeln!(
+            out,
+            "define internal {value} @nts_gobject_get_{name}_{at}(ptr %self) nounwind {{\n  call void @nts_callback_enter()\n  %r = call {value} {}(ptr %self)\n  call void @nts_callback_leave()\n  ret {value} %r\n}}",
+            symbol(&get.name)
+        );
+        let _ = writeln!(
+            out,
+            "define internal void @nts_gobject_set_{name}_{at}(ptr %self, {value} %v) nounwind {{\n  call void @nts_callback_enter()\n  call void {}(ptr %self, {value} %v)\n  call void @nts_callback_leave()\n  ret void\n}}",
+            symbol(&set.name)
+        );
+        bytes_constant(out, &format!("nts_gobject_property_{name}_{at}"), &property.name);
+        rows.push(format!(
+            "{{ ptr, i8, ptr, ptr }} {{ ptr @nts_gobject_property_{name}_{at}, i8 {}, ptr @nts_gobject_get_{name}_{at}, ptr @nts_gobject_set_{name}_{at} }}",
+            u32::from(property.kind)
+        ));
+    }
+    let _ = writeln!(
+        out,
+        "@nts_gobject_properties_{name} = internal constant [{} x {{ ptr, i8, ptr, ptr }}] [{}]",
+        rows.len(),
+        rows.join(", ")
+    );
+    Ok(Some(format!("@nts_gobject_properties_{name}")))
+}
+
+/// Each `nts_gobject_notify_{Class}_{index}` the program calls -- a write of
+/// a property's field -- defined as `g_object_notify_by_pspec` with the
+/// property's spec, found once and kept.
+fn notifies(program: &Program) -> String {
+    let mut out = String::new();
+    let mut done = std::collections::BTreeSet::new();
+    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_notify_") => Some(target),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((class, index)) = target.name.trim_start_matches("nts_gobject_notify_").rsplit_once('_') else { continue };
+        if done.len() == 1 {
+            out.push_str("declare ptr @nts_gobject_property_spec(i64, i32)\ndeclare void @g_object_notify_by_pspec(ptr, ptr)\n");
+        }
+        let thunk = &target.name;
+        let _ = writeln!(
+            out,
+            "@{thunk}.spec = internal global ptr null\n\
+             define void @{thunk}(ptr %self) nounwind {{\nentry:\n\
+             \x20 %kept = load ptr, ptr @{thunk}.spec\n  %none = icmp eq ptr %kept, null\n  br i1 %none, label %find, label %have\n\
+             find:\n  %type = call i64 @{PROGRAM_GTYPE}{class}()\n  %found = call ptr @nts_gobject_property_spec(i64 %type, i32 {index})\n\
+             \x20 store ptr %found, ptr @{thunk}.spec\n  br label %have\n\
+             have:\n  %spec = phi ptr [ %kept, %entry ], [ %found, %find ]\n\
+             \x20 call void @g_object_notify_by_pspec(ptr %self, ptr %spec)\n  ret void\n}}"
+        );
+    }
+    out
 }
 
 /// A NUL-terminated byte string constant, escaped as IR spells one: a signal's

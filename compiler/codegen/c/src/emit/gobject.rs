@@ -130,9 +130,12 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         }
         // Its signals, added to the type the moment it exists: before any
         // instance can be made or connected to.
-        let signals = registrations(class);
+        let mut signals = registrations(class);
         if !signals.is_empty() {
             writer.line(origin, "unsigned nts_gobject_add_signal(size_t type, const char *name, const char *kinds);");
+        }
+        if let Some(table) = properties(writer, origin, program, class)? {
+            let _ = write!(signals, " nts_gobject_set_properties(type, {table}, {}u);", class.properties.len());
         }
         writer.line(
             origin,
@@ -154,8 +157,41 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         }
     }
     let wrote = chains(writer, origin, program, wrote)?;
+    let wrote = notifies(writer, origin, program, wrote);
     emits(writer, origin, program, wrote);
     Ok(())
+}
+
+/// Each `nts_gobject_notify_{Class}_{index}` the program calls -- a write of
+/// a property's field -- defined as `g_object_notify_by_pspec` with the
+/// property's spec, found once and kept.
+fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
+    let mut done = std::collections::BTreeSet::new();
+    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_notify_") => Some(target),
+        _ => None,
+    }) {
+        if !done.insert(target.name.clone()) {
+            continue;
+        }
+        let Some((class, index)) = target.name.trim_start_matches("nts_gobject_notify_").rsplit_once('_') else { continue };
+        if !wrote {
+            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            wrote = true;
+        }
+        if done.len() == 1 {
+            writer.line(origin, "void *nts_gobject_property_spec(size_t type, unsigned index);");
+            writer.line(origin, "void g_object_notify_by_pspec(void *object, void *pspec);");
+        }
+        writer.line(
+            origin,
+            format!(
+                "void {}(void *self) {{ static void *spec; if (!spec) spec = nts_gobject_property_spec({PROGRAM_GTYPE}{class}(), {index}u); g_object_notify_by_pspec(self, spec); }}",
+                target.name
+            ),
+        );
+    }
+    wrote
 }
 
 /// The maker of a class's fields, entered and left as an entry point is, or
@@ -174,6 +210,50 @@ fn state_maker(writer: &mut CodeWriter, origin: &Origin, program: &Program, clas
         ),
     );
     Ok(format!("nts_gobject_state_maker_{name}"))
+}
+
+/// A class's properties as the runtime's `get_property` and `set_property`
+/// reach them: a wrapper per accessor, entered and left as an entry point is,
+/// and the `{ name, kind, get, set }` table registration hands over. `None`
+/// for a class with none.
+fn properties(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass) -> Result<Option<String>, Diagnostic> {
+    if class.properties.is_empty() {
+        return Ok(None);
+    }
+    let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
+    let name = &class.name;
+    writer.line(origin, "struct nts_gobject_property { const char *name; char kind; void (*get)(void); void (*set)(void); };");
+    writer.line(origin, "void nts_gobject_set_properties(size_t type, const void *properties, size_t count);");
+    let mut rows = Vec::new();
+    for (at, property) in class.properties.iter().enumerate() {
+        let find = |wanted: &str| {
+            program.funcs.iter().find(|func| func.name == wanted).ok_or_else(|| refuse("a GObject property whose accessor this program does not define"))
+        };
+        let (get, set) = (find(&property.getter)?, find(&property.setter)?);
+        let instance = c_type_of(program, &get.params[0].ty, &get.params[0].origin)?;
+        let value = c_type_of(program, &get.return_type, &get.origin)?;
+        writer.line(
+            origin,
+            format!(
+                "static {value} nts_gobject_get_{name}_{at}(void *self) {{ nts_callback_enter(); {value} r = {}(({instance})self); nts_callback_leave(); return r; }}",
+                c_identifier(&get.name)
+            ),
+        );
+        writer.line(
+            origin,
+            format!(
+                "static void nts_gobject_set_{name}_{at}(void *self, {value} v) {{ nts_callback_enter(); {}(({instance})self, v); nts_callback_leave(); }}",
+                c_identifier(&set.name)
+            ),
+        );
+        rows.push(format!(
+            "{{ {}, '{}', (void (*)(void))nts_gobject_get_{name}_{at}, (void (*)(void))nts_gobject_set_{name}_{at} }}",
+            c_string(&property.name),
+            property.kind
+        ));
+    }
+    writer.line(origin, format!("static const struct nts_gobject_property nts_gobject_properties_{name}[] = {{ {} }};", rows.join(", ")));
+    Ok(Some(format!("nts_gobject_properties_{name}")))
 }
 
 /// The calls adding a class's signals to its `GType`, one per signal.

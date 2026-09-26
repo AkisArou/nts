@@ -2196,6 +2196,33 @@ pub struct ForeignClass {
     /// `WithSignals` in `c:types`), registered on its `GType` after it.
     /// Empty for every other family.
     pub signals: Vec<ForeignSignal>,
+    /// The fields a `GObject` class declares as properties (`Property<T>`),
+    /// installed on its `GType` in order, as ids 1..n. Empty for every other
+    /// family.
+    pub properties: Vec<ForeignProperty>,
+}
+
+/// One property a `GObject` class the program writes declares: its name, its
+/// kind as a signal parameter's is spelled, and the compiled functions
+/// `get_property` and `set_property` reach its field through --
+/// `{Class}#get_{name}` answering the field, `{Class}#set_{name}` writing it,
+/// which notifies as every write of the field does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeignProperty {
+    pub name: String,
+    pub kind: char,
+    pub getter: String,
+    pub setter: String,
+}
+
+impl ForeignProperty {
+    /// The C function a write of the field calls after storing it:
+    /// `g_object_notify_by_pspec` with the property's spec, which the backend
+    /// defines beside the registration.
+    #[must_use]
+    pub fn notify_thunk(class: &str, index: usize) -> String {
+        format!("nts_gobject_notify_{class}_{index}")
+    }
 }
 
 /// One signal a `GObject` class the program writes declares: its name, and
@@ -2220,12 +2247,18 @@ impl ForeignSignal {
 
 impl ForeignClass {
     /// The compiled functions this class's runtime calls, each with borrowed
-    /// arguments, through an entry the backend emits: its methods, and the
-    /// maker of its fields' object. None takes over what it is passed,
+    /// arguments, through an entry the backend emits: its methods, the maker
+    /// of its fields' object, and a `GObject` property's accessors. None takes over what it is passed,
     /// whatever it stores (`own::Summaries`), since no caller of ours hands
     /// it a reference.
     pub fn entered(&self) -> impl Iterator<Item = &str> {
-        self.methods.iter().map(|method| method.function.as_str()).chain(self.state.as_deref())
+        self.methods
+            .iter()
+            .map(|method| method.function.as_str())
+            .chain(self.state.as_deref())
+            // A property's accessors, which `get_property` and `set_property`
+            // call with borrowed arguments.
+            .chain(self.properties.iter().flat_map(|property| [property.getter.as_str(), property.setter.as_str()]))
     }
 }
 

@@ -6009,6 +6009,7 @@ fn register_objc_class(
         state,
         composition: None,
         signals: Vec::new(),
+        properties: Vec::new(),
     });
 }
 
@@ -6152,7 +6153,8 @@ fn lower_class(
     }
     if let Some(parent) = gobject {
         let state = objc_state_function(snapshot, foreign, class, shared, lowered);
-        register_gobject_class(snapshot, class, parent, gobject_methods, state, lowered);
+        let properties = gobject_properties(snapshot, foreign, class, shared, lowered);
+        register_gobject_class(snapshot, class, parent, (gobject_methods, properties), state, lowered);
     }
     if let Some(composition) = super::native::composable_base(snapshot, class) {
         let state = objc_state_function(snapshot, foreign, class, shared, lowered);
@@ -6169,7 +6171,7 @@ fn register_gobject_class(
     snapshot: &SemanticSnapshot,
     class: NodeId,
     parent: String,
-    methods: Vec<super::ForeignMethod>,
+    (methods, properties): (Vec<super::ForeignMethod>, Vec<super::ForeignProperty>),
     state: Option<String>,
     lowered: &mut Lowered,
 ) {
@@ -6199,7 +6201,111 @@ fn register_gobject_class(
         state,
         composition: None,
         signals,
+        properties,
     });
+}
+
+/// The fields a class declares as `GObject` properties (`Property<T>` in
+/// `c:types`), in the order it writes them, each with its kind: a `number`
+/// (`d`), a `boolean` (`b`), a `string` (`s`) or a `GObject` handle (`o`).
+/// Anything else marked is refused by name.
+fn property_fields(snapshot: &SemanticSnapshot, class: NodeId) -> Result<Vec<(String, char)>, String> {
+    let Some(instance) = instance_type_of(snapshot, class) else { return Ok(Vec::new()) };
+    let kind = |ty: nts_semantic_schema::TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+    let marked = |ty: nts_semantic_schema::TypeId| super::native::schema::property(snapshot, ty, "___c_property").is_some();
+    let Some(TypeKind::Object { properties }) = kind(instance) else { return Ok(Vec::new()) };
+    let mut fields = Vec::new();
+    for field in properties.iter().filter(|p| p.own && p.kind == MemberKind::Field) {
+        // `Property<boolean>` distributes: `(true & P) | (false & P)`.
+        let parts: Vec<nts_semantic_schema::TypeId> = match kind(field.ty) {
+            Some(TypeKind::Union(parts)) => parts.clone(),
+            _ => vec![field.ty],
+        };
+        if !parts.iter().all(|part| marked(*part)) {
+            continue;
+        }
+        let under = |part: nts_semantic_schema::TypeId| -> Vec<nts_semantic_schema::TypeId> {
+            match kind(part) {
+                Some(TypeKind::Intersection(pieces)) => pieces.clone(),
+                _ => vec![part],
+            }
+        };
+        let pieces: Vec<nts_semantic_schema::TypeId> = parts.iter().flat_map(|part| under(*part)).collect();
+        let has = |want: fn(&TypeKind) -> bool| pieces.iter().any(|piece| kind(*piece).is_some_and(want));
+        let property_kind = if has(|k| matches!(k, TypeKind::Number)) {
+            'd'
+        } else if has(|k| matches!(k, TypeKind::String)) {
+            's'
+        } else if has(|k| matches!(k, TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)))) {
+            'b'
+        } else if matches!(
+            super::native::pointer(snapshot, field.ty),
+            Some(super::native::Pointee::Opaque(ref handle)) if handle.family == super::native::Family::GObject
+        ) {
+            'o'
+        } else {
+            return Err(format!(
+                "a property `{}` of type {}, where a property is a `number`, a `boolean`, a `string` or a GObject",
+                field.name,
+                describe(snapshot, field.ty)
+            ));
+        };
+        fields.push((field.name.clone(), property_kind));
+    }
+    Ok(fields)
+}
+
+/// Where `property` stands among the properties `class` declares: its id,
+/// less one.
+fn fields_index(snapshot: &SemanticSnapshot, class: NodeId, property: &str) -> usize {
+    property_fields(snapshot, class).ok().and_then(|fields| fields.iter().position(|(name, _)| name == property)).unwrap_or(0)
+}
+
+/// Each property a class declares, with the compiled functions reading and
+/// writing its field (`{Class}#get_{name}`, `{Class}#set_{name}`), which the
+/// backend's registration hands `get_property` and `set_property`. Empty for a
+/// class with none; a refusal is reported, and the class registers without.
+fn gobject_properties(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    class: NodeId,
+    shared: &Shared,
+    lowered: &mut Lowered,
+) -> Vec<super::ForeignProperty> {
+    let refuse = |lowered: &mut Lowered, diagnostic: Diagnostic| {
+        note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+        lowered.diagnostics.push(diagnostic);
+    };
+    let fields = match property_fields(snapshot, class) {
+        Ok(fields) => fields,
+        Err(why) => {
+            refuse(lowered, FuncBuilder::probe(snapshot).unsupported(class, &why));
+            return Vec::new();
+        }
+    };
+    let Some(name) = foreign_class_name(snapshot, class) else { return Vec::new() };
+    let Some(&(index, class_ty)) = shared.hierarchy.objc_states.get(&name) else { return Vec::new() };
+    let mut properties = Vec::new();
+    for (field, kind) in fields {
+        let mut accessors = Vec::new();
+        for setter in [false, true] {
+            let mut builder = shared.builder(snapshot, foreign, Copy::default());
+            match builder.lower_gobject_property_accessor(class, &name, (index, class_ty), &field, setter) {
+                Ok(func) => {
+                    accessors.push(func.name.clone());
+                    lowered.program.funcs.push(func);
+                    collect_layouts(&mut lowered.program, builder.layouts);
+                }
+                Err(diagnostic) => {
+                    refuse(lowered, diagnostic);
+                    return Vec::new();
+                }
+            }
+        }
+        let [getter, setter] = <[String; 2]>::try_from(accessors).unwrap_or_default();
+        properties.push(super::ForeignProperty { name: field, kind, getter, setter });
+    }
+    properties
 }
 
 /// The signals a class declares, read off its instance type's
@@ -6372,6 +6478,7 @@ fn register_com_class(
         state,
         composition: Some(composition),
         signals: Vec::new(),
+        properties: Vec::new(),
     });
 }
 
@@ -10474,6 +10581,22 @@ fn declares_storage(properties: &[nts_semantic_schema::PropertyRecord]) -> bool 
         .any(|property| property.own && property.kind.is_stored())
 }
 
+/// The one type a `Property<T>` intersection holds beside its brand -- an
+/// object whose only property is the optional `__c_property` -- or `None` for
+/// any other intersection.
+fn property_branded(snapshot: &SemanticSnapshot, parts: &[TypeId]) -> Option<TypeId> {
+    let brand = |id: &TypeId| {
+        matches!(snapshot.types.get(id.0 as usize).map(|record| &record.kind), Some(TypeKind::Object { properties })
+            if matches!(properties.as_slice(), [p] if p.name == "___c_property" && p.optional && p.readonly))
+    };
+    let [a, b] = parts else { return None };
+    match (brand(a), brand(b)) {
+        (true, false) => Some(*b),
+        (false, true) => Some(*a),
+        _ => None,
+    }
+}
+
 fn representation_within(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
@@ -11420,6 +11543,13 @@ fn representation_of(
         TypeKind::Intersection(_) if super::native::is_branded_string(snapshot, ty) => {
             HirType::Managed(ManagedType::String)
         }
+        // A `GObject` property's field (`Property<T>` in `c:types`): `T` beside
+        // a brand that is optional and never exists, so exactly a `T`. The
+        // brand is read where the class registers, not here.
+        TypeKind::Intersection(parts) if property_branded(snapshot, parts).is_some() => {
+            let rest = property_branded(snapshot, parts)?;
+            representation_within(snapshot, rest, path, subst)?
+        }
         // And one half of a `CBool` (`true & brand`): exactly a boolean, for
         // the same reason -- its brand is optional and never exists. A whole
         // `CBool` is the union of both, which the union arm above builds from
@@ -12150,6 +12280,10 @@ struct FuncBuilder<'a> {
     /// arguments are lowered: each is lowered a property at a time and never
     /// built (`Role::Label`).
     labels_pending: rustc_hash::FxHashSet<NodeId>,
+    /// A `GObject` class's state field that is a property (`Property<T>`),
+    /// as a place resolved it -- the state object and the field -- with the
+    /// instance and the thunk a write of it calls to notify.
+    notifying: rustc_hash::FxHashMap<(ValueId, u32), (ValueId, String)>,
     /// Each boxed record's pointer `coerce` read out of a box for a C
     /// argument, and the box: the call that passes the pointer lends the box
     /// (`Lent::Boxed`), so it lives until C is done with it.
@@ -12393,6 +12527,7 @@ impl<'a> FuncBuilder<'a> {
             sources: super::generics::Sources::default(),
             omitting_for: None,
             labels_pending: rustc_hash::FxHashSet::default(),
+            notifying: rustc_hash::FxHashMap::default(),
             unboxed: rustc_hash::FxHashMap::default(),
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
@@ -15145,7 +15280,76 @@ impl<'a> FuncBuilder<'a> {
         let ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
         let origin = self.origin(id);
         let object = self.runtime_call(reader, vec![receiver], ty, origin);
+        if reader == "nts_gobject_state"
+            && let Some(thunk) = self.property_notify_thunk(class_ty, member)
+        {
+            self.notifying.insert((object, field), (receiver, thunk));
+        }
         Ok(Some(Place::Field { object, field }))
+    }
+
+    /// The thunk a write of `member` notifies through, where `member` is a
+    /// property (`Property<T>`) of a class in the chain of `class_ty`: the
+    /// declaring class's own, numbered as its registration numbers them.
+    fn property_notify_thunk(&self, class_ty: TypeId, member: &str) -> Option<String> {
+        for ty in self.objc_chain(class_ty) {
+            let symbol = self.snapshot.types.get(ty.0 as usize)?.symbol?;
+            let class = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().copied().find(|d| {
+                self.kind_of(*d) == Some(syntax::CLASS_DECLARATION)
+            })?;
+            let fields = property_fields(self.snapshot, class).ok()?;
+            if let Some(at) = fields.iter().position(|(name, _)| name == member) {
+                let name = foreign_class_name(self.snapshot, class)?;
+                return Some(super::ForeignProperty::notify_thunk(&name, at));
+            }
+        }
+        None
+    }
+
+    /// The function `get_property` (`setter` false) or `set_property` calls
+    /// for one property of a `GObject` class the program writes: the field of
+    /// the instance's state, read and answered, or written -- through
+    /// `write_place`, so it notifies as any write of the field does.
+    fn lower_gobject_property_accessor(
+        &mut self,
+        class: NodeId,
+        name: &str,
+        (index, class_ty): (usize, TypeId),
+        property: &str,
+        setter: bool,
+    ) -> Result<Func, Diagnostic> {
+        let origin = self.origin(class);
+        let instance = instance_type_of(self.snapshot, class)
+            .and_then(|ty| self.represent(ty))
+            .ok_or_else(|| self.unsupported(class, "a GObject class with no handle type"))?;
+        let layout = self.objc_state_layout(class, index, class_ty)?;
+        let field = layout
+            .index_of(property)
+            .ok_or_else(|| self.unsupported(class, &format!("a property `{property}` that is not a field of the class's state")))?;
+        let field_ty = layout.fields[field as usize].ty.clone();
+        // The parameters first: each is the value its position names.
+        let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
+        self.this = Some(receiver);
+        let mut params = vec![Param { name: "this".to_owned(), shape: ParamShape::Ordinary, ty: instance, origin: origin.clone(), known: Facts::TOP }];
+        let value = setter.then(|| {
+            params.push(Param { name: "value".to_owned(), shape: ParamShape::Ordinary, ty: field_ty.clone(), origin: origin.clone(), known: Facts::TOP });
+            self.push(OpKind::Param(1), field_ty.clone(), origin.clone())
+        });
+        let state_ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
+        let state = self.runtime_call("nts_gobject_state", vec![receiver], state_ty, origin.clone());
+        if let Some(value) = value {
+            let at = fields_index(self.snapshot, class, property);
+            self.notifying.insert((state, field), (receiver, super::ForeignProperty::notify_thunk(name, at)));
+            self.returns = HirType::Void;
+            self.write_place(class, &Place::Field { object: state, field }, value)?;
+            self.terminate(Terminator::Return(None));
+            Ok(self.finish(format!("{name}#set_{property}"), params, HirType::Void, origin, false))
+        } else {
+            let value = self.push(OpKind::FieldGet { object: state, field }, field_ty.clone(), origin.clone());
+            self.returns = field_ty.clone();
+            self.terminate(Terminator::Return(Some(value)));
+            Ok(self.finish(format!("{name}#get_{property}"), params, field_ty, origin, false))
+        }
     }
 
     /// The state of the class the program writes that the receiver of
@@ -30748,6 +30952,21 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// After a store into a `GObject` property's field (`notifying`): the
+    /// change `GObject` announces (`notify::name`), by the property's spec.
+    fn notify_property(&mut self, id: NodeId, slot: (ValueId, u32), origin: Origin) -> Result<(), Diagnostic> {
+        let Some((instance, thunk)) = self.notifying.get(&slot).cloned() else { return Ok(()) };
+        let void = HirType::NativePointer(super::native::Pointee::Void);
+        let instance = self.coerce(instance, &void, id)?;
+        let notify = synthesized(&thunk, vec![super::native::Type::Pointer(super::native::Pointee::Void)], super::native::Type::Void, None, Vec::new());
+        self.push(
+            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(notify)), args: vec![instance], frame: None },
+            HirType::Void,
+            origin,
+        );
+        Ok(())
+    }
+
     fn write_place(
         &mut self,
         id: NodeId,
@@ -30785,6 +31004,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Place::Field { object, field } => {
                 self.field_set(object, field, value, &origin);
+                self.notify_property(id, (object, field), origin)?;
             }
             // `xs.length = n`. The variant follows the element, the same way
             // every other array helper's does -- and it is the whole point

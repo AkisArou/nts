@@ -27,6 +27,11 @@
 //                 boolean, `adopted` with a GObject.
 //                 Registered on `Tally`'s own `GType`, so nothing is emitted
 //                 by name: a class that declared none reads `tally` alone
+//   notes title done weight title a b true 2.5  properties `Note`
+//                 declares (`Property<T>`): each write of one notifies with
+//                 its name -- `plain`, a field only, does not -- and
+//                 `bind_property` reads `title` through `get_property`, then
+//                 writes `b` back through `set_property`, which notifies too
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
@@ -54,8 +59,8 @@ import {
   Orientation,
   type GtkOrientation,
 } from "c:Gtk-4.0";
-import { g_type_name_from_instance } from "c:GObject-2.0";
-import type { CEnum, CNumber, Ptr, c_uint } from "c:types";
+import { BindingFlags, GObject, g_object_bind_property, g_type_name_from_instance } from "c:GObject-2.0";
+import type { CEnum, CNumber, Property, Ptr, c_uint } from "c:types";
 import { local } from "c:memory";
 import { sub_emit, sub_log } from "c:sub";
 
@@ -151,6 +156,35 @@ function tally(): string {
   t.emit("toggled", true);
   t.emit("adopted", new GtkLabel({ label: "kid" }));
   return "tally " + seen.trim();
+}
+
+// Properties a class declares, GJS's `Properties`: `title`, `done` and
+// `weight` are fields the class reads and writes as any other, and GObject
+// properties too; `plain` is a field and nothing more.
+class Note extends GObject {
+  title: Property<string> = "";
+  done: Property<boolean> = false;
+  weight: Property<number> = 0;
+  plain = 1;
+}
+
+function notes(): string {
+  const note = new Note({});
+  let seen = "";
+  note.connect("notify", (_self, pspec) => {
+    seen += " " + pspec.get_name();
+  });
+  note.title = "a";
+  note.done = true;
+  note.weight = 2.5;
+  note.plain = 2;
+  // Read through `get_property` (`SYNC_CREATE` copies the title across),
+  // then written back through `set_property` (`BIDIRECTIONAL`).
+  const label = new GtkLabel({ label: "" });
+  g_object_bind_property(note, "title", label, "label", BindingFlags.SYNC_CREATE | BindingFlags.BIDIRECTIONAL);
+  const synced = label.label ?? "";
+  label.set_label("b");
+  return "notes" + seen + " " + synced + " " + note.title + " " + String(note.done) + " " + String(note.weight);
 }
 
 class Square extends GtkWidget {
@@ -275,6 +309,7 @@ function main(): void {
   sub_log("greeter " + g_type_name_from_instance(greeter));
   sub_log(framed());
   sub_log(tally());
+  sub_log(notes());
 
   const square = new Square({});
   const width = local<CNumber<"int">>();
