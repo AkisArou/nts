@@ -13619,6 +13619,99 @@ impl<'a> FuncBuilder<'a> {
         self.represent(signature.return_type)
     }
 
+    /// The return type a function expression's **context** gives it, where its
+    /// own inferred one has no representation.
+    ///
+    /// Contextual typing gives an arrow's *parameters* their types and leaves its
+    /// return inferred from the body, so
+    ///
+    /// ```ts
+    /// const make: (name: string) => Task | null = (_name) => null;
+    /// ```
+    ///
+    /// has the checker answering `(_name: string) => null` for the arrow itself.
+    /// `null` has no representation of its own, so `declared_return` came back
+    /// `None` and `return_type_of` refused by name -- while the same arrow written
+    /// `(_name): Task | null =>` compiles and agrees with node. The React lane
+    /// reported it at 20 cascades; it is also what was left on the statement
+    /// `7bee3c808` was about.
+    ///
+    /// **The contextual signature is already decomposed**, which is why this needs
+    /// no `getContextualType` and no schema change. `nts types` on the line above
+    /// prints the arrow's own `(_name: #4) -> #5` beside the annotation's
+    /// `(name: #4) -> #1`, and `#1` represents.
+    ///
+    /// **Only the immediate context, named rather than searched.** Walking up for
+    /// "the nearest function type" would find the *enclosing* function for an
+    /// arrow written inside one, and take its return type -- a wrong answer rather
+    /// than a refusal, in a function that compiles. So the parent must be a
+    /// position that actually supplies a contextual type, and this admits one:
+    /// a variable declaration whose initializer the function is. An argument at a
+    /// parameter position is the other common one (`scheduleCallback(priority, ()
+    /// => { ...; return null; })`) and is a second change, because it has to
+    /// resolve the call's signature and the argument's index and can be wrong in
+    /// ways this cannot.
+    ///
+    /// Taking a *wider* type than the body returns is the safe direction and the
+    /// only one reachable: the body's value is coerced at the `return`, exactly as
+    /// a written annotation already makes it, and a contextual type narrower than
+    /// the body returns is an assignment the checker would have rejected.
+    fn contextual_return(&self, id: NodeId) -> Option<HirType> {
+        if !matches!(
+            self.kind_of(id),
+            Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
+        ) {
+            return None;
+        }
+        // Through a conditional and through parentheses, because that is where
+        // the shape this was written for actually lives:
+        //
+        //     const createTask: (name: string) => Task | null =
+        //       isDevelopment && ... ? (name) => ... : (_name) => null;
+        //
+        // Both arms of a conditional have the conditional's own contextual type,
+        // so recursing is sound and stopping at the immediate parent is what made
+        // the first version of this clear **nothing** on the corpus it was written
+        // for -- the arrow's parent there is the `?:`, not the declaration.
+        // [`Self::contextual_type`] recurses through the same two node kinds for
+        // the same reason.
+        //
+        // The *condition* is excluded: it has no contextual type from the
+        // declaration, and an arrow written there would otherwise be given the
+        // declaration's return type, which is a wrong answer rather than a
+        // refusal.
+        let mut child = id;
+        let mut parent = self.syntactic_parent(id)?;
+        for _ in 0..8 {
+            match self.kind_of(parent) {
+                Some(syntax::PARENTHESIZED_EXPRESSION) => {},
+                Some(syntax::CONDITIONAL_EXPRESSION) => {
+                    if self.children(parent).first().copied() == Some(child) {
+                        return None;
+                    }
+                },
+                _ => break,
+            }
+            child = parent;
+            parent = self.syntactic_parent(parent)?;
+        }
+        if self.kind_of(parent) != Some(syntax::VARIABLE_DECLARATION) {
+            return None;
+        }
+        // The initializer and not the name, so `const f = ...` cannot read its
+        // own binding's type when the binding is what the arrow defines.
+        if self.children(parent).last().copied() != Some(child) {
+            return None;
+        }
+        let ty = self.snapshot.node_types.get(&parent).copied()?;
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        let nts_semantic_schema::TypeKind::Function(signature) = record.kind else {
+            return None;
+        };
+        let signature = self.snapshot.signatures.get(signature.0 as usize)?;
+        self.represent(signature.return_type)
+    }
+
     fn declared_return(&self, id: NodeId) -> Option<HirType> {
         // **A `get` accessor's node type is the property it defines**, not a
         // function type, so the signature branch below can never match one and
@@ -13648,6 +13741,9 @@ impl<'a> FuncBuilder<'a> {
             && let Some(signature) = self.snapshot.signatures.get(signature.0 as usize)
             && let Some(returned) = self.represent(signature.return_type)
         {
+            return Some(returned);
+        }
+        if let Some(returned) = self.contextual_return(id) {
             return Some(returned);
         }
 
@@ -18957,7 +19053,14 @@ impl<'a> FuncBuilder<'a> {
                 Err(error) => Err(error),
             }
         } else {
-            self.lower_expression(body).map(|value| {
+            // **Lowered *expecting* the return type**, which is what a block
+            // body's `return` already does and a concise body did not. A bare
+            // `null` takes its representation from what it stands in for, so
+            // `const f: (n: string) => Task | null = (_n) => null` refused --
+            // `null` with nothing expected is not a reference -- while the same
+            // body written `{ return null; }` compiled. The two spellings are the
+            // same function, which is the sentence four lines above this one.
+            self.lower_expecting(body, &return_type).map(|value| {
                 // `x => f(x)` where `f` returns nothing. The call happens and
                 // there is no value to carry: C cannot `return` one from a
                 // void function, and the emitter declares no variable for a
