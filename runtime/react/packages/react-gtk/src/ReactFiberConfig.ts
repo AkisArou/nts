@@ -125,8 +125,9 @@ export function createTextInstance(text: string, _root: GtkContainer, _hostConte
 export function appendInitialChild(parentInstance: HostNode, child: HostNode): void {
   parentInstance.appendChild(child);
 }
-export function finalizeInitialChildren(_instance: HostNode, _type: string, _props: Props, _hostContext: HostContext): boolean {
-  return false;
+// A window is presented once its tree is committed (WidgetNode.commitMount).
+export function finalizeInitialChildren(instance: HostNode, _type: string, _props: Props, _hostContext: HostContext): boolean {
+  return instance.needsCommitMount();
 }
 export function cloneMutableInstance(instance: HostNode, _keepChildren: boolean): HostNode {
   return instance;
@@ -142,6 +143,11 @@ export function appendChildToContainer(container: GtkContainer, child: HostNode)
   const widget = child.widgetNode();
   if (widget === null) {
     throw new Error(`<${child.name()}> goes directly inside its widget, not in a window's root.`);
+  }
+  // A window rendered at the root opens over the root's window.
+  if (widget.isToplevel()) {
+    widget.openFrom(container.window);
+    return;
   }
   if (container.child !== null && container.child !== widget) {
     throw new Error("A GTK window holds one child: wrap its children in a <Box>.");
@@ -159,6 +165,11 @@ export function removeChild(parentInstance: HostNode, child: HostNode): void {
   parentInstance.removeChild(child);
 }
 export function removeChildFromContainer(container: GtkContainer, child: HostNode): void {
+  const widget = child.widgetNode();
+  if (widget !== null && widget.isToplevel()) {
+    widget.close();
+    return;
+  }
   if (container.child === child) {
     container.child = null;
     container.window.set_child(null);
@@ -170,7 +181,9 @@ export function clearContainer(container: GtkContainer): void {
 }
 
 export function commitTextUpdate(_textInstance: HostNode, _oldText: string, _newText: string): void {}
-export function commitMount(_instance: HostNode, _type: string, _newProps: Props, _handle: object): void {}
+export function commitMount(instance: HostNode, _type: string, _newProps: Props, _handle: object): void {
+  instance.commitMount();
+}
 export function commitUpdate(instance: HostNode, _type: string, oldProps: Props, newProps: Props, _handle: object): void {
   instance.applyProps(oldProps, newProps);
 }

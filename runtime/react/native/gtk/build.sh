@@ -54,6 +54,7 @@ notebook 0,1,2 two 2
 bar b1>b2 e1>e2 b0>b1 b1>-
 overlay true true true>false true
 fixed 12,40>5,40
+window true true false>true over=true closed=true
 slot side,main side,none none,none titled=true
 work timer"
 

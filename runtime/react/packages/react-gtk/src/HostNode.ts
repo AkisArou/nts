@@ -14,7 +14,7 @@
 // window needs. Each subclass also holds it typed as what it is, in its own
 // `gtk` field, so its setters are the widget's own methods, with no cast.
 
-import type { GtkWidget } from "c:Gtk-4.0";
+import { type GtkWidget, GtkWindow } from "c:Gtk-4.0";
 import { g_idle_add_full } from "c:GLib-2.0";
 
 import { connectController, Controllers } from "./controllers.ts";
@@ -224,6 +224,13 @@ export abstract class HostNode {
   /** This node as a widget's, or null for a slot element. */
   abstract widgetNode(): WidgetNode | null;
 
+  /** Whether the node has work for the commit phase once it is placed (`commitMount`). */
+  needsCommitMount(): boolean {
+    return false;
+  }
+  /** The node's commit-phase work, after the tree it is in has been placed. */
+  commitMount(): void {}
+
   /** What a ref to the element holds: a widget. */
   abstract publicInstance(): GtkWidget;
 
@@ -245,6 +252,8 @@ export abstract class WidgetNode extends HostNode {
   private slots: Map<string, SignalSlot> | null = null;
   // The event controllers input props added (`onKeyPressed`), made on first use.
   private controllers: Controllers | null = null;
+  // For a window: the widget, or the root's window, that it was opened from.
+  private opener: GtkWidget | null = null;
   // The props last applied: a controlled prop is put back to its value here.
   private props: Props | null = null;
   // The one child a single-child widget holds.
@@ -424,8 +433,47 @@ export abstract class WidgetNode extends HostNode {
     child.takeOutOf(this);
   }
 
+  // A window is a toplevel wherever it is rendered: a dialog a component opens
+  // from inside the tree. Placing one records what opened it. It is presented
+  // at commit (React places a new tree during render, which can be thrown
+  // away, and before that tree is in any window), over the window its opener
+  // is in, and destroyed when React takes it out.
+  /** Whether this is a window, which opens as a toplevel rather than going into its parent. */
+  isToplevel(): boolean {
+    return this.widget instanceof GtkWindow;
+  }
+  /** A window, opened from `opener`. */
+  openFrom(opener: GtkWidget): void {
+    this.opener = opener;
+  }
+  /** A window, closed. */
+  close(): void {
+    const window = this.widget;
+    if (window instanceof GtkWindow) {
+      window.destroy();
+    }
+    this.opener = null;
+  }
+  needsCommitMount(): boolean {
+    return this.isToplevel();
+  }
+  commitMount(): void {
+    const window = this.widget;
+    if (!(window instanceof GtkWindow)) {
+      return;
+    }
+    const opener = this.opener;
+    const over = opener === null ? null : opener.get_root();
+    window.set_transient_for(over instanceof GtkWindow ? over : null);
+    window.present();
+  }
+
   // A widget goes among its parent's children, by the parent's protocol.
   placeIn(parent: WidgetNode, before: HostNode | null): void {
+    if (this.isToplevel()) {
+      this.openFrom(parent.widget);
+      return;
+    }
     // Before a slot element is last among the children: only single-child
     // widgets have slots (the generator checks), and they hold one.
     const sibling = before === null ? null : before.widgetNode();
@@ -436,6 +484,10 @@ export abstract class WidgetNode extends HostNode {
     }
   }
   takeOutOf(parent: WidgetNode): void {
+    if (this.isToplevel()) {
+      this.close();
+      return;
+    }
     parent.unplace(this);
   }
 

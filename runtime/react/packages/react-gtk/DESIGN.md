@@ -48,6 +48,7 @@ contract the noop renderer and the test host implement.
 | `commitUpdate(old, new)` | for each changed property, its setter; for signals, see below |
 | `appendChild` / `insertBefore` / `removeChild` | the parent's container protocol (below) |
 | `appendChildToContainer` | the window's `set_child`, or the application's window list |
+| `finalizeInitialChildren` / `commitMount` | a window is presented at commit (below) |
 | `hideInstance` / `unhideInstance` | `set_visible(false)` / `set_visible(true)`, for Suspense and Activity |
 | `scheduleMicrotask` | nts's microtask queue |
 | the scheduler host (`SchedulerHost.ts`) | GLib: `g_get_monotonic_time` for `now`, `g_idle_add_full` to post work, `g_timeout_add_full` for timers |
@@ -79,6 +80,16 @@ reads it back).
 
 A widget with no child protocol refuses children at `appendInitialChild`,
 with a message naming the widget.
+
+**A window is a toplevel wherever it is rendered.** A component can render a
+dialog (`<Window>`, `<AboutDialog>`) inside its tree, and the dialog opens
+over the window that tree is in, not as a child, which GTK does not allow.
+Placing a window records what opened it and nothing more, because React
+places a new tree during render, which can be thrown away, and before that
+tree is in any window. `finalizeInitialChildren` asks for a commit mount,
+and `commitMount` presents the window, transient for the window its opener
+is in. Taking it out destroys it, so unmounting a dialog closes it. A window
+rendered at the root opens over the root's window the same way.
 
 **Lifetime.** A fiber's `stateNode` holds the widget. Cycles between fibers
 and GObjects (a closure capturing a widget, connected to that widget) are the

@@ -66,6 +66,9 @@
 //             Overlay.Layer's child over it; the layer's `measure` updates in
 //             place; the layer removed leaves the Overlay
 //   fixed     a Fixed.Child puts its child at its position and moves it
+//   window    a Window rendered inside the tree is a toplevel, not a child:
+//             placed in a Box it is not parented or shown; at commit it is
+//             presented over the root's window; taken out, it is destroyed
 //   slot      slot elements fill a Paned's start and end children, their
 //             children placed first as React completes them; a child removed
 //             from its slot element empties the slot, and so does the slot
@@ -104,8 +107,10 @@ import {
 import {
   appendChildToContainer,
   appendInitialChild,
+  commitMount,
   commitUpdate,
   createInstance,
+  finalizeInitialChildren,
   getCurrentUpdatePriority,
   getPublicInstance,
   GtkContainer,
@@ -133,6 +138,7 @@ import {
   PanedNode,
   ScaleNode,
   StackNode,
+  WindowNode,
 } from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
 
@@ -590,6 +596,19 @@ function main(): void {
   commitUpdate(spot, "GtkFixed.Child", { x: 12, y: 40 }, { x: 5, y: 40 }, {});
   position += ">" + placedAt();
   react_gtk_log("fixed " + position);
+
+  const dialog = createInstance("GtkWindow", { title: "Dialog" }, container, 0, {});
+  const wantsMount = finalizeInitialChildren(dialog, "GtkWindow", { title: "Dialog" }, 0);
+  appendInitialChild(root, dialog);
+  const beforeCommit = String(widget(dialog).get_parent() === null) + " " + String(widget(dialog).get_visible());
+  commitMount(dialog, "GtkWindow", { title: "Dialog" }, {});
+  const opened = dialog instanceof WindowNode ? dialog.gtk : null;
+  const overRoot = opened !== null && opened.get_transient_for() === container.window;
+  const presented = widget(dialog).get_visible();
+  removeChild(root, dialog);
+  react_gtk_log(
+    "window " + String(wantsMount) + " " + beforeCommit + ">" + String(presented) + " over=" + String(overRoot) + " closed=" + String(!widget(dialog).get_visible()),
+  );
 
   const paned = createInstance("GtkPaned", {}, container, 0, {});
   const startSlot = createInstance("GtkPaned.StartChild", {}, container, 0, {});
