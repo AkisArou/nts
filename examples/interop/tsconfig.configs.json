@@ -57,6 +57,7 @@
     "ios-hello/nts.config.ts",
     "ios-list/nts.config.ts",
     "ios-nav/nts.config.ts",
+    "ios-form/nts.config.ts",
     "macos-draw/nts.config.ts",
     "macos-notes/nts.config.ts",
     "native-string/nts.config.ts",

@@ -8,7 +8,7 @@
 declare module "objc:AppKit" {
   import type { ByValue, CEnum, Fields, Ptr, Struct } from "c:types";
   import type { ClassObject, Selector } from "objc:runtime";
-  import type { CGFloat, CString, Double, Float, Int, Int16, Int32, Int64, ObjCBool, TimeInterval, UInt, UInt16, UInt64 } from "objc:types";
+  import type { BridgedString, CGFloat, CString, Double, Float, Int, Int16, Int32, Int64, ObjCBool, TimeInterval, UInt, UInt16, UInt64 } from "objc:types";
 
   export type CGPoint = Struct<{ x: Double; y: Double }, "CGPoint">;
 
@@ -1886,6 +1886,12 @@ declare module "objc:AppKit" {
     rulerView(ruler: NSRulerView, labels: { pointForLocation: CGFloat }): ByValue<CGPoint>;
     /** @ntsSelector self */
     self(): NSView;
+    /** @ntsSymbol NSViewBoundsDidChangeNotification */
+    static get boundsDidChangeNotification(): BridgedString;
+    /** @ntsSymbol NSViewDidUpdateTrackingAreasNotification */
+    static get didUpdateTrackingAreasNotification(): BridgedString;
+    /** @ntsSymbol NSViewFrameDidChangeNotification */
+    static get frameDidChangeNotification(): BridgedString;
     // Not bound, each for the reason given:
     //   @property canDraw: deprecated in macOS 10.14
     //   @property acceptsTouchEvents: deprecated in macOS 10.12
@@ -1910,6 +1916,8 @@ declare module "objc:AppKit" {
     //   -releaseGState: deprecated in macOS 10.10
     //   -setUpGState: deprecated in macOS 10.10
     //   -renewGState: deprecated in macOS 10.10
+    //   NSViewGlobalFrameDidChangeNotification: deprecated in macOS 10.14
+    //   NSViewNoIntrinsicMetric: a `const double`
   }
 
   /** @ntsClass NSWindow */
@@ -2376,6 +2384,68 @@ declare module "objc:AppKit" {
     enableSnapshotRestoration(): void;
     /** @ntsSelector self */
     self(): NSWindow;
+    /** @ntsSymbol NSBackingPropertyOldColorSpaceKey */
+    static get oldColorSpaceUserInfoKey(): BridgedString;
+    /** @ntsSymbol NSBackingPropertyOldScaleFactorKey */
+    static get oldScaleFactorUserInfoKey(): BridgedString;
+    /** @ntsSymbol NSWindowDidBecomeKeyNotification */
+    static get didBecomeKeyNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidBecomeMainNotification */
+    static get didBecomeMainNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidChangeBackingPropertiesNotification */
+    static get didChangeBackingPropertiesNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidChangeOcclusionStateNotification */
+    static get didChangeOcclusionStateNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidChangeScreenNotification */
+    static get didChangeScreenNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidChangeScreenProfileNotification */
+    static get didChangeScreenProfileNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidDeminiaturizeNotification */
+    static get didDeminiaturizeNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidEndLiveResizeNotification */
+    static get didEndLiveResizeNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidEndSheetNotification */
+    static get didEndSheetNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidEnterFullScreenNotification */
+    static get didEnterFullScreenNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidEnterVersionBrowserNotification */
+    static get didEnterVersionBrowserNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidExitFullScreenNotification */
+    static get didExitFullScreenNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidExitVersionBrowserNotification */
+    static get didExitVersionBrowserNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidExposeNotification */
+    static get didExposeNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidMiniaturizeNotification */
+    static get didMiniaturizeNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidMoveNotification */
+    static get didMoveNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidResignKeyNotification */
+    static get didResignKeyNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidResignMainNotification */
+    static get didResignMainNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidResizeNotification */
+    static get didResizeNotification(): BridgedString;
+    /** @ntsSymbol NSWindowDidUpdateNotification */
+    static get didUpdateNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillBeginSheetNotification */
+    static get willBeginSheetNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillCloseNotification */
+    static get willCloseNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillEnterFullScreenNotification */
+    static get willEnterFullScreenNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillEnterVersionBrowserNotification */
+    static get willEnterVersionBrowserNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillExitFullScreenNotification */
+    static get willExitFullScreenNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillExitVersionBrowserNotification */
+    static get willExitVersionBrowserNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillMiniaturizeNotification */
+    static get willMiniaturizeNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillMoveNotification */
+    static get willMoveNotification(): BridgedString;
+    /** @ntsSymbol NSWindowWillStartLiveResizeNotification */
+    static get willStartLiveResizeNotification(): BridgedString;
     // Not bound, each for the reason given:
     //   @property cascadingReferenceFrame: introduced in macOS 15.0
     //   @property hasActiveWindowSharingSession: introduced in macOS 13.3
@@ -2580,6 +2650,42 @@ declare module "objc:AppKit" {
     constructor(labels: { coder: NSCoder });
     /** @ntsSelector self */
     self(): NSApplication;
+    /** @ntsSymbol NSApplicationDidBecomeActiveNotification */
+    static get didBecomeActiveNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationDidChangeOcclusionStateNotification */
+    static get didChangeOcclusionStateNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationDidChangeScreenParametersNotification */
+    static get didChangeScreenParametersNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationDidFinishLaunchingNotification */
+    static get didFinishLaunchingNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationDidFinishRestoringWindowsNotification */
+    static get didFinishRestoringWindowsNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationDidHideNotification */
+    static get didHideNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationDidResignActiveNotification */
+    static get didResignActiveNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationDidUnhideNotification */
+    static get didUnhideNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationDidUpdateNotification */
+    static get didUpdateNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationLaunchIsDefaultLaunchKey */
+    static get launchIsDefaultUserInfoKey(): BridgedString;
+    /** @ntsSymbol NSApplicationLaunchUserNotificationKey */
+    static get launchUserNotificationUserInfoKey(): BridgedString;
+    /** @ntsSymbol NSApplicationWillBecomeActiveNotification */
+    static get willBecomeActiveNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationWillFinishLaunchingNotification */
+    static get willFinishLaunchingNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationWillHideNotification */
+    static get willHideNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationWillResignActiveNotification */
+    static get willResignActiveNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationWillTerminateNotification */
+    static get willTerminateNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationWillUnhideNotification */
+    static get willUnhideNotification(): BridgedString;
+    /** @ntsSymbol NSApplicationWillUpdateNotification */
+    static get willUpdateNotification(): BridgedString;
     // Not bound, each for the reason given:
     //   @property applicationShouldSuppressHighDynamicRangeContent: introduced in macOS 26.0
     //   @property context: deprecated in macOS 10.12
@@ -2716,6 +2822,12 @@ declare module "objc:AppKit" {
     invalidateIntrinsicContentSize(): void;
     /** @ntsSelector self */
     self(): NSControl;
+    /** @ntsSymbol NSControlTextDidBeginEditingNotification */
+    static get textDidBeginEditingNotification(): BridgedString;
+    /** @ntsSymbol NSControlTextDidChangeNotification */
+    static get textDidChangeNotification(): BridgedString;
+    /** @ntsSymbol NSControlTextDidEndEditingNotification */
+    static get textDidEndEditingNotification(): BridgedString;
     // Not bound, each for the reason given:
     //   -setNeedsDisplay: deprecated in macOS 10.14
     //   -calcSize: deprecated in macOS 10.14
@@ -2827,6 +2939,7 @@ declare module "objc:AppKit" {
     //   @property context: deprecated in macOS 10.12
     //   @property CGEvent: a `struct __CGEvent *`
     //   +eventWithCGEvent:: a `struct __CGEvent *`
+    //   NSEventDurationForever: a `const double`
   }
 
   /** @ntsClass NSLayoutAnchor */
@@ -3077,6 +3190,20 @@ declare module "objc:AppKit" {
     submenuAction(sender: NSObject | null): void;
     /** @ntsSelector self */
     self(): NSMenu;
+    /** @ntsSymbol NSMenuDidAddItemNotification */
+    static get didAddItemNotification(): BridgedString;
+    /** @ntsSymbol NSMenuDidBeginTrackingNotification */
+    static get didBeginTrackingNotification(): BridgedString;
+    /** @ntsSymbol NSMenuDidChangeItemNotification */
+    static get didChangeItemNotification(): BridgedString;
+    /** @ntsSymbol NSMenuDidEndTrackingNotification */
+    static get didEndTrackingNotification(): BridgedString;
+    /** @ntsSymbol NSMenuDidRemoveItemNotification */
+    static get didRemoveItemNotification(): BridgedString;
+    /** @ntsSymbol NSMenuDidSendActionNotification */
+    static get didSendActionNotification(): BridgedString;
+    /** @ntsSymbol NSMenuWillSendActionNotification */
+    static get willSendActionNotification(): BridgedString;
     // Not bound, each for the reason given:
     //   @property automaticallyInsertsWritingToolsItems: introduced in macOS 15.2
     //   @property presentationStyle: introduced in macOS 14.0
@@ -3160,6 +3287,8 @@ declare module "objc:AppKit" {
     constructor();
     /** @ntsSelector self */
     self(): NSMenuItem;
+    /** @ntsSymbol NSMenuItemImportFromDeviceIdentifier */
+    static get importFromDeviceIdentifier(): BridgedString;
     // Not bound, each for the reason given:
     //   @property writingToolsItems: introduced in macOS 15.2
     //   @property subtitle: introduced in macOS 14.4
@@ -3274,6 +3403,16 @@ declare module "objc:AppKit" {
     addFloatingSubview(view: NSView, labels: { for: CEnum<NSEvent.GestureAxis, Int> }): void;
     /** @ntsSelector self */
     self(): NSScrollView;
+    /** @ntsSymbol NSScrollViewDidEndLiveMagnifyNotification */
+    static get didEndLiveMagnifyNotification(): BridgedString;
+    /** @ntsSymbol NSScrollViewDidEndLiveScrollNotification */
+    static get didEndLiveScrollNotification(): BridgedString;
+    /** @ntsSymbol NSScrollViewDidLiveScrollNotification */
+    static get didLiveScrollNotification(): BridgedString;
+    /** @ntsSymbol NSScrollViewWillStartLiveMagnifyNotification */
+    static get willStartLiveMagnifyNotification(): BridgedString;
+    /** @ntsSymbol NSScrollViewWillStartLiveScrollNotification */
+    static get willStartLiveScrollNotification(): BridgedString;
   }
 
   /** @ntsClass NSTableView */
@@ -3479,6 +3618,16 @@ declare module "objc:AppKit" {
     didRemove(rowView: NSTableRowView, labels: { forRow: Int }): void;
     /** @ntsSelector self */
     self(): NSTableView;
+    /** @ntsSymbol NSTableViewColumnDidMoveNotification */
+    static get columnDidMoveNotification(): BridgedString;
+    /** @ntsSymbol NSTableViewColumnDidResizeNotification */
+    static get columnDidResizeNotification(): BridgedString;
+    /** @ntsSymbol NSTableViewRowViewKey */
+    static get rowViewIdentifier(): BridgedString;
+    /** @ntsSymbol NSTableViewSelectionDidChangeNotification */
+    static get selectionDidChangeNotification(): BridgedString;
+    /** @ntsSymbol NSTableViewSelectionIsChangingNotification */
+    static get selectionIsChangingNotification(): BridgedString;
     // Not bound, each for the reason given:
     //   -preparedCellAtColumn:row:: deprecated in macOS 10.10
     //   -shouldFocusCell:atColumn:row:: deprecated in macOS 10.10

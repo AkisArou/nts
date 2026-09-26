@@ -845,6 +845,28 @@ declare module "objc:UIKit" {
     constructor();
     /** @ntsSelector self */
     self(): UIResponder;
+    /** @ntsSymbol UIKeyboardAnimationCurveUserInfoKey */
+    static get keyboardAnimationCurveUserInfoKey(): BridgedString;
+    /** @ntsSymbol UIKeyboardAnimationDurationUserInfoKey */
+    static get keyboardAnimationDurationUserInfoKey(): BridgedString;
+    /** @ntsSymbol UIKeyboardDidChangeFrameNotification */
+    static get keyboardDidChangeFrameNotification(): BridgedString;
+    /** @ntsSymbol UIKeyboardDidHideNotification */
+    static get keyboardDidHideNotification(): BridgedString;
+    /** @ntsSymbol UIKeyboardDidShowNotification */
+    static get keyboardDidShowNotification(): BridgedString;
+    /** @ntsSymbol UIKeyboardFrameBeginUserInfoKey */
+    static get keyboardFrameBeginUserInfoKey(): BridgedString;
+    /** @ntsSymbol UIKeyboardFrameEndUserInfoKey */
+    static get keyboardFrameEndUserInfoKey(): BridgedString;
+    /** @ntsSymbol UIKeyboardIsLocalUserInfoKey */
+    static get keyboardIsLocalUserInfoKey(): BridgedString;
+    /** @ntsSymbol UIKeyboardWillChangeFrameNotification */
+    static get keyboardWillChangeFrameNotification(): BridgedString;
+    /** @ntsSymbol UIKeyboardWillHideNotification */
+    static get keyboardWillHideNotification(): BridgedString;
+    /** @ntsSymbol UIKeyboardWillShowNotification */
+    static get keyboardWillShowNotification(): BridgedString;
   }
 
   /** @ntsClass UIScreen */
@@ -889,6 +911,17 @@ declare module "objc:UIKit" {
     constructor();
     /** @ntsSelector self */
     self(): UIScreen;
+    /** @ntsSymbol UIScreenBrightnessDidChangeNotification */
+    static get brightnessDidChangeNotification(): BridgedString;
+    /** @ntsSymbol UIScreenCapturedDidChangeNotification */
+    static get capturedDidChangeNotification(): BridgedString;
+    /** @ntsSymbol UIScreenModeDidChangeNotification */
+    static get modeDidChangeNotification(): BridgedString;
+    /** @ntsSymbol UIScreenReferenceDisplayModeStatusDidChangeNotification */
+    static get referenceDisplayModeStatusDidChangeNotification(): BridgedString;
+    // Not bound, each for the reason given:
+    //   UIScreenDidConnectNotification: deprecated in iOS 16.0
+    //   UIScreenDidDisconnectNotification: deprecated in iOS 16.0
   }
 
   /** @ntsClass UIView */
@@ -1244,6 +1277,10 @@ declare module "objc:UIKit" {
     viewPrintFormatter(): UIViewPrintFormatter;
     /** @ntsSelector self */
     self(): UIView;
+    // Not bound, each for the reason given:
+    //   UILayoutFittingCompressedSize: a `const struct CGSize`
+    //   UILayoutFittingExpandedSize: a `const struct CGSize`
+    //   UIViewNoIntrinsicMetric: a `const double`
   }
 
   /** @ntsClass UIViewController */
@@ -1510,6 +1547,10 @@ declare module "objc:UIKit" {
     separateSecondaryViewController(labels: { for: UISplitViewController }): UIViewController | null;
     /** @ntsSelector self */
     self(): UIViewController;
+    /** @ntsSymbol UIViewControllerHierarchyInconsistencyException */
+    static get hierarchyInconsistencyException(): BridgedString;
+    /** @ntsSymbol UIViewControllerShowDetailTargetDidChangeNotification */
+    static get showDetailTargetDidChangeNotification(): BridgedString;
   }
 
   /** @ntsClass UIWindow */
@@ -1564,6 +1605,14 @@ declare module "objc:UIKit" {
     convert(rect: ByValue<CGRect> | Fields<CGRect>, labels: { from: UIView | null }): ByValue<CGRect>;
     /** @ntsSelector self */
     self(): UIWindow;
+    /** @ntsSymbol UIWindowDidBecomeHiddenNotification */
+    static get didBecomeHiddenNotification(): BridgedString;
+    /** @ntsSymbol UIWindowDidBecomeKeyNotification */
+    static get didBecomeKeyNotification(): BridgedString;
+    /** @ntsSymbol UIWindowDidBecomeVisibleNotification */
+    static get didBecomeVisibleNotification(): BridgedString;
+    /** @ntsSymbol UIWindowDidResignKeyNotification */
+    static get didResignKeyNotification(): BridgedString;
   }
 
   /** @ntsClass UIApplication */
@@ -1690,6 +1739,54 @@ declare module "objc:UIKit" {
     constructor();
     /** @ntsSelector self */
     self(): UIApplication;
+    /** @ntsSymbol UIApplicationBackgroundRefreshStatusDidChangeNotification */
+    static get backgroundRefreshStatusDidChangeNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationDidBecomeActiveNotification */
+    static get didBecomeActiveNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationDidEnterBackgroundNotification */
+    static get didEnterBackgroundNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationDidFinishLaunchingNotification */
+    static get didFinishLaunchingNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationDidReceiveMemoryWarningNotification */
+    static get didReceiveMemoryWarningNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationInvalidInterfaceOrientationException */
+    static get invalidInterfaceOrientationException(): BridgedString;
+    /** @ntsSymbol UIApplicationOpenSettingsURLString */
+    static get openSettingsURLString(): BridgedString;
+    /** @ntsSymbol UIApplicationProtectedDataDidBecomeAvailable */
+    static get protectedDataDidBecomeAvailableNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationProtectedDataWillBecomeUnavailable */
+    static get protectedDataWillBecomeUnavailableNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationSignificantTimeChangeNotification */
+    static get significantTimeChangeNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationStateRestorationBundleVersionKey */
+    static get stateRestorationBundleVersionKey(): BridgedString;
+    /** @ntsSymbol UIApplicationStateRestorationSystemVersionKey */
+    static get stateRestorationSystemVersionKey(): BridgedString;
+    /** @ntsSymbol UIApplicationStateRestorationTimestampKey */
+    static get stateRestorationTimestampKey(): BridgedString;
+    /** @ntsSymbol UIApplicationStateRestorationUserInterfaceIdiomKey */
+    static get stateRestorationUserInterfaceIdiomKey(): BridgedString;
+    /** @ntsSymbol UIApplicationUserDidTakeScreenshotNotification */
+    static get userDidTakeScreenshotNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationWillEnterForegroundNotification */
+    static get willEnterForegroundNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationWillResignActiveNotification */
+    static get willResignActiveNotification(): BridgedString;
+    /** @ntsSymbol UIApplicationWillTerminateNotification */
+    static get willTerminateNotification(): BridgedString;
+    /** @ntsSymbol UIStateRestorationViewControllerStoryboardKey */
+    static get stateRestorationViewControllerStoryboardKey(): BridgedString;
+    // Not bound, each for the reason given:
+    //   UIApplicationBackgroundFetchIntervalMinimum: a `const double`
+    //   UIApplicationBackgroundFetchIntervalNever: a `const double`
+    //   UIApplicationDidChangeStatusBarFrameNotification: deprecated in iOS 13.0
+    //   UIApplicationDidChangeStatusBarOrientationNotification: deprecated in iOS 13.0
+    //   UIApplicationOpenDefaultApplicationsSettingsURLString: introduced in iOS 18.3
+    //   UIApplicationStatusBarFrameUserInfoKey: deprecated in iOS 13.0
+    //   UIApplicationStatusBarOrientationUserInfoKey: deprecated in iOS 13.0
+    //   UIApplicationWillChangeStatusBarFrameNotification: deprecated in iOS 13.0
+    //   UIApplicationWillChangeStatusBarOrientationNotification: deprecated in iOS 13.0
   }
 
   /** @ntsClass UILabel */
@@ -1878,6 +1975,8 @@ declare module "objc:UIKit" {
     show(vc: UIViewController, labels: { sender: NSObject | null }): void;
     /** @ntsSelector self */
     self(): UINavigationController;
+    // Not bound, each for the reason given:
+    //   UINavigationControllerHideShowBarDuration: a `const double`
   }
 
   /** @ntsProtocol UIApplicationDelegate */

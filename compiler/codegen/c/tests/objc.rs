@@ -890,3 +890,49 @@ fn a_constructor_or_a_reaching_initializer_on_an_objective_c_subclass_is_refused
     assert_eq!(messages.iter().filter(|m| m.contains(reaching)).count(), 2, "{messages:?}");
     assert!(messages.iter().any(|m| m.contains("does not open with its `super(...)`")), "{messages:?}");
 }
+
+const CONSTANTS: &str = r#"/**
+ * @ntsFramework Foundation
+ */
+declare module "objc:Foundation" {
+  import type { BridgedString } from "objc:types";
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+  }
+  /** @ntsClass NSNotificationCenter */
+  export class NotificationCenter extends NSObject {
+    /** @ntsSymbol NSSystemClockDidChangeNotification */
+    static get systemClockDidChange(): BridgedString;
+    /** @ntsSymbol NSNotificationCenterShared */
+    static get shared(): NotificationCenter;
+  }
+}
+"#;
+
+/// A framework's constant, which Swift imports as a class's static property:
+/// the extern variable itself, declared as one and read by name -- never
+/// called, and never a message. An `NSString *` one is copied into the
+/// program's string as a C function's `BridgedString` result is.
+#[test]
+fn a_constant_is_the_extern_variable_read() {
+    let source = "import { NotificationCenter } from \"objc:Foundation\";\n\
+                  export function run(): number {\n  const shared = NotificationCenter.shared;\n  return NotificationCenter.systemClockDidChange.length + (shared === NotificationCenter.shared ? 1 : 0);\n}\n";
+    let Some((_, prepared)) = prepare("objc-constants", CONSTANTS, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for name in ["NSSystemClockDidChangeNotification", "NSNotificationCenterShared"] {
+        let declared = text.lines().any(|line| line.starts_with("extern ") && line.ends_with(&format!(" {name};")));
+        assert!(declared, "no extern declaration of {name}:\n{text}");
+        assert!(text.contains(&format!("= {name};")), "{name} is not read by name:\n{text}");
+        assert!(!text.contains(&format!("{name}(")), "{name} was called:\n{text}");
+    }
+    assert!(!text.contains("sel_registerName(\"systemClockDidChange\")"), "a constant was sent as a message:\n{text}");
+    assert!(text.contains("nts_string_of_nsstring(v"), "the NSString constant was not copied into a string:\n{text}");
+}

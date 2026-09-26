@@ -653,6 +653,11 @@ pub enum Retention {
 pub enum Convention {
     C,
     Nts,
+    /// Not called but read: the symbol is an extern variable of the result's
+    /// type, and the "call" takes no arguments and answers its value -- a
+    /// framework's constant, `UITextFieldTextDidChangeNotification`, which a
+    /// binding declares as a static getter tagged with its C name.
+    Variable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

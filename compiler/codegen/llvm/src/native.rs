@@ -159,6 +159,10 @@ pub(super) fn declarations(program: &Program, platform: Platform) -> Result<Vec<
 }
 
 fn declaration(func: &Func, target: &Function, platform: Platform) -> Result<String, Diagnostic> {
+    // A variable is a global of the value's type, which the call loads.
+    if target.convention == nts_core::hir::native::Convention::Variable {
+        return Ok(format!("@{} = external global {}", target.name, ty_of(&target.result.abi(platform.abi), func)?));
+    }
     let plan = plan(func, target, 0, platform)?;
     let mut parameters: Vec<String> = plan.result.as_ref().and_then(|passing| aggregate::sret(passing, "")).map(|hidden| hidden.trim_end().to_owned()).into_iter().collect();
     for (ty, crossing) in target.parameters.iter().zip(&plan.arguments) {
@@ -212,6 +216,12 @@ pub(super) fn call(
     out: &str,
     platform: Platform,
 ) -> Result<String, Diagnostic> {
+    if target.convention == nts_core::hir::native::Convention::Variable {
+        if *result != target.call_result() {
+            return Err(refuse(func, "a native call whose HIR disagrees with its declared ABI"));
+        }
+        return Ok(format!("{out} = load {}, ptr @{}", ty_of(result, func)?, target.name));
+    }
     let plan = plan(func, target, 0, platform)?;
     let carried = target.argument_types().count();
     let miscounted = match target.variadic {

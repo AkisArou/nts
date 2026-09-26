@@ -40482,9 +40482,20 @@ impl<'a> FuncBuilder<'a> {
                     matches!(
                         self.kind_of(*at),
                         Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)
-                    )
+                    ) && !self.an_objective_c_accessor(*at)
                 })
             })
+    }
+
+    /// Whether an accessor is a binding's for an Objective-C property or a
+    /// framework's constant: declared, with no body, in an `objc:` module. Its
+    /// read is a message or a load of an extern variable, and neither can
+    /// raise into TypeScript -- native code cannot, which `calls_compiled_code`
+    /// says of every C call. So `try { label.text } catch {}` needs no handler
+    /// edge for it. A class the program writes over an Objective-C one has a
+    /// body, and is compiled code like any other.
+    fn an_objective_c_accessor(&self, accessor: NodeId) -> bool {
+        !self.children(accessor).into_iter().any(|part| self.kind_of(part) == Some(syntax::BLOCK)) && self.in_objc_module(accessor)
     }
 
     /// Whether a call or `new` reaches a function this program compiles.
@@ -46806,6 +46817,12 @@ impl<'a> FuncBuilder<'a> {
             let receiver = receiver.ok_or_else(|| self.unsupported(id, "a static accessor of a class extending an Objective-C class"))?;
             return self.call_program_accessor(id, property.declaration, "get", vec![receiver]).map(Some);
         }
+        // A class's constant: a static getter tagged with the extern variable
+        // it reads (`@ntsSymbol UITextFieldTextDidChangeNotification`), which
+        // is no message but a load of that variable.
+        if receiver.is_none() && self.node(property.declaration).native.as_ref().is_some_and(|native| native.symbol.is_some()) {
+            return self.read_native_variable(id, property.declaration, ty).map(Some);
+        }
         let chained = self.without_chain_absence(id, ty);
         // The receiver is present where the getter is sent: `a?.b?.c` sends
         // `c` to `a.b` as a `B`, not as the `B | null | undefined` the
@@ -46818,6 +46835,25 @@ impl<'a> FuncBuilder<'a> {
         // around it makes the chain's.
         let typed = if chained == ty { None } else { self.represent(chained) };
         self.finish_call_typed(id, callee, args, lent, Some(property.declaration), typed).map(Some)
+    }
+
+    /// The value of the extern variable `declaration` names (`@ntsSymbol`),
+    /// at the declared type: a native with no parameters whose convention
+    /// is [`super::native::Convention::Variable`], which each backend reads
+    /// rather than calls. An `NSString *` crosses as a C function's does,
+    /// as a `BridgedString` copied into the program's string.
+    fn read_native_variable(&mut self, id: NodeId, declaration: NodeId, ty: TypeId) -> Result<ValueId, Diagnostic> {
+        let signature = accessor_signature(None, None, ty);
+        let Callee::Native(target) = self.native_callee(id, Some(declaration), String::new(), &signature)? else {
+            return Err(self.unsupported(id, "a constant whose binding names no C variable"));
+        };
+        if !target.parameters.is_empty() || matches!(target.result, super::native::Type::Record(_) | super::native::Type::Void) {
+            return Err(self.unsupported(id, "a constant that is not one value a C variable holds"));
+        }
+        let mut variable = (*target).clone();
+        variable.convention = super::native::Convention::Variable;
+        let callee = Callee::Native(std::sync::Arc::new(variable));
+        self.finish_call_typed(id, callee, Vec::new(), Vec::new(), Some(declaration), None)
     }
 
     /// `object.property = value` as a message: the setter, sent to the

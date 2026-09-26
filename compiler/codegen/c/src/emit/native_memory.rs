@@ -552,6 +552,10 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // is not followed by `(`.
             writer.line(origin, format!(
                 "_Static_assert(__builtin_types_compatible_p(__typeof__({name}), {function_type}), \"the header declares {name} as the binding does\");"));
+        } else if prototype.starts_with("extern ") {
+            // A variable's declaration says `extern` itself, as it must to
+            // be one rather than a tentative definition.
+            writer.line(origin, prototype.clone());
         } else {
             writer.line(origin, format!("extern {prototype}"));
         }

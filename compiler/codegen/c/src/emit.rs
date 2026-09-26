@@ -1123,6 +1123,10 @@ fn native_prototype(
     target: &nts_core::hir::native::Function,
     spelling: Spelling,
 ) -> String {
+    // A variable is declared as the variable it is, and read by name.
+    if target.convention == nts_core::hir::native::Convention::Variable {
+        return format!("extern {} {name};", spelling.of(&target.result));
+    }
     format!("{} {name}({});", spelling.of(&target.result), native_parameters(target, spelling))
 }
 
@@ -1133,6 +1137,9 @@ fn native_prototype(
 /// result is spelled through its typedef, so the type never needs a declarator
 /// wrapped around it.
 pub(super) fn native_function_type(target: &nts_core::hir::native::Function, spelling: Spelling) -> String {
+    if target.convention == nts_core::hir::native::Convention::Variable {
+        return spelling.of(&target.result);
+    }
     format!("{} ({})", spelling.of(&target.result), native_parameters(target, spelling))
 }
 
@@ -1680,7 +1687,10 @@ fn native_call_expression(
     let arguments = arguments.as_slice();
     // A send is refused a managed ABI where it is read, so the cast below is
     // the whole of it.
-    let call = if let Some(send) = &target.send {
+    let call = if target.convention == nts_core::hir::native::Convention::Variable {
+        // A constant: the variable itself, read where the value is used.
+        target.name.clone()
+    } else if let Some(send) = &target.send {
         objc::send_expression(target, send, arguments)
     } else if let Some(vtable) = &target.vtable {
         com::vtable_expression(target, vtable, arguments)

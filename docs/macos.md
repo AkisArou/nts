@@ -30,7 +30,12 @@ nts bind-objc --module objc:AppKit --framework AppKit --framework Foundation \
 
 - Each `--class` is bound with its ancestors, and every member Swift imports.
   Whatever cannot be bound yet is listed in the class, with its reason.
-- `--protocol` declares an interface that a class you write implements.
+- `--protocol` declares an interface that a class you write implements. A
+  bound class that adopts it, directly or through a protocol that refines
+  it, has its methods as its own, as Swift's conformance gives them.
+- A constant Swift imports as a class's static property
+  (`UITextField.textDidChangeNotification`) is bound with its class: a
+  static getter reading the extern variable.
 - `--values` writes the functions behind Swift's `async` forms.
 - A Core Foundation class (`--class CGContext`) is bound as Swift imports it:
   its methods and properties are the C functions that take it.
@@ -62,6 +67,8 @@ committed copy.
 | `UIView.animate(withDuration: 0.1, animations: { ... }, completion: nil)` | `UIView.animate({ withDuration: 0.1, animations: () => ... }, null)`: an optional closure is `(...) \| null` |
 | `override func viewDidLoad() { super.viewDidLoad(); title = "Items" }` | `override viewDidLoad(): void { super.viewDidLoad(); this.title = "Items"; }` |
 | `delegate?.tableView?(t, didSelectRowAt: p)` | `delegate?.tableViewDidSelectRowAt?.(t, p)`, which asks `respondsToSelector:` first |
+| `UITextField.textDidChangeNotification` | `UITextField.textDidChangeNotification`: a framework's constant, the extern variable read |
+| `textField.insertText("hi")` (`UITextField: UIKeyInput`) | `textField.insertText(new NSString({ string: "hi" }))`, where the binding declares the protocol (`--protocol UIKeyInput`) |
 | `Set<IndexPath>`, `Set<String>` | `Set<NSIndexPath>`, `Set<string>` (objects compared by `-isEqual:`) |
 | `NSRect(x: 0, y: 0, width: 320, height: 200)` | `{ origin: { x: 0, y: 0 }, size: { width: 320, height: 200 } }` |
 | `Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { t in ... }` | `Timer.scheduledTimer({ withTimeInterval: 1, repeats: true }, (t) => { ... })` |

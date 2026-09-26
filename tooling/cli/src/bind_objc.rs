@@ -114,12 +114,15 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     let objc: Vec<String> = request.classes.iter().filter(|c| !cf_types.values().any(|name| name == *c)).cloned().collect();
     let bound = closure(&objc, &headers.supers)?;
     let protocols: BTreeSet<String> = request.protocols.iter().cloned().collect();
-    let functions = cf::functions(&swift, &cf_types, &request.functions);
-    let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols, &functions))?;
+    let constants = swift.constants(&bound);
+    let mut symbols = cf::functions(&swift, &cf_types, &request.functions);
+    symbols.extend(constants.keys().cloned());
+    let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols, &symbols))?;
     let (platform, target) = deployment_target(&request.target)?;
     let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, target);
     model.platform = platform;
     model.read_cf(&bodies.functions, &request.functions);
+    model.read_constants(&constants, &bodies.variables);
     Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model) })
 }
 
@@ -224,7 +227,8 @@ enum Wanted<'a> {
     /// Headers only: supers, enum widths, and struct definitions.
     Headers,
     /// The bodies of these classes, and of the categories on them, and of
-    /// these protocols; and the declarations of these C functions.
+    /// these protocols; and the declarations of these C functions and extern
+    /// variables.
     Bodies(&'a BTreeSet<String>, &'a BTreeSet<String>, &'a BTreeSet<String>),
 }
 
@@ -233,6 +237,9 @@ enum Wanted<'a> {
 struct Dumped {
     /// Every class, and the class it inherits from.
     supers: BTreeMap<String, Option<String>>,
+    /// The protocols each class adopts (in its interface or a category) and
+    /// each protocol refines, by the class's or protocol's name.
+    adopts: BTreeMap<String, BTreeSet<String>>,
     /// Every enum with a fixed width, and that width's C spelling.
     enums: BTreeMap<String, String>,
     /// Each enum's constants and their values, in declaration order.
@@ -247,6 +254,8 @@ struct Dumped {
     protocols: BTreeMap<String, Vec<Value>>,
     /// The requested C functions' declarations: their type and parameters.
     functions: BTreeMap<String, Value>,
+    /// The type of each requested extern variable, by its C name.
+    variables: BTreeMap<String, Value>,
     /// Every typedef, and the type it names with its sugar taken off: what a
     /// block's parameter spelled `NSModalResponse` is, since a block's type
     /// arrives as one string clang did not desugar.
@@ -342,6 +351,97 @@ impl<'de> DeserializeSeed<'de> for Declaration<'_, '_> {
     }
 }
 
+/// What one declaration of a dump said, as its keys were read: the fields
+/// [`file`] puts where the model looks for them.
+struct Declared {
+    kind: String,
+    name: Option<String>,
+    interface: Option<String>,
+    parent: Option<String>,
+    width: Option<String>,
+    body: Option<Value>,
+    aliased: Option<String>,
+    function: Option<Value>,
+    variable: Option<Value>,
+    adopted: Vec<String>,
+}
+
+/// File one declaration where the model reads it: a class's body and
+/// superclass, a protocol's requirements, conformances, a function's or a
+/// variable's type, an enum, a record, a typedef.
+fn file(out: &mut Dumped, wanted: &Wanted<'_>, declared: Declared) {
+    let Declared { kind, name, interface, parent, width, body, aliased, function, variable, adopted } = declared;
+    if let (Some(name), Some(aliased)) = (name.as_ref(), aliased) {
+        out.typedefs.entry(name.clone()).or_insert(aliased);
+    }
+    // Whose conformances these are: a category's class, or the
+    // interface or protocol itself.
+    let conforming = match kind.as_str() {
+        "ObjCCategoryDecl" => interface.clone(),
+        "ObjCInterfaceDecl" | "ObjCProtocolDecl" => name.clone(),
+        _ => None,
+    };
+    if let Some(conforming) = conforming.filter(|_| !adopted.is_empty()) {
+        out.adopts.entry(conforming).or_default().extend(adopted);
+    }
+    match (kind.as_str(), name) {
+        ("ObjCInterfaceDecl", Some(name)) => {
+            // A forward `@class` has no super; the definition's wins.
+            let entry = out.supers.entry(name.clone()).or_insert(None);
+            if parent.is_some() {
+                *entry = parent;
+            }
+            if let Some(Value::Array(members)) = body {
+                out.bodies.entry(name).or_default().extend(members);
+            }
+        }
+        ("ObjCCategoryDecl", _) => {
+            if let (Some(class), Some(Value::Array(members))) = (interface, body) {
+                out.bodies.entry(class).or_default().extend(members);
+            }
+        }
+        ("ObjCProtocolDecl", Some(name)) => {
+            if let Some(Value::Array(members)) = body {
+                if name == "NSObject" {
+                    out.root_protocol.extend(members.iter().cloned());
+                }
+                if matches!(wanted, Wanted::Bodies(_, protocols, _) if protocols.contains(&name)) {
+                    out.protocols.entry(name).or_default().extend(members);
+                }
+            }
+        }
+        ("VarDecl", Some(name)) => {
+            if let Some(ty) = variable {
+                out.variables.entry(name).or_insert(ty);
+            }
+        }
+        ("FunctionDecl", Some(name)) => {
+            if let (Some(ty), Some(inner)) = (function, body) {
+                out.functions.insert(name, serde_json::json!({ "type": ty, "inner": inner }));
+            }
+        }
+        ("EnumDecl", Some(name)) => {
+            if let Some(Value::Array(members)) = &body {
+                out.constants.insert(name.clone(), enum_constants(members));
+            }
+            if let Some(width) = width {
+                out.enums.insert(name, width);
+            }
+        }
+        ("RecordDecl", Some(name)) => {
+            if let Some(Value::Array(members)) = body {
+                let fields = members
+                    .iter()
+                    .filter(|m| m.get("kind").and_then(Value::as_str) == Some("FieldDecl"))
+                    .filter_map(|m| Some((named(m)?, desugared(m.get("type")?)?)))
+                    .collect();
+                out.records.insert(name, fields);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// `{"name": ...}`, which is how clang refers to another declaration.
 fn named(value: &Value) -> Option<String> {
     value.get("name").and_then(Value::as_str).map(str::to_owned)
@@ -358,12 +458,18 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
         let mut body = None;
         let mut aliased = None;
         let mut function = None;
+        let mut variable = None;
+        let mut adopted: Vec<String> = Vec::new();
         while let Some(key) = map.next_key::<String>()? {
             match key.as_str() {
                 "kind" => kind = map.next_value()?,
                 "name" => name = Some(map.next_value::<String>()?),
                 "interface" => interface = named(&map.next_value::<Value>()?),
                 "super" => parent = named(&map.next_value::<Value>()?),
+                "protocols" => {
+                    let listed = map.next_value::<Value>()?;
+                    adopted = listed.as_array().map(|list| list.iter().filter_map(named).collect()).unwrap_or_default();
+                }
                 "completeDefinition" => complete = map.next_value()?,
                 "fixedUnderlyingType" => {
                     width = desugared(&map.next_value::<Value>()?);
@@ -372,6 +478,9 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                     aliased = desugared(&map.next_value::<Value>()?);
                 }
                 "type" if kind == "FunctionDecl" => function = Some(map.next_value::<Value>()?),
+                "type" if kind == "VarDecl" && matches!(self.wanted, Wanted::Bodies(_, _, wanted) if name.as_ref().is_some_and(|n| wanted.contains(n))) => {
+                    variable = Some(map.next_value::<Value>()?);
+                }
                 "inner" => {
                     let keep = match self.wanted {
                         Wanted::Headers => (kind == "RecordDecl" && complete) || kind == "EnumDecl",
@@ -399,61 +508,7 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                 }
             }
         }
-        let out = self.out;
-        if let (Some(name), Some(aliased)) = (name.as_ref(), aliased) {
-            out.typedefs.entry(name.clone()).or_insert(aliased);
-        }
-        match (kind.as_str(), name) {
-            ("ObjCInterfaceDecl", Some(name)) => {
-                // A forward `@class` has no super; the definition's wins.
-                let entry = out.supers.entry(name.clone()).or_insert(None);
-                if parent.is_some() {
-                    *entry = parent;
-                }
-                if let Some(Value::Array(members)) = body {
-                    out.bodies.entry(name).or_default().extend(members);
-                }
-            }
-            ("ObjCCategoryDecl", _) => {
-                if let (Some(class), Some(Value::Array(members))) = (interface, body) {
-                    out.bodies.entry(class).or_default().extend(members);
-                }
-            }
-            ("ObjCProtocolDecl", Some(name)) => {
-                if let Some(Value::Array(members)) = body {
-                    if name == "NSObject" {
-                        out.root_protocol.extend(members.iter().cloned());
-                    }
-                    if matches!(self.wanted, Wanted::Bodies(_, protocols, _) if protocols.contains(&name)) {
-                        out.protocols.entry(name).or_default().extend(members);
-                    }
-                }
-            }
-            ("FunctionDecl", Some(name)) => {
-                if let (Some(ty), Some(inner)) = (function, body) {
-                    out.functions.insert(name, serde_json::json!({ "type": ty, "inner": inner }));
-                }
-            }
-            ("EnumDecl", Some(name)) => {
-                if let Some(Value::Array(members)) = &body {
-                    out.constants.insert(name.clone(), enum_constants(members));
-                }
-                if let Some(width) = width {
-                    out.enums.insert(name, width);
-                }
-            }
-            ("RecordDecl", Some(name)) => {
-                if let Some(Value::Array(members)) = body {
-                    let fields = members
-                        .iter()
-                        .filter(|m| m.get("kind").and_then(Value::as_str) == Some("FieldDecl"))
-                        .filter_map(|m| Some((named(m)?, desugared(m.get("type")?)?)))
-                        .collect();
-                    out.records.insert(name, fields);
-                }
-            }
-            _ => {}
-        }
+        file(self.out, self.wanted, Declared { kind, name, interface, parent, width, body, aliased, function, variable, adopted });
         Ok(())
     }
 }
@@ -642,6 +697,26 @@ impl Swift {
         self.by_usr.get(usr)
     }
 
+    /// The extern constants Swift imports as static properties of one of
+    /// `classes` -- `UITextFieldTextDidChangeNotification` as
+    /// `UITextField.textDidChangeNotification` -- by their C name, with the
+    /// Objective-C class each belongs to and its symbol. A global's USR is
+    /// `c:@` and its C name, with no `@` after it.
+    fn constants(&self, classes: &BTreeSet<String>) -> BTreeMap<String, (String, Symbol)> {
+        let by_swift: BTreeMap<String, &String> = classes.iter().map(|objc| (self.class(objc), objc)).collect();
+        self.by_usr
+            .iter()
+            .filter(|(usr, symbol)| {
+                usr.strip_prefix("c:@").is_some_and(|rest| !rest.contains('@')) && symbol.kind.identifier == "swift.type.property"
+            })
+            .filter_map(|(usr, symbol)| {
+                let [class, _] = symbol.path.as_slice() else { return None };
+                let objc = by_swift.get(class)?;
+                Some((usr["c:@".len()..].to_owned(), ((*objc).clone(), symbol.clone())))
+            })
+            .collect()
+    }
+
     /// The name Swift gives Objective-C class `class`: `Timer` for `NSTimer`.
     fn class(&self, class: &str) -> String {
         self.get(&format!("c:objc(cs){class}")).map_or_else(|| class.to_owned(), |s| s.names.title.clone())
@@ -687,6 +762,9 @@ struct Protocol {
     /// is an object -- so a property typed as the protocol is still one where
     /// a base class's is typed `NSObject`.
     base: String,
+    /// The declared protocols it refines, by Swift name: `UITextInput`
+    /// refines `UIKeyInput`, so the interface extends it.
+    refines: Vec<String>,
     members: Vec<String>,
     skipped: Vec<String>,
 }
@@ -985,7 +1063,16 @@ impl<'a> Model<'a> {
             ));
         }
         let base = self.object("NSObject");
-        Protocol { objc: objc.to_owned(), swift, base, members, skipped }
+        let refines = self
+            .headers
+            .adopts
+            .get(objc)
+            .into_iter()
+            .flatten()
+            .filter(|parent| self.declared_protocols.contains(*parent))
+            .map(|parent| self.protocol_name(parent))
+            .collect();
+        Protocol { objc: objc.to_owned(), swift, base, refines, members, skipped }
     }
 
     /// A protocol method as the adopting class writes it: every argument
@@ -1700,6 +1787,38 @@ impl<'a> Model<'a> {
         Ok(format!("Map<string, {value}>"))
     }
 
+    /// Each constant Swift imports as a static property of a bound class --
+    /// `UITextField.textDidChangeNotification` -- as a static getter of that
+    /// class tagged with the C variable it reads (`@ntsSymbol`). Its type is
+    /// spelled as a C function's result is, so an `NSString *` is a
+    /// `BridgedString`. A constant clang did not declare, or one the target
+    /// does not have, is listed with its reason.
+    pub(super) fn read_constants(&mut self, constants: &BTreeMap<String, (String, Symbol)>, variables: &BTreeMap<String, Value>) {
+        for (name, (objc, symbol)) in constants {
+            let Some(at) = self.classes.iter().position(|class| &class.objc == objc) else { continue };
+            let spelling = Class {
+                objc: self.classes[at].objc.clone(),
+                swift: self.classes[at].swift.clone(),
+                parent: None,
+                members: Vec::new(),
+                skipped: Vec::new(),
+                sent: Vec::new(),
+            };
+            let spelled = self.available(symbol).and_then(|()| {
+                let ty = without_top_const(variables.get(name).ok_or("no header here declares it")?);
+                self.in_c_function(|model| model.spell(&spelling, &ty, Position::Result))
+            });
+            let class = &mut self.classes[at];
+            match spelled {
+                Ok(ty) => class.members.push(format!(
+                    "    /** @ntsSymbol {name} */\n    static get {}(): {ty};",
+                    quoted_key(&symbol.names.title)
+                )),
+                Err(why) => class.skipped.push(format!("{name}: {why}")),
+            }
+        }
+    }
+
     /// `spell` a C function's parameters or result: `c_function` for the
     /// span of `body`, and restored after it whatever it answers.
     pub(super) fn in_c_function<T>(&mut self, body: impl FnOnce(&mut Self) -> T) -> T {
@@ -1707,6 +1826,26 @@ impl<'a> Model<'a> {
         let answer = body(self);
         self.c_function = outer;
         answer
+    }
+
+    /// The Swift name of protocol `objc`, as its graph gives it.
+    fn protocol_name(&self, objc: &str) -> String {
+        self.swift.get(&format!("c:objc(pl){objc}")).map_or_else(|| objc.to_owned(), |s| s.names.title.clone())
+    }
+
+    /// The declared protocols class `objc` conforms to, by Swift name: those
+    /// it adopts, in its interface or a category, and those they refine, as
+    /// far as the chain goes. What Swift's `extension UITextField:
+    /// UITextInput` gives it: `textField.insertText(_:)`.
+    fn conformances(&self, objc: &str) -> Vec<String> {
+        let mut seen = BTreeSet::new();
+        let mut pending: Vec<&String> = self.headers.adopts.get(objc).into_iter().flatten().collect();
+        while let Some(protocol) = pending.pop() {
+            if seen.insert(protocol.clone()) {
+                pending.extend(self.headers.adopts.get(protocol).into_iter().flatten());
+            }
+        }
+        seen.iter().filter(|protocol| self.declared_protocols.contains(*protocol)).map(|protocol| self.protocol_name(protocol)).collect()
     }
 
     /// The Swift name of the one protocol `id<P>` names, where this binding
@@ -2114,6 +2253,25 @@ fn block_is_nullable(written: &str) -> bool {
     })
 }
 
+/// A variable's type without its own top-level `const` -- `NSString *const`
+/// is an `NSString *` the program cannot reassign, which says nothing about
+/// how its value crosses. Only a variable has one: a parameter's or result's
+/// is dropped by C itself.
+fn without_top_const(ty: &Value) -> Value {
+    let mut ty = ty.clone();
+    if let Value::Object(fields) = &mut ty {
+        for key in ["qualType", "desugaredQualType"] {
+            if let Some(Value::String(text)) = fields.get_mut(key)
+                && let Some(stripped) = text.trim_end().strip_suffix("const").map(str::trim_end)
+                && stripped.ends_with('*')
+            {
+                *text = stripped.to_owned();
+            }
+        }
+    }
+    ty
+}
+
 /// A type without the attributes clang writes before it: availability
 /// (`API_AVAILABLE(macos(11.0)) NSString *`) and Swift's own
 /// (`NS_SWIFT_UI_ACTOR void`). Neither says anything about how it crosses.
@@ -2204,7 +2362,7 @@ fn render_protocol(out: &mut String, protocol: &Protocol) {
         "  /** @ntsProtocol {} */\n  export interface {} extends {} {{",
         protocol.objc,
         path.last().map_or("", String::as_str),
-        protocol.base
+        std::iter::once(protocol.base.as_str()).chain(protocol.refines.iter().map(String::as_str)).collect::<Vec<_>>().join(", ")
     );
     for line in &protocol.members {
         let _ = writeln!(text, "{line}");
@@ -2294,6 +2452,12 @@ fn render(request: &Request, model: &Model) -> String {
             }
         }
         let _ = writeln!(text, "  }}");
+        // Its conformances, merged into the class as TypeScript merges an
+        // interface of the same name: the protocols' methods are its own.
+        let conformances = model.conformances(&class.objc);
+        if !conformances.is_empty() {
+            let _ = writeln!(text, "  export interface {} extends {} {{}}", path.last().map_or("", String::as_str), conformances.join(", "));
+        }
         nest(&mut out, &path, &text);
     }
     for protocol in &model.protocols {
@@ -2930,6 +3094,9 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         assert_eq!(strip_attributes("NS_SWIFT_UI_ACTOR void"), "void");
         assert_eq!(strip_attributes("NS_SWIFT_NAME(x) API_AVAILABLE(ios(2.0)) BOOL"), "BOOL");
         assert_eq!(strip_attributes("BOOL"), "BOOL");
+        let constant = serde_json::json!({ "qualType": "NSNotificationName", "desugaredQualType": "NSString *const" });
+        assert_eq!(without_top_const(&constant)["desugaredQualType"], "NSString *");
+        assert_eq!(without_top_const(&serde_json::json!({ "qualType": "const char *" }))["qualType"], "const char *");
         assert!(block_is_nullable("void (^ _Nullable)(BOOL)"));
         assert!(!block_is_nullable("void (^)(NSError * _Nullable)"));
         assert!(!block_is_nullable("void (^ _Nonnull)(NSString * _Nullable)"));
