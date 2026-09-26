@@ -104,3 +104,42 @@ export function constantStillFolds(n: number): number {
 export function constantConditional(n: number): number {
   return never ? n + 100 : n + 2;
 }
+
+/**
+ * **A decided `const` operand beside a mutable one the decision never reads.**
+ * `false && anything` is `false` without evaluating the right operand, so whether
+ * that operand reads a mutable binding cannot matter -- and a guard applied to the
+ * whole condition declined this, leaving the dead branch lowered and refusing.
+ * `isDevelopment && !hasLoggedError` is the shape, and the React lane found seven
+ * of the ten roots the blunt guard cost them were exactly it.
+ *
+ * The dead branch holds a construct this compiler refuses by name, so what is
+ * tested is the fold rather than the answer.
+ */
+let logged = false;
+
+export function decidedBesideMutable(n: number): number {
+  if (never && !logged) {
+    return Object.getOwnPropertyNames({ a: 1 }).length;
+  }
+  return n + 3;
+}
+
+/** The mirror for `||`: `true || x` is `true` without reading `x`. */
+const always = true;
+
+export function orDecidedBesideMutable(n: number): number {
+  if (always || logged) {
+    return n + 4;
+  }
+  return Object.getOwnPropertyNames({ a: 1 }).length;
+}
+
+/** **Control.** The mutable operand decides it alone, so the fold must decline. */
+export function mutableDecidesAlone(n: number): number {
+  return logged ? n + 100 : n + 5;
+}
+
+export function mark(): void {
+  logged = true;
+}

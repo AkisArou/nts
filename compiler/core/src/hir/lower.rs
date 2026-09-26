@@ -32307,6 +32307,64 @@ impl<'a> FuncBuilder<'a> {
     /// could disagree is a program whose author widened the type *because* they
     /// intend to change the value.
     fn statically_decided(&self, condition: NodeId) -> Option<bool> {
+        self.decided_value(condition, 0)
+    }
+
+    /// The value a condition is decided to have, reading only the operands the
+    /// decision actually depends on.
+    ///
+    /// **Short-circuiting is what makes this more than a tidy-up.** The guard below
+    /// declines a condition that reads a mutable binding, because the checker's
+    /// narrowed literal type is stale for one a closure assigns. Applied to the
+    /// *whole* condition it is too blunt for the commonest real shape:
+    ///
+    /// ```ts
+    /// if (isDevelopment && !hasLoggedError) { ... }
+    /// ```
+    ///
+    /// where `isDevelopment` is a `const` the checker decided is `false` and
+    /// `hasLoggedError` is a module-scope `let`. `false && x` is decided **without
+    /// evaluating `x`**, so whether `x` is mutable cannot matter -- and declining
+    /// here left the dead branch lowered and refusing. The React lane sampled the
+    /// ten roots this guard cost them and **seven were this shape**.
+    ///
+    /// So each operator asks only what it needs: `a && b` is `false` when `a` is,
+    /// whatever `b` says; `a || b` is `true` when `a` is; and only when the first
+    /// operand does not decide it does the second get asked. A mutable read in an
+    /// operand the decision never reaches is irrelevant by the language's own
+    /// evaluation order, which is why this fails safe -- it needs no enumeration of
+    /// assignment forms, because the operand it ignores is one nothing evaluates.
+    ///
+    /// `hasLoggedError && ...` on its own still declines, which is the case the
+    /// guard exists for.
+    fn decided_value(&self, condition: NodeId, depth: u32) -> Option<bool> {
+        if depth > 16 {
+            return None;
+        }
+        let parts = self.children(condition);
+        if self.kind_of(condition) == Some(syntax::BINARY_EXPRESSION)
+            && let [left, operator, right] = parts.as_slice()
+        {
+            let (left, operator, right) = (*left, *operator, *right);
+            let and = match self.kind_of(operator) {
+                Some(syntax::AMPERSAND_AMPERSAND_TOKEN) => true,
+                Some(syntax::BAR_BAR_TOKEN) => false,
+                _ => return self.the_checker_decided(condition),
+            };
+            // `false && b` is `false` and `true || b` is `true`, and neither reads
+            // `b`. Otherwise the answer *is* `b`'s.
+            return match self.decided_value(left, depth + 1) {
+                Some(known) if known != and => Some(known),
+                Some(_) => self.decided_value(right, depth + 1),
+                None => None,
+            };
+        }
+        self.the_checker_decided(condition)
+    }
+
+    /// The checker's literal answer for a condition, where the condition reads
+    /// nothing that can change under it.
+    fn the_checker_decided(&self, condition: NodeId) -> Option<bool> {
         let ty = self.snapshot.node_types.get(&condition)?;
         match &self.snapshot.types.get(ty.0 as usize)?.kind {
             TypeKind::Literal(LiteralValue::Boolean(known)) => {
