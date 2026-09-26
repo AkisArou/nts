@@ -1479,6 +1479,7 @@ const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_closure_lend", 0),
     ("nts_closure_lend_once", 0),
     ("nts_concat_into", 0),
+    ("nts_enqueue_job", 0),
     ("nts_environment_install_platform", 0),
     ("nts_number_to_string_into", 0),
     ("nts_presence_clear", 0),

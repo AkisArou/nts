@@ -327,8 +327,12 @@ Application.Start(() => { new App(); });
 1. **W1 is closed.** One named gap: under LLVM on Win64, an exported
    function taking or returning an erased value or a `bigint` is refused (7
    functions in 3 examples); it needs a C-convention entry beside it.
-2. **W2's rest** as listed above: awaitable operations once `await` honours
-   thenables. **W3** is complete for the fixture's needs; next is **W4**.
+2. **W2's rest** as listed above: awaitable operations. `await` now honours
+   a class's `then`, as the specification resolves a thenable (docs/async.md
+   5d), so what is left is the binder's half: a `then` on each async
+   operation type, and the census reaching a bound class, which it does not
+   yet -- a Windows Runtime class is a binding's, not one the program
+   declares. **W3** is complete for the fixture's needs; next is **W4**.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against
    C#/CsWinRT and C++/WinRT. The surface is JavaScript-style, as the Windows
    Runtime's own JavaScript projection was: types in PascalCase, members in

@@ -356,6 +356,50 @@ where "wrong" and "zero" are indistinguishable.
 
 ---
 
+## 5d. Resolving: the one procedure, and thenables
+
+Every way a promise is resolved -- `await x`, `return x` from an `async`
+function, an executor's `resolve(x)`, `Promise.resolve(x)`, a resolving
+function a thenable is handed -- reaches `settle` in `hir::lower`, which is the
+specification's promise resolve function and asks its three questions in its
+order:
+
+1. **A promise** is adopted (`nts_promise_adopt`, two hops, 5b). Decided from
+   the type where the type says `Promise<T>`; from the tag, in
+   `nts_promise_resolve_value`, where the value is erased.
+2. **A thenable** -- an object with a callable `then` -- is followed:
+   `NewPromiseResolveThenableJob` queues a microtask that calls
+   `x.then(resolve, reject)`. The program is closed, so which classes declare a
+   `then` method is known before lowering: `thenables` is that census, and for
+   each class it makes a *job* closure and the pair of *resolving function*
+   closures it hands `then`, typed exactly as `then`'s parameters are. A resolve
+   site whose value can be an instance of one tests for it with `instanceof`,
+   most-derived first, and queues the job (`nts_enqueue_job`); a type that rules
+   every thenable out -- a number, a string, most of any program -- pays nothing.
+3. **Anything else** is fulfilled.
+
+**A pair's `alreadyResolved` is counted per promise**, as `resolutions`, in the
+padding of `NtsPromise`. At most one pair of a promise is live at a time -- the
+executor's is 0, and a thenable job makes the next -- so a pair is live exactly
+while its number equals the count, and `nts_promise_claim` spends it. The flag
+is not the same as being settled: `resolve(p)` leaves the promise pending until
+`p` settles, and a `resolve(v)` in that window must be ignored.
+
+**What refuses, and where.** A candidate the census could not give a plain job
+-- a `then` that can throw (a method has no raising copy for the job to catch
+it through), a generic `then`, a `then` that is a field or an accessor, an
+object literal with a `then` (literals of one shape share a layout, so
+`instanceof` cannot tell whose) -- refuses at compile time where the site's
+static type proves the value is one, and where it is merely possible (an erased
+value, a subclass), decides when the value arrives: a throwing `then` runs and a
+throw ends the program by name, and a class with no job stops through
+`nts_refused`. A site whose payload cannot hold what `then` delivers -- the
+checker typed it from a class above the one declaring `then` -- refuses.
+
+`examples/an-await-of-a-thenable` pins the tick: awaiting a thenable resumes one
+turn after awaiting a promise would, and running the job inline agrees on every
+other arm and fails that one.
+
 ## 6. How this gets tested
 
 The seam exists for portability, but its **first** value is that it makes the

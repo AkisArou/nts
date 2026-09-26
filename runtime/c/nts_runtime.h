@@ -2741,6 +2741,17 @@ _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
  * slot; the descriptor's own name is not available to a caller that failed to
  * recognise it. */
 _Noreturn void nts_no_arm(const char *member);
+
+/* A construct this compiler refuses, reached at run time.
+ *
+ * Most refusals are made while compiling. A few can only be decided when a
+ * value arrives: a promise resolved with an erased value that turns out to be
+ * an instance of a thenable class whose `then` no job can call. Refusing every
+ * site that merely *could* receive one would refuse a program for a value it
+ * may never produce, so such a site tests, and this is where the test ends --
+ * named, and never an answer node would not give. `what` is the reason, as the
+ * compile-time refusal would have said it. */
+_Noreturn void nts_refused(const NtsString *what);
 /* The same, for a chain a **lowering** built rather than an emitter: a call on
  * an erased receiver whose arms are the classes the receiver's union names.
  *
@@ -3744,6 +3755,16 @@ void nts_promise_adopt(NtsPromise *outer, NtsPromise *inner);
  * is one field in the padding where a flag per pair would be an allocation per
  * pair. */
 bool nts_promise_claim(NtsPromise *promise, uint32_t pair);
+/* The number of the resolving functions that may resolve `promise` now: the
+ * pair a thenable job makes, after its `resolve(thenable)` spent the one
+ * before. See `nts_promise_claim`. */
+NTS_READS_ONLY uint32_t nts_promise_pair(const NtsPromise *promise);
+/* Run a closure as a microtask: HostEnqueuePromiseJob, for a job the compiler
+ * builds rather than one the runtime does. `NewPromiseResolveThenableJob`'s
+ * body is a call of the thenable's own `then`, which only the program can
+ * make, so the program makes the job and this queues it. `slot` is the
+ * closure's call slot, as `nts_set_timeout` takes it. */
+void nts_enqueue_job(NtsHeader *callback, double slot);
 /* Resolve with a value whose kind is known only at run time: the
  * specification's promise resolve function, for the one case the compiler
  * cannot decide from a type. A promise is adopted, exactly as

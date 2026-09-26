@@ -453,6 +453,7 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // the same call the native lanes do rather than by an emitter's own
         // `unreachable`: the chain is control flow the lowering wrote, so there
         // is nothing backend-specific about how it ends.
+        "nts_refused" => (RUNTIME, "refused", "(Ljava/lang/String;)V"),
         "nts_no_arm_of" => (RUNTIME, "noArm", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
         "nts_raise" => (RUNTIME, "raise", "(Lnts/rt/NtsValue;)V"),
         "nts_raising" => (RUNTIME, "raising", "()I"),
@@ -751,7 +752,9 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_promise_adopt" => {
             (types::PROMISE, "adopt", "(Lnts/rt/NtsPromise;Lnts/rt/NtsPromise;)V")
         }
+        "nts_enqueue_job" => (RUNTIME, "enqueueJob", "(Lnts/rt/NtsCallback;D)V"),
         "nts_promise_claim" => (types::PROMISE, "claim", "(Lnts/rt/NtsPromise;I)Z"),
+        "nts_promise_pair" => (types::PROMISE, "pair", "(Lnts/rt/NtsPromise;)I"),
         "nts_promise_is_rejected" => (types::PROMISE, "isRejected", "(Lnts/rt/NtsPromise;)Z"),
         "nts_promise_number" => (types::PROMISE, "number", "(Lnts/rt/NtsPromise;)D"),
         "nts_promise_reference" => {

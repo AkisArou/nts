@@ -153,6 +153,8 @@ public final class NtsPromise {
             settle(outer, inner.state, inner.settled);
         }
     }
+    /** The resolving functions that may resolve it now; see {@code nts_promise_pair}. */
+    public static int pair(NtsPromise promise) { return promise.resolutions; }
     /**
      * Whether the resolving functions numbered {@code pair} may still resolve
      * {@code promise}, spending them if so. {@code pair} is unsigned, as the

@@ -267,6 +267,19 @@ impl Hierarchy {
             && !self.implements.values().any(|faces| faces.contains(&ty))
     }
 
+    /// Whether any class declares `then`, and so may need a thenable job.
+    ///
+    /// A job is a closure the census in `Shared::whole_program` appends after
+    /// the closure slot is numbered, so the slot is decided from this rather
+    /// than from the census's answer, which needs the finished hierarchy. It is
+    /// a superset of the census, so a job always has its slot; the price is one
+    /// slot in a program whose `then` turned out to be refused.
+    fn declares_a_then(&self) -> bool {
+        self.declares
+            .iter()
+            .any(|(class, names)| !self.faces.contains(class) && names.iter().any(|name| name == "then"))
+    }
+
     /// The nearest class at or above `ty` that declares `member`.
     fn declaring(&self, ty: TypeId, member: &str) -> Option<TypeId> {
         let mut at = Some(ty);
@@ -1396,7 +1409,8 @@ fn collect_hierarchy(
     }
     // One more slot on the end, if anything in the program is a closure. A
     // program with none carries no table at all, which is what it should carry.
-    if closures.iter().any(|closure| closure.refusal.is_none()) {
+    // Or one whose class declares `then`: see `Hierarchy::declares_a_then`.
+    if closures.iter().any(|closure| closure.refusal.is_none()) || hierarchy.declares_a_then() {
         hierarchy.closure_slot = Some(u32::try_from(hierarchy.slots.len()).unwrap_or(u32::MAX));
     }
     // And one for the resumption, on the same terms: a program with no
@@ -1425,8 +1439,8 @@ fn collect_hierarchy(
 /// nothing for the thing that carries the captures.
 #[derive(Clone, Debug)]
 struct ClosureInfo {
-    /// The arrow function node, or -- when [`Self::wraps`] -- the declaration of
-    /// the named function this exists to be.
+    /// The arrow function node; for any other [`ClosureSource`], the
+    /// declaration it was made from, which that variant names.
     node: NodeId,
     /// What the body reads from outside itself, in a fixed order.
     captures: Vec<Capture>,
@@ -1436,28 +1450,8 @@ struct ClosureInfo {
     /// closure this does not handle still compiles the rest -- and so the
     /// reason is reported at the arrow rather than at whatever read it.
     refusal: Option<&'static str>,
-    /// Whether this closure is a *named function* used as a value rather than
-    /// an arrow.
-    ///
-    /// `nextTick(finish, stream)` passes `finish` where JavaScript's answer is
-    /// a function object. This compiler's answer is a closure with no captures
-    /// whose `call` forwards to `finish` -- one static instance, so `finish`
-    /// is the same object everywhere it is written. An event emitter removing
-    /// a listener depends on exactly that.
-    wraps: bool,
-    /// Whether the wrapped declaration is a **method**, whose receiver the
-    /// closure carries.
-    ///
-    /// `const g = c.twice` is a function object that remembers `c`. A free
-    /// function needs nothing remembered, so [`Self::wraps`] alone is a single
-    /// static instance; a method needs one object *per read*, with the receiver
-    /// in field 0 -- which is also what JavaScript does, since `c.twice !==
-    /// c.twice`.
-    ///
-    /// Always empty [`Self::captures`]: a method body reads its receiver
-    /// through `this`, not through the enclosing scope, so field 0 is the whole
-    /// environment and `bind_captures` starts after it.
-    binds_receiver: bool,
+    /// Where it came from, which decides what its body is.
+    source: ClosureSource,
     /// The structural copy this closure is a variant for, by suffix, or
     /// `None` for the closure as written.
     ///
@@ -1483,6 +1477,272 @@ struct ClosureInfo {
     retyped_captures: std::collections::BTreeMap<u32, HirType>,
 }
 
+/// Where a closure came from, which decides what its body is.
+///
+/// One enum rather than two booleans, because the booleans had combinations
+/// that meant nothing -- a closure that binds a receiver without wrapping
+/// anything -- and a third kind would have added a third flag and four more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ClosureSource {
+    /// An arrow or a function expression, lowered from its own body.
+    Authored,
+    /// A *named function* used as a value.
+    ///
+    /// `nextTick(finish, stream)` passes `finish` where JavaScript's answer is
+    /// a function object. This compiler's answer is a closure with no captures
+    /// whose `call` forwards to `finish` -- one static instance, so `finish`
+    /// is the same object everywhere it is written. An event emitter removing
+    /// a listener depends on exactly that.
+    Function,
+    /// A **method** used as a value, whose receiver the closure carries.
+    ///
+    /// `const g = c.twice` is a function object that remembers `c`. A free
+    /// function needs nothing remembered, so [`Self::Function`] is a single
+    /// static instance; a method needs one object *per read*, with the receiver
+    /// in field 0 -- which is also what JavaScript does, since `c.twice !==
+    /// c.twice`.
+    ///
+    /// Always empty [`ClosureInfo::captures`]: a method body reads its receiver
+    /// through `this`, not through the enclosing scope, so field 0 is the whole
+    /// environment and `bind_captures` starts after it.
+    Method,
+    /// The specification's `NewPromiseResolveThenableJob` for one thenable
+    /// class: `x.then(resolve, reject)`, run as a microtask. The node is the
+    /// class's `then`. See [`Thenable`].
+    Job {
+        /// The class whose `then` it calls.
+        class: TypeId,
+        /// The resolving functions it hands that `then`, by closure index:
+        /// `CreateResolvingFunctions`. `None` where `then` declares no
+        /// parameter for one.
+        resolve: Option<usize>,
+        reject: Option<usize>,
+    },
+    /// One of the resolving functions a [`Self::Job`] makes. The node is the
+    /// `then` parameter it is passed as, whose function type is its
+    /// signature -- so the `then` that calls it calls exactly what it built.
+    Resolving { rejects: bool },
+}
+
+impl ClosureSource {
+    /// Whether `call` forwards to a declaration rather than running a body.
+    const fn wraps(self) -> bool {
+        matches!(self, Self::Function | Self::Method)
+    }
+
+    /// Whether field 0 is the receiver of a method it forwards to.
+    const fn binds_receiver(self) -> bool {
+        matches!(self, Self::Method)
+    }
+}
+
+/// What resolving a promise with an instance of one class does.
+///
+/// The specification's promise resolve function reads `then` off the value at
+/// run time and, where it is callable, queues `NewPromiseResolveThenableJob`
+/// -- which is how `await x` and `return x` and `resolve(x)` all come to call a
+/// thenable's `then`. The program is closed, so which classes answer that
+/// question is known before anything is lowered. [`thenables`] is the one
+/// census of it, and every resolve site reads its answer rather than deriving
+/// one.
+///
+/// **What a site does with a candidate depends on whether it proves the
+/// value is one.** A site whose static type is the class or below it resolves
+/// only with instances of it, and refuses at compile time where the answer is
+/// not a plain [`Self::Job`]. A site that merely *could* receive one -- an
+/// erased value, or a class below the static type -- decides when the value
+/// arrives, as the specification's own `Get(x, "then")` does. Refusing those
+/// would refuse every `await` of an `unknown` in a program that declares one
+/// awkward `then` anywhere.
+#[derive(Clone, Debug)]
+enum Thenable {
+    /// Resolved through the job at this closure index.
+    Job(usize),
+    /// A job exists, and `then` can throw. See [`RAISING_THEN`]: refused where
+    /// a site proves it, and where it is merely possible the job runs and a
+    /// throw ends the program by name through the uncaught path.
+    Raises(usize),
+    /// A `then` no job can call, and why: refused where a site proves it, and
+    /// where it is merely possible, a named stop (`nts_refused`) if one
+    /// arrives.
+    Refused(&'static str),
+}
+
+/// Why a `then` that can throw is refused where a site proves it reaches one.
+///
+/// A throw from `then` rejects the promise, so the job must catch it -- and
+/// only a plain function has a raising copy to catch a throw through, which
+/// is the same line a `try` around a call to such a method is refused at.
+const RAISING_THEN: &str = "a thenable whose `then` can throw: the job must reject with what it throws, and a \
+                            method has no raising copy to catch it through";
+
+/// A resolving function's pair number, as `nts_promise_claim` takes it.
+const PAIR: HirType = HirType::Int { bits: 32, signed: false };
+
+/// A promise whose payload this closure does not know.
+///
+/// **The job and the resolving functions are payload-generic**, one per
+/// thenable class rather than one per class and payload, so they hold the
+/// promise as `Promise<unknown>` and resolve it through the erased path, and
+/// the value's tag carries the payload. The resolve site puts a
+/// `Promise<number>` there through an erase and an unerase. Sound because a
+/// promise's representation does not vary with its payload -- one `NtsPromise`
+/// with a tagged value, on every backend -- and the reader at the `await` asks
+/// the tag, which `nts_promise_fulfill_value` stored.
+fn erased_promise() -> HirType {
+    HirType::Managed(ManagedType::Promise(Box::new(HirType::Erased)))
+}
+
+/// A thenable job's fields: the thenable, and the promise it resolves.
+fn thenable_job_fields(class: TypeId) -> Vec<Field> {
+    vec![
+        Field { name: "thenable".to_owned(), ty: HirType::Managed(ManagedType::Object(class)), readonly: true, declared_by: None },
+        Field { name: "promise".to_owned(), ty: erased_promise(), readonly: true, declared_by: None },
+    ]
+}
+
+/// A resolving function's fields: the promise, and which pair it is.
+fn resolving_function_fields() -> Vec<Field> {
+    vec![
+        Field { name: "promise".to_owned(), ty: erased_promise(), readonly: true, declared_by: None },
+        Field { name: "pair".to_owned(), ty: PAIR, readonly: true, declared_by: None },
+    ]
+}
+
+/// Every class a promise can be resolved with through its `then`, and the
+/// closures that do it: for each, a [`ClosureSource::Job`] and the
+/// [`ClosureSource::Resolving`] pair it hands `then`, appended to `closures`.
+///
+/// Classes that *declare* `then` only. A subclass that inherits one is an
+/// instance of the class that declared it, whose job dispatches -- so it needs
+/// no job of its own, and one that overrides `then` declares it.
+fn thenables(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    hierarchy: &Hierarchy,
+    throwing: &rustc_hash::FxHashSet<u32>,
+    closures: &mut Vec<ClosureInfo>,
+) -> rustc_hash::FxHashMap<TypeId, Thenable> {
+    let mut found = rustc_hash::FxHashMap::default();
+    // Sorted, so one compiler on one input numbers the closures one way.
+    let mut classes: Vec<TypeId> = hierarchy
+        .name
+        .keys()
+        .copied()
+        .filter(|class| !hierarchy.faces.contains(class))
+        .collect();
+    classes.sort_unstable_by_key(|class| class.0);
+    for class in classes {
+        let Some(TypeKind::Object { properties }) = snapshot.types.get(class.0 as usize).map(|record| &record.kind) else {
+            continue;
+        };
+        let Some(then) = properties.iter().find(|property| property.name == "then") else {
+            continue;
+        };
+        let answer = match then.kind {
+            nts_semantic_schema::MemberKind::Method if hierarchy.declares_itself(class, "then") => {
+                match then.declaration {
+                    Some(method) => thenable_job(snapshot, probe, class, method, throwing, closures),
+                    None => Thenable::Refused("a thenable whose `then` has no declaration to call"),
+                }
+            }
+            // Inherited: the declaring class's job covers it.
+            nts_semantic_schema::MemberKind::Method => continue,
+            // **Refused rather than skipped**, because skipping is a wrong
+            // answer: the specification calls a `then` whatever kind of member
+            // holds it, and a site resolving with one of these would fulfil
+            // with the object where node calls it.
+            nts_semantic_schema::MemberKind::Accessor(_) => {
+                Thenable::Refused("a thenable whose `then` is an accessor, which a job would have to run to find the function it calls")
+            }
+            nts_semantic_schema::MemberKind::Field => {
+                Thenable::Refused("a thenable whose `then` is a field holding a function, which a job would call through the field rather than a method")
+            }
+        };
+        found.insert(class, answer);
+    }
+    found
+}
+
+/// The job for one class's `then`, and its resolving functions, or why there
+/// can be none.
+fn thenable_job(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    class: TypeId,
+    method: NodeId,
+    throwing: &rustc_hash::FxHashSet<u32>,
+    closures: &mut Vec<ClosureInfo>,
+) -> Thenable {
+    // Each refusal says which gap it is, because they are cleared by different
+    // work, and a reader clearing one must not take the sentence for another.
+    if named(snapshot, class).is_none_or(is_anonymous_shape) {
+        // Literals of one shape share a layout, and `instanceof` is a test of
+        // the layout -- so it could not say whose `then` to call.
+        return Thenable::Refused("an object literal with a `then` method, whose layout another literal of the same shape can share");
+    }
+    if !instantiation_suffix(snapshot, class).is_empty() {
+        return Thenable::Refused(
+            "a thenable generic class: its `then` has a copy per instantiation, and the job is one per declaration",
+        );
+    }
+    if is_generic_function(snapshot, method) {
+        return Thenable::Refused(
+            "a thenable whose `then` is generic: a job calls one copy of it, and which copy a generic method needs is \
+             chosen at a call site the job does not have",
+        );
+    }
+    // Whether `then` can throw, which a job cannot catch: see `RAISING_THEN`.
+    let symbol = snapshot
+        .symbols
+        .iter()
+        .position(|record| record.declarations.contains(&method))
+        .and_then(|at| u32::try_from(at).ok());
+    let raises = symbol.is_some_and(|symbol| throwing.contains(&symbol));
+    let parameters: Vec<NodeId> = probe
+        .children(method)
+        .into_iter()
+        .filter(|child| probe.kind_of(*child) == Some(syntax::PARAMETER))
+        .collect();
+    if parameters.len() > 2 {
+        return Thenable::Refused("a thenable whose `then` takes more than the two callbacks a job passes it");
+    }
+    // Each parameter is the resolving function it will be handed, so each has
+    // to be typed as a function: the resolving function's signature is that
+    // type's, which is what makes the call `then` makes the call it built.
+    let is_function = |parameter: &NodeId| {
+        snapshot
+            .node_types
+            .get(parameter)
+            .is_some_and(|ty| signature_key(snapshot, *ty).is_some())
+    };
+    if !parameters.iter().all(is_function) {
+        return Thenable::Refused("a thenable whose `then` takes a callback not typed as a function");
+    }
+    let job = closures.len();
+    let mut next = job + 1;
+    let mut resolving = |at: usize| {
+        parameters.get(at).map(|_| {
+            let index = next;
+            next += 1;
+            index
+        })
+    };
+    let resolve = resolving(0);
+    let reject = resolving(1);
+    closures.push(ClosureInfo {
+        source: ClosureSource::Job { class, resolve, reject },
+        ..ClosureInfo::as_written(method)
+    });
+    for (parameter, rejects) in parameters.iter().zip([false, true]) {
+        closures.push(ClosureInfo {
+            source: ClosureSource::Resolving { rejects },
+            ..ClosureInfo::as_written(*parameter)
+        });
+    }
+    if raises { Thenable::Raises(job) } else { Thenable::Job(job) }
+}
+
 impl ClosureInfo {
     /// The closure as written: no copy of an enclosing generic, nothing
     /// re-typed, nothing wrapped.
@@ -1497,8 +1757,7 @@ impl ClosureInfo {
             node,
             captures: Vec::new(),
             refusal: None,
-            wraps: false,
-            binds_receiver: false,
+            source: ClosureSource::Authored,
             within: None,
             within_copy: None,
             retyped_captures: std::collections::BTreeMap::new(),
@@ -2625,13 +2884,12 @@ fn collect_function_values(
     }
 
     closures.extend(wrapped.into_iter().map(|declaration| ClosureInfo {
-        wraps: true,
+        source: ClosureSource::Function,
         ..ClosureInfo::as_written(declaration)
     }));
     closures.extend(bound.into_iter().map(|declaration| ClosureInfo {
         refusal: refusal_for_a_method_value(probe, declaration),
-        wraps: true,
-        binds_receiver: true,
+        source: ClosureSource::Method,
         ..ClosureInfo::as_written(declaration)
     }));
 }
@@ -7178,6 +7436,9 @@ struct Shared {
     /// map of substitutions -- two hash maps each -- into every one of them
     /// took `stream` from 15 to 66 seconds. Measured, then shared.
     class_instances: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Substitution>>,
+    /// Which classes are thenables. Shared for the reason `class_instances`
+    /// is: it is read by every builder and written by none.
+    thenables: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Thenable>>,
 }
 
 impl Shared {
@@ -7205,14 +7466,19 @@ impl Shared {
                 .map(|instance| (instance.ty, instance.substitution))
                 .collect(),
         );
+        let naming = naming(snapshot);
+        // After every variant, so that none is made of these: a job and its
+        // resolving functions capture nothing a copy could re-type.
+        let thenables = std::rc::Rc::new(thenables(snapshot, &probe, hierarchy, &naming.throwing, &mut closures));
         Self {
             module: module.clone(),
             hierarchy: hierarchy.clone(),
             closures,
-            naming: naming(snapshot),
+            naming,
             generics,
             structural,
             class_instances,
+            thenables,
         }
     }
 
@@ -7236,6 +7502,7 @@ impl Shared {
         builder.raises = copy.raises;
         builder.retyped = copy.retyped;
         builder.class_instances = std::rc::Rc::clone(&self.class_instances);
+        builder.thenables = std::rc::Rc::clone(&self.thenables);
         builder.generic_calls.clone_from(&self.generics.at_call);
         // A structural call names its copy the same way a generic one does, so
         // the naming site needs no second question -- one map, two sources.
@@ -8902,7 +9169,10 @@ fn lower_wanted_closures(
             closures[index].node,
             closures[index].retyped_captures.clone(),
         );
-        match builder.lower_closure(index, &closures[index]) {
+        // A job or a resolving function has a body the compiler makes; every
+        // other closure has one the program wrote.
+        let made = builder.lower_made_closure(index, &closures[index]);
+        match made.unwrap_or_else(|| builder.lower_closure(index, &closures[index])) {
             Ok(func) => lowered.program.funcs.push(func),
             // **A refused closure had no line of its own.** `uncompiled` is keyed
             // by a *declared* name and an arrow has none, so every cascade ending
@@ -10057,6 +10327,12 @@ fn relate_closures_to_signatures(
     let mut declared_for: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
 
     for (index, info) in closures.iter().enumerate() {
+        // A job's node is the `then` it calls, whose type is `then`'s and not
+        // the job's: a job takes nothing and is never a value the program
+        // holds, so there is no signature for it to be related to.
+        if matches!(info.source, ClosureSource::Job { .. }) {
+            continue;
+        }
         let (class, method) = closure_names(index);
         let Some(at) = program
             .layouts
@@ -10072,7 +10348,17 @@ fn relate_closures_to_signatures(
             continue;
         };
         // A function type, and one the program named. See above.
-        if !matches!(record.kind, TypeKind::Function(_)) || record.symbol.is_none() {
+        //
+        // **Or a resolving function's, named or not.** The ambiguity that
+        // keeps an unnamed type out -- two ids for one written signature --
+        // cannot reach one: its node is the `then` parameter it is passed as,
+        // so its type is that parameter's own id rather than one the checker
+        // inferred, and the layout it has to extend is the one holding exactly
+        // that id. Without the relation the JVM refuses the job, which stores
+        // the closure where the parameter's class is declared; C and LLVM
+        // accept it because a pointer is a pointer, which is not agreement.
+        let exact = matches!(info.source, ClosureSource::Resolving { .. });
+        if !matches!(record.kind, TypeKind::Function(_)) || (record.symbol.is_none() && !exact) {
             continue;
         }
         // *Not* the layout for this exact type id. The arrow's own type is the
@@ -10115,7 +10401,11 @@ fn relate_closures_to_signatures(
             .filter(|(index, layout)| {
                 *index != at
                     && layout.types.iter().any(|&other| {
-                        signature_key(snapshot, other).is_some_and(|found| found == key)
+                        if exact {
+                            other == ty
+                        } else {
+                            signature_key(snapshot, other).is_some_and(|found| found == key)
+                        }
                     })
             })
             .map(|(at, _)| at)
@@ -12631,6 +12921,9 @@ struct FuncBuilder<'a> {
     /// What each generic class instantiation binds, by the instance's type.
     /// See `Shared::class_instances`.
     class_instances: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Substitution>>,
+    /// Which classes are thenables, and how a promise is resolved with one.
+    /// See [`Thenable`].
+    thenables: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Thenable>>,
     /// Which of *this* copy's own parameters are re-typed, by position. Empty
     /// for every function that is not a structural specialisation.
     retyped: Retyped,
@@ -12945,6 +13238,7 @@ impl<'a> FuncBuilder<'a> {
             generic_calls: rustc_hash::FxHashMap::default(),
             structural_calls: rustc_hash::FxHashMap::default(),
             class_instances: std::rc::Rc::default(),
+            thenables: std::rc::Rc::default(),
             retyped: Retyped::new(),
             retyped_symbols: std::collections::BTreeMap::new(),
             in_constructor: false,
@@ -18942,10 +19236,10 @@ impl<'a> FuncBuilder<'a> {
         // field read rather than a copy into a local: the value is already
         // there, and `FieldGet` is what every other object read is.
         // **Field 0 is the receiver, and it comes before the captures.**
-        // `binds_receiver` guarantees `info.captures` is empty -- a method body
+        // `ClosureSource::Method` guarantees `info.captures` is empty -- a method body
         // reaches its receiver through `this`, not through the enclosing scope
         // -- so the two never have to agree about an offset.
-        let fields = if info.binds_receiver {
+        let fields = if info.source.binds_receiver() {
             vec![self.bind_receiver(id, receiver, &origin)?]
         } else {
             self.bind_captures(receiver, info, &origin)?
@@ -19001,7 +19295,7 @@ impl<'a> FuncBuilder<'a> {
         // stands for, which keeps that function's one definition the only one:
         // re-lowering the declaration's body here would compile it twice and
         // give recursion two things to mean.
-        if info.wraps {
+        if info.source.wraps() {
             // The name the wrapped function is *emitted* under, which is not
             // always the name written on it: where two modules declare the same
             // one, `Naming` qualifies both apart, and the definition is emitted
@@ -19156,6 +19450,193 @@ impl<'a> FuncBuilder<'a> {
             )
     }
 
+    /// A closure whose body the compiler makes rather than the program
+    /// writing one, or `None` for any other.
+    fn lower_made_closure(&mut self, index: usize, info: &ClosureInfo) -> Option<Result<Func, Diagnostic>> {
+        match info.source {
+            ClosureSource::Job { class, resolve, reject } => {
+                Some(self.lower_thenable_job(index, info.node, class, [resolve, reject]))
+            }
+            ClosureSource::Resolving { rejects } => Some(self.lower_resolving_function(index, info.node, rejects)),
+            ClosureSource::Authored | ClosureSource::Function | ClosureSource::Method => None,
+        }
+    }
+
+    /// `NewPromiseResolveThenableJob`: `x.then(resolve, reject)`, where `x` is
+    /// the thenable a promise was resolved with.
+    ///
+    /// Its fields are the thenable and the promise, which the resolve site
+    /// wrote. The resolving functions are made here, when the job runs rather
+    /// than when it was queued, because that is where the specification makes
+    /// them -- and their pair is the promise's `nts_promise_pair` now, which is
+    /// the one after the use that queued this.
+    fn lower_thenable_job(
+        &mut self,
+        index: usize,
+        method: NodeId,
+        class: TypeId,
+        resolving: [Option<usize>; 2],
+    ) -> Result<Func, Diagnostic> {
+        let (_, name) = closure_names(index);
+        let receiver_ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        let origin = self.origin(method);
+        let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
+        let params = vec![Param {
+            name: "this".to_owned(),
+            shape: ParamShape::Ordinary,
+            ty: receiver_ty,
+            origin: origin.clone(),
+            known: Facts::TOP,
+        }];
+        self.layouts.push(self.closure_layout(index, thenable_job_fields(class)));
+        let thenable = self.push(
+            OpKind::FieldGet { object: receiver, field: 0 },
+            HirType::Managed(ManagedType::Object(class)),
+            origin.clone(),
+        );
+        let promise = self.push(OpKind::FieldGet { object: receiver, field: 1 }, erased_promise(), origin.clone());
+        let pair = self.runtime_call("nts_promise_pair", vec![promise], PAIR, origin.clone());
+
+        let (parameters, returns) = self.method_signature(method)?;
+        let mut args = vec![thenable];
+        for (function, parameter) in resolving.into_iter().flatten().zip(&parameters) {
+            let object = self.resolving_function(function, promise, pair, &origin);
+            args.push(self.coerce(object, parameter, method)?);
+        }
+        for ty in parameters.iter().chain([&returns]) {
+            self.materialize(method, ty)?;
+        }
+        // The ordinary dispatch, so a subclass that overrides `then` is the one
+        // called: the job is per declaring class, and the value may be below it.
+        let callee = self.callee_for(method, class, "then")?;
+        self.push(OpKind::Call { callee, args, frame: None }, returns, origin.clone());
+        self.terminate(Terminator::Return(None));
+        Ok(self.finish(name, params, HirType::Void, origin, false))
+    }
+
+    /// One of a promise's resolving functions, as a value: the closure a job
+    /// hands `then`.
+    fn resolving_function(&mut self, index: usize, promise: ValueId, pair: ValueId, origin: &Origin) -> ValueId {
+        let object = self.push(
+            OpKind::ObjectNew { frame: false },
+            HirType::Managed(ManagedType::Object(closure_type(index))),
+            origin.clone(),
+        );
+        self.field_set(object, 0, promise, origin);
+        self.field_set(object, 1, pair, origin);
+        self.layouts.push(self.closure_layout(index, resolving_function_fields()));
+        self.used_closures.push(index);
+        object
+    }
+
+    /// A resolving function's body: if its pair is unspent, resolve the promise
+    /// with what it was called with, or reject it.
+    ///
+    /// Its signature is the `then` parameter's function type, exactly: `then`
+    /// calls it as that type says, directly once specialisation has seen it and
+    /// through the closure slot otherwise, and a body built from its own
+    /// opinion of the signature would be called with somebody else's. So the
+    /// parameters are the type's, the first is the value, and it returns what
+    /// the type returns -- `undefined` of it.
+    ///
+    /// Resolving is `settle`, the one resolve procedure, recursively: a
+    /// thenable handed to `onFulfilled` is resolved through its own job, as the
+    /// specification does.
+    fn lower_resolving_function(&mut self, index: usize, parameter: NodeId, rejects: bool) -> Result<Func, Diagnostic> {
+        let (_, name) = closure_names(index);
+        let receiver_ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        let origin = self.origin(parameter);
+        let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
+        let mut params = vec![Param {
+            name: "this".to_owned(),
+            shape: ParamShape::Ordinary,
+            ty: receiver_ty,
+            origin: origin.clone(),
+            known: Facts::TOP,
+        }];
+        self.layouts.push(self.closure_layout(index, resolving_function_fields()));
+        let function = self.snapshot.node_types.get(&parameter).copied();
+        let Some((arguments, returned)) = function.and_then(|ty| signature_key(self.snapshot, ty)) else {
+            return Err(self.unsupported(parameter, "a thenable's callback not typed as a function"));
+        };
+        let mut values = Vec::new();
+        for (at, argument) in arguments.iter().enumerate() {
+            let ty = self
+                .represent(*argument)
+                .ok_or_else(|| self.unrepresentable(parameter, "a thenable callback's parameter"))?;
+            self.materialize(parameter, &ty)?;
+            let position = u32::try_from(at + 1).unwrap_or(u32::MAX);
+            values.push(self.push(OpKind::Param(position), ty.clone(), origin.clone()));
+            params.push(Param {
+                name: if at == 0 { if rejects { "reason" } else { "value" }.to_owned() } else { format!("unused{at}") },
+                shape: ParamShape::Ordinary,
+                ty,
+                origin: origin.clone(),
+                known: Facts::TOP,
+            });
+        }
+        let returns = self
+            .represent(returned)
+            .ok_or_else(|| self.unrepresentable(parameter, "a thenable callback's result"))?;
+        let answers = match returns {
+            HirType::Void => false,
+            HirType::Erased => true,
+            _ => {
+                return Err(self.unsupported(
+                    parameter,
+                    "a thenable's callback declared to return something other than `void` or `unknown`, which \
+                     a resolving function has no value of",
+                ));
+            }
+        };
+
+        let promise = self.push(OpKind::FieldGet { object: receiver, field: 0 }, erased_promise(), origin.clone());
+        let pair = self.push(OpKind::FieldGet { object: receiver, field: 1 }, PAIR, origin.clone());
+        let live = self.runtime_call("nts_promise_claim", vec![promise, pair], HirType::Bool, origin.clone());
+        let settles = self.new_block();
+        let join = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: live,
+            then_target: settles,
+            then_args: Vec::new(),
+            else_target: join,
+            else_args: Vec::new(),
+        });
+        self.switch_to(settles);
+        let value = values.first().copied();
+        if rejects {
+            self.reject_with(parameter, promise, value)?;
+        } else {
+            let result = AsyncResult { promise, payload: HirType::Erased };
+            self.settle(parameter, &result, value)?;
+        }
+        self.terminate(Terminator::Jump { target: join, args: Vec::new() });
+        self.switch_to(join);
+        let answer = answers.then(|| self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone()));
+        self.terminate(Terminator::Return(answer));
+        Ok(self.finish(name, params, returns, origin, false))
+    }
+
+    /// A method's parameter and result types, from its declaration's
+    /// signature.
+    fn method_signature(&self, method: NodeId) -> Result<(Vec<HirType>, HirType), Diagnostic> {
+        let signature = self
+            .snapshot
+            .node_types
+            .get(&method)
+            .and_then(|ty| signature_key(self.snapshot, *ty))
+            .ok_or_else(|| self.unrepresentable(method, "a method's signature"))?;
+        let parameters = signature
+            .0
+            .iter()
+            .map(|ty| self.represent(*ty).ok_or_else(|| self.unrepresentable(method, "a method's parameter")))
+            .collect::<Result<Vec<_>, _>>()?;
+        let returns = self
+            .represent(signature.1)
+            .ok_or_else(|| self.unrepresentable(method, "a method's result"))?;
+        Ok((parameters, returns))
+    }
+
     /// The representation of a name bound to a `const` arrow, where it is one.
     ///
     /// **The same answer the creating side gives**, which is the whole of why
@@ -19230,7 +19711,7 @@ impl<'a> FuncBuilder<'a> {
         info: &ClosureInfo,
         forwarded: Vec<ValueId>,
     ) -> Result<(Callee, Vec<ValueId>), Diagnostic> {
-        if !info.binds_receiver {
+        if !info.source.binds_receiver() {
             let called = self
                 .qualified
                 .get(&id)
@@ -22627,7 +23108,19 @@ impl<'a> FuncBuilder<'a> {
         // runtime's queue does, as it does for every other resolved promise.
         let promise = match self.values[promise.0 as usize].ty.clone() {
             HirType::Managed(ManagedType::Promise(_)) => promise,
-            payload => self.settled_around(id, promise, payload)?,
+            // **What it settles with is what `then` delivers**, where the
+            // operand can be a thenable -- and the checker already said what
+            // that is, as the `await` expression's own type. Otherwise the
+            // operand itself, as before: for a union that is the erased value
+            // the checker's narrower answer would have to be unerased from.
+            operand => {
+                let payload = if self.thenable_candidates(&operand).is_empty() {
+                    operand
+                } else {
+                    self.type_of(id).unwrap_or(operand)
+                };
+                self.settled_around(id, promise, payload)?
+            }
         };
         let HirType::Managed(ManagedType::Promise(payload)) =
             self.values[promise.0 as usize].ty.clone()
@@ -24862,6 +25355,217 @@ impl<'a> FuncBuilder<'a> {
         Ok(promise)
     }
 
+    /// The thenable half of the resolve procedure. Where `value` can be an
+    /// instance of a class that declares `then`, ask which, and queue that
+    /// class's job instead of fulfilling. `None` where its type rules every
+    /// thenable out, which is almost everywhere and costs nothing.
+    ///
+    /// **A test per candidate, most-derived first**, each an `InstanceOf` of
+    /// the class and everything under it, and a value none of them matches is
+    /// fulfilled as before. A type that declares `then` itself is a candidate
+    /// like any other rather than a jump straight to its job, because a
+    /// reference of that type can still be `null`, which is not a thenable.
+    ///
+    /// A candidate the census refused refuses *here*, at the site that reaches
+    /// it: the census knows why and the site knows whether, and a site that
+    /// did not ask would fulfil with the object where node calls its `then`.
+    fn settle_through_thenables(
+        &mut self,
+        id: NodeId,
+        result: &AsyncResult,
+        value: ValueId,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let candidates = self.thenable_candidates(&self.values[value.0 as usize].ty.clone());
+        if candidates.is_empty() {
+            return Ok(None);
+        }
+        // Where the static type is the class or below it, every value that is
+        // not null is an instance: the site proves it. See `Thenable`.
+        let declared = match self.values[value.0 as usize].ty {
+            HirType::Managed(ManagedType::Object(declared)) => Some(declared),
+            _ => None,
+        };
+        let mut arms = Vec::new();
+        for class in candidates {
+            let proven = declared.is_some_and(|declared| self.hierarchy.descends_from(declared, class));
+            let arm = match self.thenables.get(&class) {
+                Some(Thenable::Raises(_)) if proven => {
+                    return Err(self.unsupported(id, &format!("resolving a promise with {RAISING_THEN}")));
+                }
+                Some(Thenable::Refused(reason)) if proven => {
+                    return Err(self.unsupported(id, &format!("resolving a promise with {reason}")));
+                }
+                Some(Thenable::Job(job) | Thenable::Raises(job)) => Ok(*job),
+                Some(Thenable::Refused(reason)) => Err(*reason),
+                None => continue,
+            };
+            if let Ok(job) = arm {
+                self.check_delivery(id, job, &result.payload)?;
+            }
+            arms.push((class, arm));
+        }
+        let origin = self.origin(id);
+        let erased = self.erased(value, &origin);
+        let join = self.new_block();
+        for (class, arm) in arms {
+            let classes = self.classes_under(class);
+            let test = self.push(OpKind::InstanceOf { value: erased, classes }, HirType::Bool, origin.clone());
+            let hit = self.new_block();
+            let miss = self.new_block();
+            self.terminate(Terminator::Branch {
+                cond: test,
+                then_target: hit,
+                then_args: Vec::new(),
+                else_target: miss,
+                else_args: Vec::new(),
+            });
+            self.switch_to(hit);
+            match arm {
+                Ok(job) => {
+                    let thenable = self.push(
+                        OpKind::Unerase { value: erased },
+                        HirType::Managed(ManagedType::Object(class)),
+                        origin.clone(),
+                    );
+                    self.queue_thenable_job(id, job, class, thenable, result.promise, &origin)?;
+                    self.terminate(Terminator::Jump { target: join, args: Vec::new() });
+                }
+                // A value no job can resolve arrived, where the type only
+                // allowed it: stop, naming why, rather than fulfil with it.
+                Err(reason) => {
+                    let what = self.push(
+                        OpKind::ConstString(format!("resolving a promise with {reason}")),
+                        HirType::Managed(ManagedType::String),
+                        origin.clone(),
+                    );
+                    self.runtime_call("nts_refused", vec![what], HirType::Void, origin.clone());
+                    self.terminate(Terminator::Unreachable);
+                }
+            }
+            self.switch_to(miss);
+        }
+        // **The miss is fulfilled through the tag**, not through `fulfil`.
+        // The payload was typed for what `then` delivers -- `await box` is a
+        // `number` -- and a value that is not a thenable is not that: where
+        // the static type declares `then`, it is only the `null` the type
+        // admits. So it is resolved as an erased value is, under its own tag.
+        // Where the payload can hold it, the typed reader at the `await` reads
+        // it; where the checker's type said it could not arrive, that reader's
+        // assertion names it rather than reading a null as a number.
+        let promise = self.erased(result.promise, &origin);
+        let promise = self.push(OpKind::Unerase { value: promise }, erased_promise(), origin.clone());
+        self.runtime_call("nts_promise_resolve_value", vec![promise, erased], HirType::Void, origin.clone());
+        self.terminate(Terminator::Jump { target: join, args: Vec::new() });
+        self.switch_to(join);
+        Ok(Some(self.push(OpKind::ConstUndefined, HirType::Void, origin)))
+    }
+
+    /// Refuse where a thenable would resolve this promise with something its
+    /// payload cannot hold.
+    ///
+    /// The payload is the checker's, and the checker reads `then` from the
+    /// *static* type: `await held` with `held: Base` is typed `Base`, and a
+    /// `Derived` that declares `then(onFulfilled: (value: number) => ...)`
+    /// resolves it with a number. Node answers the number. Here the slot is a
+    /// `Base` pointer, so the honest answer is to say so rather than to read a
+    /// number's bits as one.
+    ///
+    /// What `then` delivers is its first callback's first parameter, which is
+    /// the resolving function's signature. An erased payload holds anything,
+    /// and two references share a reader; anything else must be the same
+    /// representation.
+    fn check_delivery(&self, id: NodeId, job: usize, payload: &HirType) -> Result<(), Diagnostic> {
+        let ClosureSource::Job { resolve: Some(resolve), .. } = self.closures[job].source else {
+            // A `then` with no `onFulfilled` never fulfils anything.
+            return Ok(());
+        };
+        let delivered = self
+            .snapshot
+            .node_types
+            .get(&self.closures[resolve].node)
+            .and_then(|ty| signature_key(self.snapshot, *ty))
+            .and_then(|(parameters, _)| parameters.first().copied())
+            .and_then(|ty| self.represent(ty));
+        let Some(delivered) = delivered else {
+            return Ok(());
+        };
+        // A thenable delivered is resolved in turn, through its own job, so
+        // what finally arrives is decided there -- and the reader at the
+        // `await` asks its tag, which is where a mismatch then says so.
+        if !self.thenable_candidates(&delivered).is_empty() {
+            return Ok(());
+        }
+        let holds = match (payload, &delivered) {
+            (HirType::Erased, _) | (HirType::Managed(_), HirType::Managed(_)) => true,
+            (payload, delivered) => payload == delivered,
+        };
+        if holds {
+            return Ok(());
+        }
+        Err(self.unsupported(
+            id,
+            &format!(
+                "resolving a promise typed to settle with {payload:?} through a thenable whose `then` delivers \
+                 {delivered:?}, which the checker typed from a class above the one declaring `then`",
+            ),
+        ))
+    }
+
+    /// The thenable classes a value of this type can be an instance of, most
+    /// derived first: those below it, and the one above it that declares
+    /// `then` if it inherits one. Everything, for an erased value.
+    fn thenable_candidates(&self, ty: &HirType) -> Vec<TypeId> {
+        let related = |class: &TypeId, to: TypeId| {
+            self.hierarchy.descends_from(*class, to) || self.hierarchy.descends_from(to, *class)
+        };
+        let mut found: Vec<TypeId> = match ty {
+            HirType::Erased => self.thenables.keys().copied().collect(),
+            HirType::Managed(ManagedType::Object(declared)) if declared.0 < super::SYNTHETIC_TYPE_FLOOR => {
+                self.thenables.keys().copied().filter(|class| related(class, *declared)).collect()
+            }
+            _ => Vec::new(),
+        };
+        let depth = |class: TypeId| {
+            std::iter::successors(Some(class), |at| self.hierarchy.base.get(at).copied()).take(64).count()
+        };
+        found.sort_by_key(|class| (std::cmp::Reverse(depth(*class)), class.0));
+        found
+    }
+
+    /// Queue `NewPromiseResolveThenableJob` for `thenable`, to resolve
+    /// `promise`: `HostEnqueuePromiseJob`, with the job the census made for its
+    /// class.
+    fn queue_thenable_job(
+        &mut self,
+        id: NodeId,
+        job: usize,
+        class: TypeId,
+        thenable: ValueId,
+        promise: ValueId,
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        // See `erased_promise`: the job holds the promise without its payload.
+        let erased = self.erased(promise, origin);
+        let promise = self.push(OpKind::Unerase { value: erased }, erased_promise(), origin.clone());
+        let object = self.push(
+            OpKind::ObjectNew { frame: false },
+            HirType::Managed(ManagedType::Object(closure_type(job))),
+            origin.clone(),
+        );
+        self.field_set(object, 0, thenable, origin);
+        self.field_set(object, 1, promise, origin);
+        self.layouts.push(self.closure_layout(job, thenable_job_fields(class)));
+        self.used_closures.push(job);
+        // Present whenever a class declares `then`, which is a superset of
+        // there being a job -- see where the hierarchy numbers it.
+        let Some(slot) = self.hierarchy.closure_slot else {
+            return Err(self.unsupported(id, "a thenable job in a program with no closure slot"));
+        };
+        let slot = self.push(OpKind::ConstFloat(f64::from(slot)), HirType::NUMBER, origin.clone());
+        self.runtime_call("nts_enqueue_job", vec![object, slot], HirType::Void, origin.clone());
+        Ok(())
+    }
+
     /// Settle an `async` function's promise and hand it back.
     ///
     /// The function's HIR return type is the promise, not the payload, so every
@@ -24934,6 +25638,21 @@ impl<'a> FuncBuilder<'a> {
                 origin,
             ));
         }
+        // **Then a thenable**, which is the other half of the specification's
+        // resolve procedure: it reads `then` off whatever it is given, and
+        // where there is one, the promise follows it instead of holding it.
+        if let Some(value) = value
+            && let Some(settled) = self.settle_through_thenables(id, result, value)?
+        {
+            return Ok(settled);
+        }
+        self.fulfil(id, result, value)
+    }
+
+    /// Settle with what is neither a promise nor a thenable: the
+    /// specification's `FulfillPromise`, which `settle` reaches once it has
+    /// asked both.
+    fn fulfil(&mut self, id: NodeId, result: &AsyncResult, value: Option<ValueId>) -> Result<ValueId, Diagnostic> {
         // At the payload's own type before the helper is chosen from it. The
         // two were read independently, so a `Promise<Buffer>` settled from a
         // value the flow had erased picked `nts_promise_fulfill_tagged` -- from
@@ -34846,7 +35565,7 @@ impl<'a> FuncBuilder<'a> {
         let index = record.declarations.iter().find_map(|declaration| {
             self.closures
                 .iter()
-                .position(|closure| closure.wraps && !closure.binds_receiver && closure.node == *declaration)
+                .position(|closure| closure.source == ClosureSource::Function && closure.node == *declaration)
         })?;
         if self.closures[index].refusal.is_some() {
             return None;
@@ -35089,7 +35808,7 @@ impl<'a> FuncBuilder<'a> {
         let Some(index) = record.declarations.iter().find_map(|declaration| {
             self.closures
                 .iter()
-                .position(|closure| closure.binds_receiver && closure.node == *declaration)
+                .position(|closure| closure.source == ClosureSource::Method && closure.node == *declaration)
         }) else {
             return Ok(None);
         };
@@ -53968,7 +54687,7 @@ impl<'a> FuncBuilder<'a> {
                     && record.declarations.iter().any(|declaration| {
                         self.closures
                             .iter()
-                            .any(|closure| closure.wraps && closure.node == *declaration)
+                            .any(|closure| closure.source.wraps() && closure.node == *declaration)
                     })
             });
         if let Some((index, _)) = function {
@@ -54077,7 +54796,7 @@ impl<'a> FuncBuilder<'a> {
             && let Some(index) = record.declarations.iter().find_map(|declaration| {
                 self.closures
                     .iter()
-                    .position(|closure| closure.wraps && closure.node == *declaration)
+                    .position(|closure| closure.source.wraps() && closure.node == *declaration)
             })
         {
             self.used_closures.push(index);

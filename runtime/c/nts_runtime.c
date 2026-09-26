@@ -1689,6 +1689,16 @@ _Noreturn void nts_no_arm(const char *member) {
   abort();
 }
 
+_Noreturn void nts_refused(const NtsString *what) {
+  fflush(stdout);
+  fputs("nts: refused at run time: ", stderr);
+  for (uint32_t at = 0; what && at < what->length; at++) {
+    fputc((int)nts_unit(what, at), stderr);
+  }
+  fputc('\n', stderr);
+  abort();
+}
+
 _Noreturn void nts_no_arm_of(NtsValue subject, const NtsString *member) {
   const char *name = "a value with no descriptor";
   if (NTS_TAG_IS_MANAGED(nts_value_tag(subject))) {
@@ -9218,6 +9228,10 @@ void nts_promise_adopt(NtsPromise *outer, NtsPromise *inner) {
       (NtsTask){nts_adoption_begin, nts_adoption_drop, adoption});
 }
 
+uint32_t nts_promise_pair(const NtsPromise *promise) {
+  return promise->resolutions;
+}
+
 void nts_promise_resolve_value(NtsPromise *promise, NtsValue value) {
   nts_promise_require_owner("nts_promise_resolve_value");
   if (nts_is_promise(value)) {
@@ -9318,6 +9332,10 @@ NtsTask nts_callback_task(NtsHeader *callback, double slot, bool repeating) {
   task.drop = nts_callback_drop;
   task.state = entry;
   return task;
+}
+
+void nts_enqueue_job(NtsHeader *callback, double slot) {
+  nts_enqueue_microtask(nts_callback_task(callback, slot, false));
 }
 
 double nts_set_timeout(NtsHeader *callback, double slot, double delay_ms,

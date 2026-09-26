@@ -100,3 +100,11 @@ using-unsupported 2 the constructs the name promises
 # branch must not make it disappear. A count of 0 here means the analyses stopped
 # walking a branch that runs.
 a-dead-branch-does-not-refuse-a-try 1 the control arm: a live call to a generic that throws, which cannot have a raising copy
+# Two of twelve arms, each a named edge of thenable resolution rather than a
+# debt of this fixture. `throwsInThen`: a throw from `then` must reject the
+# promise, and a method has no raising copy for the job to catch it through.
+# `asItsBase`: the checker types `await held` from `held: Base`, and `Derived`'s
+# `then` delivers a number a `Base` slot cannot hold. A count of 0 here means a
+# site stopped asking the census, which fulfils with the object where node calls
+# its `then`.
+an-await-of-a-thenable 2 a `then` that can throw, and a thenable held as a base whose `then` delivers what the base cannot hold

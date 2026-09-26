@@ -174,6 +174,10 @@ public final class NtsRuntime {
      * {@link #unreachable}: the call is emitted by lowering as an ordinary
      * runtime call, so there is no emitter here to add the throw.
      */
+    /** A refusal reached at run time; see {@code nts_refused}. */
+    public static void refused(String what) {
+        throw new NtsRefusal("at run time: " + what);
+    }
     public static void noArm(NtsValue subject, String member) {
         /* `-source 8`, as `uncaught` above is written for: no switch
            expressions, so this is a statement and a local. */
@@ -247,6 +251,28 @@ public final class NtsRuntime {
      * what it takes, which is the same guarantee arriving early enough to be
      * useful.
      */
+    /** A closure as a microtask; see {@code nts_enqueue_job}. */
+    public static void enqueueJob(NtsCallback callback, double slot) {
+        NtsEnv.microtask(NtsEnv.current(), new Job(callback));
+    }
+
+    /**
+     * The queued closure. A class rather than a method reference, because the
+     * runtime compiles to no {@code invokedynamic}: see
+     * {@code nothing_in_the_runtime_needs_a_feature_android_lacks}.
+     */
+    private static final class Job implements NtsResumable {
+        private final NtsCallback callback;
+
+        Job(NtsCallback callback) {
+            this.callback = callback;
+        }
+
+        @Override
+        public void resume() {
+            callback.call();
+        }
+    }
     public static double setTimeout(NtsCallback callback, double slot, double delayMs, boolean repeating) {
         return NtsEnv.postDelayed(NtsEnv.current(), callback, delayMs, repeating);
     }
