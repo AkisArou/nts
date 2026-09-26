@@ -19,6 +19,8 @@
 //   single    a single-child widget holds its child
 //   argument  a signal's argument reaches the handler its prop holds, typed,
 //             at the discrete event priority
+//   list      a ListBox, which wraps each child in a row: append, insert
+//             before, move and remove, in the rows' own order
 //
 // What the host refuses -- text outside a widget with a label, an unknown
 // prop or widget, a second child for a single-child widget -- is an Error
@@ -45,7 +47,7 @@ import {
   type HostNode,
   type Props,
 } from "../../../packages/react-gtk/src/ReactFiberConfig.ts";
-import { BoxNode, ButtonNode, FrameNode, LabelNode } from "../../../packages/react-gtk/src/widgets.ts";
+import { BoxNode, ButtonNode, FrameNode, LabelNode, ListBoxNode } from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
 
 // The children of `parent`, as GTK orders them, named by the nodes they are.
@@ -59,6 +61,27 @@ function order(parent: HostNode, nodes: HostNode[], names: string[]): string {
       }
     }
     child = child.get_next_sibling();
+  }
+  return out;
+}
+
+// The children of a ListBox, as its rows order them, named by the nodes they are.
+function rows(list: HostNode, nodes: HostNode[], names: string[]): string {
+  if (!(list instanceof ListBoxNode)) {
+    return "not a list";
+  }
+  let out = "";
+  for (let i = 0; ; i++) {
+    const row = list.gtk.get_row_at_index(i);
+    if (row === null) {
+      break;
+    }
+    const child = row.get_child();
+    for (let n = 0; n < nodes.length; n++) {
+      if (nodes[n]!.widget === child) {
+        out += (out === "" ? "" : ",") + names[n]!;
+      }
+    }
   }
   return out;
 }
@@ -155,6 +178,24 @@ function main(): void {
   );
   react_gtk_emit_double(scale.widget, "adjust-bounds", 2.5);
   react_gtk_log("argument " + bounds);
+
+  const list = createInstance("GtkListBox", {}, container, 0, {});
+  const a = createInstance("GtkLabel", { label: "a" }, container, 0, {});
+  const b = createInstance("GtkLabel", { label: "b" }, container, 0, {});
+  const c = createInstance("GtkLabel", { label: "c" }, container, 0, {});
+  const d = createInstance("GtkLabel", { label: "d" }, container, 0, {});
+  const items = [a, b, c, d];
+  const labels = ["a", "b", "c", "d"];
+  appendInitialChild(list, a);
+  appendInitialChild(list, b);
+  appendInitialChild(list, c);
+  const appended = rows(list, items, labels);
+  insertBefore(list, d, b);
+  const inserted = rows(list, items, labels);
+  insertBefore(list, c, a);
+  const moved = rows(list, items, labels);
+  removeChild(list, b);
+  react_gtk_log("list " + appended + " " + inserted + " " + moved + " " + rows(list, items, labels));
 
   const loop = g_main_loop_new(null, false);
   let ran = "";

@@ -124,7 +124,7 @@ import {
   type PangoWrapMode,
 } from "c:Pango-1.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
-import { HostNode, type SignalSlot } from "./HostNode.ts";
+import { HostNode, insertAt, type SignalSlot } from "./HostNode.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -3849,6 +3849,45 @@ export class FlowBoxNode extends HostNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return flowBoxSignal(this.gtk, key, slot);
   }
+  // A list places a child at an index, and holds a child that is not a
+  // row in a row it makes for it: React's order of the children gives the
+  // index, and what the list holds for each is what moves or goes.
+  private readonly items: HostNode[] = [];
+  private readonly placed: GtkWidget[] = [];
+  private held(child: HostNode): GtkWidget {
+    const parent = child.widget.get_parent();
+    return parent !== null && parent !== this.gtk ? parent : child.widget;
+  }
+  appendChild(child: HostNode): void {
+    this.gtk.append(child.widget);
+    this.items.push(child);
+    this.placed.push(this.held(child));
+  }
+  insertBefore(child: HostNode, before: HostNode): void {
+    const at = this.items.indexOf(child);
+    if (at >= 0) {
+      // A move. A row the list made is its own: it goes when removed, so the
+      // child is taken back out of it first, and placed anew.
+      if (this.placed[at] !== child.widget) {
+        this.gtk.get_child_at_index(at)!.set_child(null);
+      }
+      this.gtk.remove(this.placed[at]!);
+      this.items.splice(at, 1);
+      this.placed.splice(at, 1);
+    }
+    const index = this.items.indexOf(before);
+    this.gtk.insert(child.widget, index);
+    insertAt(this.items, index, child);
+    insertAt(this.placed, index, this.held(child));
+  }
+  removeChild(child: HostNode): void {
+    const at = this.items.indexOf(child);
+    if (at >= 0) {
+      this.gtk.remove(this.placed[at]!);
+      this.items.splice(at, 1);
+      this.placed.splice(at, 1);
+    }
+  }
 }
 
 /** `<FlowBoxChild>`: a GtkFlowBoxChild. */
@@ -4118,6 +4157,45 @@ export class ListBoxNode extends HostNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return listBoxSignal(this.gtk, key, slot);
+  }
+  // A list places a child at an index, and holds a child that is not a
+  // row in a row it makes for it: React's order of the children gives the
+  // index, and what the list holds for each is what moves or goes.
+  private readonly items: HostNode[] = [];
+  private readonly placed: GtkWidget[] = [];
+  private held(child: HostNode): GtkWidget {
+    const parent = child.widget.get_parent();
+    return parent !== null && parent !== this.gtk ? parent : child.widget;
+  }
+  appendChild(child: HostNode): void {
+    this.gtk.append(child.widget);
+    this.items.push(child);
+    this.placed.push(this.held(child));
+  }
+  insertBefore(child: HostNode, before: HostNode): void {
+    const at = this.items.indexOf(child);
+    if (at >= 0) {
+      // A move. A row the list made is its own: it goes when removed, so the
+      // child is taken back out of it first, and placed anew.
+      if (this.placed[at] !== child.widget) {
+        this.gtk.get_row_at_index(at)!.set_child(null);
+      }
+      this.gtk.remove(this.placed[at]!);
+      this.items.splice(at, 1);
+      this.placed.splice(at, 1);
+    }
+    const index = this.items.indexOf(before);
+    this.gtk.insert(child.widget, index);
+    insertAt(this.items, index, child);
+    insertAt(this.placed, index, this.held(child));
+  }
+  removeChild(child: HostNode): void {
+    const at = this.items.indexOf(child);
+    if (at >= 0) {
+      this.gtk.remove(this.placed[at]!);
+      this.items.splice(at, 1);
+      this.placed.splice(at, 1);
+    }
   }
 }
 

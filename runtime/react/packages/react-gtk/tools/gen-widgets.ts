@@ -320,7 +320,7 @@ function handlerType(type: string, types: Set<string>): string | null {
   return null;
 }
 
-type ChildProtocol = "none" | "single" | "box";
+type ChildProtocol = "none" | "single" | "box" | "list";
 
 /** A GIR class from Widget down, abstract or not: what its own function sets. */
 interface WidgetType {
@@ -335,6 +335,13 @@ interface WidgetType {
 
 const camel = (name: string): string => name.replace(/[-_](\w)/g, (_, c: string) => c.toUpperCase());
 const tsName = (girName: string): string => `Gtk${girName}`;
+
+// A list container's accessor for the row it made for a child, by index: a
+// moved child is taken back out of it before the row goes.
+const rowAccessors = new Map([
+  ["ListBox", "get_row_at_index"],
+  ["FlowBox", "get_child_at_index"],
+]);
 
 // Children arrive as React children, never as a prop.
 const childProps = new Set(["child"]);
@@ -475,9 +482,11 @@ function model(gir: Gir, bindings: Bindings): Model {
     const takesChild = chain.some((c) => bindings.setters.get(tsName(c.name))?.get("set_child") === "GtkWidget | null");
     const children: ChildProtocol = ["append", "remove", "insert_child_after", "reorder_child_after"].every(has)
       ? "box"
-      : takesChild
-        ? "single"
-        : "none";
+      : ["append", "remove", "insert"].every(has) && rowAccessors.has(t.name)
+        ? "list"
+        : takesChild
+          ? "single"
+          : "none";
     const type: WidgetType = { gir: t, ts, jsx: t.name, parent, props, signals, children };
     types.set(t.name, type);
     return type;
@@ -514,7 +523,7 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
   line();
   line("__IMPORTS__");
   line('import type { HostComponent } from "shared/ReactHostComponent.ts";');
-  line('import { HostNode, type SignalSlot } from "./HostNode.ts";');
+  line('import { HostNode, insertAt, type SignalSlot } from "./HostNode.ts";');
   line();
   line("// ---- props: what JSX checks -------------------------------------------------");
   line();
@@ -618,6 +627,46 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("  removeChild(child: HostNode): void {");
       line("    this.gtk.set_child(null);");
       line("    this.release(child);");
+      line("  }");
+    } else if (w.children === "list") {
+      line("  // A list places a child at an index, and holds a child that is not a");
+      line("  // row in a row it makes for it: React's order of the children gives the");
+      line("  // index, and what the list holds for each is what moves or goes.");
+      line("  private readonly items: HostNode[] = [];");
+      line("  private readonly placed: GtkWidget[] = [];");
+      line("  private held(child: HostNode): GtkWidget {");
+      line("    const parent = child.widget.get_parent();");
+      line("    return parent !== null && parent !== this.gtk ? parent : child.widget;");
+      line("  }");
+      line("  appendChild(child: HostNode): void {");
+      line("    this.gtk.append(child.widget);");
+      line("    this.items.push(child);");
+      line("    this.placed.push(this.held(child));");
+      line("  }");
+      line("  insertBefore(child: HostNode, before: HostNode): void {");
+      line("    const at = this.items.indexOf(child);");
+      line("    if (at >= 0) {");
+      line("      // A move. A row the list made is its own: it goes when removed, so the");
+      line("      // child is taken back out of it first, and placed anew.");
+      line("      if (this.placed[at] !== child.widget) {");
+      line(`        this.gtk.${rowAccessors.get(w.jsx)}(at)!.set_child(null);`);
+      line("      }");
+      line("      this.gtk.remove(this.placed[at]!);");
+      line("      this.items.splice(at, 1);");
+      line("      this.placed.splice(at, 1);");
+      line("    }");
+      line("    const index = this.items.indexOf(before);");
+      line("    this.gtk.insert(child.widget, index);");
+      line("    insertAt(this.items, index, child);");
+      line("    insertAt(this.placed, index, this.held(child));");
+      line("  }");
+      line("  removeChild(child: HostNode): void {");
+      line("    const at = this.items.indexOf(child);");
+      line("    if (at >= 0) {");
+      line("      this.gtk.remove(this.placed[at]!);");
+      line("      this.items.splice(at, 1);");
+      line("      this.placed.splice(at, 1);");
+      line("    }");
       line("  }");
     } else if (w.children === "box") {
       line("  appendChild(child: HostNode): void {");

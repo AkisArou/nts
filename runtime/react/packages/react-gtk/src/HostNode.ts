@@ -74,6 +74,17 @@ function isSignalProp(key: string): boolean {
   return third >= "A" && third <= "Z";
 }
 
+// ---- a list container's children ----------------------------------------------------
+
+/** Puts `item` at `index` in `items`, moving what follows up by one. */
+export function insertAt<T>(items: T[], index: number, item: T): void {
+  items.push(item);
+  for (let i = items.length - 1; i > index; i--) {
+    items[i] = items[i - 1]!;
+  }
+  items[index] = item;
+}
+
 // ---- the node ---------------------------------------------------------------------
 
 export abstract class HostNode {
