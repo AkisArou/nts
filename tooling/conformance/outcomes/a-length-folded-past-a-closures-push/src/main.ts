@@ -17,7 +17,10 @@
 //   other       a second closure reading \`.length\` answers right       -- the environment is fine
 //   pushedFirst the caller pushing once itself first answers right     -- another clause trips,
 //                                                                          which is why it looks intermittent
-// A known divergence the compiler lane is fixing: on that day this shows FIXED.
+// **Now a guard.** a795534a4 made `allocated_length_is_exact` a whitelist over
+// every use -- an op kind it does not know loses the claim, where before it kept
+// it -- and this was re-recorded as agreeing. examples/a-length-read-after-a-
+// closure-pushed carries the same behaviour; this row is the second seatbelt.
 function callerReads(): number {
   const seen: number[] = [];
   const push = (): void => { seen.push(1); };

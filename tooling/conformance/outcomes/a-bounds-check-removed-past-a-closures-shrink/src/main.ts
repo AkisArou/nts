@@ -14,8 +14,8 @@
 // `index 5 is outside [0, 0)`. A reproduction written that way sees nothing and
 // looks fixed; it is not.
 //
-// **What the fix should make this say: CHANGED, not FIXED.** When `fields::lengths`
-// stops trusting the recorded length, the check comes back and the read aborts
+// **Recorded after the fix, as predicted: CHANGED, not FIXED.** 3190720a0 made
+// `fields::lengths` escape-aware, so the check came back and the read aborts
 // (`index 5 is outside [0, 0)`) where node answers `undefined`: a *stale element
 // read with no check* becomes a *refused index*. That is progress -- the silent
 // divergence replaced by a loud one -- and still a divergence. Answering
