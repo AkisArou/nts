@@ -1,3 +1,10 @@
+// **Now a guard.** 2d1430701 runs `initialize_fields` after the inline construction
+// of a provided error base, where the language puts a subclass's field
+// initialisers; every arm below agrees with node on main, recorded from a clean
+// build of 2d1430701. Three arms (plain class, own-class subclass, explicit
+// constructor) must keep agreeing; the rest are the defect, now fixed. The
+// history is kept beneath, because it is what the arms were chosen to rule out.
+//
 // **A subclass of a provided class with no constructor of its own never runs its
 // field initialisers** -- so a declared field is both absent to `in` and, if it
 // has an initialiser, missing its value. `class Kept extends Error { code = 5 }`:
