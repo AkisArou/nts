@@ -1156,6 +1156,28 @@ export function use<T>(usable: Usable<T>): T {
 
 // The rendering fiber's memo caches: its own if this render prepared them,
 // else a copy of the current fiber's (copy-on-write), else none yet.
+// Each cache of a fiber, copied: a typed one by its cloner, an array slot by
+// slot. A loop rather than `map` and `slice`, which a native build has no form
+// of over erased values.
+function cloneMemoCaches(memoCache: MemoCache): unknown[] {
+  const data: unknown[] = [];
+  for (let at = 0; at < memoCache.data.length; at++) {
+    const cache = memoCache.data[at];
+    const clone = memoCache.cloners[at];
+    if (clone != null) {
+      data.push(clone(cache));
+    } else {
+      const slots = cache as unknown[];
+      const copy: unknown[] = [];
+      for (let slot = 0; slot < slots.length; slot++) {
+        copy.push(slots[slot]);
+      }
+      data.push(copy);
+    }
+  }
+  return data;
+}
+
 function memoCachesInRender(): MemoCache {
   let memoCache: MemoCache | null = null;
   // Fast-path, load memo cache from wip fiber if already prepared
@@ -1197,10 +1219,7 @@ function memoCachesInRender(): MemoCache {
             data: enableNoCloningMemoCache
               ? currentMemoCache.data
               : // Clone the memo cache before each render (copy-on-write)
-                currentMemoCache.data.map((cache, at) => {
-                  const clone = currentMemoCache.cloners[at];
-                  return clone != null ? clone(cache) : (cache as unknown[]).slice();
-                }),
+                cloneMemoCaches(currentMemoCache),
             cloners: enableNoCloningMemoCache ? currentMemoCache.cloners : currentMemoCache.cloners.slice(),
             index: 0,
           };

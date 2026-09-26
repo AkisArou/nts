@@ -170,7 +170,11 @@ export type RendererTask = (didTimeout: boolean) => RendererTask | null | undefi
 // The state `react` shares with every renderer that uses it. The reconciler
 // installs the dispatchers while it renders; the public API reads them.
 export interface SharedStateClient {
-  H: Dispatcher | null;
+  // The hooks dispatcher: a `Dispatcher` object in the JavaScript build, which
+  // its readers cast it back to. A native build installs a phase instead
+  // (ReactFiberHooksDispatcher.native.ts) and leaves this null, so the field
+  // is erased and no `Dispatcher` needs a layout.
+  H: unknown;
   A: AsyncDispatcher | null;
   T: Transition | null;
   S: ((transition: Transition, returnValue: unknown) => void) | null;

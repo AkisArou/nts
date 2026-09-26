@@ -107,12 +107,18 @@ export const InvalidNestedRerenderInDEVKind = 10;
 // dispatcher someone else installed.
 export type SavedDispatcher = Dispatcher | null;
 
+// What `ReactSharedInternals.H` holds in this build (shared/ReactTypes.ts
+// erases the slot, which a native build leaves null).
+function installedDispatcher(): SavedDispatcher {
+  return ReactSharedInternals.H as SavedDispatcher;
+}
+
 export function installDispatcher(kind: HookDispatcherKind): void {
   ReactSharedInternals.H = dispatcherOf(kind);
 }
 
 export function saveDispatcher(): SavedDispatcher {
-  return ReactSharedInternals.H;
+  return installedDispatcher();
 }
 
 export function restoreDispatcher(saved: SavedDispatcher): void {
@@ -124,7 +130,7 @@ export function restoreDispatcher(saved: SavedDispatcher): void {
 // default dispatcher: the first renderer attaches one lazily, so that a hook
 // called outside any render gets a useful error.
 export function pushContextOnlyDispatcher(): SavedDispatcher {
-  const prevDispatcher = ReactSharedInternals.H;
+  const prevDispatcher = installedDispatcher();
   ReactSharedInternals.H = ContextOnlyDispatcher;
   return prevDispatcher === null ? ContextOnlyDispatcher : prevDispatcher;
 }
