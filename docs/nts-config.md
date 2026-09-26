@@ -237,6 +237,113 @@ identical across runs, verified), and the `.d.ts` and its binding table are
 **one atomic artefact**, because the table is keyed by byte offsets into the text
 that same run produced.
 
+### 3a. Proposed (2026-09-26): one mechanism for every platform
+
+Agreed with the user on 2026-09-26, and written from measurements taken that day
+on the Apple lane. Every lane has the same three layers of type surface, and
+today five generators with five ad hoc wirings:
+
+| lane | generator | layer 1: platform | layer 2: package manager | layer 3: own sources |
+| --- | --- | --- | --- | --- |
+| Apple | `bind-objc` | AppKit, UIKit, Foundation, ... per SDK | SwiftPM `Package.resolved`, CocoaPods `Podfile.lock` | Objective-C headers, Swift |
+| Windows | `bind-winmd` | Win32 metadata; WinRT (Windows SDK); the Windows App SDK (WinUI 3), each versioned on its own | NuGet packages that ship `.winmd` (WebView2, Win2D) | a component's built `.winmd` |
+| GTK / Linux | `bind-gir` | GTK 4, GLib, Gio, ... from GIR | pkg-config, system GIR | C headers, GObject libraries |
+| Android / JVM | `bind` | `android-XX`, `java-XX` | Gradle / Maven (`dependencies.tsv`) | Java / Kotlin |
+| C | `bind-c` | libc | pkg-config, vcpkg | C headers |
+
+**A surface is a package of per-module declaration files.** One package per
+library -- `@nts/apple-appkit`, `@nts/apple-foundation`, `@nts/gtk-gtk4` --
+each an ambient `declare module "objc:AppKit" { ... }`, which is the shape every
+binding already has. One package per platform (`@nts/platform-macos-26`)
+references the set a target implies: AppKit, Foundation and Core Graphics for
+macOS; UIKit and Foundation for iOS. Anything beyond that is installed, as
+Swift's `import MapKit` is written. Per library, because the checker parses what
+the program holds: all of AppKit measured 3.65 s cold and 0.07 s warm.
+
+**Exposure is `types`, as `@types/node` is -- not `paths`.** Both were probed.
+`paths` (`"objc:*": ["./platform/*.d.ts"]`) resolves an ambient file and loads
+only what is imported, and the program compiles to the same C, down to type-id
+numbering. It is still rejected, for three reasons:
+- **It does not compose.** A library's own `.d.ts` that imports `objc:AppKit`
+  resolves in its consumer only if the consumer repeats the mapping. A types
+  package is an ordinary dependency, and resolves everywhere.
+- **It hides what is not yet imported.** An editor offers a class for
+  completion and auto-import only once its declarations are in the program, and
+  discovering `NSStackView` is the point.
+- **It is the idiom for aliasing a project's own modules**, not for a platform.
+
+**`types` must be listed.** TypeScript 6 changed `compilerOptions.types` to
+default to `[]`, and tsgo is TypeScript 7: an installed `@types` package is not
+included by itself (measured: `TS2307` until listed). So a project lists its
+platform package, one line as `@types/node` now needs. `nts build`, `--watch`
+and the language server add it themselves from `nts.config.ts`'s targets,
+through the frontend's generated-roots hook (`tsgo::generated`), so the line is
+only for tools that do not ask nts.
+
+**A surface package says so, and the frontend reads it.** Anything tsgo marks
+`is_from_external_library` is skipped by `compiled_files`, which is the npm
+lane's rule that code under `node_modules` is not lowered. Measured: a binding
+moved into `node_modules/@types` typechecks, and every class in it is then "of
+unrepresentable type (`NSObject`)", since its declarations were never read. So a
+package marks itself -- `"nts": { "surface": "objc" }` in its `package.json` --
+and the frontend decodes that package's `.d.ts` files. Declarations only:
+nothing a surface package ships is lowered, so the npm rule holds.
+
+**Generated code does not live in a surface package.** A binding's values
+module (Swift's `async` forms, `@ntsCall`) is TypeScript that must be lowered,
+so it is generated beside the project's other generated files in `.nts/types`
+and added to the program through the same hook.
+
+**One `Binder` interface.** Each lane's generator implements it, and the build,
+`--watch` and the language server know only the interface:
+
+    identity()        binder name and version, for the cache key
+    inputs(config)    what decides the output: an SDK, metadata, a lockfile,
+                      a native directory -- the files a watcher watches
+    modules(inputs)   the modules it produces, by specifier
+    generate(inputs)  the packages, deterministic, into the cache
+
+**Where packages come from: two modes, one layout.** Published to npm where the
+inputs may be redistributed; generated locally, once per SDK, into
+`~/.cache/nts/types/<platform>/<sdk build>` and linked into the project, where
+they may not. Which is which is read from each input's licence, not assumed:
+GIR and Win32 metadata are likely publishable; Apple's SDKs, the Windows SDK's
+WinRT metadata and the Windows App SDK are local until their terms are read. So
+every lane builds the local mode first. The layout is identical, so a project
+cannot tell which it got.
+
+**What the Windows lane's review added** (2026-09-26):
+- **A package need not be one module.** WinRT has about 300 namespaces and
+  Win32 metadata about 180, so a package is a contract or a `.winmd`
+  (`Windows.Foundation.UniversalApiContract`, `Microsoft.UI.Xaml`), with a
+  module per namespace inside it.
+- **A package may declare instantiations of another's generics.**
+  `IVector<IUIElement>` needed by one package over another's types is emitted
+  where it is used, with its IID, so `modules()` allows that.
+- **`generate()` takes the target's architecture.** Win32 metadata declares some
+  records per architecture (`CONTEXT` on x64 and arm64).
+- **A layer-1 surface can have several inputs** versioned independently: a
+  Windows platform package is keyed by the Windows SDK and the App SDK.
+
+**Declaration merging across files.** A Swift extension -- UIKit's
+`NSIndexPath.row` on a Foundation class -- is a second `declare module
+"objc:Foundation" { interface NSIndexPath { ... } }` block in UIKit's package,
+which tsgo merges. Measured: the frontend keeps only the declarations of the
+first file it decodes (`symbols::intern_declared`, `Deferred::attach`), so the
+class declaration was dropped and `NSString` refused as unrepresentable. The
+frontend must record every file's declarations of a merged symbol before
+cross-package extensions work; raised with MainClaude.
+
+**Order.** The Apple lane builds the reference -- the frontend's surface marker,
+`bind-objc` as the first `Binder`, `@nts/platform-macos-26` generated locally,
+`macos-window` moved onto it and measured. Then each lane ports its generator.
+Then `--watch` and a language-server proxy over tsgo's own (`cmd/tsgo/lsp.go`),
+which publishes nts's refusals as editor diagnostics beside the checker's.
+
+**What this replaces.** The Apple lane's bindings derived from a program's
+imports (`objc_bindings`, 2026-09-26) stop being the default for platform
+frameworks; their engine (`bind-objc --name`) stays, for layers 2 and 3.
+
 ---
 
 ## 4. Proposed: products, and the app/library asymmetry
