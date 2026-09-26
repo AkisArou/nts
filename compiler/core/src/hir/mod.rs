@@ -2218,6 +2218,17 @@ impl ForeignSignal {
     }
 }
 
+impl ForeignClass {
+    /// The compiled functions this class's runtime calls, each with borrowed
+    /// arguments, through an entry the backend emits: its methods, and the
+    /// maker of its fields' object. None takes over what it is passed,
+    /// whatever it stores (`own::Summaries`), since no caller of ours hands
+    /// it a reference.
+    pub fn entered(&self) -> impl Iterator<Item = &str> {
+        self.methods.iter().map(|method| method.function.as_str()).chain(self.state.as_deref())
+    }
+}
+
 /// One method of a [`ForeignClass`]: how the runtime dispatches to it, the
 /// compiled function that is its body, and the C signature the runtime calls
 /// it with -- for Objective-C `self`, `_cmd`, then the arguments; for COM the

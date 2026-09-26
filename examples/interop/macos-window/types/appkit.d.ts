@@ -1775,7 +1775,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector showDefinitionForAttributedString:atPoint: */
     showDefinition(labels: { for: NSAttributedString | null; at: ByValue<CGPoint> | Fields<CGPoint> }): void;
     /** @ntsSelector showDefinitionForAttributedString:range:options:baselineOriginProvider: */
-    showDefinition(labels: { for: NSAttributedString | null; range: ByValue<NSRange> | Fields<NSRange>; options: Map<string, NSObject> | null }, originProvider: (arg0: ByValue<NSRange>) => ByValue<CGPoint>): void;
+    showDefinition(labels: { for: NSAttributedString | null; range: ByValue<NSRange> | Fields<NSRange>; options: Map<string, NSObject> | null }, originProvider: ((arg0: ByValue<NSRange>) => ByValue<CGPoint>) | null): void;
     /** @ntsSelector addGestureRecognizer: */
     addGestureRecognizer(gestureRecognizer: NSGestureRecognizer): void;
     /** @ntsSelector removeGestureRecognizer: */
@@ -2237,11 +2237,11 @@ declare module "objc:AppKit" {
     /** @ntsCall nts_async_NSWindow_beginSheet */
     beginSheet(sheetWindow: NSWindow): Promise<Int>;
     /** @ntsSelector beginSheet:completionHandler: */
-    beginSheet(sheetWindow: NSWindow, handler: (arg0: Int) => void): void;
+    beginSheet(sheetWindow: NSWindow, handler: ((arg0: Int) => void) | null): void;
     /** @ntsCall nts_async_NSWindow_beginCriticalSheet */
     beginCriticalSheet(sheetWindow: NSWindow): Promise<Int>;
     /** @ntsSelector beginCriticalSheet:completionHandler: */
-    beginCriticalSheet(sheetWindow: NSWindow, handler: (arg0: Int) => void): void;
+    beginCriticalSheet(sheetWindow: NSWindow, handler: ((arg0: Int) => void) | null): void;
     /** @ntsSelector endSheet: */
     endSheet(sheetWindow: NSWindow): void;
     /** @ntsSelector endSheet:returnCode: */
@@ -2390,7 +2390,7 @@ declare module "objc:AppKit" {
     get allowsImplicitAnimation(): boolean;
     set allowsImplicitAnimation(value: boolean);
     /** @ntsSelector runAnimationGroup:completionHandler: */
-    static runAnimationGroup(changes: (arg0: NSAnimationContext) => void, completionHandler: () => void): void;
+    static runAnimationGroup(changes: (arg0: NSAnimationContext) => void, completionHandler: (() => void) | null): void;
     /** @ntsCall nts_async_NSAnimationContext_runAnimationGroup */
     static runAnimationGroup(changes: (arg0: NSAnimationContext) => void): Promise<void>;
     /** @ntsSelector runAnimationGroup: */

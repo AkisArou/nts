@@ -1398,7 +1398,8 @@ impl<'a> Model<'a> {
         let name = named(decl).unwrap_or_default();
         let closure = self.spell(class, ty, Position::Parameter)?;
         let optional = written(ty).contains("_Nullable") || symbol.optionality() != Optionality::Neither;
-        let value = if optional { format!("({closure}) | null") } else { closure };
+        // A nullable block is spelled optional already (`spell`).
+        let value = if optional && !closure.ends_with(" | null") { format!("({closure}) | null") } else { closure };
         let swift_name = symbol.names.title.clone();
         let setter = decl.get("setter").and_then(named).unwrap_or_else(|| format!("set{}:", capitalized(&name)));
         let is_static = if decl.get("class").and_then(Value::as_bool) == Some(true) { "static " } else { "" };
@@ -1420,7 +1421,11 @@ impl<'a> Model<'a> {
             // the typedef spells.
             let spelled = if written.contains("(^") { written.clone() } else { desugared.clone() };
             return match position {
-                Position::Parameter => self.block(class, &spelled),
+                // Swift's `((Bool) -> Void)?`: the block pointer's own
+                // nullability, `(^ _Nullable)`, not one of its parameters'.
+                Position::Parameter => self.block(class, &spelled).map(|closure| {
+                    if block_is_nullable(&spelled) { format!("({closure}) | null") } else { closure }
+                }),
                 Position::Block => Err("a block that takes or returns a block".to_owned()),
                 // A block the program is handed has no closure to be.
                 Position::Result => Err("a block as a result or a property".to_owned()),
@@ -2098,6 +2103,15 @@ enum Position {
     /// A parameter or result of a block: an object as it is, since a block
     /// bridges no string or array.
     Block,
+}
+
+/// Whether the block pointer itself is nullable -- `void (^ _Nullable)(BOOL)`
+/// -- read from the marker between `(^` and its `)`, where one of the
+/// block's parameters being nullable (`(NSError * _Nullable)`) says nothing.
+fn block_is_nullable(written: &str) -> bool {
+    written.split_once("(^").and_then(|(_, rest)| rest.split_once(')')).is_some_and(|(marker, _)| {
+        marker.split_whitespace().any(|word| word == "_Nullable" || word == "__nullable" || word == "_Null_unspecified")
+    })
 }
 
 /// A type without the attributes clang writes before it: availability
@@ -2916,5 +2930,8 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         assert_eq!(strip_attributes("NS_SWIFT_UI_ACTOR void"), "void");
         assert_eq!(strip_attributes("NS_SWIFT_NAME(x) API_AVAILABLE(ios(2.0)) BOOL"), "BOOL");
         assert_eq!(strip_attributes("BOOL"), "BOOL");
+        assert!(block_is_nullable("void (^ _Nullable)(BOOL)"));
+        assert!(!block_is_nullable("void (^)(NSError * _Nullable)"));
+        assert!(!block_is_nullable("void (^ _Nonnull)(NSString * _Nullable)"));
     }
 }

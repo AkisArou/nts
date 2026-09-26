@@ -59,6 +59,8 @@ committed copy.
 | `let views: [NSView]` | `const views: NSView[]` |
 | `[String: NSObject]` | `Map<string, NSObject>` |
 | `table.dataSource` (`(any UITableViewDataSource)?`) | `table.dataSource`, `UITableViewDataSource \| null`, when the binding declares the protocol (`--protocol`) |
+| `UIView.animate(withDuration: 0.1, animations: { ... }, completion: nil)` | `UIView.animate({ withDuration: 0.1, animations: () => ... }, null)`: an optional closure is `(...) \| null` |
+| `override func viewDidLoad() { super.viewDidLoad(); title = "Items" }` | `override viewDidLoad(): void { super.viewDidLoad(); this.title = "Items"; }` |
 | `delegate?.tableView?(t, didSelectRowAt: p)` | `delegate?.tableViewDidSelectRowAt?.(t, p)`, which asks `respondsToSelector:` first |
 | `Set<IndexPath>`, `Set<String>` | `Set<NSIndexPath>`, `Set<string>` (objects compared by `-isEqual:`) |
 | `NSRect(x: 0, y: 0, width: 320, height: 200)` | `{ origin: { x: 0, y: 0 }, size: { width: 320, height: 200 } }` |
@@ -223,7 +225,9 @@ UIApplicationMain`, the delegate class given by name, and `exit` from
 `c:stdlib` to end it (see `examples/interop/ios-hello`, and
 `examples/interop/ios-list` for a table view's data source). Each has a Swift
 twin in `reference/`, whose output is compared with the TypeScript program's.
-A device build needs signing, and is refused.
+`examples/interop/ios-nav` is a navigation stack of view controllers the
+program writes, driven by UIKit's lifecycle. A device build needs signing, and
+is refused.
 
 ## Not yet
 

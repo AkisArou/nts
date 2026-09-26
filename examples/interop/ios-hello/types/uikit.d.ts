@@ -1041,23 +1041,23 @@ declare module "objc:UIKit" {
     /** @ntsSelector performWithoutAnimation: */
     static performWithoutAnimation(actionsWithoutAnimation: () => void): void;
     /** @ntsSelector animateWithDuration:delay:options:animations:completion: */
-    static animate(labels: { withDuration: TimeInterval; delay: TimeInterval; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: () => void }, completion: (arg0: boolean) => void): void;
+    static animate(labels: { withDuration: TimeInterval; delay: TimeInterval; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: () => void }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsSelector animateWithDuration:animations:completion: */
-    static animate(labels: { withDuration: TimeInterval; animations: () => void }, completion: (arg0: boolean) => void): void;
+    static animate(labels: { withDuration: TimeInterval; animations: () => void }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsSelector animateWithDuration:animations: */
     static animate(labels: { withDuration: TimeInterval }, animations: () => void): void;
     /** @ntsSelector animateWithDuration:delay:usingSpringWithDamping:initialSpringVelocity:options:animations:completion: */
-    static animate(labels: { withDuration: TimeInterval; delay: TimeInterval; usingSpringWithDamping: CGFloat; initialSpringVelocity: CGFloat; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: () => void }, completion: (arg0: boolean) => void): void;
+    static animate(labels: { withDuration: TimeInterval; delay: TimeInterval; usingSpringWithDamping: CGFloat; initialSpringVelocity: CGFloat; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: () => void }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsSelector transitionWithView:duration:options:animations:completion: */
-    static transition(labels: { with: UIView; duration: TimeInterval; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: () => void }, completion: (arg0: boolean) => void): void;
+    static transition(labels: { with: UIView; duration: TimeInterval; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: (() => void) | null }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsSelector transitionFromView:toView:duration:options:completion: */
-    static transition(labels: { from: UIView; to: UIView; duration: TimeInterval; options: CEnum<UIView.AnimationOptions | 0, UInt> }, completion: (arg0: boolean) => void): void;
+    static transition(labels: { from: UIView; to: UIView; duration: TimeInterval; options: CEnum<UIView.AnimationOptions | 0, UInt> }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsSelector performSystemAnimation:onViews:options:animations:completion: */
-    static perform(animation: CEnum<UIView.SystemAnimation, UInt>, labels: { on: UIView[]; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: () => void }, completion: (arg0: boolean) => void): void;
+    static perform(animation: CEnum<UIView.SystemAnimation, UInt>, labels: { on: UIView[]; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: (() => void) | null }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsSelector modifyAnimationsWithRepeatCount:autoreverses:animations: */
     static modifyAnimations(labels: { withRepeatCount: CGFloat; autoreverses: boolean }, animations: () => void): void;
     /** @ntsSelector animateKeyframesWithDuration:delay:options:animations:completion: */
-    static animateKeyframes(labels: { withDuration: TimeInterval; delay: TimeInterval; options: CEnum<UIView.KeyframeAnimationOptions | 0, UInt>; animations: () => void }, completion: (arg0: boolean) => void): void;
+    static animateKeyframes(labels: { withDuration: TimeInterval; delay: TimeInterval; options: CEnum<UIView.KeyframeAnimationOptions | 0, UInt>; animations: () => void }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsCall nts_async_UIView_animateKeyframes */
     static animateKeyframes(labels: { withDuration: TimeInterval; delay: TimeInterval; options: CEnum<UIView.KeyframeAnimationOptions | 0, UInt>; animations: () => void }): Promise<boolean>;
     /** @ntsSelector addKeyframeWithRelativeStartTime:relativeDuration:animations: */
@@ -1341,9 +1341,9 @@ declare module "objc:UIKit" {
     /** @ntsSelector didReceiveMemoryWarning */
     didReceiveMemoryWarning(): void;
     /** @ntsSelector presentViewController:animated:completion: */
-    present(viewControllerToPresent: UIViewController, labels: { animated: boolean }, completion: () => void): void;
+    present(viewControllerToPresent: UIViewController, labels: { animated: boolean }, completion: (() => void) | null): void;
     /** @ntsSelector dismissViewControllerAnimated:completion: */
-    dismiss(labels: { animated: boolean }, completion: () => void): void;
+    dismiss(labels: { animated: boolean }, completion: (() => void) | null): void;
     /** @ntsSelector setContentScrollView:forEdge: */
     setContentScrollView(scrollView: UIScrollView | null, labels: { for: CEnum<NSDirectionalRectEdge | 0, UInt> }): void;
     /** @ntsSelector contentScrollViewForEdge: */
@@ -1377,7 +1377,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector removeFromParentViewController */
     removeFromParent(): void;
     /** @ntsSelector transitionFromViewController:toViewController:duration:options:animations:completion: */
-    transition(labels: { from: UIViewController; to: UIViewController; duration: TimeInterval; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: () => void }, completion: (arg0: boolean) => void): void;
+    transition(labels: { from: UIViewController; to: UIViewController; duration: TimeInterval; options: CEnum<UIView.AnimationOptions | 0, UInt>; animations: (() => void) | null }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsSelector beginAppearanceTransition:animated: */
     beginAppearanceTransition(isAppearing: boolean, labels: { animated: boolean }): void;
     /** @ntsSelector endAppearanceTransition */
@@ -1539,7 +1539,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector canOpenURL: */
     canOpenURL(url: NSURL): boolean;
     /** @ntsSelector openURL:options:completionHandler: */
-    open(url: NSURL, labels: { options: Map<string, NSObject> }, completion: (arg0: boolean) => void): void;
+    open(url: NSURL, labels: { options: Map<string, NSObject> }, completion: ((arg0: boolean) => void) | null): void;
     /** @ntsCall nts_async_UIApplication_open */
     open(url: NSURL, labels: { options: Map<string, NSObject> }): Promise<boolean>;
     /** @ntsSelector sendEvent: */
@@ -1549,17 +1549,17 @@ declare module "objc:UIKit" {
     /** @ntsSelector supportedInterfaceOrientationsForWindow: */
     supportedInterfaceOrientations(labels: { for: UIWindow | null }): CEnum<UIInterfaceOrientationMask | 0, UInt>;
     /** @ntsSelector beginBackgroundTaskWithExpirationHandler: */
-    beginBackgroundTask(handler: () => void): UInt;
+    beginBackgroundTask(handler: (() => void) | null): UInt;
     /** @ntsSelector beginBackgroundTaskWithName:expirationHandler: */
-    beginBackgroundTask(labels: { withName: string | null }, handler: () => void): UInt;
+    beginBackgroundTask(labels: { withName: string | null }, handler: (() => void) | null): UInt;
     /** @ntsSelector endBackgroundTask: */
     endBackgroundTask(identifier: UInt): void;
     /** @ntsSelector setMinimumBackgroundFetchInterval: */
     setMinimumBackgroundFetchInterval(minimumBackgroundFetchInterval: TimeInterval): void;
     /** @ntsSelector requestSceneSessionActivation:userActivity:options:errorHandler: */
-    requestSceneSessionActivation(sceneSession: UISceneSession | null, labels: { userActivity: NSUserActivity | null; options: UIScene.ActivationRequestOptions | null }, errorHandler: (arg0: NSError) => void): void;
+    requestSceneSessionActivation(sceneSession: UISceneSession | null, labels: { userActivity: NSUserActivity | null; options: UIScene.ActivationRequestOptions | null }, errorHandler: ((arg0: NSError) => void) | null): void;
     /** @ntsSelector requestSceneSessionDestruction:options:errorHandler: */
-    requestSceneSessionDestruction(sceneSession: UISceneSession, labels: { options: UISceneDestructionRequestOptions | null }, errorHandler: (arg0: NSError) => void): void;
+    requestSceneSessionDestruction(sceneSession: UISceneSession, labels: { options: UISceneDestructionRequestOptions | null }, errorHandler: ((arg0: NSError) => void) | null): void;
     /** @ntsSelector requestSceneSessionRefresh: */
     requestSceneSessionRefresh(sceneSession: UISceneSession): void;
     /** @ntsSelector registerForRemoteNotifications */
@@ -1587,7 +1587,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector setNewsstandIconImage: */
     setNewsstandIconImage(image: UIImage | null): void;
     /** @ntsSelector setAlternateIconName:completionHandler: */
-    setAlternateIconName(alternateIconName: string | null, completionHandler: (arg0: NSError | null) => void): void;
+    setAlternateIconName(alternateIconName: string | null, completionHandler: ((arg0: NSError | null) => void) | null): void;
     /** @ntsCall nts_async_UIApplication_setAlternateIconName */
     setAlternateIconName(alternateIconName: string | null): Promise<void>;
     /** @ntsSelector extendStateRestoration */
@@ -1605,7 +1605,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector setStatusBarHidden:withAnimation: */
     setStatusBarHidden(hidden: boolean, labels: { with: CEnum<UIStatusBarAnimation, Int> }): void;
     /** @ntsSelector setKeepAliveTimeout:handler: */
-    setKeepAliveTimeout(timeout: TimeInterval, keepAliveHandler: () => void): boolean;
+    setKeepAliveTimeout(timeout: TimeInterval, keepAliveHandler: (() => void) | null): boolean;
     /** @ntsSelector clearKeepAliveTimeout */
     clearKeepAliveTimeout(): void;
     /** @ntsSelector init */

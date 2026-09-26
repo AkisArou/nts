@@ -45093,7 +45093,24 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         lent.push(Lent::Closure { context });
-        Ok(Some(self.push(OpKind::NativeBlock { invoke, context, signature }, want, origin.clone())))
+        let block = self.push(OpKind::NativeBlock { invoke, context, signature }, want.clone(), origin.clone());
+        // Swift's `completion: nil`: a closure that is `null` is a NULL block,
+        // not a block around nothing, which the callee would call and which
+        // would call through a NULL closure. Lending and releasing a NULL
+        // closure do nothing, so only the pointer passed is chosen.
+        let void = HirType::NativePointer(super::native::Pointee::Void);
+        let none = self.push(OpKind::ConstNull, void.clone(), origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: context, rhs: none }, HirType::Bool, origin.clone());
+        let (nil, given, joined) = (self.new_block(), self.new_block(), self.new_block());
+        let passed = self.push_block_param(joined, want.clone(), origin.clone());
+        self.terminate(Terminator::Branch { cond: absent, then_target: nil, then_args: Vec::new(), else_target: given, else_args: Vec::new() });
+        self.switch_to(nil);
+        let null_block = self.push(OpKind::ConstNull, want, origin.clone());
+        self.terminate(Terminator::Jump { target: joined, args: vec![null_block] });
+        self.switch_to(given);
+        self.terminate(Terminator::Jump { target: joined, args: vec![block] });
+        self.switch_to(joined);
+        Ok(Some(passed))
     }
 
     /// What a declaration's `@ntsHresult` says, if it has one: plain,
@@ -46178,8 +46195,10 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|record| record.declarations.iter().copied().find(objc))
             .or_else(|| {
                 // Through the absences of an optional receiver: `w?.contentView`
-                // reads it on `NSWindow | null`.
-                let ty = self.present_part(*self.snapshot.node_types.get(&object)?)?;
+                // reads it on `NSWindow | null`. And through `this` in a
+                // method of a class the program writes, whose type is the
+                // class's polymorphic `this`: `this.title` is the class's.
+                let ty = self.class_behind(self.present_part(*self.snapshot.node_types.get(&object)?)?);
                 let TypeKind::Object { properties } = &self.snapshot.types.get(ty.0 as usize)?.kind else { return None };
                 properties.iter().find(|p| p.name == name).and_then(|p| p.declaration).filter(objc)
             })?;
@@ -46314,7 +46333,7 @@ impl<'a> FuncBuilder<'a> {
         // The receiver is present where the getter is sent: `a?.b?.c` sends
         // `c` to `a.b` as a `B`, not as the `B | null | undefined` the
         // checker gives the expression `a?.b`.
-        let receiver_ty = self.present_part(receiver_ty).unwrap_or(receiver_ty);
+        let receiver_ty = self.class_behind(self.present_part(receiver_ty).unwrap_or(receiver_ty));
         let signature = accessor_signature(receiver.map(|_| receiver_ty), None, chained);
         let callee = self.native_callee_sending(id, property.declaration, &property.getter, &signature)?;
         let (args, lent) = self.lower_call_arguments(id, &callee, &[], receiver)?;
@@ -46354,6 +46373,9 @@ impl<'a> FuncBuilder<'a> {
             self.call_program_accessor(id, property.declaration, "set", vec![receiver, value])?;
             return Ok(Some(value));
         }
+        // `this.title = ...` in a method of a class the program writes: the
+        // class, not its polymorphic `this`.
+        let receiver_ty = self.class_behind(receiver_ty);
         let signature = accessor_signature(receiver.map(|_| receiver_ty), Some(ty), self.void_type()?);
         let callee = self.native_callee_sending(id, property.declaration, &setter, &signature)?;
         let (args, lent) = self.lower_call_arguments(id, &callee, &[source], receiver)?;

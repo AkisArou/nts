@@ -141,14 +141,26 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
         mutates,
         harmless,
         hands_back: hands_back_a_parameter(program, layouts),
-        consumes: program
-            .funcs
-            .iter()
-            .filter_map(|func| {
-                let slots = consuming(func, layouts);
-                (!slots.is_empty()).then(|| (func.name.clone(), slots))
-            })
-            .collect(),
+        consumes: {
+            // What a foreign runtime calls -- an Objective-C method, a
+            // `GObject` virtual function, a COM override -- it calls through
+            // an entry the backend emits, passing each argument as the
+            // runtime holds it: borrowed, `self` at +0 as ARC passes it. So it
+            // takes over nothing, whatever it stores; a store retains for
+            // itself. Taking `this` over because a closure captured it
+            // released a reference no caller had given.
+            let entered: rustc_hash::FxHashSet<&str> =
+                program.foreign_classes.iter().flat_map(super::ForeignClass::entered).collect();
+            program
+                .funcs
+                .iter()
+                .filter(|func| !entered.contains(func.name.as_str()))
+                .filter_map(|func| {
+                    let slots = consuming(func, layouts);
+                    (!slots.is_empty()).then(|| (func.name.clone(), slots))
+                })
+                .collect()
+        },
     }
 }
 
@@ -445,9 +457,14 @@ pub fn analyze(
     summaries: &Summaries,
     live: &mut liveness::Liveness,
 ) -> Map {
-    let owns: rustc_hash::FxHashSet<ValueId> = consuming(func, layouts)
+    // What its callers were told it takes over (`Summaries::consumes`), so
+    // the callee and every caller answer from one derivation.
+    let owns: rustc_hash::FxHashSet<ValueId> = summaries
+        .consumes
+        .get(&func.name)
         .into_iter()
-        .map(ValueId)
+        .flatten()
+        .map(|slot| ValueId(*slot))
         .collect();
     let held = entry_owned(func, layouts);
     let vouched = summaries
