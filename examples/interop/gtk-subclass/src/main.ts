@@ -200,6 +200,17 @@ class Note extends GObject {
   plain = 1;
 }
 
+// A class with properties the program never makes: its setters are still
+// compiled, and notify through the class's `GType`, which is registered for
+// them. That the program builds at all is the check.
+class Unmade extends GObject {
+  count: Property<number> = 0;
+}
+
+export function bumpUnmade(thing: Unmade): void {
+  thing.count = thing.count + 1;
+}
+
 function notes(): string {
   const note = new Note({});
   let seen = "";

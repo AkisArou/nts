@@ -30,4 +30,5 @@ pub mod native;
 pub mod counting;
 pub mod objc;
 pub mod com;
+pub mod gobject;
 pub mod abi;

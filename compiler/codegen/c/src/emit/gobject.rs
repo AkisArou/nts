@@ -29,37 +29,10 @@ use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program};
 
 use super::{CodeWriter, Diagnostic, Origin, c_identifier, c_type_of};
 
-/// The classes the program writes whose `GType` it needs: each it makes, each
-/// a chain-up reaches the parent of, and each one of those's ancestors that
-/// the program wrote too. Parents first, as nothing requires but a reader
-/// expects.
-pub(crate) fn registered(program: &Program) -> Vec<&ForeignClass> {
-    let gobject = |name: &str| program.foreign_classes.iter().find(|class| class.family == Family::GObject && class.name == name);
-    let mut wanted: Vec<&str> = Vec::new();
-    for op in program.funcs.iter().flat_map(|func| &func.values) {
-        let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
-        if let Some(made) = target.name.strip_prefix("nts_gobject_new_").or_else(|| target.name.strip_prefix(PROGRAM_GTYPE)) {
-            wanted.push(made);
-        } else if let Some((class, _)) = target.name.strip_prefix("nts_gobject_chain_").and_then(|rest| rest.rsplit_once('_')) {
-            wanted.extend(gobject(class).and_then(|class| class.superclass.strip_prefix(PROGRAM_GTYPE)));
-        }
-    }
-    let mut order: Vec<&ForeignClass> = Vec::new();
-    for name in wanted {
-        let mut chain = Vec::new();
-        let mut at = gobject(name);
-        while let Some(class) = at.filter(|class| !order.iter().chain(&chain).any(|seen| seen.name == class.name)) {
-            chain.push(class);
-            at = class.superclass.strip_prefix(PROGRAM_GTYPE).and_then(gobject);
-        }
-        order.extend(chain.into_iter().rev());
-    }
-    order
-}
 
 pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
-    let registered = registered(program);
+    let registered = nts_codegen_common::gobject::registered(program);
     let wrote = !registered.is_empty();
     if wrote {
         header(writer, origin, &registered);
@@ -172,6 +145,10 @@ fn header(writer: &mut CodeWriter, origin: &Origin, registered: &[&ForeignClass]
     );
     writer.line(origin, "void *nts_gobject_new(size_t type);");
     writer.line(origin, "struct nts_gobject_slot { size_t offset; void (*entry)(void); };");
+    if registered.iter().any(|class| !class.properties.is_empty()) {
+        writer.line(origin, "struct nts_gobject_property { const char *name; char kind; void (*get)(void); void (*set)(void); };");
+        writer.line(origin, "void nts_gobject_set_properties(size_t type, const void *properties, size_t count);");
+    }
     if registered.iter().any(|class| !class.protocols.is_empty()) {
         writer.line(origin, "void nts_gobject_add_interfaces(size_t type, const void *interfaces, size_t count);");
         writer.line(origin, "struct nts_gobject_interface { size_t (*get_type)(void); const struct nts_gobject_slot *slots; size_t count; };");
@@ -457,8 +434,6 @@ fn properties(writer: &mut CodeWriter, origin: &Origin, program: &Program, class
     }
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     let name = &class.name;
-    writer.line(origin, "struct nts_gobject_property { const char *name; char kind; void (*get)(void); void (*set)(void); };");
-    writer.line(origin, "void nts_gobject_set_properties(size_t type, const void *properties, size_t count);");
     let mut rows = Vec::new();
     for (at, property) in class.properties.iter().enumerate() {
         let find = |wanted: &str| {

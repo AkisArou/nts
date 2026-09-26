@@ -24,32 +24,6 @@ fn made(program: &Program, class: &ForeignClass) -> bool {
     called(program, &maker(class))
 }
 
-/// The classes the program writes whose `GType` it needs, parents first: each
-/// it makes, each a chain-up reaches the parent of, and each one of those's
-/// ancestors that the program wrote too -- as the C backend's `registered`.
-fn registered(program: &Program) -> Vec<&ForeignClass> {
-    let gobject = |name: &str| program.foreign_classes.iter().find(|class| class.family == Family::GObject && class.name == name);
-    let mut wanted: Vec<&str> = Vec::new();
-    for op in program.funcs.iter().flat_map(|func| &func.values) {
-        let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
-        if let Some(made) = target.name.strip_prefix("nts_gobject_new_").or_else(|| target.name.strip_prefix(PROGRAM_GTYPE)) {
-            wanted.push(made);
-        } else if let Some((class, _)) = target.name.strip_prefix("nts_gobject_chain_").and_then(|rest| rest.rsplit_once('_')) {
-            wanted.extend(gobject(class).and_then(|class| class.superclass.strip_prefix(PROGRAM_GTYPE)));
-        }
-    }
-    let mut order: Vec<&ForeignClass> = Vec::new();
-    for name in wanted {
-        let mut chain = Vec::new();
-        let mut at = gobject(name);
-        while let Some(class) = at.filter(|class| !order.iter().chain(&chain).any(|seen| seen.name == class.name)) {
-            chain.push(class);
-            at = class.superclass.strip_prefix(PROGRAM_GTYPE).and_then(gobject);
-        }
-        order.extend(chain.into_iter().rev());
-    }
-    order
-}
 
 /// Whether the program calls `name` as a foreign function, and so declares it.
 fn called(program: &Program, name: &str) -> bool {
@@ -85,7 +59,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
     out.push_str(&get_by_name(program, platform)?);
     out.push_str(&notifies(program));
     out.push_str(&children(program));
-    let classes = registered(program);
+    let classes = nts_codegen_common::gobject::registered(program);
     if classes.is_empty() {
         return Ok(out);
     }
