@@ -2880,6 +2880,36 @@ fn store_names_a_slot_that_exists(func: &Func, array: ValueId, index: ValueId) -
 /// The rule is deliberately blunt -- an array that is handed to *anything* loses
 /// the claim, because what a callee does with it is not visible here. An array
 /// literal that is only indexed keeps it, which is the case the claim exists for.
+///
+/// **That sentence said "anything" and the code tested one thing: a call
+/// argument.** A closure captures by storing into its frame, so
+///
+/// ```text
+/// %2 = array.new
+/// %3 = object.new frame : closure#0
+/// field.set %3.0 = %2            <- the array leaves here
+/// %5 = call Closure0#call(%3)    <- and the argument is the frame, not the array
+/// ```
+///
+/// passed the test, kept the claim, and folded `.length` to the allocated size
+/// through a `push` the closure made. `const seen: number[] = []; const push =
+/// (): void => { seen.push(1) }; push(); return seen.length` answered **0** where
+/// node answers 1, over 28 cases, and had done since before anything this week.
+/// The prose was the invariant and the code was a subset of it.
+///
+/// So the test is now a **whitelist over every use**, and the polarity is the
+/// point rather than a style choice: an operation added later is outside the list
+/// and therefore *loses* the claim, which costs an optimisation. Under a blacklist
+/// it would keep the claim, which is a wrong answer -- the same asymmetry
+/// [`changes_array_length`] states for its own list one function down, arrived at
+/// from the other side.
+///
+/// **Terminators are deliberately not examined**, which is worth saying because
+/// their absence looks like the same oversight. `return xs` hands the array out
+/// and nothing in this function runs afterwards to fold; a `Jump` carrying it as
+/// a block argument gives the receiving block a *different* `ValueId`, whose
+/// definition is a block parameter rather than an `ArrayNew`, so the first test
+/// here already declines it.
 #[must_use]
 pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) -> bool {
     if !matches!(func.values[array.0 as usize].kind, OpKind::ArrayNew { .. }) {
@@ -2893,18 +2923,54 @@ pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) ->
         // all.
         return true;
     }
-    if func.values.iter().any(|op| {
-        let OpKind::ArraySet { array: t, index, checked: true, .. } = &op.kind else {
-            return false;
-        };
-        *t == array && !store_names_a_slot_that_exists(func, array, *index)
-    }) {
-        return false;
-    }
-    !func
-        .values
+    func.values
         .iter()
-        .any(|op| matches!(&op.kind, OpKind::Call { args, .. } if args.contains(&array)))
+        .all(|op| use_keeps_the_allocated_length(func, array, &op.kind))
+}
+
+/// Whether one operation's use of an array leaves its allocated length exact.
+///
+/// The whitelist [`allocated_length_is_exact`] is written around: an operation
+/// that does not mention the array answers yes trivially, one that reads its
+/// length or an element answers yes, an initialising store answers yes, and
+/// **everything else answers no** -- a call argument, a field store into an
+/// object, an `Erase` into a table, a store of it into another array.
+///
+/// The array must also appear only in the *receiver* position of a read or a
+/// store. `xs[0] = xs` and `xs[xs.length - 1]` are uses in which the array is the
+/// value or part of the index, and the first of those puts it somewhere a later
+/// read can reach with no call anywhere in the function.
+fn use_keeps_the_allocated_length(func: &Func, array: ValueId, kind: &OpKind) -> bool {
+    if !operands_of(kind).contains(&array) {
+        return true;
+    }
+    match kind {
+        // Reading the length, and counting a reference: neither moves the array
+        // nor resizes it. One arm because the answer is the same expression, not
+        // because the operations are alike.
+        OpKind::Length(of) | OpKind::Retain(of) | OpKind::Release(of) => *of == array,
+        // An element, by an index that is not the array itself.
+        OpKind::ArrayGet {
+            array: receiver,
+            index,
+            ..
+        } => *receiver == array && *index != array,
+        // A store into a slot the allocation already made. An *unchecked* store
+        // is one the bounds pass proved in range, so it names an existing slot by
+        // construction; a checked one has to say so.
+        OpKind::ArraySet {
+            array: receiver,
+            index,
+            value,
+            checked,
+        } => {
+            *receiver == array
+                && *index != array
+                && *value != array
+                && (!*checked || store_names_a_slot_that_exists(func, array, *index))
+        }
+        _ => false,
+    }
 }
 
 /// Whether a runtime helper can change an array's length.
@@ -5567,6 +5633,171 @@ mod tests {
             ValueId(1),
             true
         ));
+    }
+
+    /// A closure captures by **storing into its frame**, so the array never
+    /// appears in a call's argument list -- the frame does. The old test asked
+    /// only about `OpKind::Call { args }` and therefore kept the claim here,
+    /// folding `.length` past a `push` the closure made: `const seen: number[] =
+    /// []; const push = (): void => { seen.push(1) }; push(); return seen.length`
+    /// answered 0 where node answers 1.
+    ///
+    /// The second half is the one that keeps the whitelist honest: an array the
+    /// function only *reads* must still keep its claim in a program that can
+    /// grow arrays, or the fix would have removed the optimisation rather than
+    /// narrowed it.
+    #[test]
+    fn a_field_store_hands_an_array_over_as_surely_as_a_call_does() {
+        let captured = capturing();
+        assert!(arrays_can_grow(&captured));
+        assert!(!allocated_length_is_exact(
+            &captured.funcs[0],
+            ValueId(1),
+            true
+        ));
+
+        let read_only = only_read();
+        assert!(arrays_can_grow(&read_only));
+        assert!(allocated_length_is_exact(
+            &read_only.funcs[0],
+            ValueId(1),
+            true
+        ));
+    }
+
+    /// `%1 = array.new; %2 = object.new frame; field.set %2.0 = %1; call f(%2)`,
+    /// with the `push` in a **second function** -- the closure's body.
+    ///
+    /// That placement is the whole test and the first version of it got it wrong:
+    /// with the push in the same function, `args: [array, ..]` mentions the array
+    /// and the *old* blacklist declined it too, so the test passed either way and
+    /// measured nothing. The real shape has the caller handing over only a frame
+    /// and the growth happening somewhere it cannot see.
+    fn capturing() -> Program {
+        let numbers = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
+        let values = vec![
+            Op { kind: OpKind::ConstFloat(4.0), ty: HirType::NUMBER, origin: origin() },
+            Op {
+                kind: OpKind::ArrayNew { length: ValueId(0), zeroed: true },
+                ty: numbers.clone(),
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::ObjectNew { frame: true },
+                ty: HirType::Erased,
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::FieldSet { object: ValueId(2), field: 0, value: ValueId(1) },
+                ty: HirType::Void,
+                origin: origin(),
+            },
+            // The frame is what is handed over; the array is not an argument.
+            Op {
+                kind: OpKind::Call {
+                    callee: Callee::Direct("Closure0#call".to_owned()),
+                    args: vec![ValueId(2)],
+                    frame: None,
+                },
+                ty: HirType::Void,
+                origin: origin(),
+            },
+            Op { kind: OpKind::Length(ValueId(1)), ty: HirType::NUMBER, origin: origin() },
+        ];
+        let mut program = one_function(values, numbers.clone());
+        // The closure's own body: it reads the array back out of the frame and
+        // pushes. Nothing here is in the caller's `values`, which is the point.
+        let pushes = vec![
+            Op { kind: OpKind::ConstFloat(1.0), ty: HirType::NUMBER, origin: origin() },
+            Op {
+                kind: OpKind::ObjectNew { frame: true },
+                ty: HirType::Erased,
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::FieldGet { object: ValueId(1), field: 0 },
+                ty: numbers,
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::Call {
+                    callee: Callee::External("nts_array_push".to_owned()),
+                    args: vec![ValueId(2), ValueId(0)],
+                    frame: None,
+                },
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
+        ];
+        let mut closure = one_function(pushes, HirType::Void);
+        closure.funcs[0].name = "Closure0#call".to_owned();
+        program.funcs.append(&mut closure.funcs);
+        program
+    }
+
+    /// The control: allocated, indexed and measured, handed to nothing. The
+    /// `push` is on a *different* array, so the program is growable and this one
+    /// still keeps its length.
+    fn only_read() -> Program {
+        let numbers = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
+        let values = vec![
+            Op { kind: OpKind::ConstFloat(4.0), ty: HirType::NUMBER, origin: origin() },
+            Op {
+                kind: OpKind::ArrayNew { length: ValueId(0), zeroed: true },
+                ty: numbers.clone(),
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::ArrayNew { length: ValueId(0), zeroed: true },
+                ty: numbers.clone(),
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::ArrayGet { array: ValueId(1), index: ValueId(0), checked: false },
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
+            Op { kind: OpKind::Length(ValueId(1)), ty: HirType::NUMBER, origin: origin() },
+            Op { kind: OpKind::Retain(ValueId(1)), ty: HirType::Void, origin: origin() },
+            Op {
+                kind: OpKind::Call {
+                    callee: Callee::External("nts_array_push".to_owned()),
+                    args: vec![ValueId(2), ValueId(0)],
+                    frame: None,
+                },
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
+        ];
+        one_function(values, numbers)
+    }
+
+    fn one_function(values: Vec<Op>, _ty: HirType) -> Program {
+        let ops = (0..values.len())
+            .map(|index| ValueId(u32::try_from(index).unwrap_or(0)))
+            .collect();
+        Program {
+            funcs: vec![Func {
+                name: "f".to_owned(),
+                params: Vec::new(),
+                return_type: HirType::Void,
+                values,
+                blocks: vec![Block {
+                    params: Vec::new(),
+                    ops,
+                    terminator: Terminator::Return(None),
+                }],
+                origin: origin(),
+                exported: true,
+                initializes_receiver: false,
+                async_result: None,
+                frame: None,
+                abstract_declaration: false,
+            }],
+            globals: Vec::new(),
+            layouts: Vec::new(),
+            ..Program::default()
+        }
     }
 
     #[test]
