@@ -109,13 +109,41 @@ struct Run {
     stderr: String,
 }
 
+/// Run a command, waiting out a binary that is being written.
+///
+/// **`ETXTBSY` is never a fact about the program under test.** `cargo test` can
+/// relink `nts` while a test execs it, and the kernel answers
+/// `Os { code: 26, kind: ExecutableFileBusy }` -- which `expect` then reports as
+/// "running nts build", a message that reads like the build failing. On
+/// 2026-09-26 that took a whole gate run red at `tests` in 11 seconds, where the
+/// same step on the same commit passes in about 200; the Windows lane lost a run
+/// to the sibling shape the same hour. Two gates at once is enough to produce it,
+/// and `all.sh`'s header says a gate is deterministic -- which it is, apart from
+/// this.
+///
+/// So it is retried rather than reported. Bounded, because a permanent `ETXTBSY`
+/// would otherwise hang the suite instead of failing it, and every other error is
+/// returned untouched.
+fn output_of(command: &mut Command) -> std::io::Result<std::process::Output> {
+    for _ in 0..50 {
+        match command.output() {
+            Err(busy) if busy.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            answer => return answer,
+        }
+    }
+    command.output()
+}
+
 fn build(project: &Path, extra: &[&str]) -> Run {
-    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .arg("build")
-        .arg(project.join("tsconfig.json"))
-        .args(extra)
-        .output()
-        .expect("running nts build");
+    let output = output_of(
+        Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("build")
+            .arg(project.join("tsconfig.json"))
+            .args(extra),
+    )
+    .expect("running nts build");
     Run {
         ok: output.status.success(),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -4315,13 +4343,14 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     )
     .expect("tsconfig");
     let build_with = |nts: &Path| {
-        let output = Command::new(nts)
-            .arg("build")
-            .arg(project.join("tsconfig.json"))
-            .env("PKG_CONFIG_PATH", project.join("pc"))
-            .env("GI_GIR_PATH", project.join("gir"))
-            .output()
-            .expect("running nts build");
+        let output = output_of(
+            Command::new(nts)
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("PKG_CONFIG_PATH", project.join("pc"))
+                .env("GI_GIR_PATH", project.join("gir")),
+        )
+        .expect("running nts build");
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         assert!(output.status.success(), "{stdout}{}", String::from_utf8_lossy(&output.stderr));
         stdout
