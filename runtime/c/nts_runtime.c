@@ -1660,6 +1660,33 @@ void nts_callback_enter(void) {
   nts_environment_current()->in_callback++;
 }
 void nts_callback_leave(void) {
+  /* **The boundary a raising closure returns through.** A closure body records
+   * a throw with `nts_raise` and returns, and every *compiled* caller between
+   * it and the handler tests `nts_raising` and returns too. Foreign code does
+   * not: a GObject signal handler, an Objective-C block or a COM callback
+   * returns into C, which never looks. Left unchecked the flag *survives* that
+   * return, and the next compiled call to test it takes a raise from an
+   * unrelated frame
+   * -- a throw routed into a `try` it has nothing to do with, arbitrarily
+   * later.
+   *
+   * Ending the program here is what the `throw` itself does in a body that does
+   * not raise, so the behaviour at a platform boundary is unchanged. That is
+   * the point: this is what makes it sound for every closure to raise.
+   *
+   * It lives here rather than in either backend's bridge text for the reason
+   * the LLVM bridge already states -- "the policy lives in the runtime and not
+   * in either backend's text" -- and because `nts_raise_take` has three
+   * different ABI spellings (a `{ i32, i64 }` return on SysV, an `sret` pointer
+   * on Win64,
+   * `[2 x i64]` on arm64). Hand-writing the test in IR would have been that
+   * policy in four places. And both the callback bridges and the Objective-C
+   * method entries already bracket with this pair, so one check covers both.
+   *
+   * Before the decrement, because it does not return. */
+  if (nts_raising()) {
+    nts_uncaught(nts_raise_take(), NULL);
+  }
   NtsEnvironment *environment = nts_environment_current();
   environment->in_callback--;
   /* A foreign loop handing control back: the outermost callback has returned

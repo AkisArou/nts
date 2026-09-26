@@ -3266,13 +3266,58 @@ fn copyable_symbols(
 /// `FUNCTION_DECLARATION`s -- and a generic's suffix is already spoken for. An
 /// `async` function never raises synchronously, so it is not this question at
 /// all.
+/// Whether a body uses `super` anywhere inside it, nested functions included.
+///
+/// **A raising copy is the same body emitted under another name, and `super` needs
+/// the context the name carried.** `lower_super` resolves the base from the
+/// declaration's *enclosing class*; a copy is reached as a function and the
+/// resolution falls through to the generic refusal, "a super keyword is not
+/// supported by this lowering yet" -- a sentence about the token, in a function
+/// nobody wrote.
+///
+/// That cost is not the copy's. **Measured:** admitting `METHOD_DECLARATION` to
+/// `can_be_copied` without this took "a super keyword" from **1 refusal to 42** in
+/// `runtime/node/http` alone, and the copy's failure cascades to every caller of
+/// the *original* -- 48 functions stopped being emitted there, including
+/// `clearTimeout`, `clearInterval` and `Channel__publish`, none of which asked for
+/// a raising form. Across both corpora that was **-369 definitions** against -434
+/// refusals: a change that looked like a win by one number and a regression by the
+/// other.
+///
+/// Nested functions are walked rather than skipped because a closure *inside* a
+/// method reaches the same resolution, and the closures-only arm of the same
+/// experiment lost almost exactly as many definitions (-372).
+///
+/// **The general question this is the answer to**, and the one I did not ask first:
+/// when a change makes a new kind of copy, ask what the copy's body may *contain*,
+/// not only what it may *call*. `a_copy_can_contain`'s fixpoint asks the second and
+/// reads as though it asks the first.
+///
+/// Supporting `super` in a copy is the real fix and is separate work: the copy would
+/// need the base binding the original has.
+fn uses_super(probe: &FuncBuilder, at: NodeId) -> bool {
+    if probe.kind_of(at) == Some(syntax::SUPER_KEYWORD) {
+        return true;
+    }
+    probe.children(at).into_iter().any(|child| uses_super(probe, child))
+}
+
 fn can_be_copied(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) -> bool {
     let Some(record) = snapshot.symbols.get(symbol as usize) else {
         return false;
     };
     let mut declarations = record.declarations.iter().map(|at| the_function_of(probe, *at));
     declarations.any(|declaration| {
-        probe.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION)
+        // **Two places decided this and I widened one.** `raising_copies`'
+        // eligibility asks the same question about the same node, and admitting a
+        // method there while this still said "function declaration only" changed
+        // nothing at all -- the set was empty before the eligibility filter ever
+        // ran. Ask how many places decide a fact before changing one of them.
+        matches!(
+            probe.kind_of(declaration),
+            Some(syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION)
+        )
+            && !uses_super(probe, declaration)
             && !is_generic_function(snapshot, declaration)
             && !probe
                 .node(declaration)
@@ -3331,7 +3376,21 @@ fn raising_copies(
         };
         for declaration in &record.declarations {
             let declaration = the_function_of(probe, *declaration);
-            if probe.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION) {
+            // **A method too, where its call sites name it.** A method call is
+            // `Callee::Direct(Class#m)` far more often than not -- the compiler
+            // devirtualises a monomorphic receiver, and even
+            // `const b: Base = new Sub()` emits `call Sub#raise` -- so a second
+            // body under a second name can be *named* at the call site exactly as
+            // a function's can, with no second slot in any dispatch table.
+            //
+            // This is the larger half of the family: 52 roots in `runtime/node`'s
+            // `http` alone against 15 for a function value, which is why closures
+            // raising on their own measured as **-372 definitions** -- the `try`
+            // compiled far enough to reach the method call and refused there.
+            if matches!(
+                probe.kind_of(declaration),
+                Some(syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION)
+            ) {
                 eligible.insert(declaration);
             }
         }
@@ -8841,6 +8900,26 @@ fn lower_wanted_closures(
                 // copy's do, which for a generic function is keyed by the
                 // declaration and this suffix together.
                 declaration: within.and_then(ClassCopy::function),
+                // **A closure body records a throw and returns, like a raising
+                // copy of a declaration.** `nts_raise` sets a flag and returns,
+                // so a raising body has the *same signature* as a plain one --
+                // there is no second layout and no second entry point, which is
+                // what `blockers/a-callbacks-throw-inside-a-try` assumed there
+                // had to be. Every call through a closure then tests the flag
+                // (`test_for_a_raise`), which is how the `try` around one gets
+                // its handler edge.
+                //
+                // **Not an `async` closure.** `throw_erased` checks `raises`
+                // *before* its async arm, so this would hijack the rejection of
+                // the promise the closure already returned -- which
+                // `lower_unguarded` routes into the enclosing handler correctly
+                // today. Same exclusion, and the same reason, as
+                // `throwing_symbols` gives for skipping an `async` declaration:
+                // an `async` function never raises *synchronously*.
+                raises: !FuncBuilder::probe(snapshot)
+                    .node(closures[index].node)
+                    .modifiers
+                    .contains(nts_semantic_schema::DeclarationModifiers::ASYNC),
                 ..Copy::default()
             },
         );
@@ -41121,7 +41200,47 @@ impl<'a> FuncBuilder<'a> {
     /// `import { validate }` puts a local symbol here and the copy is keyed by
     /// the declaration, which is what `raising_copies` collected and what the
     /// emitted name comes from.
+    /// Whether a call reaches its callee through a **value** rather than a name:
+    /// a parameter holding a function.
+    ///
+    /// Extracted because two questions have to agree about it. `calls_compiled_code`
+    /// asks "can this call raise" and [`Self::has_a_raising_copy`] asks "is there a
+    /// raising body to call", and this file's own rule for the pair is that "what a
+    /// copy may contain and what a `try` may contain are one rule". They were one
+    /// expression in one of them and absent from the other, which is how the
+    /// refusal survived closures becoming raising bodies.
+    ///
+    /// **A promise settler is excluded, and that exclusion is load-bearing.**
+    /// Calling a settler is not a call in the sense meant here, and the first
+    /// version of the arm above without this removed **246 GIR promise wrappers** --
+    /// caught by `interop` and invisible to a refusal census.
+    fn through_a_function_value(&self, call: NodeId) -> bool {
+        let Some(callee) = self.children(call).first().copied() else {
+            return false;
+        };
+        let Some(symbol) = self.node(callee).symbol else {
+            return false;
+        };
+        let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
+            return false;
+        };
+        record
+            .declarations
+            .iter()
+            .any(|at| self.kind_of(*at) == Some(syntax::PARAMETER))
+            && !self.settlers.contains_key(&symbol.0)
+    }
+
     fn has_a_raising_copy(&self, call: NodeId) -> bool {
+        // **A closure is its own raising copy.** Every closure body is lowered in
+        // raising form (`lower_wanted_closures`), so a call through a function
+        // value has a body that records a throw and returns -- under no suffix and
+        // no second name, which is why `self.raising`, a set of *declarations*,
+        // cannot answer for it. Without this the machinery is in and the refusal
+        // stays, which is exactly what the first build of it did.
+        if self.through_a_function_value(call) {
+            return true;
+        }
         self.snapshot
             .call_targets
             .get(&call)
@@ -41288,12 +41407,7 @@ impl<'a> FuncBuilder<'a> {
         // generated `*_promise` wrapper, whose body is a `try` around the settler
         // it was handed. The gate's interop step is what said so; the corpus
         // census did not, because the GIR bindings are not in it.
-        if record
-            .declarations
-            .iter()
-            .any(|at| self.kind_of(*at) == Some(syntax::PARAMETER))
-            && !self.settlers.contains_key(&symbol.0)
-        {
+        if self.through_a_function_value(call) {
             return true;
         }
         // Not merely "compiled", but **can raise**. `bounded(n)` inside a `try`
@@ -48165,6 +48279,12 @@ impl<'a> FuncBuilder<'a> {
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);
+        // Read before the callee is moved into the op, because what it *is* is
+        // what decides whether the call can raise: a closure's `#call` is a
+        // raising body with no suffix to read. `Virtual` is deliberately not
+        // here -- a method body does not raise yet, which is the standing gap
+        // `a-throw-that-stays-in-its-function` records.
+        let through_a_closure = matches!(callee, Callee::Closure { .. });
         let call = self.push(
             OpKind::Call {
                 callee,
@@ -48175,7 +48295,7 @@ impl<'a> FuncBuilder<'a> {
             origin,
         );
         let call = self.note_generator_call(call, reserved);
-        self.test_for_a_raise(id);
+        self.test_for_a_raise(id, through_a_closure)?;
         Ok(call)
     }
 
@@ -48204,9 +48324,22 @@ impl<'a> FuncBuilder<'a> {
     /// With no handler in this body the branch returns instead, leaving the
     /// flag set for this function's own caller to find. That is reachable only
     /// inside a raising copy, whose callers all test -- see [`Self::raises`].
-    fn test_for_a_raise(&mut self, id: NodeId) {
-        if self.raising_suffix_of(id).is_empty() {
-            return;
+    /// `Err` only from the arm that hands an uncaught raise to
+    /// [`Self::throw_erased`], which is the one place here that can refuse --
+    /// and it cannot for an erased value. Returned rather than swallowed because
+    /// a `let _ =` on that call is how a future arm's refusal would disappear.
+    fn test_for_a_raise(
+        &mut self,
+        id: NodeId,
+        through_a_closure: bool,
+    ) -> Result<(), Diagnostic> {
+        // Two ways a call can raise, and only the first has a *name* to read.
+        // A raising copy of a declaration is a second function under a suffix,
+        // so the call site knows from the suffix it resolved. A closure has no
+        // suffix: its single `#call` *is* the raising body, so the callee's shape
+        // is what answers.
+        if !through_a_closure && self.raising_suffix_of(id).is_empty() {
+            return Ok(());
         }
         let origin = self.origin(id);
         let flag = self.runtime_call("nts_raising", Vec::new(), HirType::Int { bits: 32, signed: true }, origin.clone());
@@ -48262,11 +48395,44 @@ impl<'a> FuncBuilder<'a> {
                 target,
                 args: Vec::new(),
             });
-        } else {
+        } else if self.raises {
             let value = self.raised_return(&origin);
             self.terminate(Terminator::Return(value));
+        } else {
+            // **No handler here and nobody above who will look.** Until closures
+            // raised, this arm was reachable only inside a raising copy, "whose
+            // callers all test" -- so returning and leaving the flag set was
+            // always someone else's problem. An ordinary body can reach it now,
+            // and returning there would *swallow* the throw and carry on with a
+            // zero.
+            //
+            // **Handed to `throw_erased` rather than answered here, and the
+            // first version of this did answer here -- with `nts_uncaught`.**
+            // That is right for an ordinary body and *wrong* for an `async` one:
+            // `throw_erased`'s second arm rejects the promise the body already
+            // owns, because node rejects and every caller awaiting it sees a
+            // rejection rather than a dead process. So
+            // `async function f(cb) { cb(); }` with a throwing `cb` would have
+            // ended the program -- a silent wrong answer replacing today's
+            // refusal, which is the one outcome worse than the refusal.
+            //
+            // Calling it costs a `take` and, inside a raising copy, a `raise`
+            // that re-sets the flag we just cleared: two runtime calls on the
+            // cold path, in exchange for **one** place deciding how a body
+            // leaves with a value nothing here catches. A copy of those three
+            // arms is how the `async` one came to be missing in the first place.
+            //
+            // The erased value for both arguments, which is what a *rethrow*
+            // already does -- `throw_erased`'s own doc says so: "a rethrow has
+            // only the erased form, and passes it for both -- the runtime reads
+            // the reference out of the tag". A taken raise is exactly that
+            // shape, so nothing new had to be said about it.
+            let thrown =
+                self.runtime_call("nts_raise_take", Vec::new(), HirType::Erased, origin.clone());
+            self.throw_erased(id, thrown, thrown, &HirType::Erased)?;
         }
         self.switch_to(carry_on);
+        Ok(())
     }
 
     /// The declaration a call resolves to, when it is a plain function.
@@ -49122,7 +49288,16 @@ impl<'a> FuncBuilder<'a> {
         // class.
         self.materialize(id, &ty)?;
         let origin = self.origin(id);
-        Ok(self.push(
+        // **The closure path needs the raising test too, and it is not the
+        // direct-call path.** `finish_call_typed` calls `test_for_a_raise` and
+        // seventy-six places push a `Call` op; a closure call arrives here
+        // instead. Adding the `Callee::Closure` case to that predicate and not
+        // here lifted the refusal and then *dropped the handler* -- `call(fn)`
+        // emitted `call.closure[0]` with no test and no branch, so the throw was
+        // never caught and 48 of the fixture's cases disagreed with node while
+        // the sibling `direct()` was correct. A refusal replaced by a wrong
+        // answer, which is the one outcome worse than the refusal.
+        let call = self.push(
             OpKind::Call {
                 callee,
                 args,
@@ -49130,7 +49305,9 @@ impl<'a> FuncBuilder<'a> {
             },
             ty,
             origin,
-        ))
+        );
+        self.test_for_a_raise(id, true)?;
+        Ok(call)
     }
 
     /// The `Math` or `Number` member a callee names, if it names one.
