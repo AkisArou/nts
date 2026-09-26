@@ -58,6 +58,7 @@ import {
   GtkListView,
   GtkMediaControls,
   GtkMenuButton,
+  type GtkMessageType,
   type GtkMovementStep,
   type GtkNaturalWrapMode,
   GtkNotebook,
@@ -88,6 +89,7 @@ import {
   GtkSearchBar,
   GtkSearchEntry,
   type GtkSelectionMode,
+  type GtkSensitivityType,
   GtkSeparator,
   GtkSpinButton,
   type GtkSpinButtonUpdatePolicy,
@@ -158,6 +160,30 @@ export interface WidgetProps extends HostProps {
   vexpand?: boolean;
   vexpandSet?: boolean;
   visible?: boolean;
+  onNotifyCanFocus?: (value: boolean) => void;
+  onNotifyCanTarget?: (value: boolean) => void;
+  onNotifyFocusOnClick?: (value: boolean) => void;
+  onNotifyFocusable?: (value: boolean) => void;
+  onNotifyHalign?: (value: GtkAlign) => void;
+  onNotifyHasTooltip?: (value: boolean) => void;
+  onNotifyHexpand?: (value: boolean) => void;
+  onNotifyHexpandSet?: (value: boolean) => void;
+  onNotifyLimitEvents?: (value: boolean) => void;
+  onNotifyMarginBottom?: (value: number) => void;
+  onNotifyMarginEnd?: (value: number) => void;
+  onNotifyMarginStart?: (value: number) => void;
+  onNotifyMarginTop?: (value: number) => void;
+  onNotifyName?: (value: string) => void;
+  onNotifyOpacity?: (value: number) => void;
+  onNotifyOverflow?: (value: GtkOverflow) => void;
+  onNotifyReceivesDefault?: (value: boolean) => void;
+  onNotifySensitive?: (value: boolean) => void;
+  onNotifyTooltipMarkup?: (value: string | null) => void;
+  onNotifyTooltipText?: (value: string | null) => void;
+  onNotifyValign?: (value: GtkAlign) => void;
+  onNotifyVexpand?: (value: boolean) => void;
+  onNotifyVexpandSet?: (value: boolean) => void;
+  onNotifyVisible?: (value: boolean) => void;
   onDestroy?: () => void;
   onDirectionChanged?: (previous_direction: GtkTextDirection) => void;
   onHide?: () => void;
@@ -188,6 +214,18 @@ export interface WindowProps extends WidgetProps {
   resizable?: boolean;
   startupId?: string;
   title?: string | null;
+  onNotifyDecorated?: (value: boolean) => void;
+  onNotifyDeletable?: (value: boolean) => void;
+  onNotifyDestroyWithParent?: (value: boolean) => void;
+  onNotifyFocusVisible?: (value: boolean) => void;
+  onNotifyGravity?: (value: GtkWindowGravity) => void;
+  onNotifyHandleMenubarAccel?: (value: boolean) => void;
+  onNotifyHideOnClose?: (value: boolean) => void;
+  onNotifyIconName?: (value: string | null) => void;
+  onNotifyMnemonicsVisible?: (value: boolean) => void;
+  onNotifyModal?: (value: boolean) => void;
+  onNotifyResizable?: (value: boolean) => void;
+  onNotifyTitle?: (value: string | null) => void;
   onActivateDefault?: () => void;
   onActivateFocus?: () => void;
   onCloseRequest?: () => boolean;
@@ -208,17 +246,31 @@ export interface AboutDialogProps extends WindowProps {
   website?: string | null;
   websiteLabel?: string;
   wrapLicense?: boolean;
+  onNotifyComments?: (value: string | null) => void;
+  onNotifyCopyright?: (value: string | null) => void;
+  onNotifyLicense?: (value: string | null) => void;
+  onNotifyLicenseType?: (value: GtkLicense) => void;
+  onNotifyLogoIconName?: (value: string | null) => void;
+  onNotifyProgramName?: (value: string | null) => void;
+  onNotifySystemInformation?: (value: string | null) => void;
+  onNotifyTranslatorCredits?: (value: string | null) => void;
+  onNotifyVersion?: (value: string | null) => void;
+  onNotifyWebsite?: (value: string | null) => void;
+  onNotifyWebsiteLabel?: (value: string | null) => void;
+  onNotifyWrapLicense?: (value: boolean) => void;
   onActivateLink?: (uri: string) => boolean;
 }
 
 /** `<ActionBar>`'s props: GtkActionBar's own properties and signals. */
 export interface ActionBarProps extends WidgetProps {
   revealed?: boolean;
+  onNotifyRevealed?: (value: boolean) => void;
 }
 
 /** `<ApplicationWindow>`'s props: GtkApplicationWindow's own properties and signals. */
 export interface ApplicationWindowProps extends WindowProps {
   showMenubar?: boolean;
+  onNotifyShowMenubar?: (value: boolean) => void;
 }
 
 /** `<AspectFrame>`'s props: GtkAspectFrame's own properties and signals. */
@@ -227,6 +279,10 @@ export interface AspectFrameProps extends WidgetProps {
   ratio?: number;
   xalign?: number;
   yalign?: number;
+  onNotifyObeyChild?: (value: boolean) => void;
+  onNotifyRatio?: (value: number) => void;
+  onNotifyXalign?: (value: number) => void;
+  onNotifyYalign?: (value: number) => void;
 }
 
 /** `<Box>`'s props: GtkBox's own properties and signals. */
@@ -236,6 +292,11 @@ export interface BoxProps extends WidgetProps {
   homogeneous?: boolean;
   spacing?: number;
   orientation?: GtkOrientation;
+  onNotifyBaselineChild?: (value: number) => void;
+  onNotifyBaselinePosition?: (value: GtkBaselinePosition) => void;
+  onNotifyHomogeneous?: (value: boolean) => void;
+  onNotifySpacing?: (value: number) => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<Button>`'s props: GtkButton's own properties and signals. */
@@ -246,8 +307,14 @@ export interface ButtonProps extends WidgetProps {
   label?: string;
   useUnderline?: boolean;
   actionName?: string | null;
+  onNotifyCanShrink?: (value: boolean) => void;
+  onNotifyHasFrame?: (value: boolean) => void;
+  onNotifyIconName?: (value: string | null) => void;
+  onNotifyLabel?: (value: string | null) => void;
+  onNotifyUseUnderline?: (value: boolean) => void;
   onActivate?: () => void;
   onClicked?: () => void;
+  onNotifyActionName?: (value: string | null) => void;
 }
 
 /** `<Calendar>`'s props: GtkCalendar's own properties and signals. */
@@ -255,6 +322,9 @@ export interface CalendarProps extends WidgetProps {
   showDayNames?: boolean;
   showHeading?: boolean;
   showWeekNumbers?: boolean;
+  onNotifyShowDayNames?: (value: boolean) => void;
+  onNotifyShowHeading?: (value: boolean) => void;
+  onNotifyShowWeekNumbers?: (value: boolean) => void;
   onDaySelected?: () => void;
   onNextMonth?: () => void;
   onNextYear?: () => void;
@@ -267,6 +337,9 @@ export interface CenterBoxProps extends WidgetProps {
   baselinePosition?: GtkBaselinePosition;
   shrinkCenterLast?: boolean;
   orientation?: GtkOrientation;
+  onNotifyBaselinePosition?: (value: GtkBaselinePosition) => void;
+  onNotifyShrinkCenterLast?: (value: boolean) => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<CheckButton>`'s props: GtkCheckButton's own properties and signals. */
@@ -276,8 +349,13 @@ export interface CheckButtonProps extends WidgetProps {
   label?: string | null;
   useUnderline?: boolean;
   actionName?: string | null;
+  onNotifyActive?: (value: boolean) => void;
+  onNotifyInconsistent?: (value: boolean) => void;
+  onNotifyLabel?: (value: string | null) => void;
+  onNotifyUseUnderline?: (value: boolean) => void;
   onActivate?: () => void;
   onToggled?: () => void;
+  onNotifyActionName?: (value: string | null) => void;
 }
 
 /** `<ColorDialogButton>`'s props: GtkColorDialogButton's own properties and signals. */
@@ -295,7 +373,15 @@ export interface ColumnViewProps extends WidgetProps {
   tabBehavior?: GtkListTabBehavior;
   hscrollPolicy?: GtkScrollablePolicy;
   vscrollPolicy?: GtkScrollablePolicy;
+  onNotifyEnableRubberband?: (value: boolean) => void;
+  onNotifyReorderable?: (value: boolean) => void;
+  onNotifyShowColumnSeparators?: (value: boolean) => void;
+  onNotifyShowRowSeparators?: (value: boolean) => void;
+  onNotifySingleClickActivate?: (value: boolean) => void;
+  onNotifyTabBehavior?: (value: GtkListTabBehavior) => void;
   onActivate?: (position: number) => void;
+  onNotifyHscrollPolicy?: (value: GtkScrollablePolicy) => void;
+  onNotifyVscrollPolicy?: (value: GtkScrollablePolicy) => void;
 }
 
 /** `<DragIcon>`'s props: GtkDragIcon's own properties and signals. */
@@ -306,6 +392,8 @@ export interface DragIconProps extends WidgetProps {
 export interface DrawingAreaProps extends WidgetProps {
   contentHeight?: number;
   contentWidth?: number;
+  onNotifyContentHeight?: (value: number) => void;
+  onNotifyContentWidth?: (value: number) => void;
   onResize?: (width: number, height: number) => void;
 }
 
@@ -315,6 +403,10 @@ export interface DropDownProps extends WidgetProps {
   searchMatchMode?: GtkStringFilterMatchMode;
   selected?: number;
   showArrow?: boolean;
+  onNotifyEnableSearch?: (value: boolean) => void;
+  onNotifySearchMatchMode?: (value: GtkStringFilterMatchMode) => void;
+  onNotifySelected?: (value: number) => void;
+  onNotifyShowArrow?: (value: boolean) => void;
   onActivate?: () => void;
 }
 
@@ -326,6 +418,12 @@ export interface EditableLabelProps extends WidgetProps {
   text?: string;
   widthChars?: number;
   xalign?: number;
+  onNotifyEditable?: (value: boolean) => void;
+  onNotifyEnableUndo?: (value: boolean) => void;
+  onNotifyMaxWidthChars?: (value: number) => void;
+  onNotifyText?: (value: string) => void;
+  onNotifyWidthChars?: (value: number) => void;
+  onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
   onInsertText?: (text: string, length: number, position: number) => void;
@@ -338,6 +436,11 @@ export interface PopoverProps extends WidgetProps {
   hasArrow?: boolean;
   mnemonicsVisible?: boolean;
   position?: GtkPositionType;
+  onNotifyAutohide?: (value: boolean) => void;
+  onNotifyCascadePopdown?: (value: boolean) => void;
+  onNotifyHasArrow?: (value: boolean) => void;
+  onNotifyMnemonicsVisible?: (value: boolean) => void;
+  onNotifyPosition?: (value: GtkPositionType) => void;
   onActivateDefault?: () => void;
   onClosed?: () => void;
 }
@@ -365,11 +468,27 @@ export interface EntryProps extends WidgetProps {
   text?: string;
   widthChars?: number;
   xalign?: number;
+  onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyHasFrame?: (value: boolean) => void;
+  onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
+  onNotifyInvisibleChar?: (value: number) => void;
+  onNotifyMaxLength?: (value: number) => void;
+  onNotifyOverwriteMode?: (value: boolean) => void;
+  onNotifyPlaceholderText?: (value: string | null) => void;
+  onNotifyProgressFraction?: (value: number) => void;
+  onNotifyProgressPulseStep?: (value: number) => void;
+  onNotifyVisibility?: (value: boolean) => void;
   onActivate?: () => void;
   onIconPress?: (icon_pos: GtkEntryIconPosition) => void;
   onIconRelease?: (icon_pos: GtkEntryIconPosition) => void;
   onEditingDone?: () => void;
   onRemoveWidget?: () => void;
+  onNotifyEditable?: (value: boolean) => void;
+  onNotifyEnableUndo?: (value: boolean) => void;
+  onNotifyMaxWidthChars?: (value: number) => void;
+  onNotifyText?: (value: string) => void;
+  onNotifyWidthChars?: (value: number) => void;
+  onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
   onInsertText?: (text: string, length: number, position: number) => void;
@@ -382,6 +501,11 @@ export interface ExpanderProps extends WidgetProps {
   resizeToplevel?: boolean;
   useMarkup?: boolean;
   useUnderline?: boolean;
+  onNotifyExpanded?: (value: boolean) => void;
+  onNotifyLabel?: (value: string | null) => void;
+  onNotifyResizeToplevel?: (value: boolean) => void;
+  onNotifyUseMarkup?: (value: boolean) => void;
+  onNotifyUseUnderline?: (value: boolean) => void;
   onActivate?: () => void;
 }
 
@@ -399,6 +523,13 @@ export interface FlowBoxProps extends WidgetProps {
   rowSpacing?: number;
   selectionMode?: GtkSelectionMode;
   orientation?: GtkOrientation;
+  onNotifyActivateOnSingleClick?: (value: boolean) => void;
+  onNotifyColumnSpacing?: (value: number) => void;
+  onNotifyHomogeneous?: (value: boolean) => void;
+  onNotifyMaxChildrenPerLine?: (value: number) => void;
+  onNotifyMinChildrenPerLine?: (value: number) => void;
+  onNotifyRowSpacing?: (value: number) => void;
+  onNotifySelectionMode?: (value: GtkSelectionMode) => void;
   onActivateCursorChild?: () => void;
   onChildActivated?: (child: GtkFlowBoxChild) => void;
   onMoveCursor?: (step: GtkMovementStep, count: number, extend: boolean, modify: boolean) => boolean;
@@ -406,6 +537,7 @@ export interface FlowBoxProps extends WidgetProps {
   onSelectedChildrenChanged?: () => void;
   onToggleCursorChild?: () => void;
   onUnselectAll?: () => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<FlowBoxChild>`'s props: GtkFlowBoxChild's own properties and signals. */
@@ -419,6 +551,10 @@ export interface FontDialogButtonProps extends WidgetProps {
   level?: GtkFontLevel;
   useFont?: boolean;
   useSize?: boolean;
+  onNotifyFontFeatures?: (value: string | null) => void;
+  onNotifyLevel?: (value: GtkFontLevel) => void;
+  onNotifyUseFont?: (value: boolean) => void;
+  onNotifyUseSize?: (value: boolean) => void;
   onActivate?: () => void;
 }
 
@@ -426,6 +562,8 @@ export interface FontDialogButtonProps extends WidgetProps {
 export interface FrameProps extends WidgetProps {
   label?: string | null;
   labelXalign?: number;
+  onNotifyLabel?: (value: string | null) => void;
+  onNotifyLabelXalign?: (value: number) => void;
 }
 
 /** `<GLArea>`'s props: GtkGLArea's own properties and signals. */
@@ -433,6 +571,9 @@ export interface GLAreaProps extends WidgetProps {
   autoRender?: boolean;
   hasDepthBuffer?: boolean;
   hasStencilBuffer?: boolean;
+  onNotifyAutoRender?: (value: boolean) => void;
+  onNotifyHasDepthBuffer?: (value: boolean) => void;
+  onNotifyHasStencilBuffer?: (value: boolean) => void;
   onResize?: (width: number, height: number) => void;
 }
 
@@ -440,6 +581,8 @@ export interface GLAreaProps extends WidgetProps {
 export interface GraphicsOffloadProps extends WidgetProps {
   blackBackground?: boolean;
   enabled?: GtkGraphicsOffloadEnabled;
+  onNotifyBlackBackground?: (value: boolean) => void;
+  onNotifyEnabled?: (value: GtkGraphicsOffloadEnabled) => void;
 }
 
 /** `<Grid>`'s props: GtkGrid's own properties and signals. */
@@ -450,6 +593,12 @@ export interface GridProps extends WidgetProps {
   rowHomogeneous?: boolean;
   rowSpacing?: number;
   orientation?: GtkOrientation;
+  onNotifyBaselineRow?: (value: number) => void;
+  onNotifyColumnHomogeneous?: (value: boolean) => void;
+  onNotifyColumnSpacing?: (value: number) => void;
+  onNotifyRowHomogeneous?: (value: boolean) => void;
+  onNotifyRowSpacing?: (value: number) => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<ListBase>`'s props: GtkListBase's own properties and signals. */
@@ -457,6 +606,9 @@ export interface ListBaseProps extends WidgetProps {
   orientation?: GtkOrientation;
   hscrollPolicy?: GtkScrollablePolicy;
   vscrollPolicy?: GtkScrollablePolicy;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
+  onNotifyHscrollPolicy?: (value: GtkScrollablePolicy) => void;
+  onNotifyVscrollPolicy?: (value: GtkScrollablePolicy) => void;
 }
 
 /** `<GridView>`'s props: GtkGridView's own properties and signals. */
@@ -466,6 +618,11 @@ export interface GridViewProps extends ListBaseProps {
   minColumns?: number;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
+  onNotifyEnableRubberband?: (value: boolean) => void;
+  onNotifyMaxColumns?: (value: number) => void;
+  onNotifyMinColumns?: (value: number) => void;
+  onNotifySingleClickActivate?: (value: boolean) => void;
+  onNotifyTabBehavior?: (value: GtkListTabBehavior) => void;
   onActivate?: (position: number) => void;
 }
 
@@ -474,6 +631,9 @@ export interface HeaderBarProps extends WidgetProps {
   decorationLayout?: string | null;
   showTitleButtons?: boolean;
   useNativeControls?: boolean;
+  onNotifyDecorationLayout?: (value: string | null) => void;
+  onNotifyShowTitleButtons?: (value: boolean) => void;
+  onNotifyUseNativeControls?: (value: boolean) => void;
 }
 
 /** `<Image>`'s props: GtkImage's own properties and signals. */
@@ -481,6 +641,9 @@ export interface ImageProps extends WidgetProps {
   iconName?: string | null;
   iconSize?: GtkIconSize;
   pixelSize?: number;
+  onNotifyIconName?: (value: string | null) => void;
+  onNotifyIconSize?: (value: GtkIconSize) => void;
+  onNotifyPixelSize?: (value: number) => void;
 }
 
 /** `<Inscription>`'s props: GtkInscription's own properties and signals. */
@@ -495,6 +658,15 @@ export interface InscriptionProps extends WidgetProps {
   wrapMode?: PangoWrapMode;
   xalign?: number;
   yalign?: number;
+  onNotifyMinChars?: (value: number) => void;
+  onNotifyMinLines?: (value: number) => void;
+  onNotifyNatChars?: (value: number) => void;
+  onNotifyNatLines?: (value: number) => void;
+  onNotifyText?: (value: string | null) => void;
+  onNotifyTextOverflow?: (value: GtkInscriptionOverflow) => void;
+  onNotifyWrapMode?: (value: PangoWrapMode) => void;
+  onNotifyXalign?: (value: number) => void;
+  onNotifyYalign?: (value: number) => void;
 }
 
 /** `<Label>`'s props: GtkLabel's own properties and signals. */
@@ -514,6 +686,21 @@ export interface LabelProps extends WidgetProps {
   wrapMode?: PangoWrapMode;
   xalign?: number;
   yalign?: number;
+  onNotifyEllipsize?: (value: PangoEllipsizeMode) => void;
+  onNotifyJustify?: (value: GtkJustification) => void;
+  onNotifyLabel?: (value: string) => void;
+  onNotifyLines?: (value: number) => void;
+  onNotifyMaxWidthChars?: (value: number) => void;
+  onNotifyNaturalWrapMode?: (value: GtkNaturalWrapMode) => void;
+  onNotifySelectable?: (value: boolean) => void;
+  onNotifySingleLineMode?: (value: boolean) => void;
+  onNotifyUseMarkup?: (value: boolean) => void;
+  onNotifyUseUnderline?: (value: boolean) => void;
+  onNotifyWidthChars?: (value: number) => void;
+  onNotifyWrap?: (value: boolean) => void;
+  onNotifyWrapMode?: (value: PangoWrapMode) => void;
+  onNotifyXalign?: (value: number) => void;
+  onNotifyYalign?: (value: number) => void;
   onActivateCurrentLink?: () => void;
   onActivateLink?: (uri: string) => boolean;
   onCopyClipboard?: () => void;
@@ -528,13 +715,20 @@ export interface LevelBarProps extends WidgetProps {
   mode?: GtkLevelBarMode;
   value?: number;
   orientation?: GtkOrientation;
-  onOffsetChanged?: (name: string) => void;
+  onNotifyInverted?: (value: boolean) => void;
+  onNotifyMaxValue?: (value: number) => void;
+  onNotifyMinValue?: (value: number) => void;
+  onNotifyMode?: (value: GtkLevelBarMode) => void;
+  onNotifyValue?: (value: number) => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<LinkButton>`'s props: GtkLinkButton's own properties and signals. */
 export interface LinkButtonProps extends ButtonProps {
   uri?: string;
   visited?: boolean;
+  onNotifyUri?: (value: string) => void;
+  onNotifyVisited?: (value: boolean) => void;
   onActivateLink?: () => boolean;
 }
 
@@ -544,6 +738,10 @@ export interface ListBoxProps extends WidgetProps {
   selectionMode?: GtkSelectionMode;
   showSeparators?: boolean;
   tabBehavior?: GtkListTabBehavior;
+  onNotifyActivateOnSingleClick?: (value: boolean) => void;
+  onNotifySelectionMode?: (value: GtkSelectionMode) => void;
+  onNotifyShowSeparators?: (value: boolean) => void;
+  onNotifyTabBehavior?: (value: GtkListTabBehavior) => void;
   onActivateCursorRow?: () => void;
   onMoveCursor?: (step: GtkMovementStep, count: number, extend: boolean, modify: boolean) => void;
   onRowActivated?: (row: GtkListBoxRow) => void;
@@ -559,7 +757,10 @@ export interface ListBoxRowProps extends WidgetProps {
   activatable?: boolean;
   selectable?: boolean;
   actionName?: string | null;
+  onNotifyActivatable?: (value: boolean) => void;
+  onNotifySelectable?: (value: boolean) => void;
   onActivate?: () => void;
+  onNotifyActionName?: (value: string | null) => void;
 }
 
 /** `<ListView>`'s props: GtkListView's own properties and signals. */
@@ -568,6 +769,10 @@ export interface ListViewProps extends ListBaseProps {
   showSeparators?: boolean;
   singleClickActivate?: boolean;
   tabBehavior?: GtkListTabBehavior;
+  onNotifyEnableRubberband?: (value: boolean) => void;
+  onNotifyShowSeparators?: (value: boolean) => void;
+  onNotifySingleClickActivate?: (value: boolean) => void;
+  onNotifyTabBehavior?: (value: GtkListTabBehavior) => void;
   onActivate?: (position: number) => void;
 }
 
@@ -586,6 +791,15 @@ export interface MenuButtonProps extends WidgetProps {
   label?: string;
   primary?: boolean;
   useUnderline?: boolean;
+  onNotifyActive?: (value: boolean) => void;
+  onNotifyAlwaysShowArrow?: (value: boolean) => void;
+  onNotifyCanShrink?: (value: boolean) => void;
+  onNotifyDirection?: (value: GtkArrowType) => void;
+  onNotifyHasFrame?: (value: boolean) => void;
+  onNotifyIconName?: (value: string | null) => void;
+  onNotifyLabel?: (value: string | null) => void;
+  onNotifyPrimary?: (value: boolean) => void;
+  onNotifyUseUnderline?: (value: boolean) => void;
   onActivate?: () => void;
 }
 
@@ -597,6 +811,12 @@ export interface NotebookProps extends WidgetProps {
   showBorder?: boolean;
   showTabs?: boolean;
   tabPos?: GtkPositionType;
+  onNotifyGroupName?: (value: string | null) => void;
+  onNotifyPage?: (value: number) => void;
+  onNotifyScrollable?: (value: boolean) => void;
+  onNotifyShowBorder?: (value: boolean) => void;
+  onNotifyShowTabs?: (value: boolean) => void;
+  onNotifyTabPos?: (value: GtkPositionType) => void;
   onChangeCurrentPage?: (page: number) => boolean;
   onFocusTab?: (tab: GtkNotebookTab) => boolean;
   onMoveFocusOut?: (direction: GtkDirectionType) => void;
@@ -621,12 +841,19 @@ export interface PanedProps extends WidgetProps {
   shrinkStartChild?: boolean;
   wideHandle?: boolean;
   orientation?: GtkOrientation;
+  onNotifyPosition?: (value: number) => void;
+  onNotifyResizeEndChild?: (value: boolean) => void;
+  onNotifyResizeStartChild?: (value: boolean) => void;
+  onNotifyShrinkEndChild?: (value: boolean) => void;
+  onNotifyShrinkStartChild?: (value: boolean) => void;
+  onNotifyWideHandle?: (value: boolean) => void;
   onAcceptPosition?: () => boolean;
   onCancelPosition?: () => boolean;
   onCycleChildFocus?: (reversed: boolean) => boolean;
   onCycleHandleFocus?: (reversed: boolean) => boolean;
   onMoveHandle?: (scroll_type: GtkScrollType) => boolean;
   onToggleHandleFocus?: () => boolean;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<PasswordEntry>`'s props: GtkPasswordEntry's own properties and signals. */
@@ -638,7 +865,14 @@ export interface PasswordEntryProps extends WidgetProps {
   text?: string;
   widthChars?: number;
   xalign?: number;
+  onNotifyShowPeekIcon?: (value: boolean) => void;
   onActivate?: () => void;
+  onNotifyEditable?: (value: boolean) => void;
+  onNotifyEnableUndo?: (value: boolean) => void;
+  onNotifyMaxWidthChars?: (value: number) => void;
+  onNotifyText?: (value: string) => void;
+  onNotifyWidthChars?: (value: number) => void;
+  onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
   onInsertText?: (text: string, length: number, position: number) => void;
@@ -650,11 +884,16 @@ export interface PictureProps extends WidgetProps {
   canShrink?: boolean;
   contentFit?: GtkContentFit;
   isolateContents?: boolean;
+  onNotifyAlternativeText?: (value: string | null) => void;
+  onNotifyCanShrink?: (value: boolean) => void;
+  onNotifyContentFit?: (value: GtkContentFit) => void;
+  onNotifyIsolateContents?: (value: boolean) => void;
 }
 
 /** `<PopoverBin>`'s props: GtkPopoverBin's own properties and signals. */
 export interface PopoverBinProps extends WidgetProps {
   handleInput?: boolean;
+  onNotifyHandleInput?: (value: boolean) => void;
 }
 
 /** `<PopoverMenu>`'s props: GtkPopoverMenu's own properties and signals. */
@@ -674,6 +913,13 @@ export interface ProgressBarProps extends WidgetProps {
   showText?: boolean;
   text?: string | null;
   orientation?: GtkOrientation;
+  onNotifyEllipsize?: (value: PangoEllipsizeMode) => void;
+  onNotifyFraction?: (value: number) => void;
+  onNotifyInverted?: (value: boolean) => void;
+  onNotifyPulseStep?: (value: number) => void;
+  onNotifyShowText?: (value: boolean) => void;
+  onNotifyText?: (value: string | null) => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<Range>`'s props: GtkRange's own properties and signals. */
@@ -684,10 +930,16 @@ export interface RangeProps extends WidgetProps {
   roundDigits?: number;
   showFillLevel?: boolean;
   orientation?: GtkOrientation;
+  onNotifyFillLevel?: (value: number) => void;
+  onNotifyInverted?: (value: boolean) => void;
+  onNotifyRestrictToFillLevel?: (value: boolean) => void;
+  onNotifyRoundDigits?: (value: number) => void;
+  onNotifyShowFillLevel?: (value: boolean) => void;
   onAdjustBounds?: (value: number) => void;
   onChangeValue?: (scroll: GtkScrollType, value: number) => boolean;
   onMoveSlider?: (step: GtkScrollType) => void;
   onValueChanged?: () => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<Revealer>`'s props: GtkRevealer's own properties and signals. */
@@ -695,6 +947,9 @@ export interface RevealerProps extends WidgetProps {
   revealChild?: boolean;
   transitionDuration?: number;
   transitionType?: GtkRevealerTransitionType;
+  onNotifyRevealChild?: (value: boolean) => void;
+  onNotifyTransitionDuration?: (value: number) => void;
+  onNotifyTransitionType?: (value: GtkRevealerTransitionType) => void;
 }
 
 /** `<Scale>`'s props: GtkScale's own properties and signals. */
@@ -703,6 +958,10 @@ export interface ScaleProps extends RangeProps {
   drawValue?: boolean;
   hasOrigin?: boolean;
   valuePos?: GtkPositionType;
+  onNotifyDigits?: (value: number) => void;
+  onNotifyDrawValue?: (value: boolean) => void;
+  onNotifyHasOrigin?: (value: boolean) => void;
+  onNotifyValuePos?: (value: GtkPositionType) => void;
 }
 
 /** `<ScaleButton>`'s props: GtkScaleButton's own properties and signals. */
@@ -710,14 +969,18 @@ export interface ScaleButtonProps extends WidgetProps {
   hasFrame?: boolean;
   value?: number;
   orientation?: GtkOrientation;
+  onNotifyHasFrame?: (value: boolean) => void;
+  onNotifyValue?: (value: number) => void;
   onPopdown?: () => void;
   onPopup?: () => void;
   onValueChanged?: (value: number) => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<Scrollbar>`'s props: GtkScrollbar's own properties and signals. */
 export interface ScrollbarProps extends WidgetProps {
   orientation?: GtkOrientation;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<ScrolledWindow>`'s props: GtkScrolledWindow's own properties and signals. */
@@ -732,6 +995,16 @@ export interface ScrolledWindowProps extends WidgetProps {
   propagateNaturalHeight?: boolean;
   propagateNaturalWidth?: boolean;
   windowPlacement?: GtkCornerType;
+  onNotifyHasFrame?: (value: boolean) => void;
+  onNotifyKineticScrolling?: (value: boolean) => void;
+  onNotifyMaxContentHeight?: (value: number) => void;
+  onNotifyMaxContentWidth?: (value: number) => void;
+  onNotifyMinContentHeight?: (value: number) => void;
+  onNotifyMinContentWidth?: (value: number) => void;
+  onNotifyOverlayScrolling?: (value: boolean) => void;
+  onNotifyPropagateNaturalHeight?: (value: boolean) => void;
+  onNotifyPropagateNaturalWidth?: (value: boolean) => void;
+  onNotifyWindowPlacement?: (value: GtkCornerType) => void;
   onEdgeOvershot?: (pos: GtkPositionType) => void;
   onEdgeReached?: (pos: GtkPositionType) => void;
   onMoveFocusOut?: (direction_type: GtkDirectionType) => void;
@@ -742,6 +1015,8 @@ export interface ScrolledWindowProps extends WidgetProps {
 export interface SearchBarProps extends WidgetProps {
   searchModeEnabled?: boolean;
   showCloseButton?: boolean;
+  onNotifySearchModeEnabled?: (value: boolean) => void;
+  onNotifyShowCloseButton?: (value: boolean) => void;
 }
 
 /** `<SearchEntry>`'s props: GtkSearchEntry's own properties and signals. */
@@ -755,12 +1030,21 @@ export interface SearchEntryProps extends WidgetProps {
   text?: string;
   widthChars?: number;
   xalign?: number;
+  onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
+  onNotifyPlaceholderText?: (value: string | null) => void;
+  onNotifySearchDelay?: (value: number) => void;
   onActivate?: () => void;
   onNextMatch?: () => void;
   onPreviousMatch?: () => void;
   onSearchChanged?: () => void;
   onSearchStarted?: () => void;
   onStopSearch?: () => void;
+  onNotifyEditable?: (value: boolean) => void;
+  onNotifyEnableUndo?: (value: boolean) => void;
+  onNotifyMaxWidthChars?: (value: number) => void;
+  onNotifyText?: (value: string) => void;
+  onNotifyWidthChars?: (value: number) => void;
+  onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
   onInsertText?: (text: string, length: number, position: number) => void;
@@ -769,6 +1053,7 @@ export interface SearchEntryProps extends WidgetProps {
 /** `<Separator>`'s props: GtkSeparator's own properties and signals. */
 export interface SeparatorProps extends WidgetProps {
   orientation?: GtkOrientation;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<SpinButton>`'s props: GtkSpinButton's own properties and signals. */
@@ -788,6 +1073,14 @@ export interface SpinButtonProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   orientation?: GtkOrientation;
+  onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyClimbRate?: (value: number) => void;
+  onNotifyDigits?: (value: number) => void;
+  onNotifyNumeric?: (value: boolean) => void;
+  onNotifySnapToTicks?: (value: boolean) => void;
+  onNotifyUpdatePolicy?: (value: GtkSpinButtonUpdatePolicy) => void;
+  onNotifyValue?: (value: number) => void;
+  onNotifyWrap?: (value: boolean) => void;
   onActivate?: () => void;
   onChangeValue?: (scroll: GtkScrollType) => void;
   onOutput?: () => boolean;
@@ -795,14 +1088,22 @@ export interface SpinButtonProps extends WidgetProps {
   onWrapped?: () => void;
   onEditingDone?: () => void;
   onRemoveWidget?: () => void;
+  onNotifyEditable?: (value: boolean) => void;
+  onNotifyEnableUndo?: (value: boolean) => void;
+  onNotifyMaxWidthChars?: (value: number) => void;
+  onNotifyText?: (value: string) => void;
+  onNotifyWidthChars?: (value: number) => void;
+  onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
   onInsertText?: (text: string, length: number, position: number) => void;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<Spinner>`'s props: GtkSpinner's own properties and signals. */
 export interface SpinnerProps extends WidgetProps {
   spinning?: boolean;
+  onNotifySpinning?: (value: boolean) => void;
 }
 
 /** `<Stack>`'s props: GtkStack's own properties and signals. */
@@ -813,6 +1114,12 @@ export interface StackProps extends WidgetProps {
   transitionType?: GtkStackTransitionType;
   vhomogeneous?: boolean;
   visibleChildName?: string;
+  onNotifyHhomogeneous?: (value: boolean) => void;
+  onNotifyInterpolateSize?: (value: boolean) => void;
+  onNotifyTransitionDuration?: (value: number) => void;
+  onNotifyTransitionType?: (value: GtkStackTransitionType) => void;
+  onNotifyVhomogeneous?: (value: boolean) => void;
+  onNotifyVisibleChildName?: (value: string | null) => void;
 }
 
 /** `<StackSidebar>`'s props: GtkStackSidebar's own properties and signals. */
@@ -822,6 +1129,7 @@ export interface StackSidebarProps extends WidgetProps {
 /** `<StackSwitcher>`'s props: GtkStackSwitcher's own properties and signals. */
 export interface StackSwitcherProps extends WidgetProps {
   orientation?: GtkOrientation;
+  onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<Switch>`'s props: GtkSwitch's own properties and signals. */
@@ -829,8 +1137,11 @@ export interface SwitchProps extends WidgetProps {
   active?: boolean;
   state?: boolean;
   actionName?: string | null;
+  onNotifyActive?: (value: boolean) => void;
+  onNotifyState?: (value: boolean) => void;
   onActivate?: () => void;
   onStateSet?: (state: boolean) => boolean;
+  onNotifyActionName?: (value: string | null) => void;
 }
 
 /** `<Text>`'s props: GtkText's own properties and signals. */
@@ -851,6 +1162,16 @@ export interface TextProps extends WidgetProps {
   text?: string;
   widthChars?: number;
   xalign?: number;
+  onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyEnableEmojiCompletion?: (value: boolean) => void;
+  onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
+  onNotifyInvisibleChar?: (value: number) => void;
+  onNotifyMaxLength?: (value: number) => void;
+  onNotifyOverwriteMode?: (value: boolean) => void;
+  onNotifyPlaceholderText?: (value: string | null) => void;
+  onNotifyPropagateTextWidth?: (value: boolean) => void;
+  onNotifyTruncateMultiline?: (value: boolean) => void;
+  onNotifyVisibility?: (value: boolean) => void;
   onActivate?: () => void;
   onBackspace?: () => void;
   onCopyClipboard?: () => void;
@@ -862,6 +1183,12 @@ export interface TextProps extends WidgetProps {
   onPasteClipboard?: () => void;
   onPreeditChanged?: (preedit: string) => void;
   onToggleOverwrite?: () => void;
+  onNotifyEditable?: (value: boolean) => void;
+  onNotifyEnableUndo?: (value: boolean) => void;
+  onNotifyMaxWidthChars?: (value: number) => void;
+  onNotifyText?: (value: string) => void;
+  onNotifyWidthChars?: (value: number) => void;
+  onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
   onInsertText?: (text: string, length: number, position: number) => void;
@@ -887,6 +1214,22 @@ export interface TextViewProps extends WidgetProps {
   wrapMode?: GtkWrapMode;
   hscrollPolicy?: GtkScrollablePolicy;
   vscrollPolicy?: GtkScrollablePolicy;
+  onNotifyAcceptsTab?: (value: boolean) => void;
+  onNotifyBottomMargin?: (value: number) => void;
+  onNotifyCursorVisible?: (value: boolean) => void;
+  onNotifyEditable?: (value: boolean) => void;
+  onNotifyIndent?: (value: number) => void;
+  onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
+  onNotifyJustification?: (value: GtkJustification) => void;
+  onNotifyLeftMargin?: (value: number) => void;
+  onNotifyMonospace?: (value: boolean) => void;
+  onNotifyOverwrite?: (value: boolean) => void;
+  onNotifyPixelsAboveLines?: (value: number) => void;
+  onNotifyPixelsBelowLines?: (value: number) => void;
+  onNotifyPixelsInsideWrap?: (value: number) => void;
+  onNotifyRightMargin?: (value: number) => void;
+  onNotifyTopMargin?: (value: number) => void;
+  onNotifyWrapMode?: (value: GtkWrapMode) => void;
   onBackspace?: () => void;
   onCopyClipboard?: () => void;
   onCutClipboard?: () => void;
@@ -902,11 +1245,14 @@ export interface TextViewProps extends WidgetProps {
   onSetAnchor?: () => void;
   onToggleCursorVisible?: () => void;
   onToggleOverwrite?: () => void;
+  onNotifyHscrollPolicy?: (value: GtkScrollablePolicy) => void;
+  onNotifyVscrollPolicy?: (value: GtkScrollablePolicy) => void;
 }
 
 /** `<ToggleButton>`'s props: GtkToggleButton's own properties and signals. */
 export interface ToggleButtonProps extends ButtonProps {
   active?: boolean;
+  onNotifyActive?: (value: boolean) => void;
   onToggled?: () => void;
 }
 
@@ -915,6 +1261,9 @@ export interface TreeExpanderProps extends WidgetProps {
   hideExpander?: boolean;
   indentForDepth?: boolean;
   indentForIcon?: boolean;
+  onNotifyHideExpander?: (value: boolean) => void;
+  onNotifyIndentForDepth?: (value: boolean) => void;
+  onNotifyIndentForIcon?: (value: boolean) => void;
 }
 
 /** `<Video>`'s props: GtkVideo's own properties and signals. */
@@ -922,6 +1271,9 @@ export interface VideoProps extends WidgetProps {
   autoplay?: boolean;
   graphicsOffload?: GtkGraphicsOffloadEnabled;
   loop?: boolean;
+  onNotifyAutoplay?: (value: boolean) => void;
+  onNotifyGraphicsOffload?: (value: GtkGraphicsOffloadEnabled) => void;
+  onNotifyLoop?: (value: boolean) => void;
 }
 
 /** `<Viewport>`'s props: GtkViewport's own properties and signals. */
@@ -929,6 +1281,9 @@ export interface ViewportProps extends WidgetProps {
   scrollToFocus?: boolean;
   hscrollPolicy?: GtkScrollablePolicy;
   vscrollPolicy?: GtkScrollablePolicy;
+  onNotifyScrollToFocus?: (value: boolean) => void;
+  onNotifyHscrollPolicy?: (value: GtkScrollablePolicy) => void;
+  onNotifyVscrollPolicy?: (value: GtkScrollablePolicy) => void;
 }
 
 /** `<WindowControls>`'s props: GtkWindowControls's own properties and signals. */
@@ -936,6 +1291,9 @@ export interface WindowControlsProps extends WidgetProps {
   decorationLayout?: string | null;
   side?: GtkPackType;
   useNativeControls?: boolean;
+  onNotifyDecorationLayout?: (value: string | null) => void;
+  onNotifySide?: (value: GtkPackType) => void;
+  onNotifyUseNativeControls?: (value: boolean) => void;
 }
 
 /** `<WindowHandle>`'s props: GtkWindowHandle's own properties and signals. */
@@ -1245,6 +1603,126 @@ function widgetProp(gtk: GtkWidget, key: string, value: unknown): boolean {
 
 function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyCanFocus":
+      gtk.connect("notify::can-focus", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_can_focus()));
+      });
+      return true;
+    case "onNotifyCanTarget":
+      gtk.connect("notify::can-target", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_can_target()));
+      });
+      return true;
+    case "onNotifyFocusOnClick":
+      gtk.connect("notify::focus-on-click", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_focus_on_click()));
+      });
+      return true;
+    case "onNotifyFocusable":
+      gtk.connect("notify::focusable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_focusable()));
+      });
+      return true;
+    case "onNotifyHalign":
+      gtk.connect("notify::halign", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAlign) => void)(gtk.get_halign()));
+      });
+      return true;
+    case "onNotifyHasTooltip":
+      gtk.connect("notify::has-tooltip", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_tooltip()));
+      });
+      return true;
+    case "onNotifyHexpand":
+      gtk.connect("notify::hexpand", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_hexpand()));
+      });
+      return true;
+    case "onNotifyHexpandSet":
+      gtk.connect("notify::hexpand-set", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_hexpand_set()));
+      });
+      return true;
+    case "onNotifyLimitEvents":
+      gtk.connect("notify::limit-events", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_limit_events()));
+      });
+      return true;
+    case "onNotifyMarginBottom":
+      gtk.connect("notify::margin-bottom", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_margin_bottom()));
+      });
+      return true;
+    case "onNotifyMarginEnd":
+      gtk.connect("notify::margin-end", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_margin_end()));
+      });
+      return true;
+    case "onNotifyMarginStart":
+      gtk.connect("notify::margin-start", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_margin_start()));
+      });
+      return true;
+    case "onNotifyMarginTop":
+      gtk.connect("notify::margin-top", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_margin_top()));
+      });
+      return true;
+    case "onNotifyName":
+      gtk.connect("notify::name", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_name()));
+      });
+      return true;
+    case "onNotifyOpacity":
+      gtk.connect("notify::opacity", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_opacity()));
+      });
+      return true;
+    case "onNotifyOverflow":
+      gtk.connect("notify::overflow", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOverflow) => void)(gtk.get_overflow()));
+      });
+      return true;
+    case "onNotifyReceivesDefault":
+      gtk.connect("notify::receives-default", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_receives_default()));
+      });
+      return true;
+    case "onNotifySensitive":
+      gtk.connect("notify::sensitive", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_sensitive()));
+      });
+      return true;
+    case "onNotifyTooltipMarkup":
+      gtk.connect("notify::tooltip-markup", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_tooltip_markup()));
+      });
+      return true;
+    case "onNotifyTooltipText":
+      gtk.connect("notify::tooltip-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_tooltip_text()));
+      });
+      return true;
+    case "onNotifyValign":
+      gtk.connect("notify::valign", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkAlign) => void)(gtk.get_valign()));
+      });
+      return true;
+    case "onNotifyVexpand":
+      gtk.connect("notify::vexpand", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_vexpand()));
+      });
+      return true;
+    case "onNotifyVexpandSet":
+      gtk.connect("notify::vexpand-set", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_vexpand_set()));
+      });
+      return true;
+    case "onNotifyVisible":
+      gtk.connect("notify::visible", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_visible()));
+      });
+      return true;
     case "onDestroy":
       gtk.connect("destroy", () => slot.fire());
       return true;
@@ -1341,6 +1819,66 @@ function windowProp(gtk: GtkWindow, key: string, value: unknown): boolean {
 
 function windowSignal(gtk: GtkWindow, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyDecorated":
+      gtk.connect("notify::decorated", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_decorated()));
+      });
+      return true;
+    case "onNotifyDeletable":
+      gtk.connect("notify::deletable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_deletable()));
+      });
+      return true;
+    case "onNotifyDestroyWithParent":
+      gtk.connect("notify::destroy-with-parent", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_destroy_with_parent()));
+      });
+      return true;
+    case "onNotifyFocusVisible":
+      gtk.connect("notify::focus-visible", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_focus_visible()));
+      });
+      return true;
+    case "onNotifyGravity":
+      gtk.connect("notify::gravity", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWindowGravity) => void)(gtk.get_gravity()));
+      });
+      return true;
+    case "onNotifyHandleMenubarAccel":
+      gtk.connect("notify::handle-menubar-accel", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_handle_menubar_accel()));
+      });
+      return true;
+    case "onNotifyHideOnClose":
+      gtk.connect("notify::hide-on-close", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_hide_on_close()));
+      });
+      return true;
+    case "onNotifyIconName":
+      gtk.connect("notify::icon-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_icon_name()));
+      });
+      return true;
+    case "onNotifyMnemonicsVisible":
+      gtk.connect("notify::mnemonics-visible", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_mnemonics_visible()));
+      });
+      return true;
+    case "onNotifyModal":
+      gtk.connect("notify::modal", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_modal()));
+      });
+      return true;
+    case "onNotifyResizable":
+      gtk.connect("notify::resizable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_resizable()));
+      });
+      return true;
+    case "onNotifyTitle":
+      gtk.connect("notify::title", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_title()));
+      });
+      return true;
     case "onActivateDefault":
       gtk.connect("activate-default", () => slot.fire());
       return true;
@@ -1401,6 +1939,66 @@ function aboutDialogProp(gtk: GtkAboutDialog, key: string, value: unknown): bool
 
 function aboutDialogSignal(gtk: GtkAboutDialog, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyComments":
+      gtk.connect("notify::comments", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_comments()));
+      });
+      return true;
+    case "onNotifyCopyright":
+      gtk.connect("notify::copyright", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_copyright()));
+      });
+      return true;
+    case "onNotifyLicense":
+      gtk.connect("notify::license", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_license()));
+      });
+      return true;
+    case "onNotifyLicenseType":
+      gtk.connect("notify::license-type", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkLicense) => void)(gtk.get_license_type()));
+      });
+      return true;
+    case "onNotifyLogoIconName":
+      gtk.connect("notify::logo-icon-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_logo_icon_name()));
+      });
+      return true;
+    case "onNotifyProgramName":
+      gtk.connect("notify::program-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_program_name()));
+      });
+      return true;
+    case "onNotifySystemInformation":
+      gtk.connect("notify::system-information", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_system_information()));
+      });
+      return true;
+    case "onNotifyTranslatorCredits":
+      gtk.connect("notify::translator-credits", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_translator_credits()));
+      });
+      return true;
+    case "onNotifyVersion":
+      gtk.connect("notify::version", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_version()));
+      });
+      return true;
+    case "onNotifyWebsite":
+      gtk.connect("notify::website", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_website()));
+      });
+      return true;
+    case "onNotifyWebsiteLabel":
+      gtk.connect("notify::website-label", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_website_label()));
+      });
+      return true;
+    case "onNotifyWrapLicense":
+      gtk.connect("notify::wrap-license", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_wrap_license()));
+      });
+      return true;
     case "onActivateLink":
       gtk.connect("activate-link", (_self, _uri) => slot.decide(() => (slot.handler as (uri: string) => boolean)(_uri)));
       return true;
@@ -1418,6 +2016,13 @@ function actionBarProp(gtk: GtkActionBar, key: string, value: unknown): boolean 
 }
 
 function actionBarSignal(gtk: GtkActionBar, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyRevealed":
+      gtk.connect("notify::revealed", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_revealed()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -1431,6 +2036,13 @@ function applicationWindowProp(gtk: GtkApplicationWindow, key: string, value: un
 }
 
 function applicationWindowSignal(gtk: GtkApplicationWindow, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyShowMenubar":
+      gtk.connect("notify::show-menubar", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_menubar()));
+      });
+      return true;
+  }
   return windowSignal(gtk, key, slot);
 }
 
@@ -1453,6 +2065,28 @@ function aspectFrameProp(gtk: GtkAspectFrame, key: string, value: unknown): bool
 }
 
 function aspectFrameSignal(gtk: GtkAspectFrame, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyObeyChild":
+      gtk.connect("notify::obey-child", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_obey_child()));
+      });
+      return true;
+    case "onNotifyRatio":
+      gtk.connect("notify::ratio", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_ratio()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_xalign()));
+      });
+      return true;
+    case "onNotifyYalign":
+      gtk.connect("notify::yalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_yalign()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -1478,6 +2112,33 @@ function boxProp(gtk: GtkBox, key: string, value: unknown): boolean {
 }
 
 function boxSignal(gtk: GtkBox, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyBaselineChild":
+      gtk.connect("notify::baseline-child", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_baseline_child()));
+      });
+      return true;
+    case "onNotifyBaselinePosition":
+      gtk.connect("notify::baseline-position", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkBaselinePosition) => void)(gtk.get_baseline_position()));
+      });
+      return true;
+    case "onNotifyHomogeneous":
+      gtk.connect("notify::homogeneous", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_homogeneous()));
+      });
+      return true;
+    case "onNotifySpacing":
+      gtk.connect("notify::spacing", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_spacing()));
+      });
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -1507,11 +2168,41 @@ function buttonProp(gtk: GtkButton, key: string, value: unknown): boolean {
 
 function buttonSignal(gtk: GtkButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyCanShrink":
+      gtk.connect("notify::can-shrink", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_can_shrink()));
+      });
+      return true;
+    case "onNotifyHasFrame":
+      gtk.connect("notify::has-frame", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
+      });
+      return true;
+    case "onNotifyIconName":
+      gtk.connect("notify::icon-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_icon_name()));
+      });
+      return true;
+    case "onNotifyLabel":
+      gtk.connect("notify::label", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_label()));
+      });
+      return true;
+    case "onNotifyUseUnderline":
+      gtk.connect("notify::use-underline", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_underline()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
     case "onClicked":
       gtk.connect("clicked", () => slot.fire());
+      return true;
+    case "onNotifyActionName":
+      gtk.connect("notify::action-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_action_name()));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -1534,6 +2225,21 @@ function calendarProp(gtk: GtkCalendar, key: string, value: unknown): boolean {
 
 function calendarSignal(gtk: GtkCalendar, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyShowDayNames":
+      gtk.connect("notify::show-day-names", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_day_names()));
+      });
+      return true;
+    case "onNotifyShowHeading":
+      gtk.connect("notify::show-heading", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_heading()));
+      });
+      return true;
+    case "onNotifyShowWeekNumbers":
+      gtk.connect("notify::show-week-numbers", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_week_numbers()));
+      });
+      return true;
     case "onDaySelected":
       gtk.connect("day-selected", () => slot.fire());
       return true;
@@ -1569,6 +2275,23 @@ function centerBoxProp(gtk: GtkCenterBox, key: string, value: unknown): boolean 
 }
 
 function centerBoxSignal(gtk: GtkCenterBox, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyBaselinePosition":
+      gtk.connect("notify::baseline-position", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkBaselinePosition) => void)(gtk.get_baseline_position()));
+      });
+      return true;
+    case "onNotifyShrinkCenterLast":
+      gtk.connect("notify::shrink-center-last", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_shrink_center_last()));
+      });
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -1595,11 +2318,36 @@ function checkButtonProp(gtk: GtkCheckButton, key: string, value: unknown): bool
 
 function checkButtonSignal(gtk: GtkCheckButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActive":
+      gtk.connect("notify::active", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_active()));
+      });
+      return true;
+    case "onNotifyInconsistent":
+      gtk.connect("notify::inconsistent", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_inconsistent()));
+      });
+      return true;
+    case "onNotifyLabel":
+      gtk.connect("notify::label", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_label()));
+      });
+      return true;
+    case "onNotifyUseUnderline":
+      gtk.connect("notify::use-underline", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_underline()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
     case "onToggled":
       gtk.connect("toggled", () => slot.fire());
+      return true;
+    case "onNotifyActionName":
+      gtk.connect("notify::action-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_action_name()));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -1650,9 +2398,49 @@ function columnViewProp(gtk: GtkColumnView, key: string, value: unknown): boolea
 
 function columnViewSignal(gtk: GtkColumnView, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyEnableRubberband":
+      gtk.connect("notify::enable-rubberband", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_rubberband()));
+      });
+      return true;
+    case "onNotifyReorderable":
+      gtk.connect("notify::reorderable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_reorderable()));
+      });
+      return true;
+    case "onNotifyShowColumnSeparators":
+      gtk.connect("notify::show-column-separators", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_column_separators()));
+      });
+      return true;
+    case "onNotifyShowRowSeparators":
+      gtk.connect("notify::show-row-separators", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_row_separators()));
+      });
+      return true;
+    case "onNotifySingleClickActivate":
+      gtk.connect("notify::single-click-activate", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_single_click_activate()));
+      });
+      return true;
+    case "onNotifyTabBehavior":
+      gtk.connect("notify::tab-behavior", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListTabBehavior) => void)(gtk.get_tab_behavior()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", (_self, _position) => {
         slot.dispatch(() => (slot.handler as (position: number) => void)(_position));
+      });
+      return true;
+    case "onNotifyHscrollPolicy":
+      gtk.connect("notify::hscroll-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_hscroll_policy()));
+      });
+      return true;
+    case "onNotifyVscrollPolicy":
+      gtk.connect("notify::vscroll-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_vscroll_policy()));
       });
       return true;
   }
@@ -1681,6 +2469,16 @@ function drawingAreaProp(gtk: GtkDrawingArea, key: string, value: unknown): bool
 
 function drawingAreaSignal(gtk: GtkDrawingArea, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyContentHeight":
+      gtk.connect("notify::content-height", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_content_height()));
+      });
+      return true;
+    case "onNotifyContentWidth":
+      gtk.connect("notify::content-width", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_content_width()));
+      });
+      return true;
     case "onResize":
       gtk.connect("resize", (_self, _width, _height) => {
         slot.dispatch(() => (slot.handler as (width: number, height: number) => void)(_width, _height));
@@ -1710,6 +2508,26 @@ function dropDownProp(gtk: GtkDropDown, key: string, value: unknown): boolean {
 
 function dropDownSignal(gtk: GtkDropDown, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyEnableSearch":
+      gtk.connect("notify::enable-search", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_search()));
+      });
+      return true;
+    case "onNotifySearchMatchMode":
+      gtk.connect("notify::search-match-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkStringFilterMatchMode) => void)(gtk.get_search_match_mode()));
+      });
+      return true;
+    case "onNotifySelected":
+      gtk.connect("notify::selected", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_selected()));
+      });
+      return true;
+    case "onNotifyShowArrow":
+      gtk.connect("notify::show-arrow", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_arrow()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -1743,6 +2561,36 @@ function editableLabelProp(gtk: GtkEditableLabel, key: string, value: unknown): 
 
 function editableLabelSignal(gtk: GtkEditableLabel, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyEditable":
+      gtk.connect("notify::editable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyEnableUndo":
+      gtk.connect("notify::enable-undo", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_undo()));
+      });
+      return true;
+    case "onNotifyMaxWidthChars":
+      gtk.connect("notify::max-width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_width_chars()));
+      });
+      return true;
+    case "onNotifyText":
+      gtk.connect("notify::text", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_text()));
+      });
+      return true;
+    case "onNotifyWidthChars":
+      gtk.connect("notify::width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_width_chars()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_alignment()));
+      });
+      return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
       return true;
@@ -1783,6 +2631,31 @@ function popoverProp(gtk: GtkPopover, key: string, value: unknown): boolean {
 
 function popoverSignal(gtk: GtkPopover, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAutohide":
+      gtk.connect("notify::autohide", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_autohide()));
+      });
+      return true;
+    case "onNotifyCascadePopdown":
+      gtk.connect("notify::cascade-popdown", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_cascade_popdown()));
+      });
+      return true;
+    case "onNotifyHasArrow":
+      gtk.connect("notify::has-arrow", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_arrow()));
+      });
+      return true;
+    case "onNotifyMnemonicsVisible":
+      gtk.connect("notify::mnemonics-visible", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_mnemonics_visible()));
+      });
+      return true;
+    case "onNotifyPosition":
+      gtk.connect("notify::position", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkPositionType) => void)(gtk.get_position()));
+      });
+      return true;
     case "onActivateDefault":
       gtk.connect("activate-default", () => slot.fire());
       return true;
@@ -1864,6 +2737,56 @@ function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
 
 function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActivatesDefault":
+      gtk.connect("notify::activates-default", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyHasFrame":
+      gtk.connect("notify::has-frame", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
+      });
+      return true;
+    case "onNotifyInputPurpose":
+      gtk.connect("notify::input-purpose", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputPurpose) => void)(gtk.get_input_purpose()));
+      });
+      return true;
+    case "onNotifyInvisibleChar":
+      gtk.connect("notify::invisible-char", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_invisible_char()));
+      });
+      return true;
+    case "onNotifyMaxLength":
+      gtk.connect("notify::max-length", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_length()));
+      });
+      return true;
+    case "onNotifyOverwriteMode":
+      gtk.connect("notify::overwrite-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_overwrite_mode()));
+      });
+      return true;
+    case "onNotifyPlaceholderText":
+      gtk.connect("notify::placeholder-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_placeholder_text()));
+      });
+      return true;
+    case "onNotifyProgressFraction":
+      gtk.connect("notify::progress-fraction", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_progress_fraction()));
+      });
+      return true;
+    case "onNotifyProgressPulseStep":
+      gtk.connect("notify::progress-pulse-step", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_progress_pulse_step()));
+      });
+      return true;
+    case "onNotifyVisibility":
+      gtk.connect("notify::visibility", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_visibility()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -1882,6 +2805,36 @@ function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boolean {
       return true;
     case "onRemoveWidget":
       gtk.connect("remove-widget", () => slot.fire());
+      return true;
+    case "onNotifyEditable":
+      gtk.connect("notify::editable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyEnableUndo":
+      gtk.connect("notify::enable-undo", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_undo()));
+      });
+      return true;
+    case "onNotifyMaxWidthChars":
+      gtk.connect("notify::max-width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_width_chars()));
+      });
+      return true;
+    case "onNotifyText":
+      gtk.connect("notify::text", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_text()));
+      });
+      return true;
+    case "onNotifyWidthChars":
+      gtk.connect("notify::width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_width_chars()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_alignment()));
+      });
       return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
@@ -1923,6 +2876,31 @@ function expanderProp(gtk: GtkExpander, key: string, value: unknown): boolean {
 
 function expanderSignal(gtk: GtkExpander, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyExpanded":
+      gtk.connect("notify::expanded", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_expanded()));
+      });
+      return true;
+    case "onNotifyLabel":
+      gtk.connect("notify::label", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_label()));
+      });
+      return true;
+    case "onNotifyResizeToplevel":
+      gtk.connect("notify::resize-toplevel", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_resize_toplevel()));
+      });
+      return true;
+    case "onNotifyUseMarkup":
+      gtk.connect("notify::use-markup", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_markup()));
+      });
+      return true;
+    case "onNotifyUseUnderline":
+      gtk.connect("notify::use-underline", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_underline()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -1970,6 +2948,41 @@ function flowBoxProp(gtk: GtkFlowBox, key: string, value: unknown): boolean {
 
 function flowBoxSignal(gtk: GtkFlowBox, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActivateOnSingleClick":
+      gtk.connect("notify::activate-on-single-click", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activate_on_single_click()));
+      });
+      return true;
+    case "onNotifyColumnSpacing":
+      gtk.connect("notify::column-spacing", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_column_spacing()));
+      });
+      return true;
+    case "onNotifyHomogeneous":
+      gtk.connect("notify::homogeneous", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_homogeneous()));
+      });
+      return true;
+    case "onNotifyMaxChildrenPerLine":
+      gtk.connect("notify::max-children-per-line", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_children_per_line()));
+      });
+      return true;
+    case "onNotifyMinChildrenPerLine":
+      gtk.connect("notify::min-children-per-line", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_children_per_line()));
+      });
+      return true;
+    case "onNotifyRowSpacing":
+      gtk.connect("notify::row-spacing", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_row_spacing()));
+      });
+      return true;
+    case "onNotifySelectionMode":
+      gtk.connect("notify::selection-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkSelectionMode) => void)(gtk.get_selection_mode()));
+      });
+      return true;
     case "onActivateCursorChild":
       gtk.connect("activate-cursor-child", () => slot.fire());
       return true;
@@ -1992,6 +3005,11 @@ function flowBoxSignal(gtk: GtkFlowBox, key: string, slot: SignalSlot): boolean 
       return true;
     case "onUnselectAll":
       gtk.connect("unselect-all", () => slot.fire());
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -2030,6 +3048,26 @@ function fontDialogButtonProp(gtk: GtkFontDialogButton, key: string, value: unkn
 
 function fontDialogButtonSignal(gtk: GtkFontDialogButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyFontFeatures":
+      gtk.connect("notify::font-features", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_font_features()));
+      });
+      return true;
+    case "onNotifyLevel":
+      gtk.connect("notify::level", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkFontLevel) => void)(gtk.get_level()));
+      });
+      return true;
+    case "onNotifyUseFont":
+      gtk.connect("notify::use-font", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_font()));
+      });
+      return true;
+    case "onNotifyUseSize":
+      gtk.connect("notify::use-size", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_size()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -2050,6 +3088,18 @@ function frameProp(gtk: GtkFrame, key: string, value: unknown): boolean {
 }
 
 function frameSignal(gtk: GtkFrame, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyLabel":
+      gtk.connect("notify::label", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_label()));
+      });
+      return true;
+    case "onNotifyLabelXalign":
+      gtk.connect("notify::label-xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_label_align()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2070,6 +3120,21 @@ function gLAreaProp(gtk: GtkGLArea, key: string, value: unknown): boolean {
 
 function gLAreaSignal(gtk: GtkGLArea, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAutoRender":
+      gtk.connect("notify::auto-render", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_auto_render()));
+      });
+      return true;
+    case "onNotifyHasDepthBuffer":
+      gtk.connect("notify::has-depth-buffer", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_depth_buffer()));
+      });
+      return true;
+    case "onNotifyHasStencilBuffer":
+      gtk.connect("notify::has-stencil-buffer", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_stencil_buffer()));
+      });
+      return true;
     case "onResize":
       gtk.connect("resize", (_self, _width, _height) => {
         slot.dispatch(() => (slot.handler as (width: number, height: number) => void)(_width, _height));
@@ -2092,6 +3157,18 @@ function graphicsOffloadProp(gtk: GtkGraphicsOffload, key: string, value: unknow
 }
 
 function graphicsOffloadSignal(gtk: GtkGraphicsOffload, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyBlackBackground":
+      gtk.connect("notify::black-background", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_black_background()));
+      });
+      return true;
+    case "onNotifyEnabled":
+      gtk.connect("notify::enabled", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkGraphicsOffloadEnabled) => void)(gtk.get_enabled()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2120,6 +3197,38 @@ function gridProp(gtk: GtkGrid, key: string, value: unknown): boolean {
 }
 
 function gridSignal(gtk: GtkGrid, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyBaselineRow":
+      gtk.connect("notify::baseline-row", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_baseline_row()));
+      });
+      return true;
+    case "onNotifyColumnHomogeneous":
+      gtk.connect("notify::column-homogeneous", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_column_homogeneous()));
+      });
+      return true;
+    case "onNotifyColumnSpacing":
+      gtk.connect("notify::column-spacing", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_column_spacing()));
+      });
+      return true;
+    case "onNotifyRowHomogeneous":
+      gtk.connect("notify::row-homogeneous", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_row_homogeneous()));
+      });
+      return true;
+    case "onNotifyRowSpacing":
+      gtk.connect("notify::row-spacing", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_row_spacing()));
+      });
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2139,6 +3248,23 @@ function listBaseProp(gtk: GtkListBase, key: string, value: unknown): boolean {
 }
 
 function listBaseSignal(gtk: GtkListBase, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
+      return true;
+    case "onNotifyHscrollPolicy":
+      gtk.connect("notify::hscroll-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_hscroll_policy()));
+      });
+      return true;
+    case "onNotifyVscrollPolicy":
+      gtk.connect("notify::vscroll-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_vscroll_policy()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2165,6 +3291,31 @@ function gridViewProp(gtk: GtkGridView, key: string, value: unknown): boolean {
 
 function gridViewSignal(gtk: GtkGridView, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyEnableRubberband":
+      gtk.connect("notify::enable-rubberband", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_rubberband()));
+      });
+      return true;
+    case "onNotifyMaxColumns":
+      gtk.connect("notify::max-columns", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_columns()));
+      });
+      return true;
+    case "onNotifyMinColumns":
+      gtk.connect("notify::min-columns", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_columns()));
+      });
+      return true;
+    case "onNotifySingleClickActivate":
+      gtk.connect("notify::single-click-activate", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_single_click_activate()));
+      });
+      return true;
+    case "onNotifyTabBehavior":
+      gtk.connect("notify::tab-behavior", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListTabBehavior) => void)(gtk.get_tab_behavior()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", (_self, _position) => {
         slot.dispatch(() => (slot.handler as (position: number) => void)(_position));
@@ -2190,6 +3341,23 @@ function headerBarProp(gtk: GtkHeaderBar, key: string, value: unknown): boolean 
 }
 
 function headerBarSignal(gtk: GtkHeaderBar, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyDecorationLayout":
+      gtk.connect("notify::decoration-layout", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_decoration_layout()));
+      });
+      return true;
+    case "onNotifyShowTitleButtons":
+      gtk.connect("notify::show-title-buttons", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_title_buttons()));
+      });
+      return true;
+    case "onNotifyUseNativeControls":
+      gtk.connect("notify::use-native-controls", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_native_controls()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2209,6 +3377,23 @@ function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
 }
 
 function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyIconName":
+      gtk.connect("notify::icon-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_icon_name()));
+      });
+      return true;
+    case "onNotifyIconSize":
+      gtk.connect("notify::icon-size", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkIconSize) => void)(gtk.get_icon_size()));
+      });
+      return true;
+    case "onNotifyPixelSize":
+      gtk.connect("notify::pixel-size", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_pixel_size()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2249,6 +3434,53 @@ function inscriptionProp(gtk: GtkInscription, key: string, value: unknown): bool
 }
 
 function inscriptionSignal(gtk: GtkInscription, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyMinChars":
+      gtk.connect("notify::min-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_chars()));
+      });
+      return true;
+    case "onNotifyMinLines":
+      gtk.connect("notify::min-lines", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_lines()));
+      });
+      return true;
+    case "onNotifyNatChars":
+      gtk.connect("notify::nat-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_nat_chars()));
+      });
+      return true;
+    case "onNotifyNatLines":
+      gtk.connect("notify::nat-lines", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_nat_lines()));
+      });
+      return true;
+    case "onNotifyText":
+      gtk.connect("notify::text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_text()));
+      });
+      return true;
+    case "onNotifyTextOverflow":
+      gtk.connect("notify::text-overflow", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInscriptionOverflow) => void)(gtk.get_text_overflow()));
+      });
+      return true;
+    case "onNotifyWrapMode":
+      gtk.connect("notify::wrap-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoWrapMode) => void)(gtk.get_wrap_mode()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_xalign()));
+      });
+      return true;
+    case "onNotifyYalign":
+      gtk.connect("notify::yalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_yalign()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2305,6 +3537,81 @@ function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
 
 function labelSignal(gtk: GtkLabel, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyEllipsize":
+      gtk.connect("notify::ellipsize", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoEllipsizeMode) => void)(gtk.get_ellipsize()));
+      });
+      return true;
+    case "onNotifyJustify":
+      gtk.connect("notify::justify", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkJustification) => void)(gtk.get_justify()));
+      });
+      return true;
+    case "onNotifyLabel":
+      gtk.connect("notify::label", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_label()));
+      });
+      return true;
+    case "onNotifyLines":
+      gtk.connect("notify::lines", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_lines()));
+      });
+      return true;
+    case "onNotifyMaxWidthChars":
+      gtk.connect("notify::max-width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_width_chars()));
+      });
+      return true;
+    case "onNotifyNaturalWrapMode":
+      gtk.connect("notify::natural-wrap-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkNaturalWrapMode) => void)(gtk.get_natural_wrap_mode()));
+      });
+      return true;
+    case "onNotifySelectable":
+      gtk.connect("notify::selectable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_selectable()));
+      });
+      return true;
+    case "onNotifySingleLineMode":
+      gtk.connect("notify::single-line-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_single_line_mode()));
+      });
+      return true;
+    case "onNotifyUseMarkup":
+      gtk.connect("notify::use-markup", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_markup()));
+      });
+      return true;
+    case "onNotifyUseUnderline":
+      gtk.connect("notify::use-underline", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_underline()));
+      });
+      return true;
+    case "onNotifyWidthChars":
+      gtk.connect("notify::width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_width_chars()));
+      });
+      return true;
+    case "onNotifyWrap":
+      gtk.connect("notify::wrap", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_wrap()));
+      });
+      return true;
+    case "onNotifyWrapMode":
+      gtk.connect("notify::wrap-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoWrapMode) => void)(gtk.get_wrap_mode()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_xalign()));
+      });
+      return true;
+    case "onNotifyYalign":
+      gtk.connect("notify::yalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_yalign()));
+      });
+      return true;
     case "onActivateCurrentLink":
       gtk.connect("activate-current-link", () => slot.fire());
       return true;
@@ -2349,9 +3656,34 @@ function levelBarProp(gtk: GtkLevelBar, key: string, value: unknown): boolean {
 
 function levelBarSignal(gtk: GtkLevelBar, key: string, slot: SignalSlot): boolean {
   switch (key) {
-    case "onOffsetChanged":
-      gtk.connect("offset-changed", (_self, _name) => {
-        slot.dispatch(() => (slot.handler as (name: string) => void)(_name));
+    case "onNotifyInverted":
+      gtk.connect("notify::inverted", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_inverted()));
+      });
+      return true;
+    case "onNotifyMaxValue":
+      gtk.connect("notify::max-value", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_value()));
+      });
+      return true;
+    case "onNotifyMinValue":
+      gtk.connect("notify::min-value", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_value()));
+      });
+      return true;
+    case "onNotifyMode":
+      gtk.connect("notify::mode", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkLevelBarMode) => void)(gtk.get_mode()));
+      });
+      return true;
+    case "onNotifyValue":
+      gtk.connect("notify::value", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_value()));
+      });
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
       });
       return true;
   }
@@ -2372,6 +3704,16 @@ function linkButtonProp(gtk: GtkLinkButton, key: string, value: unknown): boolea
 
 function linkButtonSignal(gtk: GtkLinkButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyUri":
+      gtk.connect("notify::uri", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_uri()));
+      });
+      return true;
+    case "onNotifyVisited":
+      gtk.connect("notify::visited", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_visited()));
+      });
+      return true;
     case "onActivateLink":
       gtk.connect("activate-link", (_self) => slot.decide(() => (slot.handler as () => boolean)()));
       return true;
@@ -2399,6 +3741,26 @@ function listBoxProp(gtk: GtkListBox, key: string, value: unknown): boolean {
 
 function listBoxSignal(gtk: GtkListBox, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActivateOnSingleClick":
+      gtk.connect("notify::activate-on-single-click", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activate_on_single_click()));
+      });
+      return true;
+    case "onNotifySelectionMode":
+      gtk.connect("notify::selection-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkSelectionMode) => void)(gtk.get_selection_mode()));
+      });
+      return true;
+    case "onNotifyShowSeparators":
+      gtk.connect("notify::show-separators", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_separators()));
+      });
+      return true;
+    case "onNotifyTabBehavior":
+      gtk.connect("notify::tab-behavior", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListTabBehavior) => void)(gtk.get_tab_behavior()));
+      });
+      return true;
     case "onActivateCursorRow":
       gtk.connect("activate-cursor-row", () => slot.fire());
       return true;
@@ -2450,8 +3812,23 @@ function listBoxRowProp(gtk: GtkListBoxRow, key: string, value: unknown): boolea
 
 function listBoxRowSignal(gtk: GtkListBoxRow, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActivatable":
+      gtk.connect("notify::activatable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activatable()));
+      });
+      return true;
+    case "onNotifySelectable":
+      gtk.connect("notify::selectable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_selectable()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
+      return true;
+    case "onNotifyActionName":
+      gtk.connect("notify::action-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_action_name()));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -2477,6 +3854,26 @@ function listViewProp(gtk: GtkListView, key: string, value: unknown): boolean {
 
 function listViewSignal(gtk: GtkListView, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyEnableRubberband":
+      gtk.connect("notify::enable-rubberband", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_rubberband()));
+      });
+      return true;
+    case "onNotifyShowSeparators":
+      gtk.connect("notify::show-separators", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_separators()));
+      });
+      return true;
+    case "onNotifySingleClickActivate":
+      gtk.connect("notify::single-click-activate", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_single_click_activate()));
+      });
+      return true;
+    case "onNotifyTabBehavior":
+      gtk.connect("notify::tab-behavior", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkListTabBehavior) => void)(gtk.get_tab_behavior()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", (_self, _position) => {
         slot.dispatch(() => (slot.handler as (position: number) => void)(_position));
@@ -2529,6 +3926,51 @@ function menuButtonProp(gtk: GtkMenuButton, key: string, value: unknown): boolea
 
 function menuButtonSignal(gtk: GtkMenuButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActive":
+      gtk.connect("notify::active", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_active()));
+      });
+      return true;
+    case "onNotifyAlwaysShowArrow":
+      gtk.connect("notify::always-show-arrow", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_always_show_arrow()));
+      });
+      return true;
+    case "onNotifyCanShrink":
+      gtk.connect("notify::can-shrink", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_can_shrink()));
+      });
+      return true;
+    case "onNotifyDirection":
+      gtk.connect("notify::direction", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkArrowType) => void)(gtk.get_direction()));
+      });
+      return true;
+    case "onNotifyHasFrame":
+      gtk.connect("notify::has-frame", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
+      });
+      return true;
+    case "onNotifyIconName":
+      gtk.connect("notify::icon-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_icon_name()));
+      });
+      return true;
+    case "onNotifyLabel":
+      gtk.connect("notify::label", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_label()));
+      });
+      return true;
+    case "onNotifyPrimary":
+      gtk.connect("notify::primary", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_primary()));
+      });
+      return true;
+    case "onNotifyUseUnderline":
+      gtk.connect("notify::use-underline", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_underline()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -2562,6 +4004,36 @@ function notebookProp(gtk: GtkNotebook, key: string, value: unknown): boolean {
 
 function notebookSignal(gtk: GtkNotebook, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyGroupName":
+      gtk.connect("notify::group-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_group_name()));
+      });
+      return true;
+    case "onNotifyPage":
+      gtk.connect("notify::page", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_current_page()));
+      });
+      return true;
+    case "onNotifyScrollable":
+      gtk.connect("notify::scrollable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_scrollable()));
+      });
+      return true;
+    case "onNotifyShowBorder":
+      gtk.connect("notify::show-border", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_border()));
+      });
+      return true;
+    case "onNotifyShowTabs":
+      gtk.connect("notify::show-tabs", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_tabs()));
+      });
+      return true;
+    case "onNotifyTabPos":
+      gtk.connect("notify::tab-pos", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkPositionType) => void)(gtk.get_tab_pos()));
+      });
+      return true;
     case "onChangeCurrentPage":
       gtk.connect("change-current-page", (_self, _page) => slot.decide(() => (slot.handler as (page: number) => boolean)(_page)));
       return true;
@@ -2640,6 +4112,36 @@ function panedProp(gtk: GtkPaned, key: string, value: unknown): boolean {
 
 function panedSignal(gtk: GtkPaned, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyPosition":
+      gtk.connect("notify::position", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_position()));
+      });
+      return true;
+    case "onNotifyResizeEndChild":
+      gtk.connect("notify::resize-end-child", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_resize_end_child()));
+      });
+      return true;
+    case "onNotifyResizeStartChild":
+      gtk.connect("notify::resize-start-child", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_resize_start_child()));
+      });
+      return true;
+    case "onNotifyShrinkEndChild":
+      gtk.connect("notify::shrink-end-child", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_shrink_end_child()));
+      });
+      return true;
+    case "onNotifyShrinkStartChild":
+      gtk.connect("notify::shrink-start-child", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_shrink_start_child()));
+      });
+      return true;
+    case "onNotifyWideHandle":
+      gtk.connect("notify::wide-handle", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_wide_handle()));
+      });
+      return true;
     case "onAcceptPosition":
       gtk.connect("accept-position", (_self) => slot.decide(() => (slot.handler as () => boolean)()));
       return true;
@@ -2657,6 +4159,11 @@ function panedSignal(gtk: GtkPaned, key: string, slot: SignalSlot): boolean {
       return true;
     case "onToggleHandleFocus":
       gtk.connect("toggle-handle-focus", (_self) => slot.decide(() => (slot.handler as () => boolean)()));
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -2691,8 +4198,43 @@ function passwordEntryProp(gtk: GtkPasswordEntry, key: string, value: unknown): 
 
 function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyShowPeekIcon":
+      gtk.connect("notify::show-peek-icon", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_peek_icon()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
+      return true;
+    case "onNotifyEditable":
+      gtk.connect("notify::editable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyEnableUndo":
+      gtk.connect("notify::enable-undo", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_undo()));
+      });
+      return true;
+    case "onNotifyMaxWidthChars":
+      gtk.connect("notify::max-width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_width_chars()));
+      });
+      return true;
+    case "onNotifyText":
+      gtk.connect("notify::text", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_text()));
+      });
+      return true;
+    case "onNotifyWidthChars":
+      gtk.connect("notify::width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_width_chars()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_alignment()));
+      });
       return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
@@ -2730,6 +4272,28 @@ function pictureProp(gtk: GtkPicture, key: string, value: unknown): boolean {
 }
 
 function pictureSignal(gtk: GtkPicture, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyAlternativeText":
+      gtk.connect("notify::alternative-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_alternative_text()));
+      });
+      return true;
+    case "onNotifyCanShrink":
+      gtk.connect("notify::can-shrink", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_can_shrink()));
+      });
+      return true;
+    case "onNotifyContentFit":
+      gtk.connect("notify::content-fit", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkContentFit) => void)(gtk.get_content_fit()));
+      });
+      return true;
+    case "onNotifyIsolateContents":
+      gtk.connect("notify::isolate-contents", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_isolate_contents()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2743,6 +4307,13 @@ function popoverBinProp(gtk: GtkPopoverBin, key: string, value: unknown): boolea
 }
 
 function popoverBinSignal(gtk: GtkPopoverBin, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyHandleInput":
+      gtk.connect("notify::handle-input", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_handle_input()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2790,6 +4361,43 @@ function progressBarProp(gtk: GtkProgressBar, key: string, value: unknown): bool
 }
 
 function progressBarSignal(gtk: GtkProgressBar, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyEllipsize":
+      gtk.connect("notify::ellipsize", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoEllipsizeMode) => void)(gtk.get_ellipsize()));
+      });
+      return true;
+    case "onNotifyFraction":
+      gtk.connect("notify::fraction", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_fraction()));
+      });
+      return true;
+    case "onNotifyInverted":
+      gtk.connect("notify::inverted", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_inverted()));
+      });
+      return true;
+    case "onNotifyPulseStep":
+      gtk.connect("notify::pulse-step", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_pulse_step()));
+      });
+      return true;
+    case "onNotifyShowText":
+      gtk.connect("notify::show-text", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_text()));
+      });
+      return true;
+    case "onNotifyText":
+      gtk.connect("notify::text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_text()));
+      });
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2819,6 +4427,31 @@ function rangeProp(gtk: GtkRange, key: string, value: unknown): boolean {
 
 function rangeSignal(gtk: GtkRange, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyFillLevel":
+      gtk.connect("notify::fill-level", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_fill_level()));
+      });
+      return true;
+    case "onNotifyInverted":
+      gtk.connect("notify::inverted", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_inverted()));
+      });
+      return true;
+    case "onNotifyRestrictToFillLevel":
+      gtk.connect("notify::restrict-to-fill-level", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_restrict_to_fill_level()));
+      });
+      return true;
+    case "onNotifyRoundDigits":
+      gtk.connect("notify::round-digits", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_round_digits()));
+      });
+      return true;
+    case "onNotifyShowFillLevel":
+      gtk.connect("notify::show-fill-level", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_fill_level()));
+      });
+      return true;
     case "onAdjustBounds":
       gtk.connect("adjust-bounds", (_self, _value) => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(_value));
@@ -2834,6 +4467,11 @@ function rangeSignal(gtk: GtkRange, key: string, slot: SignalSlot): boolean {
       return true;
     case "onValueChanged":
       gtk.connect("value-changed", () => slot.fire());
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -2855,6 +4493,23 @@ function revealerProp(gtk: GtkRevealer, key: string, value: unknown): boolean {
 }
 
 function revealerSignal(gtk: GtkRevealer, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyRevealChild":
+      gtk.connect("notify::reveal-child", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_reveal_child()));
+      });
+      return true;
+    case "onNotifyTransitionDuration":
+      gtk.connect("notify::transition-duration", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_transition_duration()));
+      });
+      return true;
+    case "onNotifyTransitionType":
+      gtk.connect("notify::transition-type", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkRevealerTransitionType) => void)(gtk.get_transition_type()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2877,6 +4532,28 @@ function scaleProp(gtk: GtkScale, key: string, value: unknown): boolean {
 }
 
 function scaleSignal(gtk: GtkScale, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyDigits":
+      gtk.connect("notify::digits", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_digits()));
+      });
+      return true;
+    case "onNotifyDrawValue":
+      gtk.connect("notify::draw-value", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_draw_value()));
+      });
+      return true;
+    case "onNotifyHasOrigin":
+      gtk.connect("notify::has-origin", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_origin()));
+      });
+      return true;
+    case "onNotifyValuePos":
+      gtk.connect("notify::value-pos", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkPositionType) => void)(gtk.get_value_pos()));
+      });
+      return true;
+  }
   return rangeSignal(gtk, key, slot);
 }
 
@@ -2897,6 +4574,16 @@ function scaleButtonProp(gtk: GtkScaleButton, key: string, value: unknown): bool
 
 function scaleButtonSignal(gtk: GtkScaleButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyHasFrame":
+      gtk.connect("notify::has-frame", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
+      });
+      return true;
+    case "onNotifyValue":
+      gtk.connect("notify::value", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_value()));
+      });
+      return true;
     case "onPopdown":
       gtk.connect("popdown", () => slot.fire());
       return true;
@@ -2906,6 +4593,11 @@ function scaleButtonSignal(gtk: GtkScaleButton, key: string, slot: SignalSlot): 
     case "onValueChanged":
       gtk.connect("value-changed", (_self, _value) => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(_value));
+      });
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
       });
       return true;
   }
@@ -2922,6 +4614,13 @@ function scrollbarProp(gtk: GtkScrollbar, key: string, value: unknown): boolean 
 }
 
 function scrollbarSignal(gtk: GtkScrollbar, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -2963,6 +4662,56 @@ function scrolledWindowProp(gtk: GtkScrolledWindow, key: string, value: unknown)
 
 function scrolledWindowSignal(gtk: GtkScrolledWindow, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyHasFrame":
+      gtk.connect("notify::has-frame", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_frame()));
+      });
+      return true;
+    case "onNotifyKineticScrolling":
+      gtk.connect("notify::kinetic-scrolling", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_kinetic_scrolling()));
+      });
+      return true;
+    case "onNotifyMaxContentHeight":
+      gtk.connect("notify::max-content-height", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_content_height()));
+      });
+      return true;
+    case "onNotifyMaxContentWidth":
+      gtk.connect("notify::max-content-width", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_content_width()));
+      });
+      return true;
+    case "onNotifyMinContentHeight":
+      gtk.connect("notify::min-content-height", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_content_height()));
+      });
+      return true;
+    case "onNotifyMinContentWidth":
+      gtk.connect("notify::min-content-width", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_content_width()));
+      });
+      return true;
+    case "onNotifyOverlayScrolling":
+      gtk.connect("notify::overlay-scrolling", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_overlay_scrolling()));
+      });
+      return true;
+    case "onNotifyPropagateNaturalHeight":
+      gtk.connect("notify::propagate-natural-height", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_propagate_natural_height()));
+      });
+      return true;
+    case "onNotifyPropagateNaturalWidth":
+      gtk.connect("notify::propagate-natural-width", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_propagate_natural_width()));
+      });
+      return true;
+    case "onNotifyWindowPlacement":
+      gtk.connect("notify::window-placement", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkCornerType) => void)(gtk.get_placement()));
+      });
+      return true;
     case "onEdgeOvershot":
       gtk.connect("edge-overshot", (_self, _pos) => {
         slot.dispatch(() => (slot.handler as (pos: GtkPositionType) => void)(_pos));
@@ -2998,6 +4747,18 @@ function searchBarProp(gtk: GtkSearchBar, key: string, value: unknown): boolean 
 }
 
 function searchBarSignal(gtk: GtkSearchBar, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifySearchModeEnabled":
+      gtk.connect("notify::search-mode-enabled", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_search_mode()));
+      });
+      return true;
+    case "onNotifyShowCloseButton":
+      gtk.connect("notify::show-close-button", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_close_button()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3036,6 +4797,21 @@ function searchEntryProp(gtk: GtkSearchEntry, key: string, value: unknown): bool
 
 function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyInputPurpose":
+      gtk.connect("notify::input-purpose", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputPurpose) => void)(gtk.get_input_purpose()));
+      });
+      return true;
+    case "onNotifyPlaceholderText":
+      gtk.connect("notify::placeholder-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_placeholder_text()));
+      });
+      return true;
+    case "onNotifySearchDelay":
+      gtk.connect("notify::search-delay", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_search_delay()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -3053,6 +4829,36 @@ function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: SignalSlot): 
       return true;
     case "onStopSearch":
       gtk.connect("stop-search", () => slot.fire());
+      return true;
+    case "onNotifyEditable":
+      gtk.connect("notify::editable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyEnableUndo":
+      gtk.connect("notify::enable-undo", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_undo()));
+      });
+      return true;
+    case "onNotifyMaxWidthChars":
+      gtk.connect("notify::max-width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_width_chars()));
+      });
+      return true;
+    case "onNotifyText":
+      gtk.connect("notify::text", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_text()));
+      });
+      return true;
+    case "onNotifyWidthChars":
+      gtk.connect("notify::width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_width_chars()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_alignment()));
+      });
       return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
@@ -3081,6 +4887,13 @@ function separatorProp(gtk: GtkSeparator, key: string, value: unknown): boolean 
 }
 
 function separatorSignal(gtk: GtkSeparator, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3137,6 +4950,46 @@ function spinButtonProp(gtk: GtkSpinButton, key: string, value: unknown): boolea
 
 function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActivatesDefault":
+      gtk.connect("notify::activates-default", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyClimbRate":
+      gtk.connect("notify::climb-rate", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_climb_rate()));
+      });
+      return true;
+    case "onNotifyDigits":
+      gtk.connect("notify::digits", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_digits()));
+      });
+      return true;
+    case "onNotifyNumeric":
+      gtk.connect("notify::numeric", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_numeric()));
+      });
+      return true;
+    case "onNotifySnapToTicks":
+      gtk.connect("notify::snap-to-ticks", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_snap_to_ticks()));
+      });
+      return true;
+    case "onNotifyUpdatePolicy":
+      gtk.connect("notify::update-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkSpinButtonUpdatePolicy) => void)(gtk.get_update_policy()));
+      });
+      return true;
+    case "onNotifyValue":
+      gtk.connect("notify::value", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_value()));
+      });
+      return true;
+    case "onNotifyWrap":
+      gtk.connect("notify::wrap", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_wrap()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -3160,6 +5013,36 @@ function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): bo
     case "onRemoveWidget":
       gtk.connect("remove-widget", () => slot.fire());
       return true;
+    case "onNotifyEditable":
+      gtk.connect("notify::editable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyEnableUndo":
+      gtk.connect("notify::enable-undo", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_undo()));
+      });
+      return true;
+    case "onNotifyMaxWidthChars":
+      gtk.connect("notify::max-width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_width_chars()));
+      });
+      return true;
+    case "onNotifyText":
+      gtk.connect("notify::text", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_text()));
+      });
+      return true;
+    case "onNotifyWidthChars":
+      gtk.connect("notify::width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_width_chars()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_alignment()));
+      });
+      return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
       return true;
@@ -3171,6 +5054,11 @@ function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSlot): bo
     case "onInsertText":
       gtk.connect("insert-text", (_self, _text, _length, _position) => {
         slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
+      });
+      return true;
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
       });
       return true;
   }
@@ -3187,6 +5075,13 @@ function spinnerProp(gtk: GtkSpinner, key: string, value: unknown): boolean {
 }
 
 function spinnerSignal(gtk: GtkSpinner, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifySpinning":
+      gtk.connect("notify::spinning", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_spinning()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3215,6 +5110,38 @@ function stackProp(gtk: GtkStack, key: string, value: unknown): boolean {
 }
 
 function stackSignal(gtk: GtkStack, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyHhomogeneous":
+      gtk.connect("notify::hhomogeneous", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_hhomogeneous()));
+      });
+      return true;
+    case "onNotifyInterpolateSize":
+      gtk.connect("notify::interpolate-size", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_interpolate_size()));
+      });
+      return true;
+    case "onNotifyTransitionDuration":
+      gtk.connect("notify::transition-duration", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_transition_duration()));
+      });
+      return true;
+    case "onNotifyTransitionType":
+      gtk.connect("notify::transition-type", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkStackTransitionType) => void)(gtk.get_transition_type()));
+      });
+      return true;
+    case "onNotifyVhomogeneous":
+      gtk.connect("notify::vhomogeneous", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_vhomogeneous()));
+      });
+      return true;
+    case "onNotifyVisibleChildName":
+      gtk.connect("notify::visible-child-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_visible_child_name()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3236,6 +5163,13 @@ function stackSwitcherProp(gtk: GtkStackSwitcher, key: string, value: unknown): 
 }
 
 function stackSwitcherSignal(gtk: GtkStackSwitcher, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyOrientation":
+      gtk.connect("notify::orientation", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3256,11 +5190,26 @@ function switchProp(gtk: GtkSwitch, key: string, value: unknown): boolean {
 
 function switchSignal(gtk: GtkSwitch, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActive":
+      gtk.connect("notify::active", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_active()));
+      });
+      return true;
+    case "onNotifyState":
+      gtk.connect("notify::state", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_state()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
     case "onStateSet":
       gtk.connect("state-set", (_self, _state) => slot.decide(() => (slot.handler as (state: boolean) => boolean)(_state)));
+      return true;
+    case "onNotifyActionName":
+      gtk.connect("notify::action-name", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_action_name()));
+      });
       return true;
   }
   return widgetSignal(gtk, key, slot);
@@ -3322,6 +5271,56 @@ function textProp(gtk: GtkText, key: string, value: unknown): boolean {
 
 function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActivatesDefault":
+      gtk.connect("notify::activates-default", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyEnableEmojiCompletion":
+      gtk.connect("notify::enable-emoji-completion", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_emoji_completion()));
+      });
+      return true;
+    case "onNotifyInputPurpose":
+      gtk.connect("notify::input-purpose", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputPurpose) => void)(gtk.get_input_purpose()));
+      });
+      return true;
+    case "onNotifyInvisibleChar":
+      gtk.connect("notify::invisible-char", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_invisible_char()));
+      });
+      return true;
+    case "onNotifyMaxLength":
+      gtk.connect("notify::max-length", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_length()));
+      });
+      return true;
+    case "onNotifyOverwriteMode":
+      gtk.connect("notify::overwrite-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_overwrite_mode()));
+      });
+      return true;
+    case "onNotifyPlaceholderText":
+      gtk.connect("notify::placeholder-text", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_placeholder_text()));
+      });
+      return true;
+    case "onNotifyPropagateTextWidth":
+      gtk.connect("notify::propagate-text-width", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_propagate_text_width()));
+      });
+      return true;
+    case "onNotifyTruncateMultiline":
+      gtk.connect("notify::truncate-multiline", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_truncate_multiline()));
+      });
+      return true;
+    case "onNotifyVisibility":
+      gtk.connect("notify::visibility", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_visibility()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -3362,6 +5361,36 @@ function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean {
       return true;
     case "onToggleOverwrite":
       gtk.connect("toggle-overwrite", () => slot.fire());
+      return true;
+    case "onNotifyEditable":
+      gtk.connect("notify::editable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyEnableUndo":
+      gtk.connect("notify::enable-undo", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_undo()));
+      });
+      return true;
+    case "onNotifyMaxWidthChars":
+      gtk.connect("notify::max-width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_max_width_chars()));
+      });
+      return true;
+    case "onNotifyText":
+      gtk.connect("notify::text", () => {
+        slot.dispatch(() => (slot.handler as (value: string) => void)(gtk.get_text()));
+      });
+      return true;
+    case "onNotifyWidthChars":
+      gtk.connect("notify::width-chars", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_width_chars()));
+      });
+      return true;
+    case "onNotifyXalign":
+      gtk.connect("notify::xalign", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_alignment()));
+      });
       return true;
     case "onChanged":
       gtk.connect("changed", () => slot.fire());
@@ -3442,6 +5471,86 @@ function textViewProp(gtk: GtkTextView, key: string, value: unknown): boolean {
 
 function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAcceptsTab":
+      gtk.connect("notify::accepts-tab", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_accepts_tab()));
+      });
+      return true;
+    case "onNotifyBottomMargin":
+      gtk.connect("notify::bottom-margin", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_bottom_margin()));
+      });
+      return true;
+    case "onNotifyCursorVisible":
+      gtk.connect("notify::cursor-visible", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_cursor_visible()));
+      });
+      return true;
+    case "onNotifyEditable":
+      gtk.connect("notify::editable", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyIndent":
+      gtk.connect("notify::indent", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_indent()));
+      });
+      return true;
+    case "onNotifyInputPurpose":
+      gtk.connect("notify::input-purpose", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputPurpose) => void)(gtk.get_input_purpose()));
+      });
+      return true;
+    case "onNotifyJustification":
+      gtk.connect("notify::justification", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkJustification) => void)(gtk.get_justification()));
+      });
+      return true;
+    case "onNotifyLeftMargin":
+      gtk.connect("notify::left-margin", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_left_margin()));
+      });
+      return true;
+    case "onNotifyMonospace":
+      gtk.connect("notify::monospace", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_monospace()));
+      });
+      return true;
+    case "onNotifyOverwrite":
+      gtk.connect("notify::overwrite", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_overwrite()));
+      });
+      return true;
+    case "onNotifyPixelsAboveLines":
+      gtk.connect("notify::pixels-above-lines", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_pixels_above_lines()));
+      });
+      return true;
+    case "onNotifyPixelsBelowLines":
+      gtk.connect("notify::pixels-below-lines", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_pixels_below_lines()));
+      });
+      return true;
+    case "onNotifyPixelsInsideWrap":
+      gtk.connect("notify::pixels-inside-wrap", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_pixels_inside_wrap()));
+      });
+      return true;
+    case "onNotifyRightMargin":
+      gtk.connect("notify::right-margin", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_right_margin()));
+      });
+      return true;
+    case "onNotifyTopMargin":
+      gtk.connect("notify::top-margin", () => {
+        slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_top_margin()));
+      });
+      return true;
+    case "onNotifyWrapMode":
+      gtk.connect("notify::wrap-mode", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkWrapMode) => void)(gtk.get_wrap_mode()));
+      });
+      return true;
     case "onBackspace":
       gtk.connect("backspace", () => slot.fire());
       return true;
@@ -3499,6 +5608,16 @@ function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot): boolea
     case "onToggleOverwrite":
       gtk.connect("toggle-overwrite", () => slot.fire());
       return true;
+    case "onNotifyHscrollPolicy":
+      gtk.connect("notify::hscroll-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_hscroll_policy()));
+      });
+      return true;
+    case "onNotifyVscrollPolicy":
+      gtk.connect("notify::vscroll-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_vscroll_policy()));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -3514,6 +5633,11 @@ function toggleButtonProp(gtk: GtkToggleButton, key: string, value: unknown): bo
 
 function toggleButtonSignal(gtk: GtkToggleButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyActive":
+      gtk.connect("notify::active", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_active()));
+      });
+      return true;
     case "onToggled":
       gtk.connect("toggled", () => slot.fire());
       return true;
@@ -3537,6 +5661,23 @@ function treeExpanderProp(gtk: GtkTreeExpander, key: string, value: unknown): bo
 }
 
 function treeExpanderSignal(gtk: GtkTreeExpander, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyHideExpander":
+      gtk.connect("notify::hide-expander", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_hide_expander()));
+      });
+      return true;
+    case "onNotifyIndentForDepth":
+      gtk.connect("notify::indent-for-depth", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_indent_for_depth()));
+      });
+      return true;
+    case "onNotifyIndentForIcon":
+      gtk.connect("notify::indent-for-icon", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_indent_for_icon()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3556,6 +5697,23 @@ function videoProp(gtk: GtkVideo, key: string, value: unknown): boolean {
 }
 
 function videoSignal(gtk: GtkVideo, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyAutoplay":
+      gtk.connect("notify::autoplay", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_autoplay()));
+      });
+      return true;
+    case "onNotifyGraphicsOffload":
+      gtk.connect("notify::graphics-offload", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkGraphicsOffloadEnabled) => void)(gtk.get_graphics_offload()));
+      });
+      return true;
+    case "onNotifyLoop":
+      gtk.connect("notify::loop", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_loop()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3575,6 +5733,23 @@ function viewportProp(gtk: GtkViewport, key: string, value: unknown): boolean {
 }
 
 function viewportSignal(gtk: GtkViewport, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyScrollToFocus":
+      gtk.connect("notify::scroll-to-focus", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_scroll_to_focus()));
+      });
+      return true;
+    case "onNotifyHscrollPolicy":
+      gtk.connect("notify::hscroll-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_hscroll_policy()));
+      });
+      return true;
+    case "onNotifyVscrollPolicy":
+      gtk.connect("notify::vscroll-policy", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkScrollablePolicy) => void)(gtk.get_vscroll_policy()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -3594,6 +5769,23 @@ function windowControlsProp(gtk: GtkWindowControls, key: string, value: unknown)
 }
 
 function windowControlsSignal(gtk: GtkWindowControls, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyDecorationLayout":
+      gtk.connect("notify::decoration-layout", () => {
+        slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_decoration_layout()));
+      });
+      return true;
+    case "onNotifySide":
+      gtk.connect("notify::side", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkPackType) => void)(gtk.get_side()));
+      });
+      return true;
+    case "onNotifyUseNativeControls":
+      gtk.connect("notify::use-native-controls", () => {
+        slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_use_native_controls()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 

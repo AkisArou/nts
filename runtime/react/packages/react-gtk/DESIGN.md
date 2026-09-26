@@ -117,10 +117,16 @@ only if its setter does. A widget's child protocol is found from its methods:
 `set_child` taking a widget holds one child. A signal's handler takes the
 signal's arguments after the widget, typed as an app writes them
 (`onRowActivated?: (row: GtkListBoxRow) => void`, a `double` as `number`),
-read from the bindings' own `connect` overloads (155 signals on GTK 4.22).
+read from the bindings' own `connect` overloads (155 signals on GTK 4.22, and 356 `notify` props).
 A signal whose handlers answer whether they handled it (GTK's `gboolean`,
 as `close-request` does) takes a handler that returns a `boolean`; with the
 prop absent the answer is "not handled", so the widget's default runs.
+Every prop with a getter also has `onNotify<Prop>`, called with the
+property's new value when it changes (`onNotifyText={(text) => ...}`), what
+a controlled prop needs to hear. A handler hears the user and not React:
+nothing is dispatched while props are applied, so setting `text` or
+`active` from props does not call `onNotifyText` or `onToggled`, as React
+DOM does not call `onChange` for the value it sets.
 `src/widgets.skipped.txt` lists what is left out and why. The main gaps are
 object-valued props, construct-only props, and signal arguments of types a
 JSX handler cannot name yet.

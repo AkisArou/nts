@@ -21,6 +21,9 @@
 //             at the discrete event priority
 //   list      a ListBox, which wraps each child in a row: append, insert
 //             before, move and remove, in the rows' own order
+//   notify    a property changed from GTK's side (an Entry's text, as typing
+//             changes it) reaches its onNotify handler with the new value;
+//             React's own write of the prop does not
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
@@ -50,7 +53,7 @@ import {
   type HostNode,
   type Props,
 } from "../../../packages/react-gtk/src/ReactFiberConfig.ts";
-import { BoxNode, ButtonNode, FrameNode, LabelNode, ListBoxNode } from "../../../packages/react-gtk/src/widgets.ts";
+import { BoxNode, ButtonNode, EntryNode, FrameNode, LabelNode, ListBoxNode } from "../../../packages/react-gtk/src/widgets.ts";
 import { bindPerformWork, cancelTimer, postWork, startTimer } from "../../../packages/react-gtk/src/SchedulerHost.ts";
 
 // The children of `parent`, as GTK orders them, named by the nodes they are.
@@ -199,6 +202,27 @@ function main(): void {
   const moved = rows(list, items, labels);
   removeChild(list, b);
   react_gtk_log("list " + appended + " " + inserted + " " + moved + " " + rows(list, items, labels));
+
+  let typed = "none";
+  const entry = createInstance(
+    "GtkEntry",
+    {
+      // The handler first, so that it is connected when `text` is set: it
+      // must still not hear React's own write.
+      onNotifyText: (value: string) => {
+        typed = value;
+      },
+      text: "a",
+    },
+    container,
+    0,
+    {},
+  );
+  const before = typed;
+  if (entry instanceof EntryNode) {
+    entry.gtk.set_text("typed");
+  }
+  react_gtk_log("notify " + before + ">" + typed);
 
   let asked = 0;
   const closeProps: Props = {

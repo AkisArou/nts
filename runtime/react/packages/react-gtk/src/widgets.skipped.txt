@@ -6,6 +6,7 @@ GtkAboutDialog.logo	a GdkPaintable | null, which a JSX attribute does not carry 
 GtkAccessible.accessible-role	no setter in the bindings
 GtkActionable.action-target	no setter in the bindings
 GtkAppChooser.content-type	construct-only: a change would need a new widget
+GtkAppChooserButton::custom-item-activated	no connect overload in the bindings
 GtkAppChooserDialog.gfile	construct-only: a change would need a new widget
 GtkAppChooserWidget::application-activated	a handler argument JSX cannot type yet: GAppInfo
 GtkAppChooserWidget::application-selected	a handler argument JSX cannot type yet: GAppInfo
@@ -116,6 +117,7 @@ GtkLabel.attributes	a PangoAttrList | null, which a JSX attribute does not carry
 GtkLabel.extra-menu	a GMenuModel | null, which a JSX attribute does not carry yet
 GtkLabel.mnemonic-widget	a GtkWidget | null, which a JSX attribute does not carry yet
 GtkLabel.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
+GtkLevelBar::offset-changed	no connect overload in the bindings
 GtkListBase.orientation	no setter in the bindings
 GtkListBox.accept-unpaired-release	no setter in the bindings
 GtkListView.factory	a GtkListItemFactory | null, which a JSX attribute does not carry yet

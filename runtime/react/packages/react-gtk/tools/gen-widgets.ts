@@ -16,7 +16,8 @@
 // the widget, typed as an app writes them (`(row: GtkListBoxRow) => void`),
 // when each is a widget, string, number, boolean or enum. A signal whose
 // handler returns GTK's "handled" boolean takes a handler that returns one;
-// with none, the widget's default runs. What is left out is listed, with why, in
+// with none, the widget's default runs. A prop with a getter also gets
+// `onNotify<Prop>`, called with the property's new value. What is left out is listed, with why, in
 // src/widgets.skipped.txt.
 //
 // Each GIR class gets one function that sets its own props and hands any
@@ -84,7 +85,9 @@ interface GirProperty {
   writable: boolean;
   constructOnly: boolean;
   deprecated: boolean;
+  readable: boolean;
   setter: string | undefined;
+  getter: string | undefined;
   defaultValue: string | undefined;
 }
 
@@ -163,7 +166,9 @@ function readType(element: XmlElement): GirType {
       writable: flag(p, "writable"),
       constructOnly: flag(p, "construct-only"),
       deprecated: flag(p, "deprecated"),
+      readable: p.attrs.get("readable") !== "0",
       setter: p.attrs.get("setter"),
+      getter: p.attrs.get("getter"),
       defaultValue: p.attrs.get("default-value"),
     })),
     signals: children("glib:signal").map((s) => ({
@@ -181,6 +186,8 @@ function readType(element: XmlElement): GirType {
 interface Bindings {
   /** Setters taking one value, by the TypeScript name of the type that declares them: `set_label` → `string`. */
   setters: Map<string, Map<string, string>>;
+  /** Getters taking nothing, the same way: `get_text` → `string`. */
+  getters: Map<string, Map<string, string>>;
   /** Each signal's handler as bind-gir declared `connect` for it, by type and signal name. */
   signals: Map<string, Map<string, Signature>>;
   constructible: Set<string>;
@@ -237,6 +244,7 @@ function readSignature(line: string): Signature | null {
 
 function readBindings(dir: string): Bindings {
   const setters = new Map<string, Map<string, string>>();
+  const getters = new Map<string, Map<string, string>>();
   const signals = new Map<string, Map<string, Signature>>();
   const constructible = new Set<string>();
   const modules = new Map<string, string>();
@@ -252,6 +260,11 @@ function readBindings(dir: string): Bindings {
     const imports = /^ {2}import type \{ (.+) \} from "(c:[\w.-]+)";$/.exec(line);
     if (imports !== null) {
       imports[1]!.split(", ").forEach((name) => modules.set(name, imports[2]!));
+      continue;
+    }
+    const getter = /^ {4}(get_\w+)\(this: (\w+)\): (.+);$/.exec(line);
+    if (getter !== null) {
+      entry(getters, getter[2]!, () => new Map()).set(getter[1]!, getter[3]!);
       continue;
     }
     const setter = /^ {4}(set_\w+)\(this: (\w+), \w+: (.+)\): void;$/.exec(line);
@@ -273,7 +286,7 @@ function readBindings(dir: string): Bindings {
       constructible.add(constructed);
     }
   }
-  return { setters, signals, constructible, modules };
+  return { setters, getters, signals, constructible, modules };
 }
 
 // ---- the model ---------------------------------------------------------------
@@ -299,6 +312,8 @@ interface Signal {
   params: { name: string; type: string }[];
   /** Whether the handler answers whether it handled the signal (GTK's `gboolean`). */
   decides: boolean;
+  /** For `notify::x`, the getter that reads the property's new value for the handler. */
+  getter?: string;
 }
 
 /**
@@ -461,6 +476,20 @@ function model(gir: Gir, bindings: Bindings): Model {
             skipped.add(`${where}\tremoving it leaves its value: GIR gives no default`);
           }
           props.push({ jsx: camel(p.name), setter, value, reset });
+          // `onNotifyText`: the property changed, from any side, and here is
+          // its new value -- what a controlled prop needs to hear.
+          const getter = p.getter ?? `get_${p.name.replace(/-/g, "_")}`;
+          const read = bindings.getters.get(sourceTs)?.get(getter);
+          const readType = p.readable && read !== undefined ? handlerType(read, handlerTypes) : null;
+          if (readType !== null) {
+            signals.push({
+              jsx: `onNotify${camel(`-${p.name}`)}`,
+              name: `notify::${p.name}`,
+              params: [{ name: "value", type: readType }],
+              decides: false,
+              getter,
+            });
+          }
         }
       }
       for (const s of source.signals) {
@@ -590,7 +619,11 @@ function emit(gir: Gir, m: Model, gtkVersion: string): string {
       line("  switch (key) {");
       for (const s of t.signals) {
         line(`    case "${s.jsx}":`);
-        if (s.decides) {
+        if (s.getter !== undefined) {
+          line(`      gtk.connect("${s.name}", () => {`);
+          line(`        slot.dispatch(() => (slot.handler as ${handlerSignature(s)})(gtk.${s.getter}()));`);
+          line("      });");
+        } else if (s.decides) {
           const args = s.params.map((p) => `_${p.name}`);
           line(`      gtk.connect("${s.name}", (${["_self", ...args].join(", ")}) => slot.decide(() => (slot.handler as ${handlerSignature(s)})(${args.join(", ")})));`);
         } else if (s.params.length === 0) {

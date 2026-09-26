@@ -38,6 +38,12 @@ function discreteEvent(handler: () => void): void {
 
 // ---- signals ----------------------------------------------------------------------
 
+// A handler hears the user, not React's own writes: setting `text` or
+// `active` from props makes GTK emit `notify::text` or `toggled`, and React
+// DOM does not call `onChange` for the value it sets either. So nothing is
+// dispatched while props are being applied.
+let applyingProps = 0;
+
 /**
  * The handler a signal prop holds. The widget's signal is connected once, to
  * a trampoline that fires whatever handler the props hold now: a re-render
@@ -52,7 +58,7 @@ export class SignalSlot {
   /** A signal without arguments: calls the handler. */
   fire(): void {
     const handler = this.handler;
-    if (handler !== null) {
+    if (handler !== null && applyingProps === 0) {
       discreteEvent(handler as () => void);
     }
   }
@@ -62,7 +68,7 @@ export class SignalSlot {
    * the handler; with no handler, not handled, so GTK's own default runs.
    */
   decide(call: () => boolean): boolean {
-    if (this.handler === null) {
+    if (this.handler === null || applyingProps > 0) {
       return false;
     }
     const previous = getCurrentUpdatePriority();
@@ -74,7 +80,7 @@ export class SignalSlot {
 
   /** A signal with arguments: runs `call`, which passes them to the handler. */
   dispatch(call: () => void): void {
-    if (this.handler !== null) {
+    if (this.handler !== null && applyingProps === 0) {
       discreteEvent(call);
     }
   }
@@ -123,6 +129,19 @@ export abstract class HostNode {
 
   /** Applies `next`, the props after `previous` (null on creation). */
   applyProps(previous: Props | null, next: Props): void {
+    // What is wrong is thrown once the props are applied and dispatch is on
+    // again, so a bad prop cannot leave every handler silenced.
+    applyingProps++;
+    const error = this.applyAll(previous, next);
+    applyingProps--;
+    if (error !== null) {
+      throw new Error(error);
+    }
+  }
+
+  /** Applies the props, returning the first thing wrong with them, or null. */
+  private applyAll(previous: Props | null, next: Props): string | null {
+    let error: string | null = null;
     // A prop that is gone restores its default -- first, as React DOM does,
     // since two props can reach one setter (text children and `label`).
     // React treats a prop set to undefined as absent, so the value's absence
@@ -130,33 +149,36 @@ export abstract class HostNode {
     if (previous !== null) {
       for (const key in previous) {
         if (next[key] === undefined && previous[key] !== undefined) {
-          this.apply(key, undefined);
+          error = error ?? this.apply(key, undefined);
         }
       }
     }
     for (const key in next) {
       const value = next[key];
       if (value !== undefined && (previous === null || previous[key] !== value)) {
-        this.apply(key, value);
+        error = error ?? this.apply(key, value);
       }
     }
+    return error;
   }
 
-  private apply(key: string, value: unknown): void {
+  /** Applies one prop, or says what is wrong with it. */
+  private apply(key: string, value: unknown): string | null {
     if (key === "children") {
       // Text children are a widget's label: GTK has no bare text.
       const text = typeof value === "string" || typeof value === "number" ? String(value) : undefined;
       if (!this.setProp("label", text) && text !== undefined) {
-        throw new Error(`<${this.name()}> cannot hold text: put it in a <Label>.`);
+        return `<${this.name()}> cannot hold text: put it in a <Label>.`;
       }
-    } else if (isSignalProp(key)) {
-      this.handle(key, value);
-    } else if (!this.setProp(key, value)) {
-      throw new Error(`<${this.name()}> has no prop \`${key}\`.`);
+      return null;
     }
+    if (isSignalProp(key)) {
+      return this.handle(key, value);
+    }
+    return this.setProp(key, value) ? null : `<${this.name()}> has no prop \`${key}\`.`;
   }
 
-  private handle(key: string, value: unknown): void {
+  private handle(key: string, value: unknown): string | null {
     let slots = this.slots;
     if (slots === null) {
       slots = new Map<string, SignalSlot>();
@@ -167,16 +189,17 @@ export abstract class HostNode {
       if (slot !== undefined) {
         slot.handler = null;
       }
-      return;
+      return null;
     }
     if (slot === undefined) {
       slot = new SignalSlot();
       if (!this.connectSignal(key, slot)) {
-        throw new Error(`<${this.name()}> has no signal for \`${key}\`.`);
+        return `<${this.name()}> has no signal for \`${key}\`.`;
       }
       slots.set(key, slot);
     }
     slot.handler = value;
+    return null;
   }
 
   /** The JSX name: `Button` for `GtkButton`. */
