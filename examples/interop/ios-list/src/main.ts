@@ -15,6 +15,8 @@
 //   tapped banana       the table's `delegate` sent an optional requirement,
 //                       which the object implements
 //   height -1           and not sent one it does not implement
+//   header Fruits       a requirement answering a string, asked through
+//                       the table's `dataSource`
 //   done                a timer, from the run loop UIKit runs, ending the run
 import {
   NSDictionary,
@@ -58,6 +60,12 @@ class Fruits extends NSObject implements UITableViewDataSource, UITableViewDeleg
       label.text = this.items[indexPath.row];
     }
     return cell;
+  }
+
+  // Swift's `func tableView(_:titleForHeaderInSection:) -> String?`: a
+  // string answered, which UIKit receives as the `NSString` it asked for.
+  tableViewTitleForHeaderInSection(tableView: UITableView, section: Int): string | null {
+    return section === 0 ? "Fruits" : null;
   }
 
   tableViewDidSelectRowAt(tableView: UITableView, indexPath: NSIndexPath): void {
@@ -110,6 +118,7 @@ class AppDelegate extends UIResponder implements UIApplicationDelegate {
     report(`asked ${table.dataSource?.tableViewNumberOfRowsInSection(table, 0) ?? -1}`);
     table.delegate?.tableViewDidSelectRowAt?.(table, second);
     report(`height ${table.delegate?.tableViewHeightForRowAt?.(table, second) ?? -1}`);
+    report(`header ${table.dataSource?.tableViewTitleForHeaderInSection?.(table, 0) ?? "none"}`);
     Timer.scheduledTimer({ withTimeInterval: 0.2, repeats: false }, () => {
       report("done");
       exit(0 as c_int);

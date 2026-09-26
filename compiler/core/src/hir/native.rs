@@ -1755,6 +1755,17 @@ pub fn lent_ns_string(foreign: &Type, compiled: &super::HirType) -> bool {
         && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
 }
 
+/// Whether an Objective-C entry point answers an `NSString` made of the
+/// compiled method's string: the `NSString *` a `string` result is in the
+/// method's C signature ([`imp_signature`]). Both backends' entry points ask
+/// this, make the object inside the call's bracket, give the program's string
+/// back, and answer the object at +0 as a getter's result is under ARC --
+/// autoreleased where the program counts.
+#[must_use]
+pub fn answered_ns_string(foreign: &Type, compiled: &super::HirType) -> bool {
+    lent_ns_string(foreign, compiled)
+}
+
 /// `string` or `string | null`: what a callback's bridge reads from a lent
 /// `const char *` (NULL as `null`).
 fn is_c_string_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
@@ -2177,8 +2188,8 @@ pub(crate) fn imp_signature(
     };
     // A `string` parameter is the `NSString *` the runtime passes, copied
     // into the program's string where the entry point calls the method
-    // (`lent_ns_string`). A result is not: answering one would be an
-    // `NSString` the method made, which the runtime takes at +0.
+    // (`lent_ns_string`). A `string` result is the `NSString *` the entry
+    // point makes of the method's, answered at +0 (`answered_ns_string`).
     let passable = |name: &str, ty: TypeId| {
         ty_of(ty)
             .or_else(|| is_c_string_parameter(snapshot, ty).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
@@ -2199,7 +2210,9 @@ pub(crate) fn imp_signature(
         }
         parameters.push(passable(&parameter.name, parameter.ty)?);
     }
-    let result = ty_of(signature.return_type).ok_or("a result whose type has no C type the runtime could take")?;
+    let result = ty_of(signature.return_type)
+        .or_else(|| is_c_string_parameter(snapshot, signature.return_type).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
+        .ok_or("a result whose type has no C type the runtime could take")?;
     Ok(FnPointer::spell(parameters, result))
 }
 

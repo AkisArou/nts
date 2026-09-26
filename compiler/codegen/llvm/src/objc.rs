@@ -280,8 +280,15 @@ fn blocks(program: &Program) -> String {
     // expects: under reference counting the closure returns its own count,
     // which goes to the pool. Without counting it owns nothing to give.
     let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
+    // An entry point of a class the program writes answers an object the
+    // same way (`imp` in lib.rs), so the one declaration serves both.
+    let entries_return_objects = program
+        .foreign_classes
+        .iter()
+        .flat_map(|class| &class.methods)
+        .any(|method| returns_object(&method.signature.result));
     if counted
-        && signatures.iter().any(|signature| returns_object(&signature.result))
+        && (signatures.iter().any(|signature| returns_object(&signature.result)) || entries_return_objects)
         && !bound(program, "objc_autoreleaseReturnValue")
     {
         let _ = writeln!(text, "declare ptr @objc_autoreleaseReturnValue(ptr)");
@@ -330,7 +337,7 @@ pub(super) fn bare(ty: &HirType) -> &'static str {
 /// `R @nts_block_invoke_X(ptr %block, A...)`: the context and the bridge out
 /// of the block, then the bridge with the context last.
 /// Whether a block's result is an Objective-C object.
-fn returns_object(result: &Type) -> bool {
+pub(super) fn returns_object(result: &Type) -> bool {
     matches!(result, Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if handle.family == nts_core::hir::native::Family::Objc)
 }
 

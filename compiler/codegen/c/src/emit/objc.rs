@@ -85,6 +85,79 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
     }
 }
 
+/// One method's entry point, `nts_imp_<Class>_<at>`: the runtime's arguments
+/// -- `self`, `_cmd`, then the method's -- converted to the compiled method's
+/// (a lent `NSString` copied into a string, a record read through its
+/// address), and its result answered as the runtime takes it (a string as
+/// an `NSString`, an object at +0 where the program counts).
+fn entry_point(
+    program: &Program,
+    (method, compiled): (&nts_core::hir::ForeignMethod, &nts_core::hir::Func),
+    symbol: &str,
+    counted: bool,
+    refuse: &dyn Fn(&str) -> Diagnostic,
+) -> Result<String, Diagnostic> {
+    // A record result is written through an address the entry point
+    // passes the compiled method last.
+    let record_out = matches!(*method.signature.result, Type::Record(_));
+    if compiled.params.len() + 1 != method.signature.parameters.len() + usize::from(record_out) {
+        return Err(refuse("an Objective-C method whose entry point and compiled function disagree about arity"));
+    }
+    let mut parameters = Vec::new();
+    let mut arguments = Vec::new();
+    let (mut copies, mut releases) = (String::new(), String::new());
+    for (slot, ty) in method.signature.parameters.iter().enumerate() {
+        parameters.push(format!("{} a{slot}", ty.c_type()));
+        // `_cmd` is the runtime's; the compiled method never reads it.
+        if slot == 1 {
+            continue;
+        }
+        let want = compiled.params[if slot == 0 { 0 } else { slot - 1 }].clone();
+        // An `NSString` the runtime lends, where the method takes a
+        // string: copied in for the call and given back after it, as
+        // a callback bridge does a C string's.
+        if nts_core::hir::native::lent_ns_string(ty, &want.ty) {
+            let _ = write!(copies, " NtsString *s{slot} = nts_string_of_nsstring(a{slot});");
+            let _ = write!(releases, " nts_release((NtsHeader *)s{slot});");
+            arguments.push(format!("s{slot}"));
+            continue;
+        }
+        // A record arrives by value and the compiled method reads it
+        // through its address, as every `ByValue<T>` is carried.
+        let by_value = if matches!(ty, Type::Record(_)) { "&" } else { "" };
+        arguments.push(format!("({}){by_value}a{slot}", c_type_of(program, &want.ty, &want.origin)?));
+    }
+    if record_out {
+        arguments.push("&r".to_owned());
+    }
+    let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+    let result = method.signature.result.c_type();
+    let body = if record_out {
+        format!("{result} r; nts_callback_enter();{copies} {call};{releases} nts_callback_leave(); return r;")
+    } else if matches!(*method.signature.result, Type::Void) {
+        format!("nts_callback_enter();{copies} {call};{releases} nts_callback_leave();")
+    } else if nts_core::hir::native::answered_ns_string(&method.signature.result, &compiled.return_type) {
+        // A string answered as the `NSString` Swift's `String` result
+        // is: made of the method's, which is given back, and answered
+        // at +0 where the program counts, as an object is.
+        let answer = if counted { "objc_autoreleaseReturnValue((void *)made)" } else { "made" };
+        format!(
+            "nts_callback_enter();{copies} NtsString *t = {call};{releases} {result} made = ({result})nts_nsstring_of(t); nts_release((NtsHeader *)t); nts_callback_leave(); return ({result}){answer};"
+        )
+    } else if counted && returns_object(&method.signature.result) {
+        // An object answered at +0, as a message that is no `new` or
+        // `copy` answers under ARC: the compiled method hands over
+        // its own count, which goes to the pool. Without counting it
+        // owns nothing to give.
+        format!(
+            "nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return ({result})objc_autoreleaseReturnValue((void *)r);"
+        )
+    } else {
+        format!("nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return r;")
+    };
+    Ok(format!("static {result} {symbol}({}) {{ {body} }}", parameters.join(", ")))
+}
+
 /// What every block in the program shares: the layout, the two helpers the
 /// block runtime calls on a copy and its final release, and the stack block's
 /// class. Then one invoke adapter and one descriptor per signature.
@@ -113,6 +186,12 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     }
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     writer.line(origin, "/* Objective-C classes the program declares: see `emit/objc.rs`. */");
+    let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
+    // `returns_object` holds for an `NSString` result too, which is what a
+    // `string` one answers as.
+    if counted && classes.iter().flat_map(|class| &class.methods).any(|method| returns_object(&method.signature.result)) {
+        writer.line(origin, "extern void *objc_autoreleaseReturnValue(void *value);");
+    }
     for class in &classes {
         let mut rows = Vec::new();
         for (at, method) in class.methods.iter().enumerate() {
@@ -121,50 +200,8 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .iter()
                 .find(|func| func.name == method.function)
                 .ok_or_else(|| refuse("an Objective-C method whose compiled function this program does not define"))?;
-            // A record result is written through an address the entry point
-            // passes the compiled method last.
-            let record_out = matches!(*method.signature.result, Type::Record(_));
-            if compiled.params.len() + 1 != method.signature.parameters.len() + usize::from(record_out) {
-                return Err(refuse("an Objective-C method whose entry point and compiled function disagree about arity"));
-            }
-            let mut parameters = Vec::new();
-            let mut arguments = Vec::new();
-            let (mut copies, mut releases) = (String::new(), String::new());
-            for (slot, ty) in method.signature.parameters.iter().enumerate() {
-                parameters.push(format!("{} a{slot}", ty.c_type()));
-                // `_cmd` is the runtime's; the compiled method never reads it.
-                if slot == 1 {
-                    continue;
-                }
-                let want = compiled.params[if slot == 0 { 0 } else { slot - 1 }].clone();
-                // An `NSString` the runtime lends, where the method takes a
-                // string: copied in for the call and given back after it, as
-                // a callback bridge does a C string's.
-                if nts_core::hir::native::lent_ns_string(ty, &want.ty) {
-                    let _ = write!(copies, " NtsString *s{slot} = nts_string_of_nsstring(a{slot});");
-                    let _ = write!(releases, " nts_release((NtsHeader *)s{slot});");
-                    arguments.push(format!("s{slot}"));
-                    continue;
-                }
-                // A record arrives by value and the compiled method reads it
-                // through its address, as every `ByValue<T>` is carried.
-                let by_value = if matches!(ty, Type::Record(_)) { "&" } else { "" };
-                arguments.push(format!("({}){by_value}a{slot}", c_type_of(program, &want.ty, &want.origin)?));
-            }
-            if record_out {
-                arguments.push("&r".to_owned());
-            }
-            let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
             let symbol = nts_codegen_common::objc::imp_symbol(&class.name, at);
-            let result = method.signature.result.c_type();
-            let body = if record_out {
-                format!("{result} r; nts_callback_enter();{copies} {call};{releases} nts_callback_leave(); return r;")
-            } else if matches!(*method.signature.result, Type::Void) {
-                format!("nts_callback_enter();{copies} {call};{releases} nts_callback_leave();")
-            } else {
-                format!("nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return r;")
-            };
-            writer.line(origin, format!("static {result} {symbol}({}) {{ {body} }}", parameters.join(", ")));
+            writer.line(origin, entry_point(program, (method, compiled), &symbol, counted, &refuse)?);
             rows.push(format!(
                 "{{ \"{}\", (void (*)(void)){symbol}, \"{}\" }}",
                 method.selector(),

@@ -20,7 +20,7 @@ import {
   XMLParser,
   type NSXMLParserDelegate,
 } from "objc:Foundation";
-import { kvo_forget, kvo_observe, live_objects, report, weak_alive, weak_watch } from "c:support";
+import { kvc_watch, kvo_forget, kvo_observe, live_objects, report, weak_alive, weak_watch } from "c:support";
 import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
 import type { c_int } from "c:types";
 import type { ObjCBool, UInt } from "objc:types";
@@ -225,6 +225,16 @@ function classNames(): string {
     roundTrip("NS" + tail),
     roundTrip("NoSuchClass"),
   ].join(" ");
+}
+
+// Swift's `@objc var made: NSObject { NSObject() }`, read by key-value
+// coding: the runtime calls the program's `made`, which answers a new object
+// at +0 as ARC's getter does. Its count goes to the pool, and the object is
+// gone once the pool is.
+class Maker extends NSObject {
+  made(): NSObject {
+    return new NSObject();
+  }
 }
 
 // Swift's `init(owner:opening:)` on an `NSObject` subclass: a constructor
@@ -438,6 +448,7 @@ function main(): void {
 
   report(`parsed ${parsed()}`);
   report(`kept ${keptNames()}`);
+  report(`answered ${weak_alive(kvc_watch(new Maker(), "made")) ? "alive" : "gone"}`);
   // `dealloc` gave the fields back: as many of the program's objects are
   // alive after as before, the array the fields held included.
   const before = live_objects();

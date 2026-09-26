@@ -12,6 +12,8 @@ SEL sel_registerName(const char *name);
 void objc_msgSend(void);
 id objc_getClass(const char *name);
 id object_getClass(id object);
+void *objc_autoreleasePoolPush(void);
+void objc_autoreleasePoolPop(void *pool);
 size_t nts_live_count(void);
 void nts_collect_cycles(void);
 
@@ -70,4 +72,17 @@ void kvo_forget(struct NSObject *object) {
   ((void (*)(id, SEL, id, id))objc_msgSend)(
       (id)object, sel_registerName("removeObserver:forKeyPath:"), observer,
       ((id (*)(id, SEL, const char *))objc_msgSend)(objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), "tag"));
+}
+
+/* Key-value coding's read of `key`, inside a pool of its own: the runtime
+ * sends the object's getter, which answers at +0, and the pool gives back
+ * whatever the answer was autoreleased with. Answers a watch on the value,
+ * read once the pool is gone. */
+int kvc_watch(struct NSObject *object, const char *key) {
+  void *pool = objc_autoreleasePoolPush();
+  id name = ((id (*)(id, SEL, const char *))objc_msgSend)(objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), key);
+  id value = ((id (*)(id, SEL, id))objc_msgSend)((id)object, sel_registerName("valueForKey:"), name);
+  int watch = weak_watch((struct NSObject *)value);
+  objc_autoreleasePoolPop(pool);
+  return watch;
 }

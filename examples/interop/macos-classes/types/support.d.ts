@@ -12,4 +12,5 @@ declare module "c:support" {
   export function live_objects(): c_int;
   export function kvo_observe(object: NSObject): boolean;
   export function kvo_forget(object: NSObject): void;
+  export function kvc_watch(object: NSObject, key: string): c_int;
 }

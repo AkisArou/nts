@@ -2666,9 +2666,9 @@ declare module "objc:UIKit" {
     /** @ntsSelector numberOfSectionsInTableView: */
     numberOfSections?(tableView: UITableView): Int;
     /** @ntsSelector tableView:titleForHeaderInSection: */
-    tableViewTitleForHeaderInSection?(tableView: UITableView, section: Int): NSString | null;
+    tableViewTitleForHeaderInSection?(tableView: UITableView, section: Int): string | null;
     /** @ntsSelector tableView:titleForFooterInSection: */
-    tableViewTitleForFooterInSection?(tableView: UITableView, section: Int): NSString | null;
+    tableViewTitleForFooterInSection?(tableView: UITableView, section: Int): string | null;
     /** @ntsSelector tableView:canEditRowAtIndexPath: */
     tableViewCanEditRowAt?(tableView: UITableView, indexPath: NSIndexPath): boolean;
     /** @ntsSelector tableView:canMoveRowAtIndexPath: */
@@ -2736,7 +2736,7 @@ declare module "objc:UIKit" {
     /** @ntsSelector tableView:editingStyleForRowAtIndexPath: */
     tableViewEditingStyleForRowAt?(tableView: UITableView, indexPath: NSIndexPath): CEnum<UITableViewCell.EditingStyle, Int>;
     /** @ntsSelector tableView:titleForDeleteConfirmationButtonForRowAtIndexPath: */
-    tableViewTitleForDeleteConfirmationButtonForRowAt?(tableView: UITableView, indexPath: NSIndexPath): NSString | null;
+    tableViewTitleForDeleteConfirmationButtonForRowAt?(tableView: UITableView, indexPath: NSIndexPath): string | null;
     /** @ntsSelector tableView:editActionsForRowAtIndexPath: */
     tableViewEditActionsForRowAt?(tableView: UITableView, indexPath: NSIndexPath): NSArray | null;
     /** @ntsSelector tableView:leadingSwipeActionsConfigurationForRowAtIndexPath: */

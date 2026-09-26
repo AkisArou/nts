@@ -1086,19 +1086,11 @@ impl<'a> Model<'a> {
         let mut parameters = Vec::new();
         for (at, parameter) in parameters_of(decl).into_iter().enumerate() {
             let spelled = self.spell(adopter, parameter.get("type").ok_or("a parameter with no type")?, Position::Block)?;
-            // Swift's `String` parameter of a requirement: the entry point
-            // copies the runtime's `NSString` in (`lent_ns_string`), and a
-            // message sending it bridges a `string` out. An array or a
-            // dictionary still crosses as the object it is.
-            let spelled = match spelled.as_str() {
-                "NSString" => "string".to_owned(),
-                "NSString | null" => "string | null".to_owned(),
-                _ => spelled,
-            };
+            let spelled = swift_string(spelled);
             let name = named(parameter).filter(|n| !n.is_empty() && !reserved(n)).unwrap_or_else(|| format!("arg{at}"));
             parameters.push(format!("{name}: {spelled}"));
         }
-        let result = self.spell(adopter, decl.get("returnType").ok_or("no return type")?, Position::Block)?;
+        let result = swift_string(self.spell(adopter, decl.get("returnType").ok_or("no return type")?, Position::Block)?);
         Ok(Requirement { selector: named(decl).unwrap_or_default(), base, labels, optional, parameters: parameters.join(", "), result })
     }
 
@@ -2251,6 +2243,18 @@ enum Position {
     /// A parameter or result of a block: an object as it is, since a block
     /// bridges no string or array.
     Block,
+}
+
+/// A requirement's `NSString` as Swift's `String`: the entry point copies a
+/// parameter in (`lent_ns_string`) and makes a result's `NSString`
+/// (`answered_ns_string`). An array or a dictionary still crosses as the
+/// object it is.
+fn swift_string(spelled: String) -> String {
+    match spelled.as_str() {
+        "NSString" => "string".to_owned(),
+        "NSString | null" => "string | null".to_owned(),
+        _ => spelled,
+    }
 }
 
 /// Whether the block pointer itself is nullable -- `void (^ _Nullable)(BOOL)`

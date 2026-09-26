@@ -17,5 +17,8 @@ int live_objects(void);
  * its class; and stop. */
 bool kvo_observe(struct NSObject *object);
 void kvo_forget(struct NSObject *object);
+/* Read `key` by key-value coding in a pool of its own, answering a watch on
+ * the value. */
+int kvc_watch(struct NSObject *object, const char *key);
 
 #endif

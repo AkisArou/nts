@@ -1371,7 +1371,7 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: &mut 
                     None => Ok((String::new(), None)),
                 };
             };
-            rows.push(imp(&mut out, platform, &class.name, at, method, compiled)?);
+            rows.push(imp(&mut out, (platform, program.provider == nts_core::hir::Provider::ReferenceCounting), &class.name, at, method, compiled)?);
         }
         let _ = writeln!(out, "@{table} = internal constant [{} x {{ ptr, ptr, ptr }}] [{}]", rows.len(), rows.join(", "));
         text_constant(&mut out, &format!("{table}.name"), &class.name);
@@ -1412,7 +1412,7 @@ fn text_constant(out: &mut String, name: &str, value: &str) {
 /// -- `self`, `_cmd`, then the method's, a record by value by the platform's
 /// convention -- converted to the compiled method's, and its result back.
 /// Returns the method table's row for it.
-fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nts_core::hir::ForeignMethod, compiled: &Func) -> Result<String, Diagnostic> {
+fn imp(out: &mut String, (platform, program_counts): (Platform, bool), class: &str, at: usize, method: &nts_core::hir::ForeignMethod, compiled: &Func) -> Result<String, Diagnostic> {
     // A record result is written through an address the entry point passes
     // the compiled method last.
     let record_out = matches!(*method.signature.result, nts_core::hir::native::Type::Record(_));
@@ -1510,18 +1510,46 @@ fn imp(out: &mut String, platform: Platform, class: &str, at: usize, method: &nt
         let want_ty = ty_of(&want, compiled)?;
         let _ = writeln!(out, "define internal {want_ty} @{imp}({}) nounwind {{", parameters.join(", "));
         out.push_str(&body);
-        let _ = writeln!(out, "  call void @nts_callback_enter()\n{copies}  %r = {call}\n{releases}  call void @nts_callback_leave()");
-        if have == want {
-            let _ = writeln!(out, "  ret {want_ty} %r\n}}");
+        // A string answered as the `NSString` Swift's `String` result is:
+        // made of the method's inside the bracket, which is given back.
+        let answers_string = nts_core::hir::native::answered_ns_string(&method.signature.result, &have);
+        let (made, reply) = if answers_string {
+            ("  %made = call ptr @nts_nsstring_of(ptr %r)\n  call void @nts_release(ptr %r)\n", "%made")
         } else {
-            let instruction = conversion(&have, &want, compiled)?;
-            let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}", ty_of(&have, compiled)?);
-        }
+            ("", "%r")
+        };
+        let _ = writeln!(out, "  call void @nts_callback_enter()\n{copies}  %r = {call}\n{releases}{made}  call void @nts_callback_leave()");
+        answer(out, (method, compiled), (&have, &want, want_ty), (reply, program_counts))?;
     }
     text_constant(out, &format!("{imp}.sel"), method.selector());
     text_constant(out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
     Ok(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"))
 }
+/// How an entry point answers once the compiled method has returned `%r`,
+/// its `NSString` made into `reply` where the result is a string
+/// (`answered_ns_string`): an object at +0 where the program counts -- as a
+/// message that is no `new` or `copy` answers under ARC, the compiled
+/// method's own count going to the pool (`objc::module` declares the call);
+/// without counting it owns nothing to give -- and anything else as the
+/// runtime's type.
+fn answer(
+    out: &mut String,
+    (method, compiled): (&nts_core::hir::ForeignMethod, &Func),
+    (have, want, want_ty): (&HirType, &HirType, &str),
+    (reply, program_counts): (&str, bool),
+) -> Result<(), Diagnostic> {
+    let object = objc::returns_object(&method.signature.result);
+    if program_counts && object && (reply == "%made" || have == want) {
+        let _ = writeln!(out, "  %given = call ptr @objc_autoreleaseReturnValue(ptr {reply})\n  ret {want_ty} %given\n}}");
+    } else if reply == "%made" || have == want {
+        let _ = writeln!(out, "  ret {want_ty} {reply}\n}}");
+    } else {
+        let instruction = conversion(have, want, compiled)?;
+        let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}", ty_of(have, compiled)?);
+    }
+    Ok(())
+}
+
 /// The fields' maker of `class`, where it has fields: the compiled
 /// `{Class}#state` entered as an entry point is, because the runtime calls it
 /// from the `init` it adds, on whatever stack sent `init`. `Err(None)` for a
@@ -2064,13 +2092,17 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
     // An Objective-C entry point copies an `NSString` argument into the
     // program's string and gives it back after the call (`imp`), and no
     // operation names either.
-    let lends_ns_strings = program.foreign_classes.iter().flat_map(|class| &class.methods).any(|method| {
-        method.signature.parameters.iter().any(|ty| {
-            matches!(ty, nts_core::hir::native::Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if *handle == nts_core::hir::native::Handle::ns_string())
-        })
-    });
-    if lends_ns_strings {
-        for helper in ["nts_string_of_nsstring", "nts_release"] {
+    let ns_string = |ty: &nts_core::hir::native::Type| {
+        matches!(ty, nts_core::hir::native::Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if *handle == nts_core::hir::native::Handle::ns_string())
+    };
+    // And answers the `NSString` it makes of a `string` result.
+    let crosses_ns_strings = program
+        .foreign_classes
+        .iter()
+        .flat_map(|class| &class.methods)
+        .any(|method| method.signature.parameters.iter().any(ns_string) || ns_string(&method.signature.result));
+    if crosses_ns_strings {
+        for helper in ["nts_string_of_nsstring", "nts_nsstring_of", "nts_release"] {
             let helper = helper.to_owned();
             if !seen.contains(&helper)
                 && let Some(line) = declaration(&helper, platform)

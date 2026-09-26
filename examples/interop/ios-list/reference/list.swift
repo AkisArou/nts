@@ -31,6 +31,10 @@ class Fruits: NSObject, UITableViewDataSource, UITableViewDelegate {
     return cell
   }
 
+  func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+    section == 0 ? "Fruits" : nil
+  }
+
   func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     report("tapped \(items[indexPath.row])")
   }
@@ -78,6 +82,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     report("asked \(table.dataSource?.tableView(table, numberOfRowsInSection: 0) ?? -1)")
     table.delegate?.tableView?(table, didSelectRowAt: second)
     report("height \(Int(table.delegate?.tableView?(table, heightForRowAt: second) ?? -1))")
+    let header: String? = table.dataSource?.tableView?(table, titleForHeaderInSection: 0) ?? nil
+    report("header \(header ?? "none")")
     Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { _ in
       report("done")
       exit(0)

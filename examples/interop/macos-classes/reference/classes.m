@@ -141,6 +141,12 @@ static NSString *classNames(void) {
   return [parts componentsJoinedByString:@" "];
 }
 
+@interface Maker : NSObject
+@end
+@implementation Maker
+- (NSObject *)made { return [[NSObject alloc] init]; }
+@end
+
 @interface Ledger : NSObject
 @property NSString *owner;
 @property NSInteger balance;
@@ -312,6 +318,13 @@ int main(void) {
       second.delegate = elements;
       [second parse];
       printf("kept %s %s\n", first.UTF8String, elements.last.UTF8String);
+    }
+    {
+      __weak id answered = nil;
+      @autoreleasepool {
+        answered = [[[Maker alloc] init] valueForKey:@"made"];
+      }
+      printf("answered %s\n", answered ? "alive" : "gone");
     }
     @autoreleasepool {
       printf("fields %s\n", tallied().UTF8String);

@@ -956,7 +956,7 @@ declare module "objc:Foundation" {
 "#;
     let source = "import { NSObject } from \"objc:Foundation\";\n\
                   let seen = \"\";\n\
-                  class Reader extends NSObject {\n  read(text: string, more: string | null): void { seen = text + (more ?? \"\"); }\n}\n\
+                  class Reader extends NSObject {\n  read(text: string, more: string | null): void { seen = text + (more ?? \"\"); }\n  title(): string { return seen + \"!\"; }\n}\n\
                   export function run(): number {\n  return new Reader() === null ? 0 : seen.length;\n}\n";
     let Some((_, prepared)) = prepare("objc-string-parameter", binding, source) else {
         eprintln!("skipped: no tsgo");
@@ -972,6 +972,10 @@ declare module "objc:Foundation" {
         "NtsString *s3 = nts_string_of_nsstring(a3);",
         "nts_release((NtsHeader *)s2); nts_release((NtsHeader *)s3);",
         "{ \"read::\", ",
+        // A string answered as the `NSString` made of it, the program's
+        // copy given back.
+        "NtsString *t = Reader__title((struct Reader *)a0);",
+        "made = (struct NSString *)nts_nsstring_of(t); nts_release((NtsHeader *)t);",
     ] {
         assert!(text.contains(expected), "no `{expected}` in:\n{text}");
     }
