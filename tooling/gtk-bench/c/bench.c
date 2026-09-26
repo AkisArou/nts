@@ -119,6 +119,46 @@ static void vfunc_run(long n) {
   measured += total;
 }
 
+typedef struct {
+  GObject parent;
+} BenchModel;
+typedef struct {
+  GObjectClass parent_class;
+} BenchModelClass;
+static guint bench_model_get_n_items(GListModel *list) {
+  (void)list;
+  return 7;
+}
+static GType bench_model_get_item_type(GListModel *list) {
+  (void)list;
+  return G_TYPE_OBJECT;
+}
+static gpointer bench_model_get_item(GListModel *list, guint position) {
+  (void)list;
+  (void)position;
+  return NULL;
+}
+static void bench_model_list_init(GListModelInterface *iface) {
+  iface->get_n_items = bench_model_get_n_items;
+  iface->get_item_type = bench_model_get_item_type;
+  iface->get_item = bench_model_get_item;
+}
+G_DEFINE_TYPE_WITH_CODE(BenchModel, bench_model, G_TYPE_OBJECT,
+                        G_IMPLEMENT_INTERFACE(G_TYPE_LIST_MODEL,
+                                              bench_model_list_init))
+static void bench_model_class_init(BenchModelClass *klass) { (void)klass; }
+static void bench_model_init(BenchModel *model) { (void)model; }
+
+static GListModel *model;
+static void model_run(long n) {
+  GListModel *items = model;
+  long total = 0;
+  for (long i = 0; i < n; i++) {
+    total += g_list_model_get_n_items(items);
+  }
+  measured += total;
+}
+
 static void mapped(GtkWidget *w, gpointer app) {
   (void)w;
   g_application_quit(G_APPLICATION(app));
@@ -160,6 +200,9 @@ int main(void) {
   } else if (strcmp(name, "vfunc") == 0) {
     square = g_object_ref_sink(g_object_new(bench_square_get_type(), NULL));
     best("vfunc", 200000, vfunc_run);
+  } else if (strcmp(name, "model") == 0) {
+    model = G_LIST_MODEL(g_object_new(bench_model_get_type(), NULL));
+    best("model", 2000000, model_run);
   } else if (strcmp(name, "outs") == 0) {
     button = g_object_ref_sink(gtk_button_new_with_label("x"));
     gtk_widget_set_size_request(button, 3, 4);

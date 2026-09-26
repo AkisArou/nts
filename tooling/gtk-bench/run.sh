@@ -30,7 +30,7 @@ micro() {
   env BENCH_CASE="$name" GSK_RENDERER=cairo xvfb-run -a "$@" 2>/dev/null | awk -v n="$name" '$1 == n { print $2 }'
 }
 printf '| case | C | nts | gjs | gjs / nts |\n|---|---:|---:|---:|---:|\n'
-for name in signal property construct method outs vfunc; do
+for name in signal property construct method outs vfunc model; do
   c=$(micro "$name" "$floor")
   a=$(micro "$name" "$bench")
   b=$(micro "$name" gjs "$here/gjs/bench.js")

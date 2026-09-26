@@ -14,9 +14,10 @@ import {
   Orientation,
   type GtkOrientation,
 } from "c:Gtk-4.0";
-import { ApplicationFlags } from "c:Gio-2.0";
+import { ApplicationFlags, type GListModelImplementation } from "c:Gio-2.0";
+import { GObject } from "c:GObject-2.0";
 import { bench_case, bench_log, bench_now } from "c:bench";
-import type { CEnum, CNumber, Ptr, c_uint } from "c:types";
+import type { CEnum, CNumber, Erased, Owned, Ptr, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 
 function best(name: string, n: number, run: (n: number) => void): void {
@@ -127,6 +128,29 @@ function vfunc(): void {
   if (total === 0) bench_log("vfunc: never measured");
 }
 
+// An interface's virtual function, which Gio calls through the interface's
+// table: `get_n_items` on a list model whose class the program writes.
+class Model extends GObject<{}, GListModelImplementation> {
+  vfunc_get_n_items(): CNumber<"uint"> {
+    return 7;
+  }
+  vfunc_get_item_type(): c_size_t {
+    return GObject.$gtype;
+  }
+  vfunc_get_item(_position: CNumber<"uint">): Owned<Erased<GObject>> | null {
+    return null;
+  }
+}
+
+function model(): void {
+  const items = new Model();
+  let total = 0;
+  best("model", 2000000, (n) => {
+    for (let i = 0; i < n; i++) total += items.get_n_items();
+  });
+  if (total === 0) bench_log("model: never counted");
+}
+
 // Startup to a mapped window, timed from outside the process.
 function startup(): void {
   const application = new GtkApplication({ application_id: "dev.nts.Bench", flags: ApplicationFlags.NON_UNIQUE });
@@ -154,6 +178,7 @@ function main(): void {
   else if (name === "method") method();
   else if (name === "outs") outs();
   else if (name === "vfunc") vfunc();
+  else if (name === "model") model();
   else bench_log("unknown case: " + name);
 }
 

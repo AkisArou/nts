@@ -105,6 +105,31 @@ function vfunc() {
         print('vfunc: never measured');
 }
 
+const Model = GObject.registerClass({Implements: [Gio.ListModel]}, class Model extends GObject.Object {
+    vfunc_get_n_items() {
+        return 7;
+    }
+
+    vfunc_get_item_type() {
+        return GObject.Object.$gtype;
+    }
+
+    vfunc_get_item(position) {
+        return null;
+    }
+});
+
+function model() {
+    const items = new Model();
+    let total = 0;
+    best('model', 2000000, n => {
+        for (let i = 0; i < n; i++)
+            total += items.get_n_items();
+    });
+    if (total === 0)
+        print('model: never counted');
+}
+
 function startup() {
     const application = new Gtk.Application({ application_id: 'dev.nts.Bench', flags: Gio.ApplicationFlags.NON_UNIQUE });
     application.connect('activate', () => {
@@ -135,6 +160,8 @@ if (name === 'startup') {
         outs();
     else if (name === 'vfunc')
         vfunc();
+    else if (name === 'model')
+        model();
     else
         print(`unknown case: ${name}`);
 }
