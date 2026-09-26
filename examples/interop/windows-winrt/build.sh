@@ -83,7 +83,7 @@ for provider in nogc rc; do
         diff -u "$expected" "$build/windows-$product.txt"
         echo "windows-x86_64 ($product, $provider): Windows.Data.Json through COM vtables, run on Windows"
         ;;
-      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      77) echo "SKIP windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
       *) echo "windows-winrt: $product ($provider) exited $status on Windows" >&2; exit 1 ;;
     esac
   done
@@ -97,7 +97,7 @@ for provider in nogc rc; do
     status=$?
     set -e
     case $status in
-      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      77) echo "SKIP windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
       1)
         printf 'before\n' | diff -u - "$build/windows-$product-throw.txt"
         grep -q "^nts: a callback threw across a C boundary that cannot carry it: .*the handler failed" "$build/windows-$product-throw.err" ||
@@ -117,7 +117,7 @@ for provider in nogc rc; do
     status=$?
     set -e
     case $status in
-      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      77) echo "SKIP windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
       0)
         printf 'status=1 refused=HRESULT 0x80000018 folder=Windows pending=0\n' | diff -u - "$build/windows-$product-async.txt"
         echo "windows-x86_64 ($product, $provider): an IAsyncAction settles a Promise, run on Windows"
@@ -136,7 +136,7 @@ for provider in nogc rc; do
     status=$?
     set -e
     case $status in
-      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      77) echo "SKIP windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
       0)
         printf 'carried 7\nleft the loop, idle\n' | diff -u - "$build/windows-$product-pumped.txt"
         echo "windows-x86_64 ($product, $provider): a carried call inside an idle message loop leaves it idle, run on Windows"
@@ -155,7 +155,7 @@ for provider in nogc rc; do
     status=$?
     set -e
     case $status in
-      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+      77) echo "SKIP windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)" ;;
       0)
         printf 'returned\ncarried 7\ndelegates=0\n' | diff -u - "$build/windows-$product-thread.txt"
         echo "windows-x86_64 ($product, $provider): a delegate called off its thread is carried to it, run on Windows"

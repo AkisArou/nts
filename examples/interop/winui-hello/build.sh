@@ -82,7 +82,7 @@ for provider in nogc rc; do
         diff -u "$source/expected.txt" "$build/windows-$product.txt"
         echo "windows-x86_64 ($product, $provider): a WinUI 3 window, and the event loop inside XAML's, run on Windows"
         ;;
-      77) echo "windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)"; continue ;;
+      77) echo "SKIP windows-x86_64 ($product, $provider): not run -- no Windows reachable (tooling/windows/vm.md)"; continue ;;
       *) cat "$build/windows-$product.err" >&2; echo "winui-hello: $product ($provider) exited $status on Windows" >&2; exit 1 ;;
     esac
     # The control: the same program with its bootstrapper moved away.

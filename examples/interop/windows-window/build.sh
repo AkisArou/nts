@@ -80,7 +80,7 @@ for product in window windowLlvm; do
       diff -u "$source/expected.txt" "$out/windows-$product.txt"
       echo "windows-x86_64 ($product): closed by TypeScript inside the message loop, run on Windows"
       ;;
-    77) echo "windows-x86_64: not run -- no Windows reachable (tooling/windows/vm.md)" ;;
+    77) echo "SKIP windows-x86_64: not run -- no Windows reachable (tooling/windows/vm.md)" ;;
     *) echo "windows-window: $product exited $status on Windows" >&2; exit 1 ;;
   esac
 done
