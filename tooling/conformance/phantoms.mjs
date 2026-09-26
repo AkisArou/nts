@@ -35,7 +35,7 @@
 // Exit 0: every project measured, no phantom. Exit 1: a phantom, or a project
 // not measured. The report names each.
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,18 +51,37 @@ if (!existsSync(NTS)) {
 }
 
 const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+/** Every project under `base` with a tsconfig.json, as repo-relative paths. */
+const under = (base) =>
+  readdirSync(join(ROOT, base), { withFileTypes: true })
+    .filter((e) => e.isDirectory() && existsSync(join(ROOT, base, e.name, "tsconfig.json")))
+    .map((e) => join(base, e.name));
+// Default: the examples and the blockers -- the blockers most of all, since
+// every one of them exists to refuse, which is where a refusal row can lie.
 const projects = named.length > 0
   ? named
-  : readdirSync(join(ROOT, "examples"), { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(join(ROOT, "examples", e.name, "tsconfig.json")))
-    .map((e) => join("examples", e.name))
-    .sort();
+  : [...under("examples"), ...under("tooling/conformance/blockers")].sort();
 
-const run = (args) => spawnSync(NTS, args, { cwd: ROOT, env, encoding: "utf8", timeout: 300_000, maxBuffer: 64 * 1024 * 1024 });
+/** One nts invocation, as a promise of what spawnSync would have returned. */
+const run = (args) =>
+  new Promise((resolve) => {
+    const child = spawn(NTS, args, { cwd: ROOT, env });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => child.kill("SIGTERM"), 300_000);
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.on("error", (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
+    child.on("close", (status, signal) => { clearTimeout(timer); resolve({ status, signal, stdout, stderr }); });
+  });
+// Four at a time: two nts invocations per project over ~580 projects was ten
+// minutes serially. Four keeps it near three without crowding a shared box.
+const WORKERS = Number(process.env.NTS_PHANTOM_JOBS ?? 4);
 
 /** The names a prepared program contains, and whether the count reconciles. */
 export function compiledNames(text) {
-  const names = new Set();
+  /** name -> the `func` line that defines it, so a phantom prints both sides. */
+  const names = new Map();
   let lines = 0;
   for (const line of text.split("\n")) {
     // The name is everything before the parameter list: an accessor prints as
@@ -71,7 +90,7 @@ export function compiledNames(text) {
     // reconciliation below reported as NOT MEASURED rather than as clean.
     const m = /^(?:export )?func (.+?)\(/.exec(line);
     if (m) {
-      names.add(m[1]);
+      names.set(m[1], line.replace(/\s*\{\s*$/, ""));
       lines += 1;
       continue;
     }
@@ -108,7 +127,9 @@ export function judge(project, hirText, refusalsText) {
   if (stated === null) return { unmeasured: `${project}: nts hir printed no "N function(s)" line` };
   if (lines !== stated) return { unmeasured: `${project}: parsed ${lines} func line(s) where the summary states ${stated}` };
   const entries = refusedNames(refusalsText);
-  const found = entries.filter(({ name }) => names.has(name)).map(({ name, reason }) => ({ project, name, reason }));
+  const found = entries
+    .filter(({ name }) => names.has(name))
+    .map(({ name, reason }) => ({ project, name, reason, line: names.get(name) }));
   return { phantoms: found, stated, entries: entries.length };
 }
 
@@ -154,17 +175,17 @@ let withRefusals = 0;
 let refusalEntries = 0;
 let functions = 0;
 
-for (const project of projects) {
-  const hir = run(["hir", "--prepared", project]);
+async function scan(project) {
+  const hir = await run(["hir", "--prepared", project]);
   const said = `${hir.stdout ?? ""}${hir.stderr ?? ""}`;
   if (hir.error || hir.signal) {
     unmeasured.push(`${project}: nts hir ${hir.signal ?? hir.error?.message}`);
-    continue;
+    return;
   }
-  const refusals = run(["refusals", project]);
+  const refusals = await run(["refusals", project]);
   if (refusals.error || refusals.signal) {
     unmeasured.push(`${project}: nts refusals ${refusals.signal ?? refusals.error?.message}`);
-    continue;
+    return;
   }
   if (DOES_NOT_TYPECHECK.has(project)) {
     if (/does not typecheck/.test(said)) {
@@ -172,12 +193,12 @@ for (const project of projects) {
     } else {
       unmeasured.push(`${project}: listed as not typechecking, and now it does -- the reason has expired`);
     }
-    continue;
+    return;
   }
   const verdict = judge(project, said, refusals.stdout ?? "");
   if (verdict.unmeasured) {
     unmeasured.push(verdict.unmeasured);
-    continue;
+    return;
   }
   measured += 1;
   functions += verdict.stated;
@@ -186,12 +207,29 @@ for (const project of projects) {
   phantoms.push(...verdict.phantoms);
 }
 
+let nextProject = 0;
+await Promise.all(
+  Array.from({ length: Math.min(WORKERS, projects.length) }, async () => {
+    while (nextProject < projects.length) await scan(projects[nextProject++]);
+  }),
+);
+phantoms.sort((a, b) => a.project.localeCompare(b.project));
+unmeasured.sort();
+skipped.sort();
+
 console.log(`  compiler ${NTS}`);
 console.log(
   `  ${measured} of ${projects.length} project(s) measured: ${functions} compiled function(s), ` +
     `${refusalEntries} refusal entr(ies) in ${withRefusals} project(s)`,
 );
-for (const p of phantoms) console.log(`  PHANTOM       ${p.project}: \`${p.name}\` is refused -- "${p.reason}" -- and compiled`);
+// The pair, both sides on screen: which of the two is lying is the reader's
+// first question, and the answer -- the refusal -- is only obvious with the
+// line that contradicts it beside it.
+for (const p of phantoms) {
+  console.log(`  PHANTOM       ${p.project}: \`${p.name}\``);
+  console.log(`                nts refusals says:     ${p.reason}`);
+  console.log(`                nts hir --prepared has: ${p.line}`);
+}
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
 for (const k of skipped) console.log(`  skipped       ${k}`);
 if (measured === 0) console.log("  NOT MEASURED: no project was measured, which is not a clean corpus");

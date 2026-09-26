@@ -1881,6 +1881,22 @@ outcomes() {
   return $status
 }
 
+# Refusals that are not: a name `nts refusals` lists (`Program::uncompiled`)
+# that `nts hir --prepared` shows was compiled after all -- a lie in the one
+# place a reader asks "why is this export missing?". Over examples/ and every
+# conformance blocker. `tooling/conformance/phantoms.mjs` reconciles each
+# project's parsed functions against its own "N function(s)" summary, so it
+# cannot pass by parsing nothing, and prints a phantom as the pair -- the
+# refusal and the line that contradicts it. Its first scan found the
+# structural-copy phantom that 1cf4c99d7 then guarded against. Exit status
+# decides. About 3 s.
+phantoms() {
+  out=$(node tooling/conformance/phantoms.mjs 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^$/'
+  return $status
+}
+
 step "build"   cargo build --release
 step "clippy"  lint
 # Every interop project, built the way its README says and then run.
@@ -2033,6 +2049,7 @@ step "test262" test262
 step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases
 step "outcomes" outcomes
+step "phantoms" phantoms
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly
