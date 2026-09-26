@@ -474,6 +474,12 @@ pub enum Written {
     HString,
     /// A Windows Runtime `boolean`, one byte, read as `!= 0`.
     Bool,
+    /// An object the program reads as `Inspectable`: the `IInspectable` the
+    /// slot holds, unboxed by the runtime (`nts_winrt_unbox`) into the
+    /// string, number or boolean an `IPropertyValue` holds, and otherwise the
+    /// object itself -- as the Windows Runtime's JavaScript projection read
+    /// one. Read into an erased value, which owns the reference written.
+    Boxed,
     /// A struct (`ByValue<T>`), written into the slot, which is the record's
     /// storage and the value: the slot's rules are the result's, as a C
     /// function's record result is in the local it was written into. So
@@ -2634,6 +2640,8 @@ fn hresult_result(
 fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&str>) -> Result<Option<(Type, Written)>, String> {
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
+    } else if boxable(snapshot, ty).is_some() {
+        (Type::Pointer(Pointee::Void), Written::Boxed)
     } else {
         let declared = returned(snapshot, name, ty, abi)?;
         if declared.string.is_some() {

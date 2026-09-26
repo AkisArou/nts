@@ -439,5 +439,6 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_winrt_box", returns: "ptr", params: &["ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_winrt_factory", returns: "ptr", params: &["ptr", "i64", "i64"], attributes: &[] },
     Signature { name: "nts_winrt_listen", returns: "i32", params: &["ptr", "i64", "i64", "i32", "ptr"], attributes: &[] },
+    Signature { name: "nts_winrt_unbox", returns: "void", params: &["ptr dead_on_unwind writable sret({ i32, i64 }) align 8", "ptr"], attributes: &[] },
     Signature { name: "nts_winrt_unlisten", returns: "i32", params: &["ptr", "i64", "i64", "i32", "i32", "ptr"], attributes: &[] },
 ];

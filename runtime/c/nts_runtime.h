@@ -1996,6 +1996,10 @@ uint32_t nts_winrt_activations(void);
  * boxed as an `IPropertyValue`, an object as itself, and `null` or
  * `undefined` as NULL. */
 void *nts_winrt_box(NtsValue value);
+/* The other way: an `IInspectable` a call answered, taken over, as the value
+ * the program reads -- the string, number or boolean an `IPropertyValue`
+ * holds, and any other object as itself; NULL as `null`. */
+NtsValue nts_winrt_unbox(void *object);
 int32_t nts_winrt_listen(void *object, uint64_t iid_low, uint64_t iid_high,
                          uint32_t add, void *delegate);
 int32_t nts_winrt_unlisten(void *object, uint64_t iid_low, uint64_t iid_high,

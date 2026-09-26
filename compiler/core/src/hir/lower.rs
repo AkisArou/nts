@@ -45076,6 +45076,13 @@ impl<'a> FuncBuilder<'a> {
                 let hstring = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
                 self.runtime_call("nts_string_from_hstring", vec![hstring], HirType::Managed(ManagedType::String), origin.clone())
             }
+            // The object written, unboxed: the runtime takes over the
+            // reference and answers the value that owns what is left of it.
+            super::native::Written::Boxed => {
+                let index = first(self);
+                let object = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
+                self.runtime_call("nts_winrt_unbox", vec![object], HirType::Erased, origin.clone())
+            }
             // The slot is the record's storage, and so the value -- which is
             // why a record result is still refused in a loop, as a C
             // function's is.

@@ -557,7 +557,7 @@ impl Writer<'_> {
         if !read.types.is_empty() {
             return None;
         }
-        let answered = self.spell(&read.return_type, false).ok()?;
+        let answered = self.answered(&read.return_type).ok()?;
         let writable = setter.and_then(|(slot, put)| {
             let written = put.signature(&[]);
             let [ty] = written.types.as_slice() else { return None };
@@ -826,7 +826,7 @@ impl Writer<'_> {
         if !read.types.is_empty() {
             return None;
         }
-        let answered = self.spell(&read.return_type, false).ok()?;
+        let answered = self.answered(&read.return_type).ok()?;
         let taken = match setter {
             Some((_, put)) => {
                 let written = put.signature(&arguments);
@@ -1239,10 +1239,14 @@ impl Writer<'_> {
                 }
             }
         }
+        // An override's result is what the program hands Windows, not what
+        // it reads: an object stays one.
+        let overriding = matches!(receiver, Receiver::Override { .. });
         let result = match &signature.return_type {
             Type::Void if outs.is_empty() => "void".to_owned(),
             Type::Void => format!("{{ {} }}", outs.join("; ")),
-            other if outs.is_empty() => self.spell(other, false)?,
+            other if outs.is_empty() && overriding => self.spell(other, false)?,
+            other if outs.is_empty() => self.answered(other)?,
             other => format!("{{ {}; returnValue: {} }}", outs.join("; "), self.spell(other, false)?),
         };
         let mut text = String::new();
@@ -1455,6 +1459,19 @@ impl Writer<'_> {
         self.brands.insert("CEnum");
         self.brands.insert(underlying);
         Ok(format!("CEnum<{enumeration}, {underlying}>"))
+    }
+
+    /// What a method or a property answers, as the program reads it: any
+    /// object as `Inspectable`, which the call unboxes into the string,
+    /// number or boolean a boxed `IPropertyValue` holds -- `button.content`
+    /// reads back the `"Press"` it was given -- and everything else as
+    /// [`Self::spell`] spells it.
+    fn answered(&mut self, ty: &Type) -> Result<String, String> {
+        if matches!(ty, Type::Object) {
+            self.brands.insert("Inspectable");
+            return Ok("Inspectable".to_owned());
+        }
+        self.spell(ty, false)
     }
 
     /// A delegate where a method takes one: `Delegate<(sender: S, args: A) =>

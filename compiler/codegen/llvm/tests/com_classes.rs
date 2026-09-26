@@ -972,7 +972,7 @@ const BOXING: &str = r#"declare module "winrt:Test.Boxing" {
     /**
      * @ntsGet 7 get_Content
      */
-    get content(): IInspectable;
+    get content(): Inspectable;
     /**
      * @ntsSet 8 put_Content
      */
@@ -988,7 +988,7 @@ const BOXING: &str = r#"declare module "winrt:Test.Boxing" {
 /// same, through the setter's slot.
 #[test]
 fn a_primitive_where_an_object_is_taken_is_boxed() {
-    let source = "import type { IHolder } from \"winrt:Test.Boxing\";\nexport function fill(h: IHolder): void {\n  h.Put(\"text\");\n  h.Put(4.5);\n  h.Put(h.content);\n  h.content = \"Press\";\n}\n";
+    let source = "import type { IInspectable } from \"winrt:types\";\nimport type { IHolder } from \"winrt:Test.Boxing\";\nexport function fill(h: IHolder, object: IInspectable): void {\n  h.Put(\"text\");\n  h.Put(4.5);\n  h.Put(object);\n  h.content = \"Press\";\n}\n";
     let Some((dir, prepared)) = prepare_with("boxing", BOXING, source) else {
         eprintln!("skipped: no tsgo");
         return;
@@ -1003,4 +1003,24 @@ fn a_primitive_where_an_object_is_taken_is_boxed() {
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(llvm.text.contains("@nts_winrt_box("), "the IR does not box:\n{}", llvm.text);
+}
+
+/// What a getter answering any object reads back: the runtime unboxes it
+/// (`nts_winrt_unbox`) into the string, number or boolean it holds, or the
+/// object -- which the program narrows as JavaScript would, by `typeof`.
+#[test]
+fn an_object_read_back_is_unboxed() {
+    let source = "import type { IHolder } from \"winrt:Test.Boxing\";\nexport function label(h: IHolder): string {\n  const content = h.content;\n  return typeof content === \"string\" ? content : \"object\";\n}\n";
+    let Some((dir, prepared)) = prepare_with("unboxing", BOXING, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("nts_winrt_unbox("), "the getter's object is not unboxed:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 }

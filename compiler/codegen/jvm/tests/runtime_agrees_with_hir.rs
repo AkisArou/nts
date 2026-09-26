@@ -267,4 +267,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 112 for `nts_winrt_box`, a string or number boxed where the Windows
 /// Runtime takes an object: Windows again.
-const REFUSED_FLOOR: usize = 112;
+///
+/// 113 for `nts_winrt_unbox`, an object a Windows Runtime getter answers read
+/// back as the primitive it boxes: Windows again.
+const REFUSED_FLOOR: usize = 113;

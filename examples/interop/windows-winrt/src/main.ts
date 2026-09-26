@@ -264,7 +264,7 @@ function run(): string {
   try {
     JsonValue.Parse("{not json");
   } catch (error) {
-    threw = (error as Error).message.slice(0, 18);
+    threw = (error instanceof Error ? error.message : "not an Error").slice(0, 18);
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
@@ -353,7 +353,7 @@ async function awaited(): Promise<string> {
   try {
     await awaitAction(action);
   } catch (error) {
-    refused = (error as Error).message.slice(0, 18);
+    refused = (error instanceof Error ? error.message : "not an Error").slice(0, 18);
   }
   const folder = await awaitFolder(StorageFolder.GetFolderFromPathAsync("C:\\Windows"));
   return "status=" + String(status) + " refused=" + refused + " folder=" + folder.as_IStorageItem().get_Name() + " pending=" + String(pending());

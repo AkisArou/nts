@@ -457,6 +457,114 @@ void *nts_winrt_box(NtsValue value) {
   return boxed;
 }
 
+/* {4BD682DD-7554-40E9-9A9B-82654EDE7E62}: `IPropertyValue`, which a boxed
+ * primitive answers. Its slots from 6: `get_Type`, `get_IsNumericScalar`,
+ * then one getter per `PropertyType`, `GetUInt8` at 8 through `GetString` at
+ * 19. */
+static const IID nts_iid_property_value = {
+    0x4BD682DD,
+    0x7554,
+    0x40E9,
+    {0x9A, 0x9B, 0x82, 0x65, 0x4E, 0xDE, 0x7E, 0x62}};
+
+typedef HRESULT(STDMETHODCALLTYPE *NtsPropertyGetter)(void *, void *);
+
+/* A number an `IPropertyValue` of `type` holds, read through its getter. */
+static int nts_property_number(void *boxed, int32_t type, double *out) {
+  union {
+    uint8_t u8;
+    int16_t i16;
+    uint16_t u16;
+    int32_t i32;
+    uint32_t u32;
+    int64_t i64;
+    uint64_t u64;
+    float f32;
+    double f64;
+  } read = {0};
+  /* `PropertyType` 1..9 is `UInt8` .. `Double`, whose getters are slots
+   * 8..16 in the same order. */
+  if (type < 1 || type > 9) {
+    return 0;
+  }
+  NtsPropertyGetter getter =
+      (NtsPropertyGetter)(*(void ***)boxed)[8 + (type - 1)];
+  if (FAILED(getter(boxed, &read))) {
+    return 0;
+  }
+  switch (type) {
+  case 1:
+    *out = read.u8;
+    break;
+  case 2:
+    *out = read.i16;
+    break;
+  case 3:
+    *out = read.u16;
+    break;
+  case 4:
+    *out = read.i32;
+    break;
+  case 5:
+    *out = read.u32;
+    break;
+  case 6:
+    *out = (double)read.i64;
+    break;
+  case 7:
+    *out = (double)read.u64;
+    break;
+  case 8:
+    *out = read.f32;
+    break;
+  default:
+    *out = read.f64;
+    break;
+  }
+  return 1;
+}
+
+NtsValue nts_winrt_unbox(void *object) {
+  if (object == 0) {
+    return nts_value_of_null();
+  }
+  void *boxed = 0;
+  if (FAILED((*(const NtsUnknownTable **)object)
+                 ->query_interface(object, &nts_iid_property_value, &boxed)) ||
+      boxed == 0) {
+    return nts_value_of_handle(object, NTS_TAG_HANDLE_COM);
+  }
+  int32_t type = 0;
+  NtsValue value = nts_value_of_null();
+  int read =
+      SUCCEEDED(((NtsPropertyGetter)(*(void ***)boxed)[6])(boxed, &type));
+  double number;
+  if (read && type == 12) { /* String */
+    void *text = 0;
+    read = SUCCEEDED(((NtsPropertyGetter)(*(void ***)boxed)[19])(boxed, &text));
+    if (read) {
+      value = nts_value_of_reference((NtsHeader *)nts_string_from_hstring(text),
+                                     NTS_TAG_STRING);
+    }
+  } else if (read && type == 11) { /* Boolean */
+    uint8_t flag = 0;
+    read = SUCCEEDED(((NtsPropertyGetter)(*(void ***)boxed)[18])(boxed, &flag));
+    value = nts_value_of_boolean(flag != 0);
+  } else if (read && nts_property_number(boxed, type, &number)) {
+    value = nts_value_of_number(number);
+  } else {
+    read = 0;
+  }
+  nts_unknown_release(boxed);
+  if (!read) {
+    /* A boxed value of a type the program has no primitive for -- a
+     * `DateTime`, an array -- is the object. */
+    return nts_value_of_handle(object, NTS_TAG_HANDLE_COM);
+  }
+  nts_com_release(object);
+  return value;
+}
+
 /* Events, as `addEventListener` registers them: an object's event and a
  * function, and the token the event's `add_` answered, which its `remove_`
  * takes back. Keyed as the DOM keys a listener -- the object by its

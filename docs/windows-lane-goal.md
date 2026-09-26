@@ -393,8 +393,8 @@ Application.Start(() => { new App(); });
      is handed an object. Reading an `IPropertyValue` back as the
      primitive is not done yet.
    - Not yet: `for…of` over an `IIterable<T>` that is not a vector, struct
-     fields (`size.Width`), unboxing an `IPropertyValue` read back, and
-     `instanceof` of a COM value in `unknown`. Also started: a record a call takes by value may be
+     fields (`size.Width`), and `instanceof` of a COM value in
+     `unknown` or `Inspectable`. Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's
    record stays `ByValue<T>`.

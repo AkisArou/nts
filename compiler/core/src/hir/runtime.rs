@@ -285,6 +285,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_winrt_box", &[None], None),
     ("nts_winrt_factory", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_winrt_listen", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
+    ("nts_winrt_unbox", &[None], None),
     ("nts_winrt_unlisten", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
 ];
 
