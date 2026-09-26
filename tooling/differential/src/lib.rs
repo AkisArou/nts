@@ -792,6 +792,13 @@ const HARNESS_PRELUDE: &str =
     // nothing a program is likely to want.
     "#include <math.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\
          long strtol(const char *, char **, int);\n\
+         char *getenv(const char *);\n\
+         /* Where the results go: a file named by NTS_DIFF_RESULTS, not stdout.\n\
+          * stdout is the program's own -- it can print on purpose -- and a\n\
+          * result told from its output by shape could be spoofed by a program\n\
+          * that logs `name 7 ...`. A channel of its own makes every line a\n\
+          * result by construction. */\n\
+         static FILE *nts_check_out;\n\
          #include \"nts_runtime.h\"\n\
          #include \"nts_test_host.h\"\n\n\
          /* A string is compared by its code units, which is what a JavaScript\n\
@@ -806,16 +813,16 @@ const HARNESS_PRELUDE: &str =
          \x20    * crash is the one outcome that reports nothing about the case\n\
          \x20    * it happened on. */\n\
          \x20   if (s == NULL) {\n\
-         \x20       printf(\"%s %d undefined\\n\", name, at);\n\
-         \x20       fflush(stdout);\n\
+         \x20       fprintf(nts_check_out, \"%s %d undefined\\n\", name, at);\n\
+         \x20       fflush(nts_check_out);\n\
          \x20       return;\n\
          \x20   }\n\
-         \x20   printf(\"%s %d str %u\", name, at, s->length);\n\
+         \x20   fprintf(nts_check_out, \"%s %d str %u\", name, at, s->length);\n\
          \x20   for (uint32_t i = 0; i < s->length; i++) {\n\
-         \x20       printf(\",%u\", (unsigned)nts_str_char_code_at(s, (double)i));\n\
+         \x20       fprintf(nts_check_out, \",%u\", (unsigned)nts_str_char_code_at(s, (double)i));\n\
          \x20   }\n\
-         \x20   printf(\"\\n\");\n\
-         \x20   fflush(stdout);\n\
+         \x20   fprintf(nts_check_out, \"\\n\");\n\
+         \x20   fflush(nts_check_out);\n\
          }\n\n\
          static void nts_check_show(const char *name, int at, double value) {\n\
          \x20   uint64_t bits;\n\
@@ -824,13 +831,13 @@ const HARNESS_PRELUDE: &str =
          \x20    * comparing them bit for bit would fail on a difference nobody\n\
          \x20    * can see. */\n\
          \x20   if (value != value) {\n\
-         \x20       printf(\"%s %d nan\\n\", name, at);\n\
-         \x20       fflush(stdout);\n\
+         \x20       fprintf(nts_check_out, \"%s %d nan\\n\", name, at);\n\
+         \x20       fflush(nts_check_out);\n\
          \x20       return;\n\
          \x20   }\n\
          \x20   memcpy(&bits, &value, sizeof bits);\n\
-         \x20   printf(\"%s %d %016llx\\n\", name, at, (unsigned long long)bits);\n\
-         \x20   fflush(stdout);\n\
+         \x20   fprintf(nts_check_out, \"%s %d %016llx\\n\", name, at, (unsigned long long)bits);\n\
+         \x20   fflush(nts_check_out);\n\
          }\n\n\
          /* An `async` function hands back a promise, so its answer is what it\n\
           * settles with once the loop has nothing left to run. The budget is a\n\
@@ -857,8 +864,8 @@ const HARNESS_PRELUDE: &str =
          \x20       budget--;\n\
          \x20   }\n\
          \x20   if (budget == 0) {\n\
-         \x20       printf(\"%s %d starved\\n\", name, at);\n\
-         \x20       fflush(stdout);\n\
+         \x20       fprintf(nts_check_out, \"%s %d starved\\n\", name, at);\n\
+         \x20       fflush(nts_check_out);\n\
          \x20       return;\n\
          \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
@@ -873,13 +880,13 @@ const HARNESS_PRELUDE: &str =
          \x20       return;\n\
          \x20   }\n\
          \x20   if (p->state == NTS_PROMISE_PENDING) {\n\
-         \x20       printf(\"%s %d pending\\n\", name, at);\n\
+         \x20       fprintf(nts_check_out, \"%s %d pending\\n\", name, at);\n\
          \x20   } else if (p->state == NTS_PROMISE_REJECTED) {\n\
-         \x20       printf(\"%s %d rejected\\n\", name, at);\n\
+         \x20       fprintf(nts_check_out, \"%s %d rejected\\n\", name, at);\n\
          \x20   } else {\n\
-         \x20       printf(\"%s %d undefined\\n\", name, at);\n\
+         \x20       fprintf(nts_check_out, \"%s %d undefined\\n\", name, at);\n\
          \x20   }\n\
-         \x20   fflush(stdout);\n\
+         \x20   fflush(nts_check_out);\n\
          }\n\n";
 
 fn native_harness(testable: &[Testable], initializes: bool) -> String {
@@ -916,6 +923,12 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
         "int main(int argc, char **argv) {\n\
          \x20   long from = argc > 1 ? strtol(argv[1], 0, 10) : 0;\n\
          \x20   long at_case = -1;\n\
+         \x20   const char *nts_check_path = getenv(\"NTS_DIFF_RESULTS\");\n\
+         \x20   /* No fallback to stdout: that would quietly restore the shared\n\
+         \x20    * channel this exists to remove. */\n\
+         \x20   if (nts_check_path == NULL) { fprintf(stderr, \"nts-check: NTS_DIFF_RESULTS is not set\\n\"); return 2; }\n\
+         \x20   nts_check_out = fopen(nts_check_path, \"a\");\n\
+         \x20   if (nts_check_out == NULL) { fprintf(stderr, \"nts-check: cannot open %s\\n\", nts_check_path); return 2; }\n\
          \x20   /* Deterministic: virtual time, one thread, no I/O. Ordering is\n\
          \x20    * reproducible here in a way it is not against a real loop. */\n\
          \x20   nts_test_host_install();\n",
@@ -1000,7 +1013,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
     // collection is forced at each point so that what is merely awaiting the
     // cycle collector is not counted as held.
     main.push_str(
-        "#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   return 0;\n}\n",
+        "#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   /* The terminal marker: a run that stopped after three cases leaves\n         \x20    * three good lines and nothing else, which reads exactly like a\n         \x20    * short clean run unless the end is written down. */\n         \x20   fprintf(nts_check_out, \"done %ld\\n\", at_case + 1 - from);\n         \x20   fclose(nts_check_out);\n         \x20   return 0;\n}\n",
     );
     main
 }
@@ -1450,7 +1463,7 @@ fn run_native(
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
     timeouts: &mut usize,
-) -> Result<Vec<String>> {
+) -> Result<Run> {
     // Which backend renders the program.
     //
     // `NTS_BACKEND` runs the whole differential -- every example, every case,
@@ -1568,12 +1581,28 @@ fn run_native(
     // such case costs every case after it. Node answers `undefined` for the same
     // input, so the two had nothing to compare there anyway; what matters is
     // that the *rest* of the program still gets checked.
-    collect_restarting(&results(testable), refused, aborts, timeouts, |from| {
+    collect_restarting(dir, &results(testable), refused, aborts, timeouts, |from, path| {
         bounded(binary.as_str())
+            .env("NTS_DIFF_RESULTS", path.as_str())
             .arg(from.to_string())
             .output()
             .context("running the compiled program")
     })
+}
+
+/// The `n` of a results file's `done <n>` line, if it has one.
+fn run_done(path: &Utf8Path) -> Option<usize> {
+    let text = std::fs::read_to_string(path).ok()?;
+    text.lines().last()?.strip_prefix("done ")?.trim().parse().ok()
+}
+
+/// What one side of the comparison produced: the cases' result lines, from the
+/// results file, and the program's own output, from its stdout. Two streams,
+/// compared separately, because a program may now print on purpose and a
+/// result told from its output by shape could be spoofed by it.
+struct Run {
+    results: Vec<String>,
+    output: Vec<String>,
 }
 
 /// Run a case set, restarting past whatever ends it.
@@ -1589,31 +1618,48 @@ fn run_native(
 /// stopped early mean" is one question, and two answers to it would be two
 /// different accountings of the same refusal.
 fn collect_restarting(
+    dir: &Utf8Path,
     results: &[String],
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
     timeouts: &mut usize,
-    run_from: impl Fn(usize) -> Result<std::process::Output>,
-) -> Result<Vec<String>> {
+    run_from: impl Fn(usize, &Utf8Path) -> Result<std::process::Output>,
+) -> Result<Run> {
     let total = results.len();
     let mut collected: Vec<String> = Vec::new();
+    let mut output: Vec<String> = Vec::new();
     let mut from = 0;
     let mut restarts = 0;
     while from < total && restarts <= REFUSALS {
-        let run = run_from(from)?;
-        let produced = lines(&run.stdout);
-        // The cases answered: result lines, in the order they were asked
-        // for. Not every line: a program's own `console.log` is on stdout
-        // too, and compared, but counting it as a case made a run that
-        // printed read as one that stopped early, with a case declined.
+        // One file per spawn, in this run's own directory: two lanes run at
+        // once, and two writers appending to one file interleave into a
+        // plausible-looking result set. **The spawner truncates, the harness
+        // appends**: a file left by an earlier spawn goes here, before the
+        // program starts, where the run boundary is known.
+        let path = dir.join(format!("results-{restarts}.txt"));
+        let _ = std::fs::remove_file(&path);
+        let run = run_from(from, &path)?;
+        let mut produced = std::fs::read(&path).map(|bytes| lines(&bytes)).unwrap_or_default();
+        // The terminal marker. A run that stopped after three cases leaves
+        // three good lines; without `done` it is not a short clean run.
+        let finished = produced.last().is_some_and(|last| last.starts_with("done "));
+        if finished {
+            produced.pop();
+        }
+        let read = produced.len();
+        output.extend(lines(&run.stdout));
+        // The cases answered: result lines, in the order they were asked for.
         //
-        // **The subject and the instrument share stdout, and the subject can
-        // now write it.** A result is told from the program's output by its
-        // shape, `name at `, and only as the next case expected, so a line
-        // is miscounted only if the program prints exactly that where that
-        // case's result belongs. Results on a channel of their own (fd 3)
-        // would make it true by construction; match no looser prefix than
-        // this one.
+        // **They arrive on a channel of their own**, the file named by
+        // `NTS_DIFF_RESULTS`, not on stdout. Until 2026-09-26 the subject and the
+        // instrument shared stdout, and once a compiled program could write it
+        // on purpose, a result was told from output by its shape (`name at `) --
+        // so `console.log("twice 7 ...")` could spoof, duplicate or hide a
+        // case. Now every line of the file is a result by construction, and
+        // the program's stdout is its output, compared as its own stream.
+        // Every line of the file is a result; matching each against the case
+        // expected next is now a check on the harness, not a way to tell
+        // results from output.
         let reached = produced.iter().fold(0, |answered, line| {
             if results.get(from + answered).is_some_and(|result| line.starts_with(result.as_str())) { answered + 1 } else { answered }
         });
@@ -1628,7 +1674,25 @@ fn collect_restarting(
         if let Some(grew) = growth(&complaint) {
             aborts.push(grew);
         }
+        // The marker agreeing with the reader: `done <n>` is the cases this run
+        // answered, and the collector counts the lines it read. A harness that
+        // miscounts is reported rather than trusted.
+        if let Some(said) = run_done(&path).filter(|said| *said != read) {
+            aborts.push(format!("the harness wrote `done {said}` after {read} result line(s)"));
+        }
+        if !finished && run.status.success() && reached < total - from {
+            aborts.push(format!(
+                "exited 0 after {reached} of {} case(s) without its `done` line: the results file is truncated",
+                total - from
+            ));
+        }
         if reached == total - from {
+            if !finished {
+                aborts.push(format!(
+                    "answered every case and ended without its `done` line: {}",
+                    String::from_utf8_lossy(&run.stderr).lines().next().unwrap_or("no message")
+                ));
+            }
             break;
         }
         match stopped_with(run.status.code(), signal_of(run.status), &complaint) {
@@ -1642,7 +1706,7 @@ fn collect_restarting(
         from += reached + 1;
         restarts += 1;
     }
-    Ok(collected)
+    Ok(Run { results: collected, output })
 }
 
 /// The JVM lane: classes, a jar, and `java`.
@@ -1659,7 +1723,7 @@ fn run_jvm(
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
     timeouts: &mut usize,
-) -> Result<Vec<String>> {
+) -> Result<Run> {
     let emitted = nts_codegen_jvm::emit(program);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  not emitted: {} {}", diagnostic.code, diagnostic.message);
@@ -1738,8 +1802,9 @@ fn run_jvm(
     std::fs::write(&cases_path, cases)?;
 
     let classpath = format!("{dir}:{jar}");
-    collect_restarting(&results(testable), refused, aborts, timeouts, move |from| {
+    collect_restarting(dir, &results(testable), refused, aborts, timeouts, move |from, path| {
         bounded_jvm()
+            .env("NTS_DIFF_RESULTS", path.as_str())
             .arg("-cp")
             .arg(&classpath)
             .arg("nts.rt.Check")
@@ -1879,12 +1944,18 @@ fn growth(complaint: &str) -> Option<String> {
     })
 }
 
-fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Vec<String>> {
+fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Run> {
     let absolute = entry
         .canonicalize_utf8()
         .with_context(|| format!("locating {entry}"))?;
     let mut driver = format!(
-        "const m = await import({:?});\n\
+        "import {{ openSync, writeSync, closeSync }} from \"node:fs\";\n\
+         // Results to their own file, as on the compiled side: stdout is the\n\
+         // program's, and its `console.log` is compared as output, never\n\
+         // mistaken for a case.\n\
+         const resultsFd = openSync(process.env.NTS_DIFF_RESULTS, \"a\");\n\
+         function emit(line) {{ writeSync(resultsFd, line); }}\n\
+         const m = await import({:?});\n\
          const view = new DataView(new ArrayBuffer(8));\n\
          function showString(name, at, s) {{\n\
          \x20 // The compiled side answers `undefined` for an absent string, and\n\
@@ -1893,18 +1964,18 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
          \x20 // the compiler represents both as the null pointer, so folding\n\
          \x20 // them would make a `string | null` export *agree* about a\n\
          \x20 // difference it cannot represent.\n\
-         \x20 if (s === undefined) {{ process.stdout.write(`${{name}} ${{at}} undefined\\n`); return; }}\n\
-         \x20 if (s === null) {{ process.stdout.write(`${{name}} ${{at}} null\\n`); return; }}\n\
+         \x20 if (s === undefined) {{ emit(`${{name}} ${{at}} undefined\\n`); return; }}\n\
+         \x20 if (s === null) {{ emit(`${{name}} ${{at}} null\\n`); return; }}\n\
          \x20 let out = `${{name}} ${{at}} str ${{s.length}}`;\n\
          \x20 for (let i = 0; i < s.length; i++) out += `,${{s.charCodeAt(i)}}`;\n\
-         \x20 process.stdout.write(out + \"\\n\");\n\
+         \x20 emit(out + \"\\n\");\n\
          }}\n\
          function show(name, at, value) {{\n\
          \x20 const n = Number(value);\n\
-         \x20 if (Number.isNaN(n)) {{ process.stdout.write(`${{name}} ${{at}} nan\\n`); return; }}\n\
+         \x20 if (Number.isNaN(n)) {{ emit(`${{name}} ${{at}} nan\\n`); return; }}\n\
          \x20 view.setFloat64(0, n);\n\
          \x20 const bits = view.getBigUint64(0).toString(16).padStart(16, \"0\");\n\
-         \x20 process.stdout.write(`${{name}} ${{at}} ${{bits}}\\n`);\n\
+         \x20 emit(`${{name}} ${{at}} ${{bits}}\\n`);\n\
          }}\n",
         format!("file://{absolute}")
     );
@@ -1952,14 +2023,14 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
             let _ = match payload {
                 Some(HirType::Void) => writeln!(
                     driver,
-                    "try {{ await {call}; process.stdout.write(`{} {at} undefined\n`); }} \
-                     catch {{ process.stdout.write(`{} {at} rejected\n`); }}",
+                    "try {{ await {call}; emit(`{} {at} undefined\n`); }} \
+                     catch {{ emit(`{} {at} rejected\n`); }}",
                     one.name, one.name
                 ),
                 Some(_) => writeln!(
                     driver,
                     "try {{ {show}({:?}, {at}, await {call}); }} \
-                     catch {{ process.stdout.write(`{} {at} rejected\n`); }}",
+                     catch {{ emit(`{} {at} rejected\n`); }}",
                     one.name, one.name
                 ),
                 // The same guard the two arms above have, for the same
@@ -1985,18 +2056,27 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
                 None => writeln!(
                     driver,
                     "try {{ {show}({:?}, {at}, {call}); }} \
-                     catch {{ process.stdout.write(`{} {at} threw\n`); }}",
+                     catch {{ emit(`{} {at} threw\n`); }}",
                     one.name, one.name
                 ),
             };
         }
     }
+    // The terminal marker, the same as the compiled side's: a driver that died
+    // after three cases must not read as a run of three.
+    let _ = writeln!(driver, "emit(\"done {}\\n\"); closeSync(resultsFd);", interleaved(testable).len());
     let path = dir.join("check_driver.mjs");
     std::fs::write(&path, driver)?;
     let hook = dir.join("resolve_ts.mjs");
     std::fs::write(&hook, RESOLVE_TS)?;
 
-    let run = bounded("node")
+    let results_path = dir.join("results-node.txt");
+    // **The spawner truncates, the harness appends.** A file left by a previous
+    // run at this path would read as this run's results, so it goes before
+    // node starts -- here, where the run boundary is known.
+    let _ = std::fs::remove_file(&results_path);
+    let run = without_colour(bounded("node"))
+        .env("NTS_DIFF_RESULTS", results_path.as_str())
         // Node strips types by default, which *refuses* the two TypeScript
         // constructs that are not erasable: a parameter property and an `enum`.
         // `constructor(private x: number)` is `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX
@@ -2017,10 +2097,57 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
         .arg(&path)
         .output()
         .context("running node")?;
-    if run.stdout.is_empty() && !run.status.success() {
-        bail!("node: {}", String::from_utf8_lossy(&run.stderr));
+    let results = node_results(&results_path, &run)?;
+    Ok(Run { results, output: lines(&run.stdout) })
+}
+
+/// The node oracle, uncoloured whatever shell launched it.
+///
+/// **The oracle's output is decided by the oracle, not by the shell that
+/// launched it.** `console.log` colourises through `util.inspect` when the
+/// stream says colour is wanted, and `FORCE_COLOR` says so even into a pipe: a
+/// developer shell exporting it turned `examples/console` into 74
+/// disagreements that were entirely escape codes, on one machine and not
+/// another. Removed, and `NO_COLOR` set so the intent is stated rather than
+/// implied by the absence of two variables.
+fn without_colour(mut command: std::process::Command) -> std::process::Command {
+    command.env_remove("FORCE_COLOR").env_remove("CLICOLOR_FORCE").env("NO_COLOR", "1");
+    command
+}
+
+/// Node's results file, judged: the `done` line stripped, and its absence
+/// split by how node ended. Apart from `run_node` so the rules about a
+/// truncated file sit in one place.
+fn node_results(results_path: &Utf8Path, run: &std::process::Output) -> Result<Vec<String>> {
+    let mut results = std::fs::read(results_path).map(|bytes| lines(&bytes)).unwrap_or_default();
+    if results.last().is_some_and(|last| last.starts_with("done ")) {
+        results.pop();
+    } else {
+        // **Said, and not fatal.** Node stopping part-way -- a pool value in a
+        // loop bound, or its heap exhausted by one (`examples/array-from` asks
+        // for an array of 2^31) -- was always tolerated: the cases it answered
+        // are compared and the rest are "not reached". The `done` line's job
+        // is to make that *visible* rather than a short run that looks whole,
+        // so it is printed here; turning it into an error lost three examples'
+        // worth of answered cases on its first corpus run.
+        if results.is_empty() && !run.status.success() {
+            bail!("node: {}", String::from_utf8_lossy(&run.stderr));
+        }
+        // Split by how it ended. Non-zero or a signal: the run died, which its
+        // status already says, and the answered cases are kept. **Exit 0 with no
+        // `done`**: the driver wrote fewer cases than it answered, or was cut
+        // off by something that still exited zero -- nothing legitimate does
+        // that, so it is not a notice.
+        if run.status.success() {
+            bail!("node exited 0 without writing its `done` line: the results file is truncated");
+        }
+        eprintln!(
+            "  node stopped part-way: {} result(s), no `done` line ({})",
+            results.len(),
+            String::from_utf8_lossy(&run.stderr).lines().find(|l| !l.trim().is_empty()).unwrap_or("no message")
+        );
     }
-    Ok(lines(&run.stdout))
+    Ok(results)
 }
 
 /// A resolve hook that follows TypeScript's `.js` specifiers to the `.ts` files
@@ -2114,8 +2241,8 @@ impl Report {
 }
 
 fn report(
-    native: &[String],
-    engine: &[String],
+    native_run: &Run,
+    engine_run: &Run,
     testable: &[Testable],
     refused: &[usize],
     approximate: &std::collections::HashSet<String>,
@@ -2127,12 +2254,14 @@ fn report(
     // between the two languages rather than between the two compilers.
     //
     // A case's *result* line is dropped, found by counting result lines in
-    // the order the cases ran, and not the line at the case's index: what a
-    // program prints itself (`console.log`) is on stdout between the results,
-    // compared like them, and printed by a declined case on both sides.
+    // the order the cases ran. What a program prints itself (`console.log`)
+    // is no longer among them: results arrive on their own file, and the
+    // program's stdout is compared as a separate stream below.
+    let native = &native_run.results;
     let results = results(testable);
     let mut case = 0;
-    let engine: Vec<&String> = engine
+    let engine: Vec<&String> = engine_run
+        .results
         .iter()
         .filter(|line| {
             if !results.get(case).is_some_and(|result| line.starts_with(result.as_str())) {
@@ -2166,6 +2295,17 @@ fn report(
             continue;
         }
         disagreements.push((native[at].clone(), engine[at].clone()));
+    }
+    // The program's own output, compared on its own now that results have a
+    // channel of theirs: line for line, and a line one side printed and the
+    // other did not is a disagreement, not a trailing detail.
+    let (ours, theirs) = (&native_run.output, &engine_run.output);
+    for at in 0..ours.len().max(theirs.len()) {
+        let mine = ours.get(at).map_or("(no line)", String::as_str);
+        let node = theirs.get(at).map_or("(no line)", String::as_str);
+        if mine != node {
+            disagreements.push((format!("output {at}: {mine}"), format!("output {at}: {node}")));
+        }
     }
     Report {
         functions: testable.len(),
@@ -2368,5 +2508,106 @@ mod tests {
             ),
             Stopped::Declined,
         );
+    }
+}
+
+#[cfg(test)]
+mod result_channel {
+    use super::collect_restarting;
+    use camino::Utf8PathBuf;
+    use std::os::unix::process::ExitStatusExt;
+
+    fn scratch(name: &str) -> Utf8PathBuf {
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir().join(format!("nts-result-channel-{name}-{}", std::process::id())))
+            .expect("utf-8 temp dir");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    fn exited(stdout: &str) -> std::process::Output {
+        std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: stdout.as_bytes().to_vec(), stderr: Vec::new() }
+    }
+
+    const RESULTS: [&str; 2] = ["f 0 ", "f 1 "];
+
+    fn expected() -> Vec<String> {
+        RESULTS.iter().map(|r| (*r).to_owned()).collect()
+    }
+
+    /// A run that answered every case and wrote no `done` line is reported --
+    /// the shape of a program that died after its last case, which without a
+    /// terminal marker reads exactly like a clean run.
+    #[test]
+    fn answering_every_case_without_done_is_reported() {
+        let dir = scratch("no-done");
+        let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
+        let run = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
+            std::fs::write(path, "f 0 1\nf 1 2\n").expect("write results");
+            Ok(exited(""))
+        })
+        .expect("collect");
+        assert_eq!(run.results.len(), 2);
+        assert!(aborts.iter().any(|a| a.contains("without its `done` line")), "no report: {aborts:?}");
+    }
+
+    /// The spawner truncates: a file left at the path by an earlier run must
+    /// never be read as this run's results.
+    #[test]
+    fn a_stale_results_file_is_removed_before_the_spawn() {
+        let dir = scratch("stale");
+        std::fs::write(dir.join("results-0.txt"), "f 0 stale\nf 1 stale\ndone 2\n").expect("stale file");
+        let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
+        let run = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
+            assert!(!path.exists(), "the stale file was still there when the program started");
+            std::fs::write(path, "f 0 fresh\nf 1 fresh\ndone 2\n").expect("write results");
+            Ok(exited(""))
+        })
+        .expect("collect");
+        assert_eq!(run.results, vec!["f 0 fresh".to_owned(), "f 1 fresh".to_owned()]);
+        assert!(aborts.is_empty(), "{aborts:?}");
+    }
+
+    /// Exit 0 part-way with no `done`: nothing legitimate produces it, so it
+    /// is a defect -- a truncated file must never read as a short clean run.
+    #[test]
+    fn exit_zero_without_done_part_way_is_a_defect() {
+        let dir = scratch("exit-zero");
+        let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
+        let _ = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
+            std::fs::write(path, "f 0 1\n").expect("write results");
+            Ok(exited(""))
+        })
+        .expect("collect");
+        assert!(aborts.iter().any(|a| a.contains("exited 0 after 1 of 2")), "no report: {aborts:?}");
+    }
+
+    /// The marker must agree with the reader: `done 3` after two lines is a
+    /// harness that miscounts, and it is reported.
+    #[test]
+    fn a_done_count_that_disagrees_is_reported() {
+        let dir = scratch("miscount");
+        let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
+        let _ = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
+            std::fs::write(path, "f 0 1\nf 1 2\ndone 3\n").expect("write results");
+            Ok(exited(""))
+        })
+        .expect("collect");
+        assert!(aborts.iter().any(|a| a.contains("wrote `done 3` after 2")), "no report: {aborts:?}");
+    }
+
+    /// Program output shaped exactly like a result stays output: it cannot
+    /// answer, duplicate or hide a case, because results have their own file.
+    #[test]
+    fn output_shaped_like_a_result_is_not_a_result() {
+        let dir = scratch("spoof");
+        let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
+        let run = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
+            std::fs::write(path, "f 0 1\nf 1 2\ndone 2\n").expect("write results");
+            Ok(exited("f 1 999 printed by the program\n"))
+        })
+        .expect("collect");
+        assert_eq!(run.results, vec!["f 0 1".to_owned(), "f 1 2".to_owned()]);
+        assert_eq!(run.output, vec!["f 1 999 printed by the program".to_owned()]);
+        assert!(refused.is_empty() && aborts.is_empty());
     }
 }
