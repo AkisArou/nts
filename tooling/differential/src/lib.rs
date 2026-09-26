@@ -663,6 +663,12 @@ fn exports_of(
 /// never reached at all. Interleaving makes a timeout truncate everything
 /// equally, so what is checked is a sample of the whole program rather than a
 /// prefix of it.
+/// The start of each case's result line, `name at `, in the order the cases
+/// are run: what both runners print before the value.
+fn results(testable: &[Testable]) -> Vec<String> {
+    interleaved(testable).into_iter().map(|(one, at, _)| format!("{} {at} ", one.name)).collect()
+}
+
 fn interleaved(testable: &[Testable]) -> Vec<(&Testable, usize, Vec<f64>)> {
     let per: Vec<Vec<Vec<f64>>> = testable.iter().map(|one| tuples(&one.params)).collect();
     let deepest = per.iter().map(Vec::len).max().unwrap_or(0);
@@ -1562,7 +1568,7 @@ fn run_native(
     // such case costs every case after it. Node answers `undefined` for the same
     // input, so the two had nothing to compare there anyway; what matters is
     // that the *rest* of the program still gets checked.
-    collect_restarting(interleaved(testable).len(), refused, aborts, timeouts, |from| {
+    collect_restarting(&results(testable), refused, aborts, timeouts, |from| {
         bounded(binary.as_str())
             .arg(from.to_string())
             .output()
@@ -1583,19 +1589,34 @@ fn run_native(
 /// stopped early mean" is one question, and two answers to it would be two
 /// different accountings of the same refusal.
 fn collect_restarting(
-    total: usize,
+    results: &[String],
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
     timeouts: &mut usize,
     run_from: impl Fn(usize) -> Result<std::process::Output>,
 ) -> Result<Vec<String>> {
+    let total = results.len();
     let mut collected: Vec<String> = Vec::new();
     let mut from = 0;
     let mut restarts = 0;
     while from < total && restarts <= REFUSALS {
         let run = run_from(from)?;
         let produced = lines(&run.stdout);
-        let reached = produced.len();
+        // The cases answered: result lines, in the order they were asked
+        // for. Not every line: a program's own `console.log` is on stdout
+        // too, and compared, but counting it as a case made a run that
+        // printed read as one that stopped early, with a case declined.
+        //
+        // **The subject and the instrument share stdout, and the subject can
+        // now write it.** A result is told from the program's output by its
+        // shape, `name at `, and only as the next case expected, so a line
+        // is miscounted only if the program prints exactly that where that
+        // case's result belongs. Results on a channel of their own (fd 3)
+        // would make it true by construction; match no looser prefix than
+        // this one.
+        let reached = produced.iter().fold(0, |answered, line| {
+            if results.get(from + answered).is_some_and(|result| line.starts_with(result.as_str())) { answered + 1 } else { answered }
+        });
         collected.extend(produced);
         let complaint = String::from_utf8_lossy(&run.stderr);
         // What the program still held, once and at the end. Only under a
@@ -1717,7 +1738,7 @@ fn run_jvm(
     std::fs::write(&cases_path, cases)?;
 
     let classpath = format!("{dir}:{jar}");
-    collect_restarting(interleaved(testable).len(), refused, aborts, timeouts, move |from| {
+    collect_restarting(&results(testable), refused, aborts, timeouts, move |from| {
         bounded_jvm()
             .arg("-cp")
             .arg(&classpath)
@@ -2104,17 +2125,37 @@ fn report(
     // than comparing is the right thing: node answered `undefined` where the
     // compiled program declined to answer at all, and that is a difference
     // between the two languages rather than between the two compilers.
+    //
+    // A case's *result* line is dropped, found by counting result lines in
+    // the order the cases ran, and not the line at the case's index: what a
+    // program prints itself (`console.log`) is on stdout between the results,
+    // compared like them, and printed by a declined case on both sides.
+    let results = results(testable);
+    let mut case = 0;
     let engine: Vec<&String> = engine
         .iter()
-        .enumerate()
-        .filter(|(at, _)| !refused.contains(at))
-        .map(|(_, line)| line)
+        .filter(|line| {
+            if !results.get(case).is_some_and(|result| line.starts_with(result.as_str())) {
+                return true;
+            }
+            case += 1;
+            !refused.contains(&(case - 1))
+        })
         .collect();
 
-    let checked = native.len().min(engine.len());
+    let compared = native.len().min(engine.len());
+    // Cases, not lines, for the same reason: a result line is `name at value`.
+    let keys: std::collections::HashSet<&str> = results.iter().map(String::as_str).collect();
+    let checked = native[..compared]
+        .iter()
+        .filter(|line| {
+            let mut spaces = line.match_indices(' ').map(|(at, _)| at);
+            spaces.nth(1).is_some_and(|second| keys.contains(&line[..=second]))
+        })
+        .count();
     let mut disagreements = Vec::new();
     let mut approximated = 0;
-    for at in 0..checked {
+    for at in 0..compared {
         let name = native[at].split(' ').next().unwrap_or_default();
         let loose = approximate.contains(name);
         if native[at] == *engine[at] {
