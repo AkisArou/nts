@@ -2558,6 +2558,7 @@ declare module "objc:UIKit" {
 
   /** @ntsProtocol UIApplicationDelegate */
   export interface UIApplicationDelegate extends NSObject {
+    window?: UIWindow | null;
     /** @ntsSelector applicationDidFinishLaunching: */
     applicationDidFinishLaunching?(application: UIApplication): void;
     /** @ntsSelector application:willFinishLaunchingWithOptions: */
@@ -2653,7 +2654,6 @@ declare module "objc:UIKit" {
     //   -application:handleEventsForBackgroundURLSession:completionHandler:: a block that takes or returns a block
     //   -application:handleWatchKitExtensionRequest:reply:: a block that takes or returns a block
     //   -application:handleIntent:completionHandler:: a block that takes or returns a block
-    //   @property window: a property requirement, which a class implements as accessors
     //   -application:continueUserActivity:restorationHandler:: a block that takes or returns a block
   }
 

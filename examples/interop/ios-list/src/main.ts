@@ -17,6 +17,11 @@
 //   height -1           and not sent one it does not implement
 //   header Fruits       a requirement answering a string, asked through
 //                       the table's `dataSource`
+//   window yes          `application.delegate?.window`: UIKit's view of the
+//                       delegate's field, which meets the protocol's
+//                       `window` requirement
+//   plain none          the same requirement read from an adopter that does
+//                       not meet it, which is not sent the getter
 //   done                a timer, from the run loop UIKit runs, ending the run
 import {
   NSDictionary,
@@ -81,6 +86,9 @@ function shown(table: UITableView, row: number): string {
   return table.cellForRow({ at: new NSIndexPath({ forRow: row, inSection: 0 }) })?.textLabel?.text ?? "none";
 }
 
+// Adopts the protocol and meets none of its requirements, `window` among them.
+class Plain extends NSObject implements UIApplicationDelegate {}
+
 class AppDelegate extends UIResponder implements UIApplicationDelegate {
   window: UIWindow | null = null;
   fruits: Fruits | null = null;
@@ -118,6 +126,11 @@ class AppDelegate extends UIResponder implements UIApplicationDelegate {
     table.delegate?.tableViewDidSelectRowAt?.(table, second);
     console.log(`height ${table.delegate?.tableViewHeightForRowAt?.(table, second) ?? -1}`);
     console.log(`header ${table.dataSource?.tableViewTitleForHeaderInSection?.(table, 0) ?? "none"}`);
+    // Swift's `application.delegate?.window`, a `UIWindow??`: an `optional`
+    // property requirement, read through the protocol.
+    console.log(`window ${application.delegate?.window === window ? "yes" : "no"}`);
+    const plain: UIApplicationDelegate = new Plain();
+    console.log(`plain ${plain.window == null ? "none" : "some"}`);
     Timer.scheduledTimer({ withTimeInterval: 0.2, repeats: false }, () => {
       console.log("done");
       exit(0 as c_int);

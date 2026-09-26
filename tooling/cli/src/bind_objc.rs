@@ -1013,6 +1013,7 @@ impl<'a> Model<'a> {
         let swift = self.swift.get(&container).map_or_else(|| objc.to_owned(), |s| s.names.title.clone());
         let adopter = Class { objc: objc.to_owned(), swift: swift.clone(), parent: None, members: Vec::new(), skipped: Vec::new(), sent: Vec::new() };
         let mut requirements = Vec::new();
+        let mut properties = Vec::new();
         let mut skipped = Vec::new();
         for decl in decls.iter().filter(|d| d.get("isImplicit").and_then(Value::as_bool) != Some(true)) {
             let Some(name) = named(decl) else { continue };
@@ -1028,7 +1029,18 @@ impl<'a> Model<'a> {
                         Err(why) => skipped.push(format!("-{name}: {why}")),
                     }
                 }
-                Some("ObjCPropertyDecl") => skipped.push(format!("@property {name}: a property requirement, which a class implements as accessors")),
+                Some("ObjCPropertyDecl") if decl.get("class").and_then(Value::as_bool) == Some(true) => {
+                    skipped.push(format!("@property (class) {name}: a class-side requirement, which a TypeScript class cannot write"));
+                }
+                Some("ObjCPropertyDecl") => {
+                    let usr = format!("{container}(py){name}");
+                    let Some(symbol) = self.swift.get(&usr).cloned() else { continue };
+                    let optional = self.swift.optional.contains(&usr);
+                    match self.available(&symbol).and_then(|()| self.property_requirement(&adopter, decl, &symbol, optional)) {
+                        Ok(property) => properties.push(property),
+                        Err(why) => skipped.push(format!("@property {name}: {why}")),
+                    }
+                }
                 _ => {}
             }
         }
@@ -1042,6 +1054,15 @@ impl<'a> Model<'a> {
         let unique = |requirement: &Requirement| bases.get(requirement.base.as_str()) == Some(&1);
         let mut taken: BTreeSet<String> = requirements.iter().filter(|r| unique(r)).map(|r| r.base.clone()).collect();
         let mut members = Vec::new();
+        // A property first, by its Swift name, which a method's derived name
+        // then steers clear of: `window` is `UIApplicationDelegate`'s.
+        for (name, text) in properties {
+            if !taken.insert(name.clone()) {
+                skipped.push(format!("@property {name}: named as a method of the protocol is"));
+                continue;
+            }
+            members.push(text);
+        }
         for requirement in &requirements {
             let name = if unique(requirement) {
                 requirement.base.clone()
@@ -1073,6 +1094,44 @@ impl<'a> Model<'a> {
             .map(|parent| self.protocol_name(parent))
             .collect();
         Protocol { objc: objc.to_owned(), swift, base, refines, members, skipped }
+    }
+
+    /// A protocol's property requirement, as Swift imports it -- `var window:
+    /// UIWindow? { get set }` -- and as the adopting class meets it: a field
+    /// or an accessor of that name. Its Swift name, and the member's text: a
+    /// property signature, `?` where Swift marks it `optional`, `readonly`
+    /// where the header does, and tagged with its getter and setter where
+    /// they are not the ones its name gives.
+    fn property_requirement(&mut self, adopter: &Class, decl: &Value, symbol: &Symbol, optional: bool) -> std::result::Result<(String, String), String> {
+        let name = named(decl).unwrap_or_default();
+        let ty = decl.get("type").ok_or("no type")?;
+        if written(ty).contains("(^") || desugared(ty).is_some_and(|d| d.contains("(^")) {
+            return Err("a block property requirement, which a field holding a closure cannot answer".to_owned());
+        }
+        let spelled = optional_as_swift(self.spell(adopter, ty, Position::Result)?, symbol.optionality() != Optionality::Neither);
+        let readonly = decl.get("readonly").and_then(Value::as_bool) == Some(true);
+        let swift_name = symbol.names.title.clone();
+        let getter = decl.get("getter").and_then(named).unwrap_or_else(|| name.clone());
+        let setter = decl.get("setter").and_then(named).unwrap_or_else(|| format!("set{}:", capitalized(&name)));
+        let mut tags = Vec::new();
+        if getter != swift_name {
+            tags.push(format!("@ntsSelector {getter}"));
+        }
+        if !readonly && setter != format!("set{}:", capitalized(&swift_name)) {
+            tags.push(format!("@ntsSet {setter}"));
+        }
+        let mut text = String::new();
+        if !tags.is_empty() {
+            let _ = writeln!(text, "    /** {} */", tags.join("\n     * "));
+        }
+        let _ = write!(
+            text,
+            "    {}{}{}: {spelled};",
+            if readonly { "readonly " } else { "" },
+            quoted_key(&swift_name),
+            if optional { "?" } else { "" }
+        );
+        Ok((swift_name, text))
     }
 
     /// A protocol method as the adopting class writes it: every argument
@@ -2757,7 +2816,9 @@ typedef NSInteger Response;
 @end
 @protocol ShapeDelegate
 - (void)shapeDidMove:(Shape *)shape;
+@property (nullable) Shape *partner;
 @optional
+@property (readonly, getter=isVisible) BOOL visible;
 - (void)shapeDidRename:(Shape *)shape;
 - (void)shape:(Shape *)shape didRenameTo:(NSString *)name;
 - (BOOL)shape:(Shape *)shape shouldHide:(BOOL)hide;
@@ -2845,6 +2906,9 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             symbol("c:objc(pl)ShapeDelegate(im)shapeDidRename:", "swift.method", "shapeDidRename(_:)", &["ShapeWatching", "shapeDidRename(_:)"], ""),
             symbol("c:objc(pl)ShapeDelegate(im)shape:didRenameTo:", "swift.method", "shape(_:didRename:)", &["ShapeWatching", "shape(_:didRename:)"], ""),
             symbol("c:objc(pl)ShapeDelegate(im)shape:shouldHide:", "swift.method", "shape(_:shouldHide:)", &["ShapeWatching", "shape(_:shouldHide:)"], ""),
+            r#"{"identifier":{"precise":"c:objc(pl)ShapeDelegate(py)partner","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"partner"},"pathComponents":["ShapeWatching","partner"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"var partner: Shape? { get set }"}]}"#.to_owned(),
+            symbol("c:objc(pl)ShapeDelegate(py)visible", "swift.property", "isVisible", &["ShapeWatching", "isVisible"], ""),
+            symbol("c:objc(pl)ShapeDelegate(py)size", "swift.property", "size", &["ShapeWatching", "size"], ""),
             symbol("c:objc(cs)Shape(im)settleWith:completionHandler:", "swift.method", "settle(with:completionHandler:)", &["Shape", "settle(with:completionHandler:)"], ""),
             asynchronous.to_owned(),
             symbol("c:objc(cs)Shape(im)fetchNamed:completionHandler:", "swift.method", "fetch(named:completionHandler:)", &["Shape", "fetch(named:completionHandler:)"], ""),
@@ -2862,8 +2926,8 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             r#"{"identifier":{"precise":"c:objc(cs)Shape(cm)runGroup:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.type.method"},"names":{"title":"runGroup(_:)"},"pathComponents":["Shape","runGroup(_:)"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"class func runGroup(_ changes: (Shape) -> Void) async"}]}"#.to_owned(),
             r#"{"identifier":{"precise":"c:objc(cs)Shape(im)pairWithCompletionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"pair()"},"pathComponents":["Shape","pair()"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"func pair() async throws -> (Shape, String)"}]}"#.to_owned(),
         ];
-        let optional = ["shapeDidRename:", "shape:didRenameTo:", "shape:shouldHide:"].map(|selector| {
-            format!(r#"{{"kind":"optionalRequirementOf","source":"c:objc(pl)ShapeDelegate(im){selector}","target":"c:objc(pl)ShapeDelegate"}}"#)
+        let optional = ["(im)shapeDidRename:", "(im)shape:didRenameTo:", "(im)shape:shouldHide:", "(py)visible", "(py)size"].map(|member| {
+            format!(r#"{{"kind":"optionalRequirementOf","source":"c:objc(pl)ShapeDelegate{member}","target":"c:objc(pl)ShapeDelegate"}}"#)
         });
         let required = r#"{"kind":"requirementOf","source":"c:objc(pl)ShapeDelegate(im)shapeDidMove:","target":"c:objc(pl)ShapeDelegate"}"#;
         format!(r#"{{"symbols":[{}],"relationships":[{},{required}]}}"#, symbols.join(","), optional.join(","))
@@ -2991,13 +3055,18 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             // says `optional`, every argument positional and an object as
             // itself. A shared base name takes its first label, and one that
             // still collides with a name Swift gave is named by its selector.
+            // A property requirement is a property signature under Swift's
+            // name, which a field meets: `?` where Swift says `optional`, and
+            // `readonly` with no setter where the header says so.
             "  /** @ntsProtocol ShapeDelegate */\n  export interface ShapeWatching extends NSObject {\n\
+             \x20   partner: Shape | null;\n\
+             \x20   readonly isVisible?: boolean;\n\
+             \x20   size?: Int32;\n\
              \x20   /** @ntsSelector shapeDidMove: */\n    shapeDidMove(shape: Shape): void;\n\
              \x20   /** @ntsSelector shapeDidRename: */\n    shapeDidRename?(shape: Shape): void;\n\
              \x20   /** @ntsSelector shape:didRenameTo: */\n    shapeDidRenameTo?(shape: Shape, name: string): void;\n\
              \x20   /** @ntsSelector shape:shouldHide: */\n    shapeShouldHide?(shape: Shape, hide: boolean): boolean;\n",
             "+classSide: a class-side requirement",
-            "@property size: a property requirement",
         ] {
             assert!(text.contains(expected), "no `{expected}` in:\n{text}");
         }

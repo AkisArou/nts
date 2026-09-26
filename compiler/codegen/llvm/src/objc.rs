@@ -225,6 +225,25 @@ fn bound(program: &Program, symbol: &str) -> bool {
 fn blocks(program: &Program) -> String {
     let signatures = block_signatures(program);
     let mut text = String::new();
+    // A block returning an object hands it back at +0, as ARC's caller
+    // expects: under reference counting the closure returns its own count,
+    // which goes to the pool. Without counting it owns nothing to give.
+    let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
+    // An entry point of a class the program writes answers an object the
+    // same way (`imp` in lib.rs), so the one declaration serves both -- and
+    // is made before the return below, since a program can have entry
+    // points and no block.
+    let entries_return_objects = program
+        .foreign_classes
+        .iter()
+        .flat_map(|class| &class.methods)
+        .any(|method| returns_object(&method.signature.result));
+    if counted
+        && (signatures.iter().any(|signature| returns_object(&signature.result)) || entries_return_objects)
+        && !bound(program, "objc_autoreleaseReturnValue")
+    {
+        let _ = writeln!(text, "declare ptr @objc_autoreleaseReturnValue(ptr)");
+    }
     if signatures.is_empty() {
         return text;
     }
@@ -275,23 +294,6 @@ fn blocks(program: &Program) -> String {
         "}".to_owned(),
     ] {
         let _ = writeln!(text, "{line}");
-    }
-    // A block returning an object hands it back at +0, as ARC's caller
-    // expects: under reference counting the closure returns its own count,
-    // which goes to the pool. Without counting it owns nothing to give.
-    let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
-    // An entry point of a class the program writes answers an object the
-    // same way (`imp` in lib.rs), so the one declaration serves both.
-    let entries_return_objects = program
-        .foreign_classes
-        .iter()
-        .flat_map(|class| &class.methods)
-        .any(|method| returns_object(&method.signature.result));
-    if counted
-        && (signatures.iter().any(|signature| returns_object(&signature.result)) || entries_return_objects)
-        && !bound(program, "objc_autoreleaseReturnValue")
-    {
-        let _ = writeln!(text, "declare ptr @objc_autoreleaseReturnValue(ptr)");
     }
     for signature in signatures {
         adapter(&mut text, signature, counted);

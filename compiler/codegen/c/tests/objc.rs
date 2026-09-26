@@ -980,3 +980,47 @@ declare module "objc:Foundation" {
         assert!(text.contains(expected), "no `{expected}` in:\n{text}");
     }
 }
+
+/// Swift's `var window: UIWindow?` in a class adopting a protocol that asks
+/// for it: the field answers the requirement's getter and, unless it is
+/// `readonly`, its setter, which the runtime is told of. A field no protocol
+/// asks for is the program's alone. An `optional` requirement read through
+/// the protocol is sent only to an object that answers
+/// `respondsToSelector:` for it.
+#[test]
+fn a_field_meets_a_protocols_property_requirement() {
+    let binding = r#"/**
+ * @ntsFramework Foundation
+ */
+declare module "objc:Foundation" {
+  /** @ntsClass NSObject */
+  export class NSObject {
+    /** @ntsSelector init */
+    constructor();
+  }
+  /** @ntsProtocol Watcher */
+  export interface Watcher extends NSObject {
+    partner?: NSObject | null;
+    /** @ntsSelector isOn */
+    readonly on: boolean;
+  }
+}
+"#;
+    let source = "import { NSObject, type Watcher } from \"objc:Foundation\";\n\
+                  class Keeper extends NSObject implements Watcher {\n  partner: NSObject | null = null;\n  readonly on: boolean = true;\n  own = 0;\n}\n\
+                  export function run(): number {\n  const seen: Watcher = new Keeper();\n  return seen.partner == null && seen.on ? 1 : 0;\n}\n";
+    let Some((_, prepared)) = prepare("objc-property-requirement", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    for expected in ["{ \"partner\", ", "{ \"setPartner:\", ", "{ \"isOn\", ", "respondsToSelector:"] {
+        assert!(text.contains(expected), "no `{expected}` in:\n{text}");
+    }
+    for absent in ["{ \"setOn:\", ", "{ \"own\", ", "{ \"setOwn:\", "] {
+        assert!(!text.contains(absent), "`{absent}` in:\n{text}");
+    }
+}

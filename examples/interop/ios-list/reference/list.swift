@@ -48,6 +48,8 @@ func shown(_ table: UITableView, _ row: Int) -> String {
   table.cellForRow(at: IndexPath(row: row, section: 0))?.textLabel?.text ?? "none"
 }
 
+class Plain: NSObject, UIApplicationDelegate {}
+
 class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
   var fruits: Fruits?
@@ -84,6 +86,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     report("height \(Int(table.delegate?.tableView?(table, heightForRowAt: second) ?? -1))")
     let header: String? = table.dataSource?.tableView?(table, titleForHeaderInSection: 0) ?? nil
     report("header \(header ?? "none")")
+    report("window \((application.delegate?.window ?? nil) === window ? "yes" : "no")")
+    let plain: UIApplicationDelegate = Plain()
+    report("plain \(plain.window == nil ? "none" : "some")")
     Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { _ in
       report("done")
       exit(0)

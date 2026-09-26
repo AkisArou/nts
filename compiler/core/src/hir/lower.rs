@@ -6177,6 +6177,7 @@ fn lower_class(
         }
     }
     if super::native::extends_objc(snapshot, class) {
+        objc_methods.extend(objc_field_properties(snapshot, foreign, class, shared, lowered));
         let state = objc_state_function(snapshot, foreign, class, shared, lowered);
         register_objc_class(snapshot, class, objc_methods, state, lowered);
     }
@@ -6382,6 +6383,57 @@ fn gobject_properties(
         properties.push(super::ForeignProperty { name: field, kind, getter, setter });
     }
     properties
+}
+
+/// The fields of a class the program writes over an Objective-C class that
+/// meet a property requirement of a protocol it adopts: Swift's
+/// `var window: UIWindow?` in an application delegate, which `UIKit` reads
+/// with `window` and writes with `setWindow:`. Each is a getter and, unless
+/// the field is `readonly`, a setter the runtime calls, which read and write
+/// the field of the instance's state as the program's own `this.window` does.
+/// A field no protocol asks for is the program's alone, as Swift's
+/// non-`@objc` one is.
+fn objc_field_properties(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    class: NodeId,
+    shared: &Shared,
+    lowered: &mut Lowered,
+) -> Vec<super::ForeignMethod> {
+    let probe = FuncBuilder::probe(snapshot);
+    let Some(name) = foreign_class_name(snapshot, class) else { return Vec::new() };
+    let Some(&(index, class_ty)) = shared.hierarchy.objc_states.get(&name) else { return Vec::new() };
+    let mut methods = Vec::new();
+    for field in probe.children(class) {
+        if probe.kind_of(field) != Some(syntax::PROPERTY_DECLARATION) || is_static_member(snapshot, field) {
+            continue;
+        }
+        let Some(property) = probe.member_name(field) else { continue };
+        let Some(requirement) = probe.property_requirement(class, &property) else { continue };
+        let (getter, setter) = probe.property_selectors(requirement, &property);
+        let readonly = probe.node(field).modifiers.contains(nts_semantic_schema::DeclarationModifiers::READONLY);
+        for (selector, writes) in [(Some(getter), false), (setter.filter(|_| !readonly), true)] {
+            let Some(selector) = selector else { continue };
+            let mut builder = shared.builder(snapshot, foreign, Copy::default());
+            match builder.lower_objc_field_accessor(class, &name, (index, class_ty), (field, &property), writes) {
+                Ok((func, imp)) => {
+                    methods.push(super::ForeignMethod {
+                        dispatch: super::Dispatch::Selector(selector),
+                        function: func.name.clone(),
+                        signature: std::sync::Arc::new(imp),
+                    });
+                    lowered.program.funcs.push(func);
+                    collect_layouts(&mut lowered.program, builder.layouts);
+                }
+                Err(diagnostic) => {
+                    note_uncompiled(snapshot, &mut lowered.program, field, None, &diagnostic);
+                    lowered.diagnostics.push(diagnostic);
+                    break;
+                }
+            }
+        }
+    }
+    methods
 }
 
 /// The signals a class declares, read off its instance type's
@@ -15431,6 +15483,83 @@ impl<'a> FuncBuilder<'a> {
             self.terminate(Terminator::Return(Some(value)));
             Ok(self.finish(format!("{name}#get_{property}"), params, field_ty, origin, false))
         }
+    }
+
+    /// The getter (`setter` false) or setter the runtime calls for a field of
+    /// a class the program writes over an Objective-C class, which a protocol
+    /// it adopts asks for as a property: the field of the instance's state,
+    /// read and answered, or written. With the signature the entry point
+    /// takes it by, which is the property's.
+    fn lower_objc_field_accessor(
+        &mut self,
+        class: NodeId,
+        name: &str,
+        (index, class_ty): (usize, TypeId),
+        (field, property): (NodeId, &str),
+        setter: bool,
+    ) -> Result<(Func, super::native::FnPointer), Diagnostic> {
+        let origin = self.origin(field);
+        let pointee = instance_type_of(self.snapshot, class)
+            .and_then(|ty| super::native::pointer(self.snapshot, ty))
+            .ok_or_else(|| self.unsupported(class, "an Objective-C class with no handle type"))?;
+        let value = *self.snapshot.node_types.get(&field).ok_or_else(|| self.unrepresentable(field, "a field"))?;
+        let signature = if setter {
+            accessor_signature(None, Some(value), self.void_type()?)
+        } else {
+            accessor_signature(None, None, value)
+        };
+        let imp = super::native::imp_signature(self.snapshot, pointee.clone(), &signature)
+            .map_err(|why| self.unsupported(field, &format!("a field meeting a protocol's property requirement, whose {why}")))?;
+        if matches!(*imp.result, super::native::Type::Record(_)) {
+            return Err(self.unsupported(field, "a record field meeting a protocol's property requirement, which is answered by value"));
+        }
+        let layout = self.objc_state_layout(class, index, class_ty)?;
+        let at = layout
+            .index_of(property)
+            .ok_or_else(|| self.unsupported(field, &format!("`{property}`, which is not a field of the class's state")))?;
+        let field_ty = layout.fields[at as usize].ty.clone();
+        let instance = HirType::NativePointer(pointee);
+        let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
+        self.this = Some(receiver);
+        let mut params = vec![Param { name: "this".to_owned(), shape: ParamShape::Ordinary, ty: instance, origin: origin.clone(), known: Facts::TOP }];
+        let written = setter.then(|| {
+            params.push(Param { name: "value".to_owned(), shape: ParamShape::Ordinary, ty: field_ty.clone(), origin: origin.clone(), known: Facts::TOP });
+            self.push(OpKind::Param(1), field_ty.clone(), origin.clone())
+        });
+        let state_ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
+        let state = self.runtime_call("nts_objc_state", vec![receiver], state_ty, origin.clone());
+        let func = if let Some(written) = written {
+            self.returns = HirType::Void;
+            self.write_place(field, &Place::Field { object: state, field: at }, written)?;
+            self.terminate(Terminator::Return(None));
+            self.finish(format!("{name}#objc set {property}"), params, HirType::Void, origin, false)
+        } else {
+            let read = self.push(OpKind::FieldGet { object: state, field: at }, field_ty.clone(), origin.clone());
+            self.returns = field_ty.clone();
+            self.terminate(Terminator::Return(Some(read)));
+            self.finish(format!("{name}#objc get {property}"), params, field_ty, origin, false)
+        };
+        Ok((func, imp))
+    }
+
+    /// The property requirement named `name` of a protocol `class` adopts, or
+    /// one that protocol refines: `UIWindowSceneDelegate`'s `window`.
+    fn property_requirement(&self, class: NodeId, name: &str) -> Option<NodeId> {
+        let mut pending = self.objc_protocols(class);
+        let mut seen = rustc_hash::FxHashSet::default();
+        while let Some(protocol) = pending.pop() {
+            if !seen.insert(protocol) {
+                continue;
+            }
+            let found = self.children(protocol).into_iter().find(|member| {
+                self.kind_of(*member) == Some(syntax::PROPERTY_SIGNATURE) && self.member_name(*member).as_deref() == Some(name)
+            });
+            if found.is_some() {
+                return found;
+            }
+            pending.extend(super::native::implemented(self.snapshot, protocol).into_iter().filter(|base| self.in_objc_module(*base)));
+        }
+        None
     }
 
     /// `this.title`, where `title` is a child the receiver's class template
@@ -38600,10 +38729,20 @@ impl<'a> FuncBuilder<'a> {
     /// implements an optional requirement is its class's, at run time.
     fn objc_optional_call(&mut self, id: NodeId, (object, member): (NodeId, NodeId), selector: &str) -> Result<ValueId, Diagnostic> {
         let receiver = self.lower_expression(object)?;
-        let HirType::NativePointer(pointee) = self.values[receiver.0 as usize].ty.clone() else {
+        if !matches!(self.values[receiver.0 as usize].ty, HirType::NativePointer(_)) {
             return Err(self.unsupported(id, "an optional requirement of an Objective-C protocol on something that is not an object"));
-        };
+        }
         let origin = self.origin(id);
+        let present = self.responds_to(receiver, selector, origin);
+        self.lower_branching_value(id, present, Branch::MethodOn(receiver, object, member, None), Branch::Absent)
+    }
+
+    /// `[receiver respondsToSelector:@selector(selector)]`, which the runtime
+    /// answers `NO` for a nil receiver.
+    fn responds_to(&mut self, receiver: ValueId, selector: &str, origin: Origin) -> ValueId {
+        let HirType::NativePointer(pointee) = self.values[receiver.0 as usize].ty.clone() else {
+            unreachable!("`respondsToSelector:` is sent only to an object")
+        };
         let selector_pointee = super::native::Pointee::Opaque("objc_selector".into());
         let selector_value = self.push(
             OpKind::ObjcSelector { name: selector.to_owned() },
@@ -38617,12 +38756,11 @@ impl<'a> FuncBuilder<'a> {
             Some(super::native::Send { selector: "respondsToSelector:".to_owned(), class: None, super_of: None }),
             Vec::new(),
         );
-        let present = self.push(
+        self.push(
             OpKind::Call { callee: Callee::Native(std::sync::Arc::new(responds)), args: vec![receiver, selector_value], frame: None },
             HirType::Bool,
             origin,
-        );
-        self.lower_branching_value(id, present, Branch::MethodOn(receiver, object, member, None), Branch::Absent)
+        )
     }
 
     /// Whether `ty` declares `key` as a method *and* optionally.
@@ -39825,6 +39963,7 @@ impl<'a> FuncBuilder<'a> {
                 Ok(value)
             }
             Branch::Present(value) => self.narrowed(id, value),
+            Branch::ObjcGetter(receiver, object, property) => self.send_objc_getter(id, object, &property, Some(receiver)),
         }
     }
 
@@ -44591,16 +44730,19 @@ impl<'a> FuncBuilder<'a> {
     /// Swift's `dataSource?.tableView(table, numberOfRowsInSection: 0)`, a
     /// message to whatever object conforms.
     fn objc_protocol_member(&self, declaration: NodeId) -> bool {
-        if self.kind_of(declaration) != Some(syntax::METHOD_SIGNATURE) {
-            return false;
-        }
-        let mut owner = self.node(declaration).parent;
+        self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE) && self.declaring_protocol(declaration).is_some()
+    }
+
+    /// The Objective-C protocol a binding declares (`@ntsProtocol`) that
+    /// declares `member`, a method or a property requirement.
+    fn declaring_protocol(&self, member: NodeId) -> Option<NodeId> {
+        let mut owner = self.node(member).parent;
         while let Some(at) = owner.filter(|at| self.kind_of(*at).is_none()) {
             owner = self.node(at).parent;
         }
-        owner.is_some_and(|at| {
-            self.kind_of(at) == Some(syntax::INTERFACE_DECLARATION)
-                && self.node(at).native.as_ref().is_some_and(|native| native.protocol.is_some())
+        owner.filter(|at| {
+            self.kind_of(*at) == Some(syntax::INTERFACE_DECLARATION)
+                && self.node(*at).native.as_ref().is_some_and(|native| native.protocol.is_some())
         })
     }
 
@@ -46994,7 +47136,7 @@ impl<'a> FuncBuilder<'a> {
     fn read_objc_property(&mut self, id: NodeId, object: NodeId, property: &ObjcProperty, receiver: Option<ValueId>) -> Result<Option<ValueId>, Diagnostic> {
         // The access's type is the property's: the checker gives the member's
         // symbol none of its own.
-        let (Some(receiver_ty), Some(ty)) =
+        let (Some(_), Some(ty)) =
             (self.snapshot.node_types.get(&object).copied(), self.snapshot.node_types.get(&id).copied())
         else {
             return Ok(None);
@@ -47009,6 +47151,48 @@ impl<'a> FuncBuilder<'a> {
         if receiver.is_none() && self.node(property.declaration).native.as_ref().is_some_and(|native| native.symbol.is_some()) {
             return self.read_native_variable(id, property.declaration, ty).map(Some);
         }
+        if let Some(receiver) = receiver
+            && self.optional_requirement(property.declaration)
+        {
+            // Swift's `delegate?.window`, where `window` is an `optional`
+            // requirement: sent only to an object that implements it, and
+            // absent from one that does not.
+            let origin = self.origin(id);
+            let present = self.responds_to(receiver, &property.getter, origin);
+            return self
+                .lower_branching_value(id, present, Branch::ObjcGetter(receiver, object, property.clone()), Branch::Absent)
+                .map(Some);
+        }
+        self.send_objc_getter(id, object, property, receiver).map(Some)
+    }
+
+    /// Whether `declaration` is an `optional` property requirement of an
+    /// Objective-C protocol a binding declares: `window?: UIWindow | null`.
+    fn optional_requirement(&self, declaration: NodeId) -> bool {
+        self.kind_of(declaration) == Some(syntax::PROPERTY_SIGNATURE)
+            && self.children(declaration).iter().any(|child| self.kind_of(*child) == Some(syntax::QUESTION_TOKEN))
+            && self.declaring_protocol(declaration).is_some()
+    }
+
+    /// The getter of `property`, sent: to `receiver`, or to the class for a
+    /// class property.
+    fn send_objc_getter(&mut self, id: NodeId, object: NodeId, property: &ObjcProperty, receiver: Option<ValueId>) -> Result<ValueId, Diagnostic> {
+        let (Some(receiver_ty), Some(ty)) =
+            (self.snapshot.node_types.get(&object).copied(), self.snapshot.node_types.get(&id).copied())
+        else {
+            return Err(self.unrepresentable(id, "an Objective-C property"));
+        };
+        // An `optional` requirement's `?` adds an `undefined` the getter does
+        // not answer: the one absence is the branch around it, and the getter
+        // answers what the declaration writes, `UIWindow | null`.
+        let ty = if self.optional_requirement(property.declaration) {
+            self.children(property.declaration)
+                .last()
+                .and_then(|annotation| self.snapshot.node_types.get(annotation).copied())
+                .unwrap_or(ty)
+        } else {
+            ty
+        };
         let chained = self.without_chain_absence(id, ty);
         // The receiver is present where the getter is sent: `a?.b?.c` sends
         // `c` to `a.b` as a `B`, not as the `B | null | undefined` the
@@ -47020,7 +47204,7 @@ impl<'a> FuncBuilder<'a> {
         // In a chain, the getter's value is the property's type; the branch
         // around it makes the chain's.
         let typed = if chained == ty { None } else { self.represent(chained) };
-        self.finish_call_typed(id, callee, args, lent, Some(property.declaration), typed).map(Some)
+        self.finish_call_typed(id, callee, args, lent, Some(property.declaration), typed)
     }
 
     /// The value of the extern variable `declaration` names (`@ntsSymbol`),
@@ -55189,6 +55373,10 @@ enum Branch {
     /// What `a?.b` produces when `a` is absent -- and it is the *expression's*
     /// type rather than the member's, because the member is not read at all.
     Absent,
+    /// An optional property requirement's getter, sent to a receiver that
+    /// answered `respondsToSelector:` for it: inside the arm, so an object
+    /// that does not implement it is never sent it.
+    ObjcGetter(ValueId, NodeId, ObjcProperty),
     /// A member read from a receiver that is already lowered.
     ///
     /// The receiver is evaluated before the branch and read inside it, which is
@@ -55580,6 +55768,7 @@ fn counted_helper(element: &HirType, op: Counts) -> &'static str {
     }
 }
 
+#[derive(Clone)]
 struct ObjcProperty {
     declaration: NodeId,
     /// A class property, sent to the class.

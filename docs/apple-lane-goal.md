@@ -811,8 +811,23 @@ correctness does not depend on arm64 running by luck.
        `class_addProtocol` stubbed out, fails on that line.
      - `macos-window`'s controller now implements the generated
        `NSWindowDelegate`.
-     - Not yet: property requirements and class-side requirements. Both are
-       listed as not bound, with the reason.
+     - **Property requirements (2026-09-26).** Swift's `var window:
+       UIWindow?` in an application delegate. The binding writes a
+       protocol's property as a property signature under Swift's name, `?`
+       where Swift says `optional` and `readonly` where the header does. A
+       field of the adopting class meets it: the class registers a getter
+       and, unless the field is `readonly`, a setter, each reading or
+       writing the field of the instance's state. A field no protocol asks
+       for stays the program's alone, as a Swift property that is not
+       `@objc` does.
+       - Read through the protocol (`application.delegate?.window`), an
+         `optional` requirement is sent only to an object that answers
+         `respondsToSelector:` for it, and is absent from one that does not.
+       - `ios-list` reads its delegate's `window` back through UIKit, and an
+         adopter that does not implement it as absent, against Swift.
+       - Not yet: a block-typed requirement, a record-typed field meeting one,
+         and class-side requirements. Each is listed as not bound, or refused,
+         with the reason.
      - **Not GTK's `__c_implements`.** The two answer different questions.
        `@ntsProtocol` is an attribute naming a runtime protocol: which
        selectors a method is sent under, and what `class_addProtocol` adopts.
