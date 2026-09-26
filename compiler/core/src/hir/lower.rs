@@ -41035,6 +41035,31 @@ impl<'a> FuncBuilder<'a> {
     /// sit on every edge of the cycle it bounds. Hence
     /// [`Self::reason_without_a_leaf`], which never recurses, and one entry
     /// point here.
+    /// Why no copy can be made of this declaration, when none can.
+    ///
+    /// The three conditions `can_be_copied` tests, as sentences. It is a predicate
+    /// and this is its prose, kept adjacent so a condition added there is a
+    /// condition a reader here can see is missing.
+    ///
+    /// `None` where a copy *could* be made, which is the case where the leaf is
+    /// further down and the walk should keep going.
+    fn why_not_copyable(&self, declaration: NodeId) -> Option<&'static str> {
+        if self.kind_of(declaration) != Some(syntax::FUNCTION_DECLARATION) {
+            return Some("which is not a plain function, and a raising copy is made of those only");
+        }
+        if is_generic_function(self.snapshot, declaration) {
+            return Some("a generic, whose copy suffix already names its instantiation");
+        }
+        if self
+            .node(declaration)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        {
+            return Some("`async`, so its `throw` rejects the promise it returned rather than raising");
+        }
+        None
+    }
+
     fn the_leaf_that_cannot_be_carried(
         &self,
         declaration: NodeId,
@@ -41043,6 +41068,31 @@ impl<'a> FuncBuilder<'a> {
     ) -> Option<(String, String)> {
         if depth >= 64 || !seen.insert(declaration) {
             return None;
+        }
+        // **This declaration itself, when nothing about its *calls* is the
+        // problem.** A function that throws and cannot be copied is the leaf, and
+        // until now the walk looked only at what it called -- so it fell through
+        // to the loop, found every call carryable, and returned `None`. The caller
+        // then printed "a function that itself calls something whose `throw`
+        // cannot be carried" with nothing named, which is the sentence the React
+        // lane had on **nine** `try`s in `ReactFiberCommitEffects.ts` and could not
+        // bisect.
+        //
+        // Reproduced in eleven lines before this existed: a generic `boomGeneric<T>`
+        // that throws, called through one plain function inside a `try`. Its
+        // suffix is spoken for, so no copy is made, and no arm of
+        // `reason_without_a_leaf` covers "not copyable" -- that function answers
+        // for the *shape of the call*, and this is a fact about the callee.
+        // No "does it throw" test, deliberately: every declaration this walk is
+        // handed is the callee of a call `calls_compiled_code` already said can
+        // raise -- the loop below guards on it, and so does the caller. So "no
+        // copy can be made of it" is on its own the reason the chain stops here.
+        if let Some(why) = self.why_not_copyable(declaration) {
+            return Some((
+                self.declared_name(declaration)
+                    .unwrap_or_else(|| "the callee".to_owned()),
+                why.to_owned(),
+            ));
         }
         for call in calls_in_the_body_of(self, declaration) {
             if self.has_a_raising_copy(call) || !self.calls_compiled_code(call) {
