@@ -18,7 +18,8 @@
 // - `vector`: a class's other interface, by `QueryInterface` with the IID the
 //   Windows Runtime computes for `IVector<IJsonValue>` -- `as_IVector` on a
 //   `JsonArray`, whose own interface is `IJsonArray`. A wrong IID ends the
-//   process naming it rather than printing anything.
+//   process naming it rather than printing anything. Then `for...of` over
+//   another's, summing its numbers.
 // - `built`: a runtime class made by its default constructor
 //   (`JsonObject.create()`, `ActivateInstance` then its default interface),
 //   filled, and read back through another of its interfaces.
@@ -32,8 +33,10 @@
 // - `global`: a handle held at module scope, read from a function (`held`).
 // - `released`, reported after `run` returns: 2 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
-//   call that was handed it -- and 37 under `--rc` (`expected-rc.txt`),
-//   those two and one for each object handed over, among them: the six
+//   call that was handed it -- and 42 under `--rc` (`expected-rc.txt`),
+//   those two and one for each object handed over, among them: the five
+//   the `for...of` walk takes -- the parsed array, its `IVector`, and the
+//   three values `GetAt` answers (37 before the walk) -- the six
 //   releases of `erased`'s one object -- `seven`'s own, `back`'s own, the
 //   erased copy `map.set` is passed, the erased value `get` hands back, and
 //   the map's entry and the array's element, each given back when its
@@ -249,7 +252,12 @@ function run(): string {
   const first = languages.getAt(0);
   const tags = (languages.size >= 1 ? "some" : "none") + "," + (first.includes("-") ? "tagged" : first);
   const vector = JsonArray.Parse("[1, 2.5, true]").as_IVector();
-  const items = String(vector.size) + ":" + String(vector.getAt(1).GetNumber());
+  // Walked by `for...of`, as an array is: `GetAt(i)` while `i < get_Size()`.
+  let total = 0;
+  for (const value of JsonArray.Parse("[1, 2.5, 4]").as_IVector()) {
+    total += value.GetNumber();
+  }
+  const items = String(vector.size) + ":" + String(vector.getAt(1).GetNumber()) + ":" + String(total);
   const built = JsonObject.create();
   built.SetNamedValue("x", JsonValue.CreateNumberValue(3));
   const shown = built.as_IJsonValue().Stringify();

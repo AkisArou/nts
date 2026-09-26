@@ -44,8 +44,9 @@ use crate::origin::Origin;
 /// and `gtype`, which landed at 29 without one. 31: `SourceFile::rewritten_by`,
 /// a file a source transform rewrote before it was read. 32: `via`, the
 /// interface a Windows Runtime class's member is called through. 33:
-/// `listener`, a Windows Runtime class's `addEventListener`.
-pub const SCHEMA_VERSION: u32 = 33;
+/// `listener`, a Windows Runtime class's `addEventListener`. 34: `iterate`, a
+/// Windows Runtime vector's `for...of`.
+pub const SCHEMA_VERSION: u32 = 34;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -818,6 +819,12 @@ pub struct NativeAttributes {
     /// token the source answers for the removal.
     #[serde(default)]
     pub listener: Option<String>,
+    /// `@ntsIterate get_Size GetAt`, on the `[Symbol.iterator]` a Windows
+    /// Runtime vector declares (`IVector<T>`, `IVectorView<T>`): `for...of`
+    /// walks it by count, `GetAt(i)` while `i < get_Size()`, each a method of
+    /// the same instantiation -- no iterator object, and no query.
+    #[serde(default)]
+    pub iterate: Option<String>,
     /// `@ntsVfunc GtkButtonClass clicked`: a `GObject` virtual function -- the
     /// member `clicked` of the class struct `GtkButtonClass` -- declared as
     /// `vfunc_clicked(this: GtkButton)`, which a subclass the program writes

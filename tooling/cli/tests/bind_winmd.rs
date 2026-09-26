@@ -206,6 +206,11 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         collections.contains("     * @ntsVtable 13 Append\n     * @ntsHresult\n     */\n    append(this: IVector<T>, value: T): void;"),
         "IVector<T> has no `append`"
     );
+    // And it is walked by count, `for (const x of list)`.
+    assert!(
+        collections.contains("     * @ntsIterate get_Size GetAt\n     */\n    [Symbol.iterator](): Iterator<T>;"),
+        "a vector is not iterable"
+    );
     assert!(refused.is_empty(), "Windows.Data.Json refused something:\n{refused}");
 }
 

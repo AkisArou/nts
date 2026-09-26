@@ -845,6 +845,11 @@ const GENERIC: &str = r#"declare module "winrt:Test.Generic" {
   import type { ComClass, IInspectable } from "winrt:types";
   export interface IVectorMethods<T> {
     /**
+     * @ntsVtable 6 GetAt
+     * @ntsHresult
+     */
+    GetAt(this: IVector<T>, index: CNumber<"uint32">): T;
+    /**
      * @ntsVtable 7 get_Size
      * @ntsHresult
      */
@@ -860,6 +865,10 @@ const GENERIC: &str = r#"declare module "winrt:Test.Generic" {
      * @ntsGet 7 get_Size
      */
     readonly size: CNumber<"uint32">;
+    /**
+     * @ntsIterate get_Size GetAt
+     */
+    [Symbol.iterator](): Iterator<T>;
   }
   export type IVector<T> = ComClass<"Test_IVector"> & IVectorMethods<T> & IVectorMembers<T>;
   export type Things = IVector<IInspectable>;
@@ -883,4 +892,26 @@ fn a_generic_interfaces_surface_is_called_on_its_own_table() {
     assert!(text.contains("[7])(") && text.contains("[6])("), "not the slots:\n{text}");
     assert!(!text.contains("nts_com_query("), "an instantiation is asked for itself:\n{text}");
     windows_syntax(&dir, &c);
+}
+
+/// `for (const x of list)` over a vector: `GetAt(i)` while `i < get_Size()`,
+/// the size asked each turn as an array's `length` is -- two slot calls, no
+/// iterator object and no query. `Array.from(list)` walks it the same way.
+/// (`[...list]` is a copy, which only an array has.)
+#[test]
+fn a_vector_is_walked_by_count_through_its_own_table() {
+    let source = "import type { IInspectable } from \"winrt:types\";\nimport type { IVector } from \"winrt:Test.Generic\";\nexport function count(v: IVector<IInspectable>): number {\n  let n = 0;\n  for (const item of v) {\n    if (item !== null) n += 1;\n  }\n  return n;\n}\nexport function copied(v: IVector<IInspectable>): number {\n  return Array.from(v).length;\n}\n";
+    let Some((dir, prepared)) = prepare_with("vector-walk", GENERIC, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let text = c.writer.text();
+    assert!(text.contains("[7])(") && text.contains("[6])("), "not get_Size and GetAt:\n{text}");
+    assert!(!text.contains("nts_com_query("), "a vector is asked for another interface to be walked:\n{text}");
+    windows_syntax(&dir, &c);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 }

@@ -472,6 +472,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let activate = leading_tag(source, "@ntsActivate");
     let via = leading_tag(source, "@ntsVia");
     let listener = leading_tag(source, "@ntsListener");
+    let iterate = leading_tag(source, "@ntsIterate");
     let vfunc = leading_tag(source, "@ntsVfunc");
     let gtype = leading_tag(source, "@ntsGType");
     let composable = leading_tag(source, "@ntsComposable");
@@ -500,6 +501,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         && activate.is_none()
         && via.is_none()
         && listener.is_none()
+        && iterate.is_none()
         && vfunc.is_none()
         && gtype.is_none()
         && composable.is_none()
@@ -532,6 +534,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         activate,
         via,
         listener,
+        iterate,
         vfunc,
         gtype,
         composable,

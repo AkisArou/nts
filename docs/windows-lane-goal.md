@@ -376,7 +376,11 @@ Application.Start(() => { new App(); });
      weak reference to each object, so a new object made at a dead one's
      address adds its own listener rather than finding the old entry.
      winui-hello's `rebuilt` arm measured 8 of 20 skipped without it.
-   - Not yet: `for…of` over an `IIterable<T>`, static properties, struct
+   - **`for…of` over a vector:** `for (const child of panel.children)`,
+     and `Array.from(list)`, walked by count as an array is: `GetAt(i)`
+     while `i < get_Size()`, with no iterator object and no query
+     (`@ntsIterate` on the vector's `[Symbol.iterator]`).
+   - Not yet: `for…of` over an `IIterable<T>` that is not a vector, static properties, struct
      fields (`size.Width`), strings boxed where a slot takes `IInspectable`,
      and `instanceof` of a COM value in `unknown`. Also started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`

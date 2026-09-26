@@ -469,6 +469,13 @@ impl Writer<'_> {
                 out.push_str(&text);
             }
         }
+        // A vector -- `IVector<T>`, `IVectorView<T>` -- is walked by count, as
+        // an array is: `for (const child of panel.children)`.
+        if let (Some(_), Some((_, at))) = (slot_of("get_Size"), slot_of("GetAt"))
+            && let Ok(element) = self.spell(&at.signature(&self.signature_arguments()).return_type, false)
+        {
+            let _ = writeln!(out, "    /**\n     * @ntsIterate get_Size GetAt\n     */\n    [Symbol.iterator](): Iterator<{element}>;");
+        }
         out
     }
 
