@@ -3,10 +3,9 @@
 # run it (see src/main.ts): each logged line is one thing the reconciler will
 # ask of the host, checked on real widgets. `G_DEBUG=fatal-criticals` turns
 # any GTK complaint -- a widget parented twice, a source removed twice -- into
-# an end. It builds with reference counting, as the GTK examples do: the
-# default build takes no reference to a GObject it holds, so a widget GTK lets
-# go of is finalized while a node still names it (a ListBox move does). Further
-# arguments after the output directory go to `nts build`.
+# an end. It builds with reference counting, as the GTK examples do; the
+# default build passes too (since d8889f02 it sinks every widget it makes).
+# Further arguments after the output directory go to `nts build`.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 out=${1:-"$root/target/react-native-gtk"}
