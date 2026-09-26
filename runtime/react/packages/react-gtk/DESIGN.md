@@ -64,7 +64,11 @@ reads it back).
   `insert_child_after(child, before.get_prev_sibling())`, where a null
   sibling prepends.
 - `GtkWindow`/`GtkApplicationWindow`: a single `set_child`.
-- `GtkListBox`: `append`, `remove`, and `insert` at the index of `before`'s row.
+- `GtkListBox` and `GtkFlowBox`: `append`, `remove`, and `insert` at an index.
+  The node keeps its children in React's order, so the index is `before`'s
+  place in it. A list wraps a child that is not a row in a row it makes, and
+  what the list holds for each (the child or its row) is what moves or goes.
+  A move takes the child back out of that row (`set_child(null)`) first.
 
 A widget with no child protocol refuses children at `appendInitialChild`,
 with a message naming the widget.
@@ -130,7 +134,7 @@ Regenerate after a GTK update, from a native program's generated bindings:
    natively.
 2. Props and signals generated from GIR for every widget class. Done for
    props with scalar values and signals whose handlers return nothing.
-3. `ListBox`, `Entry` with controlled `text`, and the rest of the common
-   widgets.
+3. `ListBox` (done, with `FlowBox`), `Entry` with controlled `text`, and the
+   rest of the common widgets.
 4. A benchmark against GJS on the same app, which the GTK lane's goal already
    names.
