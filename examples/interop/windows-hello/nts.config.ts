@@ -4,7 +4,7 @@
 // (mingw ABI, through zig) and run on the lane's VM (`tooling/windows/run.sh`);
 // what they print must be byte-identical to what Linux printed. aarch64 only
 // links: there is no arm64 Windows to run it on, and that gap is written down.
-import { app, defineConfig, sources, target } from "@nts/config";
+import { app, defineConfig, target } from "@nts/config";
 
 export default defineConfig({
   products: {
@@ -29,5 +29,4 @@ export default defineConfig({
       ],
     }),
   },
-  native: [sources({ dir: "native" })],
 });

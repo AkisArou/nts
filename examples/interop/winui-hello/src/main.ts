@@ -46,7 +46,6 @@
 //   listener ran once: added twice, it is added once, and a second listener,
 //   removed, adds nothing.
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
-import { report } from "c:report";
 import type { ByValue } from "c:types";
 import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
@@ -187,7 +186,7 @@ class App extends Application {
     // A record written as its fields, where the call takes one by value.
     button.measure({ Width: 1000, Height: 1000 });
     const desired = button.desiredSize.Width > 0;
-    report(
+    console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
         " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " rebuilt=" + String(this.rebuilt()),
@@ -205,4 +204,4 @@ function pressOnce(listener: () => void): void {
 Application.start(() => {
   new App();
 });
-report("after");
+console.log("after");

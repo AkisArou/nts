@@ -2,8 +2,8 @@
 # Build one TypeScript program for Linux and for Windows (x86_64 and arm64) from
 # this Linux box, and hold every build to the same output.
 #
-# `expected.txt` is what node prints for the same source, with `report` as
-# `console.log`. What each arm asserts:
+# `expected.txt` is what node prints for the same source. What each arm
+# asserts:
 #
 # - **Linux:** runs, and prints `expected.txt` byte for byte.
 # - **Control:** the comparison is fed a one-line change of `expected.txt` and

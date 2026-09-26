@@ -1,5 +1,5 @@
 // A Win32 window from TypeScript, built here and run on the lane's Windows.
-import { app, defineConfig, sources, target } from "@nts/config";
+import { app, defineConfig, target } from "@nts/config";
 
 export default defineConfig({
   products: {
@@ -16,5 +16,4 @@ export default defineConfig({
       targets: [target.windows({ arch: "x86_64", backend: "llvm" })],
     }),
   },
-  native: [sources({ dir: "native" })],
 });

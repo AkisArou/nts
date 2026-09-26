@@ -5,7 +5,7 @@
 // 64-bit integer arithmetic, hash-map iteration order, and the event loop
 // (a timer and a promise continuation, which only a working libuv host runs
 // in this order -- on Windows that host is IOCP). The same text is the claim.
-import { report } from "c:report";
+
 
 const lines: string[] = [];
 
@@ -40,7 +40,7 @@ later();
 setTimeout(() => {
   lines.push("timer");
   for (const line of lines) {
-    report(line);
+    console.log(line);
   }
 }, 1);
 lines.push("sync");

@@ -15,7 +15,6 @@
 // which Win64 passes as one 8-byte integer. (290, 10) is inside the client
 // area and (10, 290) below it, so a point that reached C with its fields
 // swapped, or as a pointer, answers `hit=0 miss=0` instead.
-import { report } from "c:report";
 import { local } from "c:memory";
 import { malloc } from "c:stdlib";
 import type { ConstPtr, c_int, c_long32, c_uint, c_uint16, c_uint64 } from "c:types";
@@ -85,13 +84,13 @@ function main(): void {
   cls[0].hInstance = instance;
   cls[0].lpszClassName = name;
   if (RegisterClassExW(cls) === 0) {
-    report("RegisterClassExW failed");
+    console.log("RegisterClassExW failed");
     return;
   }
   const hwnd = CreateWindowExW(WINDOW_EX_STYLE.WS_EX_LEFT, "NtsWindow", "nts", WINDOW_STYLE.WS_OVERLAPPED,
     0 as c_int, 0 as c_int, 320 as c_int, 240 as c_int, null, null, instance, null);
   if (hwnd === null) {
-    report("CreateWindowExW failed");
+    console.log("CreateWindowExW failed");
     return;
   }
   const inside = local<POINT>();
@@ -109,7 +108,7 @@ function main(): void {
     TranslateMessage(msg);
     DispatchMessageW(msg);
   }
-  report("created=" + String(created) + " destroyed=" + String(destroyed) + " by=" + closedBy + " hit=" + String(hit) + " miss=" + String(miss));
+  console.log("created=" + String(created) + " destroyed=" + String(destroyed) + " by=" + closedBy + " hit=" + String(hit) + " miss=" + String(miss));
 }
 
 main();

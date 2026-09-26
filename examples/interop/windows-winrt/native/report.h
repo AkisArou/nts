@@ -6,7 +6,6 @@
 #include <stdbool.h>
 
 // Prints `line` and a newline to stdout.
-void report(const char *line);
 
 // How many runtime classes the Windows Runtime has activated so far:
 // `nts_winrt_activations`, which a cache that never hit would count up.

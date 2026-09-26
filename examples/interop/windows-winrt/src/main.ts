@@ -65,7 +65,6 @@ import {
   process_cpu_ms,
   quit_message_loop_after,
   releases,
-  report,
   run_message_loop,
 } from "c:report";
 // Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
@@ -231,9 +230,9 @@ function throwing(): void {
   reference.add_Closed(() => {
     throw new Error("the handler failed");
   });
-  report("before");
+  console.log("before");
   reference.as_IClosable().Close();
-  report("after");
+  console.log("after");
 }
 
 // A handle at module scope: a global the module's initializer assigns and a
@@ -282,11 +281,11 @@ if (asked("throw")) {
 // Before, each ended the process by name.
 function threaded(): void {
   invoke_elsewhere((sender) => {
-    report("carried " + String(sender.GetNumber()));
+    console.log("carried " + String(sender.GetNumber()));
   }, JsonValue.Parse("7"));
-  report("returned");
+  console.log("returned");
   setTimeout(() => {
-    report("delegates=" + String(delegates()));
+    console.log("delegates=" + String(delegates()));
   }, 1000);
 }
 
@@ -361,7 +360,7 @@ async function awaited(): Promise<string> {
 }
 
 async function reportAwaited(): Promise<void> {
-  report(await awaited());
+  console.log(await awaited());
 }
 
 // Run as `winrt pumped`: the same carried call, inside a Win32 message loop
@@ -376,13 +375,13 @@ async function reportAwaited(): Promise<void> {
 // milliseconds idle, against the whole two seconds spinning.
 function pumped(): void {
   invoke_elsewhere((sender) => {
-    report("carried " + String(sender.GetNumber()));
+    console.log("carried " + String(sender.GetNumber()));
   }, JsonValue.Parse("7"));
   quit_message_loop_after(2000 as c_uint);
   const before = process_cpu_ms();
   run_message_loop();
   const spent = process_cpu_ms() - before;
-  report("left the loop, " + (spent < 500 ? "idle" : "spinning: " + String(Math.round(spent)) + " ms"));
+  console.log("left the loop, " + (spent < 500 ? "idle" : "spinning: " + String(Math.round(spent)) + " ms"));
 }
 
 if (asked("pumped")) {
@@ -393,5 +392,5 @@ if (asked("pumped")) {
   threaded();
 } else {
   const line = run();
-  report(line + " released=" + String(releases()) + " delegates=" + String(delegates()));
+  console.log(line + " released=" + String(releases()) + " delegates=" + String(delegates()));
 }

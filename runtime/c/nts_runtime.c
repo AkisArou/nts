@@ -4892,6 +4892,26 @@ NtsString *nts_value_inspect(NtsValue value) {
   return nts_value_to_string(value);
 }
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+
+/* Windows opens stdout and stderr in text mode, which writes each `\n` as
+ * `\r\n`; node writes `\n` on every platform, so a line must be the same
+ * bytes on Windows as on Linux. Binary mode before `main`, for every program.
+ * A program with no console -- a GUI one nothing redirected -- has no
+ * descriptor to set (`_fileno` answers a negative one, and `_setmode` of it
+ * ends the process through the CRT's invalid-parameter handler). */
+__attribute__((constructor)) static void nts_stdio_binary(void) {
+  int descriptors[] = {_fileno(stdout), _fileno(stderr)};
+  for (size_t at = 0; at < sizeof descriptors / sizeof *descriptors; at++) {
+    if (descriptors[at] >= 0) {
+      _setmode(descriptors[at], _O_BINARY);
+    }
+  }
+}
+#endif
+
 void nts_console_write(const NtsString *line, bool to_stderr) {
   FILE *stream = to_stderr ? stderr : stdout;
   /* ASCII as it is stored, U+0000 included: the common line costs a scan and
