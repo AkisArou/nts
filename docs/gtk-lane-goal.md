@@ -571,6 +571,50 @@ check behind it, and needs one.
   and values.
 - Cycles through a GObject (below).
 
+### Signals a class declares
+
+GJS's `Signals`, typed from one declaration:
+
+```ts
+class Tally extends GtkButton<{ incremented: [by: number]; renamed: [to: string, from: string] }> {
+  bump(by: number): void { this.emit("incremented", by); }
+}
+tally.connect("incremented", (self, by) => { /* self: Tally, by: number */ });
+```
+
+- **Typing.** Each binding class's constructor is generic in the signals a
+  subclass adds, `new <Sig extends SignalMap = {}>(props?): Signalled<X,
+  Sig>`, which intersects `WithSignals<Sig>` (`c:types`) into the instance
+  type. The intersection makes its `connect`/`emit` overloads beside the
+  binding's own, so a name or argument the map does not declare is the
+  checker's error, and a plain `new GtkButton()` reads as before. Probed
+  first against the real binding shapes; a merged `interface` (TS2320) and a
+  `this`-indexed map (deferred inside the class) were the two that failed.
+- **Registration.** The map survives into the structural snapshot as the
+  phantom `__c_signals`, read into `ForeignClass::signals`. Each backend adds
+  them to the class's `GType` the moment it is registered
+  (`nts_gobject_add_signal`: `g_signal_newv`, the generic marshaller). A
+  parameter is a `number` (`G_TYPE_DOUBLE`), a `boolean`, a `string` or a
+  GObject; anything else is refused by name. Only a class over a binding's
+  declares signals: one over the program's own inherits its parent's.
+- **emit** is a call of `nts_gobject_emit_{kinds}__{name}`, which each
+  backend defines as `g_signal_emit` by id, looked up on the instance's type
+  once per thunk and cached. No name is parsed per emit, and the program
+  makes no variadic call.
+- **connect** is `nts_gobject_connect`, as for a binding's signal, with the
+  instance typed `void *` at every call, as the C function takes it.
+- **Strings in a handler.** A callback bridge takes a `string` parameter: C's
+  lent `const char *`, copied in for the call (NULL as `null`) and released
+  after. The binder now binds a GObject signal carrying `utf8`: in gtk-gir's
+  binding set the "a callback taking or returning a string" refusals went
+  57 -> 15 (`GSettings::changed`, `GActionGroup`'s, `GtkLabel::activate-link`,
+  `GtkEntryBuffer::inserted-text` ...). The rest are non-signal callbacks
+  whose typedefs the witness compares exactly, and ones returning a string.
+- Witnesses: gtk-subclass's `tally` arm (`tally +2=2+3=5 a>b on kid`) and
+  gtk-gir's `inserted 0:x:1`, C and LLVM, plain and `--rc`. Control: with the
+  registration disabled the C product dies on GTK's critical; the previous
+  binary does not typecheck `inserted-text` (TS2769).
+
 ### A handle where any value may go
 
 `unknown`, an `unknown[]`, a `Map`'s key or value hold a GObject as the value
@@ -902,8 +946,8 @@ third family beside `Objc` and `Com`.
   `instance_init` and released in `finalize`, which chains up. The state
   object is a holder node for the cycle collector, so a closure a subclass
   keeps in a field is traced the way a connected handler already is.
-- An extension for what only GObject declares in `class_init`: signals
-  (`g_signal_new`, typed from a static `signals` table) and properties
+- An extension for what only GObject declares in `class_init`: signals,
+  built (below, "Signals a class declares"); properties
   (`g_object_class_install_property`), later.
 
 **What each backend emits for one class:**
