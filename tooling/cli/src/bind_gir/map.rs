@@ -569,6 +569,15 @@ fn method_of(callable: &Callable, parameters: &[(String, Mapped)]) -> Option<(St
     let (_, instance) = parameters.first()?;
     match &instance.shape {
         Shape::Handle { class, nullable: false } => Some((class.clone(), identifier(&callable.name))),
+        // An instance C takes as `gpointer`, `Erased<GObject>`: a method all
+        // the same, as a signal's `connect` is -- `source.bind_property(...)`
+        // is `g_object_bind_property(source, ...)`.
+        Shape::Other => instance
+            .ts
+            .strip_prefix("Erased<")
+            .and_then(|rest| rest.strip_suffix('>'))
+            .filter(|class| is_type_name(class))
+            .map(|class| (class.to_owned(), identifier(&callable.name))),
         _ => None,
     }
 }

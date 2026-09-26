@@ -161,13 +161,25 @@ fn accessor(out: &mut String, own: &[&Function], property: &str, getter: Option<
     if let Some((_, name)) = set.and_then(|f| f.method.as_ref()) {
         tags.push(format!("@ntsSet {name}"));
     }
-    let _ = writeln!(out, "    /**");
-    for tag in tags {
-        let _ = writeln!(out, "     * {tag}");
+    let doc = {
+        let mut doc = String::from("    /**\n");
+        for tag in &tags {
+            let _ = writeln!(doc, "     * {tag}");
+        }
+        doc.push_str("     */\n");
+        doc
+    };
+    // Read as the getter answers and written as the setter takes, where the
+    // two differ -- `string | null` read, `string` written: an accessor
+    // pair, each carrying both tags, so `null` is not assigned and the
+    // property is still assignable.
+    if !assignable && let Some(set) = set {
+        let written = &set.parameters[1].1.ts;
+        let _ = write!(out, "{doc}    get {property}(): {ts};\n{doc}    set {property}(value: {written});\n");
+        return;
     }
-    let _ = writeln!(out, "     */");
     let readonly = if assignable { "" } else { "readonly " };
-    let _ = writeln!(out, "    {readonly}{property}: {ts};");
+    let _ = writeln!(out, "{doc}    {readonly}{property}: {ts};");
 }
 
 /// What a property is on its class, once its methods are known: its type, the

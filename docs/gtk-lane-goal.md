@@ -844,6 +844,24 @@ failed to type-check: the only constructor that qualified was
   stateful action toggled through the application, a `GMenu`, an
   accelerator and a `GtkCssProvider`.
 
+### A property read one way and written another; a method on `gpointer`
+
+- **Accessor pairs.** A property whose getter answers `string | null`
+  beside a setter taking `string` was `readonly`, because one type would let
+  `null` be assigned. `stack.visible_child_name = "x"` did not type-check.
+  It is now an accessor pair, `get x(): string | null; set x(value:
+  string);` (TypeScript 5.1's unrelated accessor types), each side carrying
+  both `@ntsGet` and `@ntsSet`. That covers 57 properties in Gtk-4.0's
+  closure.
+- **`Erased` receivers.** A method whose instance C takes as `gpointer`
+  (`Erased<GObject>`) was bound only as a function: `g_object_bind_property`
+  existed, `source.bind_property(...)` did not. It is now a method, as a
+  signal's `connect` already was.
+- Witness: gtk-widgets, C and LLVM, plain and `--rc`. It has a stack and
+  switcher, a grid, a spin button bound to a label, and `notify::`
+  handlers on a switch and a drop-down. The previous binder does not
+  type-check it (TS2339 `bind_property`, TS2540 `visible_child_name`).
+
 ### libadwaita, and what a props type says
 
 Adw-1 binds from GIR like any other namespace (12,342 functions), and

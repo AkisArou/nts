@@ -36,6 +36,7 @@
     "gtk-cycles/nts.config.ts",
     "gtk-actions/nts.config.ts",
     "gtk-list/nts.config.ts",
+    "gtk-widgets/nts.config.ts",
     "gtk-subclass/nts.config.ts",
     "gtk-values/nts.config.ts",
     "gtk-notes/nts.config.ts",
