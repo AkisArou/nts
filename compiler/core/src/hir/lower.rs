@@ -34634,6 +34634,32 @@ impl<'a> FuncBuilder<'a> {
         Ok(Some(object))
     }
 
+    /// A type reached where a layout is wanted, that the frontend did not expand.
+    ///
+    /// **It names the type, and that is the whole of the change.** One sentence was
+    /// carrying three unlike causes: over `runtime/node/http` alone it is `this`
+    /// standing for a class (`NodeError`, `UVAddressError`, `UVExceptionError`,
+    /// `ReadableState`) at four sites and an uninstantiated type parameter `T` at
+    /// four more -- a polymorphic receiver and a missing copy, which are different
+    /// work with different fixes.
+    ///
+    /// Found because the largest of them **does not reduce**. `fatalError` in
+    /// `internal/async-hooks.ts` refuses here and 44 functions in that module stand
+    /// on it -- every `catch` body that calls it -- while five arms of the same
+    /// narrowing compiled cleanly in a six-line fixture, each answering a
+    /// *different* sentence. With the type in the message the answer arrived in one
+    /// command: `this`, which stands for `NodeError`. Without it there is nothing to
+    /// bisect from, in a file where several types could be the one meant.
+    fn not_decomposed(&self, id: NodeId, ty: TypeId) -> Diagnostic {
+        self.unsupported(
+            id,
+            &format!(
+                "an object type that was not decomposed ({})",
+                describe(self.snapshot, ty)
+            ),
+        )
+    }
+
     fn absent_member(&self, id: NodeId, ty: TypeId, member: &str) -> Diagnostic {
         let on_an_error = named(self.snapshot, ty).is_some_and(super::builtin::is_error)
             || self.provided_error_base(ty).is_some();
@@ -35531,7 +35557,7 @@ impl<'a> FuncBuilder<'a> {
             return Ok(layout);
         }
         let TypeKind::Object { properties } = &record.kind else {
-            return Err(self.unsupported(id, "an object type that was not decomposed"));
+            return Err(self.not_decomposed(id, ty));
         };
         // Cloned so the borrow of the snapshot ends here: `fields_of` builds
         // the layouts of the object types its fields hold, which needs `&mut`.
