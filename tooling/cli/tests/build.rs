@@ -4360,15 +4360,18 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
         stdout
     };
     let build = || build_with(Path::new(env!("CARGO_BIN_EXE_nts")));
-    // The store's entries, each `identity/key` with the time its manifest was
-    // written: an entry made again is a new key, or the same key rewritten.
+    // The store's entries, each `identity/version/inputs` with the time its
+    // manifest was written: an entry made again is a new key, or the same
+    // key rewritten.
     let entries = || -> Vec<(std::path::PathBuf, std::time::SystemTime)> {
         let mut found = Vec::new();
-        for identity in std::fs::read_dir(&store).into_iter().flatten().flatten() {
-            for key in std::fs::read_dir(identity.path()).into_iter().flatten().flatten() {
-                let manifest = key.path().join("manifest.json");
-                if let Ok(modified) = std::fs::metadata(&manifest).and_then(|m| m.modified()) {
-                    found.push((key.path(), modified));
+        let children = |dir: &Path| std::fs::read_dir(dir).into_iter().flatten().flatten().map(|entry| entry.path());
+        for identity in children(&store) {
+            for version in children(&identity) {
+                for key in children(&version) {
+                    if let Ok(modified) = std::fs::metadata(key.join("manifest.json")).and_then(|m| m.modified()) {
+                        found.push((key, modified));
+                    }
                 }
             }
         }

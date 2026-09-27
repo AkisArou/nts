@@ -307,19 +307,26 @@ typecheck, and a test of the binder's says so (Apple's is
     identity()   what it generates, as one line -- the platform, the SDK,
                  the deployment target -- which names the store's directory
     version()    the generator's own version (Apple's: a hash of its source),
-                 which keys the store, so an older generator's packages are
-                 replaced rather than kept beside the new
+                 which names a directory beside other versions': each
+                 worktree's `nts` is its own version, so one version's
+                 packages stay while builds use them, and go after a week
+                 idle
     inputs()     the files that decide the output -- an SDK's settings, the
                  symbol graphs, a lockfile -- which key the store and which a
                  watcher watches
     generate()   the packages, each with its surface and its values file
 
 `nts-surfaces` holds the rest, once: the `Store`, which generates only when
-the key changes and writes a set whole or not at all, and `link`.
+the key changes and writes a set whole or not at all, and `link`. Its
+directory is `<identity>/<version>/<inputs>`: a version's entry for inputs
+that have since changed goes at once, and another version's only once no
+build has used it for a week. Pruning every other entry of an identity,
+as it first did, made two binaries on one machine evict each other's
+packages on every build and leave each other's projects linked to nothing.
 
 **Where packages come from: two modes, one layout.** Published to npm where the
 inputs may be redistributed; generated locally, once per SDK, into
-`~/.cache/nts/types/<identity>/<key>` and linked into the project, where
+`~/.cache/nts/types/<identity>/<version>/<inputs>` and linked into the project, where
 they may not. Which is which is read from each input's licence, not assumed:
 GIR and Win32 metadata are likely publishable; Apple's SDKs, the Windows SDK's
 WinRT metadata and the Windows App SDK are local until their terms are read. So
