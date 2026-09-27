@@ -173,6 +173,9 @@ export function hideInstance(instance: HostNode): void {
   instance.setVisible(false);
 }
 export function hideTextInstance(_textInstance: HostNode): void {}
+// Shown again, a widget is as visible as its own props say, which its node
+// holds (WidgetNode.setVisible); a `visible` React set while it was hidden
+// waited for this.
 export function unhideInstance(instance: HostNode, _props: Props): void {
   instance.setVisible(true);
 }

@@ -11,7 +11,9 @@
 //   inserted  a Label inserted before the Button, in GTK's own child order
 //   moved     the Button moved before the first Label: a reorder, not an add
 //   removed   a Label removed
-//   hidden    hidden and shown again, as Suspense does
+//   hidden    hidden and shown again, as Suspense does; a widget whose
+//             `visible` is false stays hidden when shown again, and one made
+//             visible while React hides it waits until React shows it
 //   reset     removing a prop restores GTK's default, not the last value; a
 //             removed handler stops firing; text children become a Button's
 //             label in the same update that removes its `label` prop
@@ -275,7 +277,18 @@ function main(): void {
   hideInstance(button);
   const hidden = widget(button).get_visible();
   unhideInstance(button, secondProps);
-  react_gtk_log("hidden " + String(hidden) + " " + String(widget(button).get_visible()));
+  // A widget the app hides stays hidden when React shows it again, and one
+  // the app shows while React hides it waits for React.
+  const quiet = createInstance("GtkLabel", { visible: false }, container, 0, {});
+  hideInstance(quiet);
+  unhideInstance(quiet, { visible: false });
+  let suspended = String(widget(quiet).get_visible());
+  hideInstance(quiet);
+  commitUpdate(quiet, "GtkLabel", { visible: false }, { visible: true }, {});
+  suspended += " " + String(widget(quiet).get_visible());
+  unhideInstance(quiet, { visible: true });
+  suspended += " " + String(widget(quiet).get_visible());
+  react_gtk_log("hidden " + String(hidden) + " " + String(widget(button).get_visible()) + " " + suspended);
 
   const framed = frame(button);
   const unframedProps: Props = { label: "Add", hasFrame: false };

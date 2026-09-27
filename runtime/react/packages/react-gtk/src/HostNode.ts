@@ -423,8 +423,11 @@ export abstract class WidgetNode extends HostNode {
     return this.widget;
   }
 
+  // Hidden by React (Suspense, Activity), a widget stays hidden whatever its
+  // `visible` prop says; shown again, it is as visible as the prop says.
   setVisible(visible: boolean): void {
-    this.widget.set_visible(visible);
+    this.hiddenByReact = !visible;
+    this.widget.set_visible(visible && this.prop("visible") !== false);
   }
 
   widgetNode(): WidgetNode | null {
@@ -473,6 +476,10 @@ export abstract class WidgetNode extends HostNode {
 
   /** Applies one prop, or says what is wrong with it. */
   private apply(key: string, value: unknown): string | null {
+    if (key === "visible" && this.hiddenByReact) {
+      // Kept in the props, and applied when React shows the widget again.
+      return null;
+    }
     if (key === "children") {
       // Text children are a widget's label: GTK has no bare text.
       const text = textOf(value);
@@ -556,6 +563,8 @@ export abstract class WidgetNode extends HostNode {
   private order: HostNode[] | null = null;
   // Whether its parent's protocol holds it now: placed again, it is moving.
   private inParent = false;
+  // Whether React hides it (`setVisible(false)`), over its `visible` prop.
+  private hiddenByReact = false;
 
   appendChild(child: HostNode): void {
     const order = this.orderOf();
