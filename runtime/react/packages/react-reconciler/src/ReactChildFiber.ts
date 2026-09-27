@@ -3,6 +3,7 @@
 // and deletions for the commit.
 
 import { isDevelopment } from "shared/Build.ts";
+import { objectTag } from "shared/objectTag.ts";
 import { disableLegacyMode, enableAsyncIterableChildren, enableFragmentRefs } from "shared/ReactFeatureFlags.ts";
 import {
   ASYNC_ITERATOR,
@@ -267,7 +268,7 @@ function throwOnInvalidObjectTypeImpl(_returnFiber: Fiber, newChild: object): ne
         '- A compiler tries to "inline" JSX instead of using the runtime.',
     );
   }
-  const childString: string = Object.prototype.toString.call(newChild);
+  const childString: string = objectTag(newChild);
   throw new Error(
     `Objects are not valid as a React child (found: ${
       childString === "[object Object]" ? "object with keys {" + Object.keys(newChild).join(", ") + "}" : childString
@@ -572,7 +573,8 @@ class ChildReconcilerImpl {
       return created;
     }
     // Update
-    const existing = this.useFiber(current, portal.children || []);
+    const noChildren: unknown[] = [];
+    const existing = this.useFiber(current, portal.children || noChildren);
     existing.return = returnFiber;
     if (isDevelopment) {
       existing._debugInfo = currentDebugInfo;
@@ -1078,8 +1080,8 @@ class ChildReconcilerImpl {
         // as needed.
         const isGeneratorComponent =
           returnFiber.tag === FunctionComponent &&
-          Object.prototype.toString.call(returnFiber.type) === "[object GeneratorFunction]" &&
-          Object.prototype.toString.call(newChildren) === "[object Generator]";
+          objectTag(returnFiber.type) === "[object GeneratorFunction]" &&
+          objectTag(newChildren) === "[object Generator]";
         if (!isGeneratorComponent) {
           if (!didWarnAboutGenerators) {
             console.error(
@@ -1120,8 +1122,8 @@ class ChildReconcilerImpl {
         // as needed.
         const isGeneratorComponent =
           returnFiber.tag === FunctionComponent &&
-          Object.prototype.toString.call(returnFiber.type) === "[object AsyncGeneratorFunction]" &&
-          Object.prototype.toString.call(newChildren) === "[object AsyncGenerator]";
+          objectTag(returnFiber.type) === "[object AsyncGeneratorFunction]" &&
+          objectTag(newChildren) === "[object AsyncGenerator]";
         if (!isGeneratorComponent) {
           if (!didWarnAboutGenerators) {
             console.error(
@@ -1428,7 +1430,8 @@ class ChildReconcilerImpl {
           (child.stateNode as PortalStateNode).implementation === portal.implementation
         ) {
           this.deleteRemainingChildren(returnFiber, child.sibling);
-          const existing = this.useFiber(child, portal.children || []);
+          const noChildren: unknown[] = [];
+          const existing = this.useFiber(child, portal.children || noChildren);
           existing.return = returnFiber;
           return existing;
         }
@@ -1752,8 +1755,8 @@ export function validateSuspenseListChildren(children: unknown, revealOrder: Sus
           enableAsyncIterableChildren &&
           (children as { $$typeof?: unknown }).$$typeof === REACT_ELEMENT_TYPE &&
           typeof (children as ReactElement).type === "function" &&
-          (Object.prototype.toString.call((children as ReactElement).type) === "[object GeneratorFunction]" ||
-            Object.prototype.toString.call((children as ReactElement).type) === "[object AsyncGeneratorFunction]")
+          (objectTag((children as ReactElement).type) === "[object GeneratorFunction]" ||
+            objectTag((children as ReactElement).type) === "[object AsyncGeneratorFunction]")
         ) {
           console.error(
             'A generator Component was passed to a <SuspenseList revealOrder="%s" />. ' +

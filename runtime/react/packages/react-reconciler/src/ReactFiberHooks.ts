@@ -21,6 +21,7 @@ import type { TransitionStatus } from "react-reconciler/ReactFiberConfig.ts";
 import type { ThenableState } from "./ReactFiberThenable.ts";
 
 import { checksHookKinds, isDevelopment } from "shared/Build.ts";
+import { objectTag } from "shared/objectTag.ts";
 import {
   HostTransitionContext,
   NotPendingTransition as NoPendingHostTransition,
@@ -461,7 +462,7 @@ function warnIfAsyncClientComponent(Component: unknown): void {
     // async client components from crashing the app; the prod one works even
     // for transpiled async functions. Neither mechanism is completely
     // bulletproof but together they cover the most common cases.
-    const tag = Object.prototype.toString.call(Component);
+    const tag = objectTag(Component);
     const isAsyncFunction = tag === "[object AsyncFunction]" || tag === "[object AsyncGeneratorFunction]";
     if (isAsyncFunction) {
       // Encountered an async Client Component. This is not yet supported.
@@ -2615,7 +2616,7 @@ function imperativeHandleEffect<T>(create: () => T, ref: ImperativeRef<T>): void
   } else if (ref !== null && ref !== undefined) {
     const refObject = ref;
     if (isDevelopment) {
-      if (!Object.prototype.hasOwnProperty.call(refObject, "current")) {
+      if (!Object.hasOwn(refObject, "current")) {
         console.error(
           "Expected useImperativeHandle() first argument to either be a " +
             "ref callback or React.createRef() object. Instead received: %s.",

@@ -5,6 +5,7 @@ import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import { enableSrcObject } from "shared/ReactFeatureFlags.ts";
 import { REACT_ELEMENT_TYPE } from "shared/ReactSymbols.ts";
 import { isDevelopment } from "shared/Build.ts";
+import { objectTag } from "shared/objectTag.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import {
   ActivityComponent,
@@ -36,7 +37,7 @@ const maxRowLength = 120;
 const idealDepth = 15;
 
 function hasOwn(object: object, propName: string): boolean {
-  return Object.prototype.hasOwnProperty.call(object, propName);
+  return Object.hasOwn(object, propName);
 }
 
 function findNotableNode(node: HydrationDiffNode, indent: number): HydrationDiffNode {
@@ -150,7 +151,7 @@ function describeTextDiff(clientText: string, serverProps: unknown, indent: numb
 }
 
 function objectName(object: unknown): string {
-  const name: string = Object.prototype.toString.call(object);
+  const name: string = objectTag(object);
   return name.replace(/^\[object (.*)\]$/, (_m: string, p0: string) => p0);
 }
 

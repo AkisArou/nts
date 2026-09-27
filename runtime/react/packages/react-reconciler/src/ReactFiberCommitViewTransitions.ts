@@ -840,7 +840,7 @@ export function measureUpdateViewTransition(current: Fiber, finishedWork: Fiber,
     if (clones === null) {
       previousMeasurements = null;
     } else {
-      previousMeasurements = clones.map(measureClonedInstance);
+      previousMeasurements = clones.map((clone) => measureClonedInstance(clone));
     }
   } else {
     previousMeasurements = oldFiber.memoizedState as InstanceMeasurement[] | null;
@@ -879,7 +879,7 @@ export function measureNestedViewTransitions(changedParent: Fiber, gesture: bool
         if (clones === null) {
           previousMeasurements = null;
         } else {
-          previousMeasurements = clones.map(measureClonedInstance);
+          previousMeasurements = clones.map((clone) => measureClonedInstance(clone));
         }
       } else {
         previousMeasurements = child.memoizedState as InstanceMeasurement[] | null;

@@ -32,6 +32,9 @@
       "shared/replaceErrorStack.ts": [
         "./packages/shared/src/replaceErrorStack.native.ts"
       ],
+      "shared/objectTag.ts": [
+        "./packages/shared/src/objectTag.native.ts"
+      ],
       "react/ReactHooks.ts": [
         "./packages/react/src/ReactHooks.native.ts"
       ],

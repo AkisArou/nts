@@ -2,6 +2,7 @@
 // timeline's property tooltips, and diffs two props objects so a render can
 // say which props changed.
 
+import { objectTag } from "shared/objectTag.ts";
 import { OMITTED_PROP_ERROR } from "./ReactFlightPropertyAccess.ts";
 import { REACT_ELEMENT_TYPE } from "./ReactSymbols.ts";
 import { getComponentNameFromType } from "./getComponentNameFromType.ts";
@@ -10,8 +11,6 @@ export type PropertyRow = [string, string];
 
 // A value the diff reads keys from: any object, indexed by name.
 type AnyObject = { [key: string]: unknown };
-
-const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 const EMPTY_ARRAY = 0;
 const COMPLEX_ARRAY = 1;
@@ -67,7 +66,7 @@ export function addObjectToProperties(
   const record = object as AnyObject;
   let addedProperties = 0;
   for (const key in record) {
-    if (hasOwnProperty.call(record, key) && key[0] !== "_") {
+    if (Object.hasOwn(record, key) && key[0] !== "_") {
       addedProperties++;
       addValueToProperties(key, record[key], properties, indent, prefix);
       if (addedProperties >= OBJECT_WIDTH_LIMIT) {
@@ -87,7 +86,7 @@ export function addObjectToProperties(
 
 function readReactElementTypeof(value: object): unknown {
   // Prevents dotting into $$typeof in opaque origin windows.
-  return "$$typeof" in value && hasOwnProperty.call(value, "$$typeof")
+  return "$$typeof" in value && Object.hasOwn(value, "$$typeof")
     ? (value as { $$typeof?: unknown }).$$typeof
     : undefined;
 }
@@ -147,7 +146,7 @@ export function addValueToProperties(
             if (children != null && (!Array.isArray(children) || children.length > 0)) {
               hasChildren = true;
             }
-          } else if (hasOwnProperty.call(props, propKey) && propKey[0] !== "_") {
+          } else if (Object.hasOwn(props, propKey) && propKey[0] !== "_") {
             addValueToProperties(propKey, props[propKey], properties, indent + 1, prefix);
           }
           if (addedProperties >= OBJECT_WIDTH_LIMIT) {
@@ -157,7 +156,7 @@ export function addValueToProperties(
         properties.push(["", hasChildren ? ">…</" + typeName + ">" : "/>"]);
         return;
       }
-      const objectToString = Object.prototype.toString.call(value);
+      const objectToString = objectTag(value);
       let objectName = objectToString.slice(8, objectToString.length - 1);
       if (ArrayBuffer.isView(value)) {
         // Typed arrays: their type and length are more useful than every
@@ -339,8 +338,8 @@ export function addObjectDiffToProperties(
               continue;
             }
           } else {
-            const prevKind = Object.prototype.toString.call(prevValue);
-            const nextKind = Object.prototype.toString.call(nextValue);
+            const prevKind = objectTag(prevValue);
+            const nextKind = objectTag(nextValue);
             if (prevKind === nextKind && (nextKind === "[object Object]" || nextKind === "[object Array]")) {
               // Diff the nested object.
               const entry: PropertyRow = [

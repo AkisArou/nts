@@ -732,7 +732,8 @@ export interface PortalStateNode {
 }
 
 export function createFiberFromPortal(portal: ReactPortal, mode: TypeOfMode, lanes: Lanes): Fiber {
-  const pendingProps = portal.children !== null ? portal.children : [];
+  const noChildren: unknown[] = [];
+  const pendingProps = portal.children !== null ? portal.children : noChildren;
   const fiber = createFiber(HostPortal, pendingProps, portal.key, mode);
   fiber.lanes = lanes;
   const stateNode: PortalStateNode = {

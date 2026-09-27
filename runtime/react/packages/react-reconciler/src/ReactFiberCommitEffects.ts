@@ -634,7 +634,7 @@ function commitAttachRef(finishedWork: Fiber): void {
         // phase (markRef).
         if (typeof (ref as unknown) === "string") {
           console.error("String refs are no longer supported.");
-        } else if (!Object.prototype.hasOwnProperty.call(ref, "current")) {
+        } else if (!Object.hasOwn(ref, "current")) {
           console.error(
             "Unexpected ref object provided for %s. " + "Use either a ref-setter function or React.createRef().",
             getComponentNameFromFiber(finishedWork),
