@@ -28,9 +28,9 @@
 // widget.
 //
 // usage: node tools/gen-widgets.ts <native program dir> [--namespace Adw-1] [--check]
-//   <native program dir> is one `nts build` wrote GIR bindings for: they are
-//   read from its node_modules/@nts/gir-*, or from its types/gir where a build
-//   still writes them there. GI_GIR_PATH overrides /usr/share/gir-1.0.
+//   <native program dir> is one `nts build` linked GIR bindings into: they are
+//   read from its node_modules/@nts/gir-*. GI_GIR_PATH overrides
+//   /usr/share/gir-1.0.
 //   --check compares instead of writing, and fails if the committed files are
 //   stale.
 
@@ -300,9 +300,8 @@ function readSignature(line: string): Signature | null {
 }
 
 /**
- * The binding declarations `nts build` wrote for the program in `dir`: one
- * package per namespace under node_modules/@nts (`gir-gtk-4.0/index.d.ts`),
- * or, from a build that predates the packages, one file each in types/gir.
+ * The binding declarations `nts build` linked for the program in `dir`: one
+ * package per namespace under node_modules/@nts (`gir-gtk-4.0/index.d.ts`).
  */
 function bindingFiles(dir: string): string[] {
   const declarations = (at: string): string[] =>
@@ -311,13 +310,13 @@ function bindingFiles(dir: string): string[] {
       .sort()
       .map((name) => join(at, name));
   const packages = join(dir, "node_modules", "@nts");
-  if (existsSync(packages)) {
-    return readdirSync(packages)
-      .filter((name) => name.startsWith("gir-"))
-      .sort()
-      .flatMap((name) => declarations(join(packages, name)));
+  if (!existsSync(packages)) {
+    throw new Error(`${packages} does not exist: run \`nts build\` for ${dir} first, which links its GIR bindings there`);
   }
-  return declarations(join(dir, "types", "gir"));
+  return readdirSync(packages)
+    .filter((name) => name.startsWith("gir-"))
+    .sort()
+    .flatMap((name) => declarations(join(packages, name)));
 }
 
 function readBindings(files: string[]): Bindings {
