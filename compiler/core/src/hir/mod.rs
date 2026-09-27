@@ -4500,13 +4500,58 @@ while let Some(value) = frontier.pop() {
         }
     }
 }
+// **One statement, one line.** The rule above -- that a call whose result a lost
+// global stores is covered by the global's line -- leaves the case where nothing
+// is stored at all. `observe("...", arraysDestructured())` is two doomed calls in
+// one statement, the outer reading the inner, and it printed the same cause twice,
+// at `140:1` and again at `140:46`. `main();`, one call, printed once.
+//
+// So a doomed call whose result another doomed **call** reads is the inner half of
+// one statement and the outer one speaks for it. Keyed on the consumer being a
+// *call* rather than any doomed op, which is what keeps this from silencing a
+// statement: the survivor of the chain is then something this loop reports. A
+// doomed op between two doomed calls is walked through for the same reason.
+//
+// **And only where the cause is the same**, which is the difference between
+// deduplicating and losing a cause. `takesTwo(refused(), refusedAgain())` is one
+// statement with *two* refused callees, and the outer call carries only one of
+// them: suppressing by position would leave the other named nowhere, which is
+// what `integrity`'s `top-level-kept` rule asks about -- every call the
+// initializer lost is reported. So one statement can still print two lines, and
+// they say different things.
+let mut inner: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
+for block in &func.blocks {
+    for value in &block.ops {
+        if !matches!(func.values[value.0 as usize].kind, OpKind::Call { .. }) {
+            continue;
+        }
+        let Some(cause) = doomed.get(value) else {
+            continue;
+        };
+        let mut frontier: Vec<ValueId> =
+            verify::operands(&func.values[value.0 as usize].kind);
+        let mut seen: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
+        while let Some(operand) = frontier.pop() {
+            let Some(reason) = doomed.get(&operand) else {
+                continue;
+            };
+            if !seen.insert(operand) {
+                continue;
+            }
+            if reason == cause {
+                inner.insert(operand);
+            }
+            frontier.extend(verify::operands(&func.values[operand.0 as usize].kind));
+        }
+    }
+}
 let mut dropped: Vec<(String, nts_semantic_schema::Origin)> = Vec::new();
 for block in &func.blocks {
     for value in &block.ops {
         let Some(cause) = doomed.get(value) else {
             continue;
         };
-        if covered.contains(value) {
+        if covered.contains(value) || inner.contains(value) {
             continue;
         }
         if matches!(func.values[value.0 as usize].kind, OpKind::Call { .. }) {
