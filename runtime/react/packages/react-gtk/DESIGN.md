@@ -411,11 +411,14 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   naming what it holds.
 - Containers with named places take group elements, as GTK's bars do:
   `<HeaderBar.Start>`, `<ToolbarView.Top>`/`<ToolbarView.Bottom>`,
-  `<ActionRow.Prefix>`/`<ActionRow.Suffix>`, and an ExpanderRow's. They share
+  `<ActionRow.Prefix>`/`<ActionRow.Suffix>`, and an ExpanderRow's and an
+  EntryRow's (a PasswordEntryRow's too). They share
   core's `GroupNode`, with placements of their own (`src/adw/children.ts`), so
   core never names an Adw class. Which side of a row fills from its far edge
-  was measured, not assumed: an ActionRow prepends its prefixes, and an
-  ExpanderRow appends them.
+  was measured, not assumed: an ActionRow and an EntryRow prepend their
+  prefixes, and an ExpanderRow appends them.
+- A Carousel's children are its pages, placed and moved by index in React's
+  order (a protocol of their own: `append`, `insert`, `reorder`, `remove`).
 - A ViewStack's pages are `<ViewStack.Page name title iconName badgeNumber>`,
   as GTK's Stack's are, and its `visibleChildName` is controlled and set only
   once the page it names exists.

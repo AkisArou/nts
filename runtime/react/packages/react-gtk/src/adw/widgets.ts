@@ -148,8 +148,8 @@ import {
 } from "c:Pango-1.0";
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
-import { type HostNode, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type DialogBreakpoints } from "./children.ts";
+import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type DialogBreakpoints } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1045,7 +1045,7 @@ export declare const ButtonContent: HostComponent<"AdwButtonContent", ButtonCont
 export declare const ButtonRow: HostComponent<"AdwButtonRow", ButtonRowProps & Gtk.NoChildren>;
 
 /** `<Carousel>`: an AdwCarousel. */
-export declare const Carousel: HostComponent<"AdwCarousel", CarouselProps & Gtk.NoChildren>;
+export declare const Carousel: HostComponent<"AdwCarousel", CarouselProps>;
 
 /** `<CarouselIndicatorDots>`: an AdwCarouselIndicatorDots. */
 export declare const CarouselIndicatorDots: HostComponent<"AdwCarouselIndicatorDots", CarouselIndicatorDotsProps & Gtk.NoChildren>;
@@ -1066,7 +1066,7 @@ export declare const ComboRow: HostComponent<"AdwComboRow", ComboRowProps> & Act
 export declare const Dialog: HostComponent<"AdwDialog", DialogProps> & DialogBreakpoints;
 
 /** `<EntryRow>`: an AdwEntryRow. */
-export declare const EntryRow: HostComponent<"AdwEntryRow", EntryRowProps & Gtk.NoChildren>;
+export declare const EntryRow: HostComponent<"AdwEntryRow", EntryRowProps> & EntryRowChildren;
 
 /** `<ExpanderRow>`: an AdwExpanderRow. */
 export declare const ExpanderRow: HostComponent<"AdwExpanderRow", ExpanderRowProps> & ExpanderRowChildren;
@@ -1093,7 +1093,7 @@ export declare const NavigationView: HostComponent<"AdwNavigationView", Navigati
 export declare const OverlaySplitView: HostComponent<"AdwOverlaySplitView", OverlaySplitViewProps> & OverlaySplitViewSlots;
 
 /** `<PasswordEntryRow>`: an AdwPasswordEntryRow. */
-export declare const PasswordEntryRow: HostComponent<"AdwPasswordEntryRow", PasswordEntryRowProps & Gtk.NoChildren>;
+export declare const PasswordEntryRow: HostComponent<"AdwPasswordEntryRow", PasswordEntryRowProps> & EntryRowChildren;
 
 /** `<PreferencesDialog>`: an AdwPreferencesDialog. */
 export declare const PreferencesDialog: HostComponent<"AdwPreferencesDialog", PreferencesDialogProps> & DialogBreakpoints;
@@ -4511,6 +4511,42 @@ export class AdwCarouselNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return carouselSignal(this.gtk, key, slot);
   }
+  // It places and moves a child by index (an AdwCarousel's pages): React's
+  // order of the children, kept here, gives the index.
+  private readonly items: WidgetNode[] = [];
+  protected place(child: WidgetNode): void {
+    // A child already here is a move to the end: React appends it again.
+    const from = this.items.indexOf(child);
+    if (from >= 0) {
+      this.items.splice(from, 1);
+      this.items.push(child);
+      this.gtk.reorder(child.widget, this.items.length - 1);
+      return;
+    }
+    this.gtk.append(child.widget);
+    this.items.push(child);
+  }
+  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
+    const from = this.items.indexOf(child);
+    if (from >= 0) {
+      this.items.splice(from, 1);
+    }
+    // The index among the others, which is where the child ends up.
+    const at = this.items.indexOf(before);
+    insertAt(this.items, at, child);
+    if (from >= 0) {
+      this.gtk.reorder(child.widget, at);
+    } else {
+      this.gtk.insert(child.widget, at);
+    }
+  }
+  protected unplace(child: WidgetNode): void {
+    const at = this.items.indexOf(child);
+    if (at >= 0) {
+      this.items.splice(at, 1);
+      this.gtk.remove(child.widget);
+    }
+  }
 }
 
 /** `<CarouselIndicatorDots>`: an AdwCarouselIndicatorDots. */
@@ -4685,6 +4721,9 @@ export class AdwEntryRowNode extends WidgetNode {
         return this.gtk.get_text();
     }
     return undefined;
+  }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<EntryRow> places a child through <EntryRow.Prefix> or <EntryRow.Suffix>.");
   }
 }
 
@@ -4933,6 +4972,9 @@ export class AdwPasswordEntryRowNode extends WidgetNode {
         return this.gtk.get_text();
     }
     return undefined;
+  }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<PasswordEntryRow> places a child through <EntryRow.Prefix> or <EntryRow.Suffix>.");
   }
 }
 
@@ -5759,6 +5801,10 @@ export function createNode(type: string): HostNode | null {
     case "AdwActionRow.Prefix":
       return new AdwGroupNode(type);
     case "AdwActionRow.Suffix":
+      return new AdwGroupNode(type);
+    case "AdwEntryRow.Prefix":
+      return new AdwGroupNode(type);
+    case "AdwEntryRow.Suffix":
       return new AdwGroupNode(type);
     case "AdwExpanderRow.Prefix":
       return new AdwGroupNode(type);

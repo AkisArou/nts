@@ -20,6 +20,7 @@ import {
   AdwBreakpointBin,
   AdwBreakpointCondition,
   AdwDialog,
+  AdwEntryRow,
   AdwExpanderRow,
   AdwHeaderBar,
   AdwTabView,
@@ -55,6 +56,13 @@ export interface ActionRowChildren {
   readonly Prefix: HostComponent<"AdwActionRow.Prefix", PackProps>;
   /** `<ActionRow.Suffix>`: its children, after the row's title, left to right. */
   readonly Suffix: HostComponent<"AdwActionRow.Suffix", PackProps>;
+}
+
+export interface EntryRowChildren {
+  /** `<EntryRow.Prefix>`: its children, before the row's entry, left to right. */
+  readonly Prefix: HostComponent<"AdwEntryRow.Prefix", PackProps>;
+  /** `<EntryRow.Suffix>`: its children, after the row's entry, left to right. */
+  readonly Suffix: HostComponent<"AdwEntryRow.Suffix", PackProps>;
 }
 
 export interface ExpanderRowChildren {
@@ -114,6 +122,24 @@ function placementOf(type: string): GroupPlacement {
         },
         // A row adds a prefix before the ones it has: its prefixes fill from
         // the end (checked on the widget, native/adw's `row` line).
+        prefix,
+      );
+    }
+    case "AdwEntryRow.Prefix":
+    case "AdwEntryRow.Suffix": {
+      const prefix = type === "AdwEntryRow.Prefix";
+      return new GroupPlacement(
+        (row, widget) => {
+          if (!(row instanceof AdwEntryRow)) return false;
+          if (prefix) row.add_prefix(widget);
+          else row.add_suffix(widget);
+          return true;
+        },
+        (row, widget) => {
+          if (row instanceof AdwEntryRow) row.remove(widget);
+        },
+        // As an ActionRow, an EntryRow prepends its prefixes (measured:
+        // native/adw's `row` line).
         prefix,
       );
     }

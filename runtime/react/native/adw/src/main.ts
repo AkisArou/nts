@@ -17,8 +17,9 @@
 //             first row after it; a moved row and a removed one keep the order
 //   toolbar   a ToolbarView's Top group holds a header bar, and its Content
 //             slot its content
-//   row       an ActionRow's Prefix and Suffix groups, and an ExpanderRow's
-//             Prefix, place their widgets left to right in React's order
+//   row       an ActionRow's Prefix and Suffix groups, an ExpanderRow's
+//             Prefix, and an EntryRow's Prefix and Suffix, place their widgets
+//             left to right in React's order
 //   viewstack ViewStack.Page elements add named, titled pages; the
 //             ViewStack's visibleChildName, applied before its pages existed,
 //             shows the page it names; a title updates in place; switched from
@@ -41,6 +42,8 @@
 //             pinned later goes last among the pinned; an unpinned tab moved
 //             before an unpinned one stays after the pinned; a pinned tab
 //             React takes out closes
+//   carousel  a Carousel's pages in React's order: appended, one inserted,
+//             moved forward, back and to the end, and one removed
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window, its onResponse hears
 //             the response id, and taken out it closes, which onResponse
@@ -63,6 +66,7 @@ import {
   adw_init,
   AdwApplication,
   AdwApplicationWindow,
+  AdwCarousel,
   AdwEntryRow,
   AdwHeaderBar,
   AdwNavigationSplitView,
@@ -249,7 +253,25 @@ function main(): void {
   appendInitialChild(expanderPrefix, e2);
   appendInitialChild(expander, expanderPrefix);
   const expanderOrder = widget(e1).get_next_sibling() === widget(e2) ? "e1>e2" : "e1>?";
-  react_gtk_log("row " + sideNames[0]! + ">" + nextOf(0) + " " + sideNames[2]! + ">" + nextOf(2) + " " + expanderOrder);
+  const entryRow = createInstance("AdwEntryRow", { title: "Name" }, root, 0, {});
+  const entryPrefix = createInstance("AdwEntryRow.Prefix", {}, root, 0, {});
+  const entrySuffix = createInstance("AdwEntryRow.Suffix", {}, root, 0, {});
+  const entrySides: HostNode[] = [];
+  for (const name of ["r1", "r2", "t1", "t2"]) {
+    entrySides.push(createInstance("GtkLabel", { label: name }, root, 0, {}));
+  }
+  appendInitialChild(entryPrefix, entrySides[0]!);
+  appendInitialChild(entryPrefix, entrySides[1]!);
+  appendInitialChild(entrySuffix, entrySides[2]!);
+  appendInitialChild(entrySuffix, entrySides[3]!);
+  appendInitialChild(entryRow, entryPrefix);
+  appendInitialChild(entryRow, entrySuffix);
+  const follows = (first: HostNode, second: HostNode): boolean => widget(first).get_next_sibling() === widget(second);
+  const entryOrder =
+    (follows(entrySides[0]!, entrySides[1]!) ? "r1>r2" : follows(entrySides[1]!, entrySides[0]!) ? "r2>r1" : "r?") +
+    " " +
+    (follows(entrySides[2]!, entrySides[3]!) ? "t1>t2" : follows(entrySides[3]!, entrySides[2]!) ? "t2>t1" : "t?");
+  react_gtk_log("row " + sideNames[0]! + ">" + nextOf(0) + " " + sideNames[2]! + ">" + nextOf(2) + " " + expanderOrder + " " + entryOrder);
 
   const stack = createInstance("AdwViewStack", { visibleChildName: "b" }, root, 0, {});
   const pageA = createInstance("AdwViewStack.Page", { name: "a", title: "A" }, root, 0, {});
@@ -398,6 +420,45 @@ function main(): void {
     pinned += ">" + order();
   }
   react_gtk_log("pinned " + pinned);
+
+  const carousel = createInstance("AdwCarousel", {}, root, 0, {});
+  const pages: HostNode[] = [];
+  const pageNames = ["a", "b", "c", "d"];
+  for (const name of pageNames) {
+    pages.push(createInstance("GtkLabel", { label: name }, root, 0, {}));
+  }
+  const carouselWidget = widget(carousel);
+  const paging = carouselWidget instanceof AdwCarousel ? carouselWidget : null;
+  let carouselOrder = "not a carousel";
+  if (paging !== null) {
+    const order = (): string => {
+      let all = "";
+      for (let i = 0; i < paging.get_n_pages(); i++) {
+        const page = paging.get_nth_page(i);
+        for (let j = 0; j < pages.length; j++) {
+          if (widget(pages[j]!) === page) {
+            all += pageNames[j]!;
+          }
+        }
+      }
+      return all;
+    };
+    appendInitialChild(carousel, pages[0]!);
+    appendInitialChild(carousel, pages[1]!);
+    appendInitialChild(carousel, pages[2]!);
+    carouselOrder = order();
+    insertBefore(carousel, pages[3]!, pages[1]!);
+    carouselOrder += ">" + order();
+    insertBefore(carousel, pages[0]!, pages[2]!);
+    carouselOrder += ">" + order();
+    insertBefore(carousel, pages[2]!, pages[3]!);
+    carouselOrder += ">" + order();
+    appendInitialChild(carousel, pages[2]!);
+    carouselOrder += ">" + order();
+    removeChild(carousel, pages[1]!);
+    carouselOrder += ">" + order();
+  }
+  react_gtk_log("carousel " + carouselOrder);
 
   // A dialog is presented within a shown libadwaita window, as an app's is
   // (over a plain GtkWindow, libadwaita opens it as a window of its own).

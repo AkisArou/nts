@@ -500,7 +500,7 @@ function handlerType(type: string, types: Set<string>, bindings: Bindings): stri
   return null;
 }
 
-type ChildProtocol = "none" | "single" | "box" | "list" | "adds";
+type ChildProtocol = "none" | "single" | "box" | "list" | "positional" | "adds";
 
 /** A widget that only adds and removes children: the methods, and the class each takes. */
 interface Adds {
@@ -644,6 +644,7 @@ const childElements = new Map([
   ["Adw.HeaderBar", { members: "HeaderBarChildren", elements: [["AdwHeaderBar.Start", "AdwGroupNode"], ["AdwHeaderBar.End", "AdwGroupNode"]], use: "<HeaderBar.Start> or <HeaderBar.End>" }],
   ["Adw.ToolbarView", { members: "ToolbarViewChildren", elements: [["AdwToolbarView.Top", "AdwGroupNode"], ["AdwToolbarView.Bottom", "AdwGroupNode"]], use: "<ToolbarView.Top> or <ToolbarView.Bottom>" }],
   ["Adw.ActionRow", { members: "ActionRowChildren", elements: [["AdwActionRow.Prefix", "AdwGroupNode"], ["AdwActionRow.Suffix", "AdwGroupNode"]], use: "<ActionRow.Prefix> or <ActionRow.Suffix>" }],
+  ["Adw.EntryRow", { members: "EntryRowChildren", elements: [["AdwEntryRow.Prefix", "AdwGroupNode"], ["AdwEntryRow.Suffix", "AdwGroupNode"]], use: "<EntryRow.Prefix> or <EntryRow.Suffix>" }],
   ["Adw.ExpanderRow", { members: "ExpanderRowChildren", elements: [["AdwExpanderRow.Prefix", "AdwGroupNode"], ["AdwExpanderRow.Suffix", "AdwGroupNode"]], use: "<ExpanderRow.Prefix> or <ExpanderRow.Suffix>" }],
   ["Adw.ViewStack", { members: "ViewStackChildren", elements: [["AdwViewStack.Page", "ViewStackPageNode"]], use: "<ViewStack.Page name title>" }],
   ["Adw.TabView", { members: "TabViewChildren", elements: [["AdwTabView.Page", "TabViewPageNode"]], use: "<TabView.Page title>" }],
@@ -956,6 +957,8 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
             ? "box"
             : ["append", "remove", "insert"].every(has) && rowAccessors.has(qualified(t))
               ? "list"
+              : ["append", "remove", "insert", "reorder"].every(has)
+                ? "positional"
               : takesChild
                 ? "single"
                 : adds !== undefined
@@ -1367,6 +1370,44 @@ function emit(m: Model, target: Target): string {
       line("      this.gtk.remove(this.placed[at]!);");
       line("      this.items.splice(at, 1);");
       line("      this.placed.splice(at, 1);");
+      line("    }");
+      line("  }");
+    } else if (w.children === "positional") {
+      needs.add("insertAt");
+      line("  // It places and moves a child by index (an AdwCarousel's pages): React's");
+      line("  // order of the children, kept here, gives the index.");
+      line("  private readonly items: WidgetNode[] = [];");
+      line("  protected place(child: WidgetNode): void {");
+      line("    // A child already here is a move to the end: React appends it again.");
+      line("    const from = this.items.indexOf(child);");
+      line("    if (from >= 0) {");
+      line("      this.items.splice(from, 1);");
+      line("      this.items.push(child);");
+      line("      this.gtk.reorder(child.widget, this.items.length - 1);");
+      line("      return;");
+      line("    }");
+      line("    this.gtk.append(child.widget);");
+      line("    this.items.push(child);");
+      line("  }");
+      line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
+      line("    const from = this.items.indexOf(child);");
+      line("    if (from >= 0) {");
+      line("      this.items.splice(from, 1);");
+      line("    }");
+      line("    // The index among the others, which is where the child ends up.");
+      line("    const at = this.items.indexOf(before);");
+      line("    insertAt(this.items, at, child);");
+      line("    if (from >= 0) {");
+      line("      this.gtk.reorder(child.widget, at);");
+      line("    } else {");
+      line("      this.gtk.insert(child.widget, at);");
+      line("    }");
+      line("  }");
+      line("  protected unplace(child: WidgetNode): void {");
+      line("    const at = this.items.indexOf(child);");
+      line("    if (at >= 0) {");
+      line("      this.items.splice(at, 1);");
+      line("      this.gtk.remove(child.widget);");
       line("    }");
       line("  }");
     } else if (w.children === "adds" && w.adds !== undefined) {

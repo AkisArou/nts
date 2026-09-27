@@ -33,12 +33,13 @@ signal 1
 controlled kept
 group A,X,B B,A,X B,X X,B suffix=true
 toolbar true true
-row p1>p2 s1>s2 e1>e2
+row p1>p2 s1>s2 e1>e2 r1>r2 t1>t2
 viewstack b B>Bee switched=b
 switcher true true
 split true true true
 tabs A,B,C>A,D,B,C>C,A,D,B selected=true asked=1 kept=4 attached=0121 true selected=A user=B>A heard=B app=B heard=B C,A,B
 pinned P*AB>APB>B*AP>B*PA>PA
+carousel abc>adbc>dbac>cdba>dbac>dac
 dialog true true true true responded=cancel
 breakpoints A+ | A- B+ | A+
 window-breakpoint W+ true false W+ true
