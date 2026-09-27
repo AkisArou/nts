@@ -953,7 +953,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     }
     writer.blank(&origin);
 
-    emit_object_descriptors(&mut writer, &origin, program, &defined, &mut diagnostics);
+    emit_object_descriptors(&mut writer, &origin, program, &defined, &refused, &mut diagnostics);
     emit_descriptors(&mut writer, &origin, &descriptors);
     emit_literals(&mut writer, &origin, &literals);
     if let Err(diagnostic) = emit_globals(&mut writer, program) {
@@ -3044,11 +3044,84 @@ fn a_closure_with_nothing_to_call(
     })
 }
 
+/// Both ways a descriptor's method table reaches code generation unable to
+/// dispatch, asked together because they are one question about one table.
+fn a_table_that_cannot_dispatch(
+    program: &Program,
+    defined: &rustc_hash::FxHashSet<String>,
+    refused: &[String],
+    layout: &nts_core::hir::Layout,
+    origin: &Origin,
+) -> Vec<Diagnostic> {
+    a_closure_with_nothing_to_call(program, defined, layout, origin)
+        .into_iter()
+        .chain(a_method_table_naming_nothing(
+            program, defined, refused, layout, origin,
+        ))
+        .collect()
+}
+
+/// A method table naming a function nothing defines **and nothing refused**.
+///
+/// The sibling of [`a_closure_with_nothing_to_call`], for an ordinary class, and
+/// the same reasoning with one extra term. `entry` writes a null for a slot whose
+/// function is absent, and the comment there gives what licenses it: the middle
+/// end drops a body long after the layout that named it was built, so the slot
+/// outlives its implementation -- and the null is unreachable, because a class
+/// whose method was *refused* is one no surviving call can reach.
+///
+/// That argument holds for a refusal and for nothing else. Two modules each
+/// exporting a `class Thing` used to spell both methods `Thing#value`, so neither
+/// was emitted under it, **every entry went null, and the table was dropped
+/// entirely** -- `descriptor->methods` was 0 and the first virtual call went
+/// through it, `exit 139`, no diagnostic. `8482afb63` fixed the naming; this is
+/// what would have said so, and what will say so the next time a name is decided
+/// in two places.
+///
+/// So the test is not "is the function absent", which is ordinary, but "is it
+/// absent for a reason somebody recorded". **Two records, because there are two
+/// ways to be accounted for**: lowering's declines are in `program.uncompiled`,
+/// this backend's own are in `refused`, and the second is the larger set. Asking
+/// only the first reported 273 slots over the two corpora and every one was a
+/// method this backend had dropped a moment earlier -- `EventEmitter#on` calls a
+/// refused `addListener<obj7460>`, so its slot is legitimately null.
+fn a_method_table_naming_nothing(
+    program: &Program,
+    defined: &rustc_hash::FxHashSet<String>,
+    refused: &[String],
+    layout: &nts_core::hir::Layout,
+    origin: &Origin,
+) -> Vec<Diagnostic> {
+    layout
+        .methods
+        .iter()
+        .flatten()
+        .filter(|name| !defined.contains(&c_identifier(name)))
+        .filter(|name| {
+            !program.uncompiled.iter().any(|(at, _)| at == *name)
+                && !refused.iter().any(|at| at == *name)
+        })
+        .map(|name| {
+            Diagnostic::error(
+                "NTS2006",
+                format!(
+                    "the method table of `{}` names `{name}`, which this program does not \
+                     define and nothing refused -- so the slot would be null and a call \
+                     through it would read address zero",
+                    layout.name
+                ),
+                origin.location,
+            )
+        })
+        .collect()
+}
+
 fn emit_object_descriptors(
     writer: &mut CodeWriter,
     origin: &Origin,
     program: &Program,
     defined: &rustc_hash::FxHashSet<String>,
+    refused: &[String],
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let cyclic_layouts = program.cyclic_layouts();
@@ -3080,7 +3153,7 @@ fn emit_object_descriptors(
         // class does not implement is null, which is unreachable: a call only
         // uses a slot the receiver's static type declares, and every class at or
         // below that type fills it.
-        diagnostics.extend(a_closure_with_nothing_to_call(program, defined, layout, origin));
+        diagnostics.extend(a_table_that_cannot_dispatch(program, defined, refused, layout, origin));
         // A slot naming a function this program does not define is written as
         // null rather than as its address. The middle end drops a body long
         // after the layout that named it was built -- a refusal, then pruning,
