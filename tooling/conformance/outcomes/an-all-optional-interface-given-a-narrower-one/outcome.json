@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 `params`, which `Slim` does not declare",
+  "ran": "exit 1; nts: uncaught Observed: a Both handed to a Both=7003;",
+  "node": "exit 1; nts: uncaught Observed: a Slim handed to a Both=-997;a Both handed to a Both=7003;",
+  "measured_with": "bf68ff5a44403ce1",
+  "source": "measured"
+}
