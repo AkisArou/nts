@@ -181,7 +181,9 @@ export function unhideInstance(instance: HostNode, _props: Props): void {
 }
 export function unhideTextInstance(_textInstance: HostNode, _text: string): void {}
 
-export function detachDeletedInstance(_node: HostNode): void {}
+export function detachDeletedInstance(node: HostNode): void {
+  node.detachDeleted();
+}
 export function getInstanceFromNode(_node: unknown): HostNode | null {
   return null;
 }

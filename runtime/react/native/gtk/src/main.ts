@@ -40,6 +40,7 @@
 //             `from_string`, are held and cleared
 //   text      text around an expression (an array to JSX) is one text, the
 //             Label's label, updated in place; an element among it is not text
+//   detached  a widget React deleted hears no more: its handlers go
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
@@ -130,6 +131,7 @@ import {
   ApplicationRoot,
   appendChild,
   appendChildToContainer,
+  detachDeletedInstance,
   appendInitialChild,
   commitMount,
   commitUpdate,
@@ -462,6 +464,15 @@ function main(): void {
   const textBefore = shownText();
   commitUpdate(countLabel, "GtkLabel", counted, { children: ["Clicked ", 4, " times", false] }, {});
   react_gtk_log("text " + String(textual) + " " + textBefore + ">" + shownText() + " " + String(shouldSetTextContent("GtkBox", { children: ["a", {}] })));
+
+  // React deleted it: its handlers go, so a click is not heard.
+  let deletedClicks = 0;
+  const deleted = createInstance("GtkButton", { label: "gone", onClicked: () => deletedClicks++ }, container, 0, {});
+  react_gtk_emit(widget(deleted), "clicked");
+  const beforeDelete = deletedClicks;
+  detachDeletedInstance(deleted);
+  react_gtk_emit(widget(deleted), "clicked");
+  react_gtk_log("detached " + String(beforeDelete) + ">" + String(deletedClicks));
 
   let asked = 0;
   const closeProps: Props = {

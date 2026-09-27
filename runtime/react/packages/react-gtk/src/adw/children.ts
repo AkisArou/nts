@@ -364,6 +364,10 @@ export class TabViewPageNode extends PlacedNode {
     this.state.closingByReact = false;
     g_signal_handler_disconnect(view, this.closeHandler);
   }
+  detachDeleted(): void {
+    this.state.onClose.handler = null;
+    this.state.onSelect.handler = null;
+  }
   protected move(owner: WidgetNode, widget: GtkWidget): boolean {
     const view = owner.widget;
     if (!(view instanceof AdwTabView)) {
@@ -594,6 +598,10 @@ export class BreakpointNode extends HostNode {
     this.breakpoint.set_condition(condition === null ? null : AdwBreakpointCondition.parse(condition));
   }
 
+  detachDeleted(): void {
+    this.state.onApply.handler = null;
+    this.state.onUnapply.handler = null;
+  }
   widgetNode(): WidgetNode | null {
     return null;
   }

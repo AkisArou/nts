@@ -316,6 +316,14 @@ export abstract class HostNode {
   /** The node's commit-phase work, after the tree it is in has been placed. */
   commitMount(): void {}
 
+  /**
+   * React deleted the element: what ties it to the app's code goes. The
+   * widget's signal closures hold its handlers, and a handler that reaches
+   * back to the widget (a ref) would keep both alive through GTK's own
+   * references, which reference counting cannot see.
+   */
+  detachDeleted(): void {}
+
   /** What a ref to the element holds: a widget. */
   abstract publicInstance(): GtkWidget;
 
@@ -432,6 +440,17 @@ export abstract class WidgetNode extends HostNode {
 
   widgetNode(): WidgetNode | null {
     return this;
+  }
+
+  detachDeleted(): void {
+    const slots = this.slots;
+    if (slots !== null) {
+      slots.forEach((slot) => {
+        slot.handler = null;
+        slot.restore = null;
+      });
+    }
+    this.props = null;
   }
 
   /** The prop `key` as last applied: a child element reads its container's (a Stack's `visibleChildName`). */
