@@ -283,6 +283,64 @@ const generic = (name) => name.replace(/<\d+>/g, "");
  */
 const stable = (detail) => detail.replace(/Closure\d+/g, "ClosureN").replace(/<\d+>/g, "<N>").replace(/obj\d+/g, "objN");
 
+/**
+ * What a program has under a name a cascade blames and nothing refused -- the
+ * evidence for *why* the root is missing, read from the program's own raw
+ * names (never the known file's, whose numbering is taken out and with it the
+ * suffixes that tell these apart):
+ *
+ *   compiled       the blamed function compiles: the cascade is stale
+ *   declared       a `declare func` shell and no body
+ *   instantiated   only instances `name<...>`: the call names the generic,
+ *                  which is a wrong call rather than a missing refusal
+ *   renumbered     the same name under another number (`Closure12` for
+ *                  `Closure9`): a lifted function renamed after it was cited
+ *   suffixed       `name@...`: a module-qualified or aliased spelling
+ *   member         `Owner#name`
+ *   copy-of-refused  `name@0obj7`, a copy specialised for an argument's
+ *                  shape, whose `name` is refused: the copy was never made,
+ *                  and the cascade cites the name only it would have had
+ *   refused-as     nothing defined, but refused under one of the spellings
+ *                  above (`name@async` for `name`): the refusal is recorded
+ *                  against another name
+ *   nothing        none of these: no body, no refusal, no resemblance.
+ *                  Names cannot say more; by hand on 2026-09-27 these were a
+ *                  function nested in a refused one (`filterFn` in `filter`),
+ *                  lowered with its parent and so never, and a `declare`d
+ *                  binding taken as a value (`applyId(nts_process_setuid)`),
+ *                  whose wrapper calls a binding nothing declares
+ *
+ * `shape` is the blamed name's own form, independent of the program: a
+ * binding (`nts_`), a closure, a nested function (`outer@...`), or plain.
+ */
+/** `; the program has ...` or `; refused as ...`, whichever the evidence is. */
+export const evidenceText = (r) =>
+  r.evidence.length === 0 ? "" : `; ${r.kind === "refused-as" || r.kind === "copy-of-refused" ? "refused as" : "the program has"} ${r.evidence.map((e) => `\`${e}\``).join(", ")}`;
+
+export function resemblance(cause, hir, refused) {
+  const shape = /^nts_/.test(cause) ? "binding" : /Closure\d+/.test(cause) ? "closure" : cause.includes("@") ? "nested" : "plain";
+  const spelled = (d) => d.startsWith(`${cause}<`) || d.startsWith(`${cause}@`) || d.endsWith(`#${cause}`) || (d !== cause && stable(d) === stable(cause));
+  const defined = [...hir.defined.keys()];
+  const kinds = [
+    ["compiled", () => (hir.compiled.has(cause) ? [cause] : [])],
+    ["declared", () => (hir.defined.has(cause) ? [cause] : [])],
+    ["instantiated", () => defined.filter((d) => d.startsWith(`${cause}<`))],
+    ["renumbered", () => defined.filter((d) => d !== cause && stable(d) === stable(cause))],
+    ["suffixed", () => defined.filter((d) => d.startsWith(`${cause}@`))],
+    ["member", () => defined.filter((d) => d.endsWith(`#${cause}`))],
+    ["copy-of-refused", () => {
+      const base = /^(.+)@\d+obj\d+$/.exec(cause)?.[1];
+      return base && refused.has(base) ? [base] : [];
+    }],
+    ["refused-as", () => [...refused].filter((r) => r !== cause && spelled(r))],
+  ];
+  for (const [kind, find] of kinds) {
+    const evidence = find();
+    if (evidence.length > 0) return { shape, kind, evidence: evidence.sort().slice(0, 4) };
+  }
+  return { shape, kind: "nothing", evidence: [] };
+}
+
 // --- the rules ----------------------------------------------------------------
 
 /**
@@ -336,19 +394,25 @@ export function judge({ prepared, plain, layouts, refusals }, sourceLine = readS
   }
 
   const isRefused = (name) => refused.has(name) || refusedGenerically.has(generic(name));
+  // A rootless cause says what the program has under its name instead.
+  const rootless = (text, cause) => {
+    const r = resemblance(cause, hir, refused);
+    const has = evidenceText(r);
+    out.push({ rule: "cascade-has-root", detail: `${text}, which has no refusal of its own [${r.shape}, ${r.kind}${has}]`, subject: cause, resemblance: r });
+  };
   const cascades = readCascades(prepared);
   for (const { who, cause } of cascades.calls) {
-    if (!isRefused(cause)) say("cascade-has-root", `\`${who}\` blames \`${cause}\`, which has no refusal of its own`, cause);
+    if (!isRefused(cause)) rootless(`\`${who}\` blames \`${cause}\``, cause);
   }
   const uncompiled = new Set([...cascades.initializers.map((i) => i.global), ...cascades.unwritten]);
   for (const { who, global } of cascades.reads) {
     if (!uncompiled.has(global)) say("cascade-has-root", `\`${who}\` blames the initializer of \`${global}\`, and no line says it was not compiled`, `the initializer of ${global}`);
   }
   for (const { global, cause } of cascades.initializers) {
-    if (!isRefused(cause)) say("cascade-has-root", `the initializer of \`${global}\` blames \`${cause}\`, which has no refusal of its own`, cause);
+    if (!isRefused(cause)) rootless(`the initializer of \`${global}\` blames \`${cause}\``, cause);
   }
   for (const { cause } of cascades.statements) {
-    if (!isRefused(cause)) say("cascade-has-root", `a dropped module-scope statement blames \`${cause}\`, which has no refusal of its own`, cause);
+    if (!isRefused(cause)) rootless(`a dropped module-scope statement blames \`${cause}\``, cause);
   }
 
   // A call to a refused function that preparation cut from the top level must
@@ -487,6 +551,23 @@ function selfTest() {
   // table-resolves and owner-has-layout are clean over 40,000 functions, and
   // a rule that is always clean is indistinguishable from one that cannot
   // fire. Each must fire here, on the shape it exists for.
+  // What a rootless cause resembles, from raw names: each kind, and a name
+  // that is only an instance's prefix is not mistaken for nothing.
+  const resembles = (cause, defs, refusals = []) => {
+    const r = resemblance(cause, readHir(defs.map((d) => `func ${d}() -> f64 {\n}`).join("\n")), new Set(refusals));
+    return `${r.shape} ${r.kind}`;
+  };
+  const kinds = [
+    [resembles("extractSize", ["extractSize<erased>", "extractSize<str>"]), "plain instantiated"],
+    [resembles("Closure9#call", ["Closure12#call"]), "closure renumbered"],
+    [resembles("mkdtemp", ["mkdtemp@async"]), "plain suffixed"],
+    [resembles("map@ops@0obj7", [], ["map@ops@0obj8"]), "nested refused-as"],
+    [resembles("map@ops@0obj7", [], ["map@ops"]), "nested copy-of-refused"],
+    [resembles("map@ops@0obj7", [], ["map"]), "nested nothing"],
+    [resembles("nts_env", ["other"]), "binding nothing"],
+    [resembles("extractSize", ["extractSizeAlgorithm<str>"]), "plain nothing"],
+  ];
+  for (const [got, want] of kinds) if (got !== want) return `a rootless cause read as ${got}, not ${want}`;
   const rules = (t) => (judge(t).violations ?? []).map((v) => v.rule);
   if (!rules({ ...clean, prepared: clean.prepared.replace("  %2 = call total(%1) : f64", "  %2 = call nowhere(%1) : f64") }).includes("call-resolves")) return "a direct call to a function nothing defines was not caught";
   if (!rules({ ...clean, prepared: clean.prepared.replace("func total(t: f64) -> f64 {", "func total(t: f64) -> f64 {\n}\nfunc total(t: f64) -> f64 {").replace(summary(5), summary(6)) }).includes("call-resolves")) return "a function defined twice was not caught";
@@ -637,8 +718,27 @@ const heldBy = new Map();
 for (const v of held) heldBy.set(key(v), [...(heldBy.get(key(v)) ?? []), v]);
 for (const [k, vs] of [...heldBy].sort(([a], [b]) => a.localeCompare(b))) {
   const [project, rule, subject] = k.split("\t");
-  const what = vs.length === 1 ? vs[0].detail : `${rule} \`${subject}\`, ${vs.length} violations`;
+  const r = vs[0].resemblance;
+  const as = r ? ` [${r.shape}, ${r.kind}${evidenceText(r)}]` : "";
+  const what = vs.length === 1 ? vs[0].detail : `${rule} \`${subject}\`, ${vs.length} violations${as}`;
   console.log(`  known             ${project}: ${what} -- ${known.get(k)}`);
+}
+// Rootless causes by what their program has under the name: entries (one per
+// blamed name) and violations (every cascade through it) are both counted,
+// because they rank differently.
+const tally = new Map();
+for (const v of found.filter((f) => f.resemblance)) {
+  const t = `${v.resemblance.shape} / ${v.resemblance.kind}`;
+  const row = tally.get(t) ?? { entries: new Set(), violations: 0 };
+  row.entries.add(key(v));
+  row.violations += 1;
+  tally.set(t, row);
+}
+if (tally.size > 0) {
+  console.log("  rootless causes, by the blamed name's shape / what the program has under it:");
+  for (const [t, row] of [...tally].sort(([, a], [, b]) => b.entries.size - a.entries.size || b.violations - a.violations)) {
+    console.log(`    ${t.padEnd(26)} ${String(row.entries.size).padStart(4)} entr${row.entries.size === 1 ? "y" : "ies"}, ${row.violations} violation(s)`);
+  }
 }
 for (const k of expired) console.log(`  ^ no longer occurs, remove it from tooling/conformance/integrity.known: ${k.replaceAll("\t", " | ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED       ${u}`);
