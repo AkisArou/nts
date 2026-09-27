@@ -148,28 +148,46 @@ export class FiberNode {
 
   alternate: Fiber | null = null;
 
-  // Initialized with doubles rather than small integers, as upstream does,
-  // so that later double values do not change the object's shape in V8
-  // (https://github.com/facebook/react/issues/14365).
-  actualDuration = -0;
-  actualStartTime = -1.1;
-  selfBaseDuration = -0;
-  treeBaseDuration = -0;
+  // Profiling builds only, and development only below: declared here and
+  // given a value in the constructor behind their constant, as upstream's
+  // constructor does, so a production fiber in JavaScript does not carry
+  // them. They were ten more fields on every fiber, and a walk over the tree
+  // (getHostSibling) is bound by the fibers' size. A native fiber keeps its
+  // one layout either way.
+  declare actualDuration: number;
+  declare actualStartTime: number;
+  declare selfBaseDuration: number;
+  declare treeBaseDuration: number;
 
-  // Development only. Not directly used but handy for debugging internals.
-  _debugInfo: ReactDebugInfo | null = null;
-  _debugOwner: Fiber | null = null;
-  _debugStack: unknown = null;
-  _debugTask: unknown = null;
-  _debugNeedsRemount = false;
-  _debugHookTypes: HookType[] | null = null;
+  // Not directly used but handy for debugging internals.
+  declare _debugInfo: ReactDebugInfo | null;
+  declare _debugOwner: Fiber | null;
+  declare _debugStack: unknown;
+  declare _debugTask: unknown;
+  declare _debugNeedsRemount: boolean;
+  declare _debugHookTypes: HookType[] | null;
 
   constructor(tag: WorkTag, pendingProps: unknown, key: ReactKey, mode: TypeOfMode) {
     this.tag = tag;
     this.key = key;
     this.pendingProps = pendingProps;
     this.mode = mode;
+    if (enableProfilerTimer) {
+      // Initialized with doubles rather than small integers, as upstream
+      // does, so that later double values do not change the object's shape
+      // in V8 (https://github.com/facebook/react/issues/14365).
+      this.actualDuration = -0;
+      this.actualStartTime = -1.1;
+      this.selfBaseDuration = -0;
+      this.treeBaseDuration = -0;
+    }
     if (isDevelopment) {
+      this._debugInfo = null;
+      this._debugOwner = null;
+      this._debugStack = null;
+      this._debugTask = null;
+      this._debugNeedsRemount = false;
+      this._debugHookTypes = null;
       if (!hasBadMapPolyfill && typeof Object.preventExtensions === "function") {
         Object.preventExtensions(this);
       }
