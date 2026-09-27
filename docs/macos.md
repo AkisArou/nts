@@ -180,6 +180,35 @@ greeter.greet({ withTimes: 2 });
 TypeScript class adopts, and a completion handler, against the same program in
 Objective-C.
 
+## Your own Swift
+
+A directory of Swift is a module named for the directory, as a SwiftPM target
+is, and its `@objc` declarations are the module the program imports:
+
+```ts
+// nts.config.ts
+native: [sources({ dir: "native/Greeter" })],
+
+// src/main.ts
+import { Greeter } from "objc:Greeter";
+```
+
+- **Compiled here.** The same Swift toolchain compiles the module whole, into
+  one object per slice, and the link adds Swift's runtime, which every macOS
+  and iOS these targets reach carries.
+- **Bound from the header Swift writes**, as any Objective-C client of the
+  module reads it. So the names are that client's: `greet(times:)` is sent as
+  `greetWithTimes:`, and is `greet({ withTimes })`.
+- **Looked up by the name the runtime has.** A class without `@objc(Name)`
+  is registered as `_TtC7Greeter7Greeter`; the binding says so, and the
+  program still writes `Greeter`.
+- Only what Swift exposes to Objective-C is reachable: an `@objc` class,
+  protocol and member. Pure Swift -- a struct, a generic, SwiftUI -- needs an
+  `@objc` wrapper written in Swift.
+
+`examples/interop/macos-swift` is the fixture, against the same program in
+Swift.
+
 ## An application
 
 An application delegate is a class like any other, and a menu item's action

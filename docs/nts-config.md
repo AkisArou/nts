@@ -1166,8 +1166,10 @@ and `native.ts`'s own comments argue for, now running rather than described.
 An `objc:` module is the other way about. `objc:AppKit` is a framework, bound
 from the SDK, so a project's own Objective-C has to be told from one: the module
 is the header's name, `objc:Greeter` for `native/Greeter.h`. Its Swift names
-come from a symbol graph extracted on this machine (`swift_graph.rs`), and a
-`.m` in the directory compiles under ARC beside the program.
+come from a symbol graph extracted on this machine (`swift.rs`), and a
+`.m` in the directory compiles under ARC beside the program. A directory of
+`.swift` is a module named for the directory, as a SwiftPM target is: compiled
+here, and bound from the Objective-C header Swift writes for it.
 
 A package that declares native code and needs no binding still gets it compiled.
 A callback implementation is called from C and imported by nobody, so the roots

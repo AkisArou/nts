@@ -66,6 +66,7 @@
     "macos-draw/nts.config.ts",
     "macos-notes/nts.config.ts",
     "macos-native-objc/nts.config.ts",
+    "macos-swift/nts.config.ts",
     "native-string/nts.config.ts",
     "native-closure/nts.config.ts",
     "android-shape/nts.config.ts",

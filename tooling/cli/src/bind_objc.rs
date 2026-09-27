@@ -116,7 +116,7 @@ pub(crate) struct Request {
 
 /// A header a project writes -- a `native:` entry's -- read as a module of its
 /// own, beside the frameworks it imports. No SDK has its Swift graph, so it
-/// is extracted for it (`swift_graph`) into a directory of its own.
+/// is extracted for it (`swift`) into a directory of its own.
 #[derive(Clone, Debug)]
 pub(crate) struct Project {
     /// The header, `native/Greeter.h`, which the module's declarations are
@@ -126,6 +126,18 @@ pub(crate) struct Project {
     pub(crate) search: Vec<std::path::PathBuf>,
     /// The directory holding `<Module>.symbols.json`.
     pub(crate) symbols: std::path::PathBuf,
+    /// The names the Objective-C runtime has the header's classes and
+    /// protocols under, where they are not the header's: a Swift class
+    /// without `@objc(Name)` is registered as `_TtC7Greeter7Greeter`, which
+    /// `SWIFT_CLASS` in the header Swift writes says. What the binding looks
+    /// the class up by, while the program's name for it stays `Greeter`.
+    pub(crate) runtime_names: BTreeMap<String, String>,
+}
+
+/// The name the Objective-C runtime has `objc` under: see
+/// [`Project::runtime_names`].
+fn runtime_name<'r>(request: &'r Request, objc: &'r str) -> &'r str {
+    request.project.as_ref().and_then(|project| project.runtime_names.get(objc)).map_or(objc, String::as_str)
 }
 
 /// Initializers and class members one framework adds to another's class --
@@ -326,7 +338,7 @@ fn witness(request: &Request, model: &Model) -> String {
         for sent in &class.sent {
             // `self` and `_cmd`, then one per colon.
             let arguments = 2 + sent.selector.bytes().filter(|&byte| byte == b':').count();
-            let _ = writeln!(out, "  check(\"{}\", \"{}\", {}, {arguments});", class.objc, sent.selector, u8::from(sent.class_side));
+            let _ = writeln!(out, "  check(\"{}\", \"{}\", {}, {arguments});", runtime_name(request, &class.objc), sent.selector, u8::from(sent.class_side));
         }
     }
     out.push_str("  printf(\"%d messages checked, %d the runtime does not have\\n\", checked, missing);\n  return missing != 0;\n}\n");
@@ -3291,7 +3303,7 @@ fn render_class(out: &mut String, request: &Request, model: &Model, class: &Clas
     let path: Vec<String> = class.swift.split('.').map(str::to_owned).collect();
     let name = path.last().map_or("", String::as_str);
     let mut text = String::new();
-    let _ = writeln!(text, "  /** @ntsClass {} */\n  export class {name}{extends} {{", class.objc);
+    let _ = writeln!(text, "  /** @ntsClass {} */\n  export class {name}{extends} {{", runtime_name(request, &class.objc));
     for line in &class.members {
         let _ = writeln!(text, "{line}");
     }
@@ -3326,13 +3338,13 @@ fn render_class(out: &mut String, request: &Request, model: &Model, class: &Clas
 
 /// A protocol as the interface a class the program writes implements, and
 /// the type a value of it has: nested where Swift nests it.
-fn render_protocol(out: &mut String, protocol: &Protocol) {
+fn render_protocol(out: &mut String, request: &Request, protocol: &Protocol) {
     let path: Vec<String> = protocol.swift.split('.').map(str::to_owned).collect();
     let mut text = String::new();
     let _ = writeln!(
         text,
         "  /** @ntsProtocol {} */\n  export interface {} extends {} {{",
-        protocol.objc,
+        runtime_name(request, &protocol.objc),
         path.last().map_or("", String::as_str),
         std::iter::once(protocol.base.as_str()).chain(protocol.refines.iter().map(String::as_str)).collect::<Vec<_>>().join(", ")
     );
@@ -3417,7 +3429,7 @@ fn render(request: &Request, model: &Model) -> String {
         render_class(&mut out, request, model, class);
     }
     for protocol in &model.protocols {
-        render_protocol(&mut out, protocol);
+        render_protocol(&mut out, request, protocol);
     }
     for class in &model.cf_classes {
         cf::render(&mut out, class);
@@ -3433,7 +3445,8 @@ fn render(request: &Request, model: &Model) -> String {
         // form rejects with is its description.
         let members = if name == "NSError" { "\n    get localizedDescription(): string;\n  " } else { "" };
         let text = format!(
-            "  /** Named by a signature here, and not bound: its ancestors' members only.\n   * @ntsClass {name} */\n  export class {}{extends} {{{members}}}\n",
+            "  /** Named by a signature here, and not bound: its ancestors' members only.\n   * @ntsClass {} */\n  export class {}{extends} {{{members}}}\n",
+            runtime_name(request, name),
             path.last().map_or("", String::as_str)
         );
         nest(&mut out, &path, &text);

@@ -24,11 +24,24 @@ use nts_frontend_ts::tsgo::generated::{Complaint, Generated};
 use crate::bind_objc;
 use crate::objc_imports::Imports;
 
+/// This generator's source and what it runs: a change to any is a change to
+/// the bindings it writes.
+const GENERATOR: u64 = crate::apple_surface::fnv(&[
+    include_bytes!("objc_bindings.rs"),
+    include_bytes!("apple_surface.rs"),
+    include_bytes!("bind_objc.rs"),
+    include_bytes!("bind_objc/cf.rs"),
+    include_bytes!("swift.rs"),
+]);
+
 /// The generator `nts build` and `nts check` open a project with, when its
 /// `nts.config.ts` targets macOS or iOS.
 #[derive(Debug)]
 pub(crate) struct ObjcBindings {
     targets: Vec<nts_build::config::Target>,
+    /// The project's `native:` directories, whose headers and Swift it may
+    /// bind: part of what the identity fingerprints.
+    native: Vec<Utf8PathBuf>,
     /// What the program imports, read once.
     imports: Option<Imports>,
     /// Classes the checker found missing, by module, beyond the imports.
@@ -59,9 +72,10 @@ struct Provided {
 }
 
 impl ObjcBindings {
-    pub(crate) fn new(targets: Vec<nts_build::config::Target>) -> Self {
+    pub(crate) fn new(targets: Vec<nts_build::config::Target>, native: Vec<Utf8PathBuf>) -> Self {
         Self {
             targets,
+            native,
             imports: None,
             missing: None,
             reached: BTreeMap::new(),
@@ -99,8 +113,25 @@ impl ObjcBindings {
 }
 
 impl Generated for ObjcBindings {
+    /// Everything a binding is read from: this generator, each target's SDK
+    /// and the Swift graphs beside it, and the project's own headers and
+    /// Swift. A snapshot cached under the same identity answers the build
+    /// without asking this generator anything, so what the bindings would
+    /// become must change it: a constant here kept a program on the bindings
+    /// of the graphs it was first built against.
     fn identity(&self) -> String {
-        "objc-bindings/1".to_owned()
+        let mut files: Vec<Utf8PathBuf> = Vec::new();
+        for platform in ["macos", "ios"].iter().filter_map(|os| self.platform_for(os)) {
+            files.push(platform.sdk.join("SDKSettings.json"));
+            let Some(symbols) = bind_objc::default_symbols(platform.sdk.as_str()).ok().and_then(|path| Utf8PathBuf::from_path_buf(path).ok()) else { continue };
+            files.extend(listed(&symbols, &["json"]));
+        }
+        for directory in &self.native {
+            files.extend(listed(directory, &["h", "m", "swift"]));
+        }
+        files.sort();
+        files.dedup();
+        format!("objc-bindings/2 {GENERATOR:016x} {}", nts_surfaces::fingerprint(&files))
     }
 
     fn config(&mut self, tsconfig: &Utf8Path, roots: &[String], complaints: &[Complaint]) -> Result<Option<Utf8PathBuf>, String> {
@@ -200,11 +231,12 @@ impl ObjcBindings {
         for (module, names) in modules {
             let platform = self.platform(module)?;
             let symbols = bind_objc::default_symbols(platform.sdk.as_str())?;
-            // The project's own header, where a `native:` entry names one by
-            // the module's name: `objc:Greeter` is `Greeter.h`. Foundation is
-            // what every Objective-C header reads beside it; its graph is
-            // extracted below, once the directory it goes in is known.
-            let project = self.project_header(project_dir, module)?;
+            // The project's own Objective-C or Swift, where a `native:` entry
+            // is the module: `objc:Greeter` is `Greeter.h`, or a directory
+            // `Greeter` of Swift. Foundation is what every Objective-C header
+            // reads beside it; its graph is extracted below, once the
+            // directory it goes in is known.
+            let project = self.project_module(project_dir, module, &platform)?;
             let frameworks = if project.is_some() { vec!["Foundation".to_owned()] } else { frameworks(module, &symbols) };
             requests.push(bind_objc::Request {
                 frameworks,
@@ -237,14 +269,9 @@ impl ObjcBindings {
             if !binding.is_file() {
                 std::fs::create_dir_all(&directory)?;
                 if let Some(project) = &request.project {
-                    let extraction = crate::swift_graph::Extraction {
-                        module: &module,
-                        header: &project.header,
-                        search: &project.search,
-                        sdk: std::path::Path::new(&request.sdk),
-                        target: &request.target,
-                    };
-                    crate::swift_graph::toolchain()?.extract(&extraction, &project.symbols)?;
+                    let header = crate::swift::Header { module: &module, path: &project.header, search: &project.search };
+                    let target = crate::swift::Target { sdk: std::path::Path::new(&request.sdk), triple: &request.target };
+                    crate::swift::toolchain()?.extract(&header, target, &project.symbols)?;
                 }
                 let output = bind_objc::run(request)?;
                 std::fs::write(&values, &output.values)?;
@@ -266,31 +293,43 @@ impl ObjcBindings {
         Ok(config)
     }
 
-    /// The header a `native:` entry of the project's config names for
-    /// `module` -- `Greeter.h` for `objc:Greeter` -- with the directory its
-    /// imports are read from. The graph's directory is decided by the key.
-    fn project_header(&self, project: &Utf8Path, module: &str) -> anyhow::Result<Option<bind_objc::Project>> {
+    /// The project's own module `module`, where a `native:` entry of its
+    /// config is one: a header named for it -- `Greeter.h` for `objc:Greeter`
+    /// -- or a directory of Swift named for it, as a `SwiftPM` target is, whose
+    /// Objective-C header Swift writes. The graph's directory is decided by
+    /// the key.
+    fn project_module(&self, project: &Utf8Path, module: &str, platform: &Platform) -> anyhow::Result<Option<bind_objc::Project>> {
         let Some(config) = nts_build::config::above(&project.join(nts_build::config::FILE_NAME)) else { return Ok(None) };
         let package = config.parent().unwrap_or(project);
         let resolved = nts_build::config::resolve(&config)?;
-        let covered = |entry: &&nts_build::config::NativeSources| self.targets.iter().any(|target| entry.covers(&target.id, target.minimum_version.as_deref()));
-        let named: Vec<Utf8PathBuf> = resolved
+        let covered: Vec<&nts_build::config::NativeSources> = resolved
             .native
             .iter()
-            .filter(covered)
+            .filter(|entry| self.targets.iter().any(|target| entry.covers(&target.id, target.minimum_version.as_deref())))
+            .collect();
+        let headers: Vec<Utf8PathBuf> = covered
+            .iter()
             .filter_map(|entry| entry.header.as_deref())
             .map(|header| package.join(header))
             .filter(|header| header.extension() == Some("h") && header.file_stem() == Some(module))
             .collect();
-        match named.as_slice() {
-            [] => Ok(None),
-            [header] => Ok(Some(bind_objc::Project {
-                header: header.clone().into_std_path_buf(),
-                search: header.parent().map(|directory| directory.to_path_buf().into_std_path_buf()).into_iter().collect(),
-                symbols: std::path::PathBuf::new(),
-            })),
-            several => anyhow::bail!("`objc:{module}` is named by {} headers in {config}: {}", several.len(), several.iter().map(|header| header.as_str()).collect::<Vec<_>>().join(", ")),
-        }
+        let swift: Vec<Utf8PathBuf> =
+            covered.iter().map(|entry| package.join(&entry.dir)).filter(|dir| dir.file_name() == Some(module) && !swift_sources(dir).is_empty()).collect();
+        let (header, runtime_names) = match (headers.as_slice(), swift.as_slice()) {
+            ([], []) => return Ok(None),
+            ([header], []) => (header.clone(), BTreeMap::new()),
+            ([], [dir]) => swift_header(project, module, dir, platform)?,
+            _ => anyhow::bail!(
+                "`objc:{module}` is named by more than one `native:` entry in {config}: {}",
+                headers.iter().chain(&swift).map(|path| path.as_str()).collect::<Vec<_>>().join(", ")
+            ),
+        };
+        Ok(Some(bind_objc::Project {
+            search: header.parent().map(|directory| directory.to_path_buf().into_std_path_buf()).into_iter().collect(),
+            header: header.into_std_path_buf(),
+            symbols: std::path::PathBuf::new(),
+            runtime_names,
+        }))
     }
 
     /// The SDK and deployment target a module's binding is for: iOS for
@@ -303,26 +342,32 @@ impl ObjcBindings {
             "AppKit" => &["macos"][..],
             _ => &["macos", "ios"][..],
         };
-        let root = crate::apple_root();
-        for os in wanted {
-            let minimum = self
-                .targets
-                .iter()
-                .filter(|target| target.os == *os)
-                .filter_map(|target| target.minimum_version.clone())
-                .min_by(|a, b| version(a).cmp(&version(b)));
-            if !self.targets.iter().any(|target| target.os == *os) {
-                continue;
-            }
-            return Ok(if *os == "ios" {
-                let sdk = std::env::var("NTS_IOS_SIMULATOR_SDK").map_or_else(|_| root.join("iPhoneSimulator.sdk"), Utf8PathBuf::from);
-                Platform { sdk, triple: format!("x86_64-apple-ios{}-simulator", minimum.as_deref().unwrap_or("13.0")) }
-            } else {
-                let sdk = std::env::var("NTS_APPLE_SDK").map_or_else(|_| root.join("MacOSX.sdk"), Utf8PathBuf::from);
-                Platform { sdk, triple: format!("x86_64-apple-macos{}", minimum.as_deref().unwrap_or("11.0")) }
-            });
+        wanted
+            .iter()
+            .find_map(|os| self.platform_for(os))
+            .ok_or_else(|| anyhow::anyhow!("the program imports from `objc:{module}`, and nts.config.ts targets neither macOS nor iOS"))
+    }
+
+    /// The SDK and deployment target of the program's `os` targets, where it
+    /// has one: from the lowest minimum version the config asks for.
+    fn platform_for(&self, os: &str) -> Option<Platform> {
+        if !self.targets.iter().any(|target| target.os == os) {
+            return None;
         }
-        anyhow::bail!("the program imports from `objc:{module}`, and nts.config.ts targets neither macOS nor iOS")
+        let minimum = self
+            .targets
+            .iter()
+            .filter(|target| target.os == os)
+            .filter_map(|target| target.minimum_version.clone())
+            .min_by(|a, b| version(a).cmp(&version(b)));
+        let root = crate::apple_root();
+        Some(if os == "ios" {
+            let sdk = std::env::var("NTS_IOS_SIMULATOR_SDK").map_or_else(|_| root.join("iPhoneSimulator.sdk"), Utf8PathBuf::from);
+            Platform { sdk, triple: format!("x86_64-apple-ios{}-simulator", minimum.as_deref().unwrap_or("13.0")) }
+        } else {
+            let sdk = std::env::var("NTS_APPLE_SDK").map_or_else(|_| root.join("MacOSX.sdk"), Utf8PathBuf::from);
+            Platform { sdk, triple: format!("x86_64-apple-macos{}", minimum.as_deref().unwrap_or("11.0")) }
+        })
     }
 }
 
@@ -420,6 +465,110 @@ fn key(requests: &[bind_objc::Request]) -> String {
     format!("{:016x}", fnv(format!("{text}{compiler}").as_bytes()))
 }
 
+/// The files in `dir` with one of `extensions`.
+fn listed(dir: &Utf8Path, extensions: &[&str]) -> Vec<Utf8PathBuf> {
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.path()).ok())
+        .filter(|path| path.extension().is_some_and(|extension| extensions.contains(&extension)))
+        .collect()
+}
+
+/// Every `.swift` in `dir`, sorted: one module's sources.
+pub(crate) fn swift_sources(dir: &Utf8Path) -> Vec<std::path::PathBuf> {
+    let mut sources: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "swift"))
+        .collect();
+    sources.sort();
+    sources
+}
+
+/// The Objective-C header Swift writes for the module in `dir`, as an
+/// Objective-C client reads it, under `.nts/swift/<module>/<fingerprint>`:
+/// written again only when a source changes, and the one before it removed.
+/// With the names the runtime has its classes and protocols under.
+fn swift_header(project: &Utf8Path, module: &str, dir: &Utf8Path, platform: &Platform) -> anyhow::Result<(Utf8PathBuf, BTreeMap<String, String>)> {
+    let sources = swift_sources(dir);
+    let mut bytes = Vec::new();
+    for source in &sources {
+        bytes.extend(source.to_string_lossy().as_bytes());
+        bytes.extend(std::fs::read(source).unwrap_or_default());
+    }
+    bytes.extend(platform.triple.as_bytes());
+    // And this compiler, which decides what is kept of the header.
+    let compiler = std::env::current_exe().and_then(std::fs::metadata).map(|meta| format!("{}{:?}", meta.len(), meta.modified().ok())).unwrap_or_default();
+    bytes.extend(compiler.as_bytes());
+    let modules = project.join(".nts").join("swift").join(module);
+    let keep = format!("{:016x}", fnv(&bytes));
+    let header = modules.join(&keep).join(format!("{module}-Swift.h"));
+    if !header.is_file() {
+        std::fs::create_dir_all(modules.join(&keep))?;
+        let written = modules.join(&keep).join(format!("{module}-Swift.written.h"));
+        let target = crate::swift::Target { sdk: platform.sdk.as_std_path(), triple: &platform.triple };
+        crate::swift::toolchain()?.objc_header(&crate::swift::Module { name: module, sources: &sources }, target, written.as_std_path())?;
+        std::fs::write(&header, as_objc_client(&std::fs::read_to_string(&written)?))?;
+    }
+    for entry in std::fs::read_dir(&modules).into_iter().flatten().flatten() {
+        if entry.file_name().to_str() != Some(keep.as_str()) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+    let runtime_names = runtime_names(&std::fs::read_to_string(&header)?);
+    Ok((header, runtime_names))
+}
+
+/// The header Swift writes, as an Objective-C client reads it. Swift marks
+/// each declaration its own (`external_source_symbol(language="Swift")`), by
+/// a pragma pushed around them, and the importer leaves a declaration so
+/// marked out of the module's graph: it is Swift's, which Swift has already.
+/// What remains is what any Objective-C client of the module compiles against.
+fn as_objc_client(written: &str) -> String {
+    let mut out = String::with_capacity(written.len());
+    let mut pending = 0usize;
+    for line in written.lines() {
+        let trimmed = line.trim_start_matches(['#', ' ']);
+        if trimmed.starts_with("pragma clang attribute push(__attribute__((external_source_symbol(") {
+            pending += 1;
+            continue;
+        }
+        if pending > 0 && trimmed == "pragma clang attribute pop" {
+            pending -= 1;
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+/// The runtime name of each class and protocol the header declares where it
+/// is not the declaration's own: `SWIFT_CLASS("_TtC7Greeter7Greeter")` above
+/// `@interface Greeter`. A `_NAMED` one is registered under its own name.
+fn runtime_names(header: &str) -> BTreeMap<String, String> {
+    let mut names = BTreeMap::new();
+    let mut runtime: Option<&str> = None;
+    for line in header.lines().map(str::trim) {
+        if let Some(rest) = line.strip_prefix("SWIFT_CLASS(\"").or_else(|| line.strip_prefix("SWIFT_PROTOCOL(\"")).or_else(|| line.strip_prefix("SWIFT_RESILIENT_CLASS(\"")) {
+            runtime = rest.split('"').next();
+            continue;
+        }
+        let declared = line.strip_prefix("@interface ").or_else(|| line.strip_prefix("@protocol "));
+        if let (Some(runtime), Some(declared)) = (runtime.take(), declared) {
+            let name: String = declared.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name != runtime {
+                names.insert(name, runtime.to_owned());
+            }
+        }
+    }
+    names
+}
+
 /// The contents of every `.h` in `directories`, in a stable order.
 fn headers_fingerprint(directories: &[std::path::PathBuf]) -> u64 {
     let mut headers: Vec<std::path::PathBuf> = directories
@@ -468,6 +617,7 @@ fn write_reached(store: &Utf8Path, reached: &BTreeMap<String, BTreeSet<String>>)
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -484,5 +634,25 @@ mod tests {
         let binding = "  /** Named by a signature here, and not bound: its ancestors' members only.\n   * @ntsClass UINavigationBar */\n  export class UINavigationBar extends UIView {}\n\
                        export class UIWindow extends UIView {\n  }\n";
         assert_eq!(stubs(binding), ["UINavigationBar".to_owned()].into_iter().collect());
+    }
+
+    /// A header or Swift source of the project's changes the identity: a
+    /// snapshot cached under the old one would answer the build with the
+    /// bindings of the old header, and the generator would never be asked.
+    #[test]
+    fn a_changed_native_source_changes_the_identity() {
+        use nts_frontend_ts::tsgo::generated::Generated as _;
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-objc-identity-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bindings = ObjcBindings::new(Vec::new(), vec![dir.clone()]);
+        std::fs::write(dir.join("Greeter.h"), "@interface Greeter\n@end\n").unwrap();
+        let before = bindings.identity();
+        assert_eq!(bindings.identity(), before, "the identity of unchanged sources is stable");
+        std::fs::write(dir.join("Greeter.h"), "@interface Greeter\n- (void)wave;\n@end\n").unwrap();
+        let header = bindings.identity();
+        assert_ne!(header, before, "an edited header kept the identity");
+        std::fs::write(dir.join("Greeter.swift"), "").unwrap();
+        assert_ne!(bindings.identity(), header, "a new Swift source kept the identity");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

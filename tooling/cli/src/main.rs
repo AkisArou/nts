@@ -10,7 +10,7 @@ mod apple_surface;
 mod bind_objc;
 mod objc_bindings;
 mod objc_imports;
-mod swift_graph;
+mod swift;
 mod bind_gir;
 mod gir_surface;
 mod bind_winmd;
@@ -363,7 +363,7 @@ fn bind_objc_project(
             let header = std::path::PathBuf::from(header);
             let mut search: Vec<std::path::PathBuf> = header.parent().map(std::path::Path::to_path_buf).into_iter().collect();
             search.extend(repeated("--include").into_iter().map(std::path::PathBuf::from));
-            Ok(Some(bind_objc::Project { header, search, symbols: std::path::PathBuf::from(symbols) }))
+            Ok(Some(bind_objc::Project { header, search, symbols: std::path::PathBuf::from(symbols), runtime_names: std::collections::BTreeMap::new() }))
         }
         _ => anyhow::bail!("`--header` binds a project's header and needs `--project-symbols`, the directory its graph was extracted into, and the other way about"),
     }
@@ -1254,7 +1254,9 @@ fn frontend_for(tsconfig: &Utf8Path, tsgo_binary: String) -> Result<TsgoApi> {
     source = if apple.is_empty() {
         source.with_generated(Box::new(gir_surface::GirBindings::default()))
     } else {
-        source.with_generated(Box::new(objc_bindings::ObjcBindings::new(apple)))
+        let package = config.parent().unwrap_or_else(|| Utf8Path::new("."));
+        let native = resolved.native.iter().map(|entry| package.join(&entry.dir)).collect();
+        source.with_generated(Box::new(objc_bindings::ObjcBindings::new(apple, native)))
     };
     let Some(react) = resolved.react else {
         return Ok(source);
@@ -3664,13 +3666,15 @@ fn native_sources(
                     .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
                 match path.extension() {
                     Some("c") => found.push((directory.clone(), path)),
-                    // Objective-C, which has a runtime only on Apple's
-                    // platforms: refused by name elsewhere rather than left
-                    // out, which would leave its symbols to a link error.
-                    Some("m") if matches!(target.os.as_str(), "macos" | "ios") => found.push((directory.clone(), path)),
-                    Some("m") => bail!(
-                        "{path} is Objective-C, which builds for macOS and iOS, and `{}` is compiled for {}: \
+                    // Objective-C and Swift, which the Swift toolchain here
+                    // builds for Apple's platforms only: refused by name
+                    // elsewhere rather than left out, which would leave their
+                    // symbols to a link error.
+                    Some("m" | "swift") if matches!(target.os.as_str(), "macos" | "ios") => found.push((directory.clone(), path)),
+                    Some(language @ ("m" | "swift")) => bail!(
+                        "{path} is {}, which builds for macOS and iOS here, and `{}` is compiled for {}: \
                          name the targets the directory is for with `targets` in its `sources` entry",
+                        if language == "m" { "Objective-C" } else { "Swift" },
                         entry.dir,
                         target.id
                     ),
@@ -5283,6 +5287,14 @@ struct Toolchain {
 }
 
 impl Toolchain {
+    /// The SDK and target triple of an Apple toolchain, from its leading
+    /// `-target` and `-isysroot`: what Swift compiles for.
+    fn apple_target(&self) -> Option<(String, String)> {
+        let after = |flag: &str| self.leading.windows(2).find(|pair| pair[0] == flag).map(|pair| pair[1].clone());
+        let triple = after("-target").filter(|triple| triple.contains("-apple-"))?;
+        Some((after("-isysroot")?, triple))
+    }
+
     fn command(&self) -> std::process::Command {
         let mut command = std::process::Command::new(&self.program);
         command.args(&self.leading);
@@ -5792,6 +5804,14 @@ fn link_c(
             }
             command.args(binding_link_flags(wrote));
             command.args(loop_host_link_flags(&sources, format));
+            // Swift's runtime, which the Swift objects name through their
+            // autolink entries: its stubs in the SDK, and the OS's copy at
+            // run time, where every macOS and iOS these targets reach has it.
+            if native.iter().any(|(_, source)| source.extension() == Some("swift"))
+                && let Some((sdk, _)) = tools.apple_target()
+            {
+                command.arg(format!("-L{sdk}/usr/lib/swift")).arg("-Wl,-rpath,/usr/lib/swift");
+            }
             // **`--no-undefined` where it can be used**, which is the earliest
             // an unresolved symbol can be caught and the cheapest place to say
             // so. Not for an addon: a `.node` resolves `napi_*` out of the host
@@ -6284,7 +6304,24 @@ fn compile_native(
     with: &Compiling<'_>,
 ) -> Result<()> {
 
-    for (directory, source) in native {
+    // A directory of Swift is one module, compiled whole into one object, as
+    // a SwiftPM target is.
+    let mut swift: std::collections::BTreeMap<&Utf8PathBuf, Vec<std::path::PathBuf>> = std::collections::BTreeMap::new();
+    for (directory, source) in native.iter().filter(|(_, source)| source.extension() == Some("swift")) {
+        swift.entry(directory).or_default().push(source.clone().into_std_path_buf());
+    }
+    if !swift.is_empty() {
+        let (sdk, triple) = with.tools.apple_target().ok_or_else(|| anyhow!("`{name}` has Swift to compile and no Apple target to compile it for"))?;
+        let toolchain = crate::swift::toolchain()?;
+        for (directory, sources) in &swift {
+            let module = directory.file_name().unwrap_or("Swift");
+            let object = out.join(format!("{module}.swift.o"));
+            let target = crate::swift::Target { sdk: std::path::Path::new(&sdk), triple: &triple };
+            toolchain.compile(&crate::swift::Module { name: module, sources }, target, object.as_std_path())?;
+            objects.push(object);
+        }
+    }
+    for (directory, source) in native.iter().filter(|(_, source)| source.extension() != Some("swift")) {
         let object = out.join(format!("{}.o", source.file_name().unwrap_or("native")));
         // Objective-C under ARC with blocks, as Xcode compiles a `.m`: the
         // project's classes count their objects as the program's do.

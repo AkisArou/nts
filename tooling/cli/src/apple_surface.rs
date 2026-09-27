@@ -23,7 +23,7 @@ use crate::bind_objc;
 const GENERATOR: u64 = fnv(&[include_bytes!("apple_surface.rs"), include_bytes!("bind_objc.rs"), include_bytes!("bind_objc/cf.rs")]);
 
 /// FNV-1a over `parts` in order, at compile time.
-const fn fnv(parts: &[&[u8]]) -> u64 {
+pub(crate) const fn fnv(parts: &[&[u8]]) -> u64 {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     let mut part = 0;
     while part < parts.len() {
