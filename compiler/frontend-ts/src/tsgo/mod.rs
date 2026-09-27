@@ -1474,13 +1474,46 @@ impl SemanticSource for TsgoApi {
         self.stats
     }
 
+    /// **Which questions were asked, not only who asked them.**
+    ///
+    /// `cache::snapshot` folds this into the entry's key, and the three passes
+    /// below decide what the snapshot *contains*: `nts frontend` with no flags
+    /// asks for none of them, [`Self::for_compilation`] asks for decomposition
+    /// and call resolution, and `nts frontend --decompose --calls --constants`
+    /// asks for all three. With only the transform's identity here, all three
+    /// stored under **one key** -- so `nts frontend P` followed by a build of `P`
+    /// was served the narrow snapshot as a valid hit and compiled a smaller
+    /// program with nothing refused and nothing printed. `examples/math` emitted
+    /// **16 functions where it emits 40** (`aNaNExponent`, `powerCall`, `sign`,
+    /// `fround`, `logs` and `exponentials` among the missing), and
+    /// `runtime/node/stream` differed in eight emitted files. The cache lives
+    /// under the temp directory, so one lane's measurement poisoned every other
+    /// lane's next build.
+    ///
+    /// Found by the conformance lane's `snapshot-cache` step on its first real
+    /// run, which is what that step exists for: the output was correct for what
+    /// it contained, so no differential could see it.
+    ///
+    /// **The budgets are part of the answer**, not decoration: a budget bounds
+    /// what decomposition reaches, so two runs at different budgets are two
+    /// different snapshots and a key ignoring the number would serve whichever
+    /// was stored first. Written as the question rather than as the command, so
+    /// two commands that ask the same thing still share an entry -- which is the
+    /// point of the cache.
     fn identity(&self) -> String {
+        let asked = format!(
+            "asks:{}{}{}",
+            self.decompose.as_ref().map_or_else(|| "-".to_owned(), |b| format!("d{}", b.per_seed)),
+            self.resolve_calls.as_ref().map_or_else(|| "-".to_owned(), |b| format!("c{}", b.per_seed)),
+            self.fold_constants.as_ref().map_or_else(|| "-".to_owned(), |b| format!("k{}", b.per_seed)),
+        );
         let transform = self.transform.as_ref().map_or_else(String::new, |transform| transform.identity());
-        match &self.generated {
+        let rest = match &self.generated {
             Some(generated) if transform.is_empty() => generated.identity(),
             Some(generated) => format!("{transform}+{}", generated.identity()),
             None => transform,
-        }
+        };
+        if rest.is_empty() { asked } else { format!("{asked}+{rest}") }
     }
 }
 

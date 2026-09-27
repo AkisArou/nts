@@ -104,7 +104,18 @@ pub fn snapshot<S: SemanticSource>(
     // config through different symlinks are one project and must be one entry.
     let canonical = absolute(tsconfig);
     let listing = project_listing(&canonical);
-    let path = dir.join(format!("{:032x}.postcard", hash_of(canonical.as_str().as_bytes())));
+    // **`tool` is part of the file name, not only of the entry.** It carries
+    // which questions were asked (`TsgoApi::identity`), and two commands asking
+    // different ones build different snapshots. Validating it on *read* is
+    // enough for correctness -- a mismatch is a miss -- but the miss then
+    // overwrites the other command's entry, so `nts frontend P` and a build of
+    // `P` evicted each other and both ran cold every time. Hashed into the name,
+    // each keeps its own entry and both hit. The `entry.tool` check below stays
+    // as what it now is: a guard against a hash collision rather than the key.
+    let path = dir.join(format!(
+        "{:032x}.postcard",
+        hash_of(&[canonical.as_str().as_bytes(), b"\0", tool.as_bytes()].concat())
+    ));
     // The compiler that *built* the snapshot, beside the tool that answered the
     // questions. `tool` stamps `tsgo`; the decomposer turning tsgo's answers
     // into a `SemanticSnapshot` lives here, and nothing recorded it.
