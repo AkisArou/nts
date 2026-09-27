@@ -955,164 +955,63 @@ backend_examples() {
   fi
 
   results=$(mktemp)
-  ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
-    d=$1
-    n=$(basename "$(dirname "$d")")
-    case "$n" in
-      invalid|unsupported) exit 0 ;;
-    esac
-    out=$("${NTS_BIN:-./target/release/nts}" check "$d" 2>&1)
-    if [ $? -eq 0 ]; then
-      if [ "${out#*nothing to check}" != "$out" ]; then
-        # Nothing for the differential to drive, so it exits 0 without comparing
-        # an answer -- and would count as agreement in either backend.
-        #
-        # **Ten do, and the number had read `Six` since before anyone counted.**
-        # It is printed on every run and was never expanded, which is what made
-        # it invisible: a figure an instrument states unchanged every time stops
-        # being read as a question. The JVM lane enumerated theirs after the
-        # same shape turned up in a ledger row with an empty cell.
-        #
-        # **A `bare` example raises neither `passed` nor `total`**, which is
-        # the arithmetic to do before touching a floor: `passed` counts `ok` and
-        # `partial`, and `bare` is tallied beside them. Adding
-        # `using-unsupported` and raising the three floors by one on 2026-09-18
-        # failed all three backend steps with `fell from 266 to 265` -- the
-        # example was right and the floor was a guess.
-        #
-        # Five are `*-unsupported` and comparing nothing is exactly right --
-        # they exist to document a refusal:
-        #
-        #     dates-unsupported   enum-reverse-map-unsupported
-        #     generator-unsupported   generic-classes-unsupported
-        #     using-unsupported
-        #
-        # **Five are ordinary examples that export real functions**: `advanced`
-        # (`isFish`, `assertFish`, `identity`, `bounded`), `calls` (`widen`
-        # three times), `classes` (`class Circle`), `jsx` and `types`. They are
-        # skipped because the differential drives *scalar* arguments from a
-        # hostile pool, and a type predicate, a generic and a class have no
-        # scalar surface -- which is structural rather than a defect, and means
-        # five examples exercising precisely type predicates, generics and class
-        # construction have never been compared against node by this step.
-        #
-        # They are in neither `passed` nor `total`, so they cannot mask a
-        # regression in the floor; a codegen bug confined to one of them fails
-        # nothing here. Bounded rather than absent, and worth knowing wherever
-        # the floor is quoted as "equal to the corpus".
-        echo "bare $n"
-      else
-        # **Compared *less* is the same defect as compared *nothing*, and this
-        # `if` had a case for one of them.** `bare` exists because somebody saw
-        # that an example comparing no cases must not read as agreement. The
-        # question it stops one short of is an example comparing *some*: it
-        # exits 0, never prints `nothing to check`, and landed in `ok`.
-        #
-        # So `253 of 253 agree` was true of a predicate meaning "exited 0 and
-        # compared at least one case". `examples/optional-access` satisfies it
-        # while comparing **97 of 261** through LLVM, and has since before any
-        # of this weeks changes.
-        #
-        # The differential prints the count on the line above its verdict --
-        # `17 case(s) the compiled program declined` -- and folds a decline into
-        # *skipped*, never into *disagreed*, so the verdict line alone cannot
-        # tell a full comparison from a tenth of one. Reading only that line
-        # reported three hollow passes in one night, one of them in a fixture
-        # written to guard against exactly this.
-        #
-        # Counted as passing, because a decline is often the designed answer --
-        # `x!` where `x` is `undefined` aborts here and node answers `undefined`,
-        # which is a ledger row of its own. What it must not be is *silent*, so
-        # it gets its own outcome and its own ceiling.
-        #
-        # **This closes one hole and the line above it names another.** A
-        # decline is *the program refused this input*; `checked N of M` is
-        # *nobody ran the rest*. They are different, and the second is printed
-        # here unratcheted on purpose.
-        #
-        # Two of us looked at ratcheting it on 2026-09-18 and decided against,
-        # which is worth recording as a decision rather than as an absence:
-        #
-        #   - `M` is a fact about the hostile **pool**, not about the compiler.
-        #     A ceiling on it goes red when someone improves the generator and
-        #     green when someone narrows it -- a floor measuring something other
-        #     than the thing under test, which is the family this file keeps
-        #     pulling out of itself.
-        #   - It would not have caught the defect that prompted it. A fixed view
-        #     over a resizable buffer reported a stale length on every backend
-        #     for the life of the feature, and `(max=8, grown=0)` was neither
-        #     declined nor unreached -- it was **never generated**. No count over
-        #     run cases can see an input that does not exist, so the instrument
-        #     would have been green throughout.
-        #
-        # What found it was a fixture *arm* that drove the boundary: a `sized(n)`
-        # helper mapping the input onto `0, 3, 4, 8` so the corner became a
-        # compared case rather than a hoped-for one. That is a property of the
-        # example, not a statistic over runs, so it belongs in how examples are
-        # written rather than in a step here. **Map the input the pool gives you
-        # onto the corners you mean to test; do not hope the pool visits them.**
-        #
-        # (No apostrophes above: this sits inside the single-quoted `sh -c`
-        # string, and the block forty lines up says so. Written with one
-        # anyway, and the shell reported it as a syntax error at an unrelated
-        # `fi` three hundred lines below -- which is why that warning is worth
-        # repeating where the next person will be typing.)
-        case "$out" in
-          *"the compiled program declined"*)
-            why=$(printf "%s" "$out" |
-                  awk "/case\(s\) the compiled program declined/{d=\$1}
-                       /checked [0-9]+ of [0-9]+ case/{for(i=1;i<=NF;i++) if(\$i==\"checked\"){c=\$(i+1); o=\$(i+3)}}
-                       END{printf \"%s declined, %s of %s compared\", d+0, c+0, o+0}")
-            printf "partial %s\t%s\n" "$n" "$why" ;;
-          *) echo "ok $n" ;;
-        esac
-      fi
-      exit 0
-    fi
-    # **A non-zero exit is not the same claim as "the backend disagrees",** and
-    # reading it as one is how this step produced its two worst reports. `nts
-    # check` says which of the things happened; the step was asking a coarser
-    # question than the tool answers.
-    case "$out" in
-      *"disagree between the compiled program and node"*) echo "no $n" ;;
-      *"the backend declined"*)                           echo "no $n" ;;
-      *"the compiled program aborted"*)                   echo "no $n" ;;
-      # **A workspace dependency that will not resolve is not a disagreement.**
-      # `examples/library` is the only example with a `node_modules`; it is
-      # hidden by `.gitignore` and its `@nts/config` is a symlink
-      # into `tooling/config`. So it cannot be built in a `git worktree` -- and
-      # symlinking the ignored directory back does not rescue it, it turns
-      # TS2307 into TS6059 because the resolved file is then outside `rootDir`.
-      #
-      # Without this the case lands in the arm below and reads as a backend
-      # disagreement, which cost three lanes an evening: a worktree run said
-      # `not agreeing: library`, a session attributed it to two commits from
-      # another lane, and it had never been measurable there at all. A gate run
-      # from a pinned worktree would report it forever.
-      #
-      # (No apostrophes in this block: it sits inside a single-quoted `sh -c`
-      # string, so one would end the script -- which is how this comment was
-      # written the first time, and the syntax error landed nine lines below.)
-      #
-      # Keyed on the two resolution codes rather than on "does not typecheck",
-      # so a *real* typecheck regression in that example still counts against
-      # the floor instead of being filed as unmeasured for good.
-      *TS2307*|*TS6059*)
-        printf "unmeasured %s\t%s\n" "$n" "needs an installed workspace; cannot resolve here" ;;
-      *"does not typecheck"*)                             echo "no $n" ;;
-      *"refusing to proceed"*)                            echo "no $n" ;;
-      *"invalid HIR"*)                                    echo "no $n" ;;
-      *)
-        # Something that is not an answer about the backend at all: the
-        # compiler never ran, or died for a reason of its own. The first line
-        # of what it said goes with the name, because a bare list of names is
-        # what sent one session hunting jar timestamps for ten minutes.
-        why=$(printf "%s" "$out" | grep -v "^$" | head -1 | cut -c1-90)
-        printf "unmeasured %s\t%s\n" "$n" "$why"
-        ;;
-    esac
-  ' _ > "$results"
-  # `partial` is a pass -- see the classifier -- so it belongs in `passed`,
+  # **One classifier, in `tooling/differential/agree.mjs`.** This step reads its
+  # `--verdicts` projection, one line per example:
+  #
+  #   ok <name>                  agreed on every case it compared
+  #   partial <name> TAB why     agreed, and the program *declined* some cases
+  #   bare <name>                nothing to check
+  #   no <name>                  disagreed, aborted, declined by the backend,
+  #                              invalid HIR, or does not typecheck
+  #   unmeasured <name> TAB why  anything else; the step fails outright
+  #
+  # It used to be a 155-line `sh -c` here, a second derivation of what
+  # `nts check` means beside the one `agree` needs for attribution. Before it
+  # went, both ran over one clean tree (81ca51a21) on llvm, llvm+rc and jvm, a
+  # hypot sabotage, and a frontend that fails to start, and agreed line for
+  # line, every reason text included. The projection is held to be no more
+  # permissive than that classifier was: whatever it sent to `unmeasured` stays
+  # there rather than becoming a `no` a floor with slack could absorb.
+  #
+  # The decisions its comments recorded still hold, and are the reasons for the
+  # lines above:
+  #
+  # **`bare` is in neither `passed` nor `total`.** Nothing to drive, so `check`
+  # exits 0 without comparing an answer. Twelve do today: seven `*-unsupported`
+  # that exist to document a refusal, and `advanced`, `calls`, `classes`, `jsx`
+  # and `types`, which export only type predicates, generics and classes -- no
+  # scalar surface for the hostile pool. Adding `using-unsupported` and raising
+  # three floors by one failed all three on 2026-09-18: do the arithmetic before
+  # touching a floor.
+  #
+  # **`partial` passes and has a ceiling.** A decline is often the designed
+  # answer (`x!` on `undefined` aborts here where node answers `undefined`), but
+  # `agreed on every case` prints over a tenth of a comparison just as over all
+  # of it, and reading only that line reported three hollow passes in one night.
+  #
+  # **"checked N of M" is deliberately not ratcheted** (decided 2026-09-18): `M`
+  # is a fact about the hostile pool, not the compiler, and the defect that
+  # prompted it -- a fixed view over a resizable buffer -- was an input the pool
+  # never generated, which no count over run cases can see. Map the input onto
+  # the corners you mean to test; do not hope the pool visits them.
+  #
+  # **An unresolvable workspace is `unmeasured`, not `no`**: `examples/library`
+  # needs its ignored `node_modules`, so a worktree cannot build it (TS2307, or
+  # TS6059 if the directory is symlinked back). As `no` it cost three lanes an
+  # evening blaming two commits for an example never measurable there.
+  log=$(mktemp)
+  NTS_AGREE_JOBS=$jobs node "$root/tooling/differential/agree.mjs" \
+    "${NTS_BIN:-$root/target/release/nts}" --verdicts="$results" >"$log" 2>&1
+  if [ ! -s "$results" ]; then
+    # No verdicts at all: the instrument did not run, which is not a floor
+    # question. Its own report says why (a missing compiler or frontend).
+    echo "  NOT MEASURED: agree.mjs wrote no verdicts --"
+    tail -5 "$log" | sed 's/^/  /'
+    rm -f "$results" "$log"
+    return 1
+  fi
+  rm -f "$log"
+  # `partial` is a pass -- see the verdicts above -- so it belongs in `passed`,
   # which keeps every floor in this file meaning what it meant before.
   passed=$(grep -c -e '^ok ' -e '^partial ' "$results" || true)
   partial=$(grep -c '^partial ' "$results" || true)
@@ -1559,7 +1458,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   #
   # **308 -> 319, 2026-09-25**, from the same run as the two LLVM floors, and
   # this one is bookkeeping rather than a fix. `exact` enforces `passed` equal to
-  # `total` (line ~1157), *not* the floor equal to the corpus -- so this step was
+  # `total` (in `backend_examples`), *not* the floor equal to the corpus -- so this step was
   # already failing on any example that did not agree, whatever the floor said,
   # and it is the one backend step the slack was not hiding anything under. The
   # number is brought up to the corpus so that the two readings agree when

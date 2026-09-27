@@ -81,7 +81,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
-  utimesSync,
+  utimesSync, writeFileSync,
 } from "node:fs";
 import { availableParallelism, freemem, homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
@@ -174,11 +174,51 @@ export function classify(status, out) {
     if (/invalid HIR/.test(out)) return Outcome.INVALID_HIR;
     // A workspace dependency that will not resolve is not a typecheck
     // regression: `examples/library` in a worktree. Same keys as the gate.
-    if (/TS2307|TS6059/.test(out)) return Outcome.NOT_MEASURED;
+    if (/TS2307|TS6059/.test(out)) {
+      record.unresolved = true;
+      return Outcome.NOT_MEASURED;
+    }
     if (/does not typecheck|refusing to proceed/.test(out)) return Outcome.NO_TYPECHECK;
     return Outcome.NOT_MEASURED;
   })();
-  return { outcome, ...record, first };
+  const said = record.unresolved ? "needs an installed workspace; cannot resolve here" : first;
+  delete record.unresolved;
+  return { outcome, ...record, first: said };
+}
+
+/**
+ * The line `tooling/gate/all.sh`'s `backend_examples` reads for one example:
+ * `ok`, `partial <tab> why`, `bare`, `no` or `unmeasured <tab> why`, each
+ * followed by the name.
+ *
+ * A projection of the record, and deliberately no more permissive than the
+ * shell classifier it replaced. `no` counts against a floor that may have
+ * slack, while `unmeasured` fails the step outright, so every outcome that
+ * classifier failed outright stays `unmeasured` here. That means every case
+ * declined, and any text it did not recognise.
+ * `partial` keeps its gate meaning -- the program *declined* cases -- so the
+ * step's ceiling counts what it always counted; a comparison short only of
+ * timeouts or unreached cases is `ok` there, as it was.
+ */
+export function verdict(name, r) {
+  switch (r.outcome) {
+    case Outcome.AGREES:
+      return `ok ${name}`;
+    case Outcome.PARTIAL:
+      return r.declined > 0
+        ? `partial ${name}\t${r.declined} declined, ${r.checked} of ${r.expected} compared`
+        : `ok ${name}`;
+    case Outcome.NOTHING:
+      return `bare ${name}`;
+    case Outcome.DISAGREES:
+    case Outcome.ABORTED:
+    case Outcome.BACKEND_DECLINED:
+    case Outcome.INVALID_HIR:
+    case Outcome.NO_TYPECHECK:
+      return `no ${name}`;
+    default:
+      return `unmeasured ${name}\t${r.outcome === Outcome.ALL_DECLINED ? "no case was checked: every case declined" : r.first.slice(0, 90)}`;
+  }
 }
 
 /** Whether two records are the same answer. */
@@ -266,6 +306,10 @@ function selfTest() {
   const reach = { ...agreed, checked: 87, expected: 87, refused: 3 };
   if (attribute(agreed, reach) !== "REGRESSED") return "three new refusals and fewer cases compared was not REGRESSED";
   if (attribute(reach, agreed) !== "FIXED") return "three refusals cleared and more cases compared was not FIXED";
+  if (verdict("x", partial) !== "partial x\t4 declined, 20 of 24 compared") return `a decline projected as ${verdict("x", partial)}`;
+  if (verdict("x", { ...partial, declined: 0, timeouts: 3 }) !== "ok x") return "a comparison short only of timeouts is not the gate's ok";
+  if (!verdict("x", every).startsWith("unmeasured x\t")) return "every case declined projected as a floor-absorbable verdict";
+  if (!verdict("x", classify(1, "error TS2307: Cannot find module\n")).endsWith("needs an installed workspace; cannot resolve here")) return "an unresolved workspace lost its reason";
   return null;
 }
 
@@ -282,10 +326,11 @@ if (args.includes("--self-test")) {
   process.exit(0);
 }
 
+const verdictsFile = args.find((a) => a.startsWith("--verdicts="))?.slice("--verdicts=".length);
 const only = args.find((a) => a.startsWith("--only="))?.slice("--only=".length).split(",").filter(Boolean);
 const binaries = args.filter((a) => !a.startsWith("--"));
-if (binaries.length < 1 || binaries.length > 2) {
-  console.log("  usage: agree.mjs <nts> [<nts-after>] [--only=example,...]");
+if (binaries.length < 1 || binaries.length > 2 || (verdictsFile && binaries.length !== 1)) {
+  console.log("  usage: agree.mjs <nts> [<nts-after>] [--only=example,...] [--verdicts=<file>]");
   process.exit(2);
 }
 
@@ -470,6 +515,7 @@ function summarise(records) {
 const seconds = () => Math.round((Date.now() - started) / 1000);
 
 if (pins.length === 1) {
+  if (verdictsFile) writeFileSync(verdictsFile, examples.map((e) => `${verdict(e, runs.get(e)[0])}\n`).join(""));
   const all = examples.map((e) => [e, runs.get(e)[0]]);
   for (const [example, r] of all) {
     if (WRONG.has(r.outcome)) {
