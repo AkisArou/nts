@@ -689,7 +689,30 @@ profile() {
   #                            a second reading rather than a second defect.
   #                            Read the site count for this feature; this number
   #                            will drift up as more callees become copyable.
-  ceiling=14750
+  # Raised from 14750 for `runtime/node/perf_hooks`, which is **new corpus rather
+  # than a regression** -- the one case this number's own instruction ("when it
+  # trips, the first action is not to raise it") does not cover, because a module
+  # that did not exist cannot have regressed.
+  #
+  # Measured on `47e1422a6` with two pins of one base, counted the way this step
+  # counts (`emit-c --napi`, `NTS1001` occurrences):
+  #
+  #     the 26 tracked modules        14540
+  #     perf_hooks alone                740   (the node-port lane's figure, confirmed)
+  #     together                      15280
+  #
+  # **And the headroom is the point, which is why this is not the number that was
+  # asked for.** The request was 15250, from 14497 measured in that lane's own tree
+  # -- 43 lower than main, because that tree carries other edits. 15250 would have
+  # been *below* the total here, and even at 15280 a ceiling with no slack trips on
+  # the next ordinary change. This step's own comment asks for "loose enough that
+  # ordinary work does not trip it and tight enough that a large regression does",
+  # and 14750 against 14540 was 210 of slack, so the same slack above 15280 is
+  # 15490. Rounded to 15500.
+  #
+  # Verified rather than taken: raising a ceiling on a number measured in another
+  # tree is how a gate ends up green against a figure nobody can reproduce.
+  ceiling=15500
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
