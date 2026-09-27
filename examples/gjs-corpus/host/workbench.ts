@@ -33,7 +33,7 @@ import {
 } from "c:Gtk-4.0";
 import { ApplicationFlags, g_data_input_stream_new, g_file_new_for_path } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
-import { g_date_time_new_local, g_getenv, g_timeout_add_full } from "c:GLib-2.0";
+import { g_date_time_new_local, g_getenv, g_timeout_add_full, g_variant_new_string } from "c:GLib-2.0";
 
 export interface Workbench {
   readonly application: AdwApplication;
@@ -139,6 +139,10 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
     case "orientation":
       if (!(object instanceof GtkBox)) return false;
       console.log(`${id}.orientation ${object.orientation}`);
+      return true;
+    case "action":
+      if (!(object instanceof GtkWidget)) return false;
+      object.activate_action(args[0], g_variant_new_string(args[1]));
       return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;

@@ -1,0 +1,5 @@
+label label_emoji
+action box_menu_parent mood.emoji 😀
+label label_emoji
+action box_menu_parent mood.emoji 🤩
+label label_emoji

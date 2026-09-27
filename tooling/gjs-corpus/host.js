@@ -12,6 +12,7 @@
 //   close <id>     emit a popover's `closed`
 //   pick <id> <text> emit an emoji chooser's `emoji-picked`
 //   day <id> <y> <m> <d> select a calendar's day
+//   action <id> <name> <text> activate a widget's action with a string
 //   active <id>    print `active`
 //   visible <id>   print `visible`
 //   sensitive <id> print `sensitive`
@@ -94,6 +95,7 @@ application.connect("activate", async () => {
     else if (kind === "close") object.emit("closed");
     else if (kind === "pick") object.emit("emoji-picked", args[0]);
     else if (kind === "day") object.select_day(GLib.DateTime.new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0));
+    else if (kind === "action") object.activate_action(args[0], GLib.Variant.new_string(args[1]));
     else if (kind === "classes") console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
     else throw new Error(`unknown action ${kind}`);
   }
