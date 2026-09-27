@@ -40,6 +40,7 @@ split true true true
 tabs A,B,C>A,D,B,C>C,A,D,B selected=true asked=1 kept=4 attached=0121 true selected=A user=B>A heard=B app=B heard=B C,A,B
 pinned P*AB>APB>B*AP>B*PA>PA
 carousel abc>adbc>dbac>cdba>dbac>dac
+navigation AB>ABC>AB>CAB user>CA>CAB app>CA heard=2
 dialog true true true true responded=cancel
 breakpoints A+ | A- B+ | A+
 window-breakpoint W+ true false W+ true

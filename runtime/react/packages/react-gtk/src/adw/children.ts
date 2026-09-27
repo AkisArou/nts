@@ -8,6 +8,7 @@
 //   <ViewStack><ViewStack.Page name="inbox" title="Inbox" iconName="mail-symbolic">...</ViewStack.Page></ViewStack>
 //   <TabView><TabView.Page title="Notes" onClose={() => close(id)}>...</TabView.Page></TabView>
 //   <ApplicationWindow><ApplicationWindow.Breakpoint condition="max-width: 500sp" onApply={...} /></ApplicationWindow>
+//   <NavigationView onPopped={back}>{path.map((id) => <NavigationPage key={id} title={id}>...</NavigationPage>)}</NavigationView>
 //
 // Each is a GroupNode with a placement of libadwaita's, so GTK's module never
 // names an Adw class. A row's subclasses (a SwitchRow is an ActionRow) take
@@ -23,6 +24,8 @@ import {
   AdwEntryRow,
   AdwExpanderRow,
   AdwHeaderBar,
+  AdwNavigationPage,
+  AdwNavigationView,
   AdwTabView,
   AdwToolbarView,
   AdwViewStack,
@@ -35,7 +38,17 @@ import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { GroupNode, GroupPlacement, type PackProps } from "../children.ts";
-import { HostNode, isReactWriting, PlacedNode, type Props, scheduleRestore, SignalSlot, type WidgetNode, writeAsReact } from "../HostNode.ts";
+import {
+  HostNode,
+  insertAt,
+  isReactWriting,
+  PlacedNode,
+  type Props,
+  scheduleRestore,
+  SignalSlot,
+  type WidgetNode,
+  writeAsReact,
+} from "../HostNode.ts";
 
 export interface HeaderBarChildren {
   /** `<HeaderBar.Start>`: its children, packed at the bar's start, left to right. */
@@ -592,4 +605,113 @@ export class BreakpointNode extends HostNode {
   }
   // A breakpoint shows nothing, so Suspense has nothing of it to hide.
   setVisible(_visible: boolean): void {}
+}
+
+// ---- NavigationView ------------------------------------------------------------------
+
+/**
+ * A NavigationView's children as its navigation stack, bottom first: the
+ * last is the page shown, and rendering one more pushes it.
+ *
+ *   <NavigationView onPopped={() => setPath(path.slice(0, -1))}>
+ *     {path.map((id) => <NavigationPage key={id} title={id}>...</NavigationPage>)}
+ *   </NavigationView>
+ *
+ * After each change the view is brought to React's stack the way a user
+ * would see it move: pages added on top are pushed, pages taken off the top
+ * are popped (`pop_to_page`), both animated; any other change replaces the
+ * stack at once. The stack is controlled, as a Stack's `visibleChildName`
+ * is: the user going back is heard as the view's `onPopped`, and the page
+ * comes back after the flush unless the app stops rendering it. React's own
+ * pushes and pops are not heard.
+ */
+export class NavigationStack {
+  // React's order of the pages; the handlers read it, so it is its own object.
+  private readonly pages: WidgetNode[] = [];
+  private connected = false;
+
+  place(owner: WidgetNode, child: WidgetNode, before: WidgetNode | null, moving: boolean): void {
+    const view = owner.widget instanceof AdwNavigationView ? owner.widget : null;
+    if (view === null) {
+      return;
+    }
+    if (!(child.widget instanceof AdwNavigationPage)) {
+      throw new Error(`<NavigationView> holds <NavigationPage>s, not a <${child.name()}>.`);
+    }
+    const pages = this.pages;
+    if (moving) {
+      const from = pages.indexOf(child);
+      if (from >= 0) {
+        pages.splice(from, 1);
+      }
+    }
+    const at = before === null ? -1 : pages.indexOf(before);
+    insertAt(pages, at < 0 ? pages.length : at, child);
+    this.connect(view);
+    syncStack(view, pages);
+  }
+
+  unplace(owner: WidgetNode, child: WidgetNode): void {
+    const view = owner.widget instanceof AdwNavigationView ? owner.widget : null;
+    const at = this.pages.indexOf(child);
+    if (view === null || at < 0) {
+      return;
+    }
+    this.pages.splice(at, 1);
+    syncStack(view, this.pages);
+  }
+
+  // The user moved the stack (back, or a `navigation.push` action): React's
+  // stack comes back after the flush, in which the app can take it up.
+  private connect(view: AdwNavigationView): void {
+    if (this.connected) {
+      return;
+    }
+    this.connected = true;
+    const pages = this.pages;
+    view.connect("popped", (self, _page) => {
+      if (!isReactWriting()) {
+        scheduleRestore(() => syncStack(self, pages));
+      }
+    });
+    view.connect("pushed", (self) => {
+      if (!isReactWriting()) {
+        scheduleRestore(() => syncStack(self, pages));
+      }
+    });
+  }
+}
+
+/** Brings `view`'s navigation stack to `pages`, bottom first. */
+function syncStack(view: AdwNavigationView, pages: readonly WidgetNode[]): void {
+  const wanted: AdwNavigationPage[] = [];
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i]!.widget;
+    if (page instanceof AdwNavigationPage) {
+      wanted.push(page);
+    }
+  }
+  const shown: AdwNavigationPage[] = [];
+  for (let page = view.get_visible_page(); page !== null; page = view.get_previous_page(page)) {
+    shown.push(page);
+  }
+  shown.reverse();
+  let common = 0;
+  while (common < wanted.length && common < shown.length && wanted[common] === shown[common]) {
+    common++;
+  }
+  if (common === wanted.length && common === shown.length) {
+    return;
+  }
+  writeAsReact(() => {
+    if (common === shown.length && common > 0) {
+      for (let i = common; i < wanted.length; i++) {
+        view.push(wanted[i]!);
+      }
+    } else if (common === wanted.length && common > 0) {
+      view.pop_to_page(wanted[common - 1]!);
+    } else {
+      view.replace(wanted);
+    }
+  });
 }

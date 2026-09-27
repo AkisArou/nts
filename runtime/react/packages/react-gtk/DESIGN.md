@@ -404,8 +404,8 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
 
 **libadwaita's containers.**
 - A container that only adds and removes (a PreferencesGroup's rows, a
-  PreferencesPage's groups, an ExpanderRow's rows through `add_row`, a
-  NavigationView's pages) keeps React's order itself: a child inserted before
+  PreferencesPage's groups, an ExpanderRow's rows through `add_row`) keeps
+  React's order itself: a child inserted before
   another takes out what follows and adds it again. A method that takes a
   particular class (a PreferencesPage takes groups) refuses any other child,
   naming what it holds.
@@ -437,6 +437,16 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   whatever React's order, as libadwaita keeps them, and in React's order
   among the pinned; a tab React moves keeps to its region. Tabs the user
   drags into a new order keep it until React moves them.
+- A NavigationView's children are its navigation stack, bottom first, the
+  last shown: `{path.map((id) => <NavigationPage key={id} title={id}>...)}`.
+  After a change the view moves as a user would see it, pushing pages added
+  on top and popping pages taken off it (animated), and replacing the stack
+  for any other change. The stack is controlled: the user going back is
+  heard as `onPopped`, and the page returns after the flush unless the app
+  stops rendering it. React's own pushes and pops are not heard. The
+  generator hands such a widget's placements to a class of `children.ts`
+  (`childHolders`: `NavigationStack`), since what they mean is more than a
+  place.
 - Breakpoints are elements of the window, dialog or BreakpointBin they
   belong to: `<ApplicationWindow.Breakpoint condition="max-width: 500sp"
   onApply onUnapply>`. The app hears one apply and unapply and renders for

@@ -151,7 +151,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type DialogBreakpoints } from "./children.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type DialogBreakpoints, NavigationStack } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -4893,47 +4893,16 @@ export class AdwNavigationViewNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return navigationViewSignal(this.gtk, key, slot);
   }
-  // It only adds: a child inserted before another takes out what follows
-  // and adds it again, so the order is React's.
-  private readonly items: WidgetNode[] = [];
-  private adds(child: WidgetNode): void {
-    const widget = child.widget;
-    if (!(widget instanceof AdwNavigationPage)) {
-      throw new Error(`<NavigationView> holds NavigationPages, not <${child.name()}>.`);
-    }
-    this.gtk.add(widget);
-    this.items.push(child);
-  }
-  private takes(child: WidgetNode): void {
-    const at = this.items.indexOf(child);
-    if (at < 0) {
-      return;
-    }
-    const widget = child.widget;
-    if (!(widget instanceof AdwNavigationPage)) {
-      throw new Error(`<NavigationView> holds NavigationPages, not <${child.name()}>.`);
-    }
-    this.gtk.remove(widget);
-    this.items.splice(at, 1);
-  }
-  // A child placed again is a move to the end: out, then added last.
+  // Its children are held by NavigationStack (./children.ts), which each placement goes to.
+  private readonly held: NavigationStack = new NavigationStack();
   protected place(child: WidgetNode, moving: boolean): void {
-    if (moving) {
-      this.takes(child);
-    }
-    this.adds(child);
+    this.held.place(this, child, null, moving);
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
-    if (moving) {
-      this.takes(child);
-    }
-    const after = this.items.slice(this.items.indexOf(before));
-    after.forEach((item) => this.takes(item));
-    this.adds(child);
-    after.forEach((item) => this.adds(item));
+    this.held.place(this, child, before, moving);
   }
   protected unplace(child: WidgetNode): void {
-    this.takes(child);
+    this.held.unplace(this, child);
   }
 }
 

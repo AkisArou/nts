@@ -44,6 +44,10 @@
 //             React takes out closes
 //   carousel  a Carousel's pages in React's order: appended, one inserted,
 //             moved forward, back and to the end, and one removed
+//   navigation  a NavigationView's children are its stack, the last shown:
+//             one more is pushed, the last taken off is popped, a reorder
+//             replaces the stack; the user going back is heard as onPopped,
+//             and the page comes back unless the app takes it away
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window, its onResponse hears
 //             the response id, and taken out it closes, which onResponse
@@ -70,6 +74,7 @@ import {
   AdwEntryRow,
   AdwHeaderBar,
   AdwNavigationSplitView,
+  AdwNavigationView,
   AdwPreferencesGroup,
   AdwTabView,
   type AdwTabPage,
@@ -459,6 +464,57 @@ function main(): void {
     carouselOrder += ">" + order();
   }
   react_gtk_log("carousel " + carouselOrder);
+
+  let poppedHeard = 0;
+  const navProps: Props = {
+    onPopped: () => {
+      poppedHeard++;
+    },
+  };
+  const nav = createInstance("AdwNavigationView", navProps, root, 0, {});
+  const navNames = ["A", "B", "C"];
+  const navPages: HostNode[] = [];
+  for (const name of navNames) {
+    const page = createInstance("AdwNavigationPage", { title: name }, root, 0, {});
+    appendInitialChild(page, createInstance("GtkLabel", { label: name }, root, 0, {}));
+    navPages.push(page);
+  }
+  const navWidget = widget(nav);
+  const navigating = navWidget instanceof AdwNavigationView ? navWidget : null;
+  let navigation = "not a navigation view";
+  if (navigating !== null) {
+    const stack = (): string => {
+      let names = "";
+      for (let page = navigating.get_visible_page(); page !== null; page = navigating.get_previous_page(page)) {
+        for (let i = 0; i < navPages.length; i++) {
+          if (widget(navPages[i]!) === page) {
+            names = navNames[i]! + names;
+          }
+        }
+      }
+      return names;
+    };
+    appendInitialChild(nav, navPages[0]!);
+    appendInitialChild(nav, navPages[1]!);
+    navigation = stack();
+    appendInitialChild(nav, navPages[2]!);
+    navigation += ">" + stack();
+    removeChild(nav, navPages[2]!);
+    navigation += ">" + stack();
+    insertBefore(nav, navPages[2]!, navPages[0]!);
+    navigation += ">" + stack();
+    // The user goes back and the app keeps the page: it comes back.
+    navigating.pop();
+    navigation += " user>" + stack();
+    idle();
+    navigation += ">" + stack();
+    // The user goes back and the app takes the page away: it stays gone.
+    navigating.pop();
+    removeChild(nav, navPages[1]!);
+    idle();
+    navigation += " app>" + stack() + " heard=" + String(poppedHeard);
+  }
+  react_gtk_log("navigation " + navigation);
 
   // A dialog is presented within a shown libadwaita window, as an app's is
   // (over a plain GtkWindow, libadwaita opens it as a window of its own).

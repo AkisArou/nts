@@ -501,7 +501,7 @@ function handlerType(type: string, types: Set<string>, bindings: Bindings): stri
   return null;
 }
 
-type ChildProtocol = "none" | "single" | "box" | "list" | "positional" | "adds";
+type ChildProtocol = "none" | "single" | "box" | "list" | "positional" | "adds" | "held";
 
 /** A widget that only adds and removes children: the methods, and the class each takes. */
 interface Adds {
@@ -522,6 +522,8 @@ interface WidgetType {
   children: ChildProtocol;
   /** For the "adds" protocol: how it adds and removes. */
   adds?: Adds;
+  /** For the "held" protocol: the hand-written class that holds its children. */
+  holder?: string;
 }
 
 /** The nearest class in `t`'s chain, `t` included, with widget slots of its own. */
@@ -573,6 +575,11 @@ const addsBy = new Map([["Adw.ExpanderRow", "add_row"]]);
 // `set_child` would replace it), and its windows take their content through
 // their Content slot. They take children only through their elements.
 const noChildProtocol = new Set(["Adw.PreferencesRow", "Adw.ApplicationWindow", "Adw.Window"]);
+
+// Widgets whose children mean more than a place, held by a class of the
+// module's own children.ts, to which the node passes each placement: a
+// NavigationView's children are its navigation stack.
+const childHolders = new Map([["Adw.NavigationView", "NavigationStack"]]);
 
 const rowAccessors = new Map([
   ["Gtk.ListBox", "get_row_at_index"],
@@ -949,8 +956,11 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
       addsMethods === undefined || !addsMethods.has("remove")
         ? undefined
         : { add: addMethod, addType: addsMethods.get(addMethod)!, removeType: addsMethods.get("remove")! };
+    const holder = chain.map((c) => childHolders.get(qualified(c))).find((h) => h !== undefined);
     const children: ChildProtocol =
-      adds !== undefined && addsBy.has(qualified(t))
+      holder !== undefined
+        ? "held"
+        : adds !== undefined && addsBy.has(qualified(t))
         ? "adds"
         : chain.some((c) => noChildProtocol.has(qualified(c)))
           ? "none"
@@ -965,7 +975,18 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
                 : adds !== undefined
                   ? "adds"
                   : "none";
-    const type: WidgetType = { gir: t, ts, jsx: t.name, parent, props, signals, slots, children, ...(children === "adds" ? { adds } : {}) };
+    const type: WidgetType = {
+      gir: t,
+      ts,
+      jsx: t.name,
+      parent,
+      props,
+      signals,
+      slots,
+      children,
+      ...(children === "adds" ? { adds } : {}),
+      ...(holder !== undefined ? { holder } : {}),
+    };
     types.set(qualified(t), type);
     return type;
   };
@@ -1030,8 +1051,9 @@ function emit(m: Model, target: Target): string {
   line("__HOST_NODE__");
   // This module's own elements, from its own children.ts.
   const ownElements = [...childElements].filter(([key]) => key.startsWith(`${target.namespace}.`)).map(([, c]) => c);
-  if (ownElements.length > 0) {
-    const childImports = [...new Set(ownElements.flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]))];
+  const holders = m.widgets.filter((w) => local(w) && w.holder !== undefined).map((w) => w.holder!);
+  if (ownElements.length > 0 || holders.length > 0) {
+    const childImports = [...new Set([...ownElements.flatMap((c) => [`type ${c.members}`, ...c.elements.map(([, node]) => node!)]), ...holders])];
     line(`import { ${childImports.join(", ")} } from "./children.ts";`);
   }
   if (gtk) {
@@ -1418,6 +1440,18 @@ function emit(m: Model, target: Target): string {
       line("      this.items.splice(at, 1);");
       line("      this.gtk.remove(child.widget);");
       line("    }");
+      line("  }");
+    } else if (w.children === "held" && w.holder !== undefined) {
+      line(`  // Its children are held by ${w.holder} (./children.ts), which each placement goes to.`);
+      line(`  private readonly held: ${w.holder} = new ${w.holder}();`);
+      line("  protected place(child: WidgetNode, moving: boolean): void {");
+      line("    this.held.place(this, child, null, moving);");
+      line("  }");
+      line("  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {");
+      line("    this.held.place(this, child, before, moving);");
+      line("  }");
+      line("  protected unplace(child: WidgetNode): void {");
+      line("    this.held.unplace(this, child);");
       line("  }");
     } else if (w.children === "adds" && w.adds !== undefined) {
       emitAdds(w, w.adds);
