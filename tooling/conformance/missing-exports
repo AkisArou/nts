@@ -15,6 +15,26 @@ process.binding: the private binding table, which this profile replaces with sta
 process.reallyExit: the raw exit that skips node's own exit handlers; process.exit models it internally and exposing it would offer a program a way to bypass this profile's own teardown
 
 # --- needs a subsystem this profile does not have -----------------------------
+dns.Resolver: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.setServers: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.getServers: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolve: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolve4: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolve6: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveAny: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveCaa: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveCname: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveMx: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveNaptr: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveNs: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolvePtr: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveSoa: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveSrv: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveTlsa: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.resolveTxt: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+dns.reverse: the c-ares half of node:dns -- a DNS client that speaks the wire protocol itself -- which runtime/node/dns/src/main.ts records as not implemented; lookup and lookupService, the getaddrinfo half, are
+tty.ReadStream: a net.Socket over a uv_tty_t that nothing runnable here exercises (the pinned tests need a pty and fd passing, or patch internalBinding('tty_wrap')); runtime/node/tty/src/main.ts records the decision
+tty.WriteStream: as tty.ReadStream
 console.context: needs node's inspector-facing console contexts
 console.createTask: needs the async context tracking node exposes for the inspector
 process.domain: node:domain is deprecated and not implemented here
