@@ -283,7 +283,8 @@ function main(): void {
   unhideInstance(button, secondProps);
   // A widget the app hides stays hidden when React shows it again, and one
   // the app shows while React hides it waits for React.
-  const quiet = createInstance("GtkLabel", { visible: false }, container, 0, {});
+  let visibleHeard = 0;
+  const quiet = createInstance("GtkLabel", { visible: false, onNotifyVisible: () => visibleHeard++ }, container, 0, {});
   hideInstance(quiet);
   unhideInstance(quiet, { visible: false });
   let suspended = String(widget(quiet).get_visible());
@@ -292,7 +293,7 @@ function main(): void {
   suspended += " " + String(widget(quiet).get_visible());
   unhideInstance(quiet, { visible: true });
   suspended += " " + String(widget(quiet).get_visible());
-  react_gtk_log("hidden " + String(hidden) + " " + String(widget(button).get_visible()) + " " + suspended);
+  react_gtk_log("hidden " + String(hidden) + " " + String(widget(button).get_visible()) + " " + suspended + " heard=" + String(visibleHeard));
 
   const framed = frame(button);
   const unframedProps: Props = { label: "Add", hasFrame: false };

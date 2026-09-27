@@ -33,7 +33,7 @@ label world
 inserted label,second,button
 moved button,label,second>label,second,button
 removed second,button
-hidden false true false false true
+hidden false true false false true heard=0
 reset true>false>true clicks=none label=Text
 enum 1
 single true

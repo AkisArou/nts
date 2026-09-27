@@ -433,9 +433,12 @@ export abstract class WidgetNode extends HostNode {
 
   // Hidden by React (Suspense, Activity), a widget stays hidden whatever its
   // `visible` prop says; shown again, it is as visible as the prop says.
+  // React's write, so `onNotifyVisible` does not hear it.
   setVisible(visible: boolean): void {
     this.hiddenByReact = !visible;
+    reactWriting++;
     this.widget.set_visible(visible && this.prop("visible") !== false);
+    reactWriting--;
   }
 
   widgetNode(): WidgetNode | null {
