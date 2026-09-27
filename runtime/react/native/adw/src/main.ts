@@ -28,6 +28,10 @@
 //   split     a NavigationSplitView's Sidebar and Content slot elements fill
 //             its pages with the NavigationPages they hold; taken out, the
 //             sidebar is empty
+//   tabs      TabView.Page elements add titled tabs in React's order, one
+//             inserted before another and one moved; the moved tab stays
+//             selected; a close the user asks for is refused and reported
+//             as onClose, and taking the element out closes the tab
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window, and taken out it closes
 //   unknown   a root without the adw set creates no Adw widget
@@ -43,6 +47,7 @@ import {
   AdwHeaderBar,
   AdwNavigationSplitView,
   AdwPreferencesGroup,
+  AdwTabView,
   AdwToolbarView,
   AdwViewStack,
   AdwViewSwitcher,
@@ -259,6 +264,42 @@ function main(): void {
     splitting += " " + String(splitWidget.get_sidebar() === null);
   }
   react_gtk_log("split " + splitting);
+
+  const tabView = createInstance("AdwTabView", {}, root, 0, {});
+  let asked = 0;
+  const tabs: HostNode[] = [];
+  for (const title of ["A", "B", "C", "D"]) {
+    const tab = createInstance("AdwTabView.Page", { title, onClose: () => asked++ }, root, 0, {});
+    appendInitialChild(tab, createInstance("GtkLabel", { label: title }, root, 0, {}));
+    tabs.push(tab);
+  }
+  appendInitialChild(tabView, tabs[0]!);
+  appendInitialChild(tabView, tabs[1]!);
+  appendInitialChild(tabView, tabs[2]!);
+  const tabWidget = widget(tabView);
+  const tabbed = tabWidget instanceof AdwTabView ? tabWidget : null;
+  let tabbing = "not a tab view";
+  if (tabbed !== null) {
+    const titles = (): string => {
+      let all = "";
+      for (let i = 0; i < tabbed.get_n_pages(); i++) {
+        all += (i === 0 ? "" : ",") + tabbed.get_nth_page(i).get_title();
+      }
+      return all;
+    };
+    tabbing = titles();
+    insertBefore(tabView, tabs[3]!, tabs[1]!);
+    tabbing += ">" + titles();
+    const pageOf = (tab: HostNode) => tabbed.get_page(getPublicInstance(tab));
+    tabbed.set_selected_page(pageOf(tabs[2]!));
+    insertBefore(tabView, tabs[2]!, tabs[0]!);
+    tabbing += ">" + titles() + " selected=" + String(tabbed.get_selected_page() === pageOf(tabs[2]!));
+    tabbed.close_page(pageOf(tabs[3]!));
+    tabbing += " asked=" + String(asked) + " kept=" + String(tabbed.get_n_pages());
+    removeChild(tabView, tabs[3]!);
+    tabbing += " " + titles();
+  }
+  react_gtk_log("tabs " + tabbing);
 
   // A dialog is presented within a shown libadwaita window, as an app's is
   // (over a plain GtkWindow, libadwaita opens it as a window of its own).

@@ -410,6 +410,15 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
 - A ViewStack's pages are `<ViewStack.Page name title iconName badgeNumber>`,
   as GTK's Stack's are, and its `visibleChildName` is controlled and set only
   once the page it names exists.
+- A TabView's tabs are `<TabView.Page title tooltip loading needsAttention
+  keyword onClose>`, placed where React places them: inserted before the tab
+  after them, and moved with `reorder_page`, so a moved tab stays selected
+  (a child element moves in place wherever its container can move it: a
+  Notebook's pages too). Which tabs exist is React's. A close the user asks
+  for (a tab's close button, a shortcut) is refused and reported as
+  `onClose`, and React closes a tab by no longer rendering it. Tabs the user
+  drags into a new order keep it until React moves them; pinned tabs and
+  selection from props are not done yet.
 - A dialog (`<AlertDialog>`, `<AboutDialog>`, `<PreferencesDialog>`) is
   presented, not placed: rendered in a widget, it is presented over that
   widget's window at commit (`present`), and closed when React takes it out

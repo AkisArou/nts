@@ -6,17 +6,28 @@
 //   <ToolbarView><ToolbarView.Top><HeaderBar /></ToolbarView.Top>...</ToolbarView>
 //   <ActionRow title="Wi-Fi"><ActionRow.Suffix><Switch /></ActionRow.Suffix></ActionRow>
 //   <ViewStack><ViewStack.Page name="inbox" title="Inbox" iconName="mail-symbolic">...</ViewStack.Page></ViewStack>
+//   <TabView><TabView.Page title="Notes" onClose={() => close(id)}>...</TabView.Page></TabView>
 //
 // Each is a GroupNode with a placement of libadwaita's, so GTK's module never
 // names an Adw class. A row's subclasses (a SwitchRow is an ActionRow) take
 // their ancestor's groups.
 
-import { AdwActionRow, AdwExpanderRow, AdwHeaderBar, AdwToolbarView, AdwViewStack, type AdwViewStackPage } from "c:Adw-1";
+import {
+  AdwActionRow,
+  AdwExpanderRow,
+  AdwHeaderBar,
+  AdwTabView,
+  AdwToolbarView,
+  AdwViewStack,
+  type AdwTabPage,
+  type AdwViewStackPage,
+} from "c:Adw-1";
+import { g_signal_handler_disconnect } from "c:GObject-2.0";
 import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { GroupNode, GroupPlacement, type PackProps } from "../children.ts";
-import { PlacedNode, type WidgetNode } from "../HostNode.ts";
+import { PlacedNode, SignalSlot, type WidgetNode } from "../HostNode.ts";
 
 export interface HeaderBarChildren {
   /** `<HeaderBar.Start>`: its children, packed at the bar's start, left to right. */
@@ -189,5 +200,124 @@ export class ViewStackPageNode extends PlacedNode {
     page.set_needs_attention(props["needsAttention"] === true);
     const badge = props["badgeNumber"];
     page.set_badge_number(typeof badge === "number" ? badge : 0);
+  }
+}
+
+// ---- TabView ---------------------------------------------------------------------------
+
+export interface TabViewPageProps {
+  /** The tab's title. */
+  title?: string;
+  tooltip?: string;
+  /** Whether the tab shows that its page is loading. */
+  loading?: boolean;
+  needsAttention?: boolean;
+  /** A word a TabOverview's search finds the tab by, besides its title. */
+  keyword?: string;
+  /**
+   * The user asked to close the tab (its close button, a shortcut). The tab
+   * stays until the app stops rendering it.
+   */
+  onClose?: () => void;
+  children?: unknown;
+}
+
+export interface TabViewChildren {
+  /** `<TabView.Page title onClose>`: its one child, a tab of the TabView. */
+  readonly Page: HostComponent<"AdwTabView.Page", TabViewPageProps>;
+}
+
+// What a tab's `close-page` handler reads. The TabView holds the handler, so
+// the handler holds this and not the node, which holds the TabView.
+class TabClosing {
+  readonly onClose: SignalSlot = new SignalSlot();
+  // True while React closes the tab: the close is its own, and goes ahead.
+  byReact = false;
+}
+
+/**
+ * A tab of a TabView, placed where React places it: inserted before the tab
+ * after it, and moved with `reorder_page`, so it stays selected. Which tabs
+ * exist is React's: a close the user asks for is refused and reported as
+ * `onClose`, and React closes a tab by taking its element out.
+ */
+export class TabViewPageNode extends PlacedNode {
+  private readonly closing: TabClosing = new TabClosing();
+  private handler = 0;
+
+  protected attach(owner: WidgetNode, widget: GtkWidget): void {
+    const view = owner.widget;
+    if (!(view instanceof AdwTabView)) {
+      throw new Error(`<TabView.Page> goes directly inside a <TabView>, not a <${owner.name()}>.`);
+    }
+    const next = this.nextIn(view);
+    const page = next === null ? view.append(widget) : view.insert(widget, view.get_page_position(next));
+    this.describe(page);
+    const closing = this.closing;
+    this.handler = view.connect("close-page", (self, asked) => {
+      if (asked !== page) {
+        return false;
+      }
+      self.close_page_finish(page, closing.byReact);
+      if (!closing.byReact) {
+        closing.onClose.fire();
+      }
+      return true;
+    });
+  }
+  protected detach(owner: WidgetNode, widget: GtkWidget): void {
+    const view = owner.widget;
+    if (!(view instanceof AdwTabView)) {
+      return;
+    }
+    this.closing.byReact = true;
+    view.close_page(view.get_page(widget));
+    this.closing.byReact = false;
+    g_signal_handler_disconnect(view, this.handler);
+  }
+  protected move(owner: WidgetNode, widget: GtkWidget): boolean {
+    const view = owner.widget;
+    if (!(view instanceof AdwTabView)) {
+      return false;
+    }
+    const page = view.get_page(widget);
+    const from = view.get_page_position(page);
+    // The tab goes where the next one is (past the end, with none), counted
+    // with this one taken out: a tab after it moves up one.
+    const next = this.nextIn(view);
+    const to = next === null ? view.get_n_pages() : view.get_page_position(next);
+    view.reorder_page(page, to > from ? to - 1 : to);
+    return true;
+  }
+  protected update(owner: WidgetNode, widget: GtkWidget): void {
+    const view = owner.widget;
+    if (view instanceof AdwTabView) {
+      this.describe(view.get_page(widget));
+    }
+  }
+
+  // The tab React places this one before, or null for the end.
+  private nextIn(view: AdwTabView): AdwTabPage | null {
+    const next = this.before === null ? null : this.before.shownWidget();
+    return next === null ? null : view.get_page(next);
+  }
+
+  private describe(page: AdwTabPage): void {
+    const props = this.props;
+    const text = (key: string): string => {
+      const value = props[key];
+      return typeof value === "string" ? value : "";
+    };
+    page.set_title(text("title"));
+    page.set_tooltip(text("tooltip"));
+    page.set_keyword(text("keyword"));
+    page.set_loading(props["loading"] === true);
+    page.set_needs_attention(props["needsAttention"] === true);
+    const onClose = props["onClose"];
+    if (typeof onClose === "function") {
+      this.closing.onClose.handler = onClose;
+    } else {
+      this.closing.onClose.handler = null;
+    }
   }
 }

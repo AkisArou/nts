@@ -617,6 +617,7 @@ const childElements = new Map([
   ["Adw.ActionRow", { members: "ActionRowChildren", elements: [["AdwActionRow.Prefix", "AdwGroupNode"], ["AdwActionRow.Suffix", "AdwGroupNode"]], use: "<ActionRow.Prefix> or <ActionRow.Suffix>" }],
   ["Adw.ExpanderRow", { members: "ExpanderRowChildren", elements: [["AdwExpanderRow.Prefix", "AdwGroupNode"], ["AdwExpanderRow.Suffix", "AdwGroupNode"]], use: "<ExpanderRow.Prefix> or <ExpanderRow.Suffix>" }],
   ["Adw.ViewStack", { members: "ViewStackChildren", elements: [["AdwViewStack.Page", "ViewStackPageNode"]], use: "<ViewStack.Page name title>" }],
+  ["Adw.TabView", { members: "TabViewChildren", elements: [["AdwTabView.Page", "TabViewPageNode"]], use: "<TabView.Page title>" }],
 ]);
 
 // Widgets presented over the window of the widget they are rendered in, as a

@@ -141,7 +141,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode } from "./children.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1101,7 +1101,7 @@ export declare const TabButton: HostComponent<"AdwTabButton", TabButtonProps>;
 export declare const TabOverview: HostComponent<"AdwTabOverview", TabOverviewProps>;
 
 /** `<TabView>`: an AdwTabView. */
-export declare const TabView: HostComponent<"AdwTabView", TabViewProps>;
+export declare const TabView: HostComponent<"AdwTabView", TabViewProps> & TabViewChildren;
 
 /** `<ToastOverlay>`: an AdwToastOverlay. */
 export declare const ToastOverlay: HostComponent<"AdwToastOverlay", ToastOverlayProps>;
@@ -5171,6 +5171,9 @@ export class AdwTabViewNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return tabViewSignal(this.gtk, key, slot);
   }
+  protected place(_child: WidgetNode): void {
+    throw new Error("<TabView> places a child through <TabView.Page title>.");
+  }
 }
 
 /** `<ToastOverlay>`: an AdwToastOverlay. */
@@ -5543,6 +5546,8 @@ export function createNode(type: string): HostNode | null {
       return new AdwGroupNode(type);
     case "AdwViewStack.Page":
       return new ViewStackPageNode(type);
+    case "AdwTabView.Page":
+      return new TabViewPageNode(type);
   }
   return null;
 }
