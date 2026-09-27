@@ -4,6 +4,7 @@
 
 import { Render } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
+import { replaceErrorStack } from "shared/replaceErrorStack.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import {
   disableLegacyContext,
@@ -259,26 +260,23 @@ import {
 // user-space digest value. (Upstream's shared/ReactRecoverable.)
 const REACT_RECOVERABLE_DIGEST = "";
 
-// Upstream's shared/shallowEqual: equal when both have the same own keys and
-// each value is Object.is-equal.
-function shallowEqual(objA: unknown, objB: unknown): boolean {
-  if (Object.is(objA, objB)) {
+// Upstream's shared/shallowEqual, over what it is only given here: two props
+// records. Equal when both have the same own keys and each value is
+// Object.is-equal. Typed as records, not `unknown` narrowed to an object:
+// natively a record's keys are its table's, and an erased object has none.
+function shallowEqual(objA: AnyProps, objB: AnyProps): boolean {
+  if (objA === objB) {
     return true;
-  }
-  if (typeof objA !== "object" || objA === null || typeof objB !== "object" || objB === null) {
-    return false;
   }
   const keysA = Object.keys(objA);
   const keysB = Object.keys(objB);
   if (keysA.length !== keysB.length) {
     return false;
   }
-  const recordA = objA as { [key: string]: unknown };
-  const recordB = objB as { [key: string]: unknown };
   // Test for A's keys different from B.
   for (let i = 0; i < keysA.length; i++) {
     const currentKey = keysA[i]!;
-    if (!Object.prototype.hasOwnProperty.call(objB, currentKey) || !Object.is(recordA[currentKey], recordB[currentKey])) {
+    if (!Object.hasOwn(objB, currentKey) || !Object.is(objA[currentKey], objB[currentKey])) {
       return false;
     }
   }
@@ -503,7 +501,7 @@ function updateMemoComponent(
   if (!hasScheduledUpdateOrContext) {
     // This will be the props with resolved defaultProps,
     // unlike current.memoizedProps which will be the unresolved ones.
-    const prevProps = currentChild.memoizedProps;
+    const prevProps = currentChild.memoizedProps as AnyProps;
     // Default to shallow comparison
     const compare = Component.compare !== null ? Component.compare : shallowEqual;
     if (compare(prevProps, nextProps) && current.ref === workInProgress.ref) {
@@ -2442,6 +2440,18 @@ function mountSuspenseFallbackAfterRetryWithoutHydrating(
   return fallbackChildFragment;
 }
 
+// The error a Suspense boundary the server could not finish reports when the
+// client renders it instead: upstream sets `digest` on a plain Error, which a
+// native build cannot add a field to, so it is declared here.
+class ServerBoundaryError extends Error {
+  digest: string | undefined;
+
+  constructor(message: string, digest: string | undefined) {
+    super(message);
+    this.digest = digest;
+  }
+}
+
 function mountDehydratedSuspenseComponent(
   workInProgress: Fiber,
   suspenseInstance: SuspenseInstance,
@@ -2502,19 +2512,16 @@ function updateDehydratedSuspenseComponent(
 
       // This is unreachable in renderers that do not support hydration.
       if (digest !== REACT_RECOVERABLE_DIGEST) {
-        let error: Error & { digest?: string | undefined };
-        if (isDevelopment && message) {
-          error = new Error(message);
-        } else {
-          error = new Error(
-            "The server could not finish this Suspense boundary, likely " +
-              "due to an error during server rendering. " +
-              "Switched to client rendering.",
-          );
-        }
+        const error = new ServerBoundaryError(
+          isDevelopment && message
+            ? message
+            : "The server could not finish this Suspense boundary, likely " +
+                "due to an error during server rendering. " +
+                "Switched to client rendering.",
+          digest,
+        );
         // Replace the stack with the server stack
-        error.stack = (isDevelopment && stack) || "";
-        error.digest = digest;
+        replaceErrorStack(error, (isDevelopment && stack) || "");
         const capturedValue = createCapturedValueFromError(
           error,
           componentStack === undefined ? null : componentStack,
@@ -3047,7 +3054,7 @@ function updateViewTransition(current: Fiber | null, workInProgress: Fiber, rend
     workInProgress.stateNode = instance;
   }
 
-  const pendingProps = workInProgress.pendingProps as ViewTransitionProps & { className?: unknown };
+  const pendingProps = workInProgress.pendingProps as ViewTransitionProps;
   if (pendingProps.name != null && pendingProps.name !== "auto") {
     // Explicitly named boundary. We track it so that we can pair it up with another explicit
     // boundary if we get deleted.

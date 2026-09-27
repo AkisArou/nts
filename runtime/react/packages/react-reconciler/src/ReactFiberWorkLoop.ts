@@ -4234,11 +4234,14 @@ export function retryDehydratedSuspenseBoundary(boundaryFiber: Fiber): void {
 
 export function resolveRetryWakeable(boundaryFiber: Fiber, wakeable: Wakeable): void {
   let retryLane: Lane = NoLane; // Default
-  let retryCache: WeakSet<Wakeable> | Set<Wakeable> | null;
+  // A plain Set, as the commit phase makes it (ReactFiberCommitWork's
+  // getRetryCache): upstream's may be weak, which a native build has no
+  // representation for.
+  let retryCache: Set<Wakeable> | null;
   switch (boundaryFiber.tag) {
     case ActivityComponent:
     case SuspenseComponent: {
-      retryCache = boundaryFiber.stateNode as WeakSet<Wakeable> | Set<Wakeable> | null;
+      retryCache = boundaryFiber.stateNode as Set<Wakeable> | null;
       const suspenseState = boundaryFiber.memoizedState as SuspenseState | ActivityState | null;
       if (suspenseState !== null) {
         retryLane = suspenseState.retryLane;
@@ -4246,7 +4249,7 @@ export function resolveRetryWakeable(boundaryFiber: Fiber, wakeable: Wakeable): 
       break;
     }
     case SuspenseListComponent:
-      retryCache = boundaryFiber.stateNode as WeakSet<Wakeable> | Set<Wakeable> | null;
+      retryCache = boundaryFiber.stateNode as Set<Wakeable> | null;
       break;
     case OffscreenComponent: {
       const instance = boundaryFiber.stateNode as OffscreenInstance;

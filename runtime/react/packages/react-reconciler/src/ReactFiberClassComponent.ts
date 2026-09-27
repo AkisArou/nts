@@ -264,8 +264,10 @@ function checkShouldComponentUpdate(
     return shouldUpdate as boolean;
   }
 
-  // JS object model: PureComponent is recognised by a prototype marker.
-  if (ctor.prototype && ctor.prototype.isPureReactComponent) {
+  // JS object model: PureComponent is recognised by a prototype marker. Each
+  // test is a boolean: natively `&&` over an object is not one.
+  const prototype = ctor.prototype;
+  if (prototype !== undefined && prototype !== null && prototype.isPureReactComponent === true) {
     return !shallowEqual(oldProps, newProps) || !shallowEqual(oldState, newState);
   }
 
@@ -281,7 +283,7 @@ function checkClassInstance(workInProgress: Fiber, ctor: ClassComponentConstruct
     const renderPresent = members["render"];
 
     if (!renderPresent) {
-      if (ctor.prototype && typeof ctor.prototype.render === "function") {
+      if (ctor.prototype !== undefined && ctor.prototype !== null && typeof ctor.prototype.render === "function") {
         console.error(
           "No `render` method found on the %s " + "instance: did you accidentally return an object from the constructor?",
           name,
@@ -346,7 +348,12 @@ function checkClassInstance(workInProgress: Fiber, ctor: ClassComponentConstruct
         name,
       );
     }
-    if (ctor.prototype && ctor.prototype.isPureReactComponent && defines(ctor, instance, ShouldComponentUpdate)) {
+    if (
+      ctor.prototype !== undefined &&
+      ctor.prototype !== null &&
+      ctor.prototype.isPureReactComponent === true &&
+      defines(ctor, instance, ShouldComponentUpdate)
+    ) {
       console.error(
         "%s has a method called shouldComponentUpdate(). " +
           "shouldComponentUpdate should not be used when extending React.PureComponent. " +

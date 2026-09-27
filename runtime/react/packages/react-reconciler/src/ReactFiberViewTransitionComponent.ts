@@ -24,6 +24,8 @@ export interface ViewTransitionProps {
   onParentExit?: ViewTransitionEventHandler;
   onShare?: ViewTransitionEventHandler;
   onUpdate?: ViewTransitionEventHandler;
+  // Renamed to `default`: read only to warn about it.
+  className?: unknown;
 }
 
 export interface ViewTransitionState {

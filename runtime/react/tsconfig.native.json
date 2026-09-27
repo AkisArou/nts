@@ -26,6 +26,12 @@
       "shared/ReactComponentStackFrame.ts": [
         "./packages/shared/src/ReactComponentStackFrame.native.ts"
       ],
+      "shared/ReactOwnerStackFrames.ts": [
+        "./packages/shared/src/ReactOwnerStackFrames.native.ts"
+      ],
+      "shared/replaceErrorStack.ts": [
+        "./packages/shared/src/replaceErrorStack.native.ts"
+      ],
       "react/ReactHooks.ts": [
         "./packages/react/src/ReactHooks.native.ts"
       ],
