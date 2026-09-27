@@ -3,6 +3,7 @@
 //
 //   node tooling/census/erased-calls.mjs [project ...]   (default: the runtime, runtime/react, examples/, outcomes)
 //   node tooling/census/erased-calls.mjs --test262 <rows> ...   and every test262 file those census rows saw reach lowering
+//   node tooling/census/erased-calls.mjs --origins [project ...]  and where each site's value was erased
 //   node tooling/census/erased-calls.mjs --self-test
 //   NTS_BIN=<a pin> node tooling/census/erased-calls.mjs
 //
@@ -65,6 +66,117 @@ export function erasedCalls(text) {
   return sites;
 }
 
+/** One prepared listing as functions: name, parameters' types, and each value's definition and type. */
+function readFunctions(text) {
+  const fns = new Map();
+  for (const chunk of text.split(/\n(?=(?:export )?(?:declare )?func )/)) {
+    const name = /^(?:export )?(?:declare )?func (.+?)\(/.exec(chunk)?.[1];
+    if (!name) continue;
+    const types = new Map();
+    const defs = new Map();
+    for (const m of chunk.matchAll(/^ {2}(%\d+) = (.+?) : (.+)$/gm)) {
+      defs.set(m[1], m[2]);
+      types.set(m[1], m[3]);
+    }
+    for (const header of chunk.matchAll(/^b\d+\((.*)\):$/gm)) {
+      for (const m of header[1].matchAll(/(%\d+): ([^,]+(?:<[^>]*>)?)/g)) {
+        types.set(m[1], m[2]);
+        defs.set(m[1], "block-arg");
+      }
+    }
+    fns.set(name, { name, chunk, types, defs });
+  }
+  return fns;
+}
+
+/**
+ * Where each erased-callee site's value was erased, and at which closure
+ * layout. A site loads its callee from a field (`field.get %o.K : erased`);
+ * its origins are the values stored into that field of that class anywhere
+ * in the program (`field.set %o.K = %v`), each an `erase %c` whose operand's
+ * type is the layout it was stored at -- or an erased parameter, followed
+ * through the direct callers' arguments to `depth`. A site is
+ *
+ *   matched      every origin has the call site's layout
+ *   mismatched   some origin's layout differs: the slot may hold another
+ *                signature's entry -- a candidate misread
+ *   unmade       the class holding it has methods here and no compiled
+ *                constructor: none is made, and the site cannot run
+ *                (`Timeout#constructor` is refused, so `Timeout#invoke`
+ *                never meets a Timeout)
+ *   outside      the class holding it has no methods and is never made
+ *                here -- an interface or a literal's shape, whose values
+ *                arrive across an addon's boundary or from another module;
+ *                only a run can say at which signature
+ *   unresolved   an origin this walk cannot follow (block argument, a load
+ *                from another erased slot, an indirect caller), named
+ */
+export function origins(text, depth = 4) {
+  const fns = readFunctions(text);
+  const stores = new Map();
+  const callers = new Map();
+  const made = new Set();
+  const owners = new Map();
+  for (const f of fns.values()) {
+    for (const m of f.chunk.matchAll(/^ {2}%\d+ = object\.new .*? : (.+)$/gm)) made.add(m[1]);
+    // A method names its class and the class's type id: `Timeout<1195>#invoke(this: managed<obj#1195>)`.
+    const owner = /^(?:export )?(?:declare )?func ([^#(]+)#[^(]*\(this: (managed<obj#\d+>)/.exec(f.chunk);
+    if (owner) owners.set(owner[2], owner[1]);
+    for (const m of f.chunk.matchAll(/^ {2}field\.set (%\d+)\.(\d+) = (%\d+)$/gm)) {
+      const key = `${f.types.get(m[1])}.${m[2]}`;
+      stores.set(key, [...(stores.get(key) ?? []), { f, value: m[3] }]);
+    }
+    for (const m of f.chunk.matchAll(/^ {2}(?:%\d+ = )?call ([^\s(]+)\(([^)]*)\)/gm)) {
+      callers.set(m[1], [...(callers.get(m[1]) ?? []), { f, args: m[2].split(",").map((a) => a.trim()).filter(Boolean) }]);
+    }
+  }
+  /** The layouts a value of `f` may have been erased at, or why that is unknown. */
+  const layoutsOf = (f, value, left, seen) => {
+    const def = f.defs.get(value) ?? "";
+    const erased = /^erase(?:\.or\.undefined)? (%\d+)$/.exec(def);
+    if (erased) return [{ layout: f.types.get(erased[1]) ?? "?" }];
+    const param = /^param (\d+)$/.exec(def);
+    if (param && left > 0) {
+      const sites = callers.get(f.name) ?? [];
+      if (sites.length === 0) return [{ unresolved: `parameter ${param[1]} of ${f.name}, which no direct call reaches` }];
+      return sites.flatMap((c) => (seen.has(c.f.name) ? [] : layoutsOf(c.f, c.args[Number(param[1])], left - 1, new Set([...seen, c.f.name]))));
+    }
+    return [{ unresolved: `${def.split(" ")[0] || "an undefined value"} in ${f.name}` }];
+  };
+  const out = [];
+  for (const f of fns.values()) {
+    for (const m of f.chunk.matchAll(/^ {2}%\d+ = call\.closure\[\d+\] (%\d+)\(/gm)) {
+      const u = /^unerase (%\d+)$/.exec(f.defs.get(m[1]) ?? "");
+      if (!u) continue;
+      const layout = f.types.get(m[1]);
+      const load = /^field\.get (%\d+)\.(\d+)$/.exec(f.defs.get(u[1]) ?? "");
+      if (!load) {
+        out.push({ function: f.name, layout, verdict: "unresolved", why: [`the value is ${(f.defs.get(u[1]) ?? "?").split(" ")[0]}, not a field load`] });
+        continue;
+      }
+      const key = `${f.types.get(load[1])}.${load[2]}`;
+      const found = (stores.get(key) ?? []).flatMap((st) => layoutsOf(st.f, st.value, depth, new Set([st.f.name])));
+      const layouts = [...new Set(found.filter((o) => o.layout).map((o) => o.layout))];
+      const why = [...new Set(found.filter((o) => o.unresolved).map((o) => o.unresolved))];
+      // A class this program never makes is filled in outside it: by user
+      // code across an addon's boundary, or by another module. Its origin is
+      // not in this listing, and only a run can say what arrives.
+      // A class with compiled methods and no compiled constructor is made
+      // nowhere here: its constructor was refused, and the site cannot run.
+      const receiver = f.types.get(load[1]);
+      const owner = owners.get(receiver);
+      const unmade = found.length === 0 && !made.has(receiver);
+      const verdict = !unmade ? (found.length === 0 ? "unresolved" : layouts.some((l) => l !== layout) ? "mismatched" : why.length > 0 ? "unresolved" : "matched")
+        : owner && !fns.has(`${owner}#constructor`) ? "unmade" : "outside";
+      const said = verdict === "unmade" ? [`\`${owner}#constructor\` does not compile, so no ${owner} is made`]
+        : verdict === "outside" ? ["no object of this class is made in this program"]
+        : found.length === 0 ? [`nothing stores into ${key}`] : why;
+      out.push({ function: f.name, field: key, layout, layouts, verdict, why: said });
+    }
+  }
+  return out;
+}
+
 // **Seen to count before it is trusted**, on the listing shape this reads.
 function selfTest() {
   const listing = [
@@ -90,6 +202,30 @@ function selfTest() {
   if (sites.length !== 2) return `${sites.length} site(s) read where two call through an unerase and one through a param`;
   if (sites[0].signature !== "(f64) -> f64" || sites[0].arity !== 1) return `the first site read as ${JSON.stringify(sites[0])}`;
   if (sites[1].signature !== "(managed<str>, managed<str>) -> managed<str>" || sites[1].slot !== 1) return `the second site read as ${JSON.stringify(sites[1])}`;
+  const program = [
+    "func make() -> void {",
+    "b0:",
+    "  %0 = object.new : managed<obj#5>",
+    "  %1 = param 0 : managed<obj#7>",
+    "  %2 = erase %1 : erased",
+    "  field.set %0.1 = %2",
+    "}",
+    "func use(%0: managed<obj#5>) -> void {",
+    "b0:",
+    "  %0 = param 0 : managed<obj#5>",
+    "  %1 = field.get %0.1 : erased",
+    "  %2 = unerase %1 : managed<obj#7>",
+    "  %3 = call.closure[4] %2(%2) : void",
+    "}",
+  ].join("\n");
+  const [site] = origins(program);
+  if (site?.verdict !== "matched") return `a value stored and called at one layout read as ${site?.verdict}`;
+  const [other] = origins(program.replace("%2 = unerase %1 : managed<obj#7>", "%2 = unerase %1 : managed<obj#9>"));
+  if (other?.verdict !== "mismatched") return `a value stored at one layout and called at another read as ${other?.verdict}`;
+  const [foreign] = origins(program.replace(/func make[\s\S]*?\n}\n/, ""));
+  if (foreign?.verdict !== "outside") return `a field of a class nothing makes read as ${foreign?.verdict}`;
+  const [unmade] = origins(`func Box#call(this: managed<obj#5>) -> void {\nb0:\n}\n${program.replace(/func make[\s\S]*?\n}\n/, "")}`);
+  if (unmade?.verdict !== "unmade") return `a field of a class whose constructor does not compile read as ${unmade?.verdict}`;
   return null;
 }
 
@@ -100,7 +236,7 @@ if (broken) {
   process.exit(2);
 }
 if (argv.includes("--self-test")) {
-  console.log("  self-test: sites through an unerase counted, one through a param not; signatures and slots read");
+  console.log("  self-test: sites through an unerase counted, one through a param not; signatures and slots read; origins matched, mismatched, unmade and outside each told apart");
   process.exit(0);
 }
 
@@ -187,6 +323,7 @@ const run = (args) =>
   });
 
 const found = [];
+const traced = [];
 const unmeasured = [];
 let next = 0;
 await Promise.all(Array.from({ length: WORKERS }, async () => {
@@ -198,6 +335,7 @@ await Promise.all(Array.from({ length: WORKERS }, async () => {
       continue;
     }
     for (const s of erasedCalls(r.out)) found.push({ ...p, ...s });
+    if (argv.includes("--origins")) for (const o of origins(r.out)) traced.push({ ...p, ...o });
   }
 }));
 
@@ -226,4 +364,21 @@ for (const corpus of [...new Set(projects.map((p) => p.corpus))]) {
     console.log(`    ${String(row.sites).padStart(4)} site(s) ${String(row.projects.size).padStart(3)} project(s) slot ${[...row.slots].join(",")}  ${sig}`);
   }
   if (signatures.size > 15) console.log(`    ... ${signatures.size - 15} more`);
+}
+
+// Where each site's value was erased: a mismatched site calls through a
+// signature that is not the value's own -- a candidate misread.
+if (argv.includes("--origins")) {
+  console.log(`\n  origins of ${traced.length} site(s):`);
+  for (const verdict of ["mismatched", "unresolved", "unmade", "outside", "matched"]) {
+    const sites = traced.filter((t) => t.verdict === verdict);
+    console.log(`    ${verdict}: ${sites.length}`);
+    if (verdict === "matched") continue;
+    const byField = new Map();
+    for (const t of sites) {
+      const k = plain(`${t.function.replace(/<\d+>|\d+$/g, "")} -- called as ${t.layout ?? "?"}${t.layouts?.length ? `, stored as ${t.layouts.join(" | ")}` : ""}${t.why?.length ? `; ${t.why.slice(0, 2).join("; ")}` : ""}`).replace(/Closure\d+/g, "ClosureN");
+        byField.set(k, [...(byField.get(k) ?? []), t.label]);
+    }
+    for (const [k, labels] of [...byField].sort((a, b) => b[1].length - a[1].length).slice(0, 20)) console.log(`      ${String(labels.length).padStart(3)}  ${k}`);
+  }
 }
