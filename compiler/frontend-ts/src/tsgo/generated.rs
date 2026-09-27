@@ -28,9 +28,9 @@ pub trait Generated: std::fmt::Debug {
     fn identity(&self) -> String;
 
     /// The config to open in place of `tsconfig`, given the project's own
-    /// files (`roots`) and what the checker said of the config opened last
-    /// (`complaints`, empty the first time). `None` opens the project as it
-    /// is, or keeps the config opened last.
+    /// files (`roots`) and what the checker said of the config opened last --
+    /// the project's own, the first time. `None` opens the project as it is,
+    /// or keeps the config opened last.
     ///
     /// # Errors
     /// Why the files could not be generated, said to the person building.

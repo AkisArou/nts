@@ -118,6 +118,11 @@ pub enum TsgoError {
     Generated(String),
 
     #[error(
+        "{manifest} declares the nts surface {surface}, which is none of {known}: a package that claims a surface this compiler does not know is refused rather than read as ordinary code"
+    )]
+    UnknownSurface { manifest: Utf8PathBuf, surface: String, known: String },
+
+    #[error(
         "{identity} was still revising its rewrite of the project after {rounds} rounds, the most a \
          source transform is given: each revision drew errors the last had not. This is the cap \
          stopping it, not a fault in tsgo"
@@ -143,6 +148,7 @@ impl From<TsgoError> for SnapshotError {
     fn from(error: TsgoError) -> Self {
         match error {
             TsgoError::Generated(why) => Self::Generated(why),
+            error @ TsgoError::UnknownSurface { .. } => Self::Project(error.to_string()),
             error => Self::Transport(error.to_string()),
         }
     }
@@ -1495,9 +1501,17 @@ fn open_generated(
 ) -> Result<UpdateSnapshotResponse, TsgoError> {
     const ROUNDS: usize = 4;
     let roots: Vec<String> = project.projects.iter().flat_map(|opened| opened.root_files.iter().cloned()).collect();
+    // What the checker says of the project as it is, before anything is
+    // generated: a generator fills in what is missing, and a module the
+    // project already has -- an installed platform package -- is not missing.
+    let mut complaints = Vec::new();
+    for opened in &project.projects {
+        complaints.extend(
+            client.diagnostics(project.snapshot, &opened.id)?.into_iter().map(|d| generated::Complaint { code: d.code, text: d.text }),
+        );
+    }
     let mut opened = project;
     let mut current: Option<Utf8PathBuf> = None;
-    let mut complaints = Vec::new();
     for _ in 0..ROUNDS {
         let Some(config) = generated.config(tsconfig, &roots, &complaints).map_err(TsgoError::Generated)? else { break };
         if current.as_deref() == Some(config.as_path()) {
@@ -1734,6 +1748,7 @@ fn compiled_files(
 ) -> Result<Vec<Utf8PathBuf>, TsgoError> {
     let names = client.source_file_names(snapshot, project)?;
     let mut compiled = Vec::new();
+    let mut surfaces = Surfaces::default();
 
     for name in names {
         // The bundled prefix is a cheap, exact prefilter. Asking about 63 library
@@ -1744,13 +1759,54 @@ fn compiled_files(
         let path = Utf8PathBuf::from(name);
         // Path shape is a prefilter; the program's own metadata is the authority.
         let metadata = client.source_file_metadata(snapshot, project, &path)?;
-        if metadata.is_default_library || metadata.is_from_external_library {
+        if metadata.is_default_library {
+            continue;
+        }
+        // Code under `node_modules` is not the program's, and is not read.
+        // A declaration file of a package that says it is a platform surface
+        // is (`docs/nts-config.md` 3a): its declarations are what the
+        // program's `objc:AppKit` or `gi:Gtk` means. A `.d.ts` holds no code,
+        // so nothing a package ships is lowered either way.
+        if metadata.is_from_external_library && !(path.as_str().ends_with(".d.ts") && surfaces.declares(&path)?) {
             continue;
         }
         compiled.push(path);
     }
 
     Ok(compiled)
+}
+
+/// The surfaces a package may declare itself: `"nts": { "surface": "objc" }`
+/// in its `package.json`. A closed set, so that a misspelled one is refused
+/// by name rather than read as no surface at all.
+pub const SURFACES: &[&str] = &["objc", "gobject", "winrt", "win32", "java", "c"];
+
+/// Which packages are platform surfaces, read once per `package.json`.
+#[derive(Default)]
+struct Surfaces(FxHashMap<Utf8PathBuf, bool>);
+
+impl Surfaces {
+    /// Whether the package holding `file` -- the nearest `package.json` above
+    /// it -- declares itself a surface.
+    fn declares(&mut self, file: &Utf8Path) -> Result<bool, TsgoError> {
+        let Some(manifest) = file.ancestors().skip(1).map(|dir| dir.join("package.json")).find(|candidate| candidate.is_file()) else {
+            return Ok(false);
+        };
+        if let Some(&known) = self.0.get(&manifest) {
+            return Ok(known);
+        }
+        let text = std::fs::read_to_string(&manifest).unwrap_or_default();
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+        let declared = match value.pointer("/nts/surface") {
+            None => false,
+            Some(serde_json::Value::String(surface)) if SURFACES.contains(&surface.as_str()) => true,
+            Some(other) => {
+                return Err(TsgoError::UnknownSurface { manifest, surface: other.to_string(), known: SURFACES.join(", ") });
+            }
+        };
+        self.0.insert(manifest, declared);
+        Ok(declared)
+    }
 }
 
 /// Whether a node's type is part of the `Promise` constructor's surface.

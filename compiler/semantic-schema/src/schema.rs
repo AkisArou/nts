@@ -873,6 +873,11 @@ pub enum SnapshotError {
     #[error("{0}")]
     Generated(String),
 
+    /// The project declares something this compiler does not know, such as
+    /// a package claiming a platform surface that is none of the known ones.
+    #[error("{0}")]
+    Project(String),
+
     #[error("failed to decode snapshot: {0}")]
     Decode(String),
 }
