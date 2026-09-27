@@ -202,7 +202,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 }
 
 /// The brands `c:types` declares, beside its `c_` scalars.
-const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "CHandles", "ConstPtr"];
+const C_BRANDS: &[&str] = &["CBool", "CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "CHandles", "ConstPtr"];
 /// The brands `winrt:types` declares.
 const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "CopiedArray", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
@@ -1184,7 +1184,8 @@ impl Writer<'_> {
             let why = match &ty {
                 // A string makes the struct one the program holds as a plain
                 // object, copied at the call (`Copied<T>`).
-                Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 | Type::String => None,
+                // And a boolean, one byte read as one (`CBool<c_uint8>`).
+                Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 | Type::String | Type::Bool => None,
                 Type::ValueName(named) if is_guid(named) => None,
                 Type::ValueName(named) => match self.find(&named.namespace, &named.name) {
                     Ok(inner) if inner.category() == TypeCategory::Enum => None,
@@ -1194,7 +1195,6 @@ impl Writer<'_> {
                     Ok(_) => Some(format!("`{}`", named.name)),
                     Err(why) => Some(why),
                 },
-                Type::Bool => Some("a `boolean`".to_owned()),
                 other => Some(format!("{other:?}")),
             };
             if let Some(why) = why {
@@ -1243,7 +1243,11 @@ impl Writer<'_> {
                     other => Err(format!("a {other:?}")),
                 }
             }
-            Type::Bool => Err("a `boolean`".to_owned()),
+            Type::Bool => {
+                self.brands.insert("CBool");
+                self.brands.insert("c_uint8");
+                Ok("CBool<c_uint8>".to_owned())
+            }
             Type::String => {
                 self.brands.insert("HString");
                 Ok("HString".to_owned())

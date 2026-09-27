@@ -730,6 +730,9 @@ fn structure(
         // the same reason the struct case is.
         let ty = if let Some(scalar) = scalar(snapshot, property.ty) {
             Pointee::Scalar(scalar)
+        } else if super::int_bool(snapshot, property.ty) == Some(super::Scalar::UInt8) {
+            // A boolean held in one byte: the Windows Runtime's.
+            Pointee::Scalar(super::Scalar::Bool8)
         } else if let Some(
             inline @ (Pointee::Array { .. } | Pointee::Bits { .. } | Pointee::Flexible(_)),
         ) =

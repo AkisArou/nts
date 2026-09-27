@@ -401,6 +401,32 @@ fn a_struct_holding_a_string_is_copied() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+/// A struct's `boolean` field is one byte read as a boolean
+/// (`CBool<c_uint8>`): `CorePhysicalKeyStatus`, which a key event answers,
+/// is declared rather than refused.
+#[test]
+fn a_boolean_struct_field_is_a_one_byte_boolean() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-bool-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.UI.Core", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let module = std::fs::read_to_string(out.join("Windows.UI.Core.d.ts")).unwrap();
+    assert!(
+        module.contains("export type CorePhysicalKeyStatus = Struct<{ repeatCount: c_uint32; scanCode: c_uint32; isExtendedKey: CBool<c_uint8>; isMenuKeyDown: CBool<c_uint8>; wasKeyDown: CBool<c_uint8>; isKeyReleased: CBool<c_uint8> }, \"Windows_UI_Core_CorePhysicalKeyStatus\">;"),
+        "{module}"
+    );
+    let _ = std::fs::remove_dir_all(&out);
+}
+
 /// A composable class is constructed as itself: its public factory's methods
 /// without the outer and inner objects, tagged for the compiler to supply
 /// them. A protected factory, which only a subclass calls, is not bound.

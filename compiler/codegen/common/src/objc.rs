@@ -224,6 +224,7 @@ fn scalar_encoding(ty: &Type) -> (&'static str, usize) {
             // before a message is encoded; `l`/`L` are its letters.
             Scalar::Long32 => ("l", 4),
             Scalar::ULong32 => ("L", 4),
+            Scalar::Bool8 => ("B", 1),
             Scalar::Int64 | Scalar::Long | Scalar::Ptrdiff => ("q", 8),
             Scalar::UInt64 | Scalar::ULong | Scalar::Size => ("Q", 8),
             Scalar::Float => ("f", 4),

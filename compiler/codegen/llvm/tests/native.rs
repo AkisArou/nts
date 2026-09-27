@@ -2360,6 +2360,47 @@ export function run(): string {
     }
 }
 
+/// A struct holding one-byte booleans, as a Windows Runtime struct does.
+const FLAGS_LIBRARY: &str = r"
+#include <stdint.h>
+struct Flags { uint32_t count; uint8_t on; uint8_t off; };
+struct Flags flags_make(uint32_t count, int on) {
+    struct Flags made = { count, (uint8_t)(on != 0), (uint8_t)(on == 0) };
+    return made;
+}
+int flags_score(struct Flags flags) { return (int)flags.count * 10 + flags.on * 2 + flags.off; }
+";
+
+/// A boolean held in one byte of a struct (`CBool<c_uint8>`, the Windows
+/// Runtime's `boolean` field): read out of a struct C returned as a boolean,
+/// and written as 0 or 1 into one a literal makes -- `true` is the byte 1,
+/// so the score C computes from the bytes says which was written.
+#[test]
+fn a_one_byte_boolean_field_is_read_and_written_as_a_boolean_on_both_backends() {
+    let source = r#"
+import type { ByValue, CBool, Fields, Struct, c_int, c_uint8, c_uint32 } from "c:types";
+type Flags = Struct<{ count: c_uint32; on: CBool<c_uint8>; off: CBool<c_uint8> }, "Flags">;
+declare function flags_make(count: c_uint32, on: c_int): ByValue<Flags>;
+declare function flags_score(flags: ByValue<Flags> | Fields<Flags>): c_int;
+export function run(): string {
+    const a = flags_make(3 as c_uint32, 1 as c_int);
+    const b = flags_make(4 as c_uint32, 0 as c_int);
+    return String(a.on) + " " + String(a.off) + " " + String(b.on) + " " + String(b.off) + " " +
+        String(flags_score({ count: 5, on: true, off: false }));
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(
+            "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
+            "nts_release((NtsHeader *)run());",
+        );
+        let Some((_, outputs)) = run_on_both_backends("flags", source, provider, FLAGS_LIBRARY, &caller) else { return; };
+        for output in outputs {
+            assert_eq!(output, expect("true false false true 52", provider), "{provider:?}");
+        }
+    }
+}
+
 /// An asynchronous C API in miniature: a start function that keeps the
 /// callback and its data, and a loop turn that fires every pending one once.
 const ASYNC_LIBRARY: &str = r"

@@ -3760,6 +3760,10 @@ pub enum Scalar {
     Ptrdiff,
     Float,
     Double,
+    /// A Windows Runtime `boolean` held in a struct: one byte, 0 or 1, and a
+    /// boolean to the program -- read as one, written as 0 or 1. Spelled
+    /// `CBool<c_uint8>` as a field (`CorePhysicalKeyStatus.IsExtendedKey`).
+    Bool8,
 }
 
 impl Scalar {
@@ -3827,6 +3831,7 @@ impl Scalar {
             },
             Self::Float => HirType::Float { bits: 32 },
             Self::Double => HirType::NUMBER,
+            Self::Bool8 => HirType::Bool,
         }
     }
 
@@ -3837,7 +3842,8 @@ impl Scalar {
             Self::Int => "int",
             Self::UInt => "unsigned int",
             Self::Int8 => "int8_t",
-            Self::UInt8 => "uint8_t",
+            // A one-byte boolean is its byte, for the layout's sake.
+            Self::UInt8 | Self::Bool8 => "uint8_t",
             Self::Int16 => "int16_t",
             Self::UInt16 => "uint16_t",
             Self::Int32 => "int32_t",
