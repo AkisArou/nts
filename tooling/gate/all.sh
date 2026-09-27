@@ -1896,6 +1896,23 @@ assembles() {
   return $status
 }
 
+# Is what `nts types` prints a consistent table? The snapshot every
+# representation decision is read from, and until 2026-09-27 no step read it:
+# every TypeId, #n and SignatureId resolves, no type is its own base, a base is
+# an object, and an instantiation has its declaration's arity (plus the
+# checker's appended `this`, counted) and its declaration's members. A new
+# `TypeKind` variant must be added to the checker's KINDS or it fails as
+# unread. The runtime and the examples, about 21 s together. See
+# tooling/conformance/types-check.mjs.
+types_check() {
+  status=0
+  for corpus in "" --examples; do
+    out=$(node tooling/conformance/types-check.mjs $corpus 2>&1) || status=1
+    printf '%s\n' "$out" | awk '!/^$/'
+  done
+  return $status
+}
+
 # How many functions the compiler emits, per runtime/node module and
 # runtime/web-platform, against tooling/gate/definitions -- the number the
 # `profile` refusal ceiling cannot see. A change can take refusals *and*
@@ -2070,6 +2087,7 @@ step "definitions" definitions
 step "integrity-runtime" integrity_runtime
 step "snapshot-cache" snapshot_cache
 step "assembles" assembles
+step "types" types_check
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly
