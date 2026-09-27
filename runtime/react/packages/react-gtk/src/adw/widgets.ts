@@ -151,7 +151,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type DialogBreakpoints, NavigationStack } from "./children.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type AlertDialogChildren, AlertResponseNode, type DialogBreakpoints, NavigationStack } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1020,7 +1020,7 @@ export declare const AboutDialog: HostComponent<"AdwAboutDialog", AboutDialogPro
 export declare const ActionRow: HostComponent<"AdwActionRow", ActionRowProps> & ActionRowSlots & ActionRowChildren;
 
 /** `<AlertDialog>`: an AdwAlertDialog. */
-export declare const AlertDialog: HostComponent<"AdwAlertDialog", AlertDialogProps> & AlertDialogSlots & DialogBreakpoints;
+export declare const AlertDialog: HostComponent<"AdwAlertDialog", AlertDialogProps> & AlertDialogSlots & AlertDialogChildren & DialogBreakpoints;
 
 /** `<ApplicationWindow>`: an AdwApplicationWindow. */
 export declare const ApplicationWindow: HostComponent<"AdwApplicationWindow", ApplicationWindowProps> & ApplicationWindowSlots & ApplicationWindowBreakpoints;
@@ -5854,6 +5854,8 @@ export function createNode(type: string): HostNode | null {
       return new BreakpointNode(type);
     case "AdwBreakpointBin.Breakpoint":
       return new BreakpointNode(type);
+    case "AdwAlertDialog.Response":
+      return new AlertResponseNode(type);
     case "AdwDialog.Breakpoint":
       return new BreakpointNode(type);
   }

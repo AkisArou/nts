@@ -53,7 +53,9 @@
 //             replaces the stack; the user going back is heard as onPopped,
 //             and the page comes back unless the app takes it away
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
-//             it is presented within the Box's window, its onResponse hears
+//             it is presented within the Box's window; its Response
+//             elements are its buttons in React's order, one inserted between
+//             two goes between them and updates in place; its onResponse hears
 //             the response id, and taken out it closes, which onResponse
 //             does not hear
 //   breakpoints  a BreakpointBin's Breakpoint elements: of those whose
@@ -96,7 +98,7 @@ import {
 } from "c:Adw-1";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { g_main_context_iteration, g_main_loop_new, g_timeout_add_full } from "c:GLib-2.0";
-import { GtkAdjustment, GtkLabel, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
+import { GtkAdjustment, GtkButton, GtkLabel, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { react_gtk_emit, react_gtk_log } from "c:react-gtk-shim";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
 import { adw } from "../../../packages/react-gtk/src/adw/index.ts";
@@ -125,6 +127,20 @@ function widget(node: HostNode): GtkWidget {
 function idle(): void {
   while (g_main_context_iteration(null, false)) {
     // until nothing is ready
+  }
+}
+
+// The labels of the buttons in `widget`'s tree, in the tree's order: an
+// AlertDialog's responses, which it has no getter for the order of.
+function buttonLabels(widget: GtkWidget, into: string[]): void {
+  if (widget instanceof GtkButton) {
+    const label = widget.get_label();
+    if (label !== null) {
+      into.push(label);
+    }
+  }
+  for (let child = widget.get_first_child(); child !== null; child = child.get_next_sibling()) {
+    buttonLabels(child, into);
   }
 }
 
@@ -596,12 +612,34 @@ function main(): void {
     },
   };
   const dialog = createInstance("AdwAlertDialog", dialogProps, shown, 0, {});
+  const cancelResponse = createInstance("AdwAlertDialog.Response", { id: "cancel", label: "Cancel" }, shown, 0, {});
+  const okResponse = createInstance("AdwAlertDialog.Response", { id: "ok", label: "OK" }, shown, 0, {});
+  appendInitialChild(dialog, cancelResponse);
+  appendInitialChild(dialog, okResponse);
   const dialogWantsMount = finalizeInitialChildren(dialog, "AdwAlertDialog", dialogProps, 0);
   appendInitialChild(anchor, dialog);
   const unplaced = widget(dialog).get_root() === null;
   commitMount(dialog, "AdwAlertDialog", dialogProps, {});
   idle();
   const within = widget(dialog).get_root() === shown.window;
+  const responseOrder = (): string => {
+    const labels: string[] = [];
+    buttonLabels(widget(dialog), labels);
+    return labels.join(",");
+  };
+  let responses = responseOrder();
+  // A response React renders between two goes between them.
+  const deleteProps: Props = { id: "delete", label: "Delete" };
+  const deleteResponse = createInstance("AdwAlertDialog.Response", deleteProps, shown, 0, {});
+  insertBefore(dialog, deleteResponse, okResponse);
+  responses += ">" + responseOrder();
+  commitUpdate(deleteResponse, "AdwAlertDialog.Response", deleteProps, { id: "delete", label: "Erase", enabled: false }, {});
+  const alerting = widget(dialog);
+  if (alerting instanceof AdwAlertDialog) {
+    responses += ">" + alerting.get_response_label("delete") + " " + String(alerting.get_response_enabled("delete"));
+  }
+  removeChild(dialog, deleteResponse);
+  responses += ">" + responseOrder();
   // The response a user's button gives, as the dialog emits it: a detailed
   // signal, heard whatever its detail.
   const alert = widget(dialog);
@@ -611,7 +649,7 @@ function main(): void {
   removeChild(anchor, dialog);
   idle();
   const closed = widget(dialog).get_root() === null;
-  react_gtk_log("dialog " + String(dialogWantsMount) + " " + String(unplaced) + " " + String(within) + " " + String(closed) + " responded=" + responded);
+  react_gtk_log("dialog " + String(dialogWantsMount) + " " + String(unplaced) + " " + String(within) + " " + String(closed) + " responded=" + responded + " " + responses);
 
   // Every apply and unapply heard, in order.
   let breaks = "";

@@ -16,6 +16,7 @@
 
 import {
   AdwActionRow,
+  AdwAlertDialog,
   AdwApplicationWindow,
   AdwBreakpoint,
   AdwBreakpointBin,
@@ -30,6 +31,7 @@ import {
   AdwToolbarView,
   AdwViewStack,
   AdwWindow,
+  type AdwResponseAppearance,
   type AdwTabPage,
   type AdwViewStackPage,
 } from "c:Adw-1";
@@ -722,4 +724,137 @@ function syncStack(view: AdwNavigationView, pages: readonly WidgetNode[]): void 
       view.replace(wanted);
     }
   });
+}
+
+// ---- AlertDialog responses -----------------------------------------------------------
+
+export interface AlertResponseProps {
+  /** What the dialog's `onResponse` hears when the user picks it. */
+  id: string;
+  /** The button's text: the id, if none. */
+  label?: string;
+  /** Suggested or destructive, or neither. */
+  appearance?: AdwResponseAppearance;
+  /** Whether the user can pick it: true, if not given. */
+  enabled?: boolean;
+}
+
+export interface AlertDialogChildren {
+  /** `<AlertDialog.Response id label appearance enabled>`: a button of the dialog, in React's order. */
+  readonly Response: HostComponent<"AdwAlertDialog.Response", AlertResponseProps>;
+}
+
+/**
+ * A response of an AlertDialog: one of its buttons, heard as the dialog's
+ * `onResponse` with its id. The dialog only appends a response, so one React
+ * places before others is added, and those after it in React's order are
+ * added again after it.
+ */
+export class AlertResponseNode extends HostNode {
+  private owner: WidgetNode | null = null;
+  // The id it was added under, to remove it by.
+  private added: string | null = null;
+  private props: Props = {};
+
+  applyProps(_previous: Props | null, next: Props): void {
+    if (next["children"] !== undefined) {
+      throw new Error(`<${this.name()}> holds no children: its text is its \`label\`.`);
+    }
+    this.props = next;
+    const owner = this.owner;
+    const dialog = owner === null ? null : owner.widget instanceof AdwAlertDialog ? owner.widget : null;
+    if (owner === null || dialog === null) {
+      return;
+    }
+    if (this.id() !== this.added) {
+      // A new id is a new response, where this one was.
+      this.add(dialog);
+      this.appendFollowers(owner);
+    } else {
+      this.describe(dialog);
+    }
+  }
+
+  appendChild(child: HostNode): void {
+    throw new Error(`<${this.name()}> holds no children, not a <${child.name()}>.`);
+  }
+  insertBefore(child: HostNode, _before: HostNode): void {
+    this.appendChild(child);
+  }
+  removeChild(_child: HostNode): void {}
+
+  placeIn(parent: WidgetNode, before: HostNode | null): void {
+    const dialog = parent.widget instanceof AdwAlertDialog ? parent.widget : null;
+    if (dialog === null) {
+      throw new Error(`<${this.name()}> goes directly inside an <AlertDialog>, not a <${parent.name()}>.`);
+    }
+    this.owner = parent;
+    this.add(dialog);
+    // Placed before another response, it went last: those after it follow it
+    // again. Appending one again passes no `before`, so this does not recur.
+    if (before !== null) {
+      this.appendFollowers(parent);
+    }
+  }
+  takeOutOf(parent: WidgetNode): void {
+    if (this.owner !== parent) {
+      return;
+    }
+    const dialog = parent.widget instanceof AdwAlertDialog ? parent.widget : null;
+    const added = this.added;
+    if (dialog !== null && added !== null) {
+      dialog.remove_response(added);
+    }
+    this.owner = null;
+    this.added = null;
+  }
+
+  private id(): string {
+    const id = this.props["id"];
+    return typeof id === "string" ? id : "";
+  }
+
+  // Adds the response last, taking out what it was added as before.
+  private add(dialog: AdwAlertDialog): void {
+    const added = this.added;
+    if (added !== null) {
+      dialog.remove_response(added);
+    }
+    const id = this.id();
+    const label = this.props["label"];
+    dialog.add_response(id, typeof label === "string" ? label : id);
+    this.added = id;
+    this.describe(dialog);
+  }
+
+  private describe(dialog: AdwAlertDialog): void {
+    const id = this.id();
+    const label = this.props["label"];
+    dialog.set_response_label(id, typeof label === "string" ? label : id);
+    const appearance = this.props["appearance"];
+    dialog.set_response_appearance(id, typeof appearance === "number" ? appearance : 0);
+    dialog.set_response_enabled(id, this.props["enabled"] !== false);
+  }
+
+  private appendFollowers(parent: WidgetNode): void {
+    const after = parent.childrenAfter(this);
+    for (let i = 0; i < after.length; i++) {
+      const follower = after[i]!;
+      if (follower.type === this.type) {
+        follower.placeIn(parent, null);
+      }
+    }
+  }
+
+  widgetNode(): WidgetNode | null {
+    return null;
+  }
+  shownWidget(): GtkWidget | null {
+    return null;
+  }
+  publicInstance(): GtkWidget {
+    throw new Error(`<${this.name()}> is a response, not a widget: put the ref on the <AlertDialog>.`);
+  }
+  // A response shows as the dialog's button; hiding it is disabling it, which is a prop.
+  setVisible(_visible: boolean): void {}
 }

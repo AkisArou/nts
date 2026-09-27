@@ -669,6 +669,7 @@ const childElements = new Map([
   ["Adw.Window", { members: "WindowBreakpoints", elements: [["AdwWindow.Breakpoint", "BreakpointNode"]] }],
   ["Adw.ApplicationWindow", { members: "ApplicationWindowBreakpoints", elements: [["AdwApplicationWindow.Breakpoint", "BreakpointNode"]] }],
   ["Adw.BreakpointBin", { members: "BreakpointBinBreakpoints", elements: [["AdwBreakpointBin.Breakpoint", "BreakpointNode"]] }],
+  ["Adw.AlertDialog", { members: "AlertDialogChildren", elements: [["AdwAlertDialog.Response", "AlertResponseNode"]] }],
   ["Adw.Dialog", { members: "DialogBreakpoints", elements: [["AdwDialog.Breakpoint", "BreakpointNode"]] }],
 ]);
 
@@ -689,6 +690,18 @@ function presentedOf(t: WidgetType): { present: string; close: string } | null {
 }
 
 /** The elements `t` takes: its own class's, or the nearest ancestor's with some. */
+/** The members of every class in `t`'s chain with child elements: an AlertDialog's responses and a Dialog's breakpoints. */
+function childMembersOf(t: WidgetType): string[] {
+  const members: string[] = [];
+  for (let c: WidgetType | null = t; c !== null; c = c.parent) {
+    const elements = childElements.get(qualified(c.gir));
+    if (elements !== undefined) {
+      members.push(elements.members);
+    }
+  }
+  return members;
+}
+
 function childElementsOf(t: WidgetType): (typeof childElements extends Map<string, infer E> ? E : never) | null {
   for (let c: WidgetType | null = t; c !== null; c = c.parent) {
     const elements = childElements.get(qualified(c.gir));
@@ -1136,7 +1149,7 @@ function emit(m: Model, target: Target): string {
     const owner = slotOwner(w);
     line();
     line(`/** \`<${w.jsx}>\`: ${article(w.ts)} ${w.ts}. */`);
-    const members = [owner === null ? null : ref(owner, `${owner.jsx}Slots`), childElementsOf(w)?.members ?? null].filter((m) => m !== null);
+    const members = [owner === null ? null : ref(owner, `${owner.jsx}Slots`), ...childMembersOf(w)].filter((m) => m !== null);
     const children = childrenOf(w);
     const props = children === null ? `${w.jsx}Props` : `${w.jsx}Props & ${gtk ? children : `Gtk.${children}`}`;
     line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${props}>${members.map((m) => ` & ${m}`).join("")};`);

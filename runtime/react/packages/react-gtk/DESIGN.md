@@ -447,6 +447,10 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   generator hands such a widget's placements to a class of `children.ts`
   (`childHolders`: `NavigationStack`), since what they mean is more than a
   place.
+- An AlertDialog's buttons are `<AlertDialog.Response id label appearance
+  enabled>` elements, in React's order, heard as the dialog's `onResponse`
+  with their id. libadwaita only appends a response, so one React places
+  before others is added and those after it are added again after it.
 - Breakpoints are elements of the window, dialog or BreakpointBin they
   belong to: `<ApplicationWindow.Breakpoint condition="max-width: 500sp"
   onApply onUnapply>`. The app hears one apply and unapply and renders for

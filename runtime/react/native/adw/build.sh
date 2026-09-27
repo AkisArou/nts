@@ -41,7 +41,7 @@ tabs A,B,C>A,D,B,C>C,A,D,B selected=true asked=1 kept=4 attached=0121 true selec
 pinned P*AB>APB>B*AP>B*PA>PA
 carousel abc>adbc>dbac>cdba>dbac>dac
 navigation AB>ABC>AB>CAB user>CA>CAB app>CA heard=2
-dialog true true true true responded=cancel
+dialog true true true true responded=cancel Cancel,OK>Cancel,Delete,OK>Erase false>Cancel,OK
 breakpoints A+ | A- B+ | A+
 window-breakpoint W+ true false W+ true
 application true true

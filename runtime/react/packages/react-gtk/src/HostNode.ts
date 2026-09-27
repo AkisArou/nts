@@ -646,6 +646,13 @@ export abstract class WidgetNode extends HostNode {
     return null;
   }
 
+  /** The children after `child` in React's order: what an element whose container only appends places again after it. */
+  childrenAfter(child: HostNode): readonly HostNode[] {
+    const order = this.order;
+    const at = order === null ? -1 : order.indexOf(child);
+    return order === null || at < 0 ? [] : order.slice(at + 1);
+  }
+
   /** The first widget among this widget's children from `from` on, in React's order; null if none. */
   private widgetFrom(from: HostNode): WidgetNode | null {
     // A widget is its own answer; only a slot or child element is looked past.
