@@ -4,10 +4,10 @@
 #
 # The arms:
 #
-# - **Binding:** none is committed. `nts build` generates UIKit's from what
-#   `src/main.ts` imports from `objc:UIKit`, into `.nts/objc`, and
-#   `apple-binding.sh` asserts this build did. Not yet from
-#   `@nts/platform-ios`: see `ApplePlatform::installed`.
+# - **Binding:** none is committed. UIKit comes from `@nts/platform-ios`,
+#   which `nts build` generates from the simulator SDK and links into
+#   `node_modules`; `apple-binding.sh` asserts this build read it and
+#   generated nothing for the imports.
 # - **Main (C, `--rc`) and LLVM:** each is an `.app` for the simulator
 #   (`LC_BUILD_VERSION` names `iossimulator`), installed and launched with
 #   `simctl`. UIKit drives the program's lifecycle overrides through a push,
@@ -56,7 +56,7 @@ if grep -qE "refused|NTS[0-9]{4}" "$out/build.log"; then
   echo "ios-nav: nts build refused part of the program and exited 0" >&2
   exit 1
 fi
-sh "$root/examples/interop/apple-binding.sh" ios-nav "$source" "$out" ios UIKit imports
+sh "$root/examples/interop/apple-binding.sh" ios-nav "$source" "$out" ios UIKit platform
 for product in nav navLlvm; do
   binary="$out/$product/ios-17-x86_64/$product"
   llvm-objdump --macho --private-headers "$binary" | grep -q "platform iossimulator" ||

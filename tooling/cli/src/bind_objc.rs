@@ -100,6 +100,23 @@ pub(crate) struct Request {
     /// struct declared by two packages is two native layouts of one name,
     /// which lowering refuses (NTS2006) in a program that meets both.
     pub(crate) records: BTreeMap<String, String>,
+    /// What other frameworks add to the classes this package declares that
+    /// only the class's own declaration can hold: see [`Lent`].
+    pub(crate) lent: Lent,
+}
+
+/// Initializers and class members one framework adds to another's class --
+/// a Swift extension's, `UIKit`'s `NSIndexPath(row:section:)` on Foundation's
+/// -- which TypeScript lets no other file add: a class's construct signatures
+/// and statics are its declaration's alone (TS2433 for a namespace). So the
+/// package that adds them hands them to the class's own package, each tagged
+/// with the frameworks it needs loaded, and that package declares them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Lent {
+    /// Each member as rendered, by the Objective-C class it is added to.
+    pub(crate) members: BTreeMap<String, Vec<String>>,
+    /// The names those members use, by the module to import each from.
+    pub(crate) imports: BTreeMap<String, BTreeSet<String>>,
 }
 
 /// What `nts bind-objc` writes: the binding, and the witness that checks it.
@@ -122,6 +139,9 @@ pub(crate) struct Output {
     /// The C structs the binding declares, by struct name: what a package
     /// generated after it imports rather than declares (`Request::records`).
     pub(crate) records: Vec<String>,
+    /// What this package adds to other frameworks' classes that only their
+    /// own packages can declare, by the framework that owns each class.
+    pub(crate) lends: BTreeMap<String, Lent>,
 }
 
 /// One protocol a bound class adopts: see [`Output::adoptions`].
@@ -180,7 +200,9 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     model.settle_protocols();
     let adoptions = if request.names.is_empty() { BTreeMap::new() } else { swift.adoptions(&bound, &headers.adopts) };
     let records = model.records.iter().filter(|name| !request.records.contains_key(*name)).cloned().collect();
-    Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model), adoptions, records })
+    let binding = render(request, &model);
+    let lends = lends(request, &model, &binding);
+    Ok(Output { witness: witness(request, &model), values: render_values(request, &model), adoptions, records, lends, binding })
 }
 
 /// Each rendered member's name, with every declaration of it as written --
@@ -2966,6 +2988,12 @@ fn render(request: &Request, model: &Model) -> String {
         for line in &class.members {
             let _ = writeln!(text, "{line}");
         }
+        if let Some(lent) = request.lent.members.get(&class.objc) {
+            let _ = writeln!(text, "    // What the platform's other frameworks add, which only this declaration can hold:");
+            for line in lent {
+                let _ = writeln!(text, "{line}");
+            }
+        }
         if !class.skipped.is_empty() {
             let _ = writeln!(text, "    // Not bound, each for the reason given:");
             for line in &class.skipped {
@@ -3004,8 +3032,35 @@ fn render(request: &Request, model: &Model) -> String {
         nest(&mut out, &path, &text);
     }
     out.push_str("}\n");
+    import_lent(&mut out, request);
     render_extensions(&mut out, request, model);
     out
+}
+
+/// The imports the members other frameworks lend this package need (`Lent`),
+/// after the module's other imports: each name the module neither declares
+/// nor imports already, from the module that provides it.
+fn import_lent(out: &mut String, request: &Request) {
+    let known = |name: &str| {
+        out.lines().any(|line| {
+            let line = line.trim_start();
+            (line.starts_with("import ") && line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).any(|word| word == name))
+                || ["export class ", "export interface ", "export type ", "export const enum ", "export function "]
+                    .iter()
+                    .any(|prefix| line.strip_prefix(prefix).is_some_and(|rest| rest.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next() == Some(name)))
+        })
+    };
+    let mut lines = String::new();
+    for (module, names) in request.lent.imports.iter().filter(|(module, _)| **module != request.module) {
+        let wanted: Vec<&str> = names.iter().map(String::as_str).filter(|name| !known(name)).collect();
+        if !wanted.is_empty() {
+            let _ = writeln!(lines, "  import type {{ {} }} from \"{module}\";", wanted.join(", "));
+        }
+    }
+    let header = format!("declare module \"{}\" {{\n", request.module);
+    if let Some(at) = out.find(&header) {
+        out.insert_str(at + header.len(), &lines);
+    }
 }
 
 /// A package's extensions of other frameworks' classes: for each such
@@ -3013,6 +3068,73 @@ fn render(request: &Request, model: &Model) -> String {
 /// class merges the members this package declares into it, as Swift's
 /// `extension NSString` does from `AppKit`. What the members name from this
 /// package is imported into that block.
+/// The name of an extension member only the class's declaration can hold --
+/// an initializer or a class member -- or `None` for an instance member.
+fn class_side(member: &str) -> Option<String> {
+    let declaration = member.lines().map(str::trim).rfind(|line| !line.starts_with("/**") && !line.starts_with('*'))?;
+    (declaration.starts_with("constructor(") || declaration.starts_with("static "))
+        .then(|| declaration.split(['(', ':']).next().unwrap_or_default().trim().to_owned())
+}
+
+/// What this package lends the classes other frameworks declare (`Lent`):
+/// each initializer and class member of its extensions, tagged with the
+/// frameworks it needs -- the class's and this one, which is where the method
+/// is -- and the names it uses, by the module each comes from.
+fn lends(request: &Request, model: &Model, binding: &str) -> BTreeMap<String, Lent> {
+    let Some(package) = &model.package else { return BTreeMap::new() };
+    // Where each name this binding can spell comes from: its own
+    // declarations, then what it imports.
+    let mut from: BTreeMap<String, String> = BTreeMap::new();
+    // The module's own block ends at the first line that closes it; what
+    // follows extends other modules.
+    for line in binding.lines().take_while(|line| *line != "}") {
+        let Some(rest) = line.strip_prefix("  export ") else { continue };
+        let rest = rest.trim_start_matches("declare ").trim_start_matches("const ");
+        let Some((_, rest)) = rest.split_once(' ') else { continue };
+        let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
+        if !name.is_empty() {
+            from.entry(name).or_insert_with(|| request.module.clone());
+        }
+    }
+    for (module, names) in &model.imports {
+        for name in names {
+            from.entry((*name).to_owned()).or_insert_with(|| (*module).to_owned());
+        }
+    }
+    for (framework, names) in &model.foreign {
+        for name in names {
+            from.entry(name.clone()).or_insert_with(|| format!("objc:{framework}"));
+        }
+    }
+    for (record, module) in &request.records {
+        from.entry(record_name(&model.typedefs, record)).or_insert_with(|| module.clone());
+    }
+    let mut lends: BTreeMap<String, Lent> = BTreeMap::new();
+    for class in model.classes.iter().filter(|class| !class.extensions.is_empty()) {
+        let Some(owner) = model.swift.class_owner(&class.objc).filter(|owner| owner != package) else { continue };
+        for member in class.extensions.iter().filter(|member| class_side(member).is_some()) {
+            let lent = lends.entry(owner.to_owned()).or_default();
+            lent.members.entry(class.objc.clone()).or_default().push(tagged(member, &format!("{owner} {package}")));
+            for word in member.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')) {
+                if let Some(module) = from.get(word).filter(|module| **module != format!("objc:{owner}")) {
+                    lent.imports.entry(module.clone()).or_default().insert(word.to_owned());
+                }
+            }
+        }
+    }
+    lends
+}
+
+/// `member` with `@ntsFramework frameworks` in its doc comment: the frameworks
+/// a program that calls it links, where the enclosing module's would not do.
+fn tagged(member: &str, frameworks: &str) -> String {
+    if let Some(end) = member.rfind("*/") {
+        return format!("{}\n     * @ntsFramework {frameworks}\n     {}", member[..end].trim_end(), &member[end..]);
+    }
+    let indent: String = member.chars().take_while(|c| *c == ' ').collect();
+    format!("{indent}/** @ntsFramework {frameworks} */\n{member}")
+}
+
 fn render_extensions(out: &mut String, request: &Request, model: &Model) {
     let Some(package) = &model.package else { return };
     let mut by_owner: BTreeMap<&str, String> = BTreeMap::new();
@@ -3020,20 +3142,19 @@ fn render_extensions(out: &mut String, request: &Request, model: &Model) {
         let Some(owner) = model.swift.class_owner(&class.objc).filter(|owner| owner != package) else { continue };
         let text = by_owner.entry(owner).or_default();
         let _ = writeln!(text, "  interface {} {{", class.swift.rsplit('.').next().unwrap_or_default());
-        let mut unmerged = Vec::new();
+        let mut lent = Vec::new();
         for member in &class.extensions {
             // An interface merges instance members only: an initializer and a
             // class member extend the class's constructor, which no interface
-            // reaches.
-            let declaration = member.lines().map(str::trim).rfind(|line| !line.starts_with("/**") && !line.starts_with('*')).unwrap_or_default();
-            if declaration.starts_with("constructor(") || declaration.starts_with("static ") {
-                unmerged.push(declaration.split(['(', ':']).next().unwrap_or_default().trim().to_owned());
+            // reaches. The class's own package declares them: see `Lent`.
+            if let Some(name) = class_side(member) {
+                lent.push(name);
                 continue;
             }
             let _ = writeln!(text, "{member}");
         }
-        if !unmerged.is_empty() {
-            let _ = writeln!(text, "    // Not bound: an initializer or a class member, which an interface cannot add:\n    //   {}", unmerged.join(", "));
+        if !lent.is_empty() {
+            let _ = writeln!(text, "    // Declared by {owner}'s package, on the class, which alone can add them:\n    //   {}", lent.join(", "));
         }
         let _ = writeln!(text, "  }}");
     }
@@ -3522,6 +3643,20 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
 
     /// The synthetic framework's SDK and graphs, written under a directory of
     /// this test's own, and a request of it with nothing asked for yet.
+    /// A lent member names the frameworks it needs in its own doc comment,
+    /// a one-line one or a longer one, or in a new one where it had none.
+    #[test]
+    fn a_lent_member_carries_its_frameworks() {
+        assert_eq!(
+            tagged("    /** @ntsSelector +indexPathForRow:inSection: */\n    constructor(labels: { forRow: Int; inSection: Int });", "Foundation UIKit"),
+            "    /** @ntsSelector +indexPathForRow:inSection:\n     * @ntsFramework Foundation UIKit\n     */\n    constructor(labels: { forRow: Int; inSection: Int });"
+        );
+        assert_eq!(tagged("    static get shared(): X;", "Foundation UIKit"), "    /** @ntsFramework Foundation UIKit */\n    static get shared(): X;");
+        assert_eq!(class_side("    /** @ntsSelector new */\n    constructor();").as_deref(), Some("constructor"));
+        assert_eq!(class_side("    static get shared(): X;").as_deref(), Some("static get shared"));
+        assert_eq!(class_side("    get row(): Int;"), None);
+    }
+
     fn fake_request(test: &str) -> Request {
         let root = std::env::temp_dir().join(format!("nts-bind-objc-{test}-{}", std::process::id()));
         let headers = root.join("System/Library/Frameworks/Fake.framework/Headers");
@@ -3543,6 +3678,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             target: "x86_64-apple-macos13".to_owned(),
             symbols: Some(symbols),
             records: BTreeMap::new(),
+            lent: Lent::default(),
         }
     }
 
@@ -3592,6 +3728,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             target: "x86_64-apple-macos13".to_owned(),
             symbols: Some(symbols),
             records: BTreeMap::new(),
+            lent: Lent::default(),
         };
         let (text, values) = match run(&request) {
             Ok(output) => (output.binding, output.values),

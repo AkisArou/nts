@@ -7,6 +7,7 @@
 //! open question (`docs/nts-config.md` 3a), and a store on the machine that
 //! has the SDK does not ask it.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use anyhow::{Context, Result};
@@ -71,23 +72,6 @@ impl ApplePlatform {
         self.frameworks().iter().map(|(framework, _)| *framework)
     }
 
-    /// Whether a build installs these packages for a program, in place of the
-    /// binding derived from its imports.
-    ///
-    /// **Not yet iOS's.** Swift lets a framework add an initializer to
-    /// another's class -- `UIKit`'s `NSIndexPath(row:section:)` on Foundation's
-    /// -- and TypeScript cannot add a construct signature, or a static, to a
-    /// class another file declares (TS2433). So `UIKit`'s package lists them as
-    /// not bound, and a `UIKit` program needs them: `ios-list`'s
-    /// `new NSIndexPath({ forRow, inSection })` does not typecheck on it. iOS
-    /// keeps the derived binding, which declares the class and what `UIKit`
-    /// adds in one place, until the owner's package can declare them
-    /// (`docs/nts-config.md` 3a). Its packages still generate and typecheck:
-    /// `the_platform_packages_typecheck`.
-    pub(crate) fn installed(&self) -> bool {
-        self.os == "macos"
-    }
-
     /// The platform package's name: `@nts/platform-macos`.
     pub(crate) fn platform_package(&self) -> String {
         format!("@nts/platform-{}", self.os)
@@ -126,25 +110,54 @@ impl Binder for ApplePlatform {
 
     fn generate(&self) -> Result<Vec<Package>> {
         let symbols = self.symbols()?;
+        let request = |framework: &str, reads: &[&str], records: &BTreeMap<String, String>, lent: bind_objc::Lent| bind_objc::Request {
+            frameworks: std::iter::once(framework).chain(reads.iter().copied()).map(str::to_owned).collect(),
+            module: format!("objc:{framework}"),
+            classes: Vec::new(),
+            protocols: Vec::new(),
+            functions: Vec::new(),
+            names: Vec::new(),
+            package: true,
+            sdk: self.sdk.to_string(),
+            target: self.triple.clone(),
+            symbols: Some(symbols.clone()),
+            records: records.clone(),
+            lent,
+        };
+        let run = |request: &bind_objc::Request| bind_objc::run(request).with_context(|| format!("generating the `{}` package", request.module));
+        // Each framework once, in order: the structs it declares are the
+        // next one's to import, and what it adds to an earlier framework's
+        // classes is collected for that framework's package.
+        let mut outputs = Vec::new();
+        let mut records = BTreeMap::new();
+        let mut lends: BTreeMap<String, bind_objc::Lent> = BTreeMap::new();
+        for (framework, reads) in self.frameworks() {
+            let seen = records.clone();
+            let output = run(&request(framework, reads, &seen, bind_objc::Lent::default()))?;
+            records.extend(output.records.iter().map(|record| (record.clone(), format!("objc:{framework}"))));
+            for (owner, lent) in &output.lends {
+                let into = lends.entry(owner.clone()).or_default();
+                for (class, members) in &lent.members {
+                    into.members.entry(class.clone()).or_default().extend(members.iter().cloned());
+                }
+                for (module, names) in &lent.imports {
+                    into.imports.entry(module.clone()).or_default().extend(names.iter().cloned());
+                }
+            }
+            outputs.push((*framework, *reads, seen, output));
+        }
+        // Then each framework another lends to, again, with what it is lent:
+        // only a class's own declaration can hold an initializer or a class
+        // member (`bind_objc::Lent`). The structs it saw the first time are
+        // the ones it sees now, so it declares the same ones.
+        for (framework, reads, seen, output) in &mut outputs {
+            if let Some(lent) = lends.remove(*framework) {
+                *output = run(&request(framework, reads, seen, lent))?;
+            }
+        }
         let mut packages = Vec::new();
         let mut references = String::new();
-        let mut records = std::collections::BTreeMap::new();
-        for (framework, reads) in self.frameworks() {
-            let request = bind_objc::Request {
-                frameworks: std::iter::once(*framework).chain(reads.iter().copied()).map(str::to_owned).collect(),
-                module: format!("objc:{framework}"),
-                classes: Vec::new(),
-                protocols: Vec::new(),
-                functions: Vec::new(),
-                names: Vec::new(),
-                package: true,
-                sdk: self.sdk.to_string(),
-                target: self.triple.clone(),
-                symbols: Some(symbols.clone()),
-                records: records.clone(),
-            };
-            let output = bind_objc::run(&request).with_context(|| format!("generating the `objc:{framework}` package"))?;
-            records.extend(output.records.iter().map(|record| (record.clone(), format!("objc:{framework}"))));
+        for (framework, _, _, output) in outputs {
             let name = format!("@nts/apple-{}", framework.to_lowercase());
             let _ = writeln!(references, "/// <reference types=\"{name}\" />");
             packages.push(Package {

@@ -68,7 +68,7 @@ impl ObjcBindings {
         let mut provided = BTreeSet::new();
         for platform in crate::apple_surface::platforms(&self.targets) {
             let wanted = platform.modules().any(|module| imports.names.contains_key(module) && !imports.declared.contains(module));
-            if !wanted || !platform.installed() || !crate::apple_surface::available(&platform) {
+            if !wanted || !crate::apple_surface::available(&platform) {
                 continue;
             }
             let installed = store.ensure(&platform)?;
@@ -194,6 +194,7 @@ impl ObjcBindings {
                 target: platform.triple,
                 symbols: Some(symbols),
                 records: std::collections::BTreeMap::new(),
+                lent: bind_objc::Lent::default(),
             });
         }
         let key = key(&requests);

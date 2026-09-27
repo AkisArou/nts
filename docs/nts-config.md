@@ -377,15 +377,19 @@ decomposed 40,665 types for a program using a few dozen
 
 **Order.** The Apple lane builds the reference -- the frontend's surface marker,
 `bind-objc` as the first `Binder`, `@nts/platform-macos` generated locally.
-Built: `macos-notes` and `macos-draw` build on the macOS packages, and
-`macos-window` keeps its committed class list as the generator's oracle. The
-iOS packages generate and typecheck but are not installed yet: Swift lets
-UIKit add an initializer to Foundation's class (`NSIndexPath(row:section:)`),
-TypeScript cannot add a construct signature or a static to a class another
-file declares (TS2433), and a UIKit program needs them. The owner's package
-has to declare what its platform's other frameworks add, with the framework
-each needs; until then the iOS fixtures use the binding derived from their
-imports. Then each lane ports its generator.
+Built: `macos-notes`, `macos-draw` and the four iOS fixtures build on the
+platform packages, and `macos-window` keeps its committed class list as the
+generator's oracle. Then each lane ports its generator.
+
+**What one framework adds to another's class, the owner declares.** Swift
+lets UIKit add an initializer to Foundation's class
+(`NSIndexPath(row:section:)`), and TypeScript lets no other file add a
+construct signature or a static to a class (TS2433 for a namespace). So a
+package hands these to the class's own package -- `bind_objc::Lent`, each
+member tagged `@ntsFramework Foundation UIKit`, since the method is only
+there when UIKit is loaded -- and the platform's binder generates that
+package again with them. Instance members still merge as interfaces, in the
+adding framework's own package.
 Then `--watch` and a language-server proxy over tsgo's own (`cmd/tsgo/lsp.go`),
 which publishes nts's refusals as editor diagnostics beside the checker's.
 

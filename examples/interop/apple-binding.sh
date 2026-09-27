@@ -6,8 +6,7 @@
 # - `platform`: the platform packages (`docs/nts-config.md` 3a), linked into
 #   SOURCE/node_modules, with nothing generated for the program's imports.
 # - `imports`: a binding generated from the program's imports under
-#   SOURCE/.nts, which is how iOS's UIKit arrives until its package can
-#   declare what UIKit adds to Foundation's classes (`ApplePlatform::installed`).
+#   SOURCE/.nts: the fallback, for a framework no platform package provides.
 #
 # The evidence is the config the build opened the program with: `nts build`
 # writes it under SOURCE/.nts/objc on every build, listing the files it adds,

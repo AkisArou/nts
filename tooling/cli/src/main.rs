@@ -376,6 +376,7 @@ fn bind_objc(rest: &[String]) -> Result<()> {
         target: single("--target").unwrap_or_else(|| "x86_64-apple-macos13".to_owned()),
         symbols: single("--symbols").map(std::path::PathBuf::from),
         records: std::collections::BTreeMap::new(),
+        lent: bind_objc::Lent::default(),
     };
     if request.frameworks.is_empty() || (request.classes.is_empty() && request.names.is_empty() && !request.package) {
         anyhow::bail!("`nts bind-objc` needs at least one `--framework`, and a `--class` or a `--name`");
