@@ -84,6 +84,7 @@ export const RULES = [
     arms: [
       "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1",
       "node tooling/conformance/refusal-diff.mjs <before> <after>   # 0 moves is not no effect",
+      "node tooling/conformance/emitted-diff.mjs <before> <after> --axis   # which runtime modules emit differently, and node's tests for those",
       "a full test262 census against a baseline if it should make programs compile (--recorded cannot see a gain)",
     ],
   },
@@ -92,7 +93,10 @@ export const RULES = [
     when: (p) => /^compiler\/codegen\/c\//.test(p),
     why: "the differential on that backend, under both memory providers, and emitted C byte-identical across the cache",
     steps: ["examples", "rc", "outcomes", "snapshot-cache"],
-    arms: ["node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..."],
+    arms: [
+      "node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...",
+      "node tooling/conformance/emitted-diff.mjs <before> <after> --axis   # which runtime modules emit differently, and node's tests for those",
+    ],
   },
   {
     name: "the LLVM backend",
@@ -129,7 +133,10 @@ export const RULES = [
     when: (p) => /^runtime\/c\//.test(p),
     why: "runtime/c is include_str!-ed into the compiler, and the gate formats it",
     steps: ["format", "examples", "rc", "llvm", "assembles"],
-    arms: ["node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...; NTS_BACKEND=llvm ..."],
+    arms: [
+      "node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...; NTS_BACKEND=llvm ...",
+      "node tooling/conformance/emitted-diff.mjs <before> <after> --axis   # which runtime modules emit differently, and node's tests for those",
+    ],
   },
   {
     name: "a runtime module",

@@ -3,7 +3,11 @@
 # against the artifact.
 #
 #   NTS_BIN=<a pinned copy> NTS_ADDON_OUT=<a private dir> \
-#     tooling/conformance/compiled-axis.sh
+#     tooling/conformance/compiled-axis.sh [module ...]
+#
+# Every runtime/node module by default; named modules only when given, which
+# is how emitted-diff.mjs runs the axis over what a change touched. Each
+# module's real passes are left in `$NTS_ADDON_OUT/<module>.{intact,empty}.txt`.
 #
 # # Why this is its own script
 #
@@ -78,9 +82,20 @@ total_pass=0
 total_fail=0
 total_hollow=0
 
-for dir in runtime/node/*/; do
+# A named module that is not one is printed as itself rather than skipped:
+# skipped, it would be a row that is simply absent, and an absence never fails.
+if [ "$#" -gt 0 ]; then
+  dirs=()
+  for module in "$@"; do dirs+=("runtime/node/$module/"); done
+else
+  dirs=(runtime/node/*/)
+fi
+for dir in "${dirs[@]}"; do
   module="$(basename "$dir")"
-  [ -f "$dir/tsconfig.json" ] || continue
+  if [ ! -f "$dir/tsconfig.json" ]; then
+    [ "$#" -gt 0 ] && printf '%-20s NOT A MODULE -- no %stsconfig.json\n' "$module" "$dir"
+    continue
+  fi
   if NTS_ADDON_OUT="$out" timeout 1200 bash "$root/tooling/conformance/build.sh" \
       "$module" > "$out/$module.build.log" 2>&1; then
     if ! loaderr="$(node -e 'require(process.argv[1])' "$out/$module.node" 2>&1)"; then
