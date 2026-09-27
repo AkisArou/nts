@@ -18,6 +18,7 @@ members = [
     "tooling/deps",
     "tooling/bench",
     "tooling/differential",
+    "tooling/surfaces",
     "tooling/suite",
     "runtime/react/compiler/nts-react",
 ]
@@ -44,6 +45,7 @@ nts-codegen-common = { path = "compiler/codegen/common" }
 nts-core = { path = "compiler/core" }
 nts-deps = { path = "tooling/deps" }
 nts-differential = { path = "tooling/differential" }
+nts-surfaces = { path = "tooling/surfaces" }
 nts-debug-lowering = { path = "compiler/debug-lowering" }
 nts-diagnostics = { path = "compiler/diagnostics" }
 nts-frontend-ts = { path = "compiler/frontend-ts" }

@@ -33,16 +33,50 @@ pub(crate) struct ObjcBindings {
     imports: Option<Imports>,
     /// Classes the checker found missing, by module, beyond the imports.
     reached: BTreeMap<String, BTreeSet<String>>,
+    /// The `objc:` modules the checker could not find in the project as it
+    /// is: the only ones generated.
+    missing: Option<BTreeSet<String>>,
     /// The classes each module's last binding declared as stubs.
     stubs: BTreeMap<String, BTreeSet<String>>,
     /// Each module's bound classes, with the protocols they adopt and those
     /// protocols' members: see `bind_objc::Output::adoptions`.
     adoptions: BTreeMap<String, BTreeMap<String, BTreeMap<String, bind_objc::Adopted>>>,
+    /// The platform packages installed for the program, once decided: the
+    /// files a program holds for them, and the modules they provide.
+    platform: Option<(Vec<Utf8PathBuf>, BTreeSet<String>)>,
 }
 
 impl ObjcBindings {
     pub(crate) fn new(targets: Vec<nts_build::config::Target>) -> Self {
-        Self { targets, imports: None, reached: BTreeMap::new(), stubs: BTreeMap::new(), adoptions: BTreeMap::new() }
+        Self {
+            targets,
+            imports: None,
+            missing: None,
+            reached: BTreeMap::new(),
+            stubs: BTreeMap::new(),
+            adoptions: BTreeMap::new(),
+            platform: None,
+        }
+    }
+
+    /// The platform packages for the frameworks the program imports, from the
+    /// store, linked into the project where an editor finds them: the files a
+    /// program holds for them, and the modules they provide.
+    fn install_platform(&self, project: &Utf8Path, imports: &Imports) -> anyhow::Result<(Vec<Utf8PathBuf>, BTreeSet<String>)> {
+        let store = nts_surfaces::Store::new(nts_surfaces::Store::default_root());
+        let mut files = Vec::new();
+        let mut provided = BTreeSet::new();
+        for platform in crate::apple_surface::platforms(&self.targets) {
+            let wanted = platform.modules().any(|module| imports.names.contains_key(module) && !imports.declared.contains(module));
+            if !wanted || !platform.installed() || !crate::apple_surface::available(&platform) {
+                continue;
+            }
+            let installed = store.ensure(&platform)?;
+            nts_surfaces::link(&installed, project)?;
+            files.extend(installed.files());
+            provided.extend(platform.modules().map(str::to_owned));
+        }
+        Ok((files, provided))
     }
 }
 
@@ -71,8 +105,29 @@ impl Generated for ObjcBindings {
             self.imports = Some(imports);
         }
         let Some(imports) = &self.imports else { return Ok(None) };
+        // The first round is given what the checker says of the project as
+        // it is: the `objc:` modules it cannot find are the ones generated. A
+        // platform package the project installed provides its modules, and
+        // this is the fallback for one that did not.
+        let first = self.missing.is_none();
+        if first {
+            let platform = self.install_platform(project, imports).map_err(|error| format!("{error:#}"))?;
+            // What no platform package provides is what is left to generate
+            // from the program's imports: the fallback.
+            self.missing = Some(
+                complaints.iter().filter_map(missing_module).filter(|module| !platform.1.contains(*module)).map(str::to_owned).collect(),
+            );
+            self.platform = Some(platform);
+        }
+        let missing = self.missing.clone().unwrap_or_default();
+        let platform_files = self.platform.as_ref().map(|(files, _)| files.clone()).unwrap_or_default();
+        if missing.is_empty() {
+            // Only the platform's packages, or nothing: a program whose
+            // modules the project already has opens as it is.
+            return if platform_files.is_empty() || !first { Ok(None) } else { wrapper(tsconfig, &store.join("platform"), &platform_files).map(Some).map_err(|error| format!("{error:#}")) };
+        }
         let mut grew = false;
-        for complaint in complaints {
+        for complaint in complaints.iter().filter(|_| !first) {
             let Some((member, class)) = missing_member_of(complaint) else { continue };
             // A stub: the class itself, bound whole.
             for (module, stubs) in &self.stubs {
@@ -95,12 +150,12 @@ impl Generated for ObjcBindings {
                 }
             }
         }
-        if !complaints.is_empty() && !grew {
+        if !first && !grew {
             return Ok(None);
         }
         let mut modules: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for (module, names) in &imports.names {
-            if imports.declared.contains(module) {
+            if imports.declared.contains(module) || !missing.contains(module) {
                 continue;
             }
             let mut all = names.clone();
@@ -138,11 +193,11 @@ impl ObjcBindings {
                 sdk: platform.sdk.to_string(),
                 target: platform.triple,
                 symbols: Some(symbols),
+                records: std::collections::BTreeMap::new(),
             });
         }
         let key = key(&requests);
         let directory = store.join(&key);
-        let config = directory.join("tsconfig.json");
         let mut files = Vec::new();
         for request in &requests {
             let module = request.module.trim_start_matches("objc:");
@@ -165,9 +220,8 @@ impl ObjcBindings {
                 files.push(values);
             }
         }
-        let listed: Vec<String> = files.iter().map(|file| format!("{:?}", file.as_str())).collect();
-        let text = format!("{{\n  \"extends\": {:?},\n  \"files\": [{}]\n}}\n", tsconfig.as_str(), listed.join(", "));
-        std::fs::write(&config, text)?;
+        files.extend(self.platform.as_ref().map(|(platform, _)| platform.clone()).unwrap_or_default());
+        let config = wrapper(tsconfig, &directory, &files)?;
         prune(store, &key);
         Ok(config)
     }
@@ -210,6 +264,17 @@ struct Platform {
     triple: String,
 }
 
+/// The config that opens the project with `files` added, written in
+/// `directory`: it `extends` the project's, whose `include` it keeps.
+fn wrapper(tsconfig: &Utf8Path, directory: &Utf8Path, files: &[Utf8PathBuf]) -> anyhow::Result<Utf8PathBuf> {
+    std::fs::create_dir_all(directory)?;
+    let config = directory.join("tsconfig.json");
+    let listed: Vec<String> = files.iter().map(|file| format!("{:?}", file.as_str())).collect();
+    let text = format!("{{\n  \"extends\": {:?},\n  \"files\": [{}]\n}}\n", tsconfig.as_str(), listed.join(", "));
+    std::fs::write(&config, text)?;
+    Ok(config)
+}
+
 /// The C frameworks, whose headers C includes and whose binding names them
 /// (`@ntsHeader`): Foundation is not one, and cannot be read beside them.
 const C_FRAMEWORKS: &[&str] = &["CoreFoundation", "CoreGraphics", "CoreText", "CoreVideo", "CoreMedia", "ImageIO"];
@@ -231,6 +296,16 @@ fn frameworks(module: &str, symbols: &std::path::Path) -> Vec<String> {
 /// A version's numbers, so that `9.0` sorts before `13.0`.
 fn version(text: &str) -> Vec<u32> {
     text.split('.').map(|part| part.parse().unwrap_or(0)).collect()
+}
+
+/// The `objc:` module a complaint says cannot be found -- TypeScript's
+/// `Cannot find module 'objc:AppKit' or its corresponding type declarations.`
+/// (2307) -- by the name after the prefix.
+fn missing_module(complaint: &Complaint) -> Option<&str> {
+    if complaint.code != 2307 {
+        return None;
+    }
+    complaint.text.split_once("'objc:")?.1.split('\'').next()
 }
 
 /// The member and the class a complaint says lacks it: TypeScript's
@@ -281,7 +356,7 @@ fn prune(store: &Utf8Path, keep: &str) {
     let Ok(entries) = std::fs::read_dir(store) else { return };
     for entry in entries.flatten() {
         let name = entry.file_name();
-        if entry.path().is_dir() && name.to_str() != Some(keep) {
+        if entry.path().is_dir() && name.to_str() != Some(keep) && name.to_str() != Some("platform") {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }

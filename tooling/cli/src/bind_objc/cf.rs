@@ -165,6 +165,7 @@ impl Model<'_> {
             swift: class.swift.clone(),
             parent: None,
             members: Vec::new(),
+            extensions: Vec::new(),
             skipped: Vec::new(),
             sent: Vec::new(),
         }
@@ -256,7 +257,7 @@ impl Model<'_> {
         self.available(symbol)?;
         let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
         let (base, labels) = swift_name(&symbol.names.title);
-        let spelling = Class { objc: String::new(), swift: String::new(), parent: None, members: Vec::new(), skipped: Vec::new(), sent: Vec::new() };
+        let spelling = Class { objc: String::new(), swift: String::new(), parent: None, members: Vec::new(), extensions: Vec::new(), skipped: Vec::new(), sent: Vec::new() };
         let arguments = self.cf_arguments(&spelling, &symbol.names.title, &declared.parameters, &labels)?;
         let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
         Ok(format!("  /** @ntsSymbol {function} */\n  export function {base}({arguments}): {result};"))

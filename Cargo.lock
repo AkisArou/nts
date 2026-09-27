@@ -180,6 +180,7 @@ dependencies = [
  "nts-memory-lowering",
  "nts-react",
  "nts-semantic-schema",
+ "nts-surfaces",
  "roxmltree",
  "rustc-hash",
  "serde",
@@ -389,6 +390,16 @@ dependencies = [
  "serde_json",
  "thiserror",
  "xxhash-rust",
+]
+
+[[package]]
+name = "nts-surfaces"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "camino",
+ "nts-frontend-ts",
+ "serde_json",
 ]
 
 [[package]]

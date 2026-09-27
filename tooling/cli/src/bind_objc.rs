@@ -95,6 +95,11 @@ pub(crate) struct Request {
     /// Where `tooling/apple/symbolgraph.sh` wrote Swift's symbol graphs for
     /// this SDK. By default, `symbolgraph/<SDK version>` beside the SDK.
     pub(crate) symbols: Option<std::path::PathBuf>,
+    /// C structs another package already declares, by struct name, with the
+    /// module to import each from: `CGRect` from `objc:CoreGraphics`. One
+    /// struct declared by two packages is two native layouts of one name,
+    /// which lowering refuses (NTS2006) in a program that meets both.
+    pub(crate) records: BTreeMap<String, String>,
 }
 
 /// What `nts bind-objc` writes: the binding, and the witness that checks it.
@@ -114,6 +119,9 @@ pub(crate) struct Output {
     /// reads `field.insertText` needs bound, and not every protocol a class
     /// adopts, which clash.
     pub(crate) adoptions: BTreeMap<String, BTreeMap<String, Adopted>>,
+    /// The C structs the binding declares, by struct name: what a package
+    /// generated after it imports rather than declares (`Request::records`).
+    pub(crate) records: Vec<String>,
 }
 
 /// One protocol a bound class adopts: see [`Output::adoptions`].
@@ -153,6 +161,9 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     // (`IOSurfaceRef` in Core Graphics) is that framework's to bind.
     if request.package {
         objc.retain(|class| headers.supers.contains_key(class));
+        // And the classes of other frameworks it extends, for the members it
+        // declares on them.
+        objc.extend(swift.extended_by(framework_of(request)).into_iter().filter(|class| headers.supers.contains_key(class)));
     }
     let bound = closure(&objc, &headers.supers)?;
     let protocols: BTreeSet<String> = request.protocols.iter().cloned().collect();
@@ -168,7 +179,8 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     model.read_constants(&constants, &bodies.variables);
     model.settle_protocols();
     let adoptions = if request.names.is_empty() { BTreeMap::new() } else { swift.adoptions(&bound, &headers.adopts) };
-    Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model), adoptions })
+    let records = model.records.iter().filter(|name| !request.records.contains_key(*name)).cloned().collect();
+    Ok(Output { binding: render(request, &model), witness: witness(request, &model), values: render_values(request, &model), adoptions, records })
 }
 
 /// Each rendered member's name, with every declaration of it as written --
@@ -746,7 +758,7 @@ struct Relationship {
 pub(crate) struct Swift {
     by_usr: BTreeMap<String, Symbol>,
     /// The framework each symbol is declared by: the graph it came from.
-    /// `AppKit@Foundation.symbols.json` is AppKit's, extending Foundation's
+    /// `AppKit@Foundation.symbols.json` is `AppKit`'s, extending Foundation's
     /// classes.
     owner: BTreeMap<String, String>,
     /// Swift's `async` import of a method, by the USR it shares with the one
@@ -800,6 +812,17 @@ impl Swift {
     /// The framework that declares Objective-C class `class`.
     fn class_owner(&self, class: &str) -> Option<&str> {
         self.owner.get(&format!("c:objc(cs){class}")).map(String::as_str)
+    }
+
+    /// The Objective-C classes of other frameworks that `framework` declares
+    /// members of: a Swift extension, `AppKit@Foundation`.
+    fn extended_by(&self, framework: &str) -> BTreeSet<String> {
+        self.owner
+            .iter()
+            .filter(|(_, owner)| *owner == framework)
+            .filter_map(|(usr, _)| usr.strip_prefix("c:objc(cs)")?.split_once('(').map(|(class, _)| class.to_owned()))
+            .filter(|class| self.class_owner(class).is_some_and(|owner| owner != framework))
+            .collect()
     }
 
     /// Every name `framework` declares at the top level, as Swift gives it:
@@ -970,6 +993,11 @@ struct Class {
     swift: String,
     parent: Option<String>,
     members: Vec<String>,
+    /// In a package, the members of another framework's class that this
+    /// framework declares -- a Swift extension, as `AppKit`'s `size(withAttributes:)`
+    /// on Foundation's `NSString` -- rendered as an interface merging into
+    /// that framework's module.
+    extensions: Vec<String>,
     skipped: Vec<String>,
     /// Every message a bound member sends, for the witness.
     sent: Vec<Sent>,
@@ -1211,6 +1239,7 @@ impl<'a> Model<'a> {
                 parent: parent.as_ref().map(|p| swift.class(p)),
                 objc: class.clone(),
                 members: Vec::new(),
+                extensions: Vec::new(),
                 skipped: Vec::new(),
                 sent: Vec::new(),
             };
@@ -1242,7 +1271,7 @@ impl<'a> Model<'a> {
     fn protocol(&mut self, objc: &str, decls: &[Value]) -> Protocol {
         let container = format!("c:objc(pl){objc}");
         let swift = self.swift.get(&container).map_or_else(|| objc.to_owned(), |s| s.names.title.clone());
-        let adopter = Class { objc: objc.to_owned(), swift: swift.clone(), parent: None, members: Vec::new(), skipped: Vec::new(), sent: Vec::new() };
+        let adopter = Class { objc: objc.to_owned(), swift: swift.clone(), parent: None, members: Vec::new(), extensions: Vec::new(), skipped: Vec::new(), sent: Vec::new() };
         let mut requirements = Vec::new();
         let mut properties = Vec::new();
         let mut skipped = Vec::new();
@@ -1505,13 +1534,22 @@ impl<'a> Model<'a> {
             Ok(text)
         });
         let is_method = decl.get("kind").and_then(Value::as_str) == Some("ObjCMethodDecl");
+        let extension = self.extends(&class.objc, &usr);
         match bound {
             Ok(text) => {
+                if extension {
+                    class.extensions.push(text.clone());
+                }
                 class.members.push(text);
                 class.sent.extend(sent_by(decl));
                 if let Some(asynchronous) = self.swift.asynchronous.get(&usr).filter(|_| is_method).cloned() {
                     match self.promise(class, decl, &symbol, &asynchronous) {
-                        Ok(overload) => class.members.push(overload),
+                        Ok(overload) => {
+                            if extension {
+                                class.extensions.push(overload.clone());
+                            }
+                            class.members.push(overload);
+                        }
                         Err(why) => class.skipped.push(format!("{shown} as Swift's `async` form: {why}")),
                     }
                 }
@@ -2092,6 +2130,7 @@ impl<'a> Model<'a> {
                 swift: self.classes[at].swift.clone(),
                 parent: None,
                 members: Vec::new(),
+                extensions: Vec::new(),
                 skipped: Vec::new(),
                 sent: Vec::new(),
             };
@@ -2217,7 +2256,7 @@ impl<'a> Model<'a> {
     /// every member of which -- its own and those it refines -- is new to the
     /// class, or declared by it, an ancestor or a protocol already merged
     /// with the same text. An interface cannot extend two types that
-    /// disagree about a member (TS2320), and AppKit's
+    /// disagree about a member (TS2320), and `AppKit`'s
     /// `NSAccessibilityElementProtocol` and `NSAccessibilityProtocol` both
     /// declare `accessibilityFrame` differently. A protocol left out keeps its
     /// members on a value of the protocol's type.
@@ -2377,6 +2416,14 @@ impl<'a> Model<'a> {
             self.mentioned.insert(name.to_owned(), parent);
         }
         self.swift.class(name)
+    }
+
+    /// Whether member `usr` of class `class` is one this package declares on
+    /// another framework's class: an extension.
+    fn extends(&self, class: &str, usr: &str) -> bool {
+        self.package.as_deref().is_some_and(|package| {
+            self.swift.class_owner(class).is_some_and(|owner| owner != package) && self.swift.owner.get(usr).is_some_and(|owner| owner == package)
+        })
     }
 
     /// Whether this binding declares class `name`: every bound class, or in a
@@ -2885,7 +2932,16 @@ fn render(request: &Request, model: &Model) -> String {
     if let Some(package) = &model.package {
         render_package_imports(&mut out, request, model, package);
     }
-    for name in &model.records {
+    // A struct another package declares, imported from it rather than
+    // declared again.
+    let mut provided: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+    for name in model.records.iter().filter_map(|name| request.records.get(name).map(|module| (name, module))) {
+        provided.entry(name.1.as_str()).or_default().insert(record_name(&model.typedefs, name.0));
+    }
+    for (module, names) in &provided {
+        let _ = writeln!(out, "  import type {{ {} }} from \"{module}\";", names.iter().cloned().collect::<Vec<_>>().join(", "));
+    }
+    for name in model.records.iter().filter(|name| !request.records.contains_key(*name)) {
         let fields = model.headers.records.get(name).map(Vec::as_slice).unwrap_or_default();
         let typedefs = &model.typedefs;
         let members: Vec<String> = fields
@@ -2901,32 +2957,7 @@ fn render(request: &Request, model: &Model) -> String {
         // the backends spell: `NSRange` is `struct _NSRange`.
         let _ = writeln!(out, "\n  export type {} = Struct<{{ {} }}, \"{name}\">;", record_name(typedefs, name), members.join("; "));
     }
-    // In a package, the classes other frameworks declare, by Swift name: a
-    // type nested in one (`NSString.DrawingOptions`, AppKit's) extends that
-    // framework's class, which one module cannot declare in another's yet.
-    let foreign_classes: BTreeSet<String> = match &model.package {
-        Some(package) => model
-            .headers
-            .supers
-            .keys()
-            .filter(|class| model.swift.class_owner(class).is_some_and(|owner| owner != package))
-            .map(|class| model.swift.class(class))
-            .collect(),
-        None => BTreeSet::new(),
-    };
-    for enumeration in model.enums.values() {
-        if enumeration.path.len() > 1 && foreign_classes.contains(&enumeration.path[0]) {
-            continue;
-        }
-        let mut text = String::new();
-        let name = enumeration.path.last().map_or("", String::as_str);
-        let _ = writeln!(text, "  export const enum {name} {{");
-        for (case, value) in &enumeration.cases {
-            let _ = writeln!(text, "    {} = {value},", quoted_key(case));
-        }
-        let _ = writeln!(text, "  }}");
-        nest(&mut out, &enumeration.path, &text);
-    }
+    render_enums(&mut out, model);
     for class in model.classes.iter().filter(|class| model.owns(&class.objc)) {
         let extends = class.parent.as_ref().map(|p| format!(" extends {p}")).unwrap_or_default();
         let path: Vec<String> = class.swift.split('.').map(str::to_owned).collect();
@@ -2973,7 +3004,115 @@ fn render(request: &Request, model: &Model) -> String {
         nest(&mut out, &path, &text);
     }
     out.push_str("}\n");
+    render_extensions(&mut out, request, model);
     out
+}
+
+/// A package's extensions of other frameworks' classes: for each such
+/// framework, a second `declare module` of it, where an interface of each
+/// class merges the members this package declares into it, as Swift's
+/// `extension NSString` does from `AppKit`. What the members name from this
+/// package is imported into that block.
+fn render_extensions(out: &mut String, request: &Request, model: &Model) {
+    let Some(package) = &model.package else { return };
+    let mut by_owner: BTreeMap<&str, String> = BTreeMap::new();
+    for class in model.classes.iter().filter(|class| !class.extensions.is_empty()) {
+        let Some(owner) = model.swift.class_owner(&class.objc).filter(|owner| owner != package) else { continue };
+        let text = by_owner.entry(owner).or_default();
+        let _ = writeln!(text, "  interface {} {{", class.swift.rsplit('.').next().unwrap_or_default());
+        let mut unmerged = Vec::new();
+        for member in &class.extensions {
+            // An interface merges instance members only: an initializer and a
+            // class member extend the class's constructor, which no interface
+            // reaches.
+            let declaration = member.lines().map(str::trim).rfind(|line| !line.starts_with("/**") && !line.starts_with('*')).unwrap_or_default();
+            if declaration.starts_with("constructor(") || declaration.starts_with("static ") {
+                unmerged.push(declaration.split(['(', ':']).next().unwrap_or_default().trim().to_owned());
+                continue;
+            }
+            let _ = writeln!(text, "{member}");
+        }
+        if !unmerged.is_empty() {
+            let _ = writeln!(text, "    // Not bound: an initializer or a class member, which an interface cannot add:\n    //   {}", unmerged.join(", "));
+        }
+        let _ = writeln!(text, "  }}");
+    }
+    // Enums this package nests in another framework's class -- `AppKit`'s
+    // `NSString.DrawingOptions` -- merge into that class there, as a
+    // namespace.
+    let owners: BTreeMap<String, &str> = model
+        .headers
+        .supers
+        .keys()
+        .filter_map(|objc| Some((model.swift.class(objc), model.swift.class_owner(objc).filter(|owner| owner != package)?)))
+        .collect();
+    for enumeration in model.enums.values() {
+        let Some(owner) = enumeration.path.first().filter(|_| enumeration.path.len() > 1).and_then(|root| owners.get(root)) else { continue };
+        let mut text = String::new();
+        let _ = writeln!(text, "  export const enum {} {{", enumeration.path.last().map_or("", String::as_str));
+        for (case, value) in &enumeration.cases {
+            let _ = writeln!(text, "    {} = {value},", quoted_key(case));
+        }
+        let _ = writeln!(text, "  }}");
+        nest(by_owner.entry(owner).or_default(), &enumeration.path, &text);
+    }
+    // What the extended module declares itself is never this package's to
+    // import: its classes, and anything nested in them.
+    let foreign: BTreeSet<String> = model.classes.iter().filter(|class| !model.owns(&class.objc)).filter_map(|class| class.swift.split('.').next().map(str::to_owned)).collect();
+    let mut own: BTreeSet<String> = model.classes.iter().filter(|class| model.owns(&class.objc)).filter_map(|class| class.swift.split('.').next().map(str::to_owned)).collect();
+    own.extend(model.enums.values().filter_map(|enumeration| enumeration.path.first().cloned()).filter(|root| !foreign.contains(root)));
+    own.extend(model.records.iter().map(|name| record_name(&model.typedefs, name)));
+    own.extend(model.protocols.iter().filter_map(|protocol| protocol.swift.split('.').next().map(str::to_owned)));
+    // And the stubs it declares for classes of frameworks not generated
+    // (CloudKit's `CKShare`).
+    own.extend(model.mentioned.keys().filter_map(|name| model.swift.class(name).split('.').next().map(str::to_owned)));
+    for (owner, body) in by_owner {
+        let words: BTreeSet<&str> = body.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).collect();
+        let _ = writeln!(out, "\n// `{}`'s extensions of `{owner}`'s classes, as Swift's.\ndeclare module \"objc:{owner}\" {{", request.module.trim_start_matches("objc:"));
+        for (module, names) in &model.imports {
+            let used: Vec<&str> = names.iter().copied().filter(|name| words.contains(name)).collect();
+            if !used.is_empty() {
+                let _ = writeln!(out, "  import type {{ {} }} from \"{module}\";", used.join(", "));
+            }
+        }
+        let used: Vec<&str> = own.iter().map(String::as_str).filter(|name| words.contains(name)).collect();
+        if !used.is_empty() {
+            let _ = writeln!(out, "  import type {{ {} }} from \"{}\";", used.join(", "), request.module);
+        }
+        out.push_str(&body);
+        out.push_str("}\n");
+    }
+}
+
+/// Each enum the binding declares, nested in its class's namespace where
+/// Swift nests it (`NSWindow.StyleMask`).
+fn render_enums(out: &mut String, model: &Model) {
+    // In a package, the classes other frameworks declare, by Swift name: a
+    // type nested in one (`NSString.DrawingOptions`, AppKit's) extends that
+    // framework's class, which one module cannot declare in another's yet.
+    let foreign_classes: BTreeSet<String> = match &model.package {
+        Some(package) => model
+            .headers
+            .supers
+            .keys()
+            .filter(|class| model.swift.class_owner(class).is_some_and(|owner| owner != package))
+            .map(|class| model.swift.class(class))
+            .collect(),
+        None => BTreeSet::new(),
+    };
+    for enumeration in model.enums.values() {
+        if enumeration.path.len() > 1 && foreign_classes.contains(&enumeration.path[0]) {
+            continue;
+        }
+        let mut text = String::new();
+        let name = enumeration.path.last().map_or("", String::as_str);
+        let _ = writeln!(text, "  export const enum {name} {{");
+        for (case, value) in &enumeration.cases {
+            let _ = writeln!(text, "    {} = {value},", quoted_key(case));
+        }
+        let _ = writeln!(text, "  }}");
+        nest(out, &enumeration.path, &text);
+    }
 }
 
 /// A package's first lines: what it imports from the frameworks that declare
@@ -3071,6 +3210,8 @@ fn render_values(request: &Request, model: &Model) -> String {
     for name in model.mentioned.keys() {
         own.extend(model.swift.class(name).split('.').next().map(str::to_owned));
     }
+    // A package's classes from other frameworks, which it re-exports.
+    own.extend(model.foreign.values().flatten().cloned());
     let mut out = format!(
         "// Generated by `nts bind-objc` beside the binding of `{}`. Do not edit: regenerate.\n//\n\
          // Swift's `async` imports: each method taking a completion handler, as a\n\
@@ -3401,6 +3542,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             sdk: root.to_string_lossy().into_owned(),
             target: "x86_64-apple-macos13".to_owned(),
             symbols: Some(symbols),
+            records: BTreeMap::new(),
         }
     }
 
@@ -3449,6 +3591,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             sdk: root.to_string_lossy().into_owned(),
             target: "x86_64-apple-macos13".to_owned(),
             symbols: Some(symbols),
+            records: BTreeMap::new(),
         };
         let (text, values) = match run(&request) {
             Ok(output) => (output.binding, output.values),
