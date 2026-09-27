@@ -148,6 +148,16 @@ for module in "${modules[@]}"; do
   # harness's, and as a single figure they read the same. No surface test
   # separates them either -- each runs against what `shape.mjs` returns, which is
   # node's key set by construction.
+  #
+  # **This counts the addon's raw export table, not what a test can reach.**
+  # `shape.mjs` assembles the surface node's tests see, and the two disagree in
+  # both directions: `fs` has 4 names in its table and 104 once shaped, while
+  # `console`'s one name (`formatTime`) shapes to nothing. So the line says
+  # "export table", never "publishes": on 2026-09-27 it said "publishes nothing"
+  # about `dgram`, whose shaped surface has names, while the compiled axis said
+  # it about a different six. One sentence naming two populations is how a
+  # ratchet nearly got seeded from the wrong one. What a test reaches is
+  # `compiled-axis.sh`'s question, and `build-floor.sh` ratchets it.
   out="$("$node_bin" -e "
     const flags = require('node:os').constants.dlopen;
     const m = { exports: {} };
@@ -157,8 +167,8 @@ for module in "${modules[@]}"; do
     try { theirs = new Set(Object.keys(require('node:$module'))); } catch { /* no such node module */ }
     const shared = theirs === null ? null : ours.filter((k) => theirs.has(k)).length;
     console.log(ours.length === 0
-      ? 'loads, and publishes nothing'
-      : 'loads, ' + ours.length + ' name(s) published' +
+      ? 'loads, and its export table is empty'
+      : 'loads, ' + ours.length + ' name(s) in its export table' +
       (shared === null ? ' (node has no such module to compare)'
        : shared === ours.length ? ' (all of them node\\'s)'
        : ' (' + shared + ' of them node\\'s)'))" 2>&1)"
