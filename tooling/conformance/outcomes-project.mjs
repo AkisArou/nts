@@ -14,6 +14,20 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 export const OUTCOMES = join(HERE, "outcomes");
+
+/**
+ * How a fixture reaches the runtime's own sources: `@nts/runtime/<path>` is
+ * `runtime/<path>` in this repository, on both sides -- a tsconfig `paths`
+ * entry for nts, and a resolve hook in `outcomes-node-preload.mjs` for node.
+ * One definition, so the two cannot drift.
+ *
+ * It exists for guards on runtime *internals*, which no other instrument
+ * compares against node: the compiled axis runs a module's own tests, and an
+ * internal like `validateObject` is nobody's module. Two such functions gave
+ * wrong answers for weeks until 7f7bf5340.
+ */
+export const RUNTIME_SPECIFIER = "@nts/runtime/";
+export const RUNTIME_ROOT = join(ROOT, "runtime");
 const HARNESS = readFileSync(join(HERE, "outcomes-harness.ts"), "utf8");
 
 /** Every fixture's name, sorted. */
@@ -39,7 +53,11 @@ export function materialise(scratch, name, sources, mode) {
   cpSync(sources, join(dir, "src"), { recursive: true });
   writeFileSync(
     join(dir, "tsconfig.json"),
-    `${JSON.stringify({ extends: join(ROOT, "tsconfig.fixtures.json"), include: ["src"] }, null, 2)}\n`,
+    `${JSON.stringify({
+      extends: join(ROOT, "tsconfig.fixtures.json"),
+      compilerOptions: { paths: { [`${RUNTIME_SPECIFIER}*`]: [`${RUNTIME_ROOT}/*`] } },
+      include: ["src"],
+    }, null, 2)}\n`,
   );
   if (mode === "build") {
     const main = join(dir, "src/main.ts");

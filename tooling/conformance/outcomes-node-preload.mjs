@@ -12,6 +12,21 @@
 // print its own UnhandledPromiseRejection text -- so a fixture reporting from
 // inside an `async` function disagreed with itself about the harness, not the
 // program. (Found probing a rethrow through `await`.)
+// `@nts/runtime/<path>` resolves to `runtime/<path>`, as the tsconfig
+// outcomes-project.mjs writes resolves it for nts: one definition, both sides.
+import { registerHooks } from "node:module";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { RUNTIME_ROOT, RUNTIME_SPECIFIER } from "./outcomes-project.mjs";
+
+registerHooks({
+  resolve(specifier, context, next) {
+    return specifier.startsWith(RUNTIME_SPECIFIER)
+      ? next(pathToFileURL(join(RUNTIME_ROOT, specifier.slice(RUNTIME_SPECIFIER.length))).href, context)
+      : next(specifier, context);
+  },
+});
+
 const report = (error) => {
   const name = error?.constructor?.name;
   const message = error?.message;

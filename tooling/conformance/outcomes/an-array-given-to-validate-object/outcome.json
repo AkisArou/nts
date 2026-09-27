@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 a parameter of unrepresentable type (a union of `CallableFunction` | undefined)",
+  "ran": "exit 1; nts: uncaught Observed: an array=The \"options\" argument must be of type object. Received an instance of Array;a plain object=accepted;null=The \"options\" argument must be of type object. Received null;",
+  "node": "exit 1; nts: uncaught Observed: an array=The \"options\" argument must be of type object. Received an instance of Array;a plain object=accepted;null=The \"options\" argument must be of type object. Received null;",
+  "measured_with": "1796dc53c9886a9f",
+  "source": "measured"
+}
