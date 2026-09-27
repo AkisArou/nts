@@ -1,0 +1,4 @@
+toggle checkbox_1
+toggle checkbox_1
+toggle checkbox_2
+active checkbox_2

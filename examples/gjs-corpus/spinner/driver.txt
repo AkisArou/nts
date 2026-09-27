@@ -1,0 +1,7 @@
+visible spinner
+click button
+visible spinner
+icon button
+click button
+visible spinner
+icon button

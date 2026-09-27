@@ -5,9 +5,10 @@
 //
 // A port's demo is a function the host calls, where the original runs as the
 // module Workbench imports: nts compiles no dynamic `import()`.
-import { AdwApplication, AdwApplicationWindow } from "c:Adw-1";
-import { GtkBuilder, GtkButton } from "c:Gtk-4.0";
+import { AdwApplication, AdwApplicationWindow, AdwSwitchRow } from "c:Adw-1";
+import { GtkBuilder, GtkButton, GtkCheckButton, GtkLabel, GtkSwitch, GtkToggleButton, GtkWidget } from "c:Gtk-4.0";
 import { ApplicationFlags, g_data_input_stream_new, g_file_new_for_path } from "c:Gio-2.0";
+import { GObject } from "c:GObject-2.0";
 import { g_getenv, g_timeout_add_full } from "c:GLib-2.0";
 
 export interface Workbench {
@@ -17,7 +18,7 @@ export interface Workbench {
   resolve(path: string): string;
 }
 
-/** The driver's actions, one a line: `click <id>`. */
+/** The driver's actions, one a line; tooling/gjs-corpus/host.js lists them. */
 function actions(path: string): string[][] {
   const stream = g_data_input_stream_new(g_file_new_for_path(path).read(null));
   const out: string[][] = [];
@@ -31,11 +32,51 @@ function actions(path: string): string[][] {
   return out;
 }
 
+/** One action on the builder's object `id`, as host.js applies it. */
+function act(kind: string, id: string, object: GObject | null): boolean {
+  switch (kind) {
+    case "click":
+      if (!(object instanceof GtkButton)) return false;
+      object.emit("clicked");
+      return true;
+    case "toggle":
+      if (object instanceof GtkCheckButton) object.active = !object.active;
+      else if (object instanceof GtkToggleButton) object.active = !object.active;
+      else if (object instanceof GtkSwitch) object.active = !object.active;
+      else if (object instanceof AdwSwitchRow) object.active = !object.active;
+      else return false;
+      return true;
+    case "label":
+      if (!(object instanceof GtkLabel)) return false;
+      console.log(`${id}.label ${object.label}`);
+      return true;
+    case "active":
+      if (object instanceof GtkCheckButton) console.log(`${id}.active ${object.active}`);
+      else if (object instanceof GtkToggleButton) console.log(`${id}.active ${object.active}`);
+      else if (object instanceof GtkSwitch) console.log(`${id}.active ${object.active}`);
+      else if (object instanceof AdwSwitchRow) console.log(`${id}.active ${object.active}`);
+      else return false;
+      return true;
+    case "visible":
+      if (!(object instanceof GtkWidget)) return false;
+      console.log(`${id}.visible ${object.visible}`);
+      return true;
+    case "icon":
+      if (!(object instanceof GtkButton)) return false;
+      console.log(`${id}.icon ${object.icon_name}`);
+      return true;
+    case "classes":
+      if (!(object instanceof GtkWidget)) return false;
+      console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
+      return true;
+    default:
+      return false;
+  }
+}
+
 function drive(builder: GtkBuilder, path: string): void {
   for (const [kind, id] of actions(path)) {
-    const object = builder.get_object(id);
-    if (kind === "click" && object instanceof GtkButton) object.emit("clicked");
-    else console.log("driver: cannot " + kind + " " + id);
+    if (!act(kind, id, builder.get_object(id))) console.log("driver: cannot " + kind + " " + id);
   }
 }
 

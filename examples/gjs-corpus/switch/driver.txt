@@ -1,0 +1,9 @@
+label label_on
+label label_off
+toggle switch_on
+label label_on
+label label_off
+active switch_off
+toggle switch_off
+label label_on
+active switch_on

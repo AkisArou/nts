@@ -7,6 +7,12 @@
 // `driver.txt`, one action a line, which the nts port's host reads too:
 //
 //   click <id>     emit `clicked` on the builder's object <id>
+//   toggle <id>    flip `active` on a check button, toggle button or switch
+//   label <id>     print a label's `label`
+//   active <id>    print `active`
+//   visible <id>   print `visible`
+//   icon <id>      print a button's `icon_name`
+//   classes <id>   print a widget's CSS classes, comma separated
 //
 // The demo's own `console.log` lines are the log; nothing else prints.
 import Adw from "gi://Adw";
@@ -40,7 +46,14 @@ application.connect("activate", async () => {
   };
   await import(`file://${main}`);
   for (const [kind, id] of actions) {
-    if (kind === "click") builder.get_object(id).emit("clicked");
+    const object = builder.get_object(id);
+    if (kind === "click") object.emit("clicked");
+    else if (kind === "toggle") object.active = !object.active;
+    else if (kind === "label") console.log(`${id}.label ${object.label}`);
+    else if (kind === "active") console.log(`${id}.active ${object.active}`);
+    else if (kind === "visible") console.log(`${id}.visible ${object.visible}`);
+    else if (kind === "icon") console.log(`${id}.icon ${object.icon_name}`);
+    else if (kind === "classes") console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
     else throw new Error(`unknown action ${kind}`);
   }
   GLib.idle_add(GLib.PRIORITY_LOW, () => {

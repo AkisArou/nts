@@ -1,0 +1,4 @@
+toggle button_camera
+toggle button_flashlight
+toggle button_camera
+toggle button_look

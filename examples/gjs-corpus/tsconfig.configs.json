@@ -14,6 +14,12 @@
     }
   },
   "files": [
-    "button/nts.config.ts"
+    "button/nts.config.ts",
+    "checkboxes/nts.config.ts",
+    "menu-button/nts.config.ts",
+    "radio-buttons/nts.config.ts",
+    "spinner/nts.config.ts",
+    "switch/nts.config.ts",
+    "toggle-button/nts.config.ts"
   ]
 }

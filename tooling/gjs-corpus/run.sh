@@ -28,6 +28,17 @@ done
 export NTS_SNAPSHOT_CACHE="${NTS_SNAPSHOT_CACHE:-$out/snapshot-cache}"
 export GSK_RENDERER=cairo
 mkdir -p "$out"
+# The ports' configs import `@nts/config`, which is this repository's: linked
+# where node resolves it from them, as a fresh checkout has no link yet.
+config="$root/examples/gjs-corpus/node_modules/@nts/config"
+if [ ! -e "$config" ]; then
+  mkdir -p "$(dirname "$config")"
+  ln -s ../../../../tooling/config "$config"
+fi
+# Each demo's first blocker, for ranking what to build by how many demos it
+# clears: the port, and the first refusal its build reported.
+ledger="$out/ledger.tsv"
+: > "$ledger"
 passed=0
 total=0
 printf '| demo | C | LLVM | C --rc | LLVM --rc |\n|---|---|---|---|---|\n'
@@ -47,9 +58,16 @@ for port in "$root"/examples/gjs-corpus/*/; do
     flag=""
     [ "$mode" = rc ] && flag="--rc"
     # shellcheck disable=SC2086
-    if ! "$nts" build "$port/tsconfig.json" --out "$out/$name/$mode" $flag > "$out/$name.$mode.build" 2>&1; then
+    # `nts build` refuses a function and still exits 0, so the build's own
+    # report says whether the program is the one its source describes.
+    if ! "$nts" build "$port/tsconfig.json" --out "$out/$name/$mode" $flag > "$out/$name.$mode.build" 2>&1 ||
+      grep -q "NTS100[13]" "$out/$name.$mode.build"; then
       row="$row | refused | refused"
       all=no
+      if [ "$mode" = plain ]; then
+        blocker=$(grep -m1 "NTS1001" "$out/$name.$mode.build" | sed 's/^[^ ]* NTS1001 //' || true)
+        printf '%s\t%s\n' "$name" "${blocker:-the build failed}" >> "$ledger"
+      fi
       continue
     fi
     for product in demo demo-llvm; do
@@ -73,3 +91,8 @@ for port in "$root"/examples/gjs-corpus/*/; do
 done
 echo
 echo "gjs-corpus: $passed of $total ported demo(s) pass on every arm"
+if [ -s "$ledger" ]; then
+  echo
+  echo "blockers, by how many demos each stops ($ledger):"
+  cut -f2 "$ledger" | sort | uniq -c | sort -rn
+fi
