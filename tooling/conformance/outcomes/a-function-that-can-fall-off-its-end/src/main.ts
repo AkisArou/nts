@@ -12,9 +12,10 @@
 // said falling off such a function "cannot happen: TypeScript rejects" it,
 // which holds only for a *declared* type excluding `undefined`; an inferred
 // one is made `| undefined` by exactly this. And the case is not only one that
-// fails to build: a valueless return left a `prepare` pass free to narrow the
-// function's result from `erased` to `f64` and delete its `erase`, a silent
-// miscompile that `verify` alone stood in front of.
+// fails to build: with a valueless return, a pass in `prepare` (which one is
+// unread) narrowed the function's result from `erased` to `f64` and deleted
+// its `erase` -- `hir` against `hir --prepared` -- a silent miscompile that
+// `verify` alone stood in front of.
 //
 // Control, measured as compiling: the same function ending `return
 // undefined;`. Not an arm here because invalid HIR costs the whole program.
