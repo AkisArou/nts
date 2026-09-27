@@ -1868,6 +1868,26 @@ integrity_runtime() {
   return $status
 }
 
+# Does the snapshot cache hit, and can a trip through it change anything? Per
+# project, through a private cache directory and a pinned copy of the binary:
+# one digest cache-off, cold and on two loads; the loads hit, counted by entry
+# writes and never by timing; `emit-c` from a stored entry byte-identical to
+# cache-off; and a bare `nts frontend`'s narrower snapshot never served to a
+# compilation. A cache that never hits passes every other step, and the last
+# check is the one that found a cross-lane bug on its first run: the key did
+# not carry which questions a snapshot answered, so after anyone ran `nts
+# frontend` on a project, its next build loaded that snapshot as a hit and
+# `examples/math` compiled 16 functions of 40 -- through the default cache,
+# shared by every lane (fixed in 90aa37954). The 15 runtime programs that
+# include web-platform, where maps collide, plus a sample of examples. See
+# tooling/conformance/snapshot-cache.mjs. About 4 min.
+snapshot_cache() {
+  out=$(node tooling/conformance/snapshot-cache.mjs 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^$/'
+  return $status
+}
+
 # How many functions the compiler emits, per runtime/node module and
 # runtime/web-platform, against tooling/gate/definitions -- the number the
 # `profile` refusal ceiling cannot see. A change can take refusals *and*
@@ -2041,6 +2061,7 @@ step "phantoms" phantoms
 step "integrity" integrity
 step "definitions" definitions
 step "integrity-runtime" integrity_runtime
+step "snapshot-cache" snapshot_cache
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly

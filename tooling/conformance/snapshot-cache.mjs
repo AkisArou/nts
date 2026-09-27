@@ -41,6 +41,13 @@
 //    so they cannot show a hash-order defect: this arm runs on the runtime
 //    programs, and examples are the control for (1) and (2) only.
 //
+// **A bare `nts frontend` is the wrong instrument for a question about a
+// build.** It asks for a narrower snapshot than any compilation does -- no
+// call resolution, no decomposition -- so what it measures is a snapshot no
+// compilation uses. This step's first digest arms used it and passed the
+// hash-order defect on the binary that had it: a small snapshot's maps do not
+// collide. Ask `frontend --decompose --calls`, the compilation's question.
+//
 // # Isolation
 //
 // Every arm uses a private cache directory, never the default under the temp
