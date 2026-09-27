@@ -54,6 +54,45 @@ pub(crate) fn repository(root: &str, search: &[Utf8PathBuf]) -> Result<Repositor
     Ok(repository)
 }
 
+/// The GIR files `root`'s closure is read from, found as `repository` finds
+/// them but reading only each file's `<include>` lines: what a store keys its
+/// packages by, asked on every build, so it must not parse the closure.
+/// The binder's own cairo is compiled into `nts` and is no file.
+pub(crate) fn closure_files(root: &str, search: &[Utf8PathBuf]) -> Result<Vec<Utf8PathBuf>> {
+    closure(root, search).map(|(files, _)| files)
+}
+
+/// `root`'s closure: the GIR files read, and every namespace in it as
+/// `Name-Version` -- cairo among them, which is no file.
+pub(crate) fn closure(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Utf8PathBuf>, Vec<String>)> {
+    let mut files = Vec::new();
+    let mut namespaces = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut pending = vec![split(root)?];
+    while let Some((name, version)) = pending.pop() {
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        namespaces.push(format!("{name}-{version}"));
+        let text = if name == "cairo" && version == "1.0" {
+            CAIRO.to_owned()
+        } else {
+            let file = format!("{name}-{version}.gir");
+            let Some(path) = search.iter().map(|dir| dir.join(&file)).find(|path| path.exists()) else { continue };
+            let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
+            files.push(path);
+            text
+        };
+        for line in text.lines().map(str::trim_start).filter(|line| line.starts_with("<include ")) {
+            let attribute = |key: &str| line.split_once(&format!("{key}=\"")).and_then(|(_, rest)| rest.split_once('"')).map(|(value, _)| value.to_owned());
+            if let (Some(name), Some(version)) = (attribute("name"), attribute("version")) {
+                pending.push((name, version));
+            }
+        }
+    }
+    Ok((files, namespaces))
+}
+
 fn split(spec: &str) -> Result<(String, String)> {
     spec.split_once('-')
         .map(|(name, version)| (name.to_owned(), version.to_owned()))

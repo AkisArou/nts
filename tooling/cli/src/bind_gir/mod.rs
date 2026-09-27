@@ -28,7 +28,6 @@ mod facts;
 mod prerequisites;
 
 use std::collections::BTreeMap;
-use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
@@ -39,6 +38,16 @@ pub(crate) struct Request {
     pub root: String,
     pub search: Vec<Utf8PathBuf>,
     pub out: Utf8PathBuf,
+}
+
+/// The GIR files `root`'s closure is read from (`parse::closure_files`).
+pub(crate) fn closure_files(root: &str, search: &[Utf8PathBuf]) -> Result<Vec<Utf8PathBuf>> {
+    parse::closure_files(root, search)
+}
+
+/// The namespaces of `root`'s closure (`parse::closure`), cairo included.
+pub(crate) fn closure_namespaces(root: &str, search: &[Utf8PathBuf]) -> Vec<String> {
+    parse::closure(root, search).map(|(_, namespaces)| namespaces).unwrap_or_default()
 }
 
 /// Where GIR files are looked for, in order: `GI_GIR_PATH` (colon-separated,
@@ -75,77 +84,6 @@ pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<Strin
     // cairo is the binder's own (`parse::CAIRO`), shipped or not.
     let known = spec == "cairo-1.0" || search.iter().any(|dir| dir.join(format!("{spec}.gir")).exists());
     (plausible && known).then(|| spec.to_owned())
-}
-
-/// Bind `roots` into `out` unless the bindings there are already of these
-/// GIR files, read by this `nts`.
-///
-/// **The stamp is what the bindings depend on, and nothing coarser.** It lists
-/// the executable and every GIR file the last run read, with each one's
-/// modification time and size, and the executable must be the one running. A system update that changes `GLib-2.0.gir`
-/// without touching `Gtk-4.0.gir` still regenerates, and a build that changes
-/// nothing costs one `stat` per file. `roots` are added to those the stamp
-/// already names, so a program that stops importing a namespace does not make
-/// the next build regenerate without it.
-pub(crate) fn ensure(roots: &std::collections::BTreeSet<String>, search: &[Utf8PathBuf], out: &Utf8PathBuf) -> Result<()> {
-    let stamp_path = out.join(".nts-stamp");
-    let previous = std::fs::read_to_string(&stamp_path).unwrap_or_default();
-    let mut wanted: std::collections::BTreeSet<String> =
-        previous.lines().filter_map(|line| line.strip_prefix("root ")).map(str::to_owned).collect();
-    let before = wanted.len();
-    wanted.extend(roots.iter().cloned());
-    let exe = std::env::current_exe().ok().and_then(|p| Utf8PathBuf::from_path_buf(p).ok());
-    // The `nts` running now must be the one that wrote them. Checking only
-    // that each file the stamp names is unchanged let a *different* `nts` --
-    // a newer binder -- reuse bindings an older one wrote, since the older
-    // binary had not changed either.
-    let this_nts = exe
-        .as_deref()
-        .and_then(|exe| Some(format!("file {exe} {}", fingerprint(exe)?)))
-        .is_some_and(|line| previous.lines().any(|seen| seen == line));
-    let fresh = wanted.len() == before
-        && this_nts
-        && !previous.is_empty()
-        && previous.lines().all(|line| match line.split_once(' ') {
-            Some(("root", _)) => true,
-            Some(("file", rest)) => rest.rsplit_once(' ').is_some_and(|(path, seen)| {
-                fingerprint(camino::Utf8Path::new(path)).as_deref() == Some(seen)
-            }),
-            _ => false,
-        });
-    if fresh {
-        return Ok(());
-    }
-    let mut stamp = String::new();
-    let mut files: Vec<Utf8PathBuf> = Vec::new();
-    // Largest closures first, and a root another root's closure already
-    // bound is not bound again: `Gtk-4.0` brings `GLib-2.0` with it, and a
-    // program importing both would otherwise pay for GLib twice.
-    let mut order: Vec<&String> = wanted.iter().collect();
-    // Cached: the key parses a root's whole GIR closure.
-    order.sort_by_cached_key(|root| std::cmp::Reverse(closure_size(root, search)));
-    for root in order {
-        let _ = writeln!(stamp, "root {root}");
-        let already = files.iter().any(|file| file.file_name() == Some(&format!("{root}.gir")));
-        if !already {
-            files.extend(bind(root, search, out, false)?);
-        }
-    }
-    files.extend(exe);
-    files.sort();
-    files.dedup();
-    for file in files {
-        if let Some(seen) = fingerprint(&file) {
-            let _ = writeln!(stamp, "file {file} {seen}");
-        }
-    }
-    write(&stamp_path, &stamp)
-}
-
-/// How many namespaces `root` includes, transitively: a cheap read of the
-/// `<include>` lines, used only to order roots.
-fn closure_size(root: &str, search: &[Utf8PathBuf]) -> usize {
-    parse::repository(root, search).map_or(0, |repository| repository.namespaces.len())
 }
 
 /// Modification time and size: what changes when a file is replaced.
@@ -203,21 +141,28 @@ fn namespace_facts(repository: &model::Repository, namespace: &model::Namespace)
     Ok(facts)
 }
 
-/// Bind `root` and its closure into `out`, returning the GIR files read. The
-/// summary is printed in full when asked for, and in one line otherwise.
-fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) -> Result<Vec<Utf8PathBuf>> {
-    let request = Request { root: root.to_owned(), search: search.to_vec(), out: out.clone() };
-    let repository = parse::repository(&request.root, &request.search)?;
-    if verbose {
-        for missing in &repository.missing {
-            println!("  {missing}: no GIR file found, so its types are unknown here");
-        }
-    }
-    std::fs::create_dir_all(&request.out).with_context(|| format!("creating {}", request.out))?;
-    let command = format!("nts bind-gir {}", request.root);
-    let mut totals: BTreeMap<String, usize> = BTreeMap::new();
-    let (mut bound, mut refused) = (0, 0);
-    let (mut asyncs, mut promised) = (0, 0);
+/// One namespace's generated texts: its declarations, the companion module,
+/// the refusals and the Promise census, and how many functions it bound.
+pub(crate) struct Generated {
+    /// `Gtk-4.0`: the namespace and its version.
+    pub(crate) stem: String,
+    pub(crate) declarations: String,
+    pub(crate) values: String,
+    pub(crate) refused: String,
+    pub(crate) promises: String,
+    pub(crate) bound: usize,
+    /// Each refusal's kind, for the ranking.
+    pub(crate) refusals: Vec<String>,
+    /// Async methods, and how many have a Promise form.
+    pub(crate) asyncs: usize,
+    pub(crate) promised: usize,
+}
+
+/// The closure of `root`, bound: each namespace's texts, the GIR files read,
+/// and the namespaces no GIR file was found for. Nothing is written.
+pub(crate) fn generate(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Generated>, Vec<Utf8PathBuf>, Vec<String>)> {
+    let repository = parse::repository(root, search)?;
+    let command = format!("nts bind-gir {root}");
     // Every struct tag first, because a namespace's signatures name the types
     // of the namespaces it includes. Each namespace is one clang run that
     // parses its headers, independent of the others, so they run at once.
@@ -237,7 +182,7 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
         }
         Ok::<_, anyhow::Error>(all)
     })?;
-    // Then each namespace's binding, checked and written, again at once.
+    // Then each namespace's binding, checked, again at once.
     let bindings: Vec<map::Binding> = std::thread::scope(|scope| {
         let runs: Vec<_> = namespaces
             .iter()
@@ -254,36 +199,63 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
             .map(|run| run.join().map_err(|_| anyhow::anyhow!("a binding thread panicked"))?)
             .collect::<Result<Vec<_>>>()
     })?;
-    for (namespace, binding) in namespaces.iter().zip(&bindings) {
-        let stem = format!("{}-{}", namespace.name, namespace.version);
-        let (async_count, promise_count) = write_namespace(&request.out, &stem, binding, &command)?;
-        asyncs += async_count;
-        promised += promise_count;
-        if verbose {
-            println!(
-                "  {:<16} {:>5} bound, {:>5} refused",
-                stem,
-                binding.functions.len(),
-                binding.refused.len()
-            );
+    let generated = namespaces
+        .iter()
+        .zip(&bindings)
+        .map(|(namespace, binding)| {
+            let census = emit::promise_census(binding);
+            Generated {
+                stem: format!("{}-{}", namespace.name, namespace.version),
+                declarations: emit::declarations(binding, &command),
+                values: emit::companion(binding, &command),
+                refused: report(binding),
+                promises: promises_report(&census),
+                bound: binding.functions.len(),
+                refusals: binding.refused.iter().map(|(_, reason)| reason.kind()).collect(),
+                asyncs: census.len(),
+                promised: census.iter().filter(|(_, outcome)| *outcome == "promise").count(),
+            }
+        })
+        .collect();
+    Ok((generated, repository.files, repository.missing.iter().cloned().collect()))
+}
+
+/// Bind `root` and its closure into `out`, returning the GIR files read. The
+/// summary is printed in full when asked for, and in one line otherwise.
+fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) -> Result<Vec<Utf8PathBuf>> {
+    let (generated, files, missing) = generate(root, search)?;
+    if verbose {
+        for missing in &missing {
+            println!("  {missing}: no GIR file found, so its types are unknown here");
         }
-        bound += binding.functions.len();
-        refused += binding.refused.len();
-        for (_, reason) in &binding.refused {
-            *totals.entry(reason.kind()).or_default() += 1;
+    }
+    std::fs::create_dir_all(out).with_context(|| format!("creating {out}"))?;
+    let mut totals: BTreeMap<String, usize> = BTreeMap::new();
+    let (mut bound, mut refused) = (0, 0);
+    let (mut asyncs, mut promised) = (0, 0);
+    for namespace in &generated {
+        write_namespace(out, namespace)?;
+        asyncs += namespace.asyncs;
+        promised += namespace.promised;
+        if verbose {
+            println!("  {:<16} {:>5} bound, {:>5} refused", namespace.stem, namespace.bound, namespace.refusals.len());
+        }
+        bound += namespace.bound;
+        refused += namespace.refusals.len();
+        for kind in &namespace.refusals {
+            *totals.entry(kind.clone()).or_default() += 1;
         }
     }
     if !verbose {
         println!(
-            "  bound {root}: {bound} function(s), {refused} refused (see *.refused.txt), {promised} of {asyncs} async method(s) with a Promise form (see *.promises.txt) into {}",
-            request.out
+            "  bound {root}: {bound} function(s), {refused} refused (see *.refused.txt), {promised} of {asyncs} async method(s) with a Promise form (see *.promises.txt) into {out}"
         );
-        return Ok(repository.files);
+        return Ok(files);
     }
-    println!("{bound} function(s) bound, {refused} refused, into {}", request.out);
+    println!("{bound} function(s) bound, {refused} refused, into {out}");
     println!("{promised} of {asyncs} async method(s) have a Promise form");
     print_ranking(totals);
-    Ok(repository.files)
+    Ok(files)
 }
 
 /// The refusals by kind, most first: what to build next.
@@ -349,19 +321,16 @@ fn pkg_config_of(what: &str, package: &str) -> Vec<String> {
 }
 
 /// One namespace's files -- the declarations, the companion module, the
-/// refusals and the Promise census -- answering how many async methods it has
-/// and how many of them have a Promise form.
-fn write_namespace(out: &Utf8PathBuf, stem: &str, binding: &map::Binding, command: &str) -> Result<(usize, usize)> {
-    write(&out.join(format!("{stem}.d.ts")), &emit::declarations(binding, command))?;
+/// refusals and the Promise census.
+fn write_namespace(out: &Utf8PathBuf, namespace: &Generated) -> Result<()> {
+    let stem = &namespace.stem;
+    write(&out.join(format!("{stem}.d.ts")), &namespace.declarations)?;
     // Not `{stem}.ts`: TypeScript reads a `.d.ts` beside a `.ts` of the same
     // stem as that file's own output and drops it, and every `c:` import of
     // the module then fails to resolve.
-    write(&out.join(format!("{stem}.values.ts")), &emit::companion(binding, command))?;
-    write(&out.join(format!("{stem}.refused.txt")), &report(binding))?;
-    let census = emit::promise_census(binding);
-    write(&out.join(format!("{stem}.promises.txt")), &promises_report(&census))?;
-    let promised = census.iter().filter(|(_, outcome)| *outcome == "promise").count();
-    Ok((census.len(), promised))
+    write(&out.join(format!("{stem}.values.ts")), &namespace.values)?;
+    write(&out.join(format!("{stem}.refused.txt")), &namespace.refused)?;
+    write(&out.join(format!("{stem}.promises.txt")), &namespace.promises)
 }
 
 /// Every async method and its Promise form or why it has none, one per line.

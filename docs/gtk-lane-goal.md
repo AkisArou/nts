@@ -109,8 +109,9 @@ The first and the `gpointer` half of the fourth are what M2's generator has to a
 ## M2, bindings from GIR: where it stands
 
 `nts bind-gir Gtk-4.0` binds GTK's closure of 13 namespaces, and `nts build`
-does it on its own for any `c:Name-Version` import (into `types/gir`,
-cached by a stamp over the GIR files read and the `nts` that read them).
+does it on its own for any `c:Name-Version` import. The bindings are
+platform packages in the machine's store, not files of the project (see
+"GTK as platform packages" below).
 `examples/interop/gtk-gir` is a GTK program with no hand-written GTK
 declarations. Landed:
 
@@ -457,6 +458,49 @@ closure: those three and `AdwSpinRow::input`). GJS has such a handler return
 its out values, which is the form to build. gtk-widgets' build asserts the
 three are refused, and on the binder before, it fails naming `input`.
 
+### GTK as platform packages
+
+The bindings used to be generated into each project's `types/gir`, with a
+stamp over the GIR files read. They are now packages in the machine's store
+(`tooling/surfaces`), shared by every project there, as Apple's frameworks
+are.
+
+- **The binder.** `gir_surface::GirPlatform` implements
+  `nts_surfaces::Binder`:
+  - its identity is the GTK version, the architecture and the roots;
+  - its version is a hash of the binder's own source (`GENERATOR`, kept
+    whole by `every_generator_file_is_hashed`);
+  - its inputs are the GIR files of the closure, found by reading only
+    their `<include>` lines;
+  - it generates one package per namespace, `@nts/gir-gtk-4.0` and so on,
+    each still declaring `module "c:Gtk-4.0"`, so programs' imports did not
+    change, plus `@nts/platform-gtk` naming them all.
+- **Roots are what the program imports**, minus any another root's closure
+  already binds. The store key follows the roots, so a GTK program and a
+  libadwaita one are two entries. Binding libadwaita beside a plain GTK
+  program would make its witness ask for `adwaita.h`.
+- **`nts build`** installs them when the checker cannot find a `c:` module
+  this machine has GIR for (`gir_surface::GirBindings`), links them into the
+  project's `node_modules/@nts`, and opens the program through
+  `tsconfig.gir.json`: the project's config, extended with the packages'
+  files (`nts_surfaces::wrapper`).
+  - **That file sits beside the project's own config.** TypeScript reads
+    `${configDir}` as the directory of the config it opened, and react-gtk
+    binds its renderer fork as `${configDir}/src/ReactFiberConfig.ts`. A
+    wrapper under `.nts/` sent the reconciler to no host config: nothing
+    imported the program's, so it was published as an entry, and its
+    abstract classes tripped NTS2006.
+- **`the_gir_packages_typecheck`** generates the Gtk and Adw closures and
+  asserts two things: no type is declared by two packages, and all 30
+  sources typecheck without `// @ts-nocheck`.
+  - The packages carry their surface there. Without it, the frontend
+    treats each declaration file under `node_modules` as a library and
+    checks only the values files; a control injecting an undefined name
+    then passed.
+  - The first run found GObject's GIR re-declaring GLib's `IOCondition`.
+    `enum_owner` now gives an enum to the namespace a re-declaring one
+    includes.
+
 ## M3, the idiomatic layer: where it stands
 
 **Methods on handles.** Every GIR method is also a method of its class:
@@ -646,8 +690,9 @@ type, which is what signatures spell.
 declares a constructor inside its class and gives it C's return type, and the
 binding writes `Declared<GtkBox, GtkWidget>` (244 constructors) -- the program
 has the class, the prototype and the witness keep `GtkWidget *`. GIR's word is
-trusted, as gtk-rs trusts it; `asGtkBox` stays for a handle known only as a
-widget.
+trusted, as gtk-rs trusts it. A handle known only as a widget is narrowed
+with `instanceof GtkBox`, as GJS writes it. The generated `asGtkBox` casts
+went with the move to platform packages.
 
 **GObjects are counted.** Under the reference-counting provider a
 `GObjectClass` handle (488 classes) is retained with `g_object_ref_sink` --

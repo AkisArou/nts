@@ -346,11 +346,12 @@ cannot tell which it got.
   boxed record's size. So a GTK surface is a function of the GIR files, the
   headers and the target triple. It is generated locally, and published only
   keyed by the library's version (`pkg-config --modversion gtk4`).
-- **`inputs()` exists today** as `types/gir/.nts-stamp`, the path, time and
-  size of every `.gir` read. The header set and the pkg-config version join it.
-- **GIR has values modules too**: enum and flags constants, checked casts
-  (`asGtkLabel`), and the `Promise` forms of `_async`/`_finish` pairs, one per
-  namespace. They go in `.nts/types`, as Swift's `async` forms do.
+- **Built** (`tooling/cli/src/gir_surface.rs`): `inputs()` is every GIR file
+  of the closure, and the identity carries the GTK version, the architecture
+  and the roots.
+- **GIR has values modules too**: the `Promise` and values forms of
+  `_async`/`_finish` pairs and out parameters, one per namespace. They are
+  each package's values file, as Swift's `async` forms are.
 - **One module per namespace** (`c:Gtk-4.0`, `c:Gio-2.0`), with `import type`
   across them, and no cross-package merging.
 - **A gap in layer 1: cairo has no usable GIR**, so `cairo.Context` is refused in

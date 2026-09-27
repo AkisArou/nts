@@ -4303,8 +4303,9 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     );
 }
 
-/// `nts build` binds a `c:Name-Version` import from GIR, reuses the binding
-/// while nothing it was made from changed, and rebinds when the GIR does.
+/// `nts build` binds a `c:Name-Version` import from GIR into the platform
+/// store, links it into the project, reuses it while nothing it was made from
+/// changed, and binds again when the GIR does.
 #[test]
 fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     let pkg_config = Command::new("pkg-config").arg("--version").output();
@@ -4341,13 +4342,17 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
         ),
     )
     .expect("tsconfig");
+    // A store of the test's own, so that what is found there is this
+    // test's doing.
+    let store = project.join("store");
     let build_with = |nts: &Path| {
         let output = output_of(
             Command::new(nts)
                 .arg("build")
                 .arg(project.join("tsconfig.json"))
                 .env("PKG_CONFIG_PATH", project.join("pc"))
-                .env("GI_GIR_PATH", project.join("gir")),
+                .env("GI_GIR_PATH", project.join("gir"))
+                .env("NTS_TYPES_ROOT", &store),
         )
         .expect("running nts build");
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -4355,28 +4360,54 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
         stdout
     };
     let build = || build_with(Path::new(env!("CARGO_BIN_EXE_nts")));
-    let first = build();
-    assert!(first.contains("bound Demo-1.0"), "the first build did not bind from GIR:\n{first}");
+    // The store's entries, each `identity/key` with the time its manifest was
+    // written: an entry made again is a new key, or the same key rewritten.
+    let entries = || -> Vec<(std::path::PathBuf, std::time::SystemTime)> {
+        let mut found = Vec::new();
+        for identity in std::fs::read_dir(&store).into_iter().flatten().flatten() {
+            for key in std::fs::read_dir(identity.path()).into_iter().flatten().flatten() {
+                let manifest = key.path().join("manifest.json");
+                if let Ok(modified) = std::fs::metadata(&manifest).and_then(|m| m.modified()) {
+                    found.push((key.path(), modified));
+                }
+            }
+        }
+        found
+    };
+    // What an older `nts` generated into the project, stamped as its own: a
+    // module of the same name, which the checker would find instead of the
+    // store's, with nothing to say it is stale.
+    let old = project.join("types/gir");
+    std::fs::create_dir_all(&old).expect("the old bindings' directory");
+    std::fs::write(old.join(".nts-stamp"), "root Demo-1.0\n").expect("the old stamp");
+    std::fs::write(old.join("Demo-1.0.d.ts"), "declare module \"c:Demo-1.0\" {}\n").expect("the old binding");
+    let _ = std::fs::remove_dir_all(&store);
+    build();
+    assert!(!old.exists(), "the bindings an older nts generated into the project were left to shadow the store's");
+    let first = entries();
+    assert_eq!(first.len(), 1, "the first build did not bind from GIR into one store entry: {first:?}");
     let run = Command::new(project.join(".nts/build/tool/linux-gnu-x86_64/tool")).output().expect("running the program");
     assert!(run.status.success(), "the program failed");
-    let second = build();
-    assert!(!second.contains("bound Demo-1.0"), "an unchanged GIR was bound again:\n{second}");
-    // A different GIR -- not merely a newer one -- so that a stamp comparing
+    build();
+    assert_eq!(entries(), first, "an unchanged GIR was bound again");
+    // A different GIR -- not merely a newer one -- so that a key comparing
     // only modification times at a coarse resolution cannot miss it.
     gir_library(&project, false);
-    let third = build();
-    assert!(third.contains("bound Demo-1.0"), "a changed GIR was not bound again:\n{third}");
+    build();
+    let third = entries();
+    assert!(third.len() == 1 && third[0].0 != first[0].0, "a changed GIR was not bound again, or its old entry kept: {third:?}");
     assert!(
-        std::fs::read_to_string(project.join("types/gir/Demo-1.0.d.ts"))
-            .expect("the rebound binding")
+        std::fs::read_to_string(project.join("node_modules/@nts/gir-demo-1.0/index.d.ts"))
+            .expect("the rebound binding, linked into the project")
             .contains("export function demo_flags(flags?: CEnum<DemoFlags, c_int>): void;"),
         "the rebound binding is not the new GIR's"
     );
-    // Another `nts` -- here a copy elsewhere, for a newer binder -- binds
-    // again, although neither the GIR nor the `nts` that wrote the bindings
-    // has changed. It is the one running now that has to match.
+    // Another `nts` built from the same source -- here a copy elsewhere --
+    // reuses the entry: the store keys a binding by the binder's source
+    // (`gir_surface::GENERATOR`), not by the executable that ran it, so a
+    // rebuild that changes nothing it is made from keeps the packages.
     let other = project.join("other-nts");
     std::fs::copy(env!("CARGO_BIN_EXE_nts"), &other).expect("a second nts");
-    let fourth = build_with(&other);
-    assert!(fourth.contains("bound Demo-1.0"), "a different nts reused another's bindings:\n{fourth}");
+    build_with(&other);
+    assert_eq!(entries(), third, "a copy of the same nts bound again");
 }

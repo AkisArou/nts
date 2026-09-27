@@ -199,6 +199,30 @@ pub fn link(installed: &Installed, project: &Utf8Path) -> Result<Vec<String>> {
     Ok(new)
 }
 
+/// The config that opens the project at `tsconfig` with `files` added --
+/// an installed platform's files -- written beside it as
+/// `tsconfig.<lane>.json`: it `extends` the project's, whose `include` it
+/// keeps, and lists `files` besides.
+///
+/// **Beside the project's own config, and nowhere else.** A config may spell
+/// a path `${configDir}/src/...`, and TypeScript reads `${configDir}` as the
+/// directory of the config it opened -- this one. A wrapper under `.nts/`
+/// moved every such path: react-gtk binds its renderer fork that way, and the
+/// reconciler found no host config, so nothing imported the program's and it
+/// was published as an entry. Each lane writes its own file name, since a
+/// project may be two lanes'.
+///
+/// # Errors
+/// The filesystem's.
+pub fn wrapper(tsconfig: &Utf8Path, lane: &str, files: &[Utf8PathBuf]) -> Result<Utf8PathBuf> {
+    let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
+    let config = project.join(format!("tsconfig.{lane}.json"));
+    let listed: Vec<String> = files.iter().map(|file| format!("{:?}", file.as_str())).collect();
+    let text = format!("{{\n  \"extends\": {:?},\n  \"files\": [{}]\n}}\n", tsconfig.as_str(), listed.join(", "));
+    std::fs::write(&config, text).with_context(|| format!("writing {config}"))?;
+    Ok(config)
+}
+
 fn write_packages(directory: &Utf8Path, packages: &[Package]) -> Result<()> {
     let mut listed = Vec::new();
     let mut values = Vec::new();

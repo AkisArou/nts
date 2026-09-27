@@ -11,8 +11,8 @@ import {
   GtkSingleSelection,
   GtkSortListModel,
   Ordering,
+  GtkListItem,
 } from "c:Gtk-4.0";
-import { asGtkLabel, asGtkListItem } from "../types/gir/Gtk-4.0.values.ts";
 import { GListStore } from "c:Gio-2.0";
 import { Entry } from "./model.ts";
 
@@ -46,15 +46,14 @@ export class Sidebar {
     this.visible = new GtkFilterListModel({ model: sorted, filter: this.filter });
     this.selection = new GtkSingleSelection({ model: this.visible });
     const factory = new GtkSignalListItemFactory({});
-    factory.connect("setup", (_factory, object) => {
-      const item = asGtkListItem(object);
-      if (item !== null) item.child = new GtkLabel({ xalign: 0 });
+    factory.connect("setup", (_factory, item) => {
+      if (item instanceof GtkListItem) item.child = new GtkLabel({ xalign: 0 });
     });
-    factory.connect("bind", (_factory, object) => {
-      const item = asGtkListItem(object);
-      const label = asGtkLabel(item?.child ?? null);
-      const entry = item?.item;
-      if (label !== null && entry instanceof Entry) label.label = entry.title;
+    factory.connect("bind", (_factory, item) => {
+      if (!(item instanceof GtkListItem)) return;
+      const label = item.child;
+      const entry = item.item;
+      if (label instanceof GtkLabel && entry instanceof Entry) label.label = entry.title;
     });
     this.view = new GtkListView({ model: this.selection, factory });
     this.scrolled = new GtkScrolledWindow({ child: this.view, vexpand: true });

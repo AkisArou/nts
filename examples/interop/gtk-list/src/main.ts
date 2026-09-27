@@ -32,7 +32,7 @@
 //                 its two items `GObject`s, as `GCompareDataFunc` does not say
 //                 -- under a filter model whose `GtkCustomFilter` closure
 //                 captures a bound, changed and announced with
-//                 `filter.changed`; each item read as `asGtkStringObject(x)?.string`
+//                 `filter.changed`; each item narrowed by `instanceof GtkStringObject`
 import {
   GtkCustomFilter,
   GtkCustomSorter,
@@ -44,13 +44,13 @@ import {
   GtkApplicationWindow,
   GtkBox,
   GtkLabel,
+  GtkListItem,
   GtkListView,
   GtkSignalListItemFactory,
   GtkSingleSelection,
   GtkStringObject,
   gtk_string_object_get_type,
 } from "c:Gtk-4.0";
-import { asGtkLabel, asGtkListItem, asGtkStringObject } from "../types/gir/Gtk-4.0.values.ts";
 import { ApplicationFlags, type GListModel, type GListModelImplementation, GListStore, g_file_new_for_path } from "c:Gio-2.0";
 import { GdkFileList } from "c:Gdk-4.0";
 import { GObject } from "c:GObject-2.0";
@@ -80,16 +80,14 @@ function taskView(): { view: GtkListView; bound: () => number } {
   console.log("tasks " + String(store.get_n_items()) + " " + String(store.get_item_type() === Task.$gtype) + " " + (first instanceof Task ? first.title : "?"));
   const factory = new GtkSignalListItemFactory({});
   let bound = 0;
-  factory.connect("setup", (_factory, object) => {
-    const item = asGtkListItem(object);
-    if (item !== null) item.child = new GtkLabel({ xalign: 0 });
+  factory.connect("setup", (_factory, item) => {
+    if (item instanceof GtkListItem) item.child = new GtkLabel({ xalign: 0 });
   });
-  factory.connect("bind", (_factory, object) => {
-    const item = asGtkListItem(object);
-    if (item === null) return;
-    const label = asGtkLabel(item.child);
+  factory.connect("bind", (_factory, item) => {
+    if (!(item instanceof GtkListItem)) return;
+    const label = item.child;
     const task = item.item;
-    if (label !== null && task instanceof Task) {
+    if (label instanceof GtkLabel && task instanceof Task) {
       label.label = (task.done ? "[x] " : "[ ] ") + task.title;
       if (task.done) bound++;
     }
@@ -140,16 +138,14 @@ class Range extends GObject<{}, GListModelImplementation> {
 function stringView(model: GListModel): { view: GtkListView; bound: () => number } {
   const factory = new GtkSignalListItemFactory({});
   let bound = 0;
-  factory.connect("setup", (_factory, object) => {
-    const item = asGtkListItem(object);
-    if (item !== null) item.child = new GtkLabel({ xalign: 0 });
+  factory.connect("setup", (_factory, item) => {
+    if (item instanceof GtkListItem) item.child = new GtkLabel({ xalign: 0 });
   });
-  factory.connect("bind", (_factory, object) => {
-    const item = asGtkListItem(object);
-    if (item === null) return;
-    const label = asGtkLabel(item.child);
-    const row = asGtkStringObject(item.item);
-    if (label !== null && row !== null) {
+  factory.connect("bind", (_factory, item) => {
+    if (!(item instanceof GtkListItem)) return;
+    const label = item.child;
+    const row = item.item;
+    if (label instanceof GtkLabel && row instanceof GtkStringObject) {
       label.label = row.string;
       bound++;
     }
@@ -162,18 +158,21 @@ function sortedWords(): string {
   const words = new GtkStringList({ strings: ["pear", "apple", "fig", "banana", "kiwi"] });
   const sorter = new GtkCustomSorter({});
   sorter.set_sort_func((a, b) => {
-    const x = asGtkStringObject(a)?.string ?? "";
-    const y = asGtkStringObject(b)?.string ?? "";
+    const x = a instanceof GtkStringObject ? a.string : "";
+    const y = b instanceof GtkStringObject ? b.string : "";
     return x < y ? Ordering.SMALLER : x > y ? Ordering.LARGER : Ordering.EQUAL;
   });
   const sorted = new GtkSortListModel({ model: words, sorter });
   let longer = 3;
   const filter = new GtkCustomFilter({});
-  filter.set_filter_func((item) => (asGtkStringObject(item)?.string.length ?? 0) > longer);
+  filter.set_filter_func((item) => (item instanceof GtkStringObject ? item.string.length : 0) > longer);
   const filtered = new GtkFilterListModel({ model: sorted, filter });
   const read = (model: GListModel): string => {
     const out: string[] = [];
-    for (let i = 0; i < model.get_n_items(); i++) out.push(asGtkStringObject(model.get_item(i))?.string ?? "?");
+    for (let i = 0; i < model.get_n_items(); i++) {
+      const item = model.get_item(i);
+      out.push(item instanceof GtkStringObject ? item.string : "?");
+    }
     return out.join(",");
   };
   const all = read(sorted);
@@ -190,8 +189,8 @@ function open(application: GtkApplication): void {
   const tasks = taskView();
   console.log(spliced());
   const range = new Range();
-  const first = asGtkStringObject(range.get_item(0));
-  console.log("range " + String(range.get_n_items()) + " first " + (first !== null ? first.string : "?"));
+  const first = range.get_item(0);
+  console.log("range " + String(range.get_n_items()) + " first " + (first instanceof GtkStringObject ? first.string : "?"));
   const lines = stringView(range);
   const column = new GtkBox({});
   column.append(rows.view);

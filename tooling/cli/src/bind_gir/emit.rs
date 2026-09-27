@@ -759,13 +759,10 @@ fn enums(out: &mut String, binding: &Binding) {
 
 /// The companion module: what a declaration file cannot carry.
 ///
-/// A `.ts` rather than a `.d.ts`, because what it holds are values:
-///
-/// - **A checked downcast per class**, `asGtkBox(value)`: the one intended
-///   caller of `unsafeDowncast`, which is safe here because the check is the
-///   type system's own -- `g_type_check_instance_is_a` against the class's
-///   `GType` -- and not the caller's word. Every GTK constructor returns a
-///   `GtkWidget *`, so this is how a program gets the box it made.
+/// A `.ts` rather than a `.d.ts`, because what it holds are values: the
+/// Promise and values forms the declarations name with `@ntsCall`. No
+/// downcast per class: a program narrows with `x instanceof GtkBox`, as GJS
+/// writes it, which asks the class's `GType` (`lower_gobject_instanceof`).
 #[must_use]
 pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     let mut out = String::new();
@@ -774,17 +771,6 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     // One import line per module, merged, since the checker lives in
     // `GObject-2.0` and so do that module's own classes.
     let mut imports: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
-    if !binding.casts.is_empty() {
-        imports.entry("c:GObject-2.0".to_owned()).or_default().extend([
-            "g_type_check_instance_is_a".to_owned(),
-            "type GTypeInstance".to_owned(),
-        ]);
-        let own = imports.entry(binding.module.clone()).or_default();
-        for cast in &binding.casts {
-            own.push(cast.get_type.clone());
-            own.push(format!("type {}", cast.class));
-        }
-    }
     let promises = promise_forms(binding);
     for (start, finish) in &promises {
         let own = imports.entry(binding.module.clone()).or_default();
@@ -821,7 +807,6 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     let shapes = || values.iter().flat_map(|function| function.parameters.iter().map(|(_, mapped)| &mapped.shape).chain([&function.result.shape]));
     let bytes = shapes().any(|shape| matches!(shape, Shape::Bytes { .. }));
     let memory: Vec<&str> = [
-        (!binding.casts.is_empty()).then_some("unsafeDowncast"),
         values
             .iter()
             .any(|function| {
@@ -849,20 +834,6 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
         let values: Vec<String> = names.iter().filter(|name| !name.starts_with("type ")).cloned().collect();
         names.retain(|name| name.strip_prefix("type ").is_none_or(|ty| !values.iter().any(|value| value == ty)));
         let _ = writeln!(out, "import {{ {} }} from \"{module}\";", names.join(", "));
-    }
-    for cast in &binding.casts {
-        let _ = writeln!(
-            out,
-            "\n/** `{class}` if `value` is one, and `null` otherwise. */\n\
-             export function as{class}(value: GTypeInstance | null): {class} | null {{\n\
-             \x20 return unsafeDowncast<{class}>(\n\
-             \x20   value,\n\
-             \x20   value !== null && g_type_check_instance_is_a(value, {get_type}()),\n\
-             \x20 );\n\
-             }}",
-            class = cast.class,
-            get_type = cast.get_type,
-        );
     }
     for (start, finish) in &promises {
         let through = !(read(finish) == 2 && settles(&finish.result));

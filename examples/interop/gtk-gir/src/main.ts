@@ -38,9 +38,9 @@
 //                 an interface's methods on the classes implementing it
 //   bounds true 1 3  `entry.get_selection_bounds()`: the `gboolean` result,
 //                 then the two out values
-//   cast-ok       `asGtkBox` answers the box `gtk_box_new` returned, held as
-//                 a plain `GtkWidget`
-//   cast-null     `asGtkLabel` answers null for that same widget
+//   cast-ok       `instanceof GtkBox` is true of the box `gtk_box_new`
+//                 returned, held as a plain `GtkWidget` -- its `GType`, asked
+//   cast-null     `instanceof GtkLabel` is false of that same widget
 //   clicked 1     a typed signal handler, connected as GJS spells it --
 //                 `button.connect("clicked", handler)`, the flags left out --
 //                 ran when the signal was emitted, and was handed the button
@@ -79,6 +79,7 @@ import {
   GtkStringList,
   gtk_string_list_new,
   type GtkWidget,
+  GtkBox,
 } from "c:Gtk-4.0";
 import {
   ApplicationFlags,
@@ -111,7 +112,6 @@ import { GdkRGBA } from "c:Gdk-4.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { CNumber, Ptr, c_char } from "c:types";
 import { local, stringFrom } from "c:memory";
-import { asGtkBox, asGtkButton, asGtkLabel } from "../types/gir/Gtk-4.0.values.ts";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
 const PRIORITY_DEFAULT = 0;
@@ -360,10 +360,10 @@ function main(): void {
     entry.select_region(1, 3);
     const [selected, start, end] = entry.get_selection_bounds();
     console.log("bounds " + String(selected) + " " + String(start) + " " + String(end));
-    // A checked downcast, for a handle known only as a widget.
+    // A checked narrowing, for a handle known only as a widget.
     const widget: GtkWidget = box;
-    console.log(asGtkBox(widget) === null ? "cast-failed" : "cast-ok");
-    console.log(asGtkLabel(widget) === null ? "cast-null" : "cast-wrong");
+    console.log(widget instanceof GtkBox ? "cast-ok" : "cast-failed");
+    console.log(widget instanceof GtkLabel ? "cast-wrong" : "cast-null");
     // Methods on the handles: each is the C function it names, called with
     // the handle as its instance -- `box.append(label)` is
     // `gtk_box_append(box, label)`, and `window.present()` reaches
@@ -379,7 +379,7 @@ function main(): void {
     button.connect("clicked", (self) => {
       clicks++;
       order += "a";
-      console.log(asGtkButton(self) === null ? "clicked-not-a-button" : "clicked " + String(clicks));
+      console.log(self instanceof GtkButton ? "clicked " + String(clicks) : "clicked-not-a-button");
     });
     button.emit("clicked");
     console.log("order=" + order);

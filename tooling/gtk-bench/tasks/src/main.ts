@@ -30,8 +30,8 @@ import {
   FilterChange,
   Orientation,
   gtk_custom_filter_new,
+  GtkListItem,
 } from "c:Gtk-4.0";
-import { asGtkLabel, asGtkListItem } from "../types/gir/Gtk-4.0.values.ts";
 import { ApplicationFlags, GListStore } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
 import { g_timeout_add_full } from "c:GLib-2.0";
@@ -107,16 +107,14 @@ function open(application: GtkApplication): void {
 
   const factory = new GtkSignalListItemFactory({});
   let bound = 0;
-  factory.connect("setup", (_factory, object) => {
-    const item = asGtkListItem(object);
-    if (item !== null) item.child = new GtkLabel({ xalign: 0 });
+  factory.connect("setup", (_factory, item) => {
+    if (item instanceof GtkListItem) item.child = new GtkLabel({ xalign: 0 });
   });
-  factory.connect("bind", (_factory, object) => {
-    const item = asGtkListItem(object);
-    if (item === null) return;
-    const label = asGtkLabel(item.child);
+  factory.connect("bind", (_factory, item) => {
+    if (!(item instanceof GtkListItem)) return;
+    const label = item.child;
     const task = item.item;
-    if (label !== null && task instanceof Task) {
+    if (label instanceof GtkLabel && task instanceof Task) {
       label.label = task.title;
       bound++;
     }

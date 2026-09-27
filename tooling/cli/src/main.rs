@@ -12,6 +12,7 @@ mod objc_bindings;
 mod objc_imports;
 mod swift_graph;
 mod bind_gir;
+mod gir_surface;
 mod bind_winmd;
 
 use std::fmt::Write as _;
@@ -1246,9 +1247,15 @@ fn frontend_for(tsconfig: &Utf8Path, tsgo_binary: String) -> Result<TsgoApi> {
         .filter(|target| matches!(target.os.as_str(), "macos" | "ios"))
         .cloned()
         .collect();
-    if !apple.is_empty() {
-        source = source.with_generated(Box::new(objc_bindings::ObjcBindings::new(apple)));
-    }
+    // Any other has GTK's packages installed from the store when it imports
+    // a `c:` module this machine has GIR for (`gir_surface`). One generator
+    // per program: a project for Apple's platforms and GTK's at once would
+    // need the two composed, which nothing asks for yet.
+    source = if apple.is_empty() {
+        source.with_generated(Box::new(gir_surface::GirBindings::default()))
+    } else {
+        source.with_generated(Box::new(objc_bindings::ObjcBindings::new(apple)))
+    };
     let Some(react) = resolved.react else {
         return Ok(source);
     };
@@ -3490,14 +3497,20 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
             roots.push(config);
         }
     }
-    // A `c:Name-Version` module this machine has GIR for is bound from the
-    // GIR, into `types/gir` beside the project's other generated bindings.
-    // Checked every build, not only when an import fails to resolve: once the
-    // bindings exist nothing fails to resolve, and a stale binding would be
-    // read silently.
+    // A `c:Name-Version` module this machine has GIR for is GTK's platform,
+    // installed from the store when the program is opened
+    // (`gir_surface::GirBindings`), and no binding of this phase's.
     let search = bind_gir::search_path();
-    let gir = project.join("types").join("gir");
-    let mut roots_wanted = std::collections::BTreeSet::new();
+    // What an older `nts` generated here -- `types/gir`, marked by its stamp
+    // -- declares the same `c:` modules and would shadow the store's, with
+    // nothing to say they are stale: the checker finds them, and the store is
+    // never asked. The stamp says `nts` wrote the directory, so `nts` takes
+    // it away, once.
+    let generated_here = project.join("types").join("gir");
+    if generated_here.join(".nts-stamp").is_file() {
+        std::fs::remove_dir_all(&generated_here).with_context(|| format!("removing {generated_here}"))?;
+        eprintln!("note: removed {generated_here}, the GIR bindings an older nts generated there; they come from the platform store now");
+    }
     // Likewise a `c:Windows.Win32.*` module, from Windows metadata, into
     // `types/winmd`.
     let winmd = project.join("types").join("winmd");
@@ -3507,8 +3520,7 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
     let winrt = project.join("types").join("winrt");
     let mut winrt_wanted = std::collections::BTreeSet::new();
     for (module, file) in wanted {
-        if let Some(namespace) = bind_gir::namespace_of(&module, &search) {
-            roots_wanted.insert(namespace);
+        if bind_gir::namespace_of(&module, &search).is_some() {
             continue;
         }
         if let Some(namespace) = bind_winmd::namespace_of(&module) {
@@ -3520,9 +3532,6 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
             continue;
         }
         bind_one(&module, &file, targets, project)?;
-    }
-    if !roots_wanted.is_empty() || gir.join(".nts-stamp").exists() {
-        bind_gir::ensure(&roots_wanted, &search, &gir)?;
     }
     if !winmd_wanted.is_empty() || winmd.join(".nts-stamp").exists() {
         bind_winmd::ensure(&winmd_wanted, &winmd)?;

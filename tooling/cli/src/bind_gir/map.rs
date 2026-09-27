@@ -864,6 +864,7 @@ impl<'a> Mapper<'a> {
             return Some(Resolved::Record);
         }
         if let Some(e) = namespace.enums.iter().find(|e| e.name == local) {
+            let (namespace, e) = self.enum_owner(namespace, e);
             // Signed or not is the compiler's answer (see `facts`), and only
             // where it gave none is GIR's reading of the values used: C makes
             // an enum `unsigned int` unless a member is negative.
@@ -1128,8 +1129,35 @@ impl<'a> Mapper<'a> {
         false
     }
 
+    /// The namespace that declares `e`, of `namespace`: its own, unless a
+    /// namespace it includes declares the same C enum. `GObject`'s GIR
+    /// registers `GLib`'s `GIOCondition` a second time, as `GObject.IOCondition`,
+    /// and two declarations of one C enum are two unrelated types to a
+    /// program that meets both. The included one owns it -- the header that
+    /// defines it is its -- and the other refers to it.
+    fn enum_owner(&self, namespace: &'a Namespace, e: &'a super::model::Enum) -> (&'a Namespace, &'a super::model::Enum) {
+        let Some(c_type) = e.c_type.as_deref() else { return (namespace, e) };
+        let mut pending: Vec<&str> = namespace.includes.iter().map(|(name, _)| name.as_str()).collect();
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        while let Some(name) = pending.pop() {
+            if !seen.insert(name) {
+                continue;
+            }
+            let Some(included) = self.repository.namespaces.get(name) else { continue };
+            if let Some(owned) = included.enums.iter().find(|other| other.c_type.as_deref() == Some(c_type)) {
+                return self.enum_owner(included, owned);
+            }
+            pending.extend(included.includes.iter().map(|(name, _)| name.as_str()));
+        }
+        (namespace, e)
+    }
+
     fn enums(&mut self) {
         for e in &self.namespace.enums {
+            // Declared by a namespace this one includes: that one's.
+            if !std::ptr::eq(self.enum_owner(self.namespace, e).0, self.namespace) {
+                continue;
+            }
             self.binding.enums.push(EnumDecl {
                 name: e.name.clone(),
                 c_type: e.c_type.clone().filter(|c| is_type_name(c) && *c != e.name),
