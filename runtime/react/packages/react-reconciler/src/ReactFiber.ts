@@ -33,12 +33,13 @@ import {
   REACT_VIEW_TRANSITION_TYPE,
 } from "shared/ReactSymbols.ts";
 import type { Props, ReactElement, ReactKey, ReactPortal, ReactDebugInfo } from "shared/ReactTypes.ts";
+import { type PortalStateNode } from "./ReactFiberStateNode.ts";
 import type { Dependencies, Fiber, HookType, Ref } from "./ReactInternalTypes.ts";
 import type { RootTag } from "./ReactRootTags.ts";
 import type { WorkTag } from "./ReactWorkTags.ts";
 import type { TypeOfMode } from "./ReactTypeOfMode.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
-import type { ActivityInstance, SuspenseInstance } from "react-reconciler/ReactFiberConfig.ts";
+import type { ActivityInstance, Container, SuspenseInstance } from "react-reconciler/ReactFiberConfig.ts";
 import type { OffscreenProps } from "./ReactFiberOffscreenComponent.ts";
 import type { ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 import type { TracingMarkerInstance } from "./ReactFiberTracingMarkerComponent.ts";
@@ -723,13 +724,6 @@ export function createFiberFromDehydratedFragment(dehydratedNode: SuspenseInstan
   return fiber;
 }
 
-// A portal fiber's `stateNode`.
-export interface PortalStateNode {
-  containerInfo: unknown;
-  // Used by persistent updates.
-  pendingChildren: unknown;
-  implementation: unknown;
-}
 
 export function createFiberFromPortal(portal: ReactPortal, mode: TypeOfMode, lanes: Lanes): Fiber {
   const noChildren: unknown[] = [];
@@ -737,7 +731,7 @@ export function createFiberFromPortal(portal: ReactPortal, mode: TypeOfMode, lan
   const fiber = createFiber(HostPortal, pendingProps, portal.key, mode);
   fiber.lanes = lanes;
   const stateNode: PortalStateNode = {
-    containerInfo: portal.containerInfo,
+    containerInfo: portal.containerInfo as Container,
     pendingChildren: null, // Used by persistent updates
     implementation: portal.implementation,
   };

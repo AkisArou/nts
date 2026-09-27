@@ -22,6 +22,7 @@ import {
 } from "shared/ReactFeatureFlags.ts";
 import { REACT_CONTEXT_TYPE, REACT_FORWARD_REF_TYPE, REACT_LAZY_TYPE, REACT_MEMO_TYPE } from "shared/ReactSymbols.ts";
 import type { LazyComponent as LazyComponentType, ReactContextConsumer, Transition, ReactContextBase } from "shared/ReactTypes.ts";
+import { portalStateOf } from "./ReactFiberStateNode.ts";
 import { getComponentNameFromFiber } from "./getComponentNameFromFiber.ts";
 import { createCapturedValueAtFiber, createCapturedValueFromError } from "react-reconciler/ReactCapturedValue.ts";
 import {
@@ -62,7 +63,7 @@ import {
   suspendIfUpdateReadFromEntangledAsyncAction,
 } from "./ReactFiberClassUpdateQueue.ts";
 import { enqueueConcurrentRenderForLane } from "./ReactFiberConcurrentUpdates.ts";
-import type { ActivityInstance, Container, Props, SuspenseInstance, Type } from "react-reconciler/ReactFiberConfig.ts";
+import type { ActivityInstance, Props, SuspenseInstance, Type } from "react-reconciler/ReactFiberConfig.ts";
 import {
   createHoistableInstance,
   getResource,
@@ -3127,7 +3128,7 @@ function updateViewTransition(current: Fiber | null, workInProgress: Fiber, rend
 }
 
 function updatePortalComponent(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  pushHostContainer(workInProgress, (workInProgress.stateNode as { containerInfo: Container }).containerInfo);
+  pushHostContainer(workInProgress, portalStateOf(workInProgress).containerInfo);
   const nextChildren = workInProgress.pendingProps;
   if (current === null) {
     // Portals are special because we don't append the children during mount
@@ -3373,7 +3374,7 @@ function attemptEarlyBailoutIfNoScheduledUpdate(current: Fiber, workInProgress: 
       break;
     }
     case HostPortal:
-      pushHostContainer(workInProgress, (workInProgress.stateNode as { containerInfo: Container }).containerInfo);
+      pushHostContainer(workInProgress, portalStateOf(workInProgress).containerInfo);
       break;
     case ContextProvider: {
       const newValue = (workInProgress.memoizedProps as AnyProps)["value"];

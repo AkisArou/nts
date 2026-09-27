@@ -2,7 +2,7 @@
 // its host instance, pop the contexts it pushed, and bubble lanes and flags
 // up to its parent.
 
-import { hostInstanceOf, hostNodeOf, textInstanceOf } from "./ReactFiberStateNode.ts";
+import { containerOf, hostInstanceOf, hostNodeOf, portalStateOf, setPendingChildren, textInstanceOf } from "./ReactFiberStateNode.ts";
 import {
   disableLegacyMode,
   enableLegacyHidden,
@@ -19,8 +19,8 @@ import type { ReactContextBase } from "shared/ReactTypes.ts";
 import { resetChildFibers } from "./ReactChildFiber.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";
 import type { Cache, SpawnedCachePool } from "./ReactFiberCacheComponent.ts";
-import { popCacheProvider } from "./ReactFiberCacheComponent.ts";
-import type { ChildSet, Container, Instance, Props, Resource, TextInstance, Type } from "react-reconciler/ReactFiberConfig.ts";
+import { cacheOf, popCacheProvider } from "./ReactFiberCacheComponent.ts";
+import type { ChildSet, Instance, Props, Resource, TextInstance, Type } from "react-reconciler/ReactFiberConfig.ts";
 import {
   appendChildToContainerChildSet,
   appendInitialChild,
@@ -162,16 +162,6 @@ import {
 import { now } from "./Scheduler.ts";
 import { propOf } from "./ReactFiberProps.ts";
 
-// The host state of a HostRoot or HostPortal fiber.
-interface PortalOrRoot {
-  containerInfo: Container;
-  pendingChildren: unknown;
-}
-
-// The state a HostRoot or CacheComponent fiber keeps: its cache.
-function cacheOf(fiber: Fiber): Cache {
-  return (fiber.memoizedState as { cache: Cache }).cache;
-}
 
 // The cache an Offscreen fiber's state holds, if it spawned a pool.
 function offscreenCacheOf(fiber: Fiber | null): Cache | null {
@@ -372,12 +362,11 @@ function appendAllChildrenToContainer(
 function updateHostContainer(current: Fiber | null, workInProgress: Fiber): void {
   if (supportsPersistence) {
     if (doesRequireClone(current, workInProgress)) {
-      const portalOrRoot = workInProgress.stateNode as PortalOrRoot;
-      const container = portalOrRoot.containerInfo;
+      const container = containerOf(workInProgress);
       const newChildSet = createContainerChildSet();
       // If children might have changed, we have to add them all to the set.
       appendAllChildrenToContainer(newChildSet, workInProgress, /* needsVisibilityToggle */ false, /* isHidden */ false);
-      portalOrRoot.pendingChildren = newChildSet;
+      setPendingChildren(workInProgress, newChildSet);
       // Schedule an update on the container to swap out the container.
       markUpdate(workInProgress);
       finalizeContainerChildren(container, newChildSet);
@@ -1604,7 +1593,7 @@ function completeWork(current: Fiber | null, workInProgress: Fiber, renderLanes:
       popHostContainer(workInProgress);
       updateHostContainer(current, workInProgress);
       if (current === null) {
-        preparePortalMount((workInProgress.stateNode as PortalOrRoot).containerInfo);
+        preparePortalMount(portalStateOf(workInProgress).containerInfo);
       }
       workInProgress.flags |= PortalStatic;
       bubbleProperties(workInProgress);

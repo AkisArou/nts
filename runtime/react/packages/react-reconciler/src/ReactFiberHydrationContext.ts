@@ -2,7 +2,7 @@
 // new ones. Every entry point checks `supportsHydration`, so a renderer that
 // cannot hydrate never reaches a host hydration call.
 
-import { hydratableInstanceOf } from "./ReactFiberStateNode.ts";
+import { fiberRootOf, hydratableInstanceOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
 import type { CapturedValue } from "react-reconciler/ReactCapturedValue.ts";
 import { createCapturedValueAtFiber } from "react-reconciler/ReactCapturedValue.ts";
@@ -143,7 +143,7 @@ function enterHydrationState(fiber: Fiber): boolean {
   if (!supportsHydration) {
     return false;
   }
-  const parentInstance: Container = (fiber.stateNode as { containerInfo: Container }).containerInfo;
+  const parentInstance: Container = fiberRootOf(fiber).containerInfo;
   nextHydratableInstance = getFirstHydratableChildWithinContainer(parentInstance);
   hydrationParentFiber = fiber;
   isHydrating = true;

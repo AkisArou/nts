@@ -7,7 +7,8 @@
 // written once per kind. A native build that checks downcasts checks here.
 
 import type { Container, HydratableInstance, Instance, TextInstance } from "react-reconciler/ReactFiberConfig.ts";
-import type { Fiber } from "./ReactInternalTypes.ts";
+import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
+import { HostRoot } from "./ReactWorkTags.ts";
 
 // A HostComponent, HostHoistable or HostSingleton fiber.
 export function hostInstanceOf(fiber: Fiber): Instance {
@@ -38,6 +39,28 @@ export interface PortalStateNode {
 
 export function portalStateOf(fiber: Fiber): PortalStateNode {
   return fiber.stateNode as PortalStateNode;
+}
+
+// A HostRoot fiber's state: its FiberRoot.
+export function fiberRootOf(fiber: Fiber): FiberRoot {
+  return fiber.stateNode as FiberRoot;
+}
+
+// A HostRoot or HostPortal fiber: the container it renders into. Both keep
+// a `containerInfo`, but in different objects (the FiberRoot, the portal's
+// state), so the tag says which one is read rather than one view of both.
+export function containerOf(fiber: Fiber): Container {
+  return fiber.tag === HostRoot ? fiberRootOf(fiber).containerInfo : portalStateOf(fiber).containerInfo;
+}
+
+// Persistent mode: the child set a HostRoot or HostPortal fiber's container
+// is given next.
+export function setPendingChildren(fiber: Fiber, children: unknown): void {
+  if (fiber.tag === HostRoot) {
+    fiberRootOf(fiber).pendingChildren = children;
+  } else {
+    portalStateOf(fiber).pendingChildren = children;
+  }
 }
 
 // DOM only (renderers with supportsResources): a hoistable host instance is

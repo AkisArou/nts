@@ -15,7 +15,7 @@
 
 import { defines } from "react-reconciler/ReactFiberClassComponentHost.ts";
 import { ComponentWillUnmount } from "shared/ReactClassComponentType.ts";
-import { ownerDocumentOf } from "./ReactFiberStateNode.ts";
+import { containerOf, ownerDocumentOf, portalStateOf } from "./ReactFiberStateNode.ts";
 import type {
   Container,
   FormInstance,
@@ -235,7 +235,6 @@ import {
   commitShowHideHostInstance,
   commitShowHideHostTextInstance,
   commitShowHideSuspenseBoundary,
-  type PortalStateNode,
 } from "./ReactFiberCommitHostEffects.ts";
 import {
   commitFragmentInstanceDeletionEffects,
@@ -979,11 +978,6 @@ function detachFiberAfterEffects(fiber: Fiber): void {
 let hostParent: Instance | Container | null = null;
 let hostParentIsContainer = false;
 
-// The host parent of a deletion: a host instance, or the container of a root
-// or portal.
-function containerInfoOf(fiber: Fiber): Container {
-  return (fiber.stateNode as { containerInfo: Container }).containerInfo;
-}
 
 function commitDeletionEffects(root: FiberRoot, returnFiber: Fiber, deletedFiber: Fiber): void {
   const prevEffectStart = pushComponentEffectStart();
@@ -1029,7 +1023,7 @@ function commitDeletionEffects(root: FiberRoot, returnFiber: Fiber, deletedFiber
         }
         case HostRoot:
         case HostPortal: {
-          hostParent = containerInfoOf(parent);
+          hostParent = containerOf(parent);
           hostParentIsContainer = true;
           break findParent;
         }
@@ -1127,7 +1121,7 @@ function commitDeletionEffectsOnFiber(
         // When we go into a portal, it becomes the parent to remove from.
         const prevHostParent = hostParent;
         const prevHostParentIsContainer = hostParentIsContainer;
-        hostParent = containerInfoOf(deletedFiber);
+        hostParent = containerOf(deletedFiber);
         hostParentIsContainer = true;
         recursivelyTraverseDeletionEffects(finishedRoot, nearestMountedAncestor, deletedFiber);
         hostParent = prevHostParent;
@@ -1135,7 +1129,7 @@ function commitDeletionEffectsOnFiber(
       } else {
         if (supportsPersistence) {
           commitHostPortalContainerChildren(
-            deletedFiber.stateNode as PortalStateNode,
+            portalStateOf(deletedFiber),
             deletedFiber,
             createContainerChildSet(),
           );
@@ -1686,7 +1680,7 @@ function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot, lane
       const prevMutationContext = pushMutationContext();
       if (supportsResources) {
         const previousHoistableRoot = currentHoistableRoot;
-        currentHoistableRoot = getHoistableRoot(containerInfoOf(finishedWork));
+        currentHoistableRoot = getHoistableRoot(containerOf(finishedWork));
         recursivelyTraverseMutationEffects(root, finishedWork, lanes);
         commitReconciliationEffects(finishedWork, lanes);
         currentHoistableRoot = previousHoistableRoot;
@@ -1707,7 +1701,7 @@ function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot, lane
 
       if (flags & Update) {
         if (supportsPersistence) {
-          const portal = finishedWork.stateNode as PortalStateNode;
+          const portal = portalStateOf(finishedWork);
           commitHostPortalContainerChildren(portal, finishedWork, portal.pendingChildren);
         }
       }
@@ -3802,7 +3796,7 @@ function accumulateSuspenseyCommitOnFiber(fiber: Fiber, committedLanes: Lanes, s
     case HostPortal: {
       if (supportsResources) {
         const previousHoistableRoot = currentHoistableRoot;
-        const container = containerInfoOf(fiber);
+        const container = containerOf(fiber);
         currentHoistableRoot = getHoistableRoot(container);
 
         recursivelyAccumulateSuspenseyCommit(fiber, committedLanes, suspendedState);

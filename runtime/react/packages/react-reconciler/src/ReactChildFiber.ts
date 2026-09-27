@@ -16,6 +16,7 @@ import {
   REACT_PORTAL_TYPE,
 } from "shared/ReactSymbols.ts";
 import type { LazyComponent, ReactDebugInfo, ReactElement, ReactKey, ReactPortal, Thenable, ReactContextBase } from "shared/ReactTypes.ts";
+import { portalStateOf } from "./ReactFiberStateNode.ts";
 import { getComponentNameFromFiber } from "./getComponentNameFromFiber.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 import {
@@ -68,11 +69,6 @@ interface ComponentDebugInfo {
   readonly debugTask?: ConsoleTask | null;
 }
 
-// The portal's host state on a HostPortal fiber.
-interface PortalStateNode {
-  readonly containerInfo: unknown;
-  readonly implementation: unknown;
-}
 
 // This tracks the thenables that are unwrapped during reconcilation.
 let thenableState: ThenableState | null = null;
@@ -561,8 +557,8 @@ class ChildReconcilerImpl {
     if (
       current === null ||
       current.tag !== HostPortal ||
-      (current.stateNode as PortalStateNode).containerInfo !== portal.containerInfo ||
-      (current.stateNode as PortalStateNode).implementation !== portal.implementation
+      portalStateOf(current).containerInfo !== portal.containerInfo ||
+      portalStateOf(current).implementation !== portal.implementation
     ) {
       // Insert
       const created = createFiberFromPortal(portal, returnFiber.mode, lanes);
@@ -1426,8 +1422,8 @@ class ChildReconcilerImpl {
       if (child.key === key) {
         if (
           child.tag === HostPortal &&
-          (child.stateNode as PortalStateNode).containerInfo === portal.containerInfo &&
-          (child.stateNode as PortalStateNode).implementation === portal.implementation
+          portalStateOf(child).containerInfo === portal.containerInfo &&
+          portalStateOf(child).implementation === portal.implementation
         ) {
           this.deleteRemainingChildren(returnFiber, child.sibling);
           const noChildren: unknown[] = [];

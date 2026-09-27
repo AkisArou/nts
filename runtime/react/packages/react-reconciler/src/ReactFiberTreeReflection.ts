@@ -1,4 +1,5 @@
 import { enableFragmentRefsTextNodes } from "shared/ReactFeatureFlags.ts";
+import { portalStateOf } from "./ReactFiberStateNode.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";
 import type { ActivityInstance, Container, Instance, SuspenseInstance, TextInstance } from "react-reconciler/ReactFiberConfig.ts";
 import { Hydrating, NoFlags, Placement } from "./ReactFiberFlags.ts";
@@ -17,10 +18,6 @@ import {
   SuspenseComponent,
 } from "./ReactWorkTags.ts";
 
-// A portal's state node.
-interface PortalStateNode {
-  containerInfo: Container;
-}
 
 export function getNearestMountedFiber(fiber: Fiber): Fiber | null {
   let node = fiber;
@@ -390,7 +387,7 @@ export function getFragmentPortalContainerInfo(fiber: Fiber): Container | null {
   let parent = fiber.return;
   while (parent !== null) {
     if (parent.tag === HostPortal) {
-      return (parent.stateNode as PortalStateNode).containerInfo;
+      return portalStateOf(parent).containerInfo;
     }
     if (parent.tag === HostRoot || parent.tag === HostComponent || parent.tag === HostSingleton) {
       break;

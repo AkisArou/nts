@@ -6,8 +6,7 @@
 import { enableProfilerTimer, enableTransitionTracing } from "shared/ReactFeatureFlags.ts";
 import type { ReactContextBase } from "shared/ReactTypes.ts";
 import type { ActivityState } from "./ReactFiberActivityComponent.ts";
-import type { Cache } from "./ReactFiberCacheComponent.ts";
-import { popCacheProvider } from "./ReactFiberCacheComponent.ts";
+import { cacheOf, popCacheProvider } from "./ReactFiberCacheComponent.ts";
 import { DidCapture, NoFlags, ShouldCapture, Update } from "./ReactFiberFlags.ts";
 import { popHiddenContext } from "./ReactFiberHiddenContext.ts";
 import { popHostContainer, popHostContext } from "./ReactFiberHostContext.ts";
@@ -45,10 +44,6 @@ import {
   TracingMarkerComponent,
 } from "./ReactWorkTags.ts";
 
-// The cache a HostRoot or CacheComponent fiber holds in its state.
-function cacheOf(fiber: Fiber): Cache {
-  return (fiber.memoizedState as { cache: Cache }).cache;
-}
 
 // Turns a ShouldCapture flag into DidCapture: this fiber is the boundary
 // that re-renders. Returns whether it captured.

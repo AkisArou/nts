@@ -1,5 +1,7 @@
 import { ReactContext } from "shared/ReactContext.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
+import type { RootState } from "./ReactFiberRoot.ts";
+import { HostRoot } from "./ReactWorkTags.ts";
 
 import { isDevelopment } from "shared/Build.ts";
 
@@ -42,6 +44,15 @@ export interface Cache {
 export interface CacheComponentState {
   readonly parent: Cache;
   readonly cache: Cache;
+}
+
+// The cache a HostRoot or CacheComponent fiber holds in its state. The two
+// states are different records (RootState, CacheComponentState), so the tag
+// says which one is read rather than one view of both.
+export function cacheOf(fiber: Fiber): Cache {
+  return fiber.tag === HostRoot
+    ? (fiber.memoizedState as RootState).cache
+    : (fiber.memoizedState as CacheComponentState).cache;
 }
 
 export interface SpawnedCachePool {

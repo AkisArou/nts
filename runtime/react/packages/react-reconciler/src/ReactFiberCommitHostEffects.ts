@@ -15,6 +15,7 @@ import type {
   SuspenseInstance,
   TextInstance,
 } from "react-reconciler/ReactFiberConfig.ts";
+import { containerOf, type PortalStateNode } from "./ReactFiberStateNode.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 
 import { isDevelopment } from "shared/Build.ts";
@@ -54,13 +55,6 @@ import { captureCommitPhaseError } from "./ReactFiberWorkLoop.ts";
 import { trackHostMutation } from "./ReactFiberMutationTracking.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 import { commitNewChildToFragmentInstances, getParentFragmentInstances } from "./ReactFiberFragmentInstance.ts";
-
-// A portal's stateNode: its container, and the child set persistent mode
-// builds for it.
-export interface PortalStateNode {
-  containerInfo: Container;
-  pendingChildren: ChildSet;
-}
 
 // Runs a host operation with the fiber as the current fiber in development,
 // where component stacks in warnings need it.
@@ -393,7 +387,7 @@ function commitPlacement(finishedWork: Fiber): void {
     }
     case HostRoot:
     case HostPortal: {
-      const parent = (hostParentFiber.stateNode as { containerInfo: Container }).containerInfo;
+      const parent = containerOf(hostParentFiber);
       const before = getHostSibling(finishedWork);
       insertOrAppendPlacementNodeIntoContainer(finishedWork, before, parent, parentFragmentInstances);
       break;
