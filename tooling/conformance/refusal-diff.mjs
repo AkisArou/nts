@@ -82,6 +82,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { armLines } from "./pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -231,6 +232,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, asy
 }));
 
 console.log(`  before ${beforeBin}\n  after  ${afterBin}`);
+for (const line of armLines(beforeBin, afterBin)) console.log(`  ${line}`);
 // One function moving in every program that imports it is one fact, not N:
 // a summary per name first, then the per-project detail.
 const byName = new Map();

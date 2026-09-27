@@ -61,6 +61,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readAxis } from "./compiled-axis-rows.mjs";
+import { armLines } from "./pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -279,6 +280,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, asy
 }));
 
 console.log(`  before ${beforeBin}, after ${afterBin} (both pinned), ${projects.length} project(s) in ${Math.round((Date.now() - started) / 1000)} s`);
+for (const line of armLines(beforeBin, afterBin)) console.log(`  ${line}`);
 const unmeasured = [];
 const differing = [];
 const renumberedOnly = [];

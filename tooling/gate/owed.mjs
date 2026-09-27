@@ -40,6 +40,10 @@
 // comparison, so what it cannot say is exactly this list. `<before>` is a
 // clean build of the base the change sits on and `<after>` a clean build with
 // it -- never `target/release/nts`, which is whichever session linked last.
+// Build both with `tooling/conformance/pin.mjs <rev> [--worktree <dir>]`: a
+// pin records its commit and what was applied, and every comparison tool then
+// prints what separates the two arms, and how many of those commits touch
+// what the binary is built from.
 
 import { execFileSync, spawnSync } from "node:child_process";
 

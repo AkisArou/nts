@@ -86,6 +86,7 @@ import {
 import { availableParallelism, freemem, homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { armLines } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -474,6 +475,7 @@ pins.forEach((p, at) => {
   const role = pins.length === 1 ? "nts   " : at === 0 ? "before" : "after ";
   console.log(`  ${role} ${p.source}  sha256 ${p.hash.slice(0, 16)}  built ${p.built}`);
 });
+if (pins.length === 2) for (const line of armLines(pins[0].source, pins[1].source)) console.log(`  ${line}`);
 console.log(`  tsgo   ${shown(resolve(tsgo))}  sha256 ${sha256(tsgo).slice(0, 16)}`);
 console.log(`  ${examples.length} example(s), ${JOBS} at a time, ${configuration}`);
 if (untracked.length > 0) console.log(`  untracked, in this tree only: ${untracked.join(" ")}`);
