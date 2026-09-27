@@ -151,7 +151,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type ToggleGroupChildren, ToggleNode, type AlertDialogChildren, AlertResponseNode, type DialogBreakpoints, NavigationStack } from "./children.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type ToastOverlayChildren, ToastNode, type ToggleGroupChildren, ToggleNode, type AlertDialogChildren, AlertResponseNode, type DialogBreakpoints, NavigationStack } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1146,7 +1146,7 @@ export declare const TabOverview: HostComponent<"AdwTabOverview", TabOverviewPro
 export declare const TabView: HostComponent<"AdwTabView", TabViewProps> & TabViewChildren;
 
 /** `<ToastOverlay>`: an AdwToastOverlay. */
-export declare const ToastOverlay: HostComponent<"AdwToastOverlay", ToastOverlayProps>;
+export declare const ToastOverlay: HostComponent<"AdwToastOverlay", ToastOverlayProps> & ToastOverlayChildren;
 
 /** `<ToggleGroup>`: an AdwToggleGroup. */
 export declare const ToggleGroup: HostComponent<"AdwToggleGroup", ToggleGroupProps> & ToggleGroupChildren;
@@ -5864,6 +5864,8 @@ export function createNode(type: string): HostNode | null {
       return new BreakpointNode(type);
     case "AdwBreakpointBin.Breakpoint":
       return new BreakpointNode(type);
+    case "AdwToastOverlay.Toast":
+      return new ToastNode(type);
     case "AdwToggleGroup.Toggle":
       return new ToggleNode(type);
     case "AdwAlertDialog.Response":

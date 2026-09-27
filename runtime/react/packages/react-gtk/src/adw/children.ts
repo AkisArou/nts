@@ -28,12 +28,15 @@ import {
   AdwNavigationPage,
   AdwNavigationView,
   AdwTabView,
+  AdwToast,
+  AdwToastOverlay,
   AdwToggle,
   AdwToggleGroup,
   AdwToolbarView,
   AdwViewStack,
   AdwWindow,
   type AdwResponseAppearance,
+  type AdwToastPriority,
   type AdwTabPage,
   type AdwViewStackPage,
 } from "c:Adw-1";
@@ -941,5 +944,129 @@ export class ToggleNode extends ObjectElementNode {
       writeAsReact(() => group.remove(this.toggle));
     }
     this.owner = null;
+  }
+}
+
+// ---- ToastOverlay --------------------------------------------------------------------
+
+export interface ToastProps {
+  title?: string;
+  /** Seconds it shows for: 5 if not given, and 0 until it is dismissed. */
+  timeout?: number;
+  priority?: AdwToastPriority;
+  /** The text of its button, if it has one. */
+  buttonLabel?: string;
+  useMarkup?: boolean;
+  /** The user dismissed it, or its time ran out: the app stops rendering it. */
+  onDismissed?: () => void;
+  /** The user pressed its button. */
+  onButtonClicked?: () => void;
+}
+
+export interface ToastOverlayChildren {
+  /** `<ToastOverlay.Toast title timeout onDismissed>`: a toast the overlay shows while it is rendered. */
+  readonly Toast: HostComponent<"AdwToastOverlay.Toast", ToastProps>;
+}
+
+// What the toast's handlers read. The toast holds the handlers, so they hold
+// this and not the node, which holds the toast.
+class ToastState {
+  readonly onDismissed: SignalSlot = new SignalSlot();
+  readonly onButtonClicked: SignalSlot = new SignalSlot();
+  // Whether the element is placed: a toast React took out reports nothing.
+  placed = false;
+}
+
+/**
+ * A toast of a ToastOverlay, shown while React renders it: placed, it is
+ * added to the overlay, and taken out, it is dismissed. A user dismissing
+ * it, or its time running out, is heard as `onDismissed`, and the app stops
+ * rendering it; rendered again under a new key, it is a new toast. Toasts
+ * have no order, so a move changes nothing.
+ */
+export class ToastNode extends ObjectElementNode {
+  private readonly toast: AdwToast = new AdwToast();
+  private readonly state: ToastState = new ToastState();
+  private owner: WidgetNode | null = null;
+
+  constructor(type: string) {
+    super(type);
+    const state = this.state;
+    this.toast.connect("dismissed", () => {
+      if (state.placed && !isReactWriting()) {
+        state.onDismissed.fire();
+      }
+    });
+    this.toast.connect("button-clicked", () => {
+      if (state.placed) {
+        state.onButtonClicked.fire();
+      }
+    });
+  }
+
+  applyProps(previous: Props | null, next: Props): void {
+    if (next["children"] !== undefined) {
+      throw new Error(`<${this.name()}> holds no children: its text is its \`title\`.`);
+    }
+    const changed = (key: string): boolean => previous === null || previous[key] !== next[key];
+    const toast = this.toast;
+    if (changed("title")) {
+      const title = next["title"];
+      toast.set_title(typeof title === "string" ? title : "");
+    }
+    if (changed("timeout")) {
+      const timeout = next["timeout"];
+      toast.set_timeout(typeof timeout === "number" ? timeout : 5);
+    }
+    if (changed("priority")) {
+      const priority = next["priority"];
+      toast.set_priority(typeof priority === "number" ? priority : 0);
+    }
+    if (changed("buttonLabel")) {
+      const label = next["buttonLabel"];
+      toast.set_button_label(typeof label === "string" ? label : null);
+    }
+    if (changed("useMarkup")) {
+      toast.set_use_markup(next["useMarkup"] === true);
+    }
+    const onDismissed = next["onDismissed"];
+    if (typeof onDismissed === "function") {
+      this.state.onDismissed.handler = onDismissed;
+    } else {
+      this.state.onDismissed.handler = null;
+    }
+    const onButtonClicked = next["onButtonClicked"];
+    if (typeof onButtonClicked === "function") {
+      this.state.onButtonClicked.handler = onButtonClicked;
+    } else {
+      this.state.onButtonClicked.handler = null;
+    }
+  }
+
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    const overlay = parent.widget instanceof AdwToastOverlay ? parent.widget : null;
+    if (overlay === null) {
+      throw new Error(`<${this.name()}> goes directly inside a <ToastOverlay>, not a <${parent.name()}>.`);
+    }
+    if (this.owner === parent) {
+      return;
+    }
+    this.owner = parent;
+    this.state.placed = true;
+    overlay.add_toast(this.toast);
+  }
+  takeOutOf(parent: WidgetNode): void {
+    if (this.owner !== parent) {
+      return;
+    }
+    this.owner = null;
+    this.state.placed = false;
+    const toast = this.toast;
+    writeAsReact(() => toast.dismiss());
+  }
+
+  detachDeleted(): void {
+    this.state.onDismissed.handler = null;
+    this.state.onButtonClicked.handler = null;
   }
 }

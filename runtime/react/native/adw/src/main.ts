@@ -62,6 +62,8 @@
 //             two goes between them and updates in place; its onResponse hears
 //             the response id, and taken out it closes, which onResponse
 //             does not hear
+//   toasts    a ToastOverlay's Toast elements show while rendered: one React
+//             takes out is dismissed unheard; the user dismissing one is heard
 //   breakpoints  a BreakpointBin's Breakpoint elements: of those whose
 //             condition holds, the last applies, heard as onApply and the
 //             other's onUnapply; a condition from props moves it; a
@@ -94,6 +96,7 @@ import {
   AdwSwitchRow,
   AdwTabOverview,
   AdwTabView,
+  AdwToastOverlay,
   AdwToggleGroup,
   type AdwTabPage,
   AdwToolbarView,
@@ -689,6 +692,27 @@ function main(): void {
   idle();
   const closed = widget(dialog).get_root() === null;
   react_gtk_log("dialog " + String(dialogWantsMount) + " " + String(unplaced) + " " + String(within) + " " + String(closed) + " responded=" + responded + " " + responses);
+
+  // Toasts shown while rendered: React taking one out is not heard; the
+  // user dismissing one is.
+  let dismissedA = 0;
+  let dismissedB = 0;
+  const toasts = createInstance("AdwToastOverlay", {}, shown, 0, {});
+  appendInitialChild(toasts, createInstance("GtkLabel", { label: "under" }, shown, 0, {}));
+  const toastA = createInstance("AdwToastOverlay.Toast", { title: "A", timeout: 0, onDismissed: () => dismissedA++ }, shown, 0, {});
+  const toastB = createInstance("AdwToastOverlay.Toast", { title: "B", timeout: 0, onDismissed: () => dismissedB++ }, shown, 0, {});
+  appendInitialChild(toasts, toastA);
+  appendInitialChild(toasts, toastB);
+  appendInitialChild(anchor, toasts);
+  idle();
+  removeChild(toasts, toastB);
+  const toastsWidget = widget(toasts);
+  if (toastsWidget instanceof AdwToastOverlay) {
+    toastsWidget.dismiss_all();
+  }
+  idle();
+  removeChild(anchor, toasts);
+  react_gtk_log("toasts " + String(dismissedA) + " " + String(dismissedB));
 
   // Every apply and unapply heard, in order.
   let breaks = "";

@@ -671,6 +671,7 @@ const childElements = new Map([
   ["Adw.Window", { members: "WindowBreakpoints", elements: [["AdwWindow.Breakpoint", "BreakpointNode"]] }],
   ["Adw.ApplicationWindow", { members: "ApplicationWindowBreakpoints", elements: [["AdwApplicationWindow.Breakpoint", "BreakpointNode"]] }],
   ["Adw.BreakpointBin", { members: "BreakpointBinBreakpoints", elements: [["AdwBreakpointBin.Breakpoint", "BreakpointNode"]] }],
+  ["Adw.ToastOverlay", { members: "ToastOverlayChildren", elements: [["AdwToastOverlay.Toast", "ToastNode"]] }],
   ["Adw.ToggleGroup", { members: "ToggleGroupChildren", elements: [["AdwToggleGroup.Toggle", "ToggleNode"]], use: "<ToggleGroup.Toggle name label>" }],
   ["Adw.AlertDialog", { members: "AlertDialogChildren", elements: [["AdwAlertDialog.Response", "AlertResponseNode"]] }],
   ["Adw.Dialog", { members: "DialogBreakpoints", elements: [["AdwDialog.Breakpoint", "BreakpointNode"]] }],

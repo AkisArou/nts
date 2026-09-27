@@ -456,6 +456,10 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   once the toggle it names exists, and a user's pick goes back after the
   flush unless the app takes it up. A toggle sets only what changed, since
   a toggle given its own name again is, to its group, a duplicate.
+- A ToastOverlay shows `<ToastOverlay.Toast title timeout onDismissed>`
+  while it is rendered: placed, it is added, and taken out, dismissed. The
+  user dismissing it, or its time running out, is heard as `onDismissed`,
+  and the app stops rendering it; toasts have no order.
 - Breakpoints are elements of the window, dialog or BreakpointBin they
   belong to: `<ApplicationWindow.Breakpoint condition="max-width: 500sp"
   onApply onUnapply>`. The app hears one apply and unapply and renders for
