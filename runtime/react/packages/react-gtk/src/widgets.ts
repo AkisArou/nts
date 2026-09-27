@@ -550,7 +550,6 @@ export interface EditableLabelProps extends WidgetProps {
   onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
-  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Popover>`'s props: GtkPopover's own properties and signals. */
@@ -659,7 +658,6 @@ export interface EntryProps extends WidgetProps {
   onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
-  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Expander>`'s props: GtkExpander's own properties and signals. */
@@ -1093,7 +1091,6 @@ export interface PasswordEntryProps extends WidgetProps {
   onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
-  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Picture>`'s props: GtkPicture's own properties and signals. */
@@ -1296,7 +1293,6 @@ export interface SearchEntryProps extends WidgetProps {
   onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
-  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<Separator>`'s props: GtkSeparator's own properties and signals. */
@@ -1347,7 +1343,6 @@ export interface SpinButtonProps extends WidgetProps {
   onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
-  onInsertText?: (text: string, length: number, position: number) => void;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
@@ -1456,7 +1451,6 @@ export interface TextProps extends WidgetProps {
   onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
-  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<TextView>`'s props: GtkTextView's own properties and signals. */
@@ -3152,11 +3146,6 @@ export function editableLabelSignal(gtk: GtkEditableLabel, key: string, slot: Si
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
       });
       return true;
-    case "onInsertText":
-      gtk.connect("insert-text", (_self, _text, _length, _position) => {
-        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
-      });
-      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -3585,11 +3574,6 @@ export function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boole
     case "onDeleteText":
       gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
-      });
-      return true;
-    case "onInsertText":
-      gtk.connect("insert-text", (_self, _text, _length, _position) => {
-        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
       });
       return true;
   }
@@ -5208,11 +5192,6 @@ export function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: Si
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
       });
       return true;
-    case "onInsertText":
-      gtk.connect("insert-text", (_self, _text, _length, _position) => {
-        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
-      });
-      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -5968,11 +5947,6 @@ export function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: Signal
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
       });
       return true;
-    case "onInsertText":
-      gtk.connect("insert-text", (_self, _text, _length, _position) => {
-        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
-      });
-      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -6157,11 +6131,6 @@ export function spinButtonSignal(gtk: GtkSpinButton, key: string, slot: SignalSl
     case "onDeleteText":
       gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
-      });
-      return true;
-    case "onInsertText":
-      gtk.connect("insert-text", (_self, _text, _length, _position) => {
-        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
       });
       return true;
     case "onNotifyOrientation":
@@ -6566,11 +6535,6 @@ export function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean
     case "onDeleteText":
       gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
-      });
-      return true;
-    case "onInsertText":
-      gtk.connect("insert-text", (_self, _text, _length, _position) => {
-        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
       });
       return true;
   }

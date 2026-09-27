@@ -23,11 +23,24 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
 fi
 
 expected="label 42.000000 notified 1 picked blue page choices request 140 icon edit-clear file null same true inherited 3=3 1 2 keys 65,66, handled true false click 2@1.5x2.5 drawn true width 300 "
+# A signal whose handler writes a slot C passes is refused, not bound
+# wrong: GIR gives a signal's parameters no C type, and the one spelled from
+# the name had no `*` -- `input`'s handler took a `double` where C passes a
+# `gdouble *`. Asked of the bindings the first build writes.
+check_refused() {
+  if ! grep -q "^$1	an out parameter" "$source/types/gir/Gtk-4.0.refused.txt"; then
+    echo "FAILED gtk-widgets: $1 is bound, and its handler would be handed a pointer as a value" >&2
+    exit 1
+  fi
+}
 for mode in plain rc; do
   flag=""
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag
+  check_refused "GtkSpinButton::input"
+  check_refused "GtkEditable::insert-text"
+  check_refused "GtkOverlay::get-child-position"
   for product in widgets widgets-llvm; do
     log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-criticals \
       timeout 30 "$root/examples/interop/with-display.sh" "$out/$mode/$product/linux-gnu-x86_64/$product" 2>/dev/null | tr '\n' ' ' || true)

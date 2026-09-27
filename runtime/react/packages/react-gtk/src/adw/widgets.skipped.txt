@@ -69,7 +69,7 @@ AdwPreferencesWindow.visible-page	deprecated
 AdwPreferencesWindow.visible-page-name	deprecated
 AdwSidebar::drop-enter	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwSidebar::drop-value-loaded	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
-AdwSpinRow::input	its handler returns a CNumber<"int">: not generated yet
+AdwSpinRow::input	no connect overload in the bindings
 AdwSqueezer.allow-none	deprecated
 AdwSqueezer.homogeneous	deprecated
 AdwSqueezer.interpolate-size	deprecated
@@ -91,3 +91,4 @@ AdwViewSwitcherTitle.subtitle	deprecated
 AdwViewSwitcherTitle.title	deprecated
 AdwViewSwitcherTitle.view-switcher-enabled	deprecated
 GtkActionable.action-target	no setter in the bindings
+GtkEditable::insert-text	no connect overload in the bindings

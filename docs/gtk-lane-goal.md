@@ -398,6 +398,23 @@ at the end of its statement, after the call. It guards against a release
 moved to the last use, which is what made `nts_view_unlend` necessary for
 views.
 
+### A handler's out parameters: refused, not bound wrong
+
+GIR gives a signal's parameters no C type, so the binder spells one from the
+type's name, and an out or inout parameter came out without its `*`.
+`GtkSpinButton::input`'s handler was declared taking `new_value: double`
+where C passes a `gdouble *`. On x86-64 the pointer arrives in an integer
+register and the bridge read a floating-point one. `GtkEditable::insert-text`
+handed the handler `position` as the pointer's bits, and
+`GtkOverlay::get-child-position` copied its caller-allocated rectangle, so
+what the handler wrote never reached GTK. React's generator reading GIR
+found it.
+
+A signal with any parameter that is not `in` is now refused (4 across the
+closure: those three and `AdwSpinRow::input`). GJS has such a handler return
+its out values, which is the form to build. gtk-widgets' build asserts the
+three are refused, and on the binder before, it fails naming `input`.
+
 ## M3, the idiomatic layer: where it stands
 
 **Methods on handles.** Every GIR method is also a method of its class:

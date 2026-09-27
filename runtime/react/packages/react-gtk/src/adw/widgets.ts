@@ -468,7 +468,6 @@ export interface EntryRowProps extends PreferencesRowProps {
   onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
-  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<ExpanderRow>`'s props: AdwExpanderRow's own properties and signals. */
@@ -703,7 +702,6 @@ export interface SpinRowProps extends ActionRowProps {
   onNotifyXalign?: (value: number) => void;
   onChanged?: () => void;
   onDeleteText?: (start_pos: number, end_pos: number) => void;
-  onInsertText?: (text: string, length: number, position: number) => void;
 }
 
 /** `<SplitButton>`'s props: AdwSplitButton's own properties and signals. */
@@ -2364,11 +2362,6 @@ export function entryRowSignal(gtk: AdwEntryRow, key: string, slot: SignalSlot):
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
       });
       return true;
-    case "onInsertText":
-      gtk.connect("insert-text", (_self, _text, _length, _position) => {
-        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
-      });
-      return true;
   }
   return preferencesRowSignal(gtk, key, slot);
 }
@@ -3217,11 +3210,6 @@ export function spinRowSignal(gtk: AdwSpinRow, key: string, slot: SignalSlot): b
     case "onDeleteText":
       gtk.connect("delete-text", (_self, _start_pos, _end_pos) => {
         slot.dispatch(() => (slot.handler as (start_pos: number, end_pos: number) => void)(_start_pos, _end_pos));
-      });
-      return true;
-    case "onInsertText":
-      gtk.connect("insert-text", (_self, _text, _length, _position) => {
-        slot.dispatch(() => (slot.handler as (text: string, length: number, position: number) => void)(_text, _length, _position));
       });
       return true;
   }

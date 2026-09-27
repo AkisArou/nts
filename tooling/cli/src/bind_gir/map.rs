@@ -1809,6 +1809,17 @@ impl<'a> Mapper<'a> {
         let mut ts_parameters = vec![format!("self: {local}")];
         let mut emitted = Vec::new();
         for param in &signal.signature.parameters {
+            // A slot the handler writes -- `GtkSpinButton::input`'s `gdouble
+            // *new_value`, `GtkOverlay::get-child-position`'s caller-allocated
+            // rectangle, `GtkEditable::insert-text`'s `gint *position`. GIR
+            // gives a signal's parameters no C type, so the one `with_c_type`
+            // spells from the name has no `*`: the handler was declared taking
+            // a `double` where C passes a pointer, and a boxed one was copied,
+            // so whatever it wrote never reached C. Refused until a handler
+            // can answer them, as GJS's returns them.
+            if param.direction != Direction::In {
+                return Err(Reason::OutParameter);
+            }
             // A UTF-8 string GLib passes the handler, lent for the call: the
             // handler's bridge copies it (`native::abi_type`). A `filename`
             // is in the file system's encoding, which a `string` is not.

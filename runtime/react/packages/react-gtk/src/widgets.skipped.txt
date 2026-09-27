@@ -28,6 +28,7 @@ GtkDialog.use-header-bar	construct-only: a change would need a new widget
 GtkDialog::close	deprecated
 GtkDialog::response	deprecated
 GtkDropDown.expression	a GtkExpression | null, which a JSX attribute does not carry yet
+GtkEditable::insert-text	no connect overload in the bindings
 GtkEntry.attributes	a PangoAttrList, which a JSX attribute does not carry yet
 GtkEntry.buffer	removing it leaves its value: GIR gives no default
 GtkEntry.completion	deprecated
@@ -67,7 +68,7 @@ GtkLockButton.tooltip-not-authorized	deprecated
 GtkLockButton.tooltip-unlock	deprecated
 GtkMessageDialog.buttons	construct-only: a change would need a new widget
 GtkNotebook::create-window	its handler returns a GtkNotebook | null: not generated yet
-GtkOverlay::get-child-position	its handler fills `allocation`: not generated yet
+GtkOverlay::get-child-position	no connect overload in the bindings
 GtkPicture.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkPicture.keep-aspect-ratio	deprecated
 GtkPopoverMenu.flags	no setter in the bindings
@@ -108,7 +109,7 @@ GtkShortcutsWindow.view-name	deprecated
 GtkShortcutsWindow::close	deprecated
 GtkShortcutsWindow::search	deprecated
 GtkSpinButton.adjustment	removing it leaves its value: GIR gives no default
-GtkSpinButton::input	its handler returns a CNumber<"int">: not generated yet
+GtkSpinButton::input	no connect overload in the bindings
 GtkStack.visible-child	removing it leaves its value: GIR gives no default
 GtkStackSidebar.stack	removing it leaves its value: GIR gives no default
 GtkStatusbar::text-popped	deprecated
