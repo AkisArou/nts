@@ -67,11 +67,11 @@ work timer"
 
 mkdir -p "$out"
 "$nts" build "$source/tsconfig.json" --out "$out" --rc "$@"
-# The build has just written types/gir from this nts's bindings, and
+# The build has just written the GIR bindings from this nts, and
 # react-gtk's widgets are generated from them: generated from an older nts's,
 # a prop can be missing or name a setter that is gone.
-if ! node "$root/runtime/react/packages/react-gtk/tools/gen-widgets.ts" "$source/types/gir" --check >/dev/null; then
-  echo "FAILED react-gtk: src/widgets.ts is stale for this nts's bindings; run tools/gen-widgets.ts ../../native/gtk/types/gir" >&2
+if ! node "$root/runtime/react/packages/react-gtk/tools/gen-widgets.ts" "$source" --check >/dev/null; then
+  echo "FAILED react-gtk: src/widgets.ts is stale for this nts's bindings; run tools/gen-widgets.ts ../../native/gtk" >&2
   exit 1
 fi
 # One program per backend (nts.config.ts): each must log the same.

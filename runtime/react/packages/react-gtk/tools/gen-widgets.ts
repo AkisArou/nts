@@ -27,10 +27,12 @@
 // other key to its parent's, so Widget's props are written once, not once per
 // widget.
 //
-// usage: node tools/gen-widgets.ts <bindings dir> [--check]
-//   <bindings dir> holds Gtk-4.0.d.ts (a native program's types/gir);
-//   GI_GIR_PATH overrides /usr/share/gir-1.0. --check compares instead of
-//   writing, and fails if the committed files are stale.
+// usage: node tools/gen-widgets.ts <native program dir> [--namespace Adw-1] [--check]
+//   <native program dir> is one `nts build` wrote GIR bindings for: they are
+//   read from its node_modules/@nts/gir-*, or from its types/gir where a build
+//   still writes them there. GI_GIR_PATH overrides /usr/share/gir-1.0.
+//   --check compares instead of writing, and fails if the committed files are
+//   stale.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -297,7 +299,28 @@ function readSignature(line: string): Signature | null {
   return { params, returns };
 }
 
-function readBindings(dir: string): Bindings {
+/**
+ * The binding declarations `nts build` wrote for the program in `dir`: one
+ * package per namespace under node_modules/@nts (`gir-gtk-4.0/index.d.ts`),
+ * or, from a build that predates the packages, one file each in types/gir.
+ */
+function bindingFiles(dir: string): string[] {
+  const declarations = (at: string): string[] =>
+    readdirSync(at)
+      .filter((name) => name.endsWith(".d.ts"))
+      .sort()
+      .map((name) => join(at, name));
+  const packages = join(dir, "node_modules", "@nts");
+  if (existsSync(packages)) {
+    return readdirSync(packages)
+      .filter((name) => name.startsWith("gir-"))
+      .sort()
+      .flatMap((name) => declarations(join(packages, name)));
+  }
+  return declarations(join(dir, "types", "gir"));
+}
+
+function readBindings(files: string[]): Bindings {
   const setters = new Map<string, Map<string, string>>();
   const childMethods = new Map<string, Map<string, string>>();
   const accessors = new Map<string, Map<string, { get?: string; set?: string }>>();
@@ -317,8 +340,7 @@ function readBindings(dir: string): Bindings {
     }
     return value;
   };
-  const files = readdirSync(dir).filter((name) => name.endsWith(".d.ts"));
-  for (const line of files.flatMap((file) => readFileSync(join(dir, file), "utf8").split("\n"))) {
+  for (const line of files.flatMap((file) => readFileSync(file, "utf8").split("\n"))) {
     const imports = /^ {2}import type \{ (.+) \} from "(c:[\w.-]+)";$/.exec(line);
     if (imports !== null) {
       imports[1]!.split(", ").forEach((name) => modules.set(name, imports[2]!));
@@ -380,9 +402,9 @@ function readBindings(dir: string): Bindings {
   // ones included: `GObjectClass<"_GtkSingleSelection", GObject, "_GListModel" | ...>`.
   const gobjectClasses = new Map<string, { parent: string; implements: string[] }>();
   const interfaces = new Set<string>();
-  for (const file of readdirSync(dir).filter((name) => name.endsWith(".d.ts"))) {
+  for (const file of files) {
     let module: string | undefined;
-    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+    for (const line of readFileSync(file, "utf8").split("\n")) {
       const declared = /^declare module "(c:[\w.-]+)" \{$/.exec(line);
       if (declared !== null) {
         module = declared[1]!;
@@ -1643,7 +1665,7 @@ function assign(p: Prop): string {
 // ---- main --------------------------------------------------------------------
 
 const args = process.argv.slice(2);
-const bindingsDir = args.find((a) => !a.startsWith("--") && args[args.indexOf(a) - 1] !== "--namespace");
+const programDir = args.find((a) => !a.startsWith("--") && args[args.indexOf(a) - 1] !== "--namespace");
 const namespaceAt = args.indexOf("--namespace");
 const girName = namespaceAt >= 0 ? args[namespaceAt + 1] : "Gtk-4.0";
 // The namespaces react-gtk generates widgets for: GTK's own, and libraries of
@@ -1653,14 +1675,14 @@ const targets = new Map([
   ["Adw-1", { namespace: "Adw", library: "libadwaita", pkgConfig: "libadwaita-1", dir: "src/adw", reads: ["Gtk-4.0", "Adw-1"] }],
 ]);
 const known = girName === undefined ? undefined : targets.get(girName);
-if (bindingsDir === undefined || known === undefined) {
-  console.error(`usage: node tools/gen-widgets.ts <bindings dir> [--namespace ${[...targets.keys()].join("|")}] [--check]`);
+if (programDir === undefined || known === undefined) {
+  console.error(`usage: node tools/gen-widgets.ts <native program dir> [--namespace ${[...targets.keys()].join("|")}] [--check]`);
   process.exit(2);
 }
 const version = execFileSync("pkg-config", ["--modversion", known.pkgConfig], { encoding: "utf8" }).trim();
 const target: Target = { namespace: known.namespace, gir: girName!, library: known.library, version, dir: known.dir };
 const gir = readGir(known.reads);
-const m = model(gir, readBindings(bindingsDir), target.namespace);
+const m = model(gir, readBindings(bindingFiles(programDir)), target.namespace);
 const files = new Map([
   [join(packageDir, target.dir, "widgets.ts"), emit(m, target)],
   [

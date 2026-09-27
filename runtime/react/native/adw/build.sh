@@ -55,10 +55,10 @@ reset true true"
 
 mkdir -p "$out"
 "$nts" build "$source/tsconfig.json" --out "$out" --rc "$@"
-# The build has just written types/gir from this nts's bindings, and
+# The build has just written the GIR bindings from this nts, and
 # react-gtk/adw's widgets are generated from them.
-if ! node "$root/runtime/react/packages/react-gtk/tools/gen-widgets.ts" "$source/types/gir" --namespace Adw-1 --check >/dev/null; then
-  echo "FAILED react-gtk/adw: src/adw/widgets.ts is stale for this nts's bindings; run tools/gen-widgets.ts ../../native/adw/types/gir --namespace Adw-1" >&2
+if ! node "$root/runtime/react/packages/react-gtk/tools/gen-widgets.ts" "$source" --namespace Adw-1 --check >/dev/null; then
+  echo "FAILED react-gtk/adw: src/adw/widgets.ts is stale for this nts's bindings; run tools/gen-widgets.ts ../../native/adw --namespace Adw-1" >&2
   exit 1
 fi
 # One program per backend (nts.config.ts): each must log the same.

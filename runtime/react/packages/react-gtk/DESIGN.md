@@ -366,7 +366,7 @@ The other gaps are construct-only props, and signal arguments of types a
 JSX handler cannot name yet.
 
 Regenerate after a GTK update, from a native program's generated bindings:
-`node tools/gen-widgets.ts ../../native/gtk/types/gir`. Each driver's
+`node tools/gen-widgets.ts ../../native/gtk`. Each driver's
 `build.sh` fails when the generated file is stale for the bindings its build
 just wrote.
 
