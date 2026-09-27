@@ -109,6 +109,23 @@ pub(crate) struct Request {
     /// declarations of `NSObject` are two unrelated classes, and two of
     /// `CGRect` two native layouts of one name (NTS2006).
     pub(crate) provided: BTreeSet<String>,
+    /// A project's own Objective-C, bound as the module itself: see
+    /// [`Project`]. `None` for a framework.
+    pub(crate) project: Option<Project>,
+}
+
+/// A header a project writes -- a `native:` entry's -- read as a module of its
+/// own, beside the frameworks it imports. No SDK has its Swift graph, so it
+/// is extracted for it (`swift_graph`) into a directory of its own.
+#[derive(Clone, Debug)]
+pub(crate) struct Project {
+    /// The header, `native/Greeter.h`, which the module's declarations are
+    /// read from.
+    pub(crate) header: std::path::PathBuf,
+    /// Where its own `#import "..."`s are found, its directory first.
+    pub(crate) search: Vec<std::path::PathBuf>,
+    /// The directory holding `<Module>.symbols.json`.
+    pub(crate) symbols: std::path::PathBuf,
 }
 
 /// Initializers and class members one framework adds to another's class --
@@ -193,8 +210,12 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     // The frameworks it reads, and those whose declarations it imports --
     // read for who owns what, so a class of theirs its signatures name is
     // imported from its framework rather than declared here as a stub.
-    let mut modules = request.frameworks.clone();
-    modules.extend(request.provided.iter().filter(|framework| !request.frameworks.contains(framework)).cloned());
+    let mut modules: Vec<(std::path::PathBuf, String)> = request.frameworks.iter().map(|framework| (symbols.clone(), framework.clone())).collect();
+    modules.extend(request.provided.iter().filter(|framework| !request.frameworks.contains(framework)).map(|framework| (symbols.clone(), framework.clone())));
+    // A project's module, whose graph is its own.
+    if let Some(project) = &request.project {
+        modules.push((project.symbols.clone(), framework_of(request).to_owned()));
+    }
     let swift = Swift::read(&symbols, &modules)?;
     let owned;
     let request = if request.package {
@@ -356,6 +377,9 @@ fn translation_unit(request: &Request) -> Result<tempfile_path::TempFile> {
     for framework in &request.frameworks {
         let _ = writeln!(text, "#import <{framework}/{framework}.h>");
     }
+    if let Some(project) = &request.project {
+        let _ = writeln!(text, "#import \"{}\"", project.header.display());
+    }
     tempfile_path::TempFile::with(".m", &text)
 }
 
@@ -419,6 +443,7 @@ fn dump(request: &Request, unit: &tempfile_path::TempFile, wanted: &Wanted<'_>) 
     let mut child = Command::new("clang")
         .args(["-target", &request.target, "-isysroot", &request.sdk, "-x", "objective-c", "-fsyntax-only"])
         .args(["-Xclang", "-ast-dump=json"])
+        .args(request.project.iter().flat_map(|project| &project.search).flat_map(|directory| [std::ffi::OsStr::new("-I"), directory.as_os_str()]))
         .arg(unit.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -922,15 +947,16 @@ pub(crate) struct Swift {
 }
 
 impl Swift {
-    /// The graphs of `modules` and of `ObjectiveC`, which declares `NSObject`.
-    pub(crate) fn read(directory: &std::path::Path, modules: &[String]) -> Result<Self> {
+    /// The graphs of `modules`, each in its directory, and of `ObjectiveC`,
+    /// which declares `NSObject`, in the SDK's `directory`.
+    pub(crate) fn read(directory: &std::path::Path, modules: &[(std::path::PathBuf, String)]) -> Result<Self> {
         let mut by_usr = BTreeMap::new();
         let mut owner = BTreeMap::new();
         let mut asynchronous = BTreeMap::new();
         let mut optional = BTreeSet::new();
-        let mut modules: Vec<&str> = modules.iter().map(String::as_str).collect();
-        modules.push("ObjectiveC");
-        for module in modules {
+        let mut modules: Vec<(&std::path::Path, &str)> = modules.iter().map(|(directory, module)| (directory.as_path(), module.as_str())).collect();
+        modules.push((directory, "ObjectiveC"));
+        for (directory, module) in modules {
             for path in graphs(directory, module)? {
                 // A framework's own graph declares its symbols; one of its
                 // extension graphs (`AppKit@Foundation`) also lists the
@@ -3718,8 +3744,21 @@ fn render_values(request: &Request, model: &Model) -> String {
     for name in model.mentioned.keys() {
         own.extend(model.swift.class(name).split('.').next().map(str::to_owned));
     }
-    // A package's classes from other frameworks, which it re-exports.
-    own.extend(model.foreign.values().flatten().cloned());
+    // Classes of other frameworks: a package re-exports them, so they are its
+    // to give; a module generated for a program imports them from their own
+    // modules -- `NSString` beside a project's header is Foundation's -- and
+    // so does its values module.
+    let mut elsewhere: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (framework, names) in &model.foreign {
+        if model.package.is_some() {
+            own.extend(names.iter().cloned());
+        } else {
+            for name in names.iter().filter(|name| words.contains(name.as_str())) {
+                own.remove(name);
+                elsewhere.entry(format!("objc:{framework}")).or_default().insert(name.clone());
+            }
+        }
+    }
     let mut out = format!(
         "// Generated by `nts bind-objc` beside the binding of `{}`. Do not edit: regenerate.\n//\n\
          // Swift's `async` imports: each method taking a completion handler, as a\n\
@@ -3730,6 +3769,9 @@ fn render_values(request: &Request, model: &Model) -> String {
     let used: Vec<&str> = own.iter().map(String::as_str).filter(|name| words.contains(name)).collect();
     if !used.is_empty() {
         let _ = writeln!(out, "import {{ {} }} from \"{}\";", used.join(", "), request.module);
+    }
+    for (module, names) in &elsewhere {
+        let _ = writeln!(out, "import {{ {} }} from \"{module}\";", names.iter().cloned().collect::<Vec<_>>().join(", "));
     }
     out.push_str("import { nts_pending_begin, nts_pending_end } from \"c:pending\";\n");
     for (module, names) in &model.imports {
@@ -4067,6 +4109,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             records: BTreeMap::new(),
             lent: Lent::default(),
             provided: BTreeSet::new(),
+            project: None,
         }
     }
 
@@ -4151,6 +4194,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             records: BTreeMap::new(),
             lent: Lent::default(),
             provided: BTreeSet::new(),
+            project: None,
         };
         let (text, values) = match run(&request) {
             Ok(output) => (output.binding, output.values),

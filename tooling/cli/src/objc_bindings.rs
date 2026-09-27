@@ -196,10 +196,16 @@ impl ObjcBindings {
     /// under a directory keyed by everything that decides them.
     fn generate(&mut self, tsconfig: &Utf8Path, store: &Utf8Path, modules: &BTreeMap<String, BTreeSet<String>>) -> anyhow::Result<Utf8PathBuf> {
         let mut requests = Vec::new();
+        let project_dir = tsconfig.parent().unwrap_or(Utf8Path::new("."));
         for (module, names) in modules {
             let platform = self.platform(module)?;
             let symbols = bind_objc::default_symbols(platform.sdk.as_str())?;
-            let frameworks = frameworks(module, &symbols);
+            // The project's own header, where a `native:` entry names one by
+            // the module's name: `objc:Greeter` is `Greeter.h`. Foundation is
+            // what every Objective-C header reads beside it; its graph is
+            // extracted below, once the directory it goes in is known.
+            let project = self.project_header(project_dir, module)?;
+            let frameworks = if project.is_some() { vec!["Foundation".to_owned()] } else { frameworks(module, &symbols) };
             requests.push(bind_objc::Request {
                 frameworks,
                 module: format!("objc:{module}"),
@@ -214,27 +220,41 @@ impl ObjcBindings {
                 records: self.platform.as_ref().map(|platform| platform.records.clone()).unwrap_or_default(),
                 lent: bind_objc::Lent::default(),
                 provided: self.platform.as_ref().map(|platform| platform.frameworks.clone()).unwrap_or_default(),
+                project,
             });
         }
         let key = key(&requests);
         let directory = store.join(&key);
         let mut files = Vec::new();
-        for request in &requests {
-            let module = request.module.trim_start_matches("objc:");
+        for request in &mut requests {
+            let module = request.module.trim_start_matches("objc:").to_owned();
             let binding = directory.join(format!("{module}.d.ts"));
             let values = directory.join(format!("{module}.values.ts"));
             let adoptions = directory.join(format!("{module}.adoptions.json"));
+            if let Some(project) = &mut request.project {
+                project.symbols = directory.join(format!("{module}.graph")).into_std_path_buf();
+            }
             if !binding.is_file() {
                 std::fs::create_dir_all(&directory)?;
+                if let Some(project) = &request.project {
+                    let extraction = crate::swift_graph::Extraction {
+                        module: &module,
+                        header: &project.header,
+                        search: &project.search,
+                        sdk: std::path::Path::new(&request.sdk),
+                        target: &request.target,
+                    };
+                    crate::swift_graph::toolchain()?.extract(&extraction, &project.symbols)?;
+                }
                 let output = bind_objc::run(request)?;
                 std::fs::write(&values, &output.values)?;
                 std::fs::write(&adoptions, serde_json::to_vec(&output.adoptions)?)?;
                 std::fs::write(&binding, &output.binding)?;
             }
             let index = std::fs::read(&adoptions).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
-            self.adoptions.insert(module.to_owned(), index);
+            self.adoptions.insert(module.clone(), index);
             let text = std::fs::read_to_string(&binding)?;
-            self.stubs.insert(module.to_owned(), stubs(&text));
+            self.stubs.insert(module.clone(), stubs(&text));
             files.push(binding);
             if std::fs::metadata(&values).is_ok_and(|meta| meta.len() > 0) {
                 files.push(values);
@@ -244,6 +264,33 @@ impl ObjcBindings {
         let config = wrapper(tsconfig, &directory, &files)?;
         prune(store, &key);
         Ok(config)
+    }
+
+    /// The header a `native:` entry of the project's config names for
+    /// `module` -- `Greeter.h` for `objc:Greeter` -- with the directory its
+    /// imports are read from. The graph's directory is decided by the key.
+    fn project_header(&self, project: &Utf8Path, module: &str) -> anyhow::Result<Option<bind_objc::Project>> {
+        let Some(config) = nts_build::config::above(&project.join(nts_build::config::FILE_NAME)) else { return Ok(None) };
+        let package = config.parent().unwrap_or(project);
+        let resolved = nts_build::config::resolve(&config)?;
+        let covered = |entry: &&nts_build::config::NativeSources| self.targets.iter().any(|target| entry.covers(&target.id, target.minimum_version.as_deref()));
+        let named: Vec<Utf8PathBuf> = resolved
+            .native
+            .iter()
+            .filter(covered)
+            .filter_map(|entry| entry.header.as_deref())
+            .map(|header| package.join(header))
+            .filter(|header| header.extension() == Some("h") && header.file_stem() == Some(module))
+            .collect();
+        match named.as_slice() {
+            [] => Ok(None),
+            [header] => Ok(Some(bind_objc::Project {
+                header: header.clone().into_std_path_buf(),
+                search: header.parent().map(|directory| directory.to_path_buf().into_std_path_buf()).into_iter().collect(),
+                symbols: std::path::PathBuf::new(),
+            })),
+            several => anyhow::bail!("`objc:{module}` is named by {} headers in {config}: {}", several.len(), several.iter().map(|header| header.as_str()).collect::<Vec<_>>().join(", ")),
+        }
     }
 
     /// The SDK and deployment target a module's binding is for: iOS for
@@ -363,9 +410,31 @@ fn key(requests: &[bind_objc::Request]) -> String {
         let _ = write!(text, "{:?}|{:?}|", request.provided, request.records);
         let settings = std::fs::read(Utf8Path::new(&request.sdk).join("SDKSettings.json")).unwrap_or_default();
         let _ = writeln!(text, "{}|{}", request.sdk, fnv(&settings));
+        // A project's header, and every header beside it that it may import:
+        // an edit to one is a new binding.
+        if let Some(project) = &request.project {
+            let _ = writeln!(text, "{}|{:016x}", project.header.display(), headers_fingerprint(&project.search));
+        }
     }
     let compiler = std::env::current_exe().and_then(std::fs::metadata).map(|meta| format!("{}{:?}", meta.len(), meta.modified().ok())).unwrap_or_default();
     format!("{:016x}", fnv(format!("{text}{compiler}").as_bytes()))
+}
+
+/// The contents of every `.h` in `directories`, in a stable order.
+fn headers_fingerprint(directories: &[std::path::PathBuf]) -> u64 {
+    let mut headers: Vec<std::path::PathBuf> = directories
+        .iter()
+        .filter_map(|directory| std::fs::read_dir(directory).ok())
+        .flat_map(|entries| entries.flatten().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|extension| extension == "h"))
+        .collect();
+    headers.sort();
+    let mut bytes = Vec::new();
+    for header in headers {
+        bytes.extend(header.to_string_lossy().as_bytes());
+        bytes.extend(std::fs::read(&header).unwrap_or_default());
+    }
+    fnv(&bytes)
 }
 
 fn fnv(bytes: &[u8]) -> u64 {

@@ -10,6 +10,7 @@ mod apple_surface;
 mod bind_objc;
 mod objc_bindings;
 mod objc_imports;
+mod swift_graph;
 mod bind_gir;
 mod bind_winmd;
 
@@ -347,6 +348,26 @@ fn bind_gir(rest: &[String]) -> Result<()> {
     bind_gir::run(&bind_gir::Request { root: root.clone(), search, out })
 }
 
+/// A project's header to bind as the module: `--header native/Greeter.h`,
+/// with `--include` for each directory its imports are found in and
+/// `--project-symbols` for the directory its extracted graph is in. All
+/// three, or none.
+fn bind_objc_project(
+    single: &dyn Fn(&str) -> Option<String>,
+    repeated: &dyn Fn(&str) -> Vec<String>,
+) -> Result<Option<bind_objc::Project>> {
+    match (single("--header"), single("--project-symbols")) {
+        (None, None) => Ok(None),
+        (Some(header), Some(symbols)) => {
+            let header = std::path::PathBuf::from(header);
+            let mut search: Vec<std::path::PathBuf> = header.parent().map(std::path::Path::to_path_buf).into_iter().collect();
+            search.extend(repeated("--include").into_iter().map(std::path::PathBuf::from));
+            Ok(Some(bind_objc::Project { header, search, symbols: std::path::PathBuf::from(symbols) }))
+        }
+        _ => anyhow::bail!("`--header` binds a project's header and needs `--project-symbols`, the directory its graph was extracted into, and the other way about"),
+    }
+}
+
 /// `nts bind-objc --module objc:AppKit --framework AppKit --class NSWindow ...
 /// [--protocol NSWindowDelegate ...] [--function CGColorSpaceCreateDeviceRGB ...] [--values appkit.values.ts]`
 ///
@@ -378,6 +399,7 @@ fn bind_objc(rest: &[String]) -> Result<()> {
         records: std::collections::BTreeMap::new(),
         lent: bind_objc::Lent::default(),
         provided: std::collections::BTreeSet::new(),
+        project: bind_objc_project(&single, &repeated)?,
     };
     if request.frameworks.is_empty() || (request.classes.is_empty() && request.names.is_empty() && !request.package) {
         anyhow::bail!("`nts bind-objc` needs at least one `--framework`, and a `--class` or a `--name`");
@@ -3631,8 +3653,19 @@ fn native_sources(
             for item in listing.flatten() {
                 let path = Utf8PathBuf::from_path_buf(item.path())
                     .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
-                if path.extension() == Some("c") {
-                    found.push((directory.clone(), path));
+                match path.extension() {
+                    Some("c") => found.push((directory.clone(), path)),
+                    // Objective-C, which has a runtime only on Apple's
+                    // platforms: refused by name elsewhere rather than left
+                    // out, which would leave its symbols to a link error.
+                    Some("m") if matches!(target.os.as_str(), "macos" | "ios") => found.push((directory.clone(), path)),
+                    Some("m") => bail!(
+                        "{path} is Objective-C, which builds for macOS and iOS, and `{}` is compiled for {}: \
+                         name the targets the directory is for with `targets` in its `sources` entry",
+                        entry.dir,
+                        target.id
+                    ),
+                    _ => {}
                 }
             }
         }
@@ -6244,8 +6277,13 @@ fn compile_native(
 
     for (directory, source) in native {
         let object = out.join(format!("{}.o", source.file_name().unwrap_or("native")));
-        let mut arguments: Vec<String> = ["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections"]
+        // Objective-C under ARC with blocks, as Xcode compiles a `.m`: the
+        // project's classes count their objects as the program's do.
+        let language: &[&str] =
+            if source.extension() == Some("m") { &["-x", "objective-c", "-fobjc-arc", "-fblocks"] } else { &["-std=c11"] };
+        let mut arguments: Vec<String> = language
             .iter()
+            .chain(&["-O2", "-ffunction-sections", "-fdata-sections"])
             .map(|flag| (*flag).to_owned())
             .collect();
         arguments.push("-I".to_owned());

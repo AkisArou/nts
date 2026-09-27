@@ -148,6 +148,38 @@ A button's action is Swift's `#selector(Notes.add(_:))`:
 the compiler answers the selector the runtime registered it under (`add:`).
 A binding's class answers its method's own: `selector(NSWindow, "close")`.
 
+## Your own Objective-C
+
+A project's own `.h` and `.m` are a `native:` entry, and the header is the
+module the program imports:
+
+```ts
+// nts.config.ts
+native: [sources({ dir: "native", header: "native/Greeter.h" })],
+
+// src/main.ts
+import { Greeter, type GreeterDelegate } from "objc:Greeter";
+const greeter = new Greeter({ name: "nts" });
+greeter.greet({ withTimes: 2 });
+```
+
+- **The binding is generated, not committed.** `nts build` reads the header
+  and binds what the program imports, as it binds a framework.
+- **The names are Swift's.** A Swift toolchain on this machine extracts the
+  header's symbol graph against the synced SDK, so `-greetWithTimes:` is
+  `greet({ withTimes })` and a completion handler has its `async` form. It is
+  found through `NTS_SWIFT_TOOLCHAIN`, or unpacked under `~/.cache/nts/swift`:
+  swift.org's Linux release matching the SDK's Swift. `nts build` never
+  contacts the Mac for it.
+- **The module is the header's name.** `objc:Greeter` is `Greeter.h`, which is
+  how a project's module is told from a framework's.
+- **A `.m` compiles under ARC, with blocks**, beside the program, for macOS
+  and iOS only; one in a directory compiled for another target is refused.
+
+`examples/interop/macos-native-objc` is the fixture: a class, a protocol a
+TypeScript class adopts, and a completion handler, against the same program in
+Objective-C.
+
 ## An application
 
 An application delegate is a class like any other, and a menu item's action
@@ -248,6 +280,11 @@ is refused.
 
 - **Out-parameters of objects.** `NSString **` and
   `AutoreleasingUnsafeMutablePointer` are skipped, with their reason.
-- **Swift-only API.** Swift's overlay adds functions with no C or
-  Objective-C symbol, such as `CGContext.move(to:)`. Those are not bound.
-  `NSBezierPath` builds paths.
+- **Swift-only API.** Swift's overlay adds functions written in Swift, such
+  as `CGContext.move(to:)`, which nothing here can call. The C function under
+  one is bound, by the name Swift hides it behind without its `__`:
+  `context.moveTo({ x, y })`.
+- **A string in a block.** A completion handler's `NSString` arrives as the
+  object, not as a `string`, and a program cannot yet read it as one.
+- **A toll-free type in a C function.** `CFStringRef` in a C function is
+  refused, with its reason; in a message it is the `NSString` it is.

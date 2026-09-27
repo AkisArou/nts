@@ -126,6 +126,7 @@ impl Binder for ApplePlatform {
             // The platform's other frameworks: a class one of them owns is
             // imported from it, whichever is generated first.
             provided: self.modules().filter(|other| *other != framework).map(str::to_owned).collect(),
+            project: None,
         };
         let run = |request: &bind_objc::Request| bind_objc::run(request).with_context(|| format!("generating the `{}` package", request.module));
         // Each framework once, in order: the structs it declares are the
