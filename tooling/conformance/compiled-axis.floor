@@ -17,6 +17,7 @@ http 3
 net 4
 os 5
 path 15
+perf_hooks 0
 process 1
 punycode 3
 querystring 1

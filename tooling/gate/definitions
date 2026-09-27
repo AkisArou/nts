@@ -23,6 +23,7 @@ runtime/node/http 2493
 runtime/node/net 2139
 runtime/node/os 396
 runtime/node/path 267
+runtime/node/perf_hooks 1820
 runtime/node/process 2549
 runtime/node/punycode 23
 runtime/node/querystring 394

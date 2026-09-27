@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.module.json",
+  "files": [
+    "src/main.ts"
+  ]
+}

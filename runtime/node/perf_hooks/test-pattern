@@ -1,0 +1,1 @@
+^test-(perf-hooks-.*|perf-gc-crash|performance(-.*|observer.*)?|tojson-perf_hooks)\.m?js$

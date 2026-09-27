@@ -137,7 +137,16 @@ readline stream string_decoder timers tty url util zlib"
 # So this entry is not "cluster does not compile". It is "cluster compiles into
 # something that cannot run", which a floor measuring only `bytes$` would have
 # called a pass -- and did not, because the undefined-symbol check exists.
-BLOCKED="cluster"
+#
+# **`perf_hooks` joined on 2026-09-28, as a new module that does not build yet.**
+# Its C is emitted and fails to compile in `addon.c`: the N-API wrapper for
+# `PerformanceEntry#toJSON` names `NtsObj_PerformanceEntryJSON`, a struct the
+# addon never declares. The addon declares the structs its exported functions
+# cross, and a record that only a class method returns is not among them --
+# add an exported function returning the same interface and it compiles. Fifteen
+# lines reproduce it with that one-thing control (reported to the compiler lane
+# 2026-09-28). The TypeScript half is complete and green on the interpreted lane.
+BLOCKED="cluster perf_hooks"
 
 # **Empty, and it held `fs` and `process` an hour ago.**
 #
