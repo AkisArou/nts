@@ -9744,7 +9744,44 @@ pub fn lower_with(
         ));
     }
 
+    // Last, because it asks what the program contains and every function that
+    // will be emitted is now in it.
+    drop_refusals_the_program_contradicts(&mut lowered);
     lowered
+}
+
+/// Drop any refusal record naming a function the finished program contains.
+///
+/// [`note_uncompiled`] already refuses to claim a name the program emits, because
+/// such an entry is not a missing cause but a **false** one -- and the hole was in
+/// its *timing*, which its own doc names: "a function emitted **after** this call
+/// could still leave a stale entry", argued away for the case it was written for
+/// and left open in general.
+///
+/// `runtime/node/punycode` is the other case. `main.ts:22` re-exports
+/// `export const encode = codec.encode`, a module-scope binding holding a function,
+/// which is refused and recorded under the bare name `encode` -- while
+/// `codec.ts:217`'s `export function encode` is lowered **later** and emitted. So
+/// `nts refusals` reported four of that module's exports as refused while the
+/// program exports all four.
+///
+/// Called last, because the condition is the guard's own and only the moment is
+/// new: here every function that will be emitted is in `funcs`. A later pass may
+/// still drop one, and that stays consistent -- `prepare` pushes the name as it
+/// removes it.
+///
+/// **Not** a place to keep the binding's reason under another key. A global and a
+/// function sharing one namespace is what `13d3faba2` answered one layer down for
+/// the LLVM symbol, and giving a global its own key would change what
+/// `codegen/napi`'s `why_uncompiled` finds when it asks by *export* name. Dropping
+/// a false claim needs no such argument.
+fn drop_refusals_the_program_contradicts(lowered: &mut Lowered) {
+    let emitted: rustc_hash::FxHashSet<&str> =
+        lowered.program.funcs.iter().map(|func| func.name.as_str()).collect();
+    lowered
+        .program
+        .uncompiled
+        .retain(|(name, _)| !emitted.contains(name.as_str()));
 }
 
 /// The index of a `message: string` field, if a type has one.
