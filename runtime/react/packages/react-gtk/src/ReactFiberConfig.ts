@@ -19,7 +19,7 @@ export * from "react-reconciler/ReactFiberConfigWithNoViewTransition.ts";
 import { ReactContext } from "shared/ReactContext.ts";
 import type { GtkWidget } from "c:Gtk-4.0";
 
-import { getCurrentUpdatePriority, type HostNode, NoEventPriority, type Props, type WidgetNode } from "./HostNode.ts";
+import { getCurrentUpdatePriority, type HostNode, NoEventPriority, type Props, textOf, type WidgetNode } from "./HostNode.ts";
 import type { HostRoot } from "./HostRoot.ts";
 import { cancelTimer, startTimer } from "./SchedulerHost.ts";
 
@@ -95,9 +95,10 @@ export function resetAfterCommit(_containerInfo: HostRoot): void {}
 
 // Text children are a widget's label: no text instance is made for them, and
 // a widget with no label refuses them (HostNode.applyProps).
+// Text children, however JSX split them, are one text content: a widget's
+// label (HostNode.ts, `textOf`), never text instances.
 export function shouldSetTextContent(_type: string, props: Props): boolean {
-  const children = props["children"];
-  return typeof children === "string" || typeof children === "number";
+  return textOf(props["children"]) !== null;
 }
 
 export function createInstance(type: string, props: Props, root: HostRoot, _hostContext: HostContext, _handle: object): HostNode {

@@ -201,6 +201,40 @@ export function stringsOf(value: unknown): readonly string[] | null {
   return value as readonly string[];
 }
 
+/**
+ * The text `children` are, when they are only text: a string, a number, or
+ * what JSX makes of text around expressions (`Clicked {count} times` is
+ * `["Clicked ", count, " times"]`), in which `false`, `null` and `undefined`
+ * render as nothing, as in React DOM. Null when a child is anything else (an
+ * element), or when there is no text at all.
+ */
+export function textOf(children: unknown): string | null {
+  if (typeof children === "string") {
+    return children;
+  }
+  if (typeof children === "number") {
+    return String(children);
+  }
+  if (!Array.isArray(children)) {
+    return null;
+  }
+  let text = "";
+  let hasText = false;
+  for (let i = 0; i < children.length; i++) {
+    const child: unknown = children[i];
+    if (typeof child === "string") {
+      text += child;
+      hasText = true;
+    } else if (typeof child === "number") {
+      text += String(child);
+      hasText = true;
+    } else if (child !== null && child !== undefined && typeof child !== "boolean") {
+      return null;
+    }
+  }
+  return hasText ? text : null;
+}
+
 // ---- a list container's children ----------------------------------------------------
 
 /** Takes `item` out of `items`, if it is there. */
@@ -434,8 +468,8 @@ export abstract class WidgetNode extends HostNode {
   private apply(key: string, value: unknown): string | null {
     if (key === "children") {
       // Text children are a widget's label: GTK has no bare text.
-      const text = typeof value === "string" || typeof value === "number" ? String(value) : undefined;
-      if (!this.setProp("label", text) && text !== undefined) {
+      const text = textOf(value);
+      if (!this.setProp("label", text === null ? undefined : text) && text !== null) {
         return `<${this.name()}> cannot hold text: put it in a <Label>.`;
       }
       return null;
@@ -705,8 +739,7 @@ export abstract class PlacedNode extends HostNode {
   private attached = false;
 
   applyProps(previous: Props | null, next: Props): void {
-    const children = next["children"];
-    if (typeof children === "string" || typeof children === "number") {
+    if (textOf(next["children"]) !== null) {
       throw new Error(`<${this.name()}> cannot hold text: put it in a <Label>.`);
     }
     this.props = next;

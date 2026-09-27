@@ -32,6 +32,11 @@
 //             props as itself, and the widget holds that object
 //   reference a widget named by another widget's prop (a Label's mnemonic
 //             widget), passed as a ref's `current` is: the other node's widget
+//   boxed     a boxed record as a prop: a colour reaches a ColorDialogButton
+//             and a new one replaces it; a Popover's rectangle is cleared
+//             when its prop goes
+//   text      text around an expression (an array to JSX) is one text, the
+//             Label's label, updated in place; an element among it is not text
 //   decision  a signal whose handler answers whether it handled it: the
 //             handler's answer reaches GTK, and with the prop removed the
 //             answer is "not handled" without calling the old handler
@@ -133,6 +138,7 @@ import {
   insertBefore,
   removeChild,
   removeChildFromContainer,
+  shouldSetTextContent,
   unhideInstance,
   type HostNode,
   type Props,
@@ -411,6 +417,16 @@ function main(): void {
   const stillPointing = pointing();
   removeChild(pointedFrom, pointed);
   react_gtk_log("boxed " + first + ">" + shade() + " " + String(wasPointing) + ">" + String(stillPointing));
+
+  // Text around an expression is what JSX makes an array of: one text, the
+  // label, where `false` renders as nothing; an element among them is not text.
+  const counted: Props = { children: ["Clicked ", 3, " times"] };
+  const textual = shouldSetTextContent("GtkLabel", counted);
+  const countLabel = createInstance("GtkLabel", counted, container, 0, {});
+  const shownText = (): string => (countLabel instanceof LabelNode ? String(countLabel.gtk.get_label()) : "not a label");
+  const textBefore = shownText();
+  commitUpdate(countLabel, "GtkLabel", counted, { children: ["Clicked ", 4, " times", false] }, {});
+  react_gtk_log("text " + String(textual) + " " + textBefore + ">" + shownText() + " " + String(shouldSetTextContent("GtkBox", { children: ["a", {}] })));
 
   let asked = 0;
   const closeProps: Props = {

@@ -20,7 +20,7 @@
 import { GtkActionBar, GtkFixed, GtkGrid, GtkHeaderBar, GtkNotebook, GtkOverlay, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
-import { HostNode, insertAt, PlacedNode, type Props, type WidgetNode } from "./HostNode.ts";
+import { HostNode, insertAt, PlacedNode, type Props, textOf, type WidgetNode } from "./HostNode.ts";
 
 function numberProp(props: Props, key: string, fallback: number): number {
   const value = props[key];
@@ -354,8 +354,7 @@ export class GroupNode extends HostNode {
   }
 
   applyProps(_previous: Props | null, next: Props): void {
-    const children = next["children"];
-    if (typeof children === "string" || typeof children === "number") {
+    if (textOf(next["children"]) !== null) {
       throw new Error(`<${this.name()}> cannot hold text: put it in a <Label>.`);
     }
   }
