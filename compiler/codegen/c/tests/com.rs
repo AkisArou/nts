@@ -388,7 +388,38 @@ export function run(set: IJsonValue): string {
     windows_syntax(&dir, &emitted);
 }
 
-/// A struct holding a string is only ever `Copied<T>`: as storage the
+/// An array of objects the callee allocated (`ReceiveArray` of interfaces):
+/// its count and block written through two slots, then moved into an array
+/// of the program's made for them, which owns each, and the block freed --
+/// read on the call's own block, before the HRESULT is checked.
+#[test]
+fn a_received_array_of_objects_is_an_array_of_the_program_s() {
+    let method = "    /**\n     * @ntsVtable 38 GetInspectableArray\n     * @ntsHresult out\n     */\n    GetInspectableArray(this: IJsonValue): { value: (IJsonValue | null)[] };";
+    let source = r#"import { Parse } from "winrt:Windows.Data.Json";
+export function run(): number {
+  return Parse("[]").GetInspectableArray().value.length;
+}
+"#;
+    let Some((dir, prepared)) = prepare("received-handles", &binding(method, ""), source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    let call = text.find("[38])(").unwrap_or_else(|| panic!("no call through slot 38:\n{text}")) + "[38])(".len();
+    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(arguments, 3, "not called with its receiver, the count slot and the block slot:\n{text}");
+    let after = &text[call..];
+    let moved = after.find("nts_winrt_received_handles(").unwrap_or_else(|| panic!("the block is not moved into an array:\n{text}"));
+    let checked = after.find("nts_hresult_message(").unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
+    assert!(moved < checked, "the block is read after the branch, not on the call's own block:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
+
 /// program holds, no one would own its HSTRING, so it is no native type at
 /// all and the declaration taking it is refused.
 #[test]

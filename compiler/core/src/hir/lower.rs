@@ -47369,6 +47369,26 @@ impl<'a> FuncBuilder<'a> {
                 let view = HirType::Managed(ManagedType::View(Box::new(super::native::Type::Scalar(scalar).representation())));
                 self.runtime_call("nts_winrt_received", vec![elements, length, kind], view, origin.clone())
             }
+            // The objects moved into an array of the program's made for
+            // them, and the callee's block freed. Zeroed on a failed call,
+            // which reads as empty.
+            super::native::Written::ReceivedHandles => {
+                let Some(count) = count else {
+                    return Err(self.unsupported(id, "a received array with no count slot before it"));
+                };
+                let Some(ty @ HirType::Managed(ManagedType::Array(_))) = typed.cloned().or_else(|| self.type_of(id)) else {
+                    return Err(self.unsupported(id, "a received array of objects read as something other than an array"));
+                };
+                let index = first(self);
+                let block = HirType::NativePointer(super::native::Pointee::Pointer(Box::new(super::native::Pointee::Void)));
+                let block = self.push(OpKind::NativeLoad { pointer: slot, index }, block, origin.clone());
+                let index = first(self);
+                let length = self.push(OpKind::NativeLoad { pointer: count, index }, HirType::Int { bits: 32, signed: false }, origin.clone());
+                let size = self.coerce(length, &HirType::NUMBER, id)?;
+                let array = self.push(OpKind::ArrayNew { length: size, zeroed: true }, ty, origin.clone());
+                self.runtime_call("nts_winrt_received_handles", vec![array, block, length], HirType::Void, origin.clone());
+                array
+            }
             super::native::Written::HString => {
                 let index = first(self);
                 let hstring = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());

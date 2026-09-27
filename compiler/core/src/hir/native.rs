@@ -513,6 +513,12 @@ pub enum Written {
     /// (`NTS_ELEMENT_*`, `builtin::element_kind`), a copy the program owns,
     /// and the block freed (`nts_winrt_received`).
     Received { kind: u32 },
+    /// An array of objects the callee allocated (`ReceiveArray` of
+    /// interfaces): the slot holds its block of interface pointers, each +1,
+    /// and the `Role::ReceivedCount` slot before it their count. Read as an
+    /// array of the program's, made for them and owning each, and the block
+    /// freed (`nts_winrt_received_handles`).
+    ReceivedHandles,
     /// A struct the program reads as a plain object (`Copied<T>`): the slot
     /// is the struct, copied field by field into a new object of the
     /// result's type -- each `HSTRING` into a `string`, and deleted, since
@@ -2810,7 +2816,7 @@ fn hresult_result(
 /// The count slot a received array's comes after: the Windows Runtime's
 /// `ReceiveArray` is `UINT32 *count, T **elements`, in that order.
 fn received_count(written: Written, (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>)) {
-    if matches!(written, Written::Received { .. }) {
+    if matches!(written, Written::Received { .. } | Written::ReceivedHandles) {
         parameters.push(Type::Pointer(Pointee::Scalar(Scalar::UInt32)));
         roles.push(Role::ReceivedCount);
     }
@@ -2823,6 +2829,12 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
     // array it hands back: a pointer to its elements, beside their count.
     if let Some((scalar, kind)) = received_array(snapshot, ty) {
         return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(scalar)))), Written::Received { kind })));
+    }
+    // An array of objects, as its block of interface pointers, which only
+    // the runtime reads: `void **`.
+    if received_handles(snapshot, ty) {
+        let block = Pointee::Pointer(Box::new(Pointee::Void));
+        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(block))), Written::ReceivedHandles)));
     }
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
@@ -2884,6 +2896,15 @@ fn received_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Scalar, u3
         _ => return None,
     };
     Some((scalar, super::builtin::element_kind(&element)?))
+}
+
+/// Whether `ty` is an array of Windows Runtime objects, each perhaps `null`:
+/// what a `ReceiveArray` of interfaces is read into.
+fn received_handles(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    let Some(TypeKind::Array(element)) = snapshot.types.get(ty.0 as usize).map(|record| &record.kind) else {
+        return false;
+    };
+    matches!(schema::pointer(snapshot, *element), Some(Pointee::Opaque(handle)) if handle.family == Family::Com)
 }
 
 /// What a foreign function hands back, read from its declared return type.

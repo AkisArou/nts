@@ -53,6 +53,7 @@ import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winr
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
 import { Button, Frame, Page, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { ContentIsland } from "winrt:Microsoft.UI.Content";
 import { ElementCompositionPreview } from "winrt:Microsoft.UI.Xaml.Hosting";
 import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
 
@@ -210,10 +211,15 @@ class App extends Application {
     properties.insertVector2("v", { x: 1.5, y: -2 });
     const got = properties.tryGetVector2("v");
     const vector = String(got.returnValue) + ":" + String(got.value.x) + "," + String(got.value.y);
+    // An array of objects the call allocated, each moved into an array of
+    // the program's: the window's content island is among the thread's.
+    const islands = ContentIsland.findAllForCurrentThread();
+    const first = islands.length > 0 ? islands[0] : null;
+    const island = first !== null && first.isConnected;
     console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " rebuilt=" + String(this.rebuilt()),
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " islands=" + String(island) + " rebuilt=" + String(this.rebuilt()),
     );
     this.exit();
   }

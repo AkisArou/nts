@@ -2023,6 +2023,11 @@ NtsValue nts_winrt_unbox(void *object);
  * to do; the block is NULL where the count is 0. */
 NTS_ALLOCATES_OR_NULL NtsView *nts_winrt_received(void *elements,
                                                   uint32_t count, double kind);
+/* The same for an array of objects: the callee's block of `count` interface
+ * pointers moved into `into`, an array of the program's made for them, which
+ * now owns each -- they came +1 -- and the block freed. A null element stays
+ * null, as the Windows Runtime allows. */
+void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count);
 /* `value instanceof C` for a Windows Runtime class: whether the value is a
  * COM object that answers the interface `iid` names, C's default. */
 bool nts_winrt_is(NtsValue value, uint64_t iid_low, uint64_t iid_high);

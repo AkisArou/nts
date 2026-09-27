@@ -264,6 +264,9 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         "{module}"
     );
     assert!(refused.contains("AsyncOperationCompletedHandler`1\ta generic delegate"), "{refused}");
+    // An array of objects the callee allocated is an array of the
+    // program's, each element perhaps `null`.
+    assert!(module.contains("GetInspectableArray(this: IPropertyValue): { value: (IInspectable | null)[] };"), "{module}");
     // An interface declares the IID it is asked for by, which an
     // `instanceof` of a class whose default it is reads.
     assert!(

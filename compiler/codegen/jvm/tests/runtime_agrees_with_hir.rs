@@ -288,4 +288,8 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 120 for `nts_com_unlend`, the end of a Windows Runtime iterable's loan to
 /// the iterator a `for...of` walks: Windows again.
-const REFUSED_FLOOR: usize = 120;
+///
+/// 121 for `nts_winrt_received_handles`, an array of objects a Windows
+/// Runtime call hands back, moved into an array of the program's: Windows
+/// again.
+const REFUSED_FLOOR: usize = 121;

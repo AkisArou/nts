@@ -1396,6 +1396,18 @@ NtsView *nts_winrt_received(void *elements, uint32_t count, double kind) {
   return view;
 }
 
+void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count) {
+  if (into->header.length != count) {
+    fprintf(stderr, "nts: %u objects received into an array of %u\n",
+            (unsigned)count, (unsigned)into->header.length);
+    abort();
+  }
+  if (count > 0) {
+    memcpy(NTS_ITEMS(into, void *), block, (size_t)count * sizeof(void *));
+  }
+  CoTaskMemFree(block);
+}
+
 /* The message an `Error` thrown for a failed HRESULT carries: the code, and
  * the system's text for it where it has one. `malloc`'d; the caller frees. */
 char *nts_hresult_message(int32_t hr) {

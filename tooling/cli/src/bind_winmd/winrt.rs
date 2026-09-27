@@ -1321,7 +1321,7 @@ impl Writer<'_> {
                 // `TryParse`'s `result`. An array written through the pointer
                 // is one the callee allocated (`ReceiveArray`).
                 let spelled = match &**written {
-                    Type::Array(element) => received(element)?,
+                    Type::Array(element) => self.received(element)?,
                     _ => self.spell(written, false)?,
                 };
                 outs.push(if matches!(**written, Type::Object | Type::ClassName(_)) {
@@ -1581,7 +1581,7 @@ impl Writer<'_> {
             return Ok("Inspectable".to_owned());
         }
         if let Type::Array(element) = ty {
-            return received(element);
+            return self.received(element);
         }
         self.spell(ty, false)
     }
@@ -1617,6 +1617,27 @@ impl Writer<'_> {
         let iid = self.interface_iid(ty)?;
         self.brands.insert("Delegate");
         Ok(format!("Delegate<({}) => void, \"{iid}\">", parameters.join(", ")))
+    }
+
+    /// An array the callee allocated (`ReceiveArray`), as the program reads
+    /// it: numbers as the typed array that holds them, a copy; objects --
+    /// a class, an interface, any object -- as an array of the program's
+    /// owning each, `null` where the Windows Runtime wrote none.
+    fn received(&mut self, element: &Type) -> Result<String, String> {
+        if let Ok(typed) = typed_array(element) {
+            return Ok(typed);
+        }
+        let object = match element {
+            Type::ClassName(named) if self.index.get(&named.namespace, generic_base(&named.name)).next().is_some_and(|def| def.category() != TypeCategory::Delegate) => {
+                self.spell(element, false)?
+            }
+            Type::Object => {
+                self.brands.insert("IInspectable");
+                "IInspectable".to_owned()
+            }
+            other => return typed_array(other),
+        };
+        Ok(format!("({object} | null)[]"))
     }
 
     /// A struct an `[out]` parameter writes, which is a field of the call's
@@ -1996,7 +2017,7 @@ impl Writer<'_> {
 /// freed. Numbers only; the element kinds a typed array has no class for --
 /// 64-bit integers, which are `bigint`, `boolean`, characters, strings,
 /// objects and structs -- are refused by name.
-fn received(element: &Type) -> Result<String, String> {
+fn typed_array(element: &Type) -> Result<String, String> {
     Ok(match element {
         Type::U8 => "Uint8Array",
         Type::I16 => "Int16Array",
