@@ -2,6 +2,7 @@
 // below it. enableScopeAPI is off in the stable channel; the module is kept
 // with upstream's behaviour for when it is on.
 
+import { propOf } from "./ReactFiberProps.ts";
 import { hostInstanceOf } from "./ReactFiberStateNode.ts";
 import type { ReactContext } from "shared/ReactTypes.ts";
 import { enableScopeAPI } from "shared/ReactFeatureFlags.ts";
@@ -85,7 +86,7 @@ function collectFirstScopedNodeFromChildren(startingChild: Fiber, fn: ReactScope
 
 function collectNearestContextValues<T>(node: Fiber, context: ReactContext<T>, childContextValues: T[]): void {
   if (node.tag === ContextProvider && node.type === context) {
-    childContextValues.push((node.memoizedProps as { value: T }).value);
+    childContextValues.push(propOf(node.memoizedProps, "value") as T);
   } else {
     let child = node.child;
     if (isFiberSuspenseAndTimedOut(node)) {

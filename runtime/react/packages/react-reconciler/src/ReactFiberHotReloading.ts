@@ -4,7 +4,7 @@
 
 import { isDevelopment } from "shared/Build.ts";
 import { REACT_FORWARD_REF_TYPE, REACT_LAZY_TYPE, REACT_MEMO_TYPE } from "shared/ReactSymbols.ts";
-import type { ReactElement } from "shared/ReactTypes.ts";
+import type { ForwardRefComponent, ReactElement } from "shared/ReactTypes.ts";
 import type { Fiber, FiberRoot } from "./ReactInternalTypes.ts";
 import { flushPendingEffects, flushSyncWork, scheduleUpdateOnFiber } from "./ReactFiberWorkLoop.ts";
 import { enqueueConcurrentRenderForLane } from "./ReactFiberConcurrentUpdates.ts";
@@ -200,7 +200,7 @@ function scheduleFibersWithFamiliesRecursively(
         outerCandidateType = elementType;
         break;
       case ForwardRef:
-        candidateType = (type as { render: unknown }).render;
+        candidateType = (type as ForwardRefComponent).render;
         outerCandidateType = elementType;
         break;
       default:

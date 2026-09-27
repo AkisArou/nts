@@ -3,7 +3,7 @@ import { ClassComponentType } from "shared/ReactClassComponentType.ts";
 import { disableLegacyMode, enableLegacyHidden, enableViewTransition } from "shared/ReactFeatureFlags.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import { REACT_STRICT_MODE_TYPE } from "shared/ReactSymbols.ts";
-import type { ReactContextConsumer, ReactContextBase } from "shared/ReactTypes.ts";
+import type { ForwardRefComponent, ReactContextBase, ReactContextConsumer } from "shared/ReactTypes.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import {
   ActivityComponent,
@@ -117,7 +117,7 @@ export function getComponentNameFromFiber(fiber: Fiber): string | null {
     case DehydratedFragment:
       return "DehydratedFragment";
     case ForwardRef:
-      return getWrappedName(type, (type as { render?: unknown }).render, "ForwardRef");
+      return getWrappedName(type, (type as ForwardRefComponent).render, "ForwardRef");
     case Fragment:
       return "Fragment";
     case HostHoistable:

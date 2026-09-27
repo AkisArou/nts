@@ -1,3 +1,4 @@
+import type { ForwardRefComponent } from "shared/ReactTypes.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { enableViewTransition } from "shared/ReactFeatureFlags.ts";
 import {
@@ -36,7 +37,7 @@ interface ReactComponentInfo {
 }
 
 function renderOf(type: unknown): unknown {
-  return (type as { render?: unknown }).render;
+  return (type as ForwardRefComponent).render;
 }
 
 function describeFiber(fiber: Fiber, childFiber: Fiber | null): string {

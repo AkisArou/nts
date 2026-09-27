@@ -1,6 +1,7 @@
 // Development-only formatting of a hydration mismatch as a diff between the
 // client's tree and the server's, for the error message.
 
+import type { ForwardRefComponent } from "shared/ReactTypes.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import { enableSrcObject } from "shared/ReactFeatureFlags.ts";
 import { REACT_ELEMENT_TYPE } from "shared/ReactSymbols.ts";
@@ -89,7 +90,7 @@ function describeFiberType(fiber: Fiber): string | null {
     case SimpleMemoComponent:
       return nameOfFunction(fiber.type);
     case ForwardRef:
-      return nameOfFunction((fiber.type as { render: unknown }).render);
+      return nameOfFunction((fiber.type as ForwardRefComponent).render);
     case ClassComponent:
       return nameOfFunction(fiber.type);
     default:

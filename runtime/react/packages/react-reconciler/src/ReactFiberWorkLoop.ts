@@ -9,7 +9,7 @@ import { hostInstanceOf } from "./ReactFiberStateNode.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { reportGlobalError } from "shared/reportGlobalError.ts";
 import { REACT_STRICT_MODE_TYPE } from "shared/ReactSymbols.ts";
-import type { Thenable, Transition, TransitionTypes, Wakeable } from "shared/ReactTypes.ts";
+import type { ForwardRefComponent, Thenable, Transition, TransitionTypes, Wakeable } from "shared/ReactTypes.ts";
 import {
   alwaysThrottleRetries,
   disableLegacyContext,
@@ -2686,7 +2686,7 @@ function replayBeginWork(suspendedUnitOfWork: Fiber): Fiber | null {
       // TODO: Consider moving this switch statement into that module. Also,
       // could maybe use this as an opportunity to say `use` doesn't work with
       // `defaultProps` :)
-      const Component = (unitOfWork.type as { render: unknown }).render;
+      const Component = (unitOfWork.type as ForwardRefComponent).render;
       next = replayFunctionComponent(
         current,
         unitOfWork,

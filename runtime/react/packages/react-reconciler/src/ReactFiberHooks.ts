@@ -935,11 +935,17 @@ export function resetHooksOnUnwind(workInProgress: Fiber): void {
     // Only reset the updates from the queue if it has a clone. If it does
     // not have a clone, that means it wasn't processed, and the updates were
     // scheduled before we entered the render phase.
+    // Upstream clears `pending` on whatever queue a hook has. The queues
+    // that have one are a state or reducer hook's and an action queue; a
+    // store's instance has none (upstream's write only adds a property
+    // nothing reads).
     let hook = workInProgress.memoizedState as Hook | null;
     while (hook !== null) {
-      const queue = hook.queue as { pending: unknown } | null;
-      if (queue !== null) {
+      const queue = hook.queue;
+      if (queue instanceof UpdateQueue) {
         queue.pending = null;
+      } else if (hook.kind === ActionQueueHook) {
+        (queue as ActionStateQueue<unknown, unknown>).pending = null;
       }
       hook = hook.next;
     }
