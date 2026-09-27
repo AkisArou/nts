@@ -237,7 +237,7 @@ identical across runs, verified), and the `.d.ts` and its binding table are
 **one atomic artefact**, because the table is keyed by byte offsets into the text
 that same run produced.
 
-### 3a. Proposed (2026-09-26): one mechanism for every platform
+### 3a. One mechanism for every platform (proposed 2026-09-26; built for Apple 2026-09-27)
 
 Agreed with the user on 2026-09-26, and written from measurements taken that day
 on the Apple lane. Every lane has the same three layers of type surface, and
@@ -247,7 +247,7 @@ today five generators with five ad hoc wirings:
 | --- | --- | --- | --- | --- |
 | Apple | `bind-objc` | AppKit, UIKit, Foundation, ... per SDK | SwiftPM `Package.resolved`, CocoaPods `Podfile.lock` | Objective-C headers, Swift |
 | Windows | `bind-winmd` | Win32 metadata; WinRT (Windows SDK); the Windows App SDK (WinUI 3), each versioned on its own | NuGet packages that ship `.winmd` (WebView2, Win2D) | a component's built `.winmd` |
-| GTK / Linux | `bind-gir` | GTK 4, GLib, Gio, ... from GIR | pkg-config, system GIR | C headers, GObject libraries |
+| GTK / Linux | `bind-gir` | GTK 4, GLib, Gio, ... from GIR and the installed headers; cairo from `bind-c` | pkg-config, system GIR | a library's own GIR (g-ir-scanner); C headers through `bind-c` |
 | Android / JVM | `bind` | `android-XX`, `java-XX` | Gradle / Maven (`dependencies.tsv`) | Java / Kotlin |
 | C | `bind-c` | libc | pkg-config, vcpkg | C headers |
 
@@ -291,21 +291,35 @@ nothing a surface package ships is lowered, so the npm rule holds.
 
 **Generated code does not live in a surface package.** A binding's values
 module (Swift's `async` forms, `@ntsCall`) is TypeScript that must be lowered,
-so it is generated beside the project's other generated files in `.nts/types`
-and added to the program through the same hook.
+so the store keeps it beside the packages (`values/`), and the build adds it
+to the program through the same hook that adds the packages.
+
+**A package is checked where it is made.** Each `index.d.ts` begins with
+`// @ts-nocheck`: neither a build nor an editor checks a framework again for
+every program that names it. The pragma silences diagnostics only; the
+declarations bind and merge as before. What a binder generates must
+typecheck, and a test of the binder's says so (Apple's is
+`the_platform_packages_typecheck`).
 
 **One `Binder` interface.** Each lane's generator implements it, and the build,
 `--watch` and the language server know only the interface:
 
-    identity()        binder name and version, for the cache key
-    inputs(config)    what decides the output: an SDK, metadata, a lockfile,
-                      a native directory -- the files a watcher watches
-    modules(inputs)   the modules it produces, by specifier
-    generate(inputs)  the packages, deterministic, into the cache
+    identity()   what it generates, as one line -- the platform, the SDK,
+                 the deployment target -- which names the store's directory
+    version()    the generator's own version (Apple's: a hash of its source),
+                 which keys the store, so an older generator's packages are
+                 replaced rather than kept beside the new
+    inputs()     the files that decide the output -- an SDK's settings, the
+                 symbol graphs, a lockfile -- which key the store and which a
+                 watcher watches
+    generate()   the packages, each with its surface and its values file
+
+`nts-surfaces` holds the rest, once: the `Store`, which generates only when
+the key changes and writes a set whole or not at all, and `link`.
 
 **Where packages come from: two modes, one layout.** Published to npm where the
 inputs may be redistributed; generated locally, once per SDK, into
-`~/.cache/nts/types/<platform>/<sdk build>` and linked into the project, where
+`~/.cache/nts/types/<identity>/<key>` and linked into the project, where
 they may not. Which is which is read from each input's licence, not assumed:
 GIR and Win32 metadata are likely publishable; Apple's SDKs, the Windows SDK's
 WinRT metadata and the Windows App SDK are local until their terms are read. So
@@ -325,18 +339,53 @@ cannot tell which it got.
 - **A layer-1 surface can have several inputs** versioned independently: a
   Windows platform package is keyed by the Windows SDK and the App SDK.
 
+**What the GTK lane's review added** (2026-09-26):
+- **Its output depends on the machine, not only the version.** `bind-gir`
+  checks every declaration against the installed headers, and bakes in ABI
+  facts: a class-struct offset (`@ntsVfunc GtkButtonClass clicked 408`), a
+  boxed record's size. So a GTK surface is a function of the GIR files, the
+  headers and the target triple. It is generated locally, and published only
+  keyed by the library's version (`pkg-config --modversion gtk4`).
+- **`inputs()` exists today** as `types/gir/.nts-stamp`, the path, time and
+  size of every `.gir` read. The header set and the pkg-config version join it.
+- **GIR has values modules too**: enum and flags constants, checked casts
+  (`asGtkLabel`), and the `Promise` forms of `_async`/`_finish` pairs, one per
+  namespace. They go in `.nts/types`, as Swift's `async` forms do.
+- **One module per namespace** (`c:Gtk-4.0`, `c:Gio-2.0`), with `import type`
+  across them, and no cross-package merging.
+- **A gap in layer 1: cairo has no usable GIR**, so `cairo.Context` is refused in
+  18 GTK APIs (`gtk_drawing_area_set_draw_func` among them). The platform
+  package needs a cairo module from `bind-c`, which does not yet take opaque
+  struct pointers. GTK 4's snapshot drawing does not need cairo.
+
 **Declaration merging across files.** A Swift extension -- UIKit's
 `NSIndexPath.row` on a Foundation class -- is a second `declare module
 "objc:Foundation" { interface NSIndexPath { ... } }` block in UIKit's package,
 which tsgo merges. Measured: the frontend keeps only the declarations of the
 first file it decodes (`symbols::intern_declared`, `Deferred::attach`), so the
 class declaration was dropped and `NSString` refused as unrepresentable. The
-frontend must record every file's declarations of a merged symbol before
-cross-package extensions work; raised with MainClaude.
+frontend now records every file's declarations of a merged symbol
+(e8647c5a5), and lowering takes a method an interface merges into an
+`@ntsClass` class as the class's.
+
+**Reaching a framework costs what the program uses of it.** Reachability and
+decomposition stop at a declaration file: a class there reaches the members
+the program names, not all of them, and a foreign class's members are
+recorded without following their types. Before that, naming AppKit
+decomposed 40,665 types for a program using a few dozen
+(`docs/records/0345`).
 
 **Order.** The Apple lane builds the reference -- the frontend's surface marker,
-`bind-objc` as the first `Binder`, `@nts/platform-macos-26` generated locally,
-`macos-window` moved onto it and measured. Then each lane ports its generator.
+`bind-objc` as the first `Binder`, `@nts/platform-macos` generated locally.
+Built: `macos-notes` and `macos-draw` build on the macOS packages, and
+`macos-window` keeps its committed class list as the generator's oracle. The
+iOS packages generate and typecheck but are not installed yet: Swift lets
+UIKit add an initializer to Foundation's class (`NSIndexPath(row:section:)`),
+TypeScript cannot add a construct signature or a static to a class another
+file declares (TS2433), and a UIKit program needs them. The owner's package
+has to declare what its platform's other frameworks add, with the framework
+each needs; until then the iOS fixtures use the binding derived from their
+imports. Then each lane ports its generator.
 Then `--watch` and a language-server proxy over tsgo's own (`cmd/tsgo/lsp.go`),
 which publishes nts's refusals as editor diagnostics beside the checker's.
 
