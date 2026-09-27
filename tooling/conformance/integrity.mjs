@@ -58,8 +58,12 @@
 //                      of them across the runtime, `Process#constructor` among
 //                      them. A firing now is a third way to lose one.
 //   location-on-a-token
-//                      every diagnostic's location is on a token of its line,
-//                      not whitespace and not past the end. nts located at a
+//                      every diagnostic's location is the first byte of a
+//                      token: not whitespace, not past the end of its line,
+//                      not inside a character or an identifier. Columns are
+//                      UTF-8 bytes; a UTF-16 offset read as bytes lands inside
+//                      tokens after any non-ASCII text, which only this
+//                      stricter form sees. nts located at a
 //                      node's full start, its leading trivia: one column early
 //                      after a space, the line *before* after a newline -- on
 //                      a clean 1075648be about 2,200 of them, `map`'s at a
@@ -165,6 +169,24 @@ export function readLayouts(text) {
     if (table && table[1].includes("#")) current.methods.push(...table[1].split(/ (?=\S+#)/));
   }
   return { byName, byId };
+}
+
+const identifierByte = (b) => (b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a) || b === 0x5f || b === 0x24 || b >= 0x80;
+
+/**
+ * Whether byte `at` of a line starts a token: null if it does, else where it
+ * is instead. Not whitespace, not past the end, not inside a multi-byte
+ * character, and not inside an identifier -- the old `60:9` landed on the `ta`
+ * of `total`, a character of a token and not its start. Punctuation is a
+ * token of its own, so `(` after `f` starts one.
+ */
+function tokenStart(bytes, at) {
+  const b = bytes[at];
+  if (b === undefined) return "past the end of its line";
+  if (b === 0x20 || b === 0x09 || b === 0x0d) return "on whitespace";
+  if (b >= 0x80 && b <= 0xbf) return "inside a character";
+  if (at > 0 && identifierByte(b) && identifierByte(bytes[at - 1])) return "inside a token";
+  return null;
 }
 
 /**
@@ -334,9 +356,8 @@ export function judge({ prepared, plain, layouts, refusals }, sourceLine = readS
     if (line === undefined) continue;
     // The column counts UTF-8 bytes from the line's start, one-based
     // (`where_it_is`), so the line is read as bytes, not as UTF-16 units.
-    const byte = Buffer.from(line, "utf8")[d.col - 1];
-    if (byte !== undefined && byte !== 0x20 && byte !== 0x09 && byte !== 0x0d) continue;
-    const where = byte === undefined ? "past the end of its line" : "on whitespace";
+    const where = tokenStart(Buffer.from(line, "utf8"), d.col - 1);
+    if (where === null) continue;
     say("location-on-a-token", `${d.code} at ${d.file}:${d.line}:${d.col} is ${where}: ${d.text.slice(0, 80)}`, d.code);
   }
 
@@ -408,6 +429,12 @@ function selfTest() {
   if (!/on whitespace/.test(located("5:12")[0]?.detail ?? "")) return "a location on the space before a construct was not caught";
   // Columns are bytes: `é` is two, so `f` is byte 14 where UTF-16 would say 13.
   if (located("6:14").length !== 0 || located("6:13").length !== 1) return "a byte column after a multi-byte character was misread";
+  // Inside a token: `getPrototypeOf` at its `P`, a mid-identifier landing.
+  if (!/inside a token/.test(located("5:23")[0]?.detail ?? "")) return "a location inside an identifier was not caught";
+  // Punctuation starts its own token: the `(` after `getPrototypeOf`.
+  if (located("5:34").length !== 0 || located("5:20").length !== 0) return "a location on punctuation after an identifier was flagged";
+  // Inside a character: the second byte of `é`.
+  if (!/inside a character/.test(located("6:10")[0]?.detail ?? "")) return "a location inside a multi-byte character was not caught";
   // A field named `methods` is not a table.
   if (readLayouts("C [1]\n  methods : Erased\n").byName.get("C").methods.length !== 0) return "a field named `methods` read as a table";
   // A listing that lost a function is not a clean program.
