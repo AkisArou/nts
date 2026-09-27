@@ -417,6 +417,14 @@ Application.Start(() => { new App(); });
    - The ABI names stay on each interface (`as_IContentControl().put_Content`).
    - **`new Window()`:** a binding's composable class is made by its
      factory's `CreateInstance`, with no outer object.
+   - **`new TextBlock()`, `new Uri(base, relative)`:** a sealed class is a
+     TypeScript class of its constructors too (`@ntsRuntimeClass`), merged
+     with the interface its instances are, as the JavaScript projection
+     declared one: its default activation, and each method of an activation
+     factory as an overload the checker chooses between. One nothing
+     constructs has a private constructor, so `instanceof` still names it,
+     and a class written over a sealed one is refused by name. `create()` is
+     gone: there is one way to make an object.
    - **A subclass where its base is taken:** `window.content = button`. A
      default interface is `ComClass<Tag, BaseDefault> & … Methods`, and the
      conversion asks for the base's interface (`nts_com_query`), since a COM

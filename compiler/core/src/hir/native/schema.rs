@@ -378,11 +378,14 @@ pub(crate) fn superclass(snapshot: &SemanticSnapshot, declaration: NodeId) -> Op
 }
 
 /// The `@ntsClass` a class declaration carries.
-/// A composable Windows Runtime class a binding declares (`@ntsComposable`):
-/// the framework's, every member a vtable call or an override a subclass
-/// writes, none a function of this program.
+/// A Windows Runtime class a binding declares -- composable
+/// (`@ntsComposable`) or sealed (`@ntsRuntimeClass`): the framework's, every
+/// member a vtable call or an override a subclass writes, none a function of
+/// this program. Only a composable one may have a class written over it
+/// ([`composable_base`]).
 pub(crate) fn is_com_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
     composable_tag(snapshot, declaration).is_some()
+        || snapshot.nodes.get(declaration.0 as usize).and_then(|node| node.native.as_ref()).is_some_and(|native| native.runtime_class.is_some())
 }
 
 /// Whether a class the program writes extends a composable Windows Runtime

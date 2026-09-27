@@ -928,6 +928,70 @@ impl Writer<'_> {
     /// `ButtonBase`'s `IButtonBase`, its `UIElement`'s `IUIElement`. Not the
     /// protected and overridable ones, which are a subclass's contract with
     /// its base rather than what the object answers to anyone.
+    /// A class's constructors, as the JavaScript projection's were: `new
+    /// PropertySet()`, activated and answered as the default interface, and
+    /// `new Uri(text)`, each method of an activation factory, overloads the
+    /// checker chooses between.
+    fn constructors(&mut self, def: TypeDef, class_name: &str, default: Option<&Type>) -> String {
+        let name = def.name();
+        let mut constructors = String::new();
+        for attribute in def.attributes().filter(|attribute| attribute.ctor().parent().name() == "ActivatableAttribute") {
+            let values: Vec<Value> = attribute.value().into_iter().map(|(_, value)| value).collect();
+            let Some(Value::TypeName(interface)) = values.first() else {
+                // The default constructor, activated.
+                if let Some(interface @ Type::ClassName(_)) = default
+                    && let Ok(default_iid) = self.interface_iid(interface)
+                {
+                    let _ = writeln!(constructors, "    /**\n     * @ntsActivate {class_name} {default_iid}\n     */");
+                    let _ = writeln!(constructors, "    constructor();");
+                    self.methods += 1;
+                }
+                continue;
+            };
+            let Some(factory) = self.index.get(&interface.namespace, &interface.name).next() else {
+                self.refuse(&format!("{name} constructors"), &format!("`{}` is not in the metadata read", interface.name));
+                continue;
+            };
+            let Some(iid) = iid(factory) else { continue };
+            for (index, method) in factory.methods().enumerate() {
+                match self.method(method, 6 + index, Receiver::Constructor { class: class_name, iid: &iid }) {
+                    Ok(text) => {
+                        constructors.push_str(&text);
+                        self.methods += 1;
+                    }
+                    Err(why) => self.refuse(&format!("{name} constructor {}", method_name(method)), &why),
+                }
+            }
+        }
+        constructors
+    }
+
+    /// The interfaces an interface declares a query for (`as_IClosable`),
+    /// by name: those it requires, and of a generic one only those that are
+    /// not generic themselves, whose IID does not depend on its arguments --
+    /// the rule `interface` writes them by.
+    fn required_query_names(&self, interface: &Type) -> BTreeSet<String> {
+        let Type::ClassName(named) = interface else { return BTreeSet::new() };
+        let Some(def) = self.index.get(&named.namespace, generic_base(&named.name)).next() else {
+            return BTreeSet::new();
+        };
+        let generic = !named.generics.is_empty();
+        // Read with the interface's own parameters in place, as `interface`
+        // reads them: only the names matter here, not what they are bound to.
+        let own: Vec<Type> = def
+            .generic_params()
+            .enumerate()
+            .map(|(at, param)| Type::Generic(param.name().to_owned(), u16::try_from(at).unwrap_or(u16::MAX)))
+            .collect();
+        def.interface_impls()
+            .map(|implemented| implemented.interface(&own))
+            .filter_map(|required| match required {
+                Type::ClassName(required) if !generic || required.generics.is_empty() => Some(generic_base(&required.name).to_owned()),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn answered_interfaces(&self, def: TypeDef) -> Vec<Type> {
         let public = |implemented: &windows_metadata::reader::InterfaceImpl| {
             !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute")
@@ -978,25 +1042,10 @@ impl Writer<'_> {
         };
         let class_name = format!("{}.{name}", self.namespace);
         let mut statics = String::new();
-        // A default constructor, `PropertySet.create()`: activated, then
-        // answered as the default interface.
-        let constructible = def.attributes().any(|attribute| {
-            attribute.ctor().parent().name() == "ActivatableAttribute"
-                && !matches!(attribute.value().into_iter().next(), Some((_, Value::TypeName(_))))
-        });
-        if constructible
-            && let Some(Type::ClassName(interface)) = default.map(|implemented| implemented.interface(&[]))
-            && let Ok(default_iid) = self.interface_iid(&Type::ClassName(interface))
-        {
-            let _ = writeln!(statics, "    /**\n     * @ntsActivate {class_name} {default_iid}\n     */");
-            let _ = writeln!(statics, "    function create(): {name};");
-            self.methods += 1;
-        }
-        // Statics, and constructors that take arguments: both are methods of
-        // an interface the class's factory answers as.
-        for attribute in def.attributes().filter(|attribute| {
-            matches!(attribute.ctor().parent().name(), "StaticAttribute" | "ActivatableAttribute" | "ComposableAttribute")
-        }) {
+        let mut constructors = self.constructors(def, &class_name, default_interface.as_ref());
+        // Statics, and a composable class's factory: methods of an interface
+        // the class's factory answers as.
+        for attribute in def.attributes().filter(|attribute| matches!(attribute.ctor().parent().name(), "StaticAttribute" | "ComposableAttribute")) {
             let values: Vec<Value> = attribute.value().into_iter().map(|(_, value)| value).collect();
             let Some(Value::TypeName(interface)) = values.first() else { continue };
             // A composable class's factory: `CreateInstance(..., outer, out
@@ -1040,7 +1089,12 @@ impl Writer<'_> {
                 self.static_member(name, method, slot, receiver, &mut statics);
             }
         }
-        let others = self.answered_interfaces(def);
+        // What the default interface already asks for its own required
+        // interfaces is the class's already: declared again on the class, the
+        // two `as_X` would disagree about `this`.
+        let inherited = default_interface.as_ref().map(|interface| self.required_query_names(interface)).unwrap_or_default();
+        let mut others = self.answered_interfaces(def);
+        others.retain(|interface| !matches!(interface, Type::ClassName(named) if inherited.contains(generic_base(&named.name))));
         let queries = self.queries(name, name, &others);
 
         if !queries.is_empty() {
@@ -1059,8 +1113,20 @@ impl Writer<'_> {
             let interfaces = if queries.is_empty() { String::new() } else { format!(", {name}Interfaces") };
             let _ = writeln!(body, "  export interface {name} extends {spelled}{interfaces}, {name}Members {{}}");
         } else if !spelled.is_empty() {
-            let interfaces = if queries.is_empty() { String::new() } else { format!(" & {name}Interfaces") };
-            let _ = writeln!(body, "  export type {name} = {spelled}{interfaces} & {name}Members;");
+            // A sealed class: a TypeScript class of its constructors, so
+            // `new` and `instanceof` name a value, merged with the interface
+            // its instances are. One nothing constructs has a private
+            // constructor, which also keeps a class from being written over
+            // it.
+            if constructors.is_empty() {
+                constructors.push_str("    private constructor();\n");
+            }
+            let _ = writeln!(body, "  /**\n   * @ntsRuntimeClass {class_name}\n   */");
+            let _ = writeln!(body, "  export class {name} {{");
+            body.push_str(&constructors);
+            let _ = writeln!(body, "  }}");
+            let interfaces = if queries.is_empty() { String::new() } else { format!(", {name}Interfaces") };
+            let _ = writeln!(body, "  export interface {name} extends {spelled}{interfaces}, {name}Members {{}}");
         }
         if !statics.is_empty() {
             let _ = writeln!(body, "  export namespace {name} {{");
@@ -1346,6 +1412,13 @@ impl Writer<'_> {
             let _ = writeln!(text, "     * @ntsVia {iid}");
         }
         let _ = writeln!(text, "     */");
+        if matches!(receiver, Receiver::Constructor { .. }) {
+            if !outs.is_empty() {
+                return Err("a constructor with `out` parameters".to_owned());
+            }
+            let _ = writeln!(text, "    constructor({});", parameters.join(", "));
+            return Ok(text);
+        }
         let keyword = if matches!(receiver, Receiver::Instance(_) | Receiver::Member) { "" } else { "function " };
         let name = display.map_or_else(|| method_name(method), str::to_owned);
         let _ = writeln!(text, "    {keyword}{name}({}): {result};", parameters.join(", "));
@@ -2245,6 +2318,10 @@ enum Receiver<'a> {
     /// names.
     Member,
     Factory { class: &'a str, iid: &'a str },
+    /// A method of a class's activation factory, which is one of its
+    /// constructors: `new Uri(text)` is `IUriRuntimeClassFactory.CreateUri`,
+    /// called on the class's factory, answering the instance.
+    Constructor { class: &'a str, iid: &'a str },
     /// A method of an interface a composable class lets a subclass override
     /// (`IApplicationOverrides.OnLaunched`), declared on the class for a
     /// subclass to write: no `this` parameter, and the interface and slot the
@@ -2295,7 +2372,7 @@ fn receiver_tags(text: &mut String, receiver: Receiver<'_>, outs: bool) {
             let _ = writeln!(text, "     * @ntsHresult composable");
             let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
         }
-        Receiver::Factory { class, iid } => {
+        Receiver::Factory { class, iid } | Receiver::Constructor { class, iid } => {
             let _ = writeln!(text, "     * @ntsHresult{}", if outs { " out" } else { "" });
             let _ = writeln!(text, "     * @ntsFactory {class} {iid}");
         }

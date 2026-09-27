@@ -126,7 +126,7 @@ class App extends Application {
   onLaunched(args: ILaunchActivatedEventArgs | null): void {
     super.onLaunched(args);
     this.launched += 1;
-    this.resources.mergedDictionaries.Append(XamlControlsResources.create().as_IResourceDictionary());
+    this.resources.mergedDictionaries.Append(new XamlControlsResources().as_IResourceDictionary());
     const window = new Window();
     window.title = "nts";
     const button = new PressButton("Press");
@@ -221,7 +221,7 @@ class App extends Application {
     // an array the program holds of `Button`s is asked, element by element,
     // for `IUIElement` -- another pointer of each object's.
     const panel = new StackPanel();
-    const caption = TextBlock.create();
+    const caption = new TextBlock();
     caption.text = "caption";
     panel.children.ReplaceAll([new Button(), caption]);
     const lentAsItIs = panel.children.size;

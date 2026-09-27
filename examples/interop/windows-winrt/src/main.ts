@@ -25,7 +25,7 @@
 //   process naming it rather than printing anything. Then `for...of` over
 //   another's, summing its numbers.
 // - `built`: a runtime class made by its default constructor
-//   (`JsonObject.create()`, `ActivateInstance` then its default interface),
+//   (`new JsonObject()`, `ActivateInstance` then its default interface),
 //   filled, and read back through another of its interfaces.
 // - `threw`: an HRESULT failure, thrown as an `Error` naming the code.
 // - `closed`: an event, a TypeScript function as a delegate (see `events`).
@@ -85,7 +85,7 @@ import {
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import { local } from "c:memory";
 import type { c_int64, c_uint, c_uint32 } from "c:types";
-import { GuidHelper, MemoryBuffer, PropertyValue } from "winrt:Windows.Foundation";
+import { GuidHelper, MemoryBuffer, PropertyValue, Uri } from "winrt:Windows.Foundation";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
 import { ThreadPool } from "winrt:Windows.System.Threading";
 import { StorageFolder } from "winrt:Windows.Storage";
@@ -104,7 +104,7 @@ import type { BitmapBounds } from "winrt:Windows.Graphics.Imaging";
 // (the year it reports, whatever the machine's time zone, is 2021) and read
 // back a day later as ticks, and bounds put on a transform and read back.
 function structs(): string {
-  const calendar = Calendar.create();
+  const calendar = new Calendar();
   const moment = local<DateTime>();
   moment[0].universalTime = 132695712000000000n as c_int64;
   calendar.SetDateTime(moment);
@@ -112,7 +112,7 @@ function structs(): string {
   calendar.AddDays(1);
   const later = calendar.GetDateTime();
   const days = (later[0].universalTime - moment[0].universalTime) / 864000000000n;
-  const transform = BitmapTransform.create();
+  const transform = new BitmapTransform();
   const bounds = local<BitmapBounds>();
   bounds[0].x = 1 as c_uint32;
   bounds[0].y = 2 as c_uint32;
@@ -188,7 +188,7 @@ function elements(): string {
 // answers whether it replaced -- and one that is not there. Through the
 // instantiation's own surface (`IMapMembers<K, V>`): `size`, `lookup`.
 function map(): string {
-  const map = StringMap.create();
+  const map = new StringMap();
   map.insert("a", "1");
   map.insert("b", "2");
   const replaced = map.insert("a", "3");
@@ -236,7 +236,7 @@ function guids(): string {
 function events(): string {
   let seen = 0;
   let sender = "none";
-  const buffer = MemoryBuffer.Create(16);
+  const buffer = new MemoryBuffer(16);
   const reference = buffer.CreateReference();
   const kept = reference.add_Closed((from) => {
     seen += 1;
@@ -264,7 +264,7 @@ function events(): string {
 // naming the boundary and the message, and the source never gets an answer:
 // never S_OK for a handler that failed. `after` never prints.
 function throwing(): void {
-  const reference = MemoryBuffer.Create(4).CreateReference();
+  const reference = new MemoryBuffer(4).CreateReference();
   reference.add_Closed(() => {
     throw new Error("the handler failed");
   });
@@ -306,9 +306,13 @@ function run(): string {
   keys.sort();
   const items = String(vector.size) + ":" + String(vector.getAt(1).GetNumber()) + ":" + String(total) +
     ",pairs=" + keys.join("") + ":" + String(sum);
-  const built = JsonObject.create();
+  // A sealed class constructed as the JavaScript projection wrote one: by
+  // its default activation (`new JsonObject()`), and by the activation
+  // factory's method the arguments choose (`new Uri(base, relative)` is
+  // `CreateWithRelativeUri`).
+  const built = new JsonObject();
   built.SetNamedValue("x", JsonValue.CreateNumberValue(3));
-  const shown = built.as_IJsonValue().Stringify();
+  const shown = built.as_IJsonValue().Stringify() + "," + new Uri("https://example.com/docs/", "page").absoluteUri;
   let threw = "nothing";
   try {
     JsonValue.Parse("{not json");

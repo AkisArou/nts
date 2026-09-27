@@ -50859,8 +50859,22 @@ impl<'a> FuncBuilder<'a> {
     /// parameterless one.
     fn lower_com_new(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
         let Some(class) = self.constructed_class(id) else { return Ok(None) };
+        // A runtime class a binding declares, made by the constructor the
+        // checker chose: composable or sealed, a factory's method or the
+        // default activation. Only the class's own constructor: one a class
+        // of the program's inherits from its base would make the base, not
+        // the class written over it.
+        let own = self
+            .snapshot
+            .call_targets
+            .get(&id)
+            .and_then(|target| target.callee)
+            .is_some_and(|constructor| self.enclosing_class(constructor) == Some(class));
+        if own && let Some(object) = self.lower_com_construct(id)? {
+            return Ok(Some(object));
+        }
         if super::native::is_com_class(self.snapshot, class) {
-            return self.lower_com_construct(id);
+            return Ok(None);
         }
         if !super::native::extends_com(self.snapshot, class) {
             return Ok(None);
@@ -50893,6 +50907,12 @@ impl<'a> FuncBuilder<'a> {
     fn lower_com_construct(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
         let Some(target) = self.snapshot.call_targets.get(&id).copied() else { return Ok(None) };
         let Some(declaration) = target.callee else { return Ok(None) };
+        // `new PropertySet()`: the default constructor, activated.
+        if let Some(activate) = self.node(declaration).native.as_ref().and_then(|n| n.activate.clone()) {
+            let result = self.snapshot.signatures[target.signature.0 as usize].return_type;
+            let arguments = self.arguments_of(id);
+            return self.lower_activation(id, &activate, result, &arguments).map(Some);
+        }
         let Some(method) = self.node(declaration).native.as_ref().and_then(|n| n.vtable.as_deref()).and_then(|v| v.split_whitespace().nth(1)).map(str::to_owned) else {
             return Ok(None);
         };

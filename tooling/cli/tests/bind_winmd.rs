@@ -171,9 +171,14 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         module.contains("@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C"),
         "JsonValue's statics are not on its factory as IJsonValueStatics:\n{module}"
     );
-    // A class is its default interface, its others by `as_` queries, and its
-    // idiomatic surface.
-    assert!(module.contains("export type JsonValue = IJsonValue & JsonValueInterfaces & JsonValueMembers;"), "{module}");
+    // A class is a TypeScript class of its constructors -- none, for one
+    // nothing activates -- merged with its default interface, its others by
+    // `as_` queries, and its idiomatic surface.
+    assert!(
+        module.contains("   * @ntsRuntimeClass Windows.Data.Json.JsonValue\n   */\n  export class JsonValue {\n    private constructor();\n  }"),
+        "{module}"
+    );
+    assert!(module.contains("export interface JsonValue extends IJsonValue, JsonValueInterfaces, JsonValueMembers {}"), "{module}");
     assert!(module.contains("export namespace JsonValue {"), "{module}");
     // Every Windows Runtime interface is an `IInspectable`, the root of its
     // chain, so any object goes where any object is taken.
@@ -185,7 +190,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         module.contains("@ntsQuery D44662BC-DCE3-59A8-9272-4B210F33908B\n     */\n    as_IVector(this: JsonArray): IVectorOfIJsonValue;"),
         "JsonArray is not queried for IVector<IJsonValue> by its computed IID:\n{module}"
     );
-    assert!(module.contains("export type JsonArray = IJsonArray & JsonArrayInterfaces & JsonArrayMembers;"), "{module}");
+    assert!(module.contains("export interface JsonArray extends IJsonArray, JsonArrayInterfaces, JsonArrayMembers {}"), "{module}");
     declared_in("export interface IJsonValueMethods", 10, "GetBoolean", "GetBoolean(this: IJsonValue): boolean;");
     // `[out]` parameters are the result's fields beside `returnValue`, as
     // the Windows Runtime's JavaScript projection returned them; an object
@@ -267,6 +272,15 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
     // An array of objects the callee allocated is an array of the
     // program's, each element perhaps `null`.
     assert!(module.contains("GetInspectableArray(this: IPropertyValue): { value: (IInspectable | null)[] };"), "{module}");
+    // A sealed class's constructors are its activation factory's methods,
+    // overloads the checker chooses between: `new Uri(text)`, `new
+    // Uri(base, relative)`.
+    assert!(
+        module.contains(
+            "   * @ntsRuntimeClass Windows.Foundation.Uri\n   */\n  export class Uri {\n    /**\n     * @ntsVtable 6 CreateUri\n     * @ntsHresult\n     * @ntsFactory Windows.Foundation.Uri 44A9796F-723E-4FDF-A218-033E75B0C084\n     */\n    constructor(uri: HString);\n    /**\n     * @ntsVtable 7 CreateWithRelativeUri\n     * @ntsHresult\n     * @ntsFactory Windows.Foundation.Uri 44A9796F-723E-4FDF-A218-033E75B0C084\n     */\n    constructor(baseUri: HString, relativeUri: HString);\n  }"
+        ),
+        "{module}"
+    );
     // Strings both ways: `HSTRING`s lent for the call, and copied back out.
     assert!(module.contains("GetStringArray(this: IPropertyValue): { value: string[] };"), "{module}");
     assert!(
@@ -347,7 +361,10 @@ fn winrt_structs_cross_by_value() {
     );
     // A class whose default interface is an instantiation is bound as it,
     // and named where a method answers it.
-    assert!(imaging.contains("export type BitmapPropertySet = IMap<HString, IBitmapTypedValue> & BitmapPropertySetInterfaces & BitmapPropertySetMembers;"), "{imaging}");
+    assert!(
+        imaging.contains("export interface BitmapPropertySet extends IMap<HString, IBitmapTypedValue>, BitmapPropertySetInterfaces, BitmapPropertySetMembers {}"),
+        "{imaging}"
+    );
     assert!(imaging.contains("): IAsyncOperationOfBitmapPropertySet;"), "{imaging}");
     assert!(!refused.contains("BitmapPropertySet"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
@@ -583,7 +600,7 @@ fn composable_classes_are_constructed_as_themselves() {
     // specialisation that declares the members its argument decides
     // (`ReplaceAll` takes the `IUIElement`s' handles).
     assert!(
-        module.contains("export type UIElementCollection = IVectorOfUIElement & UIElementCollectionInterfaces & UIElementCollectionMembers;"),
+        module.contains("export interface UIElementCollection extends IVectorOfUIElement, UIElementCollectionInterfaces, UIElementCollectionMembers {}"),
         "UIElementCollection is not its IVector<IUIElement>:\n{}",
         module.lines().filter(|line| line.contains("UIElementCollection")).collect::<Vec<_>>().join("\n")
     );
@@ -715,7 +732,7 @@ fn a_name_two_namespaces_declare_is_imported_under_its_path() {
         .unwrap();
     assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
     let module = std::fs::read_to_string(out.join("Microsoft.UI.Xaml.d.ts")).unwrap();
-    assert!(module.contains("export type LaunchActivatedEventArgs = "), "the local one is not declared");
+    assert!(module.contains("export class LaunchActivatedEventArgs {"), "the local one is not declared");
     assert!(
         module.contains("LaunchActivatedEventArgs as Windows_ApplicationModel_Activation_LaunchActivatedEventArgs"),
         "the other is not imported under its path"

@@ -592,6 +592,89 @@ export function run(): number {
     windows_syntax(&dir, &emitted);
 }
 
+/// A sealed runtime class (`@ntsRuntimeClass`), declared as a TypeScript
+/// class of its constructors: `new Uri()` activates it (`@ntsActivate`), and
+/// `new Uri(text)` calls the activation factory's method the checker chose,
+/// on the class's factory.
+fn sealed(program: &str) -> (String, String) {
+    let binding = r#"declare module "winrt:Windows.Foundation" {
+  import type { ComClass, HString } from "winrt:types";
+  export interface IUriMethods {
+    /**
+     * @ntsVtable 6 get_AbsoluteUri
+     * @ntsHresult
+     */
+    get_AbsoluteUri(this: IUri): HString;
+  }
+  export type IUri = ComClass<"IUri"> & IUriMethods;
+  /**
+   * @ntsRuntimeClass Windows.Foundation.Uri
+   */
+  export class Uri {
+    /**
+     * @ntsActivate Windows.Foundation.Uri 9E365E57-48B2-4160-956F-C7385120BBFC
+     */
+    constructor();
+    /**
+     * @ntsVtable 6 CreateUri
+     * @ntsHresult
+     * @ntsFactory Windows.Foundation.Uri 44A9796F-723E-4FDF-A218-033E75B0C084
+     */
+    constructor(uri: HString);
+  }
+  export interface Uri extends IUri {}
+}
+"#;
+    (binding.to_owned(), program.to_owned())
+}
+
+#[test]
+fn a_sealed_class_is_constructed_by_the_constructor_the_checker_chose() {
+    let (binding, source) = sealed(
+        r#"import { Uri } from "winrt:Windows.Foundation";
+export function run(): string {
+  return new Uri().get_AbsoluteUri() + new Uri("https://example.com/").get_AbsoluteUri();
+}
+"#,
+    );
+    let Some((dir, prepared)) = prepare("sealed", &binding, &source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert_eq!(text.matches("nts_winrt_activate(").count(), 1, "the default constructor is not an activation:\n{text}");
+    assert_eq!(text.matches("nts_winrt_factory(").count(), 1, "the factory constructor is not called on the class's factory:\n{text}");
+    assert!(text.contains("nts_string_to_hstring("), "the constructor's string is not lent as an HSTRING:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
+/// A class of the program's written over a sealed runtime class is refused,
+/// naming why: only a composable class makes an object a subclass composes.
+#[test]
+fn a_class_over_a_sealed_class_is_refused() {
+    let (binding, source) = sealed(
+        r#"import { Uri } from "winrt:Windows.Foundation";
+class Mine extends Uri {}
+export function run(): string {
+  return new Mine("https://example.com/").get_AbsoluteUri();
+}
+"#,
+    );
+    let Some((_, prepared)) = prepare("sealed-over", &binding, &source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("composable Windows Runtime class can be extended")),
+        "a class over a sealed class was not refused by name: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// A struct holding a string is only ever `Copied<T>`: as storage the
 /// program holds, no one would own its HSTRING, so it is no native type at
 /// all and the declaration taking it is refused.
