@@ -25345,6 +25345,26 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin))
     }
 
+    /// `nts_is_array` on the erased value: the answer for every type that does
+    /// not decide the question statically.
+    ///
+    /// One function because two arms ask it -- an open type (`any`, `unknown`, a
+    /// union, a type parameter) and TypeScript's `object` -- and a second copy of
+    /// the erase-then-call is how the two would come to disagree about which
+    /// absence the erase carries.
+    fn ask_the_runtime_is_array(&mut self, id: NodeId, subject: ValueId) -> ValueId {
+        let origin = self.origin(id);
+        let erased = match self.values[subject.0 as usize].ty {
+            HirType::Erased => subject,
+            _ => self.push(
+                OpKind::Erase { value: subject, absent: Absent::Impossible },
+                HirType::Erased,
+                origin.clone(),
+            ),
+        };
+        self.call_runtime("nts_is_array", vec![erased], HirType::Bool, &origin)
+    }
+
     fn decide_is_array(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
         let subject = self.lower_expression(argument)?;
         let ty = self
@@ -25421,16 +25441,49 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
             TypeKind::Any | TypeKind::Unknown | TypeKind::Union(_) | TypeKind::TypeParameter { .. } => {
-                let origin = self.origin(id);
-                let erased = match self.values[subject.0 as usize].ty {
-                    HirType::Erased => subject,
-                    _ => self.push(
-                        OpKind::Erase { value: subject , absent: Absent::Impossible },
-                        HirType::Erased,
-                        origin.clone(),
-                    ),
-                };
-                return Ok(self.call_runtime("nts_is_array", vec![erased], HirType::Bool, &origin));
+                return Ok(self.ask_the_runtime_is_array(id, subject));
+            }
+            // **TypeScript's `object`, which includes an array.** It is what
+            // `typeof x === "object" && x !== null` narrows an `unknown` to, so
+            // this is the type at every `Array.isArray` written after that
+            // guard -- which is how React's reconciler asks the question, four
+            // times, for every element with more than one child.
+            //
+            // It reached the catch-all below and folded to a **constant
+            // `false`**, so an array child was read as an element at the
+            // element's offsets: a silent miscompile, 28 of 58 cases differing
+            // from node, and a segfault in `nts_retain` further down. The same
+            // program with the `isArray` asked *before* the `typeof` is correct,
+            // which is what makes it look like a narrowing bug and is not one --
+            // the narrowed type simply is not one this arm knew.
+            //
+            // The fact is already written beside [`Self::is_the_object_type`]:
+            // "`object` includes an array, a `Map`, a `Set`, a `Promise` and a
+            // `Date`". Asked through that predicate rather than by testing the
+            // flag a fourth time -- `NON_PRIMITIVE` is spelled out three times
+            // in this compiler already.
+            //
+            // `{}` and an empty `interface` arrive as a *different* record --
+            // `TypeKind::Object` with no properties -- and an array is assignable
+            // to both, so they carry the same hazard and the same measurement: 28
+            // of 29 cases differing from node through a `{}` parameter and through
+            // an empty interface alike.
+            //
+            // **Where this stops, and why it is a stop rather than a line.** A
+            // *non-empty* object type can be inhabited by an array too -- an array
+            // satisfies `{ readonly length: number }`, and `runtime/node` reaches
+            // that shape 212 times -- so `Array.isArray` of one is wrong here in
+            // exactly the same way. It is not in this arm because widening to
+            // every object type stops folding the question, and an
+            // `if (Array.isArray(x))` that no longer folds has its branch
+            // *lowered*: refusals can rise, which is a corpus measurement and not
+            // a guess. The narrow arm is a fix; the wide one is a commit with a
+            // census.
+            TypeKind::Structured { .. } if self.is_the_object_type(ty) => {
+                return Ok(self.ask_the_runtime_is_array(id, subject));
+            }
+            TypeKind::Object { properties } if properties.is_empty() => {
+                return Ok(self.ask_the_runtime_is_array(id, subject));
             }
             // Everything else is not an Array, `Uint8Array` included -- which
             // the runtime test above now agrees with rather than contradicts.
