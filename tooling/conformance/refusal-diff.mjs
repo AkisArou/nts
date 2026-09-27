@@ -38,6 +38,22 @@
 // Only names either compiler knows are compared: a function neither lowered
 // nor named is invisible to both, and not counted as absent-to-absent.
 //
+// **"compiled" means the prepared program defines it, not that the backend
+// emitted it.** A function the backend then declines (NTS2009, emit-c's
+// `drop_orphaned_bodies`) reads as compiled here; no emitted C is read. So
+// `absent` is "nothing lowered it far enough to be defined or named", and a
+// function lowered and then dropped by the backend is a blind spot of this
+// tool, with the same footprint in `program.c`. `assembles` and the backend's
+// own NTS2009 lines are where that half is seen.
+//
+// **A newly named function is often an older gap becoming askable.** When a
+// change clears one refusal, lowering reaches further, and the root that
+// arrives can be an unrelated, standing gap: `stringChunkAt`'s narrowing
+// began to land, so `chunk.toString()` resolved to `Buffer#toString`, whose
+// default reads `Buffer`'s layout -- and `Buffer extends Uint8Array`, a base
+// with no representation. Read those neither as regressions nor as noise:
+// they are the next question, now reachable.
+//
 // # Names are compared with the compiler's numbering taken out
 //
 // A generic instance's type id (`R<3054>`), a closure's number and an
