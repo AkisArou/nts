@@ -1320,11 +1320,12 @@ export function mountReducer<S, I, A>(
   const queue = new UpdateQueue(reducer, initialState);
   hook.queue = queue;
   // A dispatcher closes over the fiber that mounted it and its queue, as
-  // upstream's `bind` does; the arguments after the action only feed the
-  // warning that a dispatcher takes no callback.
+  // upstream's `bind` does. The argument after the action only feeds the
+  // warning that a dispatcher takes no callback: a parameter of its own, not a
+  // rest array, which would allocate on every update.
   const fiber = currentlyRenderingFiber;
-  const dispatch: Dispatch<A> = (action: A, ...extraArgs: unknown[]) =>
-    dispatchReducerAction<A>(fiber, queue, action, extraArgs);
+  const dispatch: Dispatch<A> = (action: A, callback?: unknown) =>
+    dispatchReducerAction<A>(fiber, queue, action, callback);
   queue.dispatch = dispatch;
   return [hook.memoizedState as S, dispatch];
 }
@@ -1897,8 +1898,8 @@ export function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicSt
   const hook = mountStateImpl(initialState);
   const queue = hook.queue as UpdateQueue;
   const fiber = currentlyRenderingFiber;
-  const dispatch: Dispatch<BasicStateAction<S>> = (action: BasicStateAction<S>, ...extraArgs: unknown[]) =>
-    dispatchSetState<BasicStateAction<S>>(fiber, queue, action, extraArgs);
+  const dispatch: Dispatch<BasicStateAction<S>> = (action: BasicStateAction<S>, callback?: unknown) =>
+    dispatchSetState<BasicStateAction<S>>(fiber, queue, action, callback);
   queue.dispatch = dispatch;
   return [hook.memoizedState as S, dispatch];
 }
@@ -2315,8 +2316,8 @@ export function mountActionState<S, P>(
   const stateQueue = new UpdateQueue(actionStateReducer, initialState);
   stateHook.queue = stateQueue;
   const fiber = currentlyRenderingFiber;
-  const setState: Dispatch<unknown> = (action: unknown, ...extraArgs: unknown[]) =>
-    dispatchSetState<unknown>(fiber, stateQueue, action, extraArgs);
+  const setState: Dispatch<unknown> = (action: unknown, callback?: unknown) =>
+    dispatchSetState<unknown>(fiber, stateQueue, action, callback);
   stateQueue.dispatch = setState;
 
   // Pending state. This is used to store the pending state of the action.
@@ -3213,9 +3214,9 @@ function refreshCache<T>(fiber: Fiber, seedKey: (() => T) | null | undefined, se
 // reads `arguments[3]` to warn about a second (callback) argument; here the
 // extra arguments are a rest parameter, which keeps the bound dispatch's
 // `length` at 1 as upstream's is.
-function warnIfDispatchReceivedCallback(extraArgs: readonly unknown[]): void {
+function warnIfDispatchReceivedCallback(callback: unknown): void {
   if (isDevelopment) {
-    if (typeof extraArgs[0] === "function") {
+    if (typeof callback === "function") {
       console.error(
         "State updates from the useState() and useReducer() Hooks don't support the " +
           "second callback argument. To execute a side effect after " +
@@ -3225,8 +3226,8 @@ function warnIfDispatchReceivedCallback(extraArgs: readonly unknown[]): void {
   }
 }
 
-function dispatchReducerAction<A>(fiber: Fiber, queue: UpdateQueue, action: A, extraArgs: readonly unknown[]): void {
-  warnIfDispatchReceivedCallback(extraArgs);
+function dispatchReducerAction<A>(fiber: Fiber, queue: UpdateQueue, action: A, callback: unknown): void {
+  warnIfDispatchReceivedCallback(callback);
 
   const lane = requestUpdateLane(fiber);
 
@@ -3246,8 +3247,8 @@ function dispatchReducerAction<A>(fiber: Fiber, queue: UpdateQueue, action: A, e
   markUpdateInDevTools(fiber, lane, action);
 }
 
-function dispatchSetState<A>(fiber: Fiber, queue: UpdateQueue, action: A, extraArgs: readonly unknown[]): void {
-  warnIfDispatchReceivedCallback(extraArgs);
+function dispatchSetState<A>(fiber: Fiber, queue: UpdateQueue, action: A, callback: unknown): void {
+  warnIfDispatchReceivedCallback(callback);
 
   const lane = requestUpdateLane(fiber);
   const didScheduleUpdate = dispatchSetStateInternal<A>(fiber, queue, action, lane);
