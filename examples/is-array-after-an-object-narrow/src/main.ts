@@ -17,8 +17,18 @@
 // The arms that must not move are the boundary the decision already had: a typed
 // array is **not** an Array (node agrees, and it is why the runtime test asks the
 // descriptor's kind rather than its tag), and an ordinary object narrowed the same
-// way is still not one. `{}` and an empty `interface` are a different record from
-// `object` and carry the same hazard, so both are here.
+// way is still not one.
+//
+// **`{}` and an empty `interface` carry the same hazard and are deliberately not
+// here.** They are a different record from `object` -- `TypeKind::Object` with no
+// properties -- and the same fix covers them, measured at 28 of 29 cases through a
+// `{}` parameter before it and agreeing after. What keeps them out is that driving
+// one means passing an **array into an empty object type**, and the JVM verifier
+// rejects the bytecode for that crossing (`VerifyError: Bad type on operand
+// stack`) on a compiler built before this change as well as after. That is the
+// standing kinds-must-match hole, which C and LLVM cannot see because both spell
+// every reference the same way, and it is why an example cannot hold this arm
+// until that is closed.
 
 function describeUnknown(child: unknown): string {
   if (typeof child === "object" && child !== null) {
@@ -33,16 +43,6 @@ function describeFirst(child: unknown): string {
   if (Array.isArray(child)) return "array";
   if (typeof child === "object" && child !== null) return "object";
   return "scalar";
-}
-
-function viaEmptyObjectType(child: {}): boolean {
-  return Array.isArray(child);
-}
-
-interface Empty {}
-
-function viaEmptyInterface(child: Empty): boolean {
-  return Array.isArray(child);
 }
 
 /// The subject: an array reaching the question through the narrow.
@@ -67,14 +67,6 @@ export function anObjectAfterTheNarrow(n: number): number {
 export function aScalar(n: number): number {
   const child: unknown = 7;
   return (describeUnknown(child) === "scalar" ? 1 : 0) * 100 + n;
-}
-
-/// `{}` and an empty `interface`: an array is assignable to both.
-export function throughEmptyTypes(n: number): number {
-  const xs: number[] = [1, 2];
-  const viaType = viaEmptyObjectType(xs) ? 1 : 0;
-  const viaInterface = viaEmptyInterface(xs) ? 2 : 0;
-  return (viaType + viaInterface) * 100 + n;
 }
 
 /// And the boundary that must not move: a typed array is not an Array.
