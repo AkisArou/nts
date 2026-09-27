@@ -11,6 +11,7 @@
 //   label <id>     print a label's `label`
 //   active <id>    print `active`
 //   visible <id>   print `visible`
+//   sensitive <id> print `sensitive`
 //   icon <id>      print a button's `icon_name`
 //   classes <id>   print a widget's CSS classes, comma separated
 //   value <id> <n> set a range's or spin button's value
@@ -21,16 +22,29 @@
 //   children <id>  print how many children a widget has
 //   orientation <id> print a box's `orientation`
 //
-// The demo's own `console.log` lines are the log; nothing else prints.
+// The demo's own `console.log` lines are the log, on stdout and whole: GJS
+// writes them to stderr through GLib's logger, where a message's second line
+// has no prefix to find it by, so a writer here takes them first.
 import Adw from "gi://Adw";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import Gtk from "gi://Gtk?version=4.0";
 
+const decoder = new TextDecoder();
+GLib.log_set_writer_func((level, fields) => {
+  const domain = fields.GLIB_DOMAIN ? decoder.decode(fields.GLIB_DOMAIN) : "";
+  if (domain === "Gjs-Console" && level === GLib.LogLevelFlags.LEVEL_MESSAGE) {
+    print(decoder.decode(fields.MESSAGE));
+    return GLib.LogWriterOutput.HANDLED;
+  }
+  // Everything else goes to stderr as before, through GLib's fallback.
+  return GLib.LogWriterOutput.UNHANDLED;
+});
+
 const dir = GLib.getenv("NTS_CORPUS_DEMO");
 const [main] = ARGV;
 const port = Gio.File.new_for_path(dir);
-const actions = new TextDecoder()
+const actions = decoder
   .decode(port.get_child("driver.txt").load_contents(null)[1])
   .split("\n")
   .filter((line) => line.trim() !== "")
@@ -64,6 +78,7 @@ application.connect("activate", async () => {
     else if (kind === "toggle") object.active = !object.active;
     else if (kind === "label") console.log(`${id}.label ${object.label}`);
     else if (kind === "active") console.log(`${id}.active ${object.active}`);
+    else if (kind === "sensitive") console.log(`${id}.sensitive ${object.sensitive}`);
     else if (kind === "visible") console.log(`${id}.visible ${object.visible}`);
     else if (kind === "icon") console.log(`${id}.icon ${object.icon_name}`);
     else if (kind === "value") object.set_value(Number(arg));

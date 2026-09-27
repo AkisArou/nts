@@ -50,8 +50,7 @@ for port in "$root"/examples/gjs-corpus/*/; do
   total=$((total + 1))
   expected="$out/$name.gjs.log"
   NTS_CORPUS_DEMO="$port" timeout 30 "$root/examples/interop/with-display.sh" \
-    gjs -m "$here/host.js" "$demos/$upstream/main.js" 2>&1 |
-    sed -n 's/^Gjs-Console-Message: [0-9:.]*: //p' > "$expected" || true
+    gjs -m "$here/host.js" "$demos/$upstream/main.js" > "$expected" 2>/dev/null || true
   row="| $name"
   all=yes
   for mode in plain rc; do

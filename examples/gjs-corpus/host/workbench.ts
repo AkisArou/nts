@@ -77,6 +77,10 @@ function act(kind: string, id: string, arg: string, object: GObject | null): boo
       else if (object instanceof AdwSwitchRow) console.log(`${id}.active ${object.active}`);
       else return false;
       return true;
+    case "sensitive":
+      if (!(object instanceof GtkWidget)) return false;
+      console.log(`${id}.sensitive ${object.sensitive}`);
+      return true;
     case "visible":
       if (!(object instanceof GtkWidget)) return false;
       console.log(`${id}.visible ${object.visible}`);

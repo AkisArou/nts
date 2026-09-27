@@ -1713,6 +1713,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 7 | 1 (Button); the other six stop at one blocker, a handle narrowed by `instanceof` and captured by a closure |
 | 2026-09-27 | 9 | 1 (Button); seven stop at the captured narrowed handle, Scale at `Object.entries` over a `Record<number, string>` |
 | 2026-09-27 | 14 | 2 (Button, Button Row); ten stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer |
+| 2026-09-27 | 16 | 2 on main; 13 with the captured-handle fix (verified, waiting on the compiler hold), and Spin Button's last blocker is already on main |
 
 ## Completeness: the binding census
 
