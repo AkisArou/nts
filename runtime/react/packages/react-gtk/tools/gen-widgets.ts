@@ -629,6 +629,12 @@ const childElements = new Map([
   ["Adw.ExpanderRow", { members: "ExpanderRowChildren", elements: [["AdwExpanderRow.Prefix", "AdwGroupNode"], ["AdwExpanderRow.Suffix", "AdwGroupNode"]], use: "<ExpanderRow.Prefix> or <ExpanderRow.Suffix>" }],
   ["Adw.ViewStack", { members: "ViewStackChildren", elements: [["AdwViewStack.Page", "ViewStackPageNode"]], use: "<ViewStack.Page name title>" }],
   ["Adw.TabView", { members: "TabViewChildren", elements: [["AdwTabView.Page", "TabViewPageNode"]], use: "<TabView.Page title>" }],
+  // A breakpoint holds no child, so it is not where the widget's children go
+  // (no `use`): a window's still go in its Content slot.
+  ["Adw.Window", { members: "WindowBreakpoints", elements: [["AdwWindow.Breakpoint", "BreakpointNode"]] }],
+  ["Adw.ApplicationWindow", { members: "ApplicationWindowBreakpoints", elements: [["AdwApplicationWindow.Breakpoint", "BreakpointNode"]] }],
+  ["Adw.BreakpointBin", { members: "BreakpointBinBreakpoints", elements: [["AdwBreakpointBin.Breakpoint", "BreakpointNode"]] }],
+  ["Adw.Dialog", { members: "DialogBreakpoints", elements: [["AdwDialog.Breakpoint", "BreakpointNode"]] }],
 ]);
 
 // Widgets presented over the window of the widget they are rendered in, as a
@@ -1266,7 +1272,7 @@ function emit(m: Model, target: Target): string {
     // has one (an Overlay's main child and its layers); a widget with none
     // says which element to use.
     const elements = childElementsOf(w);
-    if (elements !== null && w.children === "none") {
+    if (elements !== null && elements.use !== undefined && w.children === "none") {
       line("  protected place(_child: WidgetNode): void {");
       line(`    throw new Error("<${w.jsx}> places a child through ${elements.use}.");`);
       line("  }");

@@ -429,6 +429,15 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   whatever React's order, as libadwaita keeps them, and in React's order
   among the pinned; a tab React moves keeps to its region. Tabs the user
   drags into a new order keep it until React moves them.
+- Breakpoints are elements of the window, dialog or BreakpointBin they
+  belong to: `<ApplicationWindow.Breakpoint condition="max-width: 500sp"
+  onApply onUnapply>`. The app hears one apply and unapply and renders for
+  it; libadwaita's setters, which change properties while a breakpoint
+  applies, are what state is for in React. Of a container's breakpoints the
+  last whose condition holds applies, and a BreakpointBin applies none while
+  it holds no child. A bin removes a breakpoint React takes out; a window or
+  a dialog cannot, so it is disarmed (its condition cleared, which never
+  holds) and armed again if placed again. A breakpoint taken out is not heard.
 - A dialog (`<AlertDialog>`, `<AboutDialog>`, `<PreferencesDialog>`) is
   presented, not placed: rendered in a widget, it is presented over that
   widget's window at commit (`present`), and closed when React takes it out

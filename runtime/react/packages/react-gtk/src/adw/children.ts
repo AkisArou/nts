@@ -7,6 +7,7 @@
 //   <ActionRow title="Wi-Fi"><ActionRow.Suffix><Switch /></ActionRow.Suffix></ActionRow>
 //   <ViewStack><ViewStack.Page name="inbox" title="Inbox" iconName="mail-symbolic">...</ViewStack.Page></ViewStack>
 //   <TabView><TabView.Page title="Notes" onClose={() => close(id)}>...</TabView.Page></TabView>
+//   <ApplicationWindow><ApplicationWindow.Breakpoint condition="max-width: 500sp" onApply={...} /></ApplicationWindow>
 //
 // Each is a GroupNode with a placement of libadwaita's, so GTK's module never
 // names an Adw class. A row's subclasses (a SwitchRow is an ActionRow) take
@@ -14,11 +15,17 @@
 
 import {
   AdwActionRow,
+  AdwApplicationWindow,
+  AdwBreakpoint,
+  AdwBreakpointBin,
+  AdwBreakpointCondition,
+  AdwDialog,
   AdwExpanderRow,
   AdwHeaderBar,
   AdwTabView,
   AdwToolbarView,
   AdwViewStack,
+  AdwWindow,
   type AdwTabPage,
   type AdwViewStackPage,
 } from "c:Adw-1";
@@ -27,7 +34,7 @@ import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { GroupNode, GroupPlacement, type PackProps } from "../children.ts";
-import { isReactWriting, PlacedNode, scheduleRestore, SignalSlot, type WidgetNode, writeAsReact } from "../HostNode.ts";
+import { HostNode, isReactWriting, PlacedNode, type Props, scheduleRestore, SignalSlot, type WidgetNode, writeAsReact } from "../HostNode.ts";
 
 export interface HeaderBarChildren {
   /** `<HeaderBar.Start>`: its children, packed at the bar's start, left to right. */
@@ -389,4 +396,174 @@ export class TabViewPageNode extends PlacedNode {
       selectByReact(view, page);
     }
   }
+}
+
+// ---- breakpoints ---------------------------------------------------------------------
+
+export interface BreakpointProps {
+  /**
+   * When the breakpoint applies, in libadwaita's syntax: `"max-width: 500sp"`,
+   * `"max-aspect-ratio: 4/3 or max-width: 800px"`. Of a container's
+   * breakpoints, the last whose condition holds is the one that applies.
+   */
+  condition?: string;
+  /** The breakpoint began to apply. */
+  onApply?: () => void;
+  /** It stopped applying: its condition no longer holds, or a later one's does. */
+  onUnapply?: () => void;
+}
+
+export interface WindowBreakpoints {
+  /** `<Window.Breakpoint condition onApply onUnapply>`: a breakpoint of the window. */
+  readonly Breakpoint: HostComponent<"AdwWindow.Breakpoint", BreakpointProps>;
+}
+
+export interface ApplicationWindowBreakpoints {
+  /** `<ApplicationWindow.Breakpoint condition onApply onUnapply>`: a breakpoint of the window. */
+  readonly Breakpoint: HostComponent<"AdwApplicationWindow.Breakpoint", BreakpointProps>;
+}
+
+export interface BreakpointBinBreakpoints {
+  /** `<BreakpointBin.Breakpoint condition onApply onUnapply>`: a breakpoint of the bin. */
+  readonly Breakpoint: HostComponent<"AdwBreakpointBin.Breakpoint", BreakpointProps>;
+}
+
+export interface DialogBreakpoints {
+  /** `<Dialog.Breakpoint condition onApply onUnapply>`: a breakpoint of the dialog. */
+  readonly Breakpoint: HostComponent<"AdwDialog.Breakpoint", BreakpointProps>;
+}
+
+// What the breakpoint's handlers read. The breakpoint holds the handlers, so
+// they hold this and not the node, which holds the breakpoint.
+class BreakpointState {
+  readonly onApply: SignalSlot = new SignalSlot();
+  readonly onUnapply: SignalSlot = new SignalSlot();
+  // Whether the element is placed: a breakpoint React took out reports nothing.
+  placed = false;
+}
+
+/**
+ * A breakpoint of a window, a dialog or a BreakpointBin: the app hears it
+ * apply and unapply, and renders for it. libadwaita's setters, which change
+ * properties when a breakpoint applies, are what state is for in React.
+ *
+ * A BreakpointBin removes a breakpoint React takes out. A window or a dialog
+ * cannot remove one, so it is disarmed: its condition is cleared, which never
+ * holds, and placed again it is armed again.
+ */
+export class BreakpointNode extends HostNode {
+  private readonly breakpoint: AdwBreakpoint = new AdwBreakpoint();
+  private readonly state: BreakpointState = new BreakpointState();
+  private condition: string | null = null;
+  private owner: WidgetNode | null = null;
+  // The widget the breakpoint was added to, for good unless it is a bin.
+  private addedTo: GtkWidget | null = null;
+
+  constructor(type: string) {
+    super(type);
+    const state = this.state;
+    this.breakpoint.connect("apply", () => {
+      if (state.placed) {
+        state.onApply.fire();
+      }
+    });
+    this.breakpoint.connect("unapply", () => {
+      if (state.placed) {
+        state.onUnapply.fire();
+      }
+    });
+  }
+
+  applyProps(_previous: Props | null, next: Props): void {
+    if (next["children"] !== undefined) {
+      throw new Error(`<${this.name()}> holds no children.`);
+    }
+    const onApply = next["onApply"];
+    if (typeof onApply === "function") {
+      this.state.onApply.handler = onApply;
+    } else {
+      this.state.onApply.handler = null;
+    }
+    const onUnapply = next["onUnapply"];
+    if (typeof onUnapply === "function") {
+      this.state.onUnapply.handler = onUnapply;
+    } else {
+      this.state.onUnapply.handler = null;
+    }
+    const condition = next["condition"];
+    this.condition = typeof condition === "string" ? condition : null;
+    if (this.owner !== null) {
+      this.arm();
+    }
+  }
+
+  appendChild(child: HostNode): void {
+    throw new Error(`<${this.name()}> holds no children, not a <${child.name()}>.`);
+  }
+  insertBefore(child: HostNode, _before: HostNode): void {
+    this.appendChild(child);
+  }
+  removeChild(_child: HostNode): void {}
+
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    const container = parent.widget;
+    if (this.addedTo !== container) {
+      if (this.addedTo !== null) {
+        throw new Error(`<${this.name()}> cannot move to another widget: libadwaita keeps a breakpoint where it was added.`);
+      }
+      this.addTo(parent);
+      this.addedTo = container;
+    }
+    this.owner = parent;
+    this.state.placed = true;
+    this.arm();
+  }
+  takeOutOf(parent: WidgetNode): void {
+    if (this.owner !== parent) {
+      return;
+    }
+    this.owner = null;
+    this.state.placed = false;
+    const bin = parent.widget instanceof AdwBreakpointBin ? parent.widget : null;
+    if (bin !== null) {
+      bin.remove_breakpoint(this.breakpoint);
+      this.addedTo = null;
+    } else {
+      writeAsReact(() => this.breakpoint.set_condition(null));
+    }
+  }
+
+  private addTo(parent: WidgetNode): void {
+    const container = parent.widget;
+    if (container instanceof AdwBreakpointBin) {
+      container.add_breakpoint(this.breakpoint);
+    } else if (container instanceof AdwWindow) {
+      container.add_breakpoint(this.breakpoint);
+    } else if (container instanceof AdwApplicationWindow) {
+      container.add_breakpoint(this.breakpoint);
+    } else if (container instanceof AdwDialog) {
+      container.add_breakpoint(this.breakpoint);
+    } else {
+      const owner = this.name().split(".")[0];
+      throw new Error(`<${this.name()}> goes directly inside a <${owner}>, not a <${parent.name()}>.`);
+    }
+  }
+
+  // Sets the condition the props give; none never holds.
+  private arm(): void {
+    const condition = this.condition;
+    this.breakpoint.set_condition(condition === null ? null : AdwBreakpointCondition.parse(condition));
+  }
+
+  widgetNode(): WidgetNode | null {
+    return null;
+  }
+  shownWidget(): GtkWidget | null {
+    return null;
+  }
+  publicInstance(): GtkWidget {
+    throw new Error(`<${this.name()}> is a breakpoint, not a widget: put the ref on a widget.`);
+  }
+  // A breakpoint shows nothing, so Suspense has nothing of it to hide.
+  setVisible(_visible: boolean): void {}
 }

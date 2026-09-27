@@ -149,7 +149,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode } from "./children.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type DialogBreakpoints } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1012,16 +1012,16 @@ export interface ViewSwitcherSidebarSlots {
 }
 
 /** `<AboutDialog>`: an AdwAboutDialog. */
-export declare const AboutDialog: HostComponent<"AdwAboutDialog", AboutDialogProps>;
+export declare const AboutDialog: HostComponent<"AdwAboutDialog", AboutDialogProps> & DialogBreakpoints;
 
 /** `<ActionRow>`: an AdwActionRow. */
 export declare const ActionRow: HostComponent<"AdwActionRow", ActionRowProps> & ActionRowSlots & ActionRowChildren;
 
 /** `<AlertDialog>`: an AdwAlertDialog. */
-export declare const AlertDialog: HostComponent<"AdwAlertDialog", AlertDialogProps> & AlertDialogSlots;
+export declare const AlertDialog: HostComponent<"AdwAlertDialog", AlertDialogProps> & AlertDialogSlots & DialogBreakpoints;
 
 /** `<ApplicationWindow>`: an AdwApplicationWindow. */
-export declare const ApplicationWindow: HostComponent<"AdwApplicationWindow", ApplicationWindowProps> & ApplicationWindowSlots;
+export declare const ApplicationWindow: HostComponent<"AdwApplicationWindow", ApplicationWindowProps> & ApplicationWindowSlots & ApplicationWindowBreakpoints;
 
 /** `<Avatar>`: an AdwAvatar. */
 export declare const Avatar: HostComponent<"AdwAvatar", AvatarProps>;
@@ -1036,7 +1036,7 @@ export declare const Bin: HostComponent<"AdwBin", BinProps>;
 export declare const BottomSheet: HostComponent<"AdwBottomSheet", BottomSheetProps> & BottomSheetSlots;
 
 /** `<BreakpointBin>`: an AdwBreakpointBin. */
-export declare const BreakpointBin: HostComponent<"AdwBreakpointBin", BreakpointBinProps>;
+export declare const BreakpointBin: HostComponent<"AdwBreakpointBin", BreakpointBinProps> & BreakpointBinBreakpoints;
 
 /** `<ButtonContent>`: an AdwButtonContent. */
 export declare const ButtonContent: HostComponent<"AdwButtonContent", ButtonContentProps>;
@@ -1063,7 +1063,7 @@ export declare const ClampScrollable: HostComponent<"AdwClampScrollable", ClampS
 export declare const ComboRow: HostComponent<"AdwComboRow", ComboRowProps> & ActionRowSlots & ActionRowChildren;
 
 /** `<Dialog>`: an AdwDialog. */
-export declare const Dialog: HostComponent<"AdwDialog", DialogProps>;
+export declare const Dialog: HostComponent<"AdwDialog", DialogProps> & DialogBreakpoints;
 
 /** `<EntryRow>`: an AdwEntryRow. */
 export declare const EntryRow: HostComponent<"AdwEntryRow", EntryRowProps>;
@@ -1096,7 +1096,7 @@ export declare const OverlaySplitView: HostComponent<"AdwOverlaySplitView", Over
 export declare const PasswordEntryRow: HostComponent<"AdwPasswordEntryRow", PasswordEntryRowProps>;
 
 /** `<PreferencesDialog>`: an AdwPreferencesDialog. */
-export declare const PreferencesDialog: HostComponent<"AdwPreferencesDialog", PreferencesDialogProps>;
+export declare const PreferencesDialog: HostComponent<"AdwPreferencesDialog", PreferencesDialogProps> & DialogBreakpoints;
 
 /** `<PreferencesGroup>`: an AdwPreferencesGroup. */
 export declare const PreferencesGroup: HostComponent<"AdwPreferencesGroup", PreferencesGroupProps> & PreferencesGroupSlots;
@@ -1111,7 +1111,7 @@ export declare const PreferencesRow: HostComponent<"AdwPreferencesRow", Preferen
 export declare const ShortcutLabel: HostComponent<"AdwShortcutLabel", ShortcutLabelProps>;
 
 /** `<ShortcutsDialog>`: an AdwShortcutsDialog. */
-export declare const ShortcutsDialog: HostComponent<"AdwShortcutsDialog", ShortcutsDialogProps>;
+export declare const ShortcutsDialog: HostComponent<"AdwShortcutsDialog", ShortcutsDialogProps> & DialogBreakpoints;
 
 /** `<Sidebar>`: an AdwSidebar. */
 export declare const Sidebar: HostComponent<"AdwSidebar", SidebarProps> & SidebarSlots;
@@ -1165,7 +1165,7 @@ export declare const ViewSwitcherBar: HostComponent<"AdwViewSwitcherBar", ViewSw
 export declare const ViewSwitcherSidebar: HostComponent<"AdwViewSwitcherSidebar", ViewSwitcherSidebarProps> & ViewSwitcherSidebarSlots;
 
 /** `<Window>`: an AdwWindow. */
-export declare const Window: HostComponent<"AdwWindow", WindowProps> & WindowSlots;
+export declare const Window: HostComponent<"AdwWindow", WindowProps> & WindowSlots & WindowBreakpoints;
 
 /** `<WindowTitle>`: an AdwWindowTitle. */
 export declare const WindowTitle: HostComponent<"AdwWindowTitle", WindowTitleProps>;
@@ -5752,6 +5752,14 @@ export function createNode(type: string): HostNode | null {
       return new ViewStackPageNode(type);
     case "AdwTabView.Page":
       return new TabViewPageNode(type);
+    case "AdwWindow.Breakpoint":
+      return new BreakpointNode(type);
+    case "AdwApplicationWindow.Breakpoint":
+      return new BreakpointNode(type);
+    case "AdwBreakpointBin.Breakpoint":
+      return new BreakpointNode(type);
+    case "AdwDialog.Breakpoint":
+      return new BreakpointNode(type);
   }
   return null;
 }

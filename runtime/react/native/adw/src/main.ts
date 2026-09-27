@@ -45,6 +45,14 @@
 //             it is presented within the Box's window, its onResponse hears
 //             the response id, and taken out it closes, which onResponse
 //             does not hear
+//   breakpoints  a BreakpointBin's Breakpoint elements: of those whose
+//             condition holds, the last applies, heard as onApply and the
+//             other's onUnapply; a condition from props moves it; a
+//             breakpoint React takes out is removed and not heard, and the
+//             one before it applies again
+//   window-breakpoint  a Window's Breakpoint applies; taken out, it is
+//             disarmed (a window cannot remove one) and not heard; placed
+//             again, it applies again
 //   unknown   a root without the adw set creates no Adw widget
 //   reset     removing the Adw prop restores libadwaita's default, and
 //             removing the inherited GTK one clears it
@@ -67,7 +75,7 @@ import {
   AdwWindow,
 } from "c:Adw-1";
 import { ApplicationFlags } from "c:Gio-2.0";
-import { g_main_context_iteration } from "c:GLib-2.0";
+import { g_main_context_iteration, g_main_loop_new, g_timeout_add_full } from "c:GLib-2.0";
 import { GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { react_gtk_emit, react_gtk_log } from "c:react-gtk-shim";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
@@ -98,6 +106,17 @@ function idle(): void {
   while (g_main_context_iteration(null, false)) {
     // until nothing is ready
   }
+}
+
+// Runs the main loop for `ms`: what waits on the frame clock, as a layout
+// pass does, has run by the end.
+function settle(ms: number): void {
+  const loop = g_main_loop_new(null, false);
+  g_timeout_add_full(0, ms, () => {
+    loop.quit();
+    return false;
+  });
+  loop.run();
 }
 
 function main(): void {
@@ -412,6 +431,69 @@ function main(): void {
   idle();
   const closed = widget(dialog).get_root() === null;
   react_gtk_log("dialog " + String(dialogWantsMount) + " " + String(unplaced) + " " + String(within) + " " + String(closed) + " responded=" + responded);
+
+  // Every apply and unapply heard, in order.
+  let breaks = "";
+  const breakpointProps = (name: string, condition: string): Props => ({
+    condition,
+    onApply: () => {
+      breaks += " " + name + "+";
+    },
+    onUnapply: () => {
+      breaks += " " + name + "-";
+    },
+  });
+  const bin = createInstance("AdwBreakpointBin", { widthRequest: 100, heightRequest: 100 }, shown, 0, {});
+  const always = createInstance("AdwBreakpointBin.Breakpoint", breakpointProps("A", "min-width: 1px"), shown, 0, {});
+  const later = createInstance("AdwBreakpointBin.Breakpoint", breakpointProps("B", "min-width: 100000px"), shown, 0, {});
+  // A bin applies breakpoints to what it holds: with no child it applies none.
+  appendInitialChild(bin, createInstance("GtkLabel", { label: "adapts" }, shown, 0, {}));
+  appendInitialChild(bin, always);
+  appendInitialChild(bin, later);
+  appendInitialChild(anchor, bin);
+  settle(200);
+  breaks += " |";
+  commitUpdate(later, "AdwBreakpointBin.Breakpoint", breakpointProps("B", "min-width: 100000px"), breakpointProps("B", "min-width: 2px"), {});
+  settle(200);
+  breaks += " |";
+  removeChild(bin, later);
+  settle(200);
+  removeChild(anchor, bin);
+  react_gtk_log("breakpoints" + breaks);
+
+  // A window cannot remove a breakpoint: taken out, it is disarmed, and
+  // placed again, armed again.
+  let windowBreaks = "";
+  const windowPoint = (): Props => ({
+    condition: "min-width: 1px",
+    onApply: () => {
+      windowBreaks += " W+";
+    },
+    onUnapply: () => {
+      windowBreaks += " W-";
+    },
+  });
+  const opened = createInstance("AdwWindow", { defaultWidth: 320, defaultHeight: 240 }, shown, 0, {});
+  const openedContent = createInstance("AdwWindow.Content", {}, shown, 0, {});
+  appendInitialChild(openedContent, createInstance("GtkLabel", { label: "window" }, shown, 0, {}));
+  appendInitialChild(opened, openedContent);
+  const point = createInstance("AdwWindow.Breakpoint", windowPoint(), shown, 0, {});
+  appendInitialChild(opened, point);
+  appendInitialChild(anchor, opened);
+  commitMount(opened, "AdwWindow", {}, {});
+  settle(200);
+  const openedWindow = widget(opened);
+  const hasBreakpoint = (): string =>
+    openedWindow instanceof AdwWindow ? String(openedWindow.get_current_breakpoint() !== null) : "not a window";
+  windowBreaks += " " + hasBreakpoint();
+  removeChild(opened, point);
+  settle(200);
+  windowBreaks += " " + hasBreakpoint();
+  appendInitialChild(opened, point);
+  settle(200);
+  windowBreaks += " " + hasBreakpoint();
+  removeChild(anchor, opened);
+  react_gtk_log("window-breakpoint" + windowBreaks);
 
   const application = new AdwApplication({ application_id: "org.nts.ReactAdw", flags: ApplicationFlags.NON_UNIQUE });
   application.register(null, null);
