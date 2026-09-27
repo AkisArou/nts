@@ -1,0 +1,19 @@
+{
+  "//": "Typechecks every Workbench port's nts.config.ts against the real @nts/config, as examples/interop/tsconfig.configs.json does its own: a config nothing typechecks is prose. Named tsconfig.configs.json so that no gate step reads it as a project.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@nts/config": [
+        "../../tooling/config/src/index.ts"
+      ]
+    }
+  },
+  "files": [
+    "button/nts.config.ts"
+  ]
+}

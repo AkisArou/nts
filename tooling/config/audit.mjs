@@ -196,6 +196,7 @@ for (const tc of [
   "examples/workspace/tsconfig.configs.json",
   "examples/library/tsconfig.config.json",
   "examples/interop/tsconfig.configs.json",
+  "examples/gjs-corpus/tsconfig.configs.json",
 ]) {
   const json = JSON.parse(readFileSync(join(repo, tc), "utf8").replace(/^\s*\/\/.*$/gm, ""));
   for (const f of [...(json.files ?? []), ...(json.include ?? [])]) {

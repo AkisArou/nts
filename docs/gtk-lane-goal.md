@@ -1680,6 +1680,42 @@ are mostly GTK's own work once loading is one `splice`.
 quiet machine; and the `outs` row, whose gap to C is the tuple allocation,
 which a caller that only destructures could avoid.
 
+## Completeness: the Workbench corpus
+
+"Complete" is measured against real GJS programs. The corpus is
+Workbench's Library demos (`github.com/workbenchdev/demos`, CC0; Workbench
+itself is GPL-3.0, and none of it is copied here). The ports are ours, in
+`examples/gjs-corpus/<demo>`:
+- `src/main.ts`, the demo's own code as GJS writes it, in the function the
+  host calls;
+- `main.ui`, the demo's Blueprint compiled with `blueprint-compiler`;
+- `driver.txt`, one action a line (`click <id>`), since the demos are
+  interactive;
+- `upstream`, the original's directory.
+
+`tooling/gjs-corpus/run.sh` runs each port on C and LLVM, plain and `--rc`,
+and compares every arm's log with the original's under GJS. GJS runs through
+`host.js`, which gives the demo the `workbench` global Workbench's own CLI
+gives it and reads the same driver. A demo passes when all four arms match.
+The originals come from a clone named by `NTS_WORKBENCH_DEMOS`; without one
+the harness says it skipped.
+
+The nts host (`examples/gjs-corpus/host/workbench.ts`) differs from the GJS
+one in two ways, both core gaps:
+- a port's demo is a function the host calls, because nts compiles no
+  dynamic `import()`;
+- the driver is a line format read with `read_line_utf8`, because `JSON`
+  and `TextDecoder` are not compiled.
+
+| | ported | pass on every arm |
+|---|---:|---:|
+| 2026-09-27 | 1 (Button) | 1 |
+
+Button is the calibration. Its control, a port whose log line differs by one
+letter, reads `differs` on all four arms. Of the 116 demos, 104 have a
+JavaScript original, and 111 have a Blueprint that compiles. The five that
+do not need Shumate, GtkSourceView, WebKit or libspelling.
+
 ## Rules this lane keeps
 
 These are inherited from `native-lane-goal.md` and not repeated here: two arms per claim, one variable per arm, explicit-path commits, three states for a gate verdict. Three are specific to GTK:
