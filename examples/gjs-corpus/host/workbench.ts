@@ -21,6 +21,7 @@ import {
   GtkCalendar,
   GtkCheckButton,
   GtkEmojiChooser,
+  GtkFlowBox,
   GtkLabel,
   GtkMenuButton,
   GtkPopover,
@@ -144,6 +145,12 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
       if (!(object instanceof GtkWidget)) return false;
       object.activate_action(args[0], g_variant_new_string(args[1]));
       return true;
+    case "activate-child": {
+      const child = object instanceof GtkFlowBox ? object.get_child_at_index(Number(args[0])) : null;
+      if (child === null) return false;
+      child.activate();
+      return true;
+    }
     case "classes":
       if (!(object instanceof GtkWidget)) return false;
       console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
