@@ -1495,6 +1495,13 @@ GTK 4.22; ns per operation, best of three in-process runs after one untimed.
 | notes app peak RSS (MB) | | 101 | 118-119 | 1.2x |
 | task list: make and sort 10000 (ms) | | 5.7-6.9 | 7.8-8.3 | 1.2-1.4x |
 | task list: 15 queries typed (ms) | | 113-142 | 301-318 | 2.2-2.7x |
+| journal: load 5000 entries (ms) | | 9 | 86 | 9.6x |
+| journal: 20 searches (ms) | | 114 | 220 | 1.9x |
+| journal: 10 sort toggles (ms) | | 46 | 604 | 13.1x |
+| journal: 200 added and edited (ms) | | 37 | 50 | 1.4x |
+| journal: 50 chart frames, draw time (ms) | | 23 | 390 | 17.0x |
+| journal: save (ms) | | 4 | 13 | 3.2x |
+| journal peak RSS (MB) | | 128 | 162 | 1.3x |
 
 Ranges are separate runs on a machine other sessions share, which is also
 why a row's C can read above its nts: both are GTK's own work at the same
@@ -1604,6 +1611,16 @@ Writing it found, in the order the compiler reported them:
   about 300 against 700 with 5000 `append`s, at a load average of 55;
 - `xs.map(entryOf)` is refused where `xs.map((one) => entryOf(one))`
   lowers: a `map` callback must be an arrow written at the call (core).
+
+**Its rows** (the table above) are the program's own `ms` lines, best of
+five runs with nts and GJS interleaved under `with-lock.sh`, both logs
+checked equal first. They come from one `run.sh` pass that started at a
+load average of 4.3 and ended at 9.3 as other sessions started work. The
+micro rows of the same pass matched their ranges above. The sort row is
+GTK re-sorting through each side's compare closure, and the chart row is
+the program's own aggregation over the store: those are the phases where
+the program's code is the time, and GJS is 13-17x behind. Load and add
+are mostly GTK's own work once loading is one `splice`.
 
 **Where its time goes** (`perf record -e cycles:u`, the `--rc` C build):
 - `g_list_store_append` was 12.8% inclusive: each append re-runs the sort

@@ -94,3 +94,40 @@ printf '| task list: make and sort 10000 (ms) | | %s | %s | %s |\n' "$a" "$b" "$
 a=$(best 5 "$out/tasks.nts.ms"); b=$(best 5 "$out/tasks.gjs.ms")
 printf '| task list: 15 queries typed (ms) | | %s | %s | %s |\n' "$a" "$b" "$(awk -v a="$a" -v b="$b" 'BEGIN { printf "%.1fx", b / a }')"
 rm -f "$out/tasks.nts.ms" "$out/tasks.gjs.ms" "$out/tasks.nts.checked" "$out/tasks.gjs.checked"
+
+# The journal (examples/interop/gtk-journal, and gjs/journal.js line for
+# line): a libadwaita application driven by its own workload -- load 5000
+# entries, 20 searches, 10 sort toggles, 200 entries added and edited, 50
+# chart frames, a save. Its log is checked equal on both sides before
+# anything is timed; each phase's timing is the program's own (its `ms`
+# lines), best of five runs, the two interleaved; and the peak resident set
+# of one whole run.
+journal_source="$root/examples/interop/gtk-journal"
+"$nts" build "$journal_source/tsconfig.json" --out "$out/journal" --rc >/dev/null
+journal="$out/journal/journal/linux-gnu-x86_64/journal"
+"$journal_source/seed.sh" 5000 > /tmp/nts-gtk-journal.txt
+env GSK_RENDERER=cairo xvfb-run -a sh -c "
+  '$journal' > '$out/journal.nts.log' 2>/dev/null
+  gjs '$here/gjs/journal.js' > '$out/journal.gjs.log' 2>/dev/null
+  for run in 1 2 3 4 5; do
+    '$journal' 2>/dev/null | grep '^ms ' >> '$out/journal.nts.ms'
+    gjs '$here/gjs/journal.js' 2>/dev/null | grep '^ms ' >> '$out/journal.gjs.ms'
+  done
+  /usr/bin/time -f %M '$journal' 2>&1 >/dev/null | tail -1 > '$out/journal.nts.rss'
+  /usr/bin/time -f %M gjs '$here/gjs/journal.js' 2>&1 >/dev/null | tail -1 > '$out/journal.gjs.rss'
+"
+grep -v '^ms ' "$out/journal.nts.log" > "$out/journal.nts.checked"
+grep -v '^ms ' "$out/journal.gjs.log" > "$out/journal.gjs.checked"
+if [ ! -s "$out/journal.nts.checked" ] || ! cmp -s "$out/journal.nts.checked" "$out/journal.gjs.checked"; then
+  echo "FAILED gtk-bench: the journal's logs differ between nts and gjs" >&2
+  exit 1
+fi
+phase() { awk -v p="$1" '$2 == p && (!seen || $3 < m) { m = $3; seen = 1 } END { printf "%.1f", m }' "$2"; }
+for name in load search sort add chart save; do
+  a=$(phase "$name" "$out/journal.nts.ms"); b=$(phase "$name" "$out/journal.gjs.ms")
+  printf '| journal: %s (ms) | | %s | %s | %s |\n' "$name" "$a" "$b" "$(awk -v a="$a" -v b="$b" 'BEGIN { if (a > 0) printf "%.1fx", b / a; else print "-" }')"
+done
+a=$(cat "$out/journal.nts.rss"); b=$(cat "$out/journal.gjs.rss")
+awk -v a="$a" -v b="$b" 'BEGIN { printf "| journal peak RSS (MB) | | %.1f | %.1f | %.1fx |\n", a / 1024, b / 1024, b / a }'
+rm -f "$out/journal.nts.ms" "$out/journal.gjs.ms" "$out/journal.nts.checked" "$out/journal.gjs.checked" "$out/journal.nts.rss" "$out/journal.gjs.rss" \
+  /tmp/nts-gtk-journal.txt /tmp/nts-gtk-journal-saved.txt
