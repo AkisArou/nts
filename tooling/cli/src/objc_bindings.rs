@@ -41,9 +41,21 @@ pub(crate) struct ObjcBindings {
     /// Each module's bound classes, with the protocols they adopt and those
     /// protocols' members: see `bind_objc::Output::adoptions`.
     adoptions: BTreeMap<String, BTreeMap<String, BTreeMap<String, bind_objc::Adopted>>>,
-    /// The platform packages installed for the program, once decided: the
-    /// files a program holds for them, and the modules they provide.
-    platform: Option<(Vec<Utf8PathBuf>, BTreeSet<String>)>,
+    /// The platform packages installed for the program, once decided.
+    platform: Option<Provided>,
+}
+
+/// What the platform packages installed for a program provide it.
+#[derive(Debug, Default)]
+struct Provided {
+    /// The files the program holds for them.
+    files: Vec<Utf8PathBuf>,
+    /// The frameworks they declare, which are their `objc:` modules: what a
+    /// binding generated from the program's imports imports rather than
+    /// declares (`bind_objc::Request::provided`).
+    frameworks: BTreeSet<String>,
+    /// The C structs they declare, with the module each is declared in.
+    records: BTreeMap<String, String>,
 }
 
 impl ObjcBindings {
@@ -62,10 +74,9 @@ impl ObjcBindings {
     /// The platform packages for the frameworks the program imports, from the
     /// store, linked into the project where an editor finds them: the files a
     /// program holds for them, and the modules they provide.
-    fn install_platform(&self, project: &Utf8Path, imports: &Imports) -> anyhow::Result<(Vec<Utf8PathBuf>, BTreeSet<String>)> {
+    fn install_platform(&self, project: &Utf8Path, imports: &Imports) -> anyhow::Result<Provided> {
         let store = nts_surfaces::Store::new(nts_surfaces::Store::default_root());
-        let mut files = Vec::new();
-        let mut provided = BTreeSet::new();
+        let mut provided = Provided::default();
         for platform in crate::apple_surface::platforms(&self.targets) {
             let wanted = platform.modules().any(|module| imports.names.contains_key(module) && !imports.declared.contains(module));
             if !wanted || !crate::apple_surface::available(&platform) {
@@ -79,10 +90,11 @@ impl ObjcBindings {
             if linked.contains(&package) {
                 eprintln!("note: linked {package} into {project}/node_modules; for an editor to see it, add \"types\": [\"{package}\"] to tsconfig.json's compilerOptions");
             }
-            files.extend(installed.files());
-            provided.extend(platform.modules().map(str::to_owned));
+            provided.records.extend(crate::apple_surface::records_of(&installed.files()));
+            provided.files.extend(installed.files());
+            provided.frameworks.extend(platform.modules().map(str::to_owned));
         }
-        Ok((files, provided))
+        Ok(provided)
     }
 }
 
@@ -121,12 +133,12 @@ impl Generated for ObjcBindings {
             // What no platform package provides is what is left to generate
             // from the program's imports: the fallback.
             self.missing = Some(
-                complaints.iter().filter_map(missing_module).filter(|module| !platform.1.contains(*module)).map(str::to_owned).collect(),
+                complaints.iter().filter_map(missing_module).filter(|module| !platform.frameworks.contains(*module)).map(str::to_owned).collect(),
             );
             self.platform = Some(platform);
         }
         let missing = self.missing.clone().unwrap_or_default();
-        let platform_files = self.platform.as_ref().map(|(files, _)| files.clone()).unwrap_or_default();
+        let platform_files = self.platform.as_ref().map(|platform| platform.files.clone()).unwrap_or_default();
         if missing.is_empty() {
             // Only the platform's packages, or nothing: a program whose
             // modules the project already has opens as it is.
@@ -199,8 +211,9 @@ impl ObjcBindings {
                 sdk: platform.sdk.to_string(),
                 target: platform.triple,
                 symbols: Some(symbols),
-                records: std::collections::BTreeMap::new(),
+                records: self.platform.as_ref().map(|platform| platform.records.clone()).unwrap_or_default(),
                 lent: bind_objc::Lent::default(),
+                provided: self.platform.as_ref().map(|platform| platform.frameworks.clone()).unwrap_or_default(),
             });
         }
         let key = key(&requests);
@@ -227,7 +240,7 @@ impl ObjcBindings {
                 files.push(values);
             }
         }
-        files.extend(self.platform.as_ref().map(|(platform, _)| platform.clone()).unwrap_or_default());
+        files.extend(self.platform.as_ref().map(|platform| platform.files.clone()).unwrap_or_default());
         let config = wrapper(tsconfig, &directory, &files)?;
         prune(store, &key);
         Ok(config)
@@ -346,6 +359,8 @@ fn key(requests: &[bind_objc::Request]) -> String {
     let mut text = String::new();
     for request in requests {
         let _ = write!(text, "{}|{}|{}|{}|", request.module, request.frameworks.join(","), request.names.join(","), request.target);
+        // What the platform provides changes what the binding declares.
+        let _ = write!(text, "{:?}|{:?}|", request.provided, request.records);
         let settings = std::fs::read(Utf8Path::new(&request.sdk).join("SDKSettings.json")).unwrap_or_default();
         let _ = writeln!(text, "{}|{}", request.sdk, fnv(&settings));
     }

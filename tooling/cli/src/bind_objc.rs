@@ -103,6 +103,12 @@ pub(crate) struct Request {
     /// What other frameworks add to the classes this package declares that
     /// only the class's own declaration can hold: see [`Lent`].
     pub(crate) lent: Lent,
+    /// Frameworks an installed platform package declares, whose classes and
+    /// enums a binding generated from a program's imports imports from
+    /// `objc:<Framework>` rather than declaring them again: two
+    /// declarations of `NSObject` are two unrelated classes, and two of
+    /// `CGRect` two native layouts of one name (NTS2006).
+    pub(crate) provided: BTreeSet<String>,
 }
 
 /// Initializers and class members one framework adds to another's class --
@@ -193,7 +199,7 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols, &symbols))?;
     let (platform, target) = deployment_target(&request.target)?;
     let package = request.package.then(|| framework_of(request).to_owned());
-    let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, target, package);
+    let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, target, Ownership { package, provided: request.provided.clone() });
     model.platform = platform;
     model.read_cf(&bodies.functions, &request.functions);
     model.read_constants(&constants, &bodies.variables);
@@ -1084,6 +1090,15 @@ struct Origin<'v> {
     container: String,
 }
 
+/// What a binding declares itself and what it imports: see
+/// [`Model::elsewhere`].
+struct Ownership {
+    /// For a package: the framework it binds.
+    package: Option<String>,
+    /// Frameworks an installed platform package declares.
+    provided: BTreeSet<String>,
+}
+
 /// The classes, enums and structs the binding describes.
 struct Model<'a> {
     swift: &'a Swift,
@@ -1118,6 +1133,8 @@ struct Model<'a> {
     imports: BTreeMap<&'static str, BTreeSet<&'static str>>,
     /// For a package: the framework it binds.
     package: Option<String>,
+    /// Frameworks an installed platform package declares: `Request::provided`.
+    provided: BTreeSet<String>,
     /// For a package: the classes other frameworks declare that its
     /// signatures name, by the module each is imported from.
     foreign: BTreeMap<String, BTreeSet<String>>,
@@ -1198,8 +1215,9 @@ impl<'a> Model<'a> {
         bound: &'a BTreeSet<String>,
         cf_types: BTreeMap<String, String>,
         target: Version,
-        package: Option<String>,
+        ownership: Ownership,
     ) -> Self {
+        let Ownership { package, provided } = ownership;
         let mut typedefs = headers.typedefs.clone();
         for decl in bodies.bodies.values().flatten() {
             if decl.get("kind").and_then(Value::as_str) == Some("ObjCTypeParamDecl")
@@ -1225,6 +1243,7 @@ impl<'a> Model<'a> {
             enums: BTreeMap::new(),
             imports: BTreeMap::new(),
             package,
+            provided,
             foreign: BTreeMap::new(),
             promises: Vec::new(),
             cf_types,
@@ -2384,9 +2403,7 @@ impl<'a> Model<'a> {
         // Another framework's, in a package: imported from its module -- the
         // enum, or the class it is nested in -- rather than declared twice,
         // which would make two unrelated `const enum`s.
-        let foreign = self.package.as_deref().and_then(|package| {
-            self.swift.owner.get(&format!("c:@E@{name}")).filter(|owner| *owner != package).cloned()
-        });
+        let foreign = self.swift.owner.get(&format!("c:@E@{name}")).filter(|owner| self.elsewhere(owner)).cloned();
         if let Some(owner) = foreign {
             if let Some(root) = symbol.path.first() {
                 self.foreign.entry(owner).or_default().insert(root.clone());
@@ -2448,17 +2465,22 @@ impl<'a> Model<'a> {
         })
     }
 
-    /// Whether this binding declares class `name`: every bound class, or in a
-    /// package only the framework's own.
-    fn owns(&self, name: &str) -> bool {
-        self.package.as_deref().is_none_or(|package| self.swift.class_owner(name).is_none_or(|owner| owner == package))
+    /// Whether a declaration of framework `owner`'s is another module's to
+    /// declare: in a package, any framework but its own; and in any binding,
+    /// one an installed platform package provides (`Request::provided`).
+    fn elsewhere(&self, owner: &str) -> bool {
+        self.package.as_deref().is_some_and(|package| owner != package) || self.provided.contains(owner)
     }
 
-    /// In a package, the framework that declares class `name` where it is not
-    /// this one.
+    /// Whether this binding declares class `name`: every bound class but
+    /// those declared elsewhere (`Self::elsewhere`).
+    fn owns(&self, name: &str) -> bool {
+        self.swift.class_owner(name).is_none_or(|owner| !self.elsewhere(owner))
+    }
+
+    /// The framework that declares class `name`, where that is elsewhere.
     fn foreign_owner(&self, name: &str) -> Option<String> {
-        let package = self.package.as_deref()?;
-        self.swift.class_owner(name).filter(|owner| *owner != package).map(str::to_owned)
+        self.swift.class_owner(name).filter(|owner| self.elsewhere(owner)).map(str::to_owned)
     }
 
     /// Record `name` as one a signature passes by value, and every record it
@@ -2951,8 +2973,9 @@ fn render(request: &Request, model: &Model) -> String {
     for (module, names) in &model.imports {
         let _ = writeln!(out, "  import type {{ {} }} from \"{module}\";", names.iter().copied().collect::<Vec<_>>().join(", "));
     }
+    render_foreign_imports(&mut out, model);
     if let Some(package) = &model.package {
-        render_package_imports(&mut out, request, model, package);
+        render_reexports(&mut out, request, package);
     }
     // A struct another package declares, imported from it rather than
     // declared again.
@@ -3240,18 +3263,23 @@ fn render_enums(out: &mut String, model: &Model) {
 /// the classes it names -- the parent of a class of its own among them -- and
 /// the frameworks it re-exports, as Swift's `import AppKit` gives Foundation.
 /// A value import, not `import type`: a class's `extends` names a value.
-fn render_package_imports(out: &mut String, request: &Request, model: &Model, package: &str) {
+fn render_foreign_imports(out: &mut String, model: &Model) {
     let mut foreign = model.foreign.clone();
     for class in model.classes.iter().filter(|class| model.owns(&class.objc)) {
         let Some(parent) = model.headers.supers.get(&class.objc).cloned().flatten() else { continue };
-        if let Some(owner) = model.swift.class_owner(&parent).filter(|owner| *owner != package) {
+        if let Some(owner) = model.foreign_owner(&parent) {
             let swift = model.swift.class(&parent);
-            foreign.entry(owner.to_owned()).or_default().insert(swift.split('.').next().unwrap_or_default().to_owned());
+            foreign.entry(owner).or_default().insert(swift.split('.').next().unwrap_or_default().to_owned());
         }
     }
     for (module, names) in &foreign {
         let _ = writeln!(out, "  import {{ {} }} from \"objc:{module}\";", names.iter().cloned().collect::<Vec<_>>().join(", "));
     }
+}
+
+/// A package's re-exports: the frameworks it reads, as Swift's `import
+/// AppKit` gives Foundation too.
+fn render_reexports(out: &mut String, request: &Request, package: &str) {
     let reexported: BTreeSet<&str> = request.frameworks.iter().map(String::as_str).filter(|framework| *framework != package).collect();
     for framework in reexported {
         let _ = writeln!(out, "  export * from \"objc:{framework}\";");
@@ -3679,6 +3707,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             symbols: Some(symbols),
             records: BTreeMap::new(),
             lent: Lent::default(),
+            provided: BTreeSet::new(),
         }
     }
 
@@ -3729,6 +3758,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             symbols: Some(symbols),
             records: BTreeMap::new(),
             lent: Lent::default(),
+            provided: BTreeSet::new(),
         };
         let (text, values) = match run(&request) {
             Ok(output) => (output.binding, output.values),

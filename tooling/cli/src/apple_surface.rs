@@ -123,6 +123,7 @@ impl Binder for ApplePlatform {
             symbols: Some(symbols.clone()),
             records: records.clone(),
             lent,
+            provided: std::collections::BTreeSet::new(),
         };
         let run = |request: &bind_objc::Request| bind_objc::run(request).with_context(|| format!("generating the `{}` package", request.module));
         // Each framework once, in order: the structs it declares are the
@@ -204,6 +205,32 @@ pub(crate) fn platforms(targets: &[nts_build::config::Target]) -> Vec<ApplePlatf
     platforms
 }
 
+/// The C structs the packages in `files` declare, by struct name, with the
+/// module each is declared in: each `Struct<{ ... }, "CGRect">` in a
+/// package's own `declare module` block. Read from the packages, which are
+/// the store's record of what was generated.
+pub(crate) fn records_of(files: &[Utf8PathBuf]) -> BTreeMap<String, String> {
+    let mut records = BTreeMap::new();
+    for file in files {
+        let Ok(text) = std::fs::read_to_string(file) else { continue };
+        let mut module = None;
+        for line in text.lines() {
+            if let Some(name) = line.strip_prefix("declare module \"").and_then(|rest| rest.strip_suffix("\" {")) {
+                // The package's own block is the first; the rest extend
+                // other modules.
+                if module.is_some() {
+                    break;
+                }
+                module = Some(name.to_owned());
+            } else if let (Some(module), Some(rest)) = (&module, line.strip_prefix("  export type ")) {
+                let Some(tag) = rest.contains(" = Struct<").then(|| rest.rsplit('"').nth(1)).flatten() else { continue };
+                records.insert(tag.to_owned(), module.clone());
+            }
+        }
+    }
+    records
+}
+
 /// Whether an SDK for `platform` is on this machine, with Swift's graphs for
 /// it: what generating its packages needs.
 pub(crate) fn available(platform: &ApplePlatform) -> bool {
@@ -215,6 +242,25 @@ pub(crate) fn available(platform: &ApplePlatform) -> bool {
 mod tests {
     use nts_frontend_ts::SemanticSource;
     use nts_surfaces::Binder;
+
+    /// The structs a package declares are read from its own module block
+    /// only: a struct named in a block extending another module is not its.
+    #[test]
+    fn records_are_read_from_a_packages_own_module() {
+        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-records-of-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("index.d.ts");
+        std::fs::write(
+            &file,
+            "// @ts-nocheck\ndeclare module \"objc:CoreGraphics\" {\n  export type CGPoint = Struct<{ x: Double; y: Double }, \"CGPoint\">;\n  export type NSRange = Struct<{ location: UInt; length: UInt }, \"_NSRange\">;\n  export class CGColor {}\n}\ndeclare module \"objc:Foundation\" {\n  export type Elsewhere = Struct<{ a: Double }, \"Elsewhere\">;\n}\n",
+        )
+        .unwrap();
+        let records = super::records_of(&[file]);
+        assert_eq!(
+            records.into_iter().collect::<Vec<_>>(),
+            [("CGPoint".to_owned(), "objc:CoreGraphics".to_owned()), ("_NSRange".to_owned(), "objc:CoreGraphics".to_owned())]
+        );
+    }
 
     /// **Each platform's packages typecheck**, whole and together, with their
     /// values files and nothing else: the check a package's `// @ts-nocheck`
