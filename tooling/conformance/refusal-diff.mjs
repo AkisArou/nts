@@ -48,6 +48,15 @@
 // tool, with the same footprint in `program.c`. `assembles` and the backend's
 // own NTS2009 lines are where that half is seen.
 //
+// **"0 moves" does not mean "no effect".** This sees which functions compile,
+// never which *answer* a compiled function gives. 7f7bf5340 stopped folding
+// `Array.isArray` on a value narrowed to `object` to `false`, and this read 27
+// of 27 projects unmoved, with the census and the definitions floor unchanged
+// too, while the emitted C differed in all 26 node modules and two live
+// wrong answers in the runtime were fixed (`validateObject` accepted an array;
+// `ERR_INVALID_ARG_TYPE` never named one "Array"). A change that alters answers
+// is measured by `agree` and by comparing emitted code, not here.
+//
 // **A newly named function is often an older gap becoming askable.** When a
 // change clears one refusal, lowering reaches further, and the root that
 // arrives can be an unrelated, standing gap: `stringChunkAt`'s narrowing
