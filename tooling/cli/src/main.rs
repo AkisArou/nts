@@ -2086,7 +2086,38 @@ fn describe_node(record: &nts_semantic_schema::NodeRecord) -> String {
 
 
 /// One function per header, one block per label, one operation per line.
-fn print_program(program: &hir::Program) {
+/// The extent of a function in the source it was lowered from, as two positions
+/// in the form every diagnostic already prints.
+///
+/// **For a rule nobody could write without it.** A refusal's location is the
+/// offending *construct's*, which is routinely outside the body being lowered --
+/// `createServer` failing seven hundred lines above its own is the documented
+/// case and is correct. What is not correct is a location inside no function at
+/// all: `stream`'s `map` is refused as "a `finally` that spans a `yield`" and the
+/// diagnostic points at the closing line of a **type alias** a hundred lines
+/// away. Telling those two apart needs the function's extent, and deriving it
+/// from source is a second brace matcher for a fact the compiler already holds.
+///
+/// Two calls to [`where_it_is`] rather than a line counter of its own: that
+/// function resolves a position through a source transform's map, and a
+/// rewritten file's lines are not the lines on disk. A second derivation of that
+/// would be right until someone rewrote a file.
+fn where_it_spans(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    at: &nts_diagnostics::Location,
+) -> String {
+    let ends = |offset: u32| nts_diagnostics::Location {
+        file: at.file,
+        span: nts_diagnostics::Span::new(offset, offset),
+    };
+    format!(
+        "{} - {}",
+        where_it_is(snapshot, &ends(at.span.start)),
+        where_it_is(snapshot, &ends(at.span.end))
+    )
+}
+
+fn print_program(snapshot: &nts_semantic_schema::SemanticSnapshot, program: &hir::Program) {
     for func in &program.funcs {
         let params: Vec<String> = func
             .params
@@ -2106,13 +2137,18 @@ fn print_program(program: &hir::Program) {
         // supported") is *honest*: the name is in `funcs` and there is still no
         // body. Their check could only tell the two apart by guessing at a
         // single-`unreachable` block, which is a heuristic about the wrong thing.
+        // The extent after the brace, not inside the signature: every reader of
+        // this dump matches a prefix (`^(export )?func NAME(`), and two of them
+        // are gate steps. Appending keeps those exact while giving a rule the
+        // one fact it cannot derive.
         println!(
-            "{}{}func {}({}) -> {} {{",
+            "{}{}func {}({}) -> {} {{  @ {}",
             if func.exported { "export " } else { "" },
             if func.abstract_declaration { "declare " } else { "" },
             func.name,
             params.join(", "),
             render(&func.return_type),
+            where_it_spans(snapshot, &func.origin.location),
         );
         for (index, block) in func.blocks.iter().enumerate() {
             let params: Vec<String> = block
@@ -2234,7 +2270,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         let lowered = hir::lower::lower(&snapshot);
         (lowered.program, lowered.diagnostics)
     };
-    print_program(&program);
+    print_program(&snapshot, &program);
 
     for diagnostic in &diagnostics {
         // With its location. A refusal without one is a scavenger hunt, and
