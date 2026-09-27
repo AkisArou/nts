@@ -1250,10 +1250,60 @@ fn objc_state_chain(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<NodeId> {
 }
 
 /// Read every class declaration's name, base and own methods.
+/// What the hierarchy calls a class -- the name an instance method is spelled
+/// `Name#member` with, and what a `new` and every call site name as well.
+fn hierarchy_class_name(
+    probe: &FuncBuilder<'_>,
+    snapshot: &SemanticSnapshot,
+    qualified: &rustc_hash::FxHashMap<NodeId, String>,
+    id: NodeId,
+    ty: TypeId,
+) -> String {
+    // An anonymous class expression has no identifier, and its stand-in
+    // is what its members were named for.
+    //
+    // **Without an entry here two of them become one.** A layout is a
+    // *representation* and identical shapes deliberately share one --
+    // `class Alpha {}` and `class Beta {}` print as `Alpha [1 2]`, see
+    // [`stands_for_a_class`] -- so the name a call site falls back to
+    // when the hierarchy has none is the merged layout's. For a named
+    // class that fallback is never reached; for an anonymous one it
+    // named every structurally identical class alike, and
+    // `new Second().which()` called `First`'s function and returned
+    // `1`. It agreed with node on 264 of 319 cases, which is what a
+    // silently wrong answer looks like from the outside.
+    //
+    // **And the qualified name where the identifier is not unique**, by
+    // the same map `class_name_for`'s static arm reads. Two modules each
+    // exporting a `Thing` both spelled their methods `Thing#value`, so
+    // one C function was defined twice -- except that nothing defined it
+    // at all: no vtable was emitted, all three descriptors carried a
+    // null `methods`, and `total`'s virtual call went through it.
+    // `exit 139`, no refusal, and the React lane found it because
+    // libadwaita's generated `HeaderBarNode` shares a name with GTK's.
+    //
+    // The comment above the walk that builds that map already said this
+    // -- "it collides happily with a method of *another class of the
+    // same name*, and `dgram` and `net` both export a `Socket`" -- and
+    // only the static arm was reading it.
+    qualified
+        .get(&id)
+        .cloned()
+        .or_else(|| {
+            probe
+                .children(id)
+                .into_iter()
+                .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+                .and_then(|child| probe.node(child).text.clone())
+        })
+        .unwrap_or_else(|| nominal_or_stand_in(snapshot, ty))
+}
+
 fn collect_hierarchy(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
+    qualified: &rustc_hash::FxHashMap<NodeId, String>,
 ) -> Hierarchy {
     let mut hierarchy = Hierarchy::default();
     let mut probe = FuncBuilder::new(snapshot, foreign);
@@ -1293,25 +1343,7 @@ fn collect_hierarchy(
             );
 
         for ty in types {
-            // An anonymous class expression has no identifier, and its stand-in
-            // is what its members were named for.
-            //
-            // **Without an entry here two of them become one.** A layout is a
-            // *representation* and identical shapes deliberately share one --
-            // `class Alpha {}` and `class Beta {}` print as `Alpha [1 2]`, see
-            // [`stands_for_a_class`] -- so the name a call site falls back to
-            // when the hierarchy has none is the merged layout's. For a named
-            // class that fallback is never reached; for an anonymous one it
-            // named every structurally identical class alike, and
-            // `new Second().which()` called `First`'s function and returned
-            // `1`. It agreed with node on 264 of 319 cases, which is what a
-            // silently wrong answer looks like from the outside.
-            let name = probe
-                .children(id)
-                .into_iter()
-                .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
-                .and_then(|child| probe.node(child).text.clone())
-                .unwrap_or_else(|| nominal_or_stand_in(snapshot, ty));
+            let name = hierarchy_class_name(&probe, snapshot, qualified, id, ty);
             {
                 // Qualified for an instantiation, by the same construction
                 // `layout_of` uses: a call site names its callee through this
@@ -3040,6 +3072,87 @@ raising: rustc_hash::FxHashSet<NodeId>,
     class_tokens: rustc_hash::FxHashMap<u32, usize>,
 }
 
+/// The emitted name of every function and class declaration whose plain name is
+/// taken, and the ones nothing here can tell apart.
+///
+/// Its own function because the class **hierarchy** needs the same answer and is
+/// built before [`naming`] is. `hierarchy.name` is what an instance method is
+/// spelled with, and taking the identifier's text there while
+/// [`FuncBuilder::class_name_for`]'s static arm took this map is how two modules
+/// exporting a class of one name came to define one `Thing#value`: no vtable was
+/// emitted, all three descriptors carried a null method table, and a virtual
+/// call went through it. `exit 139`, with no refusal and nothing in the output
+/// to read.
+///
+/// Called twice rather than threaded through four signatures, which is a cost
+/// and not a hazard: one function, one input, the same answer. What this file
+/// warns about is two *derivations* of a fact, and that is precisely what the
+/// bug above was.
+fn qualified_names(
+    snapshot: &SemanticSnapshot,
+) -> (
+    rustc_hash::FxHashMap<NodeId, String>,
+    rustc_hash::FxHashSet<NodeId>,
+) {
+    let probe = FuncBuilder::probe(snapshot);
+    let mut declarations: rustc_hash::FxHashMap<String, Vec<NodeId>> =
+        rustc_hash::FxHashMap::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        // Classes as well as functions. A method is spelled `Class#method`, so
+        // it cannot collide with a plain function -- but it collides happily
+        // with a method of *another class of the same name*, and `dgram` and
+        // `net` both export a `Socket`. That emitted two `Socket#ref`, which
+        // is one C function defined twice and whichever the linker picked.
+        let is_named_declaration = matches!(
+            node.kind,
+            NodeKind::Syntax(syntax::FUNCTION_DECLARATION)
+        ) || matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind));
+        if !is_named_declaration {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // A body is what separates an implementation from an overload
+        // signature. A class always has one.
+        if node.kind == NodeKind::Syntax(syntax::FUNCTION_DECLARATION) && !probe.has_a_body(id) {
+            continue;
+        }
+        if let Some(name) = probe.declared_name(id) {
+            declarations.entry(name).or_default().push(id);
+        }
+    }
+
+    let mut qualified: rustc_hash::FxHashMap<NodeId, String> = rustc_hash::FxHashMap::default();
+    let mut ambiguous: rustc_hash::FxHashSet<NodeId> = rustc_hash::FxHashSet::default();
+    for (name, ids) in declarations {
+        if ids.len() < 2 {
+            continue;
+        }
+        for id in &ids {
+            let file = probe.node(*id).origin.location.file;
+            // Another declaration of this name in the same file: nothing here
+            // tells them apart.
+            if ids
+                .iter()
+                .any(|other| other != id && probe.node(*other).origin.location.file == file)
+            {
+                ambiguous.insert(*id);
+                continue;
+            }
+            // The shortest tail of the path that tells this declaration from
+            // the others of its name. The stem alone is not enough:
+            // `path/posix.ts` and `path/win32.ts` differ by it, and
+            // `dgram/src/main.ts` and `net/src/main.ts` do not -- both are
+            // `main`, so qualifying by the stem produced the same name twice
+            // and fixed nothing. The whole path always works and reads like a
+            // machine wrote it, so this takes components from the end until
+            // they are distinct: `dgram_src_main`, not `_home_akisarou_...`.
+            let module = distinguishing_tail(snapshot, &ids, *id);
+            qualified.insert(*id, format!("{name}@{module}"));
+        }
+    }
+    (qualified, ambiguous)
+}
+
 /// Decide what every function declaration is called in the emitted program.
 ///
 /// Two C functions may not share a name, and two TypeScript functions may.
@@ -3727,8 +3840,6 @@ fn class_token_indices(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<u32
 fn naming(snapshot: &SemanticSnapshot) -> Naming {
     let probe = FuncBuilder::probe(snapshot);
     let class_tokens = class_token_indices(snapshot);
-    let mut declarations: rustc_hash::FxHashMap<String, Vec<NodeId>> =
-        rustc_hash::FxHashMap::default();
     let generators = generator_indices(snapshot);
     // Every object literal, by the type the checker gave it, with its property
     // names in source order. A type written two different ways is dropped: a
@@ -3761,61 +3872,13 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
         }
     }
 
-    for (index, node) in snapshot.nodes.iter().enumerate() {
-        // Classes as well as functions. A method is spelled `Class#method`, so
-        // it cannot collide with a plain function -- but it collides happily
-        // with a method of *another class of the same name*, and `dgram` and
-        // `net` both export a `Socket`. That emitted two `Socket#ref`, which
-        // is one C function defined twice and whichever the linker picked.
-        let is_named_declaration = matches!(
-            node.kind,
-            NodeKind::Syntax(syntax::FUNCTION_DECLARATION)
-        ) || matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind));
-        if !is_named_declaration {
-            continue;
-        }
-        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        // A body is what separates an implementation from an overload
-        // signature. A class always has one.
-        if node.kind == NodeKind::Syntax(syntax::FUNCTION_DECLARATION) && !probe.has_a_body(id) {
-            continue;
-        }
-        if let Some(name) = probe.declared_name(id) {
-            declarations.entry(name).or_default().push(id);
-        }
-    }
-
+    let (qualified, ambiguous) = qualified_names(snapshot);
     let mut naming = Naming {
+        qualified,
+        ambiguous,
         class_tokens,
         ..Naming::default()
     };
-    for (name, ids) in declarations {
-        if ids.len() < 2 {
-            continue;
-        }
-        for id in &ids {
-            let file = probe.node(*id).origin.location.file;
-            // Another declaration of this name in the same file: nothing here
-            // tells them apart.
-            if ids
-                .iter()
-                .any(|other| other != id && probe.node(*other).origin.location.file == file)
-            {
-                naming.ambiguous.insert(*id);
-                continue;
-            }
-            // The shortest tail of the path that tells this declaration from
-            // the others of its name. The stem alone is not enough:
-            // `path/posix.ts` and `path/win32.ts` differ by it, and
-            // `dgram/src/main.ts` and `net/src/main.ts` do not -- both are
-            // `main`, so qualifying by the stem produced the same name twice
-            // and fixed nothing. The whole path always works and reads like a
-            // machine wrote it, so this takes components from the end until
-            // they are distinct: `dgram_src_main`, not `_home_akisarou_...`.
-            let module = distinguishing_tail(snapshot, &ids, *id);
-            naming.qualified.insert(*id, format!("{name}@{module}"));
-        }
-    }
     let throwing = throwing_symbols(snapshot, &probe);
     naming.raising = raising_copies(snapshot, &probe, &throwing);
     naming.throwing = throwing.any;
@@ -9226,7 +9289,10 @@ pub fn lower_with(
     // lays out classes and a layout built without the hierarchy is a different
     // layout. `collect_hierarchy` reads the snapshot and the closures and
     // nothing else, so it can come first; the reverse is not true.
-    let hierarchy = collect_hierarchy(snapshot, foreign, &closures);
+    // The qualifying map before the hierarchy, because the hierarchy is what
+    // names an instance method and two classes of one name must not name one.
+    // `qualified_names` reads only the snapshot, so it can come first.
+    let hierarchy = collect_hierarchy(snapshot, foreign, &closures, &qualified_names(snapshot).0);
     let mut module = collect_module_scope(snapshot, foreign, &closures, &hierarchy);
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
@@ -15319,13 +15385,9 @@ impl<'a> FuncBuilder<'a> {
             // `layout_of` for -- the two names meet in the C symbol table and
             // a second derivation of either is a call to a function nothing
             // defines.
-            None => self.qualified.get(&class).cloned().map_or_else(
-                || {
-                    self.class_name(class)
-                        .ok_or_else(|| self.unsupported(class, "an anonymous class"))
-                },
-                Ok,
-            ),
+            None => self
+                .class_name(class)
+                .ok_or_else(|| self.unsupported(class, "an anonymous class")),
         }
     }
 
@@ -50160,6 +50222,18 @@ impl<'a> FuncBuilder<'a> {
     /// different answer for the named case: the checker's symbol for a class is
     /// the name the program wrote.
     fn class_name(&self, class: NodeId) -> Option<String> {
+        // **The qualified name first**, because this is what a member of the
+        // class is *emitted* as and therefore what a call site has to write.
+        // Two modules exporting a class of one name get distinct emitted names,
+        // and reading the identifier here while `class_name_for` read the map
+        // there is how `ThingA.made()` and `ThingB.made()` both emitted
+        // `call Thing.made` against definitions named `Thing@a.made` and
+        // `Thing@b.made` -- a call to a function nothing defines. Before that
+        // map covered classes at all, the two definitions *shared* the name and
+        // the linker picked one, which is the same bug with no diagnostic.
+        if let Some(name) = self.qualified.get(&class) {
+            return Some(name.clone());
+        }
         if let Some(name) = self
             .children(class)
             .into_iter()
