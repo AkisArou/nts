@@ -7143,7 +7143,7 @@ export class AboutDialogNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return windowSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7168,7 +7168,7 @@ export class ActionBarNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return actionBarSignal(this.gtk, key, slot);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<ActionBar> places a child through <ActionBar.Start> or <ActionBar.End>.");
   }
 }
@@ -7191,7 +7191,7 @@ export class ApplicationWindowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return windowSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7216,7 +7216,7 @@ export class AspectFrameNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return aspectFrameSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7241,9 +7241,9 @@ export class BoxNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return boxSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, moving: boolean): void {
     // A child already here is a move to the end: React appends it again.
-    if (child.widget.get_parent() !== this.gtk) {
+    if (!moving) {
       this.gtk.append(child.widget);
       return;
     }
@@ -7252,11 +7252,11 @@ export class BoxNode extends WidgetNode {
       this.gtk.reorder_child_after(child.widget, last);
     }
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
     // GTK places a child after a sibling; React places it before one. A
     // child already here is a move -- a keyed list reordered.
     const after = before.widget.get_prev_sibling();
-    if (child.widget.get_parent() === this.gtk) {
+    if (moving) {
       if (after !== child.widget) {
         this.gtk.reorder_child_after(child.widget, after);
       }
@@ -7284,7 +7284,7 @@ export class ButtonNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return buttonSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7353,7 +7353,7 @@ export class CheckButtonNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7412,7 +7412,7 @@ export class DragIconNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return dragIconSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7502,7 +7502,7 @@ export class EmojiChooserNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return emojiChooserSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7561,7 +7561,7 @@ export class ExpanderNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7586,7 +7586,7 @@ export class FixedNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return fixedSignal(this.gtk, key, slot);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<Fixed> places a child through <Fixed.Child x y>.");
   }
 }
@@ -7630,14 +7630,18 @@ export class FlowBoxNode extends WidgetNode {
     this.items.splice(at, 1);
     this.placed.splice(at, 1);
   }
-  protected place(child: WidgetNode): void {
-    this.takeBack(child);
+  protected place(child: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takeBack(child);
+    }
     this.gtk.append(child.widget);
     this.items.push(child);
     this.placed.push(this.held(child));
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    this.takeBack(child);
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takeBack(child);
+    }
     const index = this.items.indexOf(before);
     this.gtk.insert(child.widget, index);
     insertAt(this.items, index, child);
@@ -7668,7 +7672,7 @@ export class FlowBoxChildNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return flowBoxChildSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7713,7 +7717,7 @@ export class FrameNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return frameSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7755,7 +7759,7 @@ export class GraphicsOffloadNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return graphicsOffloadSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7780,7 +7784,7 @@ export class GridNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return gridSignal(this.gtk, key, slot);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<Grid> places a child through <Grid.Child column row>.");
   }
 }
@@ -7820,7 +7824,7 @@ export class HeaderBarNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return headerBarSlot(this.gtk, slot, widget);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<HeaderBar> places a child through <HeaderBar.Start> or <HeaderBar.End>.");
   }
 }
@@ -7908,7 +7912,7 @@ export class LinkButtonNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return linkButtonSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -7957,14 +7961,18 @@ export class ListBoxNode extends WidgetNode {
     this.items.splice(at, 1);
     this.placed.splice(at, 1);
   }
-  protected place(child: WidgetNode): void {
-    this.takeBack(child);
+  protected place(child: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takeBack(child);
+    }
     this.gtk.append(child.widget);
     this.items.push(child);
     this.placed.push(this.held(child));
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    this.takeBack(child);
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takeBack(child);
+    }
     const index = this.items.indexOf(before);
     this.gtk.insert(child.widget, index);
     insertAt(this.items, index, child);
@@ -7995,7 +8003,7 @@ export class ListBoxRowNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return listBoxRowSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8064,7 +8072,7 @@ export class MenuButtonNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8096,7 +8104,7 @@ export class NotebookNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<Notebook> places a child through <Notebook.Page tab>.");
   }
 }
@@ -8116,7 +8124,7 @@ export class OverlayNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return overlaySignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8209,7 +8217,7 @@ export class PopoverNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return popoverSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8237,7 +8245,7 @@ export class PopoverBinNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return popoverBinSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8262,7 +8270,7 @@ export class PopoverMenuNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return popoverMenuSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8338,7 +8346,7 @@ export class RevealerNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return revealerSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8414,7 +8422,7 @@ export class ScrolledWindowNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return scrolledWindowSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8446,7 +8454,7 @@ export class SearchBarNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8562,7 +8570,7 @@ export class StackNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<Stack> places a child through <Stack.Page name>.");
   }
 }
@@ -8688,7 +8696,7 @@ export class ToggleButtonNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8713,7 +8721,7 @@ export class TreeExpanderNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return treeExpanderSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8755,7 +8763,7 @@ export class ViewportNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return viewportSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8783,7 +8791,7 @@ export class WindowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return windowSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -8825,7 +8833,7 @@ export class WindowHandleNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return windowHandleSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }

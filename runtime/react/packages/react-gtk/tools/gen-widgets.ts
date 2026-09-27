@@ -1223,12 +1223,16 @@ function emit(m: Model, target: Target): string {
     line("    this.items.splice(at, 1);");
     line("  }");
     line("  // A child placed again is a move to the end: out, then added last.");
-    line("  protected place(child: WidgetNode): void {");
-    line("    this.takes(child);");
+    line("  protected place(child: WidgetNode, moving: boolean): void {");
+    line("    if (moving) {");
+    line("      this.takes(child);");
+    line("    }");
     line("    this.adds(child);");
     line("  }");
-    line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
-    line("    this.takes(child);");
+    line("  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {");
+    line("    if (moving) {");
+    line("      this.takes(child);");
+    line("    }");
     line("    const after = this.items.slice(this.items.indexOf(before));");
     line("    after.forEach((item) => this.takes(item));");
     line("    this.adds(child);");
@@ -1311,12 +1315,12 @@ function emit(m: Model, target: Target): string {
     // says which element to use.
     const elements = childElementsOf(w);
     if (elements !== null && elements.use !== undefined && w.children === "none") {
-      line("  protected place(_child: WidgetNode): void {");
+      line("  protected place(_child: WidgetNode, _moving: boolean): void {");
       line(`    throw new Error("<${w.jsx}> places a child through ${elements.use}.");`);
       line("  }");
     }
     if (w.children === "single") {
-      line("  protected place(child: WidgetNode): void {");
+      line("  protected place(child: WidgetNode, _moving: boolean): void {");
       line("    this.holdOnly(child);");
       line("    this.gtk.set_child(child.widget);");
       line("  }");
@@ -1351,14 +1355,18 @@ function emit(m: Model, target: Target): string {
       line("    this.items.splice(at, 1);");
       line("    this.placed.splice(at, 1);");
       line("  }");
-      line("  protected place(child: WidgetNode): void {");
-      line("    this.takeBack(child);");
+      line("  protected place(child: WidgetNode, moving: boolean): void {");
+      line("    if (moving) {");
+      line("      this.takeBack(child);");
+      line("    }");
       line("    this.gtk.append(child.widget);");
       line("    this.items.push(child);");
       line("    this.placed.push(this.held(child));");
       line("  }");
-      line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
-      line("    this.takeBack(child);");
+      line("  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {");
+      line("    if (moving) {");
+      line("      this.takeBack(child);");
+      line("    }");
       line("    const index = this.items.indexOf(before);");
       line("    this.gtk.insert(child.widget, index);");
       line("    insertAt(this.items, index, child);");
@@ -1377,9 +1385,9 @@ function emit(m: Model, target: Target): string {
       line("  // It places and moves a child by index (an AdwCarousel's pages): React's");
       line("  // order of the children, kept here, gives the index.");
       line("  private readonly items: WidgetNode[] = [];");
-      line("  protected place(child: WidgetNode): void {");
+      line("  protected place(child: WidgetNode, moving: boolean): void {");
       line("    // A child already here is a move to the end: React appends it again.");
-      line("    const from = this.items.indexOf(child);");
+      line("    const from = moving ? this.items.indexOf(child) : -1;");
       line("    if (from >= 0) {");
       line("      this.items.splice(from, 1);");
       line("      this.items.push(child);");
@@ -1389,8 +1397,8 @@ function emit(m: Model, target: Target): string {
       line("    this.gtk.append(child.widget);");
       line("    this.items.push(child);");
       line("  }");
-      line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
-      line("    const from = this.items.indexOf(child);");
+      line("  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {");
+      line("    const from = moving ? this.items.indexOf(child) : -1;");
       line("    if (from >= 0) {");
       line("      this.items.splice(from, 1);");
       line("    }");
@@ -1413,9 +1421,9 @@ function emit(m: Model, target: Target): string {
     } else if (w.children === "adds" && w.adds !== undefined) {
       emitAdds(w, w.adds);
     } else if (w.children === "box") {
-      line("  protected place(child: WidgetNode): void {");
+      line("  protected place(child: WidgetNode, moving: boolean): void {");
       line("    // A child already here is a move to the end: React appends it again.");
-      line("    if (child.widget.get_parent() !== this.gtk) {");
+      line("    if (!moving) {");
       line("      this.gtk.append(child.widget);");
       line("      return;");
       line("    }");
@@ -1424,11 +1432,11 @@ function emit(m: Model, target: Target): string {
       line("      this.gtk.reorder_child_after(child.widget, last);");
       line("    }");
       line("  }");
-      line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
+      line("  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {");
       line("    // GTK places a child after a sibling; React places it before one. A");
       line("    // child already here is a move -- a keyed list reordered.");
       line("    const after = before.widget.get_prev_sibling();");
-      line("    if (child.widget.get_parent() === this.gtk) {");
+      line("    if (moving) {");
       line("      if (after !== child.widget) {");
       line("        this.gtk.reorder_child_after(child.widget, after);");
       line("      }");

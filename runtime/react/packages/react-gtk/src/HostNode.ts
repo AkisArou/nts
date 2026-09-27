@@ -554,6 +554,8 @@ export abstract class WidgetNode extends HostNode {
   // included, made on the first child: where a widget inserted before a slot
   // element goes is before the first widget after it.
   private order: HostNode[] | null = null;
+  // Whether its parent's protocol holds it now: placed again, it is moving.
+  private inParent = false;
 
   appendChild(child: HostNode): void {
     const order = this.orderOf();
@@ -689,12 +691,16 @@ export abstract class WidgetNode extends HostNode {
       }
       return;
     }
+    // Placed again while in its parent, it is moving; the protocol needs to
+    // look for it only then.
+    const moving = this.inParent;
+    this.inParent = true;
     // Before a slot or child element is before the first widget after it.
     const sibling = before === null ? null : parent.widgetFrom(before);
     if (sibling === null) {
-      parent.place(this);
+      parent.place(this, moving);
     } else {
-      parent.placeBefore(this, sibling);
+      parent.placeBefore(this, sibling, moving);
     }
   }
   takeOutOf(parent: WidgetNode): void {
@@ -706,14 +712,16 @@ export abstract class WidgetNode extends HostNode {
       this.widget.unparent();
       return;
     }
+    this.inParent = false;
     parent.unplace(this);
   }
 
   // A widget holds children by its own protocol; one without one refuses them.
-  protected place(_child: WidgetNode): void {
+  // `moving`: the child is already here, and goes to its new place.
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error(`<${this.name()}> takes no children.`);
   }
-  protected placeBefore(_child: WidgetNode, _before: WidgetNode): void {
+  protected placeBefore(_child: WidgetNode, _before: WidgetNode, _moving: boolean): void {
     throw new Error(`<${this.name()}> holds one child at most.`);
   }
   protected unplace(_child: WidgetNode): void {

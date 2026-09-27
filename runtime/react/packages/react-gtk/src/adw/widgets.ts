@@ -4258,7 +4258,7 @@ export class AdwAboutDialogNode extends WidgetNode {
   commitMount(): void {
     this.gtk.present(this.presenter);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -4286,7 +4286,7 @@ export class AdwActionRowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return actionRowSlot(this.gtk, slot, widget);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<ActionRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
 }
@@ -4328,7 +4328,7 @@ export class AdwAlertDialogNode extends WidgetNode {
   commitMount(): void {
     this.gtk.present(this.presenter);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -4407,7 +4407,7 @@ export class AdwBinNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return binSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -4452,7 +4452,7 @@ export class AdwBreakpointBinNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return breakpointBinSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -4514,9 +4514,9 @@ export class AdwCarouselNode extends WidgetNode {
   // It places and moves a child by index (an AdwCarousel's pages): React's
   // order of the children, kept here, gives the index.
   private readonly items: WidgetNode[] = [];
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, moving: boolean): void {
     // A child already here is a move to the end: React appends it again.
-    const from = this.items.indexOf(child);
+    const from = moving ? this.items.indexOf(child) : -1;
     if (from >= 0) {
       this.items.splice(from, 1);
       this.items.push(child);
@@ -4526,8 +4526,8 @@ export class AdwCarouselNode extends WidgetNode {
     this.gtk.append(child.widget);
     this.items.push(child);
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    const from = this.items.indexOf(child);
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
+    const from = moving ? this.items.indexOf(child) : -1;
     if (from >= 0) {
       this.items.splice(from, 1);
     }
@@ -4598,7 +4598,7 @@ export class AdwClampNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return clampSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -4623,7 +4623,7 @@ export class AdwClampScrollableNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return clampScrollableSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -4651,7 +4651,7 @@ export class AdwComboRowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return actionRowSlot(this.gtk, slot, widget);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<ComboRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
 }
@@ -4690,7 +4690,7 @@ export class AdwDialogNode extends WidgetNode {
   commitMount(): void {
     this.gtk.present(this.presenter);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -4722,7 +4722,7 @@ export class AdwEntryRowNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<EntryRow> places a child through <EntryRow.Prefix> or <EntryRow.Suffix>.");
   }
 }
@@ -4758,12 +4758,16 @@ export class AdwExpanderRowNode extends WidgetNode {
     this.items.splice(at, 1);
   }
   // A child placed again is a move to the end: out, then added last.
-  protected place(child: WidgetNode): void {
-    this.takes(child);
+  protected place(child: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
     this.adds(child);
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    this.takes(child);
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
     const after = this.items.slice(this.items.indexOf(before));
     after.forEach((item) => this.takes(item));
     this.adds(child);
@@ -4792,7 +4796,7 @@ export class AdwHeaderBarNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return headerBarSlot(this.gtk, slot, widget);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<HeaderBar> places a child through <HeaderBar.Start> or <HeaderBar.End>.");
   }
 }
@@ -4846,7 +4850,7 @@ export class AdwNavigationPageNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return navigationPageSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -4915,12 +4919,16 @@ export class AdwNavigationViewNode extends WidgetNode {
     this.items.splice(at, 1);
   }
   // A child placed again is a move to the end: out, then added last.
-  protected place(child: WidgetNode): void {
-    this.takes(child);
+  protected place(child: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
     this.adds(child);
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    this.takes(child);
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
     const after = this.items.slice(this.items.indexOf(before));
     after.forEach((item) => this.takes(item));
     this.adds(child);
@@ -4973,7 +4981,7 @@ export class AdwPasswordEntryRowNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<PasswordEntryRow> places a child through <EntryRow.Prefix> or <EntryRow.Suffix>.");
   }
 }
@@ -5012,7 +5020,7 @@ export class AdwPreferencesDialogNode extends WidgetNode {
   commitMount(): void {
     this.gtk.present(this.presenter);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -5056,12 +5064,16 @@ export class AdwPreferencesGroupNode extends WidgetNode {
     this.items.splice(at, 1);
   }
   // A child placed again is a move to the end: out, then added last.
-  protected place(child: WidgetNode): void {
-    this.takes(child);
+  protected place(child: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
     this.adds(child);
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    this.takes(child);
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
     const after = this.items.slice(this.items.indexOf(before));
     after.forEach((item) => this.takes(item));
     this.adds(child);
@@ -5114,12 +5126,16 @@ export class AdwPreferencesPageNode extends WidgetNode {
     this.items.splice(at, 1);
   }
   // A child placed again is a move to the end: out, then added last.
-  protected place(child: WidgetNode): void {
-    this.takes(child);
+  protected place(child: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
     this.adds(child);
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    this.takes(child);
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
     const after = this.items.slice(this.items.indexOf(before));
     after.forEach((item) => this.takes(item));
     this.adds(child);
@@ -5198,7 +5214,7 @@ export class AdwShortcutsDialogNode extends WidgetNode {
   commitMount(): void {
     this.gtk.present(this.presenter);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -5270,7 +5286,7 @@ export class AdwSpinRowNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<SpinRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
 }
@@ -5290,7 +5306,7 @@ export class AdwSplitButtonNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return splitButtonSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -5315,7 +5331,7 @@ export class AdwStatusPageNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return statusPageSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -5343,7 +5359,7 @@ export class AdwSwitchRowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return actionRowSlot(this.gtk, slot, widget);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<SwitchRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
 }
@@ -5400,7 +5416,7 @@ export class AdwTabOverviewNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return tabOverviewSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -5425,7 +5441,7 @@ export class AdwTabViewNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return tabViewSignal(this.gtk, key, slot);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<TabView> places a child through <TabView.Page title>.");
   }
 }
@@ -5445,7 +5461,7 @@ export class AdwToastOverlayNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return toastOverlaySignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
   }
@@ -5490,7 +5506,7 @@ export class AdwToolbarViewNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return toolbarViewSlot(this.gtk, slot, widget);
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<ToolbarView> places a child through <ToolbarView.Top> or <ToolbarView.Bottom>.");
   }
 }
@@ -5517,7 +5533,7 @@ export class AdwViewStackNode extends WidgetNode {
     }
     return undefined;
   }
-  protected place(_child: WidgetNode): void {
+  protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<ViewStack> places a child through <ViewStack.Page name title>.");
   }
 }
@@ -5628,9 +5644,9 @@ export class AdwWrapBoxNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return wrapBoxSignal(this.gtk, key, slot);
   }
-  protected place(child: WidgetNode): void {
+  protected place(child: WidgetNode, moving: boolean): void {
     // A child already here is a move to the end: React appends it again.
-    if (child.widget.get_parent() !== this.gtk) {
+    if (!moving) {
       this.gtk.append(child.widget);
       return;
     }
@@ -5639,11 +5655,11 @@ export class AdwWrapBoxNode extends WidgetNode {
       this.gtk.reorder_child_after(child.widget, last);
     }
   }
-  protected placeBefore(child: WidgetNode, before: WidgetNode): void {
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
     // GTK places a child after a sibling; React places it before one. A
     // child already here is a move -- a keyed list reordered.
     const after = before.widget.get_prev_sibling();
-    if (child.widget.get_parent() === this.gtk) {
+    if (moving) {
       if (after !== child.widget) {
         this.gtk.reorder_child_after(child.widget, after);
       }
