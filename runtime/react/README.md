@@ -94,7 +94,8 @@ the JavaScript run (CLASS-COMPONENTS.md). Contexts are classes held by a
 non-generic base.
 
 The rules nts imposes on this code are the ones ported code must follow;
-they are listed in PORTING.md and in the native config's comments.
+they are listed in packages/react-reconciler/PORTING.md and in the native
+config's comments.
 
 ## Layout
 
