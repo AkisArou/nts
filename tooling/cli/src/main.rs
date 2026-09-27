@@ -2857,6 +2857,22 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
 /// what the snapshot carries, because that is what tsgo's encoded AST carries;
 /// turning one into a line and a column means reading the file, which is a fine
 /// price to pay once per diagnostic.
+/// The byte offset of a UTF-16 code-unit offset in `text`.
+///
+/// Walks the characters once, which is what `where_it_is` does for the line count
+/// anyway. An ASCII file needs no walk and the loop finds that out on its first
+/// character, so the common case costs one comparison per byte either way.
+fn byte_of_unit(text: &str, unit: u32) -> usize {
+    let mut units = 0u32;
+    for (at, character) in text.char_indices() {
+        if units >= unit {
+            return at;
+        }
+        units += u32::try_from(character.len_utf16()).unwrap_or(1);
+    }
+    text.len()
+}
+
 fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) -> String {
     let Some(source) = snapshot.sources.get(at.file.0 as usize) else {
         return "<unknown>".to_owned();
@@ -2880,7 +2896,22 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
     let Ok(text) = std::fs::read_to_string(path) else {
         return path.to_string();
     };
-    let upto = &text.as_bytes()[..(offset as usize).min(text.len())];
+    // **A span counts UTF-16 code units and this counts bytes.** tsgo numbers a
+    // node's position the way a JavaScript string index does, and so does the
+    // React compiler, which is why a span keeps that unit -- `nts-react`'s
+    // `text_outside_ascii_keeps_every_span` fails on anything else. Slicing the
+    // file's bytes with a unit offset is the conversion nobody did: after the
+    // first non-ASCII character every position landed early by the extra bytes
+    // above it. `blockers/a-for-in-over-an-array`'s refused `for (const k in
+    // xs)` is at unit 2197 and byte 2205, and this printed `60:12` -- the wrong
+    // line -- where the four em dashes above it account for exactly eight bytes.
+    //
+    // Found by the Assistant lane once the trivia fix stopped hiding it, and
+    // their caution is the reason it matters more than the count suggests: a
+    // location shifted by N bytes lands on *some* character, usually a token, so
+    // a rule that looks for whitespace sees only a fraction of the population.
+    let offset = byte_of_unit(&text, offset);
+    let upto = &text.as_bytes()[..offset.min(text.len())];
     // Counted a byte at a time on purpose: this runs once per diagnostic, and
     // a dependency on a vectorized byte counter for that would be absurd.
     #[allow(clippy::naive_bytecount)]

@@ -707,6 +707,25 @@ struct StringTable<'a> {
 /// the data maps. A character outside the basic plane occupies two units and
 /// both map to its first byte; positions only ever land on token boundaries, so
 /// no caller can tell.
+/// The byte offset of a UTF-16 code unit in the payload's text.
+///
+/// A span counts **code units**, because tsgo does and because the React pipeline
+/// mixes tsgo's spans with the React compiler's. The trivia walk below needs
+/// bytes, so it converts in and back out through this and `utf16`'s table.
+///
+/// The *reader* of a span is what has to convert the other way:
+/// `tooling/cli`'s `where_it_is` slices the file's bytes to count lines, and
+/// treating a unit offset as a byte offset put a diagnostic early by the extra
+/// bytes of every non-ASCII character above it -- eight, for the four em dashes
+/// above `blockers/a-for-in-over-an-array`'s refused `for...in`.
+fn byte_of(utf16: &[u32], unit: u32) -> usize {
+    if utf16.is_empty() {
+        unit as usize
+    } else {
+        utf16.get(unit as usize).copied().unwrap_or(u32::MAX) as usize
+    }
+}
+
 /// The first token of a node, skipping the leading trivia its `pos` includes.
 ///
 /// **A TypeScript node's `pos` is its *full start*: the position after the
@@ -732,16 +751,13 @@ struct StringTable<'a> {
 /// exactly as it is today. So this can move a location onto its token or leave it
 /// alone, and never onto something else.
 fn token_start(data: &[u8], utf16: &[u32], pos: u32) -> u32 {
-    // A node's `pos` counts UTF-16 code units and `data` is UTF-8, so the walk
-    // happens in bytes and the answer is converted back. For ASCII -- nearly
-    // every file -- the two are equal and `utf16` is empty by construction.
-    let byte_of = |unit: u32| -> usize {
-        if utf16.is_empty() {
-            unit as usize
-        } else {
-            utf16.get(unit as usize).copied().unwrap_or(u32::MAX) as usize
-        }
-    };
+    // **The answer is a code unit, because that is what a span is.** The walk
+    // has to happen in bytes -- `data` is UTF-8 -- so it converts in and back
+    // out. A span counted in bytes would be right for `where_it_is`, which
+    // slices `text.as_bytes()`, and wrong for the React pipeline, where tsgo's
+    // spans are mixed with the React compiler's and both count UTF-16 units:
+    // `nts-react`'s `text_outside_ascii_keeps_every_span` is the arm that says
+    // so, and it fails on a byte answer by cutting the printed text.
     let unit_of = |byte: usize| -> u32 {
         if utf16.is_empty() {
             u32::try_from(byte).unwrap_or(u32::MAX)
@@ -750,7 +766,7 @@ fn token_start(data: &[u8], utf16: &[u32], pos: u32) -> u32 {
             u32::try_from(utf16.partition_point(|at| *at < byte)).unwrap_or(u32::MAX)
         }
     };
-    let mut at = byte_of(pos);
+    let mut at = byte_of(utf16, pos);
     loop {
         match data.get(at) {
             Some(b' ' | b'\t' | b'\r' | b'\n' | 0x0b | 0x0c) => at += 1,
@@ -991,16 +1007,23 @@ mod tests {
     }
 
     #[test]
-    fn a_position_past_non_ascii_text_is_counted_in_code_units() {
+    fn a_position_past_non_ascii_text_is_answered_in_code_units() {
         // `pos` counts UTF-16 code units and the payload is UTF-8, so a file with
-        // an em dash in a comment has two numberings. The skip walks bytes and
-        // answers in units, and this is the arm that says the conversion is not
-        // the identity: the comment is three bytes and one unit wide.
+        // an em dash in a comment has two numberings. The walk happens in bytes
+        // and the answer is a **unit**, because that is what a span is -- tsgo
+        // counts units, and `nts-react` mixes tsgo's spans with the React
+        // compiler's, which counts them too.
         let text = "/*\u{2014}*/x";
         let utf16 = utf16_offsets(text.as_bytes());
         assert!(!utf16.is_empty(), "the fixture must not be ASCII");
-        // `x` is the fifth code unit: `/`, `*`, the dash, `*`, `/`.
+        // `x` is the fifth code unit and the seventh byte: `/`, `*`, three bytes
+        // of em dash, `*`, `/`. Answering 7 would be right for a byte reader and
+        // wrong for every consumer of a span.
         assert_eq!(token_start(text.as_bytes(), &utf16, 0), 5);
+        // And the conversion the walk goes through, both ends of it.
+        assert_eq!(byte_of(&utf16, 0), 0);
+        assert_eq!(byte_of(&utf16, 5), 7);
+        assert_eq!(byte_of(&[], 5), 5, "an ASCII file needs no table");
     }
 
     #[test]
