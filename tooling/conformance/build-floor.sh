@@ -457,16 +457,36 @@ for module in $FLOOR; do
 done
 
 joined=0
+# **A blocked module's build is a probe, and a probe leaves no product.**
+#
+# This loop compiles each blocked module to ask whether it builds yet, and until
+# this it wrote the artifact into the shared addon directory like any other build.
+# `loads.sh` then ran next, found `cluster.node`, loaded it eagerly and failed on
+# `undefined symbol: nts_child_process_kill` -- so adding a module to `BLOCKED`
+# turned the `addons` step red for every lane, which is the opposite of what a
+# list of known failures is for. It cost two lanes a gate run each and read as
+# somebody's change.
+#
+# So the probe builds into a directory of its own, and any artifact a previous
+# run of this script left behind is removed with a line saying so: a module in
+# `BLOCKED` has no product by definition, and one lying in the addon directory is
+# an artifact nothing in the tree claims and everything downstream trusts.
+probe_out=$(mktemp -d)
+trap 'rm -rf "$probe_out"' EXIT
 for module in $BLOCKED; do
-  out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
+  if [ -f "$out_dir/$module.node" ]; then
+    rm -f "$out_dir/$module.node"
+    printf '  %-22s an artifact of a blocked module removed from the addon directory\n' "$module"
+  fi
+  out=$(NTS_ADDON_OUT="$probe_out" NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
     timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1)
   if printf '%s' "$out" | grep -q 'bytes$'; then
     # **Compiling is not the standard.** `FLOOR` requires compile, load, and no
     # unpinned undefined symbol; a blocked module that only compiles is not ready
     # to move, and saying it is sends the next reader to break the run.
-    if ! node -e 'require(process.argv[1])' "$out_dir/$module.node" > /dev/null 2>&1; then
+    if ! node -e 'require(process.argv[1])' "$probe_out/$module.node" > /dev/null 2>&1; then
       printf '  %-22s compiles but does not load -- still blocked\n' "$module"
-    elif [ -n "$(unpinned_of "$(undefined_nts "$out_dir/$module.node")")" ]; then
+    elif [ -n "$(unpinned_of "$(undefined_nts "$probe_out/$module.node")")" ]; then
       printf '  %-22s compiles and loads, unpinned symbols remain -- still blocked\n' "$module"
     else
       printf '  %-22s NOW BUILDS -- move it into FLOOR and say what changed\n' "$module"
