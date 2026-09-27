@@ -1492,6 +1492,17 @@ void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count) {
   CoTaskMemFree(block);
 }
 
+void *nts_winrt_alloc(double bytes) {
+  void *block = CoTaskMemAlloc(bytes > 0 ? (SIZE_T)bytes : 1);
+  if (block == 0) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  return block;
+}
+
+void nts_winrt_free(void *block) { CoTaskMemFree(block); }
+
 NtsArray *nts_winrt_received_strings(void *block, uint32_t count) {
   NtsArray *strings = nts_array_new(&nts_desc_ref, count);
   void **handles = block;

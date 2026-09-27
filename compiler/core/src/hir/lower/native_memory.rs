@@ -162,6 +162,84 @@ impl FuncBuilder<'_> {
         Ok(storage)
     }
 
+    /// `body` for each index from 0 below `length` (a number), in order: the
+    /// loop the copies of an array of structs are made in.
+    fn count_up(&mut self, length: ValueId, origin: &super::Origin, mut body: impl FnMut(&mut Self, ValueId) -> Result<(), Diagnostic>) -> Result<(), Diagnostic> {
+        let (head, each, done) = (self.new_block(), self.new_block(), self.new_block());
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.terminate(super::Terminator::Jump { target: head, args: vec![zero] });
+        self.switch_to(head);
+        let at = self.push_block_param(head, HirType::NUMBER, origin.clone());
+        let more = self.push(OpKind::Binary { op: super::BinOp::Lt, lhs: at, rhs: length }, HirType::Bool, origin.clone());
+        self.terminate(super::Terminator::Branch { cond: more, then_target: each, then_args: Vec::new(), else_target: done, else_args: Vec::new() });
+        self.switch_to(each);
+        body(self, at)?;
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let next = self.push(OpKind::Binary { op: super::BinOp::Add, lhs: at, rhs: one }, HirType::NUMBER, origin.clone());
+        self.terminate(super::Terminator::Jump { target: head, args: vec![next] });
+        self.switch_to(done);
+        Ok(())
+    }
+
+    /// An array of plain objects where a call takes a block of the struct
+    /// `record` (`Role::Records`): each object copied into a block allocated
+    /// for the call, NULL for a `null` array, and the block freed after it.
+    pub(super) fn records_argument(&mut self, id: NodeId, array: ValueId, record: &std::sync::Arc<crate::hir::native::Record>, want: &HirType, lent: &mut Vec<Lent>) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "an array of structs that is not an array"));
+        };
+        let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+        let null = self.push(OpKind::ConstNull, self.values[array.0 as usize].ty.clone(), origin.clone());
+        let missing = self.push(OpKind::Binary { op: super::BinOp::Eq, lhs: array, rhs: null }, HirType::Bool, origin.clone());
+        let (fill, merge) = (self.new_block(), self.new_block());
+        let block = self.push_block_param(merge, want.clone(), origin.clone());
+        self.terminate(super::Terminator::Branch { cond: missing, then_target: merge, then_args: vec![absent], else_target: fill, else_args: Vec::new() });
+        self.switch_to(fill);
+        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
+        let size = self.push(OpKind::NativeSizeOf(Pointee::Record(record.clone())), HirType::NUMBER, origin.clone());
+        let bytes = self.push(OpKind::Binary { op: super::BinOp::Mul, lhs: length, rhs: size }, HirType::NUMBER, origin.clone());
+        let raw = self.runtime_call("nts_winrt_alloc", vec![bytes], HirType::NativePointer(Pointee::Void), origin.clone());
+        let storage = self.push(OpKind::Convert(raw), want.clone(), origin.clone());
+        self.count_up(length, &origin, |this, at| {
+            let object = this.push(OpKind::ArrayGet { array, index: at, checked: false }, (*element).clone(), origin.clone());
+            let slot = this.native_index_address(id, storage, at)?;
+            this.copy_into_native_record(id, object, slot, None)
+        })?;
+        self.terminate(super::Terminator::Jump { target: merge, args: vec![storage] });
+        self.switch_to(merge);
+        lent.push(Lent::Block { block });
+        Ok(block)
+    }
+
+    /// An array of structs a call handed back (`Written::ReceivedRecords`):
+    /// each struct of the callee's block copied into a new object of the
+    /// program's, as a `Copied<T>` result is, and the block freed.
+    pub(super) fn records_received(&mut self, id: NodeId, (slot, count): (ValueId, ValueId), ty: HirType) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Array(element)) = ty.clone() else {
+            return Err(self.unsupported(id, "a received array of structs read as something other than an array"));
+        };
+        let HirType::NativePointer(Pointee::Pointer(record)) = self.values[slot.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "a received array of structs whose slot is not a pointer to them"));
+        };
+        let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let block = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(*record), origin.clone());
+        let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let length = self.push(OpKind::NativeLoad { pointer: count, index }, HirType::Int { bits: 32, signed: false }, origin.clone());
+        let length = self.coerce(length, &HirType::NUMBER, id)?;
+        let array = self.push(OpKind::ArrayNew { length, zeroed: true }, ty, origin.clone());
+        self.count_up(length, &origin, |this, at| {
+            let from = this.native_index_address(id, block, at)?;
+            let object = this.object_from_copied(id, from, &element)?;
+            this.push(OpKind::ArraySet { array, index: at, value: object, checked: false }, HirType::Void, origin.clone());
+            Ok(())
+        })?;
+        let freed = self.push(OpKind::Convert(block), HirType::NativePointer(Pointee::Void), origin.clone());
+        self.runtime_call("nts_winrt_free", vec![freed], HirType::Void, origin);
+        Ok(array)
+    }
+
     /// A struct a Windows Runtime call wrote (`Written::Copied`), as a new
     /// object of `ty`, the program's `Copied<T>`: each field read out of the
     /// storage at `pointer` -- a nested struct into an object of its own,

@@ -2044,6 +2044,12 @@ void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count);
  * the callee's block copied into a `string` of an array of the program's and
  * deleted, and the block freed. */
 NtsArray *nts_winrt_received_strings(void *block, uint32_t count);
+/* A block of `bytes` from COM's task allocator, for an array of structs a
+ * Windows Runtime call is passed; ends the process when there is none. And
+ * a block from it freed: that one, or one a call allocated and the program
+ * has copied out of, which the ABI makes the caller's to free. */
+void *nts_winrt_alloc(double bytes);
+void nts_winrt_free(void *block);
 /* `value instanceof C` for a Windows Runtime class: whether the value is a
  * COM object that answers the interface `iid` names, C's default. */
 bool nts_winrt_is(NtsValue value, uint64_t iid_low, uint64_t iid_high);

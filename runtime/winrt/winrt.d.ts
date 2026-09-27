@@ -86,15 +86,26 @@ declare module "winrt:types" {
     }
   >;
   type Flat<O> = { [K in keyof O]: O[K] };
+  // An array of structs where a call takes one (`Counted<CopiedArray<T>,
+  // ...>`): an array of plain objects, each copied into a block of the
+  // structs for the call, and the block freed after it. `SetDragRectangles`
+  // takes one. A struct holding a string is refused here: each would lend an
+  // `HSTRING`, one per element, for the call.
+  export type CopiedArray<T extends Struct<object, string>> = readonly Copied<T>[] & { readonly __c_records?: T };
+  // A number field is a `number` whatever C's width is, as `Fields<T>` writes
+  // one -- except an enum, which keeps its members. The enum's own marker
+  // decides, since a C scalar's brand matches the `CEnum` pattern too.
   type CopiedField<V> = [V] extends [Struct<object, string>]
     ? Copied<V>
     : [V] extends [HString]
       ? string
-      : [V] extends [CEnum<infer E, number>]
-        ? E
-        : [V] extends [number]
-          ? number
-          : V;
+      : [V] extends [number]
+        ? "__c_enum" extends keyof V
+          ? V extends CEnum<infer E, number>
+            ? E
+            : number
+          : number
+        : V;
 
   // A TypeScript function where the Windows Runtime takes a delegate: a COM
   // object made for the call, whose `Invoke` calls the function and whose

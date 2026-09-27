@@ -13565,6 +13565,9 @@ enum Lent {
     Strings { pointer: ValueId },
     /// A block of `HSTRING`s lent from a `string[]`, one per element.
     HStrings { array: ValueId, block: ValueId },
+    /// A block of structs copied from an array of objects for the call
+    /// (`Role::Records`), from COM's task allocator: freed after it.
+    Block { block: ValueId },
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
     /// view must outlive the call.
     View { view: ValueId },
@@ -47556,34 +47559,15 @@ impl<'a> FuncBuilder<'a> {
             // The objects moved into an array of the program's made for
             // them, and the callee's block freed. Zeroed on a failed call,
             // which reads as empty.
-            super::native::Written::ReceivedStrings => {
+            super::native::Written::ReceivedRecords => {
                 let Some(count) = count else {
                     return Err(self.unsupported(id, "a received array with no count slot before it"));
                 };
-                let ty = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
-                let index = first(self);
-                let block = HirType::NativePointer(super::native::Pointee::Pointer(Box::new(super::native::Pointee::Void)));
-                let block = self.push(OpKind::NativeLoad { pointer: slot, index }, block, origin.clone());
-                let index = first(self);
-                let length = self.push(OpKind::NativeLoad { pointer: count, index }, HirType::Int { bits: 32, signed: false }, origin.clone());
-                self.runtime_call("nts_winrt_received_strings", vec![block, length], ty, origin.clone())
+                let ty = typed.cloned().or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a received array of structs"))?;
+                self.records_received(id, (slot, count), ty)?
             }
-            super::native::Written::ReceivedHandles => {
-                let Some(count) = count else {
-                    return Err(self.unsupported(id, "a received array with no count slot before it"));
-                };
-                let Some(ty @ HirType::Managed(ManagedType::Array(_))) = typed.cloned().or_else(|| self.type_of(id)) else {
-                    return Err(self.unsupported(id, "a received array of objects read as something other than an array"));
-                };
-                let index = first(self);
-                let block = HirType::NativePointer(super::native::Pointee::Pointer(Box::new(super::native::Pointee::Void)));
-                let block = self.push(OpKind::NativeLoad { pointer: slot, index }, block, origin.clone());
-                let index = first(self);
-                let length = self.push(OpKind::NativeLoad { pointer: count, index }, HirType::Int { bits: 32, signed: false }, origin.clone());
-                let size = self.coerce(length, &HirType::NUMBER, id)?;
-                let array = self.push(OpKind::ArrayNew { length: size, zeroed: true }, ty, origin.clone());
-                self.runtime_call("nts_winrt_received_handles", vec![array, block, length], HirType::Void, origin.clone());
-                array
+            super::native::Written::ReceivedStrings | super::native::Written::ReceivedHandles => {
+                self.read_received_references(id, written, (slot, count), typed, origin)?
             }
             super::native::Written::HString => {
                 let index = first(self);
@@ -47632,6 +47616,40 @@ impl<'a> FuncBuilder<'a> {
                 _ => return Err(self.unsupported(id, "an @ntsHresult result slot that holds neither a pointer nor a C scalar")),
             },
         })
+    }
+
+    /// An array of strings or of objects a Windows Runtime call handed back:
+    /// its block and count read from their slots, then each `HSTRING` copied
+    /// into a `string` of a new array (`nts_winrt_received_strings`), or each
+    /// object moved into an array of the program's made for them, whose
+    /// descriptor is the objects' family's (`nts_winrt_received_handles`).
+    fn read_received_references(
+        &mut self,
+        id: NodeId,
+        written: super::native::Written,
+        (slot, count): (ValueId, Option<ValueId>),
+        typed: Option<&HirType>,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(count) = count else {
+            return Err(self.unsupported(id, "a received array with no count slot before it"));
+        };
+        let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let block = HirType::NativePointer(super::native::Pointee::Pointer(Box::new(super::native::Pointee::Void)));
+        let block = self.push(OpKind::NativeLoad { pointer: slot, index }, block, origin.clone());
+        let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let length = self.push(OpKind::NativeLoad { pointer: count, index }, HirType::Int { bits: 32, signed: false }, origin.clone());
+        if written == super::native::Written::ReceivedStrings {
+            let ty = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
+            return Ok(self.runtime_call("nts_winrt_received_strings", vec![block, length], ty, origin.clone()));
+        }
+        let Some(ty @ HirType::Managed(ManagedType::Array(_))) = typed.cloned().or_else(|| self.type_of(id)) else {
+            return Err(self.unsupported(id, "a received array of objects read as something other than an array"));
+        };
+        let size = self.coerce(length, &HirType::NUMBER, id)?;
+        let array = self.push(OpKind::ArrayNew { length: size, zeroed: true }, ty, origin.clone());
+        self.runtime_call("nts_winrt_received_handles", vec![array, block, length], HirType::Void, origin.clone());
+        Ok(array)
     }
 
     /// Throw an `Error` whose message is a `malloc`'d C string, which is
@@ -48822,6 +48840,10 @@ impl<'a> FuncBuilder<'a> {
                 Lent::HStrings { array, block } => {
                     self.runtime_call("nts_hstrings_release", vec![array, block], HirType::Void, origin.clone());
                 }
+                Lent::Block { block } => {
+                    let freed = self.push(OpKind::Convert(block), HirType::NativePointer(super::native::Pointee::Void), origin.clone());
+                    self.runtime_call("nts_winrt_free", vec![freed], HirType::Void, origin.clone());
+                }
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
@@ -49400,6 +49422,9 @@ impl<'a> FuncBuilder<'a> {
                 // Each string an `HSTRING` lent for the call, NULL for a
                 // `null` array, and all given back after it.
                 Role::HStrings => c_args.extend(argument.map(|array| self.lend_hstrings(array, target.parameters[at].representation(), &mut lent, &origin))),
+                Role::Records(record) => c_args.extend(
+                    argument.map(|array| self.records_argument(id, array, &record, &target.parameters[at].representation(), &mut lent)).transpose()?,
+                ),
                 // A `Uint8Array` in place: its bytes, for the call, and the
                 // view given back after it. The give-back does nothing at run
                 // time; it is the view's last use, without which reference

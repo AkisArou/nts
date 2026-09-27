@@ -194,6 +194,12 @@ pub(crate) fn copied(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::syn
     structure(snapshot, record, &mut Vec::new(), false, true).map(std::sync::Arc::new)
 }
 
+/// The struct `ty` is, read as `Copied<T>` reads it: a `CopiedArray<T>`'s
+/// element struct.
+pub(crate) fn copied_struct(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::sync::Arc<Record>> {
+    structure(snapshot, ty, &mut Vec::new(), false, true).map(std::sync::Arc::new)
+}
+
 /// The C name of the struct `ty` is storage of (`Ptr<T>`, `ByValue<T>`),
 /// where that struct holds a Windows Runtime string: no native type at all,
 /// since no storage could own the string. What a refusal of one says.

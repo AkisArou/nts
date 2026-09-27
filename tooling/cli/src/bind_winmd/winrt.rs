@@ -204,7 +204,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 /// The brands `c:types` declares, beside its `c_` scalars.
 const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "CHandles", "ConstPtr"];
 /// The brands `winrt:types` declares.
-const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
+const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "CopiedArray", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
 /// The namespace a `winrt:` module names.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
@@ -1608,6 +1608,11 @@ impl Writer<'_> {
         if matches!(element, Type::String) {
             return Ok("string[]".to_owned());
         }
+        // Structs, each copied into a plain object.
+        if let Some(record) = self.plain_struct(element)? {
+            self.brands.insert("Copied");
+            return Ok(format!("Copied<{record}>[]"));
+        }
         let object = match element {
             Type::ClassName(named) if self.index.get(&named.namespace, generic_base(&named.name)).next().is_some_and(|def| def.category() != TypeCategory::Delegate) => {
                 self.spell(element, false)?
@@ -1644,6 +1649,9 @@ impl Writer<'_> {
         } else if !written && matches!(element, Type::String) {
             self.brands.insert("HStrings");
             "HStrings".to_owned()
+        } else if !written && let Some(record) = self.plain_struct(element)? {
+            self.brands.insert("CopiedArray");
+            format!("CopiedArray<{record}>")
         } else if !written && let Some(handle) = self.handle_element(element)? {
             self.brands.insert("CHandles");
             format!("CHandles<{handle}>")
@@ -1653,6 +1661,27 @@ impl Writer<'_> {
         self.brands.insert("Counted");
         self.brands.insert("CNumber");
         Ok(Some(lent_as))
+    }
+
+    /// A struct an array holds, by name, where each element crosses by copy:
+    /// not a `Guid`, which nobody writes as its four fields, and not one
+    /// holding a string, whose elements would each lend an `HSTRING`. `None`
+    /// for anything that is not a struct; a struct refused, with why.
+    fn plain_struct(&mut self, element: &Type) -> Result<Option<String>, String> {
+        let Type::ValueName(value) = element else { return Ok(None) };
+        if is_guid(value) {
+            return Ok(None);
+        }
+        let Some(def) = self.index.get(&value.namespace, &value.name).next().filter(|def| def.category() == TypeCategory::Struct) else {
+            return Ok(None);
+        };
+        if let Some(why) = self.struct_refusal(def, 0) {
+            return Err(format!("`{}`, {why}", value.name));
+        }
+        if self.holds_string(def, 0) {
+            return Err(format!("an array of `{}`, a struct holding a string", value.name));
+        }
+        Ok(Some(self.named(&value.namespace, &value.name)))
     }
 
     /// The interface an array of objects passes each element as: a class's

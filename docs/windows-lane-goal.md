@@ -164,6 +164,13 @@ the same vtable calls on the VM measured the behaviour first.
     `string[]`. `Inspectable` holds one too, boxed with `CreateStringArray`
     and unboxed back, as the JavaScript projection boxed one:
     `PropertyValue.CreateInspectable(["a", "b"])` reads back `["a", "b"]`.
+  - **an array of structs, both ways, as plain objects** (`CopiedArray<T>`
+    in, `Copied<T>[]` out): each object copied into a block of the structs
+    from COM's task allocator for the call, and each struct handed back
+    copied out, the block freed. `appWindow.titleBar.setDragRectangles([{ x:
+    0, y: 0, width: 100, height: 32 }])`; `convertLocalToScreenWithPoints`
+    both ways. Not a struct holding a string: each element would lend an
+    `HSTRING` from inside the copy's loop, which nothing gives back yet.
   - **Under rc, a foreign object lives to the end of what it reaches**, not
     to its last read: every `@ntsHresult` call branches to a throwing exit, so
     "held to the end" had asked a handle made after any call to dominate
@@ -171,11 +178,12 @@ the same vtable calls on the VM measured the behaviour first.
     between `get_Children` and `get_Size` -- XAML cleared the destroyed
     panel's children and the size read 0.
 - **What is left refused**, measured over winui-hello's bindings (the 83
-  namespaces its imports reach), 2026-09-27: 422 items, 312 of them a
+  namespaces its imports reach), 2026-09-28: 402 items, 312 of them a
   factory interface's composable `CreateInstance`, which is its class's
-  constructor and bound as that. Of the other 110: 45 arrays -- `GetMany`'s
-  buffer, and arrays of structs, booleans or 64-bit integers
-  (`PropertyValue`'s boxing statics most of them); 25 delegates that return a value, are answered or are
+  constructor and bound as that. Of the other 90: 25 arrays -- a buffer the
+  callee fills (`GetMany`, `CameraIntrinsics`' conversions), and arrays of
+  booleans, characters, `Guid`s, 64-bit integers or enums, `PropertyValue`'s
+  boxing statics most of them; 25 delegates that return a value, are answered or are
   generic; 10 structs holding an `IReference`; 6 holding a `boolean`; 7
   generic members with no signature; 7 idiomatic names two surfaces give.
   Before `Copied<T>`, struct `[out]` parameters and named delegates, the

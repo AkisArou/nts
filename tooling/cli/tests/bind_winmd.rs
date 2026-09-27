@@ -273,6 +273,12 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         module.contains("CreateStringArray(this: IPropertyValueStatics, value: Counted<HStrings, CNumber<\"uint32\">, \"before\">): Inspectable;"),
         "{module}"
     );
+    // Structs both ways, as plain objects copied in and out.
+    assert!(module.contains("GetPointArray(this: IPropertyValue): { value: Copied<Point>[] };"), "{module}");
+    assert!(
+        module.contains("CreatePointArray(this: IPropertyValueStatics, value: Counted<CopiedArray<Point>, CNumber<\"uint32\">, \"before\">): Inspectable;"),
+        "{module}"
+    );
     // And one the call is passed, as the handles of the interface it takes,
     // their count before them.
     assert!(

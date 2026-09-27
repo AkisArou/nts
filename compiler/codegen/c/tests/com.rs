@@ -542,6 +542,56 @@ export function run(): string {
     windows_syntax(&dir, &emitted);
 }
 
+/// Arrays of structs both ways, as plain objects: an array a call takes
+/// (`CopiedArray<T>`) is copied into a block of the structs from COM's task
+/// allocator, freed after the call on both of its paths; one it hands back is
+/// copied out into objects of the program's, and the callee's block freed.
+#[test]
+fn an_array_of_structs_is_copied_both_ways() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { c_float, CNumber, Counted, Struct } from "c:types";
+  import type { ComClass, Copied, CopiedArray, HString } from "winrt:types";
+  export type Point = Struct<{ x: c_float; y: c_float }, "Windows_Foundation_Point">;
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 10 Convert
+     * @ntsHresult
+     * @ntsNoEscape points
+     */
+    Convert(this: IJsonValue, points: Counted<CopiedArray<Point>, CNumber<"uint32">, "before">): Copied<Point>[];
+  }
+  export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
+  /**
+   * @ntsVtable 6 Parse
+   * @ntsHresult
+   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+   */
+  export function Parse(input: HString): IJsonValue;
+}
+"#;
+    let source = r#"import { Parse } from "winrt:Windows.Data.Json";
+export function run(): number {
+  const converted = Parse("[]").Convert([{ x: 1, y: 2 }, { x: 3, y: 4 }]);
+  return converted[1].x + converted[0].y;
+}
+"#;
+    let Some((dir, prepared)) = prepare("records", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert_eq!(text.matches("nts_winrt_alloc(").count(), 1, "the array is not copied into one block:\n{text}");
+    assert_eq!(text.matches("nts_winrt_free(").count(), 3, "the lent block on both paths and the received one are not all freed:\n{text}");
+    let call = text.find("[10])(").unwrap_or_else(|| panic!("no call through slot 10:\n{text}")) + "[10])(".len();
+    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(arguments, 5, "not called with its receiver, the count, the block, and the two slots:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
 /// A struct holding a string is only ever `Copied<T>`: as storage the
 /// program holds, no one would own its HSTRING, so it is no native type at
 /// all and the declaration taking it is refused.

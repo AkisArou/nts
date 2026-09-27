@@ -53,7 +53,7 @@ import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winr
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
 import { Button, Frame, Page, StackPanel, TextBlock, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
-import { ContentIsland } from "winrt:Microsoft.UI.Content";
+import { ContentCoordinateConverter, ContentIsland } from "winrt:Microsoft.UI.Content";
 import { ElementCompositionPreview } from "winrt:Microsoft.UI.Xaml.Hosting";
 import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
 
@@ -228,10 +228,18 @@ class App extends Application {
     const buttons: Button[] = [new Button(), new Button(), new Button()];
     panel.children.ReplaceAll(buttons);
     const replaced = String(lentAsItIs) + ":" + String(panel.children.size);
+    // Arrays of structs, both ways, as plain objects: two points copied into
+    // a block of `Point`s for the call, and the `PointInt32`s it hands back
+    // copied out -- their difference is the offset, whatever the window's
+    // position; and the title bar's drag region set from a rectangle.
+    const converter = ContentCoordinateConverter.createForWindowId(window.appWindow.id);
+    const screen = converter.convertLocalToScreenWithPoints([{ x: 0, y: 0 }, { x: 10, y: 20 }]);
+    window.appWindow.titleBar.setDragRectangles([{ x: 0, y: 0, width: 100, height: 32 }]);
+    const points = String(screen.length) + ":" + String(screen[1].x - screen[0].x) + "," + String(screen[1].y - screen[0].y);
     console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " rebuilt=" + String(this.rebuilt()),
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt()),
     );
     this.exit();
   }
