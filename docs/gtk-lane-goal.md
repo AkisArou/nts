@@ -728,6 +728,36 @@ property with no getter is refused as a read of what cannot be read.
 Witness: gtk-gir's `compound 6`, a label's `width_chars` through `+= 3` and
 `++`, and the corpus's View Switcher.
 
+**Constants as they are.** `import { G_PRIORITY_DEFAULT } from
+"c:GLib-2.0"`: a GIR `<constant>` is a macro's value, which no C symbol holds,
+so the module declares it with its type and its value in a tag, as every
+binding's constant is, and a read folds to the value (the compiler's
+`@ntsConstant`, which the Windows lane's constants use too):
+
+```ts
+/** @ntsConstant 0 */
+export const G_PRIORITY_DEFAULT: CNumber<"int">;
+```
+
+- Declared where GIR states an integer exactly and the fold holds it
+  exactly, negative ones included. Left out: an integer beyond 2^53
+  (`G_MAXINT64`), a floating one (GIR writes `G_E` to six digits), and the
+  strings and booleans, which the tag does not carry; as literal
+  initializers they made the module one with code in it (NTS1001) for every
+  program importing it.
+- **The fundamental types**, GJS's `GObject.TYPE_STRING`, are macros GIR
+  does not list. The binder names them and asks the headers their values
+  (`facts::Facts::macros`, `(int)(G_TYPE_STRING)` as an enumerator clang
+  evaluates): `G_TYPE_STRING: c_size_t` is 64, a `GType` as a type's is, so
+  it passes as a list store's `item_type`. One the headers define as a call
+  (`G_TYPE_GTYPE`) is no constant, and absent.
+- Witness: the_gir_packages_typecheck pins `G_PRIORITY_DEFAULT`, the
+  negative `G_MININT32` and `G_TYPE_STRING`, and the absence of `G_E`,
+  `G_MAXINT64`, `G_CSET_DIGITS` and `G_TYPE_GTYPE`. A read of each folds on
+  both backends with no C symbol (`4321 4294967295 -32768`, and `64`,
+  `gchararray` through `g_type_name`). Boxed Lists' first gap moves on to
+  `Gtk.ClosureExpression`.
+
 **Constructors return their class.** `gtk_box_new(…)` is a `GtkBox`: GIR
 declares a constructor inside its class and gives it C's return type, and the
 binding writes `Declared<GtkBox, GtkWidget>` (244 constructors) -- the program
@@ -1930,11 +1960,9 @@ named:
   UI shown in the host's window, as Workbench previews it -- which is what
   lets `app.` and `win.` actions resolve from its widgets (Toasts).
 - Designed, waiting on the compiler lane: a record's fields
-  (`new Gdk.Rectangle({ x, y })`, branch `gtk-record-fields`) and GIR's
-  constants (`GLib.PRIORITY_DEFAULT`, branch `gtk-constants`; floating ones
-  left out, since GIR writes them to six digits).
-- Open: a fundamental `GType` (`GObject.TYPE_STRING`) needs a typed
-  constant, since a GType is a branded `bigint`.
+  (`new Gdk.Rectangle({ x, y })`, branch `gtk-record-fields`). GIR's
+  numeric constants and the fundamental types are declared (see "Constants
+  as they are"); its string and boolean constants wait for a spelling.
 - Open, a representation: GLib's refcounted records (`GDateTime`, `GBytes`,
   `GRegex`, `GKeyFile`, `GMainLoop`...) bind as opaque handles a program
   unrefs by hand, since their `get_type` is declared by GObject's headers

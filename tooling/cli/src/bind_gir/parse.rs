@@ -5,7 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use roxmltree::Node;
 
 use super::model::{
-    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Enum, Member, Namespace, Param, Property,
+    ArrayRef, Callable, CallableKind, Callback, Class, Constant, Direction, Enum, Member, Namespace, Param, Property,
     Record, Repository, Scope, Signal, Signature, Transfer, TypeRef,
 };
 
@@ -203,6 +203,7 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
                 signature: signature(node),
             }),
             "function" => namespace.functions.push(callable(node, CallableKind::Function)),
+            "constant" => namespace.constants.extend(constant(node)),
             _ => {}
         }
     }
@@ -239,6 +240,15 @@ fn class_c_type(class: Node<'_, '_>) -> Option<String> {
 /// members, each named as its member is.
 fn vfuncs(class: Node<'_, '_>) -> Vec<Callable> {
     class.children().filter(|n| is(*n, "virtual-method")).map(|n| callable(n, CallableKind::Method)).collect()
+}
+
+/// A `<constant>`, where GIR names its C macro, its type and its value.
+fn constant(node: Node<'_, '_>) -> Option<Constant> {
+    Some(Constant {
+        c_name: c_attribute(node, "type")?.to_owned(),
+        ty: attribute(child(node, "type")?, "name")?.to_owned(),
+        value: attribute(node, "value")?.to_owned(),
+    })
 }
 
 /// A class's `<property>` elements, each with the methods GIR says read and

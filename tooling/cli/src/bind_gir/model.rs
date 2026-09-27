@@ -36,6 +36,17 @@ pub(crate) struct Namespace {
     /// `<alias>`: a name for another type, `(name, target)` --
     /// `GLib.Quark` for `guint32`, `HarfBuzz.codepoint_t` for `guint32`.
     pub(crate) aliases: Vec<(String, String)>,
+    /// `<constant>`: a value the headers `#define`, which no C symbol holds.
+    pub(crate) constants: Vec<Constant>,
+}
+
+/// A `<constant>`: its C macro's name (`G_PRIORITY_DEFAULT`), its GIR type
+/// name (`gint`, `utf8`), and its value as GIR writes it.
+#[derive(Debug)]
+pub(crate) struct Constant {
+    pub(crate) c_name: String,
+    pub(crate) ty: String,
+    pub(crate) value: String,
 }
 
 /// A `GObject` class or interface: an instance struct C code only points at.

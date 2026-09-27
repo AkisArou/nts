@@ -122,6 +122,9 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
             }
         }
     }
+    for constant in &binding.constants {
+        let _ = writeln!(out, "  /** @ntsConstant {} */\n  export const {}: {};", constant.value, constant.name, constant.ts);
+    }
     out.push('\n');
     for function in binding.functions.iter().filter(|function| !function.method_only) {
         let defaulted = defaults(function, &function.parameters);

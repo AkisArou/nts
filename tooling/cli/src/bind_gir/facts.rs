@@ -55,6 +55,12 @@ pub(crate) struct Facts {
     /// `GLib`'s records name functions only `GObject`'s headers declare
     /// (`g_date_time_get_type`), so GIR's word is not enough.
     pub(crate) declared: BTreeSet<String>,
+    /// `macro -> value` for each macro asked about that the headers define
+    /// as an integer constant expression: a fundamental `GType`
+    /// (`G_TYPE_STRING` is `G_TYPE_MAKE_FUNDAMENTAL (16)`, 64), which GIR does
+    /// not list. One defined as a call (`G_TYPE_GTYPE`) is no constant, and
+    /// absent.
+    pub(crate) macros: BTreeMap<String, i64>,
 }
 
 impl Facts {
@@ -68,20 +74,14 @@ impl Facts {
         self.offsets.extend(other.offsets);
         self.sizes.extend(other.sizes);
         self.declared.extend(other.declared);
+        self.macros.extend(other.macros);
     }
 }
 
-/// Ask the headers about `structs` and `enums`, which are C type names.
-pub(crate) fn resolve(
-    headers: &[String],
-    structs: &[&str],
-    enums: &[&str],
-    slots: &[(String, String)],
-    sized: &[&str],
-    functions: &[&str],
-    cflags: &[String],
-) -> Result<Facts> {
-    if structs.is_empty() && enums.is_empty() && slots.is_empty() && sized.is_empty() && functions.is_empty() {
+/// Ask the headers what `asked` wants to know.
+pub(crate) fn resolve(headers: &[String], asked: &Asked<'_>, cflags: &[String]) -> Result<Facts> {
+    let Asked { structs, enums, slots, sized, functions, macros } = *asked;
+    if structs.is_empty() && enums.is_empty() && slots.is_empty() && sized.is_empty() && functions.is_empty() && macros.is_empty() {
         return Ok(Facts::default());
     }
     let mut probe = String::new();
@@ -97,6 +97,9 @@ pub(crate) fn resolve(
     }
     for (at, function) in functions.iter().enumerate() {
         let _ = writeln!(probe, "enum {{ {PREFIX}declared_{at} = (int)sizeof(&{function}) }};");
+    }
+    for (at, name) in macros.iter().enumerate() {
+        let _ = writeln!(probe, "enum {{ {PREFIX}macro_{at} = (int)({name}) }};");
     }
     for (at, c_type) in structs.iter().enumerate() {
         let _ = writeln!(probe, "extern {c_type} {PREFIX}tag_{at};");
@@ -124,7 +127,7 @@ pub(crate) fn resolve(
         .output()
         .context("running clang to read what the headers define")?;
     let _ = std::fs::remove_dir_all(&dir);
-    Ok(parse(&String::from_utf8_lossy(&output.stdout), &Asked { structs, enums, slots, sized, functions }))
+    Ok(parse(&String::from_utf8_lossy(&output.stdout), asked))
 }
 
 /// Read the dump back: `VarDecl ... <prefix>tag_<n> '<T>':'struct <tag>'`,
@@ -134,16 +137,24 @@ pub(crate) fn resolve(
 /// looked, and clang does not.
 /// What one probe asked the headers, by kind: each answer's index is into
 /// the list of its kind.
-struct Asked<'a> {
-    structs: &'a [&'a str],
-    enums: &'a [&'a str],
-    slots: &'a [(String, String)],
-    sized: &'a [&'a str],
-    functions: &'a [&'a str],
+#[derive(Clone, Copy)]
+pub(crate) struct Asked<'a> {
+    /// C type names, for the struct each is.
+    pub(crate) structs: &'a [&'a str],
+    /// Enum types, for whether C made each signed.
+    pub(crate) enums: &'a [&'a str],
+    /// `(class struct, member)`, for each slot's offset.
+    pub(crate) slots: &'a [(String, String)],
+    /// Records, for each one's size.
+    pub(crate) sized: &'a [&'a str],
+    /// Functions, for whether the headers declare each.
+    pub(crate) functions: &'a [&'a str],
+    /// Macros, for each one's integer value.
+    pub(crate) macros: &'a [&'a str],
 }
 
 fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
-    let Asked { structs, enums, slots, sized, functions } = *asked;
+    let Asked { structs, enums, slots, sized, functions, macros } = *asked;
     let mut facts = Facts::default();
     let mut lines = dump.lines().peekable();
     while let Some(line) = lines.next() {
@@ -174,6 +185,12 @@ fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
             if let Some(function) = index("declared").and_then(|n| functions.get(n)) {
                 if enumerator_value(&mut lines).is_some_and(|v| v != "0") {
                     facts.declared.insert((*function).to_owned());
+                }
+                continue;
+            }
+            if let Some(name) = index("macro").and_then(|n| macros.get(n)) {
+                if let Some(value) = enumerator_value(&mut lines).and_then(|v| v.parse().ok()) {
+                    facts.macros.insert((*name).to_owned(), value);
                 }
                 continue;
             }
@@ -256,6 +273,7 @@ EnumConstantDecl 0x13 <t.c:13:8, col:50> col:8 ntsbindgir_declared_1 'int'
                 slots: &slots,
                 sized: &["GtkTextIter", "GBytes"],
                 functions: &["gtk_text_iter_get_type", "g_date_time_get_type"],
+                macros: &[],
             },
         );
         assert!(facts.declared.contains("gtk_text_iter_get_type"));
@@ -270,5 +288,31 @@ EnumConstantDecl 0x13 <t.c:13:8, col:50> col:8 ntsbindgir_declared_1 'int'
         assert!(!facts.tags.contains_key("NoSuchType"));
         assert!(facts.signed.contains("GParamFlags"));
         assert!(facts.unsigned.contains("GtkAlign"));
+    }
+
+    /// A macro's value, where the headers define it as a constant
+    /// expression (`G_TYPE_STRING`, `G_TYPE_MAKE_FUNDAMENTAL (16)`), and
+    /// nothing where they define it as a call (`G_TYPE_GTYPE`): clang dumps
+    /// that enumerator with no value, and the next one's is not taken for
+    /// it. The dump is clang's, the two blocks in the order that asks it.
+    #[test]
+    fn a_macro_is_valued_only_where_it_is_constant() {
+        let dump = "\
+Dumping ntsbindgir_macro_1:
+EnumConstantDecl 0x1 <facts.c:3:8> col:8 ntsbindgir_macro_1 'int'
+
+Dumping ntsbindgir_macro_0:
+EnumConstantDecl 0x1 <facts.c:2:8, col:48> col:8 ntsbindgir_macro_0 'int'
+`-ConstantExpr 0x1 <col:29, col:48> 'int'
+  |-value: Int 64
+  `-CStyleCastExpr 0x1 <col:29, col:48> 'int' <IntegralCast>
+    `-ParenExpr 0x1 <col:34, col:48> 'GType':'unsigned long'
+";
+        let facts = super::parse(
+            dump,
+            &super::Asked { structs: &[], enums: &[], slots: &[], sized: &[], functions: &[], macros: &["G_TYPE_STRING", "G_TYPE_GTYPE"] },
+        );
+        assert_eq!(facts.macros.get("G_TYPE_STRING"), Some(&64));
+        assert!(!facts.macros.contains_key("G_TYPE_GTYPE"), "a macro defined as a call was valued");
     }
 }

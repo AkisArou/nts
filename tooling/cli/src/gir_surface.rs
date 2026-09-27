@@ -291,21 +291,8 @@ mod tests {
             gtk.declarations.contains("    delete(this: GtkTextBuffer, start: GtkTextIter, end: GtkTextIter): void;"),
             "GtkTextBuffer's delete is not named delete"
         );
-        // A construct-only property no constructor takes is offered by the
-        // props and given to `g_object_new` (`with`), GJS's
-        // `new Gio.ThemedIcon({ name })`, by the calls the lowering makes.
-        let gio = packages.iter().find(|p| p.name == "@nts/gir-gio-2.0").unwrap();
-        for present in [
-            "@ntsConstruct GThemedIcon_construct g_themed_icon_get_type with name use_default_fallbacks\n",
-            "export function GThemedIcon_builder(object_type: c_size_t): Ptr<unknown>;",
-            "export function GThemedIcon_with_name(builder: Ptr<unknown>, value: string): void;",
-            "export function GThemedIcon_with_use_default_fallbacks(builder: Ptr<unknown>, value: CBool<c_int>): void;",
-            "export function GThemedIcon_build(builder: Ptr<unknown>): Owned<Declared<GThemedIcon, GObject>>;",
-        ] {
-            assert!(gio.declarations.contains(present), "missing: {present}");
-        }
-        let themed = gio.declarations.split("export interface GThemedIconProps").nth(1).and_then(|rest| rest.split("  }").next()).unwrap();
-        assert!(themed.contains("    name?: string;"), "GThemedIconProps does not offer name: {themed}");
+        pinned_constructions(&packages);
+        pinned_constants(&packages, gobject);
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-gir-packages-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -349,6 +336,53 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         assert!(errors.is_empty(), "GTK's packages do not typecheck: {errors:#?}");
         eprintln!("{} packages, {} declarations, {} sources checked", packages.len(), owners.len(), snapshot.sources.len());
+    }
+
+    /// What the binder declares for a construct-only property, where a
+    /// class made by its `GType` has one: GJS's `new Gio.ThemedIcon({ name })`.
+    fn pinned_constructions(packages: &[Package]) {
+        // A construct-only property no constructor takes is offered by the
+        // props and given to `g_object_new` (`with`), GJS's
+        // `new Gio.ThemedIcon({ name })`, by the calls the lowering makes.
+        let gio = packages.iter().find(|p| p.name == "@nts/gir-gio-2.0").unwrap();
+        for present in [
+            "@ntsConstruct GThemedIcon_construct g_themed_icon_get_type with name use_default_fallbacks\n",
+            "export function GThemedIcon_builder(object_type: c_size_t): Ptr<unknown>;",
+            "export function GThemedIcon_with_name(builder: Ptr<unknown>, value: string): void;",
+            "export function GThemedIcon_with_use_default_fallbacks(builder: Ptr<unknown>, value: CBool<c_int>): void;",
+            "export function GThemedIcon_build(builder: Ptr<unknown>): Owned<Declared<GThemedIcon, GObject>>;",
+        ] {
+            assert!(gio.declarations.contains(present), "missing: {present}");
+    }
+    let themed = gio.declarations.split("export interface GThemedIconProps").nth(1).and_then(|rest| rest.split("  }").next()).unwrap();
+    assert!(themed.contains("    name?: string;"), "GThemedIconProps does not offer name: {themed}");
+    }
+
+    /// GIR's constants and the fundamental types, as the binder declares them.
+    fn pinned_constants(packages: &[Package], gobject: &Package) {
+        // A constant is declared with its type and its value in a tag, where
+        // GIR states the value exactly, a negative one included; absent where
+        // the fold would carry a different number -- GIR writes a double to
+        // six digits, and a double cannot hold an integer beyond 2^53 -- and
+        // for a string, which the tag does not carry.
+        let glib = packages.iter().find(|p| p.name == "@nts/gir-glib-2.0").unwrap();
+        for present in [
+            "/** @ntsConstant 0 */\n  export const G_PRIORITY_DEFAULT: CNumber<\"int\">;",
+            "/** @ntsConstant -2147483648 */\n  export const G_MININT32: CNumber<\"int32\">;",
+        ] {
+            assert!(glib.declarations.contains(present), "missing: {present}");
+    }
+    for absent in ["export const G_E:", "export const G_MAXINT64:", "export const G_CSET_DIGITS"] {
+        assert!(!glib.declarations.contains(absent), "a constant the fold cannot hold: {absent}");
+    }
+    // A fundamental type, which GIR does not list, valued by the headers
+    // and declared a `GType`; one the headers define as a call is none.
+    let gobject_constants = &gobject.declarations;
+    assert!(
+        gobject_constants.contains("/** @ntsConstant 64 */\n  export const G_TYPE_STRING: c_size_t;"),
+        "G_TYPE_STRING is not the headers' 64"
+    );
+    assert!(!gobject_constants.contains("export const G_TYPE_GTYPE"), "a type defined as a call was declared a constant");
     }
 
     /// Every source file the generator is made of is in `GENERATOR`: one left

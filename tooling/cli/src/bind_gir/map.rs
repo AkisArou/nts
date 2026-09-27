@@ -92,6 +92,9 @@ pub(crate) struct Binding {
     /// By class C type, for a class made by its `GType`: the construct-only
     /// properties a construction of it can give (`construct_with`).
     pub(crate) constructed: BTreeMap<String, Constructed>,
+    /// Each `<constant>` a program can read, folded where it is read, since
+    /// no C symbol holds a macro's value.
+    pub(crate) constants: Vec<ConstantDecl>,
 }
 
 /// A class's construct-only properties, GJS's `new Gio.ThemedIcon({ name })`.
@@ -102,6 +105,17 @@ pub(crate) struct Constructed {
     /// Every one a construction of it can give, its ancestors' in its
     /// namespace included, which the tag lists (`@ntsConstruct … with name`).
     pub(crate) names: Vec<String>,
+}
+
+/// One numeric `<constant>`, declared by its C name with its type and its
+/// value in a tag, as every binding's constant is (`@ntsConstant`):
+/// `/** @ntsConstant 200 */ export const G_PRIORITY_DEFAULT_IDLE:
+/// CNumber<"int">;`.
+#[derive(Debug)]
+pub(crate) struct ConstantDecl {
+    pub(crate) name: String,
+    pub(crate) ts: String,
+    pub(crate) value: String,
 }
 
 /// How a class is constructed with every property at its default: its own
@@ -446,6 +460,13 @@ struct Mapper<'a> {
     comparing_items: bool,
 }
 
+/// An integer as GIR writes a constant's value, where a double holds it
+/// exactly -- within 2^53 -- returned as written.
+fn exact_integer(value: &str) -> Option<String> {
+    let integer = value.parse::<i128>().ok()?;
+    (integer.unsigned_abs() <= 1 << 53).then(|| value.to_owned())
+}
+
 /// Functions whose `GCompareDataFunc` compares the items of a list model --
 /// always `GObject`s, which GIR, typing the callback once for every use, cannot
 /// say. GJS's overrides know it too. The callback's two `gpointer`s are
@@ -487,6 +508,7 @@ pub(crate) fn bind<'a>(
     };
     mapper.types();
     mapper.enums();
+    mapper.constants();
     // Each with the class it is declared in, which is what a constructor
     // returns whatever its return type says.
     // A record's, with the record's C type: its constructors and functions
@@ -1279,6 +1301,37 @@ impl<'a> Mapper<'a> {
             pending.extend(included.includes.iter().map(|(name, _)| name.as_str()));
         }
         (namespace, e)
+    }
+
+    /// The namespace's integer constants whose value GIR states exactly and
+    /// the fold holds exactly: within 2^53. Left out, since the fold would
+    /// carry a different number with nothing to say so: an integer beyond
+    /// 2^53 (`G_MAXINT64`), and every floating one, which GIR writes to six
+    /// digits (`G_E` is `2.718282` there). And the strings and booleans,
+    /// which `@ntsConstant` does not carry: as literal initializers, the
+    /// module they are declared in is refused as one with code in it.
+    fn constants(&mut self) {
+        for constant in &self.namespace.constants {
+            let Some((_, brand, _)) = SCALARS
+                .iter()
+                .find(|(gir, _, scalar)| *gir == constant.ty && !matches!(scalar, Scalar::Float | Scalar::Double | Scalar::Size))
+            else {
+                continue;
+            };
+            let Some(value) = exact_integer(&constant.value) else { continue };
+            let c = brand.strip_prefix("c_").unwrap_or(brand);
+            self.binding.brands.insert("CNumber");
+            self.binding.constants.push(ConstantDecl { name: constant.c_name.clone(), ts: format!("CNumber<\"{c}\">"), value });
+        }
+        // The fundamental types, from the headers, each a `GType` as a
+        // type's is: GJS's `GObject.TYPE_STRING`, which a list store's
+        // `item_type` or a column's type takes.
+        for name in super::FUNDAMENTAL_TYPES {
+            if let Some(value) = self.facts.macros.get(*name) {
+                self.binding.brands.insert("c_size_t");
+                self.binding.constants.push(ConstantDecl { name: (*name).to_owned(), ts: "c_size_t".to_owned(), value: value.to_string() });
+            }
+        }
     }
 
     fn enums(&mut self) {

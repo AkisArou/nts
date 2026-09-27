@@ -92,6 +92,33 @@ pub(crate) fn run(request: &Request) -> Result<()> {
 }
 
 /// What one namespace's headers say: one clang run over them.
+/// `GLib`'s fundamental types, GJS's `GObject.TYPE_*`: macros, which GIR does
+/// not list, each valued by the headers (`facts::Facts::macros`) and
+/// declared as a `GType` constant of `GObject`'s module (`map::constants`).
+pub(crate) const FUNDAMENTAL_TYPES: &[&str] = &[
+    "G_TYPE_NONE",
+    "G_TYPE_INTERFACE",
+    "G_TYPE_CHAR",
+    "G_TYPE_UCHAR",
+    "G_TYPE_BOOLEAN",
+    "G_TYPE_INT",
+    "G_TYPE_UINT",
+    "G_TYPE_LONG",
+    "G_TYPE_ULONG",
+    "G_TYPE_INT64",
+    "G_TYPE_UINT64",
+    "G_TYPE_ENUM",
+    "G_TYPE_FLAGS",
+    "G_TYPE_FLOAT",
+    "G_TYPE_DOUBLE",
+    "G_TYPE_STRING",
+    "G_TYPE_POINTER",
+    "G_TYPE_BOXED",
+    "G_TYPE_PARAM",
+    "G_TYPE_OBJECT",
+    "G_TYPE_VARIANT",
+];
+
 fn namespace_facts(repository: &model::Repository, namespace: &model::Namespace) -> Result<facts::Facts> {
     let structs: Vec<&str> = namespace
         .classes
@@ -119,8 +146,10 @@ fn namespace_facts(repository: &model::Repository, namespace: &model::Namespace)
         .filter_map(|r| r.get_type.as_deref())
         .filter(|name| *name != "intern")
         .collect();
+    let macros: &[&str] = if namespace.name == "GObject" { FUNDAMENTAL_TYPES } else { &[] };
     let flags = pkg_config(repository, namespace, "--cflags");
-    let mut facts = facts::resolve(&namespace.headers, &structs, &enums, &slots, &sized, &functions, &flags)?;
+    let asked = facts::Asked { structs: &structs, enums: &enums, slots: &slots, sized: &sized, functions: &functions, macros };
+    let mut facts = facts::resolve(&namespace.headers, &asked, &flags)?;
     // The interfaces GIR gives no prerequisite, which the
     // type system is asked about instead.
     let interfaces: Vec<(&str, &str)> = namespace
