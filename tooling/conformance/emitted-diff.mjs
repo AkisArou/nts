@@ -61,7 +61,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readAxis } from "./compiled-axis-rows.mjs";
-import { armLines } from "./pin.mjs";
+import { armLines, oneChange } from "./pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -204,7 +204,7 @@ if (argv.includes("--self-test")) {
 const positional = argv.filter((a) => !a.startsWith("--"));
 const [beforeBin, afterBin, ...named] = positional;
 if (!beforeBin || !afterBin) {
-  console.log("  usage: emitted-diff.mjs <before-nts> <after-nts> [project ...] [--axis]");
+  console.log("  usage: emitted-diff.mjs <before-nts> <after-nts> [project ...] [--axis] [--one-change]");
   process.exit(2);
 }
 for (const bin of [beforeBin, afterBin]) {
@@ -213,6 +213,14 @@ for (const bin of [beforeBin, afterBin]) {
     process.exit(2);
   }
 }
+if (argv.includes("--one-change")) {
+  const why = oneChange(beforeBin, afterBin);
+  if (why) {
+    console.log(`  NOT MEASURED: --one-change, and ${why}`);
+    process.exit(2);
+  }
+}
+
 const projects = (named.length > 0
   ? named
   : [

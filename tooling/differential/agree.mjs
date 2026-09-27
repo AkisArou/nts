@@ -86,7 +86,7 @@ import {
 import { availableParallelism, freemem, homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { armLines } from "../conformance/pin.mjs";
+import { armLines, oneChange } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -331,8 +331,15 @@ const verdictsFile = args.find((a) => a.startsWith("--verdicts="))?.slice("--ver
 const only = args.find((a) => a.startsWith("--only="))?.slice("--only=".length).split(",").filter(Boolean);
 const binaries = args.filter((a) => !a.startsWith("--"));
 if (binaries.length < 1 || binaries.length > 2 || (verdictsFile && binaries.length !== 1)) {
-  console.log("  usage: agree.mjs <nts> [<nts-after>] [--only=example,...] [--verdicts=<file>]");
+  console.log("  usage: agree.mjs <nts> [<nts-after>] [--only=example,...] [--verdicts=<file>] [--one-change]");
   process.exit(2);
+}
+if (args.includes("--one-change")) {
+  const why = binaries.length === 2 ? oneChange(binaries[0], binaries[1]) : "it compares two binaries and was given one";
+  if (why) {
+    console.log(`  NOT MEASURED: --one-change, and ${why}`);
+    process.exit(2);
+  }
 }
 
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");

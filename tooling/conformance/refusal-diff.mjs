@@ -82,7 +82,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { armLines } from "./pin.mjs";
+import { armLines, oneChange } from "./pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -191,7 +191,7 @@ if (process.argv.includes("--self-test")) {
 
 const [beforeBin, afterBin, ...named] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 if (!beforeBin || !afterBin || !existsSync(beforeBin) || !existsSync(afterBin)) {
-  console.log("  usage: refusal-diff.mjs <before-nts> <after-nts> [project ...]  (both binaries must exist)");
+  console.log("  usage: refusal-diff.mjs <before-nts> <after-nts> [project ...] [--one-change]  (both binaries must exist)");
   process.exit(2);
 }
 const projects = named.length > 0 ? named : [
@@ -200,6 +200,14 @@ const projects = named.length > 0 ? named : [
     .map((e) => `runtime/node/${e.name}`),
   "runtime/web-platform",
 ].sort();
+
+if (process.argv.includes("--one-change")) {
+  const why = oneChange(beforeBin, afterBin);
+  if (why) {
+    console.log(`  NOT MEASURED: --one-change, and ${why}`);
+    process.exit(2);
+  }
+}
 
 const run = (bin, args) => new Promise((done) => {
   const c = spawn(bin, args, { cwd: ROOT, env });

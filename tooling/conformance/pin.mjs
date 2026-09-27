@@ -126,6 +126,26 @@ export function armLines(before, after) {
   return lines;
 }
 
+/**
+ * Why two binaries are not "one change and nothing else", or null when they
+ * are -- the policy `--one-change` holds a comparison to. One change is
+ * either one base with only what is applied differing, or two plain commits
+ * with exactly one commit between them that touches what the binary is built
+ * from. On 2026-09-28 a delta measured against "capture's parent" included
+ * capture, and the attribution stood by luck rather than by method.
+ */
+export function oneChange(beforeBin, afterBin) {
+  const a = provenanceOf(beforeBin);
+  const b = provenanceOf(afterBin);
+  if (!a || !b) return `${!a ? "before" : "after"} was not built by pin.mjs, so what separates the arms is unknown`;
+  const d = between(a, b);
+  if (d.sameBase) return d.appliedDiffers ? null : "the arms are the same commit with the same change";
+  if (d.backward.length > 0) return `after is not a descendant of before (${d.backward.length} commit(s) only in before)`;
+  if (a.applied || b.applied) return "the arms differ in commit and in what is applied: two changes";
+  if (d.built.length !== 1) return `${d.built.length} commit(s) between the arms touch what the binary is built from:\n${d.built.map((c) => `      ${c}`).join("\n")}`;
+  return null;
+}
+
 /** The diff a pin applies, and the files it touches; null for none. */
 function appliedDiff(sha, opts) {
   if (opts.patch) {
@@ -215,6 +235,7 @@ function selfTest() {
   if (!between(a, withPatch).appliedDiffers || !between(a, withPatch).sameBase) return "a base and its patched pin";
   if (describe(null) !== "provenance unknown: not built by pin.mjs") return "an unknown binary's description";
   if (provenanceOf("/nonexistent/nts") !== null) return "a binary with no record";
+  if (!/was not built by pin.mjs/.test(oneChange("/nonexistent/a", "/nonexistent/b") ?? "")) return "one change between two unrecorded binaries";
   return null;
 }
 
