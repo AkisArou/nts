@@ -895,6 +895,17 @@ GtkWindow({ default_width: 400 })` did not type-check, and neither did
   `p` a pointer.
 - A readable property with no getter gets `get_{name}` over
   `nts_gobject_propget_`, `g_object_get` into a local of its own type.
+  - Where the class already has `get_{name}` (or `set_{name}`) from an
+    ancestor or an interface, the synthesised method is named
+    `$ntsPropGet_{name}` (`$ntsPropSet_`) instead, so the property keeps
+    an accessor and the method keeps its meaning. Before, the synthesised
+    method shadowed it, 43 times across the GIR set. For a string list,
+    `get_n_items()` was a `g_object_get` of `n-items` instead of
+    `GListModel`'s method. `GtkShortcutsShortcut.get_direction()` read its
+    `direction` property instead of the widget's text direction, as
+    `GtkShortcutsGroup.get_height()` read `height`. GJS keeps the two
+    apart. The prefix is not `__`, since TypeScript escapes a name that
+    starts with two underscores.
   - A string comes back copied, and is freed once read (`@ntsFree g_free`).
   - A GObject comes back owned (`Owned<X>`).
   - A boxed copy is left unreadable, as "a read of a native property no
@@ -916,8 +927,10 @@ GtkWindow({ default_width: 400 })` did not type-check, and neither did
   itself), and `width 300` from `default_width`,
   on C and LLVM, plain and `--rc`. The same line checks GTK 4's own drawing:
   `Canvas`'s `vfunc_snapshot` appends a colour node through `GtkSnapshot`
-  (`drawn true`). cairo has no GIR on this machine, so `set_draw_func` stays
-  refused.
+  (`drawn true`). And `inherited 3=3 1 2`: a string list's `get_n_items()`
+  and `n_items`, and a shortcut made with `direction: RTL` whose
+  `get_direction()` is still the widget's LTR. On the compiler before, it
+  read `2 2`.
 
 ### A method whose instance C accepts as NULL
 

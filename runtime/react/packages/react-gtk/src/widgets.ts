@@ -3997,7 +3997,7 @@ export function gridSignal(gtk: GtkGrid, key: string, slot: SignalSlot): boolean
 export function listBaseProp(gtk: GtkListBase, key: string, value: unknown): boolean {
   switch (key) {
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 1 as GtkOrientation);
+      gtk.$ntsPropSet_orientation(typeof value === "number" ? value as GtkOrientation : 1 as GtkOrientation);
       return true;
     case "hadjustment":
       gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
@@ -4019,7 +4019,7 @@ export function listBaseSignal(gtk: GtkListBase, key: string, slot: SignalSlot):
   switch (key) {
     case "onNotifyOrientation":
       gtk.connect("notify::orientation", () => {
-        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
+        slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.$ntsPropGet_orientation()));
       });
       return true;
     case "onNotifyHadjustment":

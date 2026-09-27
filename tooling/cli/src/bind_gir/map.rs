@@ -47,6 +47,14 @@ pub(crate) const SET_BY_NAME: &str = "nts_gobject_prop_";
 /// reads into a local of the property's own type: a string or an object comes
 /// back owned (see `get_by_name`).
 pub(crate) const GET_BY_NAME: &str = "nts_gobject_propget_";
+/// The method name a property's by-name reader or writer takes where
+/// `get_<name>` or `set_<name>` is a method the class already has from an
+/// ancestor or an interface: a spelling no GIR method has, so the property
+/// keeps an accessor to name and the method keeps its meaning. Not `__`:
+/// TypeScript escapes a name that starts with two underscores (`___`), so
+/// the lowering would look for a method the checker records under another.
+pub(crate) const INTERNAL_GET: &str = "$ntsPropGet_";
+pub(crate) const INTERNAL_SET: &str = "$ntsPropSet_";
 
 /// One namespace's binding, ready to write.
 #[derive(Debug, Default)]
@@ -566,9 +574,12 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
             }
             let Some(param) = &property.set_by_name else { continue };
             let ident = identifier(&property.name.replace('-', "_"));
-            let method = format!("set_{ident}");
+            let mut method = format!("set_{ident}");
             if class.callables.iter().any(|callable| identifier(&callable.name) == method) {
                 continue;
+            }
+            if mapper.inherits_method(namespace, class, &method) {
+                method = format!("{INTERNAL_SET}{ident}");
             }
             let label = format!("{c_type}:{}", property.name);
             let param = mapper.with_c_type(&spelled_string(param, "const gchar*"));
@@ -666,9 +677,12 @@ fn value_kind(c: &Type) -> Option<char> {
 /// unreadable, as it was: the lowering refuses a read no `@ntsGet` names.
 fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &str, param: &Param) {
     let ident = identifier(&property.replace('-', "_"));
-    let method = format!("get_{ident}");
+    let mut method = format!("get_{ident}");
     if class.callables.iter().any(|callable| identifier(&callable.name) == method) {
         return;
+    }
+    if mapper.inherits_method(mapper.namespace, class, &method) {
+        method = format!("{INTERNAL_GET}{ident}");
     }
     let raw = param;
     let param = mapper.with_c_type(&spelled_string(raw, "const gchar*"));
@@ -1003,6 +1017,48 @@ impl<'a> Mapper<'a> {
         (None, implied)
     }
 
+    /// The interfaces `class`, of `namespace`, declares whose methods the
+    /// binding merges into its own: an interface, tagged by the headers, and
+    /// counted.
+    fn merged_interfaces(&self, namespace: &'a Namespace, class: &'a Class) -> Vec<(&'a Namespace, &'a Class)> {
+        class
+            .implements
+            .iter()
+            .filter_map(|name| {
+                let qualified = if name.contains('.') { name.clone() } else { format!("{}.{name}", namespace.name) };
+                let Some(Resolved::Class(namespace, interface)) = self.resolve(&qualified) else { return None };
+                let tagged = self.facts.tags.contains_key(interface.c_type.as_deref()?);
+                (tagged && interface.interface && self.counted(namespace, interface)).then_some((namespace, interface))
+            })
+            .collect()
+    }
+
+    /// Whether `class` has a method named `method` from elsewhere than its
+    /// own callables: an ancestor's, or an interface's the binding merges into
+    /// it or into an ancestor -- `GListStore`'s `get_n_items` is
+    /// `GListModel`'s. A property's by-name method must not take that name
+    /// (`INTERNAL_GET`): it would shadow the method GJS calls by it, which can
+    /// be another thing entirely -- `GtkShortcutsShortcut`'s `direction`
+    /// property is not `gtk_widget_get_direction`.
+    fn inherits_method(&self, namespace: &'a Namespace, class: &'a Class, method: &str) -> bool {
+        let named = |class: &Class| class.callables.iter().any(|callable| identifier(&callable.name) == method);
+        let mut interfaces = self.merged_interfaces(namespace, class);
+        let mut at = self.parent_class(namespace, class);
+        // Bounded, so a cycle in malformed GIR ends.
+        for _ in 0..64 {
+            if interfaces.iter().any(|(_, interface)| named(interface)) {
+                return true;
+            }
+            let Some((namespace, class)) = at else { return false };
+            if named(class) {
+                return true;
+            }
+            interfaces = self.merged_interfaces(namespace, class);
+            at = self.parent_class(namespace, class);
+        }
+        false
+    }
+
     /// The interfaces `class` declares, as the binding names them and as C
     /// tags them: `("GtkEditable", "_GtkEditable")`. Each one's methods are
     /// merged into the class's, from its own module. One the headers do not
@@ -1010,14 +1066,9 @@ impl<'a> Mapper<'a> {
     /// then simply not seen to implement it.
     fn implements(&mut self, class: &'a Class) -> Vec<Implemented> {
         let mut found = Vec::new();
-        for name in &class.implements {
-            let qualified = if name.contains('.') { name.clone() } else { format!("{}.{name}", self.namespace.name) };
-            let Some(Resolved::Class(namespace, interface)) = self.resolve(&qualified) else { continue };
+        for (namespace, interface) in self.merged_interfaces(self.namespace, class) {
             let Some(c_type) = interface.c_type.as_deref() else { continue };
             let Some(tag) = self.facts.tags.get(c_type).cloned() else { continue };
-            if !interface.interface || !self.counted(namespace, interface) {
-                continue;
-            }
             let (module, local) = self.reference(namespace, c_type);
             if !module.is_empty() {
                 self.binding.imports.entry(module).or_default().extend([format!("{local}Methods"), format!("{local}Props")]);

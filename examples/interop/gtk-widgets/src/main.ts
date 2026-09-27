@@ -17,6 +17,12 @@
 //                 written and read back (copied, the copy freed); an image's
 //                 unset `file`, `null`; and `primary_icon_paintable`, an object
 //                 written and read back as itself, owned
+//   inherited 3=3 1 2  a method a class has from an interface or an ancestor
+//                 keeps its meaning beside a property of the same name: the
+//                 string list's `get_n_items()` is `GListModel`'s, and its
+//                 `n_items` property is read by name; a shortcut's
+//                 `get_direction()` is the widget's text direction, LTR (1),
+//                 where its own `direction` property was made RTL (2)
 //   keys 65,66, handled true false click 2@1.5x2.5  a key controller whose
 //                 `key-pressed` handler answers whether it handled the key --
 //                 `emit` of a signal with a result answers the handlers' -- and
@@ -39,10 +45,12 @@ import {
   GtkStack,
   GtkStackSwitcher,
   GtkStringList,
+  GtkShortcutsShortcut,
   GtkSnapshot,
   GtkSwitch,
   GtkWidget,
   Orientation,
+  TextDirection,
 } from "c:Gtk-4.0";
 import { GdkRGBA } from "c:Gdk-4.0";
 import { graphene_rect_t } from "c:Graphene-1.0";
@@ -114,6 +122,10 @@ function open(app: GtkApplication): void {
   if (paintable !== null) entry.primary_icon_paintable = paintable;
   console.log(
     "icon " + (entry.primary_icon_name ?? "null") + " file " + (image.file ?? "null") + " same " + String(entry.primary_icon_paintable === paintable),
+  );
+  const shortcut = new GtkShortcutsShortcut({ direction: TextDirection.RTL });
+  console.log(
+    "inherited " + String(choices.get_n_items()) + "=" + String(choices.n_items) + " " + String(shortcut.get_direction()) + " " + String(shortcut.direction),
   );
   const keys = new GtkEventControllerKey({});
   let pressed = "";
