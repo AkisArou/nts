@@ -370,11 +370,12 @@ fn bind_objc(rest: &[String]) -> Result<()> {
         protocols: repeated("--protocol"),
         functions: repeated("--function"),
         names: repeated("--name"),
+        package: rest.iter().any(|arg| arg == "--package"),
         sdk,
         target: single("--target").unwrap_or_else(|| "x86_64-apple-macos13".to_owned()),
         symbols: single("--symbols").map(std::path::PathBuf::from),
     };
-    if request.frameworks.is_empty() || (request.classes.is_empty() && request.names.is_empty()) {
+    if request.frameworks.is_empty() || (request.classes.is_empty() && request.names.is_empty() && !request.package) {
         anyhow::bail!("`nts bind-objc` needs at least one `--framework`, and a `--class` or a `--name`");
     }
     let output = bind_objc::run(&request)?;

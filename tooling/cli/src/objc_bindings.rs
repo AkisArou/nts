@@ -134,6 +134,7 @@ impl ObjcBindings {
                 protocols: Vec::new(),
                 functions: Vec::new(),
                 names: names.iter().cloned().collect(),
+                package: false,
                 sdk: platform.sdk.to_string(),
                 target: platform.triple,
                 symbols: Some(symbols),
