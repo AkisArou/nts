@@ -31,7 +31,10 @@
 //   tabs      TabView.Page elements add titled tabs in React's order, one
 //             inserted before another and one moved; the moved tab stays
 //             selected; a close the user asks for is refused and reported
-//             as onClose, and taking the element out closes the tab
+//             as onClose, and taking the element out closes the tab; a
+//             tab's `selected` selects it, the user selecting another is
+//             heard as that tab's onSelect and put back after the flush, and
+//             the app moving `selected` moves the selection
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window, and taken out it closes
 //   unknown   a root without the adw set creates no Adw widget
@@ -70,6 +73,7 @@ import {
   getPublicInstance,
   insertBefore,
   type HostNode,
+  type Props,
   removeChild,
   removeChildFromContainer,
   WindowRoot,
@@ -296,6 +300,29 @@ function main(): void {
     tabbing += ">" + titles() + " selected=" + String(tabbed.get_selected_page() === pageOf(tabs[2]!));
     tabbed.close_page(pageOf(tabs[3]!));
     tabbing += " asked=" + String(asked) + " kept=" + String(tabbed.get_n_pages());
+    let heard = "";
+    const tabProps = (title: string, selected: boolean): Props => ({
+      title,
+      selected,
+      onClose: () => asked++,
+      onSelect: () => {
+        heard += title;
+      },
+    });
+    const selectedTitle = (): string => {
+      const page = tabbed.get_selected_page();
+      return page === null ? "-" : page.get_title();
+    };
+    commitUpdate(tabs[0]!, "AdwTabView.Page", { title: "A" }, tabProps("A", true), {});
+    commitUpdate(tabs[1]!, "AdwTabView.Page", { title: "B" }, tabProps("B", false), {});
+    tabbing += " selected=" + selectedTitle();
+    tabbed.set_selected_page(pageOf(tabs[1]!));
+    const picked = selectedTitle();
+    idle();
+    tabbing += " user=" + picked + ">" + selectedTitle() + " heard=" + heard;
+    commitUpdate(tabs[0]!, "AdwTabView.Page", tabProps("A", true), tabProps("A", false), {});
+    commitUpdate(tabs[1]!, "AdwTabView.Page", tabProps("B", false), tabProps("B", true), {});
+    tabbing += " app=" + selectedTitle() + " heard=" + heard;
     removeChild(tabView, tabs[3]!);
     tabbing += " " + titles();
   }

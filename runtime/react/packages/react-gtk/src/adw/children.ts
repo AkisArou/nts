@@ -27,7 +27,7 @@ import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { GroupNode, GroupPlacement, type PackProps } from "../children.ts";
-import { PlacedNode, SignalSlot, type WidgetNode } from "../HostNode.ts";
+import { PlacedNode, scheduleRestore, SignalSlot, type WidgetNode } from "../HostNode.ts";
 
 export interface HeaderBarChildren {
   /** `<HeaderBar.Start>`: its children, packed at the bar's start, left to right. */
@@ -215,6 +215,15 @@ export interface TabViewPageProps {
   /** A word a TabOverview's search finds the tab by, besides its title. */
   keyword?: string;
   /**
+   * Whether this is the selected tab. Controlled, as a Stack's
+   * `visibleChildName` is: the user selecting another tab reports it as that
+   * tab's `onSelect`, and this one is selected again unless the app moves
+   * `selected` to that tab.
+   */
+  selected?: boolean;
+  /** The user selected the tab. */
+  onSelect?: () => void;
+  /**
    * The user asked to close the tab (its close button, a shortcut). The tab
    * stays until the app stops rendering it.
    */
@@ -227,23 +236,41 @@ export interface TabViewChildren {
   readonly Page: HostComponent<"AdwTabView.Page", TabViewPageProps>;
 }
 
-// What a tab's `close-page` handler reads. The TabView holds the handler, so
-// the handler holds this and not the node, which holds the TabView.
-class TabClosing {
+// What a tab's handlers read. The TabView holds the handlers, so they hold
+// this and not the node, which holds the TabView.
+class TabState {
   readonly onClose: SignalSlot = new SignalSlot();
+  readonly onSelect: SignalSlot = new SignalSlot();
+  // The props' `selected`.
+  selected = false;
   // True while React closes the tab: the close is its own, and goes ahead.
-  byReact = false;
+  closingByReact = false;
+}
+
+// Above zero while React changes which tab is selected: selecting a tab from
+// props, or closing the selected one, after which libadwaita selects
+// another. The user did neither, so no tab's `onSelect` hears it.
+let selectingByReact = 0;
+
+function selectByReact(view: AdwTabView, page: AdwTabPage): void {
+  if (view.get_selected_page() !== page) {
+    selectingByReact++;
+    view.set_selected_page(page);
+    selectingByReact--;
+  }
 }
 
 /**
  * A tab of a TabView, placed where React places it: inserted before the tab
  * after it, and moved with `reorder_page`, so it stays selected. Which tabs
  * exist is React's: a close the user asks for is refused and reported as
- * `onClose`, and React closes a tab by taking its element out.
+ * `onClose`, and React closes a tab by taking its element out. Which tab is
+ * selected is the app's where a tab says `selected`.
  */
 export class TabViewPageNode extends PlacedNode {
-  private readonly closing: TabClosing = new TabClosing();
-  private handler = 0;
+  private readonly state: TabState = new TabState();
+  private closeHandler = 0;
+  private selectHandler = 0;
 
   protected attach(owner: WidgetNode, widget: GtkWidget): void {
     const view = owner.widget;
@@ -252,17 +279,33 @@ export class TabViewPageNode extends PlacedNode {
     }
     const next = this.nextIn(view);
     const page = next === null ? view.append(widget) : view.insert(widget, view.get_page_position(next));
-    this.describe(page);
-    const closing = this.closing;
-    this.handler = view.connect("close-page", (self, asked) => {
+    this.describe(view, page);
+    const state = this.state;
+    this.closeHandler = view.connect("close-page", (self, asked) => {
       if (asked !== page) {
         return false;
       }
-      self.close_page_finish(page, closing.byReact);
-      if (!closing.byReact) {
-        closing.onClose.fire();
+      self.close_page_finish(page, state.closingByReact);
+      if (!state.closingByReact) {
+        state.onClose.fire();
       }
       return true;
+    });
+    // `self`, not `view`: a handler holding the TabView would keep it alive.
+    this.selectHandler = view.connect("notify::selected-page", (self) => {
+      const notified = self instanceof AdwTabView ? self : null;
+      if (notified === null || selectingByReact > 0) {
+        return;
+      }
+      if (notified.get_selected_page() === page) {
+        state.onSelect.fire();
+      } else if (state.selected) {
+        scheduleRestore(() => {
+          if (state.selected) {
+            selectByReact(notified, page);
+          }
+        });
+      }
     });
   }
   protected detach(owner: WidgetNode, widget: GtkWidget): void {
@@ -270,10 +313,13 @@ export class TabViewPageNode extends PlacedNode {
     if (!(view instanceof AdwTabView)) {
       return;
     }
-    this.closing.byReact = true;
+    g_signal_handler_disconnect(view, this.selectHandler);
+    this.state.closingByReact = true;
+    selectingByReact++;
     view.close_page(view.get_page(widget));
-    this.closing.byReact = false;
-    g_signal_handler_disconnect(view, this.handler);
+    selectingByReact--;
+    this.state.closingByReact = false;
+    g_signal_handler_disconnect(view, this.closeHandler);
   }
   protected move(owner: WidgetNode, widget: GtkWidget): boolean {
     const view = owner.widget;
@@ -292,7 +338,7 @@ export class TabViewPageNode extends PlacedNode {
   protected update(owner: WidgetNode, widget: GtkWidget): void {
     const view = owner.widget;
     if (view instanceof AdwTabView) {
-      this.describe(view.get_page(widget));
+      this.describe(view, view.get_page(widget));
     }
   }
 
@@ -302,7 +348,7 @@ export class TabViewPageNode extends PlacedNode {
     return next === null ? null : view.get_page(next);
   }
 
-  private describe(page: AdwTabPage): void {
+  private describe(view: AdwTabView, page: AdwTabPage): void {
     const props = this.props;
     const text = (key: string): string => {
       const value = props[key];
@@ -313,11 +359,22 @@ export class TabViewPageNode extends PlacedNode {
     page.set_keyword(text("keyword"));
     page.set_loading(props["loading"] === true);
     page.set_needs_attention(props["needsAttention"] === true);
+    const state = this.state;
     const onClose = props["onClose"];
     if (typeof onClose === "function") {
-      this.closing.onClose.handler = onClose;
+      state.onClose.handler = onClose;
     } else {
-      this.closing.onClose.handler = null;
+      state.onClose.handler = null;
+    }
+    const onSelect = props["onSelect"];
+    if (typeof onSelect === "function") {
+      state.onSelect.handler = onSelect;
+    } else {
+      state.onSelect.handler = null;
+    }
+    state.selected = props["selected"] === true;
+    if (state.selected) {
+      selectByReact(view, page);
     }
   }
 }

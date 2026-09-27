@@ -79,7 +79,8 @@ export function setAfterEvent(flush: () => void): void {
   restores.flush = flush;
 }
 
-function scheduleRestore(restore: () => void): void {
+/** Runs `restore` after the flush that follows a user's change: how a controlled value is put back. */
+export function scheduleRestore(restore: () => void): void {
   restores.queue.push(restore);
   if (restores.scheduled) {
     return;
