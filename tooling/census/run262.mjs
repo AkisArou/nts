@@ -95,10 +95,13 @@ if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bo
 // carries why.
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 
-// Temporaries under the scratch rather than the shared `/tmp` tmpfs; see
-// `conformance262.mjs`, which does the same.
+// Temporaries and the snapshot cache under the scratch rather than shared;
+// see `conformance262.mjs`, which does the same and says why the cache is
+// named rather than left to follow `TMPDIR` (each case also runs with it off).
 process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
+process.env.NTS_SNAPSHOT_CACHE = join(SCRATCH, "snapshots");
+mkdirSync(process.env.NTS_SNAPSHOT_CACHE, { recursive: true });
 
 // --- the selection --------------------------------------------------------
 

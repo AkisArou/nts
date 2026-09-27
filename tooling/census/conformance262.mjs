@@ -141,14 +141,23 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 // every lane that runs out of inodes before bytes. Set on this process so the
 // workers and everything they spawn inherit it, and removed with the scratch.
 //
-// It also makes the snapshot cache private to the run: its default lives under
-// `TMPDIR`, so every run starts empty and nothing another command stored can be
-// served to a case. Before 90aa37954, a bare `nts frontend` and a build shared
-// a cache key, and a build could load a narrower snapshot and compile less. This
-// is why no recorded census can have been measured on one. A global
-// `NTS_SNAPSHOT_CACHE` would override it, so do not set one for a census run.
+// **No case is served from the snapshot cache.** Each attempt runs with it off
+// (`environment()` in project.mjs sets `NTS_NO_SNAPSHOT_CACHE=1`, because the
+// cache keys on the tsconfig and every case's tsconfig is the same file), so a
+// case's snapshot is always fresh. Before 90aa37954 a bare `nts frontend` and a
+// build shared a cache key and a build could load a narrower snapshot; this is
+// why no recorded census can have been measured on one.
+//
+// This comment used to say the property followed from `TMPDIR`, which held the
+// cache's default. It never did -- the cases turn the cache off -- and when the
+// default moved to `~/.cache/nts` for the `/tmp` quota that sentence would have
+// been the only thing claiming isolation. Anything this process runs outside
+// `environment()` gets a private cache by name, which wins over any value the
+// caller set.
 process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
+process.env.NTS_SNAPSHOT_CACHE = join(SCRATCH, "snapshots");
+mkdirSync(process.env.NTS_SNAPSHOT_CACHE, { recursive: true });
 // Per-case address-space cap; `attempt262.mjs`'s `capped` carries why it exists
 // and why 6 GB. `NTS_CENSUS_MEMORY_CAP_KB=0` removes it.
 const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
