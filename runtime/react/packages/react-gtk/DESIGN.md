@@ -478,6 +478,23 @@ desktop's settings shut out (an empty `XDG_CONFIG_HOME`, `GDK_DEBUG=no-portals`)
 since libadwaita warns about a dark colour scheme it reads through the
 settings portal.
 
+## What it costs
+
+Measured natively (`--rc`) against GTK's own calls doing the same work, on
+Labels with three props:
+
+- **Mounting** a widget costs about what making it in GTK does: the widget
+  is most of it. Appending a child is O(1) in the number of children the
+  parent holds (40,000 Labels into a Box in about 0.4 s); a keyed move is
+  O(n), since React's order of the children is an array; an insert in a
+  container with no insert of its own (a PreferencesGroup) re-adds what
+  follows.
+- **Updating** a prop costs about 1.6 µs where the bare setter costs 0.5 µs:
+  the diff reads both props records for every key, as React DOM's does, and
+  most of the rest is nts's records and reference counting, not react-gtk.
+- A long list is still better as a ListView than as a Box of widgets: GTK
+  makes only the rows on screen (see the next section).
+
 ## Lists: a row per item, rendered by React (designed, not built)
 
 A ListView, GridView or ColumnView shows its model's items through a
