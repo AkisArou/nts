@@ -556,8 +556,8 @@ pub fn analyze(
     }
     // And a foreign counted handle a name still holds, which is an anchor for a
     // reason *no* analysis here can see. See `held_to_the_end`.
-    for handle in held_to_the_end(func) {
-        live.hold_to_every_exit(func, handle);
+    for (handle, through) in held_to_the_end(func) {
+        live.hold_through(func, handle, |block| through.contains(&block));
     }
 
     let live = &*live;
@@ -805,15 +805,26 @@ fn control_flow(func: &Func) -> (Vec<Option<usize>>, Vec<rustc_hash::FxHashSet<u
 /// `examples/interop/gtk-iter-lifetime/escape` records that the
 /// invisible-dependency problem is not fully closed.
 ///
-/// **Its definition dominates every exit.** [`liveness::Liveness::
-/// hold_to_every_exit`] makes a value available in *every* block, so a release
-/// lands in each terminal one -- and in a **resumed** function, whose entry
-/// dispatches to one state per suspension, a value defined in one state's block is
-/// not available at an exit reached from another. Without this guard `verify`
-/// answered `NotDominated { func: "use__resume", … }` eighteen times for one test.
-/// The same guard `super::undominated_names` applies to a frame object's names,
-/// through the same dominator walk.
-fn held_to_the_end(func: &Func) -> Vec<ValueId> {
+/// **Its definition dominates every exit it reaches.** The value is held through
+/// the blocks its definition reaches and dominates
+/// ([`liveness::Liveness::hold_through`]), so a release lands in each exit among
+/// them -- and in a **resumed** function, whose entry dispatches to one state per
+/// suspension, a value defined in one state's block is not available at an exit
+/// reached from another. Without this guard `verify` answered `NotDominated {
+/// func: "use__resume", … }` eighteen times for one test. The same guard
+/// `super::undominated_names` applies to a frame object's names, through the same
+/// dominator walk.
+///
+/// **Every exit it reaches, not every exit.** An exit the definition does not
+/// reach has nothing to release, and asking for all of them made the rule a
+/// dead letter in Windows Runtime code: every `@ntsHresult` call branches to a
+/// throwing exit on failure, so a handle made after any call dominated none of
+/// the exits before it -- `new StackPanel()` after a `get_Title`, or after an
+/// early `return`. Its release then followed its last *read*, and
+/// `panel.children.size` released the panel between `get_Children` and
+/// `get_Size`: XAML clears a destroyed panel's children, and the size read 0
+/// (winui-hello's `replaced` arm, under rc only).
+fn held_to_the_end(func: &Func) -> Vec<(ValueId, rustc_hash::FxHashSet<usize>)> {
     let exits: Vec<BlockId> = func
         .blocks
         .iter()
@@ -927,8 +938,18 @@ fn held_to_the_end(func: &Func) -> Vec<ValueId> {
         if super::loops::in_a_cycle(func, block) {
             continue;
         }
-        if exits.iter().all(|exit| dominates(block, *exit)) {
-            found.push(value);
+        // The blocks the definition reaches, and of those the ones it
+        // dominates, which are where the value is held.
+        let mut reached = rustc_hash::FxHashSet::default();
+        let mut queue = vec![block];
+        while let Some(at) = queue.pop() {
+            if reached.insert(at.0 as usize) {
+                queue.extend(func.blocks[at.0 as usize].terminator.successors());
+            }
+        }
+        if exits.iter().filter(|exit| reached.contains(&(exit.0 as usize))).all(|exit| dominates(block, *exit)) {
+            reached.retain(|at| dominates(block, BlockId(u32::try_from(*at).unwrap_or(0))));
+            found.push((value, reached));
         }
     }
     found

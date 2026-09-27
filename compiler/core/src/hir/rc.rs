@@ -1309,6 +1309,168 @@ mod tests {
         );
     }
 
+    /// A counted foreign handle made after an exit it never reaches is still
+    /// held to the exits it does: `if (!ok) return 0; const panel = make();
+    /// read(panel); return later()`. Every Windows Runtime call branches to a
+    /// throwing exit, so asking the handle to dominate *every* exit left the
+    /// rule a dead letter there, and `panel.children.size` released the panel
+    /// between its two calls -- XAML cleared the destroyed panel's children and
+    /// the size read 0 (winui-hello's `replaced`, under rc only).
+    #[test]
+    fn a_foreign_handle_made_after_an_early_exit_outlives_its_last_read() {
+        let handle = objc_handle("Elements");
+        let native = crate::hir::native::Type::Pointer(crate::hir::native::Pointee::Opaque(crate::hir::native::Handle {
+            tag: "Elements".to_owned(),
+            ancestors: vec!["NSObject".to_owned()],
+            family: crate::hir::native::Family::Objc,
+            interface: false,
+        }));
+        let read = crate::hir::native::Function {
+            name: "read".to_owned(),
+            convention: crate::hir::native::Convention::C,
+            retention: vec![crate::hir::native::Retention::Unknown],
+            roles: vec![crate::hir::native::Role::Plain],
+            parameters: vec![native],
+            result: crate::hir::native::Type::Void,
+            variadic: None,
+            declared_at: None,
+            returns_string: None,
+            returns_array: None,
+            returns_dictionary: None,
+            returns_set: None,
+            send: None,
+            returns_owned: false,
+            consumes: Vec::new(),
+            frameworks: Vec::new(),
+            libraries: Vec::new(),
+            defaults: Vec::new(),
+            result_as: None,
+            vtable: None,
+            hresult: false,
+        };
+        let values = vec![
+            op(OpKind::Param(0), number()),                                                      // %0
+            call("ok", Vec::new(), HirType::Bool),                                               // %1
+            call("objc_make", vec![ValueId(0)], handle),                                         // %2  owned
+            op(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(read)), args: vec![ValueId(2)], frame: None }, HirType::Void), // %3  its last read
+            call("later", Vec::new(), number()),                                                 // %4
+            call("failed", Vec::new(), HirType::Bool),                                           // %5
+        ];
+        let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
+        let func = &mut program.funcs[0];
+        func.values = values;
+        func.blocks = vec![
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1)],
+                terminator: Terminator::Branch {
+                    cond: ValueId(1),
+                    then_target: crate::hir::BlockId(2),
+                    then_args: Vec::new(),
+                    else_target: crate::hir::BlockId(1),
+                    else_args: Vec::new(),
+                },
+            },
+            // The early exit, before the handle exists.
+            Block { params: Vec::new(), ops: Vec::new(), terminator: Terminator::Return(Some(ValueId(0))) },
+            // The read, then the check every Windows Runtime call ends in: a
+            // failure throws (an exit of its own) and success goes on.
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(2), ValueId(3), ValueId(5)],
+                terminator: Terminator::Branch {
+                    cond: ValueId(5),
+                    then_target: crate::hir::BlockId(3),
+                    then_args: Vec::new(),
+                    else_target: crate::hir::BlockId(4),
+                    else_args: Vec::new(),
+                },
+            },
+            Block { params: Vec::new(), ops: Vec::new(), terminator: Terminator::Unreachable },
+            Block { params: Vec::new(), ops: vec![ValueId(4)], terminator: Terminator::Return(Some(ValueId(4))) },
+        ];
+        insert(&mut program);
+        let func = &program.funcs[0];
+        let ops = &func.blocks[4].ops;
+        let releases: Vec<usize> = ops
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(2))))
+            .map(|(at, _)| at)
+            .collect();
+        let later = ops.iter().position(|v| *v == ValueId(4));
+        assert!(
+            releases.len() == 1 && later.is_some_and(|later| releases[0] > later),
+            "the handle is released before `later`: {:?}",
+            ops.iter().map(|v| &func.values[v.0 as usize].kind).collect::<Vec<_>>()
+        );
+        assert!(
+            func.blocks[1].ops.iter().all(|v| !matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(2)))),
+            "the early exit releases a handle it never saw"
+        );
+    }
+
+    /// A handle made before a loop whose body can throw is held *through* the
+    /// loop, and released at the exits, never inside it: one `ValueId` is one
+    /// object here, since it is defined once, so a release per iteration would
+    /// be a release per iteration of one reference. `make(); while (more()) {
+    /// if (failed()) throw; } return later()`.
+    ///
+    /// **A guard, not a witness.** This handle is defined in the entry block,
+    /// so it dominated every exit and the old condition held it too; the test
+    /// passes either way. What it stops is a future change releasing inside
+    /// the loop. The witness that the new condition was needed is
+    /// `a_foreign_handle_made_after_an_early_exit_outlives_its_last_read`, and
+    /// winui-hello's `replaced` arm on the platform.
+    #[test]
+    fn a_foreign_handle_held_through_a_loop_is_released_at_its_exits_only() {
+        let values = vec![
+            op(OpKind::Param(0), number()),                                  // %0
+            call("objc_make", vec![ValueId(0)], objc_handle("Elements")),    // %1  owned
+            call("more", Vec::new(), HirType::Bool),                         // %2
+            call("failed", Vec::new(), HirType::Bool),                       // %3
+            call("later", Vec::new(), number()),                             // %4
+        ];
+        let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
+        let func = &mut program.funcs[0];
+        func.values = values;
+        let branch = |cond: u32, then_target: u32, else_target: u32| Terminator::Branch {
+            cond: ValueId(cond),
+            then_target: crate::hir::BlockId(then_target),
+            then_args: Vec::new(),
+            else_target: crate::hir::BlockId(else_target),
+            else_args: Vec::new(),
+        };
+        func.blocks = vec![
+            // b0: the handle, then the loop.
+            Block { params: Vec::new(), ops: vec![ValueId(0), ValueId(1)], terminator: Terminator::Jump { target: crate::hir::BlockId(1), args: Vec::new() } },
+            // b1: the loop's head.
+            Block { params: Vec::new(), ops: vec![ValueId(2)], terminator: branch(2, 2, 4) },
+            // b2: its body, whose call can fail.
+            Block { params: Vec::new(), ops: vec![ValueId(3)], terminator: branch(3, 3, 1) },
+            // b3: the failure, an exit inside the loop's reach.
+            Block { params: Vec::new(), ops: Vec::new(), terminator: Terminator::Unreachable },
+            // b4: after the loop.
+            Block { params: Vec::new(), ops: vec![ValueId(4)], terminator: Terminator::Return(Some(ValueId(4))) },
+        ];
+        insert(&mut program);
+        let func = &program.funcs[0];
+        let released_in = |block: usize| {
+            func.blocks[block].ops.iter().filter(|v| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1)))).count()
+        };
+        let ops = |block: usize| func.blocks[block].ops.iter().map(|v| &func.values[v.0 as usize].kind).collect::<Vec<_>>();
+        // The loop's blocks and any block an edge's release was split into
+        // on the way round: none may release it.
+        for (block, _) in func.blocks.iter().enumerate().filter(|(at, _)| ![3, 4].contains(at)) {
+            assert_eq!(released_in(block), 0, "b{block} releases the handle inside or before the loop: {:?}", ops(block));
+        }
+        assert_eq!(released_in(3), 1, "the failure exit does not release it once: {:?}", ops(3));
+        assert_eq!(released_in(4), 1, "the return does not release it once: {:?}", ops(4));
+        let later = func.blocks[4].ops.iter().position(|v| *v == ValueId(4));
+        let release = func.blocks[4].ops.iter().position(|v| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1))));
+        assert!(later < release, "released before `later`: {:?}", ops(4));
+    }
+
     /// An Objective-C handle, `Elements : NSObject`, or the `NSObject` view of
     /// one.
     fn objc_handle(tag: &str) -> HirType {

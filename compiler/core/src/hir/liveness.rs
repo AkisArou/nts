@@ -87,7 +87,18 @@ impl Liveness {
     /// in a loop names a different one each time round and must die each time
     /// round with it.
     pub fn hold_to_every_exit(&mut self, func: &Func, value: ValueId) {
+        self.hold_through(func, value, |_| true);
+    }
+
+    /// Hold a value live through the blocks `through` names, to each exit
+    /// among them: [`Self::hold_to_every_exit`] for a value defined partway
+    /// through the function, whose blocks are those its definition reaches
+    /// and dominates. An exit before the definition has nothing to release.
+    pub fn hold_through(&mut self, func: &Func, value: ValueId, through: impl Fn(usize) -> bool) {
         for (index, block) in func.blocks.iter().enumerate() {
+            if !through(index) {
+                continue;
+            }
             self.available[index].insert(value);
             if index != 0 {
                 self.live_in[index].insert(value);
