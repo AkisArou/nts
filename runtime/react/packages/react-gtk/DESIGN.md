@@ -2,7 +2,8 @@
 
 React's first native host: GTK 4 widgets as React host components. What
 follows is built and checked on real GTK widgets, under reference counting and
-with GTK warnings fatal (`native/gtk/build.sh`), except where a section says
+with GTK warnings fatal (`native/gtk/build.sh`, and `native/adw/build.sh` for
+libadwaita), except where a section says
 it is designed only. A compiled app does not render yet: that waits on the
 reconciler compiling natively (see ../../README.md, Status).
 
@@ -518,7 +519,13 @@ checked in JavaScript, where react-gtk does not run.
    widgets (`native/gtk`); rendering waits on the reconciler emitting
    natively.
 2. Props and signals generated from GIR for every widget class. Done for
-   props with scalar values, and signals with scalar or widget arguments.
+   props holding scalars, string lists, objects the app makes (a class, an
+   interface's implementers, a boxed record with a constructor) and other
+   widgets, and for signals whose arguments are scalars or any class,
+   interface or boxed record, detailed signals included. Left out, each with
+   its reason in `widgets.skipped.txt`: records with no constructor (Pango's,
+   until the bindings mark them), handlers that fill an out parameter, and
+   handlers that return anything but a boolean.
 3. `ListBox` (done, with `FlowBox`), `Entry` with controlled `text` (done,
    with the other controlled props), and the rest of the common widgets.
 4. Containers that place with parameters (Grid, Stack, Notebook, the bars'
