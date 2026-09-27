@@ -542,28 +542,28 @@ impl Client {
         )
     }
 
-    /// Every diagnostic the checker produced for a whole project.
+    /// Every diagnostic the checker produces for `files`: syntactic, since a
+    /// parse error means the decoded AST is not the program anybody wrote,
+    /// and semantic.
     ///
-    /// Two exchanges for the program regardless of size, so the correctness gate
-    /// costs a constant. Syntactic diagnostics matter as much as semantic ones: a
-    /// parse error means the decoded AST is not the program anybody wrote.
-    pub fn diagnostics(
+    /// **The files a caller reads, not the program's.** Omitting the file
+    /// asks for every file the program holds, the default library included,
+    /// and checking `lib.dom.d.ts` on every build was 28% of the frontend's
+    /// time on a small program -- for diagnostics located in no file the
+    /// frontend keeps. Two exchanges a file cost next to nothing
+    /// (`docs/records/0345`); the checking behind them is the cost.
+    pub fn diagnostics_of(
         &mut self,
         snapshot: SnapshotHandle,
         project: &ProjectHandle,
+        files: impl IntoIterator<Item = impl AsRef<Utf8Path>>,
     ) -> Result<Vec<DiagnosticResponse>, TsgoError> {
-        let params = GetDiagnosticsParams {
-            snapshot,
-            project: project.clone(),
-            // Omitted on purpose — tsgo reads absence as "every file".
-            file: None,
-        };
-        let mut all: Vec<DiagnosticResponse> =
-            self.request(proto::method::GET_SYNTACTIC_DIAGNOSTICS, &params)?;
-        all.extend(self.request::<Vec<DiagnosticResponse>>(
-            proto::method::GET_SEMANTIC_DIAGNOSTICS,
-            &params,
-        )?);
+        let mut all = Vec::new();
+        for file in files {
+            let params = GetDiagnosticsParams { snapshot, project: project.clone(), file: Some(DocumentIdentifier::file(file.as_ref())) };
+            all.extend(self.request::<Vec<DiagnosticResponse>>(proto::method::GET_SYNTACTIC_DIAGNOSTICS, &params)?);
+            all.extend(self.request::<Vec<DiagnosticResponse>>(proto::method::GET_SEMANTIC_DIAGNOSTICS, &params)?);
+        }
         Ok(all)
     }
 
@@ -1501,13 +1501,17 @@ fn open_generated(
 ) -> Result<UpdateSnapshotResponse, TsgoError> {
     const ROUNDS: usize = 4;
     let roots: Vec<String> = project.projects.iter().flat_map(|opened| opened.root_files.iter().cloned()).collect();
-    // What the checker says of the project as it is, before anything is
-    // generated: a generator fills in what is missing, and a module the
-    // project already has -- an installed platform package -- is not missing.
+    // What the checker says of the project's own files as they are, before
+    // anything is generated: a generator fills in what is missing, and a
+    // module the project already has -- an installed platform package -- is
+    // not missing.
     let mut complaints = Vec::new();
     for opened in &project.projects {
         complaints.extend(
-            client.diagnostics(project.snapshot, &opened.id)?.into_iter().map(|d| generated::Complaint { code: d.code, text: d.text }),
+            client
+                .diagnostics_of(project.snapshot, &opened.id, &opened.root_files)?
+                .into_iter()
+                .map(|d| generated::Complaint { code: d.code, text: d.text }),
         );
     }
     let mut opened = project;
@@ -1526,7 +1530,10 @@ fn open_generated(
         complaints.clear();
         for project in &opened.projects {
             complaints.extend(
-                client.diagnostics(opened.snapshot, &project.id)?.into_iter().map(|d| generated::Complaint { code: d.code, text: d.text }),
+                client
+                    .diagnostics_of(opened.snapshot, &project.id, &project.root_files)?
+                    .into_iter()
+                    .map(|d| generated::Complaint { code: d.code, text: d.text }),
             );
         }
         current = Some(config);
@@ -1660,9 +1667,11 @@ fn collect_diagnostics(
         })
         .collect();
 
+    // The compiled files' only, which are the only ones kept below.
+    let files: Vec<&Utf8Path> = snapshot.sources.iter().map(|source| source.display_path.as_path()).collect();
     let mut converted = Vec::new();
     for project in &opened.projects {
-        let reported = client.diagnostics(opened.snapshot, &project.id)?;
+        let reported = client.diagnostics_of(opened.snapshot, &project.id, &files)?;
         converted.extend(
             reported
                 .iter()

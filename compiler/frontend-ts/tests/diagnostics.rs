@@ -91,8 +91,41 @@ fn a_clean_program_reports_no_errors() {
     );
 }
 
+/// **A program's own type error is still reported**, in a file the config
+/// names and in one only an import reaches. Diagnostics are asked of the
+/// files the frontend compiles, not of the whole program, and checking fewer
+/// files reads exactly like checking the right ones until an error goes
+/// missing.
 #[test]
-fn the_gate_costs_a_constant_not_a_per_file_charge() {
+fn a_type_error_in_any_of_the_programs_files_is_reported() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-diagnostics-own-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("main.ts"), "import { twice } from \"./other\";\nexport const named: string = twice(2);\n").unwrap();
+    std::fs::write(dir.join("other.ts"), "export function twice(value: number): number {\n  const wrong: boolean = value;\n  return value * 2;\n}\n").unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "strict": true, "noEmit": true, "target": "es2022", "module": "esnext" }, "files": ["main.ts"] }"#,
+    )
+    .unwrap();
+    let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
+    let snapshot = TsgoApi::new(tsgo).snapshot(&tsconfig).expect("a snapshot is produced even for a broken program");
+    let errors: Vec<(&str, &str)> = snapshot
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .map(|diagnostic| (diagnostic.code.as_str(), snapshot.sources[diagnostic.primary.file.0 as usize].uri.as_str()))
+        .collect();
+    for file in ["main.ts", "other.ts"] {
+        assert!(
+            errors.iter().any(|(code, uri)| *code == "TS2322" && uri.ends_with(file)),
+            "the type error in {file} was not reported: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn diagnostics_cost_two_exchanges_a_file() {
     let Some(tsgo) = std::env::var("NTS_TSGO")
         .ok()
         .map(Utf8PathBuf::from)
@@ -108,8 +141,10 @@ fn the_gate_costs_a_constant_not_a_per_file_charge() {
     source.snapshot(&tsconfig).unwrap();
     let stats = source.stats();
 
-    // Two fixed exchanges for the session, four per file, and two more fixed for
-    // syntactic and semantic diagnostics over the whole program. Asking per file
-    // would have made the gate scale with the thing it is guarding.
-    assert_eq!(stats.round_trips, 5 + 5 * u64::from(stats.files));
+    // Three fixed exchanges for the session, five per file to read it, and
+    // two per file for its syntactic and semantic diagnostics. Asked of the
+    // whole program instead, the diagnostics were two exchanges and a check
+    // of the default library besides, whose diagnostics the frontend drops:
+    // the exchanges are nearly free (`docs/records/0345`), the check is not.
+    assert_eq!(stats.round_trips, 3 + 7 * u64::from(stats.files));
 }
