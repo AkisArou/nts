@@ -117,7 +117,11 @@ export const RULES = [
     when: (p) => /^compiler\/(frontend-ts|semantic-schema)\//.test(p),
     why: "a schema field bumps SCHEMA_VERSION; a cache identity is a claim nothing else cross-checks",
     steps: ["snapshot-cache", "examples"],
-    arms: ["bump SCHEMA_VERSION if a semantic-schema struct changed"],
+    arms: [
+      "bump SCHEMA_VERSION if a semantic-schema struct changed",
+      "NTS_BIN=<after> node tooling/conformance/types-check.mjs; ... --examples   # the snapshot's tables: ids resolve, bases acyclic, instantiations match their declarations",
+      "a new TypeKind variant: add it to types-check.mjs's KINDS, or every type of it reads as unread",
+    ],
   },
   {
     name: "a runtime helper",
