@@ -18,3 +18,6 @@ runtime/node/util	(A) an array where a record is wanted, convertQueuingStrategyH
 runtime/node/process	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 4 missing (classified, 2026-09-28)
 runtime/node/zlib	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 27 missing (classified, 2026-09-28)
 runtime/web-platform	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark -- 1 invalid, 0 missing (classified, 2026-09-28)
+tooling/conformance/outcomes/a-closure-passed-to-an-interface-method-through-a-field	(C) the witness for it: a closure class that does not implement the callback's signature at an invokeinterface reached through a field (conformance lane, 2026-09-28)
+tooling/conformance/outcomes/an-array-given-where-a-length-record-is-wanted	(A) the witness for it: an array where a `{ length }` record is wanted; C answers right (conformance lane, 2026-09-28)
+tooling/conformance/outcomes/an-override-reading-an-erased-argument	(E) a reference to a class never written, `User` (classified, 2026-09-28)

@@ -1,6 +1,7 @@
 // Does what `emit-jvm` emits for the runtime pass the JVM's verifier?
 //
 //   node tooling/conformance/jvm-verifies.mjs [project ...]   (default: runtime/node/*, runtime/web-platform)
+//   node tooling/conformance/jvm-verifies.mjs --outcomes      the outcomes fixtures instead
 //   NTS_BIN=<a pin> node tooling/conformance/jvm-verifies.mjs
 //
 // # Why
@@ -48,6 +49,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-project.mjs";
 import { describe, provenanceOf } from "./pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -74,9 +76,22 @@ const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "targ
 delete env.NTS_NO_SNAPSHOT_CACHE;
 
 const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+/**
+ * Outcomes fixtures, each as the project outcomes-check builds (one definition
+ * of a fixture as a program), labelled by its own path. A fixture can be a JVM
+ * witness while its C record is a guard.
+ */
+const where = new Map();
+const outcomes = () => outcomeFixtures().map((n) => {
+  const label = `tooling/conformance/outcomes/${n}`;
+  where.set(label, materialise(scratch, n, join(OUTCOMES, n, "src"), runMode(n)));
+  return label;
+});
 const projects = (named.length > 0
   ? named
-  : [
+  : process.argv.includes("--outcomes")
+    ? outcomes()
+    : [
     ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
       .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
       .map((e) => `runtime/node/${e.name}`),
@@ -110,14 +125,21 @@ export function readVerify(text) {
 
 const failed = [];
 const unmeasured = [];
+const invalidHir = [];
 let classes = 0;
 let verified = 0;
 
 async function check(project, slot) {
   const out = join(scratch, `out-${slot}`);
   rmSync(out, { recursive: true, force: true });
-  const emit = await run(NTS, ["emit-jvm", project, "--out", out]);
+  const emit = await run(NTS, ["emit-jvm", where.get(project) ?? project, "--out", out]);
   const jar = join(out, "nts-runtime.jar");
+  // Invalid HIR emits nothing on any backend, and is its own outcome, which
+  // outcomes-check records: counted, not "not measured".
+  if (/refusing to emit code from invalid HIR/.test(emit.out)) {
+    invalidHir.push(project);
+    return;
+  }
   if (emit.error || emit.signal || !existsSync(jar)) {
     unmeasured.push(`${project}: emit-jvm ${emit.signal ?? emit.error?.message ?? `exit ${emit.status}`}, no class written -- ${emit.out.trim().split("\n").pop()?.slice(0, 100)}`);
     return;
@@ -155,6 +177,7 @@ for (const f of fresh) {
 }
 for (const f of held) console.log(`  known            ${f.project}: ${f.invalid.length} invalid, ${f.missing.length} missing -- ${known.get(f.project)}`);
 for (const p of expired) console.log(`  ^ ${p} verifies now: remove it from tooling/conformance/jvm-verifies.known`);
+if (invalidHir.length > 0) console.log(`  invalid HIR, so nothing to verify (outcomes records it): ${invalidHir.length} -- ${invalidHir.map((p) => p.split("/").pop()).join(", ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED     ${u}`);
 const ok = fresh.length === 0 && unmeasured.length === 0 && classes > 0;
 console.log(ok ? `  every module verifies, or is known not to (${held.length})` : `  ${fresh.length} new failure(s), ${unmeasured.length} not measured`);
