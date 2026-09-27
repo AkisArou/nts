@@ -38301,6 +38301,32 @@ impl<'a> FuncBuilder<'a> {
             return Ok((value, have));
         }
         let held = self.captured_as(info, capture)?;
+        // **Read it as a direct use reads it**, before asking whether it fits the
+        // field.
+        //
+        // The field is typed at what the *body* will read it at, which for a
+        // binding an `instanceof` narrowed is the narrowed type -- and the value in
+        // hand is what the binding was declared as. So the store was a **downcast**,
+        // and for a handle `coerce` refuses one: "an opaque C pointer converted to a
+        // different representation". A direct use of the same binding in the same
+        // branch is correct, because it goes through [`Self::narrowed`], which emits
+        // the `Convert` a GObject or Objective-C narrowing needs and nothing at all
+        // where the types already agree.
+        //
+        // So the capture asks the same function rather than a second rule about
+        // which conversions a capture may make. The GTK lane's measurement is what
+        // located it: the arrow's frame field was *already* `native<_GtkSwitch>` and
+        // its body lowered clean; the refused function was the enclosing one, at the
+        // store. It is the blocker for seven of nine of their Workbench demo ports,
+        // and `const sw: GtkSwitch = box` beside the capture is the workaround that
+        // shows what is missing -- that spelling emits exactly the `convert` this
+        // now emits, because a declaration's initializer is a direct use.
+        //
+        // A cell returns above, and must: what `bindings` holds for a
+        // captured-and-written name is the cell rather than the value, so narrowing
+        // it would re-type the cell.
+        let value = self.narrowed(capture.at, value)?;
+        let have = self.values[value.0 as usize].ty.clone();
         if let (
             HirType::Managed(ManagedType::Object(have)),
             HirType::Managed(ManagedType::Object(want)),
