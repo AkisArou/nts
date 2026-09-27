@@ -828,13 +828,13 @@ export interface HeaderBarProps extends WidgetProps {
 
 /** `<Image>`'s props: GtkImage's own properties and signals. */
 export interface ImageProps extends WidgetProps {
-  file?: string;
+  file?: string | null;
   gicon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
   iconName?: string | null;
   iconSize?: GtkIconSize;
   paintable?: GdkTexture | GtkIconPaintable | GtkMediaStream | GtkSvg | GtkWidgetPaintable | null;
   pixelSize?: number;
-  resource?: string;
+  resource?: string | null;
   useFallback?: boolean;
   onNotifyFile?: (value: string | null) => void;
   onNotifyGicon?: (value: GIcon | null) => void;
@@ -4193,7 +4193,7 @@ export function headerBarSignal(gtk: GtkHeaderBar, key: string, slot: SignalSlot
 export function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
   switch (key) {
     case "file":
-      gtk.set_file(typeof value === "string" ? value : "");
+      gtk.set_from_file(typeof value === "string" ? value : null);
       return true;
     case "gicon":
       if (value instanceof GBytesIcon) gtk.set_from_gicon(value);
@@ -4222,7 +4222,7 @@ export function imageProp(gtk: GtkImage, key: string, value: unknown): boolean {
       gtk.set_pixel_size(typeof value === "number" ? value : -1);
       return true;
     case "resource":
-      gtk.set_resource(typeof value === "string" ? value : "");
+      gtk.set_from_resource(typeof value === "string" ? value : null);
       return true;
     case "useFallback":
       gtk.set_use_fallback(typeof value === "boolean" ? value : false);
