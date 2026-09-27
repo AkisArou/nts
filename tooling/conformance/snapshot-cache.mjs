@@ -41,6 +41,28 @@
 //    so they cannot show a hash-order defect: this arm runs on the runtime
 //    programs, and examples are the control for (1) and (2) only.
 //
+// # Kinds of staleness, and where each is checked
+//
+// An `identity()` is a claim about everything the cached work depends on, and
+// nothing else in the system cross-checks it. Four defects in one day were
+// four ways to break it, in three directions, and none failed a correctness
+// test, because stale work succeeds quietly:
+//
+//   never hits           a digest that moves between runs: a private member's
+//                        mangled counter (7f574cf87), map iteration order
+//                        through a postcard round trip (05ecc8ed1)   -> (1), (2)
+//   hits, wrong contents two questions sharing a key: bare `frontend` and a
+//                        build (90aa37954)                            -> (4)
+//   hits after inputs    a constant identity in a generator: a GIR update
+//   changed              reused the old snapshot, bindings stale (GTK lane) ->
+//                        tooling/cli/tests/build.rs,
+//                        a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes
+//                        (the `tests` step)
+//
+// A new cache, or a new input to an existing one, needs one arm per kind, not
+// one per cache: run twice, change an input between the runs, and check that
+// the second run did or did not reuse the first, as the input says it should.
+//
 // **A bare `nts frontend` is the wrong instrument for a question about a
 // build.** It asks for a narrower snapshot than any compilation does -- no
 // call resolution, no decomposition -- so what it measures is a snapshot no
