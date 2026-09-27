@@ -69,7 +69,11 @@ pub(crate) struct Binding {
     /// The `c:types` names the signatures use.
     pub(crate) brands: BTreeSet<&'static str>,
     pub(crate) refused: Vec<(String, Reason)>,
-    /// Classes with a checked downcast helper.
+    /// The refused entries GIR marks deprecated, which the refusal report
+    /// says so of: a census of what programs miss leaves them out, since
+    /// GJS programs are not written against them.
+    pub(crate) deprecated: BTreeSet<String>,
+    /// Each class, with the function answering its `GType`.
     pub(crate) casts: Vec<Cast>,
     /// Each `GObject` interface's `GType` function, by its C type: what a
     /// program class implementing it (`{Name}Implementation`) registers with.
@@ -525,7 +529,12 @@ pub(crate) fn bind<'a>(
             // The entry GIR names instead is bound under the same symbol;
             // this one is a duplicate, not something missing.
             Err(Reason::Shadowed) => {}
-            Err(reason) => mapper.binding.refused.push((name, reason)),
+            Err(reason) => {
+                if callable.deprecated {
+                    mapper.binding.deprecated.insert(name.clone());
+                }
+                mapper.binding.refused.push((name, reason));
+            }
         }
     }
     vfuncs(&mut mapper, namespace);

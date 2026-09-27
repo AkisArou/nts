@@ -1,0 +1,1048 @@
+Adw-1	adw_breakpoint_add_settersv	an array
+Adw-1	adw_breakpoint_condition_new_and	a boxed record a parameter hands over, which the program's box would also free
+Adw-1	adw_breakpoint_condition_new_or	a boxed record a parameter hands over, which the program's box would also free
+Adw-1	adw_breakpoint_new	a boxed record a parameter hands over, which the program's box would also free
+Adw-1	adw_sidebar_setup_drop_target	an array
+Adw-1	AdwSpinRow::input	an out parameter of a type written through no slot here
+Adw-1	adw_spring_animation_new	a boxed record a parameter hands over, which the program's box would also free
+Adw-1	adw_swipeable_get_snap_points	an array
+Adw-1	AdwSwipeableInterface.get_snap_points	an array
+Adw-1	adw_tab_bar_setup_extra_drop_target	an array
+Adw-1	adw_tab_overview_setup_extra_drop_target	an array
+Gdk-4.0	gdk_content_deserializer_get_task_data	a `gpointer`
+Gdk-4.0	gdk_content_deserializer_get_user_data	a `gpointer`
+Gdk-4.0	gdk_content_deserializer_set_task_data	a callback whose context is not the next parameter
+Gdk-4.0	gdk_content_formats_get_gtypes	an array
+Gdk-4.0	gdk_content_formats_get_mime_types	an array
+Gdk-4.0	gdk_content_provider_new_union	an array
+Gdk-4.0	gdk_content_register_deserializer	a callback whose context is not its last parameter
+Gdk-4.0	gdk_content_register_serializer	a callback whose context is not its last parameter
+Gdk-4.0	gdk_content_serializer_get_task_data	a `gpointer`
+Gdk-4.0	gdk_content_serializer_get_user_data	a `gpointer`
+Gdk-4.0	gdk_content_serializer_set_task_data	a callback whose context is not the next parameter
+Gdk-4.0	gdk_cursor_new_from_callback	`int*`, a pointer depth other than one
+Gdk-4.0	gdk_display_map_keycode	an array
+Gdk-4.0	gdk_display_map_keyval	an array
+Gdk-4.0	gdk_dmabuf_texture_builder_build	a callback whose context is not the next parameter
+Gdk-4.0	gdk_drop_read_finish	a string out parameter
+Gdk-4.0	gdk_event_get_axes	an array
+Gdk-4.0	gdk_event_get_history	an array
+Gdk-4.0	gdk_gl_texture_builder_build	a callback whose context is not the next parameter
+Gdk-4.0	gdk_gl_texture_builder_get_sync	a `gpointer`
+Gdk-4.0	gdk_rgba_equal	a record passed by value
+Gdk-4.0	gdk_rgba_hash	a record passed by value
+Gdk-4.0	gdk_texture_download	an array
+Gdk-4.0	gdk_texture_downloader_download_bytes_with_planes	an out parameter whose storage the caller allocates
+Gdk-4.0	gdk_texture_downloader_download_into	an array
+GdkPixbuf-2.0	GdkPixbufAnimationClass.get_iter	a virtual function whose class struct member the headers do not place
+GdkPixbuf-2.0	GdkPixbufAnimationClass.get_size	a virtual function whose class struct member the headers do not place
+GdkPixbuf-2.0	GdkPixbufAnimationClass.get_static_image	a virtual function whose class struct member the headers do not place
+GdkPixbuf-2.0	GdkPixbufAnimationClass.is_static_image	a virtual function whose class struct member the headers do not place
+GdkPixbuf-2.0	GdkPixbufAnimationIterClass.advance	a virtual function whose class struct member the headers do not place
+GdkPixbuf-2.0	GdkPixbufAnimationIterClass.get_delay_time	a virtual function whose class struct member the headers do not place
+GdkPixbuf-2.0	GdkPixbufAnimationIterClass.get_pixbuf	a virtual function whose class struct member the headers do not place
+GdkPixbuf-2.0	GdkPixbufAnimationIterClass.on_currently_loading_frame	a virtual function whose class struct member the headers do not place
+GdkPixbuf-2.0	gdk_pixbuf_new_from_data	an array
+GdkPixbuf-2.0	gdk_pixbuf_non_anim_new	declared by none of the headers GIR names
+GdkPixbuf-2.0	gdk_pixbuf_read_pixels	`const guint8*`, a pointer depth other than one
+GdkPixbuf-2.0	gdk_pixbuf_save_to_callbackv	an array
+Gio-2.0	g_action_map_add_action_entries	an array
+Gio-2.0	g_action_map_remove_action_entries	an array
+Gio-2.0	g_app_info_get_supported_types	an array
+Gio-2.0	GAppInfoIface.get_supported_types	an array
+Gio-2.0	g_application_add_main_option_entries	an array
+Gio-2.0	GApplicationClass.local_command_line	an array
+Gio-2.0	g_application_command_line_get_arguments	an array
+Gio-2.0	g_async_result_get_user_data	a `gpointer`
+Gio-2.0	GAsyncResultIface.get_user_data	a `gpointer`
+Gio-2.0	g_buffered_input_stream_peek	an array
+Gio-2.0	g_buffered_input_stream_peek_buffer	an array
+Gio-2.0	g_cancellable_connect	a callback whose context is not its last parameter
+Gio-2.0	g_converter_convert	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(GConverterResult (*)(struct _GConverter *, const void *, unsigned long, void *, unsigned long, GConverterFlags, unsigned long *, unsigned long *, struct _GError **), unsigned int (*)(struct _GConverter *, void *, unsigned long, void *, unsigned long, unsigned int, unsigned long *, unsigned long *, struct _GError **))': g_converter_convert -- declared `unsigned int g_converter_convert(struct _GConverter *, void *, size_t, void *, size_t, unsigned int, size_t *, size_t *, struct _GError * *)`
+Gio-2.0	GConverterIface_convert	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(GConverterResult (*)(struct _GConverter *, const void *, unsigned long, void *, unsigned long, GConverterFlags, unsigned long *, unsigned long *, struct _GError **), unsigned int (*)(struct _GConverter *, void *, unsigned long, void *, unsigned long, unsigned int, unsigned long *, unsigned long *, struct _GError **))': GConverterIface_convert -- declared `unsigned int GConverterIface_convert(struct _GConverter *, void *, size_t, void *, size_t, unsigned int, size_t *, size_t *, struct _GError * *)`
+Gio-2.0	g_credentials_get_unix_pid	`Gio.pid_t`, a type this binder does not know
+Gio-2.0	g_credentials_get_unix_user	`Gio.uid_t`, a type this binder does not know
+Gio-2.0	g_credentials_set_unix_user	`Gio.uid_t`, a type this binder does not know
+Gio-2.0	GDatagramBasedInterface.receive_messages	an array
+Gio-2.0	GDatagramBasedInterface.send_messages	an array
+Gio-2.0	g_datagram_based_receive_messages	an array
+Gio-2.0	g_datagram_based_send_messages	an array
+Gio-2.0	g_data_input_stream_read_line	an array
+Gio-2.0	g_data_input_stream_read_line_finish	an array
+Gio-2.0	g_dbus_annotation_info_lookup	an array
+Gio-2.0	g_dbus_connection_register_subtree	a callback whose context is not the next parameter
+Gio-2.0	g_dbus_connection_send_message	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(struct _GDBusConnection *, struct _GDBusMessage *, GDBusSendMessageFlags, volatile unsigned int *, struct _GError **), int (*)(struct _GDBusConnection *, struct _GDBusMessage *, unsigned int, unsigned int *, struct _GError **))': g_dbus_connection_send_message -- declared `int g_dbus_connection_send_message(struct _GDBusConnection *, struct _GDBusMessage *, unsigned int, uint32_t *, struct _GError * *)`
+Gio-2.0	g_dbus_connection_send_message_with_reply_sync	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(struct _GDBusMessage *(*)(struct _GDBusConnection *, struct _GDBusMessage *, GDBusSendMessageFlags, int, volatile unsigned int *, struct _GCancellable *, struct _GError **), struct _GDBusMessage *(*)(struct _GDBusConnection *, struct _GDBusMessage *, unsigned int, int, unsigned int *, struct _GCancellable *, struct _GError **))': g_dbus_connection_send_message_with_reply_sync -- declared `struct _GDBusMessage * g_dbus_connection_send_message_with_reply_sync(struct _GDBusConnection *, struct _GDBusMessage *, unsigned int, int, uint32_t *, struct _GCancellable *, struct _GError * *)`
+Gio-2.0	g_dbus_connection_send_message_with_reply	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(struct _GDBusConnection *, struct _GDBusMessage *, GDBusSendMessageFlags, int, volatile unsigned int *, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *), void (*)(struct _GDBusConnection *, struct _GDBusMessage *, unsigned int, int, unsigned int *, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *))': g_dbus_connection_send_message_with_reply -- declared `void g_dbus_connection_send_message_with_reply(struct _GDBusConnection *, struct _GDBusMessage *, unsigned int, int, uint32_t *, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *)`
+Gio-2.0	g_dbus_connection_signal_subscribe	a callback taking or returning a string
+Gio-2.0	g_dbus_escape_object_path_bytestring	an array
+Gio-2.0	g_dbus_message_get_header_fields	an array
+Gio-2.0	GDBusObjectManagerClientClass_interface_proxy_properties_changed	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(struct _GDBusObjectManagerClient *, struct _GDBusObjectProxy *, struct _GDBusProxy *, struct _GVariant *, const char *const *), void (*)(struct _GDBusObjectManagerClient *, struct _GDBusObjectProxy *, struct _GDBusProxy *, struct _GVariant *, const char *))': GDBusObjectManagerClientClass_interface_proxy_properties_changed -- declared `void GDBusObjectManagerClientClass_interface_proxy_properties_changed(struct _GDBusObjectManagerClient *, struct _GDBusObjectProxy *, struct _GDBusProxy *, struct _GVariant *, const char *)`
+Gio-2.0	GDBusObjectManagerClient::interface-proxy-properties-changed	an array
+Gio-2.0	g_dbus_object_manager_client_new	a callback taking or returning a string
+Gio-2.0	g_dbus_object_manager_client_new_for_bus	a callback taking or returning a string
+Gio-2.0	g_dbus_object_manager_client_new_for_bus_sync	a callback taking or returning a string
+Gio-2.0	g_dbus_object_manager_client_new_sync	a callback taking or returning a string
+Gio-2.0	GDBusProxyClass_g_properties_changed	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(struct _GDBusProxy *, struct _GVariant *, const char *const *), void (*)(struct _GDBusProxy *, struct _GVariant *, const char *))': GDBusProxyClass_g_properties_changed -- declared `void GDBusProxyClass_g_properties_changed(struct _GDBusProxy *, struct _GVariant *, const char *)`
+Gio-2.0	GDBusProxy::g-properties-changed	an array
+Gio-2.0	g_dbus_unescape_object_path	an array
+Gio-2.0	g_dtls_connection_get_channel_binding_data	an out parameter whose storage the caller allocates
+Gio-2.0	GDtlsConnectionInterface.get_binding_data	an array
+Gio-2.0	g_file_hash	`gconstpointer`, a pointer depth other than one
+Gio-2.0	GFileIface.copy_async	a callback whose destroy function is not the parameter after its context
+Gio-2.0	g_file_info_get_attribute_data	a `gpointer`
+Gio-2.0	g_file_info_get_attribute_stringv	an array
+Gio-2.0	g_icon_hash	`gconstpointer`, a pointer depth other than one
+Gio-2.0	GIconIface.to_tokens	an out parameter whose storage the caller allocates
+Gio-2.0	g_inet_address_new_from_bytes	an array
+Gio-2.0	g_inet_address_new_from_bytes_with_ipv6_info	an array
+Gio-2.0	GInputStreamClass.read_async	an array
+Gio-2.0	g_input_stream_read_all	an array
+Gio-2.0	g_input_stream_read_all_async	an array
+Gio-2.0	g_input_stream_read	an array
+Gio-2.0	g_input_stream_read_async	an array
+Gio-2.0	g_keyfile_settings_backend_new	declared by none of the headers GIR names
+Gio-2.0	g_list_store_find_with_equal_func	a callback whose context is not the next parameter
+Gio-2.0	g_memory_input_stream_add_data	an array
+Gio-2.0	g_memory_input_stream_new_from_data	an array
+Gio-2.0	g_memory_output_stream_get_data	a `gpointer`
+Gio-2.0	g_memory_output_stream_steal_data	a `gpointer`
+Gio-2.0	g_memory_settings_backend_new	declared by none of the headers GIR names
+Gio-2.0	GMountOperation::ask-question	an array
+Gio-2.0	GMountOperationClass.show_processes	an array
+Gio-2.0	GMountOperation::show-processes	an array
+Gio-2.0	g_networking_init	declared by none of the headers GIR names
+Gio-2.0	g_null_settings_backend_new	declared by none of the headers GIR names
+Gio-2.0	GOutputStreamClass_write_async	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(struct _GOutputStream *, const void *, unsigned long, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *), void (*)(struct _GOutputStream *, void *, unsigned long, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *))': GOutputStreamClass_write_async -- declared `void GOutputStreamClass_write_async(struct _GOutputStream *, void *, size_t, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *)`
+Gio-2.0	GOutputStreamClass_write_fn	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(long (*)(struct _GOutputStream *, const void *, unsigned long, struct _GCancellable *, struct _GError **), long (*)(struct _GOutputStream *, void *, unsigned long, struct _GCancellable *, struct _GError **))': GOutputStreamClass_write_fn -- declared `long GOutputStreamClass_write_fn(struct _GOutputStream *, void *, size_t, struct _GCancellable *, struct _GError * *)`
+Gio-2.0	GOutputStreamClass.writev_async	an array
+Gio-2.0	GOutputStreamClass.writev_fn	an array
+Gio-2.0	g_output_stream_write_all_async	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(struct _GOutputStream *, const void *, unsigned long, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *), void (*)(struct _GOutputStream *, void *, unsigned long, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *))': g_output_stream_write_all_async -- declared `void g_output_stream_write_all_async(struct _GOutputStream *, void *, size_t, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *)`
+Gio-2.0	g_output_stream_write_all	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(struct _GOutputStream *, const void *, unsigned long, unsigned long *, struct _GCancellable *, struct _GError **), int (*)(struct _GOutputStream *, void *, unsigned long, unsigned long *, struct _GCancellable *, struct _GError **))': g_output_stream_write_all -- declared `int g_output_stream_write_all(struct _GOutputStream *, void *, size_t, size_t *, struct _GCancellable *, struct _GError * *)`
+Gio-2.0	g_output_stream_write_async	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(struct _GOutputStream *, const void *, unsigned long, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *), void (*)(struct _GOutputStream *, void *, unsigned long, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *))': g_output_stream_write_async -- declared `void g_output_stream_write_async(struct _GOutputStream *, void *, size_t, int, struct _GCancellable *, void (*)(struct _GObject *, struct _GAsyncResult *, void *), void *)`
+Gio-2.0	g_output_stream_write	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(long (*)(struct _GOutputStream *, const void *, unsigned long, struct _GCancellable *, struct _GError **), long (*)(struct _GOutputStream *, void *, unsigned long, struct _GCancellable *, struct _GError **))': g_output_stream_write -- declared `long g_output_stream_write(struct _GOutputStream *, void *, size_t, struct _GCancellable *, struct _GError * *)`
+Gio-2.0	g_output_stream_writev_all	an array
+Gio-2.0	g_output_stream_writev_all_async	an array
+Gio-2.0	g_output_stream_writev	an array
+Gio-2.0	g_output_stream_writev_async	an array
+Gio-2.0	GPollableInputStreamInterface.read_nonblocking	an array
+Gio-2.0	g_pollable_input_stream_read_nonblocking	an array
+Gio-2.0	GPollableOutputStreamInterface_write_nonblocking	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(long (*)(struct _GPollableOutputStream *, const void *, unsigned long, struct _GError **), long (*)(struct _GPollableOutputStream *, void *, unsigned long, struct _GError **))': GPollableOutputStreamInterface_write_nonblocking -- declared `long GPollableOutputStreamInterface_write_nonblocking(struct _GPollableOutputStream *, void *, size_t, struct _GError * *)`
+Gio-2.0	GPollableOutputStreamInterface.writev_nonblocking	an array
+Gio-2.0	g_pollable_output_stream_write_nonblocking	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(long (*)(struct _GPollableOutputStream *, const void *, unsigned long, struct _GCancellable *, struct _GError **), long (*)(struct _GPollableOutputStream *, void *, unsigned long, struct _GCancellable *, struct _GError **))': g_pollable_output_stream_write_nonblocking -- declared `long g_pollable_output_stream_write_nonblocking(struct _GPollableOutputStream *, void *, size_t, struct _GCancellable *, struct _GError * *)`
+Gio-2.0	g_pollable_output_stream_writev_nonblocking	an array
+Gio-2.0	g_pollable_stream_write_all	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(struct _GOutputStream *, const void *, unsigned long, int, unsigned long *, struct _GCancellable *, struct _GError **), int (*)(struct _GOutputStream *, void *, unsigned long, int, unsigned long *, struct _GCancellable *, struct _GError **))': g_pollable_stream_write_all -- declared `int g_pollable_stream_write_all(struct _GOutputStream *, void *, size_t, int, size_t *, struct _GCancellable *, struct _GError * *)`
+Gio-2.0	g_pollable_stream_write	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(long (*)(struct _GOutputStream *, const void *, unsigned long, int, struct _GCancellable *, struct _GError **), long (*)(struct _GOutputStream *, void *, unsigned long, int, struct _GCancellable *, struct _GError **))': g_pollable_stream_write -- declared `long g_pollable_stream_write(struct _GOutputStream *, void *, size_t, int, struct _GCancellable *, struct _GError * *)`
+Gio-2.0	g_settings_backend_changed	declared by none of the headers GIR names
+Gio-2.0	g_settings_backend_changed_tree	declared by none of the headers GIR names
+Gio-2.0	GSettingsBackendClass.get_permission	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.get_writable	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.read	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.read_user_value	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.reset	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.subscribe	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.sync	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.unsubscribe	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.write	a virtual function whose class struct member the headers do not place
+Gio-2.0	GSettingsBackendClass.write_tree	a virtual function whose class struct member the headers do not place
+Gio-2.0	g_settings_backend_flatten_tree	a string out parameter
+Gio-2.0	g_settings_backend_get_default	declared by none of the headers GIR names
+Gio-2.0	g_settings_backend_get_type	declared by none of the headers GIR names
+Gio-2.0	g_settings_backend_keys_changed	declared by none of the headers GIR names
+Gio-2.0	g_settings_backend_path_changed	declared by none of the headers GIR names
+Gio-2.0	g_settings_backend_path_writable_changed	declared by none of the headers GIR names
+Gio-2.0	g_settings_backend_writable_changed	declared by none of the headers GIR names
+Gio-2.0	GSettings::change-event	an array
+Gio-2.0	GSettingsClass.change_event	`const GQuark*`, a pointer depth other than one
+Gio-2.0	g_settings_get_mapped	a `gpointer`
+Gio-2.0	g_settings_schema_source_list_schemas	an array
+Gio-2.0	g_socket_receive	an array
+Gio-2.0	g_socket_receive_from	an array
+Gio-2.0	g_socket_receive_message	an array
+Gio-2.0	g_socket_receive_messages	an array
+Gio-2.0	g_socket_receive_with_blocking	an array
+Gio-2.0	g_socket_send_message	an array
+Gio-2.0	g_socket_send_messages	an array
+Gio-2.0	g_socket_send_message_with_timeout	an array
+Gio-2.0	g_task_get_source_tag	a `gpointer`
+Gio-2.0	g_task_get_task_data	a `gpointer`
+Gio-2.0	g_task_propagate_pointer	a `gpointer`
+Gio-2.0	g_task_return_pointer	a callback whose context is not the next parameter
+Gio-2.0	g_task_run_in_thread	a callback whose context is not the next parameter
+Gio-2.0	g_task_run_in_thread_sync	a callback whose context is not the next parameter
+Gio-2.0	g_task_set_task_data	a callback whose context is not the next parameter
+Gio-2.0	g_tls_certificate_get_dns_names	an array
+Gio-2.0	g_tls_certificate_get_ip_addresses	an array
+Gio-2.0	GTlsConnectionClass.get_binding_data	an array
+Gio-2.0	g_tls_connection_get_channel_binding_data	an out parameter whose storage the caller allocates
+Gio-2.0	GTlsDatabaseClass.lookup_certificates_issued_by	an array
+Gio-2.0	GTlsDatabaseClass.lookup_certificates_issued_by_async	an array
+Gio-2.0	g_tls_database_lookup_certificates_issued_by	an array
+Gio-2.0	g_tls_database_lookup_certificates_issued_by_async	an array
+Gio-2.0	GTlsPasswordClass.get_value	`gsize*`, a pointer depth other than one
+Gio-2.0	GTlsPasswordClass.set_value	a callback whose context is not the next parameter
+Gio-2.0	g_tls_password_get_value	`gsize*`, a pointer depth other than one
+Gio-2.0	g_tls_password_set_value_full	a callback whose context is not the next parameter
+Gio-2.0	g_unix_fd_list_new_from_array	an array
+Gio-2.0	g_unix_fd_list_peek_fds	an array
+Gio-2.0	g_unix_fd_list_steal_fds	an array
+Gio-2.0	g_unix_socket_address_new_with_type	an array
+Gio-2.0	GVfsClass.local_file_add_info	a callback whose context is not the next parameter
+Gio-2.0	g_vfs_register_uri_scheme	a callback taking or returning a string
+GLib-2.0	g_access	declared by none of the headers GIR names
+GLib-2.0	g_aligned_alloc0	a `gpointer`
+GLib-2.0	g_aligned_alloc	a `gpointer`
+GLib-2.0	g_ascii_dtostr	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_ascii_formatd	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_assertion_message_cmpstrv	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(const char *, const char *, int, const char *, const char *, const char *const *, const char *const *, unsigned long), void (*)(const char *, const char *, int, const char *, const char *, const char *, const char *, unsigned long))': g_assertion_message_cmpstrv -- declared `void g_assertion_message_cmpstrv(const char *, const char *, int, const char *, const char *, const char *, const char *, size_t)`
+GLib-2.0	g_async_queue_new_full	a callback whose context is not the next parameter
+GLib-2.0	g_async_queue_pop	a `gpointer`
+GLib-2.0	g_async_queue_pop_unlocked	a `gpointer`
+GLib-2.0	g_async_queue_push_sorted	a `gpointer`
+GLib-2.0	g_async_queue_push_sorted_unlocked	a `gpointer`
+GLib-2.0	g_async_queue_sort	a `gpointer`
+GLib-2.0	g_async_queue_sort_unlocked	a `gpointer`
+GLib-2.0	g_async_queue_timeout_pop	a `gpointer`
+GLib-2.0	g_async_queue_timeout_pop_unlocked	a `gpointer`
+GLib-2.0	g_async_queue_try_pop	a `gpointer`
+GLib-2.0	g_async_queue_try_pop_unlocked	a `gpointer`
+GLib-2.0	g_atomic_int_add	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(volatile int *, int), int (*)(void *, int))': g_atomic_int_add -- declared `int g_atomic_int_add(void *, int)`
+GLib-2.0	g_atomic_int_and	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(unsigned int (*)(volatile unsigned int *, unsigned int), unsigned int (*)(void *, unsigned int))': g_atomic_int_and -- declared `unsigned int g_atomic_int_and(void *, unsigned int)`
+GLib-2.0	g_atomic_int_compare_and_exchange_full	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(int *, int, int, int *), int (*)(void *, int, int, int *))': g_atomic_int_compare_and_exchange_full -- declared `int g_atomic_int_compare_and_exchange_full(void *, int, int, int *)`
+GLib-2.0	g_atomic_int_compare_and_exchange	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(volatile int *, int, int), int (*)(void *, int, int))': g_atomic_int_compare_and_exchange -- declared `int g_atomic_int_compare_and_exchange(void *, int, int)`
+GLib-2.0	g_atomic_int_dec_and_test	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(volatile int *), int (*)(void *))': g_atomic_int_dec_and_test -- declared `int g_atomic_int_dec_and_test(void *)`
+GLib-2.0	g_atomic_int_exchange_and_add	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(volatile int *, int), int (*)(void *, int))': g_atomic_int_exchange_and_add -- declared `int g_atomic_int_exchange_and_add(void *, int)`
+GLib-2.0	g_atomic_int_exchange	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(int *, int), int (*)(void *, int))': g_atomic_int_exchange -- declared `int g_atomic_int_exchange(void *, int)`
+GLib-2.0	g_atomic_int_get	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(const volatile int *), int (*)(void *))': g_atomic_int_get -- declared `int g_atomic_int_get(void *)`
+GLib-2.0	g_atomic_int_inc	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(volatile int *), void (*)(void *))': g_atomic_int_inc -- declared `void g_atomic_int_inc(void *)`
+GLib-2.0	g_atomic_int_or	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(unsigned int (*)(volatile unsigned int *, unsigned int), unsigned int (*)(void *, unsigned int))': g_atomic_int_or -- declared `unsigned int g_atomic_int_or(void *, unsigned int)`
+GLib-2.0	g_atomic_int_set	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(volatile int *, int), void (*)(void *, int))': g_atomic_int_set -- declared `void g_atomic_int_set(void *, int)`
+GLib-2.0	g_atomic_int_xor	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(unsigned int (*)(volatile unsigned int *, unsigned int), unsigned int (*)(void *, unsigned int))': g_atomic_int_xor -- declared `unsigned int g_atomic_int_xor(void *, unsigned int)`
+GLib-2.0	g_atomic_pointer_add	`GLib.gintptr`, a type this binder does not know
+GLib-2.0	g_atomic_pointer_and	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(unsigned long (*)(volatile void *, unsigned long), unsigned long (*)(void *, unsigned long))': g_atomic_pointer_and -- declared `size_t g_atomic_pointer_and(void *, size_t)`
+GLib-2.0	g_atomic_pointer_compare_and_exchange_full	a `gpointer`
+GLib-2.0	g_atomic_pointer_compare_and_exchange	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(volatile void *, void *, void *), int (*)(void *, void *, void *))': g_atomic_pointer_compare_and_exchange -- declared `int g_atomic_pointer_compare_and_exchange(void *, void *, void *)`
+GLib-2.0	g_atomic_pointer_exchange	a `gpointer`
+GLib-2.0	g_atomic_pointer_get	a `gpointer`
+GLib-2.0	g_atomic_pointer_or	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(unsigned long (*)(volatile void *, unsigned long), unsigned long (*)(void *, unsigned long))': g_atomic_pointer_or -- declared `size_t g_atomic_pointer_or(void *, size_t)`
+GLib-2.0	g_atomic_pointer_set	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(volatile void *, void *), void (*)(void *, void *))': g_atomic_pointer_set -- declared `void g_atomic_pointer_set(void *, void *)`
+GLib-2.0	g_atomic_pointer_xor	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(unsigned long (*)(volatile void *, unsigned long), unsigned long (*)(void *, unsigned long))': g_atomic_pointer_xor -- declared `size_t g_atomic_pointer_xor(void *, size_t)`
+GLib-2.0	g_atomic_rc_box_acquire	a `gpointer`
+GLib-2.0	g_atomic_rc_box_alloc0	a `gpointer`
+GLib-2.0	g_atomic_rc_box_alloc	a `gpointer`
+GLib-2.0	g_atomic_rc_box_dup	a `gpointer`
+GLib-2.0	g_atomic_rc_box_release_full	a callback whose context is not the next parameter
+GLib-2.0	g_atomic_ref_count_compare	`gatomicrefcount*`, a pointer depth other than one
+GLib-2.0	g_atomic_ref_count_dec	`gatomicrefcount*`, a pointer depth other than one
+GLib-2.0	g_atomic_ref_count_inc	`gatomicrefcount*`, a pointer depth other than one
+GLib-2.0	g_base64_decode_inplace	an array
+GLib-2.0	g_base64_encode_close	an array
+GLib-2.0	g_base64_encode_step	an array
+GLib-2.0	g_bit_lock_and_get	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(int *, unsigned int, int *), void (*)(void *, unsigned int, int *))': g_bit_lock_and_get -- declared `void g_bit_lock_and_get(void *, unsigned int, int *)`
+GLib-2.0	g_bit_lock	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(volatile int *, int), void (*)(void *, int))': g_bit_lock -- declared `void g_bit_lock(void *, int)`
+GLib-2.0	g_bit_trylock	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(volatile int *, int), int (*)(void *, int))': g_bit_trylock -- declared `int g_bit_trylock(void *, int)`
+GLib-2.0	g_bit_unlock_and_set	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(int *, unsigned int, int, int), void (*)(void *, unsigned int, int, int))': g_bit_unlock_and_set -- declared `void g_bit_unlock_and_set(void *, unsigned int, int, int)`
+GLib-2.0	g_bit_unlock	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(volatile int *, int), void (*)(void *, int))': g_bit_unlock -- declared `void g_bit_unlock(void *, int)`
+GLib-2.0	g_bookmark_file_get_applications	an array
+GLib-2.0	g_bookmark_file_get_groups	an array
+GLib-2.0	g_bookmark_file_get_uris	an array
+GLib-2.0	g_byte_array_append	an array
+GLib-2.0	g_byte_array_free	an array
+GLib-2.0	g_byte_array_free_to_bytes	an array
+GLib-2.0	g_byte_array_new	an array
+GLib-2.0	g_byte_array_new_take	an array
+GLib-2.0	g_byte_array_prepend	an array
+GLib-2.0	g_byte_array_ref	an array
+GLib-2.0	g_byte_array_remove_index	an array
+GLib-2.0	g_byte_array_remove_index_fast	an array
+GLib-2.0	g_byte_array_remove_range	an array
+GLib-2.0	g_byte_array_set_size	an array
+GLib-2.0	g_byte_array_sized_new	an array
+GLib-2.0	g_byte_array_sort	an array
+GLib-2.0	g_byte_array_sort_with_data	an array
+GLib-2.0	g_byte_array_steal	an array
+GLib-2.0	g_byte_array_unref	an array
+GLib-2.0	g_bytes_compare	a record passed by value
+GLib-2.0	g_bytes_equal	a record passed by value
+GLib-2.0	g_bytes_get_region	a `gpointer`
+GLib-2.0	g_bytes_hash	a record passed by value
+GLib-2.0	g_bytes_new_take	an array
+GLib-2.0	g_bytes_unref_to_array	an array
+GLib-2.0	g_bytes_unref_to_data	an array
+GLib-2.0	g_chdir	declared by none of the headers GIR names
+GLib-2.0	g_chmod	declared by none of the headers GIR names
+GLib-2.0	g_close	declared by none of the headers GIR names
+GLib-2.0	g_cond_wait	`GLib.Mutex`, a type this binder does not know
+GLib-2.0	g_cond_wait_until	`GLib.Mutex`, a type this binder does not know
+GLib-2.0	g_creat	declared by none of the headers GIR names
+GLib-2.0	g_datalist_foreach	`GData**`, a pointer depth other than one
+GLib-2.0	g_datalist_get_data	`GData**`, a pointer depth other than one
+GLib-2.0	g_datalist_get_flags	`GData**`, a pointer depth other than one
+GLib-2.0	g_datalist_id_get_data	`GData**`, a pointer depth other than one
+GLib-2.0	g_datalist_id_remove_multiple	`GData**`, a pointer depth other than one
+GLib-2.0	g_datalist_set_flags	`GData**`, a pointer depth other than one
+GLib-2.0	g_datalist_unset_flags	`GData**`, a pointer depth other than one
+GLib-2.0	g_dataset_destroy	a `gpointer`
+GLib-2.0	g_dataset_foreach	a `gpointer`
+GLib-2.0	g_dataset_id_get_data	a `gpointer`
+GLib-2.0	g_date_strftime	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_date_time_compare	a record passed by value
+GLib-2.0	g_date_time_equal	a record passed by value
+GLib-2.0	g_date_time_hash	a record passed by value
+GLib-2.0	g_date_to_struct_tm	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(const struct _GDate *, struct tm *), void (*)(const struct _GDate *, void *))': g_date_to_struct_tm -- declared `void g_date_to_struct_tm(const struct _GDate *, void *)`
+GLib-2.0	g_direct_equal	a `gpointer`
+GLib-2.0	g_direct_hash	a `gpointer`
+GLib-2.0	g_double_equal	a `gpointer`
+GLib-2.0	g_double_hash	a `gpointer`
+GLib-2.0	g_environ_setenv	an array
+GLib-2.0	g_environ_unsetenv	an array
+GLib-2.0	g_error_domain_register	a callback with `scope="forever"`
+GLib-2.0	g_error_domain_register_static	a callback with `scope="forever"`
+GLib-2.0	g_file_open_tmp	a string out parameter
+GLib-2.0	g_fopen	a `gpointer`
+GLib-2.0	g_freopen	a `gpointer`
+GLib-2.0	g_fsync	declared by none of the headers GIR names
+GLib-2.0	g_get_filename_charsets	an array
+GLib-2.0	g_hash_table_contains	a `gpointer`
+GLib-2.0	g_hash_table_find	a `gpointer`
+GLib-2.0	g_hash_table_iter_next	a `gpointer`
+GLib-2.0	g_hash_table_lookup	a `gpointer`
+GLib-2.0	g_hash_table_lookup_extended	a `gpointer`
+GLib-2.0	g_hash_table_remove	a `gpointer`
+GLib-2.0	g_hash_table_steal	a `gpointer`
+GLib-2.0	g_hash_table_steal_extended	a `gpointer`
+GLib-2.0	g_hmac_get_digest	an out parameter of a type written through no slot here
+GLib-2.0	g_hook_insert_sorted	a callback whose context is not the next parameter
+GLib-2.0	g_int64_equal	a `gpointer`
+GLib-2.0	g_int64_hash	a `gpointer`
+GLib-2.0	g_int_equal	a `gpointer`
+GLib-2.0	g_int_hash	a `gpointer`
+GLib-2.0	g_io_channel_read_chars	an array
+GLib-2.0	g_io_channel_read_line	a string out parameter
+GLib-2.0	g_io_channel_read_line_string	`gsize*`, a pointer depth other than one
+GLib-2.0	g_io_channel_write_chars	an array
+GLib-2.0	g_key_file_get_boolean_list	an array
+GLib-2.0	g_key_file_get_double_list	an array
+GLib-2.0	g_key_file_get_integer_list	an array
+GLib-2.0	g_key_file_get_locale_string_list	an array
+GLib-2.0	g_key_file_get_string_list	an array
+GLib-2.0	g_key_file_set_boolean_list	an array
+GLib-2.0	g_key_file_set_double_list	an array
+GLib-2.0	g_key_file_set_integer_list	an array
+GLib-2.0	g_log_set_handler_full	a callback taking or returning a string
+GLib-2.0	g_log_set_writer_func	an array
+GLib-2.0	g_log_structured_array	an array
+GLib-2.0	g_log_writer_default	an array
+GLib-2.0	g_log_writer_default_set_debug_domains	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(const char *const *), void (*)(const char *))': g_log_writer_default_set_debug_domains -- declared `void g_log_writer_default_set_debug_domains(const char *)`
+GLib-2.0	g_log_writer_format_fields	an array
+GLib-2.0	g_log_writer_journald	an array
+GLib-2.0	g_log_writer_standard_streams	an array
+GLib-2.0	g_log_writer_syslog	an array
+GLib-2.0	g_lstat	`GStatBuf`, which the headers do not define as a tagged struct
+GLib-2.0	g_main_context_check	an array
+GLib-2.0	g_main_context_pusher_new	`GLib.none`, a type this binder does not know
+GLib-2.0	g_main_context_query	an out parameter whose storage the caller allocates
+GLib-2.0	g_malloc0	a `gpointer`
+GLib-2.0	g_malloc0_n	a `gpointer`
+GLib-2.0	g_malloc	a `gpointer`
+GLib-2.0	g_malloc_n	a `gpointer`
+GLib-2.0	g_mapped_file_get_contents	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(struct _GMappedFile *), const char *(*)(struct _GMappedFile *))': g_mapped_file_get_contents -- declared `const char * g_mapped_file_get_contents(struct _GMappedFile *)`
+GLib-2.0	g_markup_parse_context_get_user_data	a `gpointer`
+GLib-2.0	g_markup_parse_context_new	a callback whose context is not the next parameter
+GLib-2.0	g_markup_parse_context_pop	a `gpointer`
+GLib-2.0	g_memdup2	a `gpointer`
+GLib-2.0	g_mkdir	declared by none of the headers GIR names
+GLib-2.0	g_nullify_pointer	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(void **), void (*)(void *))': g_nullify_pointer -- declared `void g_nullify_pointer(void *)`
+GLib-2.0	g_once_init_enter	a `gpointer`
+GLib-2.0	g_once_init_enter_impl	`volatile gsize*`, a pointer depth other than one
+GLib-2.0	g_once_init_leave	a `gpointer`
+GLib-2.0	g_open	declared by none of the headers GIR names
+GLib-2.0	g_option_context_add_main_entries	an array
+GLib-2.0	g_option_context_parse	an array
+GLib-2.0	g_option_context_parse_strv	an array
+GLib-2.0	g_option_context_set_translate_func	a callback taking or returning a string
+GLib-2.0	g_option_group_add_entries	an array
+GLib-2.0	g_option_group_new	a callback whose context is not the next parameter
+GLib-2.0	g_option_group_set_translate_func	a callback taking or returning a string
+GLib-2.0	g_parse_debug_string	an array
+GLib-2.0	g_path_buf_equal	a `gpointer`
+GLib-2.0	g_pointer_bit_lock_mask_ptr	a `gpointer`
+GLib-2.0	g_pointer_bit_lock	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(volatile void *, int), void (*)(void *, int))': g_pointer_bit_lock -- declared `void g_pointer_bit_lock(void *, int)`
+GLib-2.0	g_pointer_bit_trylock	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(volatile void *, int), int (*)(void *, int))': g_pointer_bit_trylock -- declared `int g_pointer_bit_trylock(void *, int)`
+GLib-2.0	g_pointer_bit_unlock	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(volatile void *, int), void (*)(void *, int))': g_pointer_bit_unlock -- declared `void g_pointer_bit_unlock(void *, int)`
+GLib-2.0	g_private_get	a `gpointer`
+GLib-2.0	g_queue_clear_full	a callback whose context is not the next parameter
+GLib-2.0	g_queue_free_full	a callback whose context is not the next parameter
+GLib-2.0	g_queue_index	a `gpointer`
+GLib-2.0	g_queue_insert_sorted	a `gpointer`
+GLib-2.0	g_queue_peek_head	a `gpointer`
+GLib-2.0	g_queue_peek_nth	a `gpointer`
+GLib-2.0	g_queue_peek_tail	a `gpointer`
+GLib-2.0	g_queue_pop_head	a `gpointer`
+GLib-2.0	g_queue_pop_nth	a `gpointer`
+GLib-2.0	g_queue_pop_tail	a `gpointer`
+GLib-2.0	g_queue_remove	a `gpointer`
+GLib-2.0	g_queue_remove_all	a `gpointer`
+GLib-2.0	g_queue_sort	a `gpointer`
+GLib-2.0	g_rand_new_with_seed_array	`const guint32*`, a pointer depth other than one
+GLib-2.0	g_rand_set_seed_array	`const guint32*`, a pointer depth other than one
+GLib-2.0	g_rc_box_acquire	a `gpointer`
+GLib-2.0	g_rc_box_alloc0	a `gpointer`
+GLib-2.0	g_rc_box_alloc	a `gpointer`
+GLib-2.0	g_rc_box_dup	a `gpointer`
+GLib-2.0	g_rc_box_release_full	a callback whose context is not the next parameter
+GLib-2.0	g_realloc	a `gpointer`
+GLib-2.0	g_realloc_n	a `gpointer`
+GLib-2.0	g_ref_count_compare	`grefcount*`, a pointer depth other than one
+GLib-2.0	g_ref_string_acquire	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_ref_string_length	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_ref_string_release	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_regex_match_all_full	an array
+GLib-2.0	g_regex_match_full	an array
+GLib-2.0	g_regex_replace	an array
+GLib-2.0	g_regex_replace_eval	an array
+GLib-2.0	g_regex_replace_literal	an array
+GLib-2.0	g_regex_split_full	an array
+GLib-2.0	g_remove	declared by none of the headers GIR names
+GLib-2.0	g_rename	declared by none of the headers GIR names
+GLib-2.0	g_rmdir	declared by none of the headers GIR names
+GLib-2.0	g_scanner_lookup_symbol	a `gpointer`
+GLib-2.0	g_scanner_scope_lookup_symbol	a `gpointer`
+GLib-2.0	g_sequence_get	a `gpointer`
+GLib-2.0	g_sequence_insert_sorted	a `gpointer`
+GLib-2.0	g_sequence_lookup	a `gpointer`
+GLib-2.0	g_sequence_search	a `gpointer`
+GLib-2.0	g_sequence_sort	a `gpointer`
+GLib-2.0	g_sequence_sort_changed	a `gpointer`
+GLib-2.0	g_shell_parse_argv	an array
+GLib-2.0	g_slice_alloc0	a `gpointer`
+GLib-2.0	g_slice_alloc	a `gpointer`
+GLib-2.0	g_slice_copy	a `gpointer`
+GLib-2.0	g_slice_get_config_state	`guint*`, a pointer depth other than one
+GLib-2.0	g_source_add_unix_fd	a `gpointer`
+GLib-2.0	g_spawn_async_with_pipes_and_fds	an array
+GLib-2.0	g_spawn_command_line_sync	an array
+GLib-2.0	g_spawn_sync	an array
+GLib-2.0	g_stat	`GStatBuf`, which the headers do not define as a tagged struct
+GLib-2.0	g_static_mutex_get_mutex_impl	`GLib.Mutex`, a type this binder does not know
+GLib-2.0	g_stpcpy	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_strcanon	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_strchomp	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_strchug	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_strdelimit	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_str_equal	a `gpointer`
+GLib-2.0	g_strfreev	an array
+GLib-2.0	g_str_hash	a `gpointer`
+GLib-2.0	g_string_new_take	a string parameter the callee takes ownership of
+GLib-2.0	g_strlcat	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_strlcpy	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_strreverse	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_strrstr_len	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *, long, const char *), const char *(*)(const char *, long, const char *))': g_strrstr_len -- declared `const char * g_strrstr_len(const char *, long, const char *)`
+GLib-2.0	g_strrstr	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *, const char *), const char *(*)(const char *, const char *))': g_strrstr -- declared `const char * g_strrstr(const char *, const char *)`
+GLib-2.0	g_strsplit_set	an array
+GLib-2.0	g_strstr_len	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *, long, const char *), const char *(*)(const char *, long, const char *))': g_strstr_len -- declared `const char * g_strstr_len(const char *, long, const char *)`
+GLib-2.0	g_str_tokenize_and_fold	an array
+GLib-2.0	g_strv_builder_take	a string parameter the callee takes ownership of
+GLib-2.0	g_strv_get_type	declared by none of the headers GIR names
+GLib-2.0	g_test_add_data_func	a `gpointer`
+GLib-2.0	g_test_add_data_func_full	a callback whose context is not the next parameter
+GLib-2.0	g_test_add_func	a callback whose context is not the next parameter
+GLib-2.0	g_test_log_buffer_free	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(GTestLogBuffer *), void (*)(struct GTestLogBuffer *))': g_test_log_buffer_free -- declared `void g_test_log_buffer_free(struct GTestLogBuffer *)`
+GLib-2.0	g_test_log_buffer_push	`const guint8*`, a pointer depth other than one
+GLib-2.0	g_test_log_msg_free	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(GTestLogMsg *), void (*)(struct GTestLogMsg *))': g_test_log_msg_free -- declared `void g_test_log_msg_free(struct GTestLogMsg *)`
+GLib-2.0	g_test_queue_destroy	a callback whose context is not the next parameter
+GLib-2.0	g_thread_join	a `gpointer`
+GLib-2.0	g_thread_new	a `gpointer`
+GLib-2.0	g_thread_try_new	a `gpointer`
+GLib-2.0	g_timer_elapsed	`gulong*`, a pointer depth other than one
+GLib-2.0	g_tree_lookup	a `gpointer`
+GLib-2.0	g_tree_lookup_extended	a `gpointer`
+GLib-2.0	g_tree_lookup_node	a `gpointer`
+GLib-2.0	g_tree_lower_bound	a `gpointer`
+GLib-2.0	g_tree_new_full	a callback whose destroy function is not the parameter after its context
+GLib-2.0	g_tree_node_key	a `gpointer`
+GLib-2.0	g_tree_node_value	a `gpointer`
+GLib-2.0	g_tree_remove	a `gpointer`
+GLib-2.0	g_tree_search	a `gpointer`
+GLib-2.0	g_tree_search_node	a `gpointer`
+GLib-2.0	g_tree_steal	a `gpointer`
+GLib-2.0	g_tree_upper_bound	a `gpointer`
+GLib-2.0	g_try_malloc0	a `gpointer`
+GLib-2.0	g_try_malloc0_n	a `gpointer`
+GLib-2.0	g_try_malloc	a `gpointer`
+GLib-2.0	g_try_malloc_n	a `gpointer`
+GLib-2.0	g_try_realloc	a `gpointer`
+GLib-2.0	g_try_realloc_n	a `gpointer`
+GLib-2.0	g_ucs4_to_utf16	an array
+GLib-2.0	g_ucs4_to_utf8	an array
+GLib-2.0	g_unichar_fully_decompose	`gunichar*`, a pointer depth other than one
+GLib-2.0	g_unichar_to_utf8	`GLib.utf8`, a type this binder does not know
+GLib-2.0	g_unicode_canonical_ordering	an array
+GLib-2.0	g_unlink	declared by none of the headers GIR names
+GLib-2.0	g_utf16_to_ucs4	an array
+GLib-2.0	g_utf16_to_utf8	an array
+GLib-2.0	g_utf8_find_next_char	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *, const char *), const char *(*)(const char *, const char *))': g_utf8_find_next_char -- declared `const char * g_utf8_find_next_char(const char *, const char *)`
+GLib-2.0	g_utf8_find_prev_char	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *, const char *), const char *(*)(const char *, const char *))': g_utf8_find_prev_char -- declared `const char * g_utf8_find_prev_char(const char *, const char *)`
+GLib-2.0	g_utf8_offset_to_pointer	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *, long), const char *(*)(const char *, long))': g_utf8_offset_to_pointer -- declared `const char * g_utf8_offset_to_pointer(const char *, long)`
+GLib-2.0	g_utf8_prev_char	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *), const char *(*)(const char *))': g_utf8_prev_char -- declared `const char * g_utf8_prev_char(const char *)`
+GLib-2.0	g_utf8_strchr	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *, long, unsigned int), const char *(*)(const char *, long, unsigned int))': g_utf8_strchr -- declared `const char * g_utf8_strchr(const char *, long, uint32_t)`
+GLib-2.0	g_utf8_strncpy	a `char *` buffer the callee may write into, which GIR calls a string
+GLib-2.0	g_utf8_strrchr	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(char *(*)(const char *, long, unsigned int), const char *(*)(const char *, long, unsigned int))': g_utf8_strrchr -- declared `const char * g_utf8_strrchr(const char *, long, uint32_t)`
+GLib-2.0	g_utf8_to_ucs4_fast	`gunichar*`, a pointer depth other than one
+GLib-2.0	g_utf8_to_ucs4	`gunichar*`, a pointer depth other than one
+GLib-2.0	g_utf8_to_utf16	`gunichar2*`, a pointer depth other than one
+GLib-2.0	g_utf8_validate	an array
+GLib-2.0	g_utf8_validate_len	an array
+GLib-2.0	g_utime	declared by none of the headers GIR names
+GLib-2.0	g_variant_compare	a record passed by value
+GLib-2.0	g_variant_dup_bytestring	an array
+GLib-2.0	g_variant_dup_bytestring_array	an array
+GLib-2.0	g_variant_dup_objv	an array
+GLib-2.0	g_variant_dup_strv	an array
+GLib-2.0	g_variant_equal	a record passed by value
+GLib-2.0	g_variant_get_bytestring	an array
+GLib-2.0	g_variant_get_bytestring_array	an array
+GLib-2.0	g_variant_get_data	a `gpointer`
+GLib-2.0	g_variant_get_gtype	declared by none of the headers GIR names
+GLib-2.0	g_variant_get_objv	an array
+GLib-2.0	g_variant_get_strv	an array
+GLib-2.0	g_variant_hash	a record passed by value
+GLib-2.0	g_variant_new_array	an array
+GLib-2.0	g_variant_new_bytestring	an array
+GLib-2.0	g_variant_new_fixed_array	a `gpointer`
+GLib-2.0	g_variant_new_from_data	a callback whose context is not the next parameter
+GLib-2.0	g_variant_new_tuple	an array
+GLib-2.0	g_variant_parse	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(struct _GVariant *(*)(const struct _GVariantType *, const char *, const char *, const char **, struct _GError **), struct _GVariant *(*)(const struct _GVariantType *, const char *, const char *, const char *, struct _GError **))': g_variant_parse -- declared `struct _GVariant * g_variant_parse(const struct _GVariantType *, const char *, const char *, const char *, struct _GError * *)`
+GLib-2.0	g_variant_type_equal	a record passed by value
+GLib-2.0	g_variant_type_hash	a record passed by value
+GLib-2.0	g_variant_type_new_tuple	an array
+GModule-2.0	g_module_symbol	a `gpointer`
+GObject-2.0	g_boxed_copy	a `gpointer`
+GObject-2.0	g_boxed_type_register_static	a callback with `scope="forever"`
+GObject-2.0	g_clear_signal_handler	`gulong*`, a pointer depth other than one
+GObject-2.0	g_closure_invoke	an array
+GObject-2.0	g_enum_complete_type_info	a record passed by value
+GObject-2.0	g_enum_register_static	an array
+GObject-2.0	g_flags_complete_type_info	a record passed by value
+GObject-2.0	g_flags_register_static	an array
+GObject-2.0	GObjectClass.dispatch_properties_changed	`GParamSpec**`, a pointer depth other than one
+GObject-2.0	g_object_force_floating	a reference count the compiler keeps itself
+GObject-2.0	g_object_get_data	a `gpointer`
+GObject-2.0	g_object_get_qdata	a `gpointer`
+GObject-2.0	g_object_getv	an array
+GObject-2.0	g_object_interface_find_property	a record passed by value
+GObject-2.0	g_object_interface_install_property	a record passed by value
+GObject-2.0	g_object_interface_list_properties	a record passed by value
+GObject-2.0	g_object_ref	a reference count the compiler keeps itself
+GObject-2.0	g_object_ref_sink	a reference count the compiler keeps itself
+GObject-2.0	g_object_steal_data	a `gpointer`
+GObject-2.0	g_object_steal_qdata	a `gpointer`
+GObject-2.0	g_object_unref	a reference count the compiler keeps itself
+GObject-2.0	g_param_spec_get_qdata	a `gpointer`
+GObject-2.0	g_param_spec_pool_list	an array
+GObject-2.0	g_param_spec_steal_qdata	a `gpointer`
+GObject-2.0	g_signal_add_emission_hook	an array
+GObject-2.0	g_signal_chain_from_overridden	an array
+GObject-2.0	g_signal_emitv	an array
+GObject-2.0	g_signal_group_connect_data	a callback whose context is not its last parameter
+GObject-2.0	g_signal_group_connect_swapped	a callback whose context is not its last parameter
+GObject-2.0	g_signal_list_ids	an array
+GObject-2.0	g_signal_override_class_handler	a callback with `scope="forever"`
+GObject-2.0	g_signal_query	an out parameter whose storage the caller allocates
+GObject-2.0	g_type_children	an array
+GObject-2.0	g_type_class_adjust_private_offset	`gint*`, a pointer depth other than one
+GObject-2.0	g_type_class_get	a record passed by value
+GObject-2.0	g_type_class_get_private	a `gpointer`
+GObject-2.0	g_type_class_peek	a record passed by value
+GObject-2.0	g_type_class_peek_parent	a record passed by value
+GObject-2.0	g_type_class_peek_static	a record passed by value
+GObject-2.0	g_type_default_interface_get	a record passed by value
+GObject-2.0	g_type_default_interface_peek	a record passed by value
+GObject-2.0	g_type_get_qdata	a `gpointer`
+GObject-2.0	g_type_instance_get_private	a `gpointer`
+GObject-2.0	g_type_interface_peek	a record passed by value
+GObject-2.0	g_type_interface_peek_parent	a record passed by value
+GObject-2.0	g_type_interface_prerequisites	an array
+GObject-2.0	g_type_interfaces	an array
+GObject-2.0	g_type_module_register_enum	an array
+GObject-2.0	g_type_module_register_flags	an array
+GObject-2.0	g_type_query	an out parameter whose storage the caller allocates
+GObject-2.0	g_value_get_boxed	a `gpointer`
+GObject-2.0	g_value_get_pointer	a `gpointer`
+GObject-2.0	g_value_init_from_instance	a record passed by value
+GObject-2.0	g_value_peek_pointer	a `gpointer`
+GObject-2.0	g_value_set_boxed	a `gpointer`
+GObject-2.0	g_value_set_static_boxed	a `gpointer`
+GObject-2.0	g_value_take_boxed	a `gpointer`
+GObject-2.0	g_value_take_string	a string parameter the callee takes ownership of
+GObject-2.0	intern	declared by none of the headers GIR names
+Graphene-1.0	graphene_box_get_vertices	an out parameter whose storage the caller allocates
+Graphene-1.0	graphene_box_init_from_points	an array
+Graphene-1.0	graphene_box_init_from_vectors	an array
+Graphene-1.0	graphene_frustum_get_planes	an out parameter whose storage the caller allocates
+Graphene-1.0	graphene_matrix_init_from_float	an array
+Graphene-1.0	graphene_matrix_to_float	an out parameter whose storage the caller allocates
+Graphene-1.0	graphene_quad_init_from_points	an array
+Graphene-1.0	graphene_rect_get_vertices	an out parameter whose storage the caller allocates
+Graphene-1.0	graphene_sphere_init_from_points	an array
+Graphene-1.0	graphene_sphere_init_from_vectors	an array
+Graphene-1.0	graphene_triangle_init_from_float	an array
+Graphene-1.0	graphene_vec2_init_from_float	an array
+Graphene-1.0	graphene_vec2_to_float	an out parameter whose storage the caller allocates
+Graphene-1.0	graphene_vec3_init_from_float	an array
+Graphene-1.0	graphene_vec3_to_float	an out parameter whose storage the caller allocates
+Graphene-1.0	graphene_vec4_init_from_float	an array
+Graphene-1.0	graphene_vec4_to_float	an out parameter whose storage the caller allocates
+Gsk-4.0	gsk_border_node_get_colors	an array
+Gsk-4.0	gsk_border_node_get_widths	an array
+Gsk-4.0	gsk_border_node_new	an array
+Gsk-4.0	gsk_broadway_renderer_new	declared by none of the headers GIR names
+Gsk-4.0	gsk_component_transfer_equal	a `gpointer`
+Gsk-4.0	gsk_component_transfer_new_discrete	an array
+Gsk-4.0	gsk_component_transfer_new_table	an array
+Gsk-4.0	gsk_conic_gradient_node_get_color_stops	an array
+Gsk-4.0	gsk_conic_gradient_node_new	an array
+Gsk-4.0	gsk_debug_node_new	a string parameter the callee takes ownership of
+Gsk-4.0	gsk_linear_gradient_node_get_color_stops	an array
+Gsk-4.0	gsk_linear_gradient_node_new	an array
+Gsk-4.0	gsk_path_builder_add_cairo_path	`cairo.Path`, a type this binder does not know
+Gsk-4.0	gsk_path_foreach	an array
+Gsk-4.0	gsk_path_get_next	a record passed by value
+Gsk-4.0	gsk_path_get_previous	a record passed by value
+Gsk-4.0	gsk_radial_gradient_node_get_color_stops	an array
+Gsk-4.0	gsk_radial_gradient_node_new	an array
+Gsk-4.0	gsk_render_node_get_children	an array
+Gsk-4.0	gsk_repeating_linear_gradient_node_new	an array
+Gsk-4.0	gsk_repeating_radial_gradient_node_new	an array
+Gsk-4.0	gsk_shadow_node_new	an array
+Gsk-4.0	gsk_stroke_equal	a `gpointer`
+Gsk-4.0	gsk_stroke_get_dash	an array
+Gsk-4.0	gsk_stroke_set_dash	an array
+Gsk-4.0	gsk_text_node_get_glyphs	an array
+Gtk-4.0	gtk_accelerator_parse_with_keycode	an array
+Gtk-4.0	gtk_accessible_hyperlink_new	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(struct _GtkAccessibleHyperlink *(*)(struct _GtkAccessibleHypertext *, unsigned int, const char *, GtkAccessibleTextRange *), struct _GtkAccessibleHyperlink *(*)(struct _GtkAccessibleHypertext *, unsigned int, const char *, struct GtkAccessibleTextRange *))': gtk_accessible_hyperlink_new -- declared `struct _GtkAccessibleHyperlink * gtk_accessible_hyperlink_new(struct _GtkAccessibleHypertext *, unsigned int, const char *, struct GtkAccessibleTextRange *)`
+Gtk-4.0	GtkAccessibleTextInterface.get_attributes	an array
+Gtk-4.0	GtkAccessibleTextInterface.get_default_attributes	an array
+Gtk-4.0	GtkAccessibleTextInterface.get_selection	an array
+Gtk-4.0	GtkAccessibleTextInterface_set_selection	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(struct _GtkAccessibleText *, unsigned long, GtkAccessibleTextRange *), int (*)(struct _GtkAccessibleText *, unsigned long, struct GtkAccessibleTextRange *))': GtkAccessibleTextInterface_set_selection -- declared `int GtkAccessibleTextInterface_set_selection(struct _GtkAccessibleText *, size_t, struct GtkAccessibleTextRange *)`
+Gtk-4.0	gtk_accessible_update_property_value	an array
+Gtk-4.0	gtk_accessible_update_relation_value	an array
+Gtk-4.0	gtk_accessible_update_state_value	an array
+Gtk-4.0	GtkBuildableIface.custom_tag_start	an out parameter whose storage the caller allocates
+Gtk-4.0	gtk_buildable_parse_context_get_element_stack	an array
+Gtk-4.0	gtk_buildable_parse_context_pop	a `gpointer`
+Gtk-4.0	gtk_builder_cscope_add_callback_symbol	a callback whose context is not the next parameter
+Gtk-4.0	gtk_cclosure_expression_new	a callback whose context is not the next parameter
+Gtk-4.0	gtk_closure_expression_new	an array
+Gtk-4.0	GtkColorChooserInterface.add_palette	an array
+Gtk-4.0	gtk_column_view_scroll_to	a boxed record a parameter hands over, which the program's box would also free
+Gtk-4.0	GtkComboBox::format-entry-text	a callback taking or returning a string
+Gtk-4.0	gtk_custom_layout_new	a callback whose context is not the next parameter
+Gtk-4.0	gtk_distribute_natural_allocation	an array
+Gtk-4.0	gtk_drop_target_async_new	a boxed record a parameter hands over, which the program's box would also free
+Gtk-4.0	gtk_drop_target_get_gtypes	an array
+Gtk-4.0	gtk_drop_target_set_gtypes	an array
+Gtk-4.0	GtkEditable::insert-text	an out parameter of a type written through no slot here
+Gtk-4.0	gtk_editable_install_properties	`GObjectClass*`, a pointer depth other than one
+Gtk-4.0	GtkEntryBufferClass.get_text	`gsize*`, a pointer depth other than one
+Gtk-4.0	gtk_enumerate_printers	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_file_dialog_open_multiple_text_files_finish	a string out parameter
+Gtk-4.0	gtk_file_dialog_open_text_file_finish	a string out parameter
+Gtk-4.0	gtk_file_dialog_save_text_file_finish	a string out parameter
+Gtk-4.0	gtk_file_filter_get_attributes	an array
+Gtk-4.0	gtk_font_dialog_choose_font_and_features_finish	a string out parameter
+Gtk-4.0	GtkFrameClass.compute_child_allocation	`GtkAllocation*`, a pointer depth other than one
+Gtk-4.0	gtk_gesture_stylus_get_axes	an array
+Gtk-4.0	gtk_gesture_stylus_get_backlog	an array
+Gtk-4.0	gtk_grid_view_scroll_to	a boxed record a parameter hands over, which the program's box would also free
+Gtk-4.0	gtk_icon_theme_get_icon_sizes	an array
+Gtk-4.0	GtkIMContextClass.get_preedit_string	a string out parameter
+Gtk-4.0	GtkIMContextClass.get_surrounding	a string out parameter
+Gtk-4.0	GtkIMContextClass.get_surrounding_with_selection	a string out parameter
+Gtk-4.0	gtk_im_context_get_preedit_string	a string out parameter
+Gtk-4.0	gtk_im_context_get_surrounding_with_selection	a string out parameter
+Gtk-4.0	gtk_list_view_scroll_to	a boxed record a parameter hands over, which the program's box would also free
+Gtk-4.0	GtkOverlay::get-child-position	an out parameter of a type written through no slot here
+Gtk-4.0	gtk_pad_controller_set_action_entries	an array
+Gtk-4.0	gtk_page_setup_unix_dialog_get_page_setup	`GtkPageSetupUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_page_setup_unix_dialog_get_print_settings	`GtkPageSetupUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_page_setup_unix_dialog_new	declared by none of the headers GIR names
+Gtk-4.0	gtk_page_setup_unix_dialog_set_page_setup	`GtkPageSetupUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_page_setup_unix_dialog_set_print_settings	`GtkPageSetupUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_accepts_pdf	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_accepts_ps	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_compare	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	GtkPrinter::details-acquired	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_backend	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_capabilities	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_default_page_size	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_description	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_hard_margins_for_paper_size	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_hard_margins	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_icon_name	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_job_count	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_location	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_name	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_get_state_message	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_has_details	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_is_accepting_jobs	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_is_active	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_is_default	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_is_paused	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_is_virtual	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_list_papers	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_new	`GtkPrintBackend`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_printer_request_details	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_collate	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_num_copies	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_n_up	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_n_up_layout	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_page_ranges	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_page_set	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_pages	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_printer	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_reverse	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_rotate	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_scale	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_settings	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_status	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_surface	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_title	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_get_track_print_status	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_new	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_send	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_collate	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_num_copies	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_n_up	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_n_up_layout	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_page_ranges	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_page_set	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_pages	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_reverse	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_rotate	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_scale	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_source_fd	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_source_file	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_job_set_track_print_status	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	GtkPrintJob::status-changed	`GtkPrintJob`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_settings_foreach	a callback taking or returning a string
+Gtk-4.0	gtk_print_settings_get_page_ranges	an array
+Gtk-4.0	gtk_print_settings_set_page_ranges	an array
+Gtk-4.0	gtk_print_unix_dialog_add_custom_tab	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_current_page	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_embed_page_setup	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_has_selection	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_manual_capabilities	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_page_setup	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_page_setup_set	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_selected_printer	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_settings	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_get_support_selection	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_new	declared by none of the headers GIR names
+Gtk-4.0	gtk_print_unix_dialog_set_current_page	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_set_embed_page_setup	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_set_has_selection	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_set_manual_capabilities	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_set_page_setup	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_set_settings	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_print_unix_dialog_set_support_selection	`GtkPrintUnixDialog`, which the headers do not define as a tagged struct
+Gtk-4.0	gtk_recent_info_get_application_info	a string out parameter
+Gtk-4.0	gtk_recent_info_get_applications	an array
+Gtk-4.0	gtk_recent_info_get_groups	an array
+Gtk-4.0	gtk_scale_set_format_value_func	a callback taking or returning a string
+Gtk-4.0	gtk_shortcut_trigger_compare	`gconstpointer`, a pointer depth other than one
+Gtk-4.0	gtk_shortcut_trigger_equal	`gconstpointer`, a pointer depth other than one
+Gtk-4.0	gtk_shortcut_trigger_hash	`gconstpointer`, a pointer depth other than one
+Gtk-4.0	gtk_snapshot_append_border	an array
+Gtk-4.0	gtk_snapshot_append_conic_gradient	an array
+Gtk-4.0	gtk_snapshot_append_linear_gradient	an array
+Gtk-4.0	gtk_snapshot_append_radial_gradient	an array
+Gtk-4.0	gtk_snapshot_append_repeating_linear_gradient	an array
+Gtk-4.0	gtk_snapshot_append_repeating_radial_gradient	an array
+Gtk-4.0	gtk_snapshot_push_shadow	an array
+Gtk-4.0	GtkSpinButton::input	an out parameter of a type written through no slot here
+Gtk-4.0	gtk_string_list_take	a string parameter the callee takes ownership of
+Gtk-4.0	gtk_svg_get_state_names	an array
+Gtk-4.0	GtkSymbolicPaintableInterface.snapshot_symbolic	an array
+Gtk-4.0	GtkSymbolicPaintableInterface.snapshot_with_weight	an array
+Gtk-4.0	gtk_symbolic_paintable_snapshot_symbolic	an array
+Gtk-4.0	gtk_symbolic_paintable_snapshot_with_weight	an array
+Gtk-4.0	gtk_test_list_all_types	an array
+Gtk-4.0	gtk_text_child_anchor_get_widgets	an array
+Gtk-4.0	gtk_try_expression_new	an array
+Gtk-4.0	gtk_viewport_scroll_to	a boxed record a parameter hands over, which the program's box would also free
+Gtk-4.0	gtk_widget_allocate	a boxed record a parameter hands over, which the program's box would also free
+Gtk-4.0	GtkWidgetClass.compute_expand	`gboolean*`, a pointer depth other than one
+Gtk-4.0	gtk_widget_size_allocate	`const GtkAllocation*`, a pointer depth other than one
+HarfBuzz-0.0	hb_aat_layout_feature_type_get_name_id	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_aat_layout_feature_type_get_selector_infos	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_aat_layout_get_feature_types	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_aat_layout_has_positioning	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_aat_layout_has_substitution	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_aat_layout_has_tracking	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_blob_get_data	an array
+HarfBuzz-0.0	hb_blob_get_data_writable	an array
+HarfBuzz-0.0	hb_buffer_add_codepoints	an array
+HarfBuzz-0.0	hb_buffer_add_latin1	an array
+HarfBuzz-0.0	hb_buffer_add_utf16	an array
+HarfBuzz-0.0	hb_buffer_add_utf32	an array
+HarfBuzz-0.0	hb_buffer_deserialize_glyphs	an array
+HarfBuzz-0.0	hb_buffer_deserialize_unicode	an array
+HarfBuzz-0.0	hb_buffer_get_glyph_infos	an array
+HarfBuzz-0.0	hb_buffer_get_glyph_positions	an array
+HarfBuzz-0.0	hb_buffer_get_language	a record passed by value
+HarfBuzz-0.0	hb_buffer_serialize	an array
+HarfBuzz-0.0	hb_buffer_serialize_glyphs	an array
+HarfBuzz-0.0	hb_buffer_serialize_list_formats	an array
+HarfBuzz-0.0	hb_buffer_serialize_unicode	an array
+HarfBuzz-0.0	hb_buffer_set_language	a record passed by value
+HarfBuzz-0.0	hb_buffer_set_message_func	a callback taking or returning a string
+HarfBuzz-0.0	hb_calloc	a `gpointer`
+HarfBuzz-0.0	hb_color_line_get_color_stops	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_draw_funcs_set_get_budget_remaining_func	`int64_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_face_builder_sort_tables	an array
+HarfBuzz-0.0	hb_face_collect_nominal_glyph_mapping	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_face_collect_unicodes	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_face_collect_variation_selectors	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_face_collect_variation_unicodes	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_face_get_table_tags	an array
+HarfBuzz-0.0	hb_face_list_loaders	an array
+HarfBuzz-0.0	hb_face_set_get_table_tags_func	`unsigned int*`, a pointer depth other than one
+HarfBuzz-0.0	hb_feature_to_string	an array
+HarfBuzz-0.0	hb_font_funcs_set_font_h_extents_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_font_v_extents_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_contour_point_func	`hb_position_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_funcs_set_glyph_from_name_func	an array
+HarfBuzz-0.0	hb_font_funcs_set_glyph_h_advance_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_h_advances_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_h_kerning_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_h_origin_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_h_origins_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_name_func	an array
+HarfBuzz-0.0	hb_font_funcs_set_glyph_v_advance_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_v_advances_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_v_origin_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_glyph_v_origins_func	a callback whose closure data is not annotated where it is passed
+HarfBuzz-0.0	hb_font_funcs_set_nominal_glyph_func	`hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_funcs_set_nominal_glyphs_func	`const hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_funcs_set_variation_glyph_func	`hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_extents_for_direction	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_font_get_glyph_advances_for_direction	`const hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_glyph_extents	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_font_get_glyph_extents_for_origin	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_font_get_glyph_from_name	an array
+HarfBuzz-0.0	hb_font_get_glyph_h_advances	`const hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_glyph_h_origins	`const hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_glyph_name	an array
+HarfBuzz-0.0	hb_font_get_glyph_v_advances	`const hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_glyph_v_origins	`const hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_h_extents	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_font_get_nominal_glyphs	`const hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_var_coords_design	`const float*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_var_coords_normalized	`const int*`, a pointer depth other than one
+HarfBuzz-0.0	hb_font_get_v_extents	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_font_glyph_to_string	an array
+HarfBuzz-0.0	hb_font_list_funcs	an array
+HarfBuzz-0.0	hb_font_set_funcs	a callback whose context is not the next parameter
+HarfBuzz-0.0	hb_font_set_funcs_data	a callback whose context is not the next parameter
+HarfBuzz-0.0	hb_font_set_var_coords_design	an array
+HarfBuzz-0.0	hb_font_set_var_coords_normalized	an array
+HarfBuzz-0.0	hb_font_set_variations	an array
+HarfBuzz-0.0	hb_ft_face_create_cached	`freetype2.Face`, a type this binder does not know
+HarfBuzz-0.0	hb_ft_face_create	`freetype2.Face`, a type this binder does not know
+HarfBuzz-0.0	hb_ft_face_create_from_blob_or_fail	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ft_face_create_from_file_or_fail	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ft_face_create_referenced	`freetype2.Face`, a type this binder does not know
+HarfBuzz-0.0	hb_ft_font_changed	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ft_font_create	`freetype2.Face`, a type this binder does not know
+HarfBuzz-0.0	hb_ft_font_create_referenced	`freetype2.Face`, a type this binder does not know
+HarfBuzz-0.0	hb_ft_font_get_load_flags	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ft_font_set_funcs	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ft_font_set_load_flags	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ft_hb_font_changed	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_glib_blob_create	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_glib_get_unicode_funcs	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_glib_script_from_script	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_glib_script_to_script	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_language_from_string	a record passed by value
+HarfBuzz-0.0	hb_language_get_default	a record passed by value
+HarfBuzz-0.0	hb_language_matches	a record passed by value
+HarfBuzz-0.0	hb_language_to_string	a record passed by value
+HarfBuzz-0.0	hb_malloc	a `gpointer`
+HarfBuzz-0.0	hb_ot_color_get_svg_document_count	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_get_svg_document_glyph_range	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_glyph_get_layers	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_color_glyph_get_svg_document_index	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_glyph_has_paint	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_glyph_reference_png	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_glyph_reference_svg	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_has_layers	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_has_paint	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_has_palettes	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_has_png	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_has_svg	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_palette_color_get_name_id	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_palette_get_colors	an array
+HarfBuzz-0.0	hb_ot_color_palette_get_count	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_palette_get_flags	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_color_palette_get_name_id	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_fetch_bits	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_fetch_number	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_font_set_funcs	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_collect_features	an array
+HarfBuzz-0.0	hb_ot_layout_collect_features_map	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_layout_collect_lookups	an array
+HarfBuzz-0.0	hb_ot_layout_feature_get_characters	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_layout_feature_get_lookups	an array
+HarfBuzz-0.0	hb_ot_layout_feature_get_name_ids	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_feature_with_variations_get_lookups	an array
+HarfBuzz-0.0	hb_ot_layout_get_attach_points	an array
+HarfBuzz-0.0	hb_ot_layout_get_baseline2	a record passed by value
+HarfBuzz-0.0	hb_ot_layout_get_baseline	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_get_baseline_with_fallback2	a record passed by value
+HarfBuzz-0.0	hb_ot_layout_get_baseline_with_fallback	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_get_font_extents2	a record passed by value
+HarfBuzz-0.0	hb_ot_layout_get_font_extents	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_layout_get_glyph_class	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_get_glyphs_in_class	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_layout_get_horizontal_baseline_tag_for_script	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_get_ligature_carets	an array
+HarfBuzz-0.0	hb_ot_layout_get_size_params	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_has_glyph_classes	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_has_positioning	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_has_substitution	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_language_find_feature	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_language_get_feature_indexes	an array
+HarfBuzz-0.0	hb_ot_layout_language_get_feature_tags	an array
+HarfBuzz-0.0	hb_ot_layout_language_get_required_feature	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_language_get_required_feature_index	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_lookup_collect_glyph_alternates	a record passed by value
+HarfBuzz-0.0	hb_ot_layout_lookup_collect_glyphs	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_layout_lookup_get_glyph_alternates	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_layout_lookup_get_optical_bound	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_lookups_substitute_closure	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_layout_lookup_substitute_closure	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_layout_lookup_would_substitute	`const hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_ot_layout_script_get_language_tags	an array
+HarfBuzz-0.0	hb_ot_layout_script_select_language2	`const hb_tag_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_ot_layout_script_select_language	`const hb_tag_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_ot_layout_table_choose_script	`const hb_tag_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_ot_layout_table_find_feature_variations	`const int*`, a pointer depth other than one
+HarfBuzz-0.0	hb_ot_layout_table_find_script	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_table_get_feature_tags	an array
+HarfBuzz-0.0	hb_ot_layout_table_get_lookup_count	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_layout_table_get_script_tags	an array
+HarfBuzz-0.0	hb_ot_layout_table_select_script	`const hb_tag_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_ot_math_get_constant	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_math_get_glyph_assembly	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_math_get_glyph_italics_correction	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_math_get_glyph_kerning	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_math_get_glyph_kernings	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_math_get_glyph_top_accent_attachment	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_math_get_glyph_variants	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_math_get_min_connector_overlap	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_math_has_data	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_math_is_glyph_extended_shape	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_meta_get_entry_tags	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_meta_reference_entry	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_metrics_get_position	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_metrics_get_position_with_fallback	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_metrics_get_variation	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_metrics_get_x_variation	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_metrics_get_y_variation	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_name_get_utf16	a record passed by value
+HarfBuzz-0.0	hb_ot_name_get_utf32	a record passed by value
+HarfBuzz-0.0	hb_ot_name_get_utf8	a record passed by value
+HarfBuzz-0.0	hb_ot_name_list_names	an array
+HarfBuzz-0.0	hb_ot_shape_get_buffer_format_serial	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_shape_glyphs_closure	an array
+HarfBuzz-0.0	hb_ot_shape_plan_collect_lookups	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_shape_plan_get_feature_tags	an array
+HarfBuzz-0.0	hb_ot_tags_from_script_and_language	a record passed by value
+HarfBuzz-0.0	hb_ot_tags_from_script	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_tags_to_script_and_language	`hb_language_t`, which the headers do not define as a tagged struct
+HarfBuzz-0.0	hb_ot_tag_to_language	a record passed by value
+HarfBuzz-0.0	hb_ot_tag_to_script	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_var_find_axis_info	`hb_ot_var_axis_info_t`, which the headers do not define as a tagged struct
+HarfBuzz-0.0	hb_ot_var_get_axis_count	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_var_get_axis_infos	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_ot_var_get_named_instance_count	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_var_has_data	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_var_named_instance_get_design_coords	an array
+HarfBuzz-0.0	hb_ot_var_named_instance_get_postscript_name_id	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_var_named_instance_get_subfamily_name_id	declared by none of the headers GIR names
+HarfBuzz-0.0	hb_ot_var_normalize_coords	`const float*`, a pointer depth other than one
+HarfBuzz-0.0	hb_ot_var_normalize_variations	an array
+HarfBuzz-0.0	hb_paint_funcs_set_custom_palette_color_func	`hb_color_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_paint_funcs_set_get_budget_remaining_func	`int64_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_paint_funcs_set_push_clip_path_start_func	a `gpointer`
+HarfBuzz-0.0	hb_paint_normalize_color_line	an array
+HarfBuzz-0.0	hb_paint_push_clip_path_start	a `gpointer`
+HarfBuzz-0.0	hb_paint_sweep_gradient_tiles	an array
+HarfBuzz-0.0	hb_realloc	a `gpointer`
+HarfBuzz-0.0	hb_set_add_sorted_array	an array
+HarfBuzz-0.0	hb_set_next_many	an array
+HarfBuzz-0.0	hb_shape	an array
+HarfBuzz-0.0	hb_shape_full	an array
+HarfBuzz-0.0	hb_shape_list_shapers	an array
+HarfBuzz-0.0	hb_shape_plan_create2	an array
+HarfBuzz-0.0	hb_shape_plan_create	an array
+HarfBuzz-0.0	hb_shape_plan_create_cached2	an array
+HarfBuzz-0.0	hb_shape_plan_create_cached	an array
+HarfBuzz-0.0	hb_shape_plan_execute	an array
+HarfBuzz-0.0	hb_tag_to_string	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_unicode_funcs_set_compose_func	`hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_unicode_funcs_set_decompose_func	`hb_codepoint_t*`, a pointer depth other than one
+HarfBuzz-0.0	hb_variation_from_string	an out parameter whose storage the caller allocates
+HarfBuzz-0.0	hb_variation_to_string	an out parameter whose storage the caller allocates
+Pango-1.0	pango_attr_break	an out parameter whose storage the caller allocates
+Pango-1.0	pango_attr_list_change	a boxed record a parameter hands over, which the program's box would also free
+Pango-1.0	pango_attr_list_insert	a boxed record a parameter hands over, which the program's box would also free
+Pango-1.0	pango_attr_list_insert_before	a boxed record a parameter hands over, which the program's box would also free
+Pango-1.0	pango_attr_shape_new_with_data	a callback whose context is not the next parameter
+Pango-1.0	pango_context_list_families	an array
+Pango-1.0	pango_default_break	an out parameter whose storage the caller allocates
+Pango-1.0	pango_extents_to_pixels	a record passed by value
+Pango-1.0	PangoFontClass.get_features	an out parameter whose storage the caller allocates
+Pango-1.0	PangoFontClass.get_glyph_extents	an out parameter whose storage the caller allocates
+Pango-1.0	PangoFontFaceClass.list_sizes	an array
+Pango-1.0	pango_font_face_list_sizes	an array
+Pango-1.0	PangoFontFamilyClass.list_faces	an array
+Pango-1.0	pango_font_family_list_faces	an array
+Pango-1.0	pango_font_get_features	an out parameter whose storage the caller allocates
+Pango-1.0	pango_font_get_glyph_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_font_get_languages	an array
+Pango-1.0	PangoFontMapClass.list_families	an array
+Pango-1.0	pango_font_map_list_families	an array
+Pango-1.0	pango_get_log_attrs	an out parameter whose storage the caller allocates
+Pango-1.0	pango_glyph_item_get_logical_widths	an out parameter whose storage the caller allocates
+Pango-1.0	pango_glyph_item_letter_space	an array
+Pango-1.0	pango_glyph_string_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_glyph_string_extents_range	an out parameter whose storage the caller allocates
+Pango-1.0	pango_glyph_string_get_logical_widths	an out parameter whose storage the caller allocates
+Pango-1.0	pango_language_get_preferred	an array
+Pango-1.0	pango_language_get_scripts	an array
+Pango-1.0	pango_layout_get_caret_pos	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_get_cursor_pos	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_get_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_get_log_attrs	an array
+Pango-1.0	pango_layout_get_log_attrs_readonly	an array
+Pango-1.0	pango_layout_get_pixel_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_index_to_pos	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_iter_get_char_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_iter_get_cluster_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_iter_get_layout_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_iter_get_line_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_iter_get_run_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_iter_get_run	`PangoLayoutRun*`, a pointer depth other than one
+Pango-1.0	pango_layout_iter_get_run_readonly	`PangoLayoutRun*`, a pointer depth other than one
+Pango-1.0	pango_layout_line_get_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_line_get_pixel_extents	an out parameter whose storage the caller allocates
+Pango-1.0	pango_layout_line_get_x_ranges	an array
+Pango-1.0	pango_log2vis_get_embedding_levels	an array
+Pango-1.0	pango_matrix_transform_pixel_rectangle	a record passed by value
+Pango-1.0	pango_matrix_transform_rectangle	a record passed by value
+Pango-1.0	pango_read_line	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(int (*)(struct _IO_FILE *, struct _GString *), int (*)(void *, struct _GString *))': pango_read_line -- declared `int pango_read_line(void *, struct _GString *)`
+Pango-1.0	PangoRendererClass.prepare_run	`PangoLayoutRun*`, a pointer depth other than one
+Pango-1.0	pango_tab_array_get_tabs	`PangoTabAlign*`, a pointer depth other than one
+Pango-1.0	pango_tailor_break	an out parameter whose storage the caller allocates

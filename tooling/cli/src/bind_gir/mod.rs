@@ -343,10 +343,17 @@ fn promises_report(census: &[(String, &'static str)]) -> String {
     lines.join("\n") + "\n"
 }
 
-/// Every refused function and why, one per line: the queue, as a file.
+/// Every refused function and why, one per line -- with a third column,
+/// `deprecated`, where GIR marks it so: the queue, as a file.
 fn report(binding: &map::Binding) -> String {
-    let mut lines: Vec<String> =
-        binding.refused.iter().map(|(name, reason)| format!("{name}\t{reason}")).collect();
+    let mut lines: Vec<String> = binding
+        .refused
+        .iter()
+        .map(|(name, reason)| {
+            let deprecated = if binding.deprecated.contains(name) { "\tdeprecated" } else { "" };
+            format!("{name}\t{reason}{deprecated}")
+        })
+        .collect();
     lines.sort();
     lines.join("\n") + "\n"
 }

@@ -1710,6 +1710,30 @@ one in two ways, both core gaps:
 | | ported | pass on every arm |
 |---|---:|---:|
 | 2026-09-27 | 1 (Button) | 1 |
+| 2026-09-27 | 7 | 1 (Button); the other six stop at one blocker, a handle narrowed by `instanceof` and captured by a closure |
+
+## Completeness: the binding census
+
+The second gauge is what the GIR binder refuses and a GJS program could
+call. `tooling/gir-census/run.sh` binds libadwaita's closure (Gtk and
+everything beneath it) and counts every refusal except those GIR marks not
+introspectable and those on deprecated entries, which no GJS program calls
+either. Its baseline, `tooling/gir-census/baseline.tsv`, is the census
+itself, one refusal a line, so a fix's diff is the list of entries it
+cleared. A fix that clears entries updates the baseline in the same commit
+(`--update`).
+
+| | GLib | HarfBuzz | Gtk | Gio | GObject | Pango | Gsk | Gdk | Graphene | GdkPixbuf | Adw | GModule | total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2026-09-27 | 327 | 221 | 155 | 143 | 59 | 51 | 26 | 25 | 17 | 12 | 11 | 1 | 1048 |
+
+By reason, the families that matter to programs: arrays 317, `gpointer`
+146, caller-allocated outs 69, records by value 47, callback shapes about
+60, string outs 14. The remaining large rows are facts the headers and the
+GIR disagree on (101 declared by no header, 82 not a tagged struct, 62
+header signatures that differ), which the binder refuses on purpose rather
+than guessing. Work on them is ranked by what the corpus hits, not by
+these counts.
 
 Button is the calibration. Its control, a port whose log line differs by one
 letter, reads `differs` on all four arms. Of the 116 demos, 104 have a
