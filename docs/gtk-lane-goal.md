@@ -1711,6 +1711,7 @@ one in two ways, both core gaps:
 |---|---:|---:|
 | 2026-09-27 | 1 (Button) | 1 |
 | 2026-09-27 | 7 | 1 (Button); the other six stop at one blocker, a handle narrowed by `instanceof` and captured by a closure |
+| 2026-09-27 | 9 | 1 (Button); seven stop at the captured narrowed handle, Scale at `Object.entries` over a `Record<number, string>` |
 
 ## Completeness: the binding census
 

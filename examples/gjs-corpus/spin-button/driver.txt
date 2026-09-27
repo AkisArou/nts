@@ -1,0 +1,5 @@
+value hours 7
+value minutes 30
+value minutes 59
+spin minutes
+spin hours

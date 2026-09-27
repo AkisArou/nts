@@ -18,4 +18,15 @@ cp "$root/examples/gjs-corpus/button/nts.config.ts" "$port/nts.config.ts"
 cp "$root/examples/gjs-corpus/button/tsconfig.json" "$port/tsconfig.json"
 python3 "$BLUEPRINT" compile "$NTS_WORKBENCH_DEMOS/$upstream/main.blp" > "$port/main.ui"
 [ -f "$port/driver.txt" ] || : > "$port/driver.txt"
+# Enrolled where the config audit typechecks every port's nts.config.ts.
+python3 - "$root/examples/gjs-corpus/tsconfig.configs.json" "$slug/nts.config.ts" <<'PY'
+import json, sys
+path, entry = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    config = json.load(f)
+config["files"] = sorted(set(config["files"]) | {entry})
+with open(path, "w") as f:
+    json.dump(config, f, indent=2)
+    f.write("\n")
+PY
 echo "$port"

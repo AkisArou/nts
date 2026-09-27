@@ -6,7 +6,18 @@
 // A port's demo is a function the host calls, where the original runs as the
 // module Workbench imports: nts compiles no dynamic `import()`.
 import { AdwApplication, AdwApplicationWindow, AdwSwitchRow } from "c:Adw-1";
-import { GtkBuilder, GtkButton, GtkCheckButton, GtkLabel, GtkSwitch, GtkToggleButton, GtkWidget } from "c:Gtk-4.0";
+import {
+  GtkBuilder,
+  GtkButton,
+  GtkCheckButton,
+  GtkLabel,
+  GtkRange,
+  GtkSpinButton,
+  GtkSwitch,
+  GtkToggleButton,
+  GtkWidget,
+  SpinType,
+} from "c:Gtk-4.0";
 import { ApplicationFlags, g_data_input_stream_new, g_file_new_for_path } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
 import { g_getenv, g_timeout_add_full } from "c:GLib-2.0";
@@ -33,7 +44,7 @@ function actions(path: string): string[][] {
 }
 
 /** One action on the builder's object `id`, as host.js applies it. */
-function act(kind: string, id: string, object: GObject | null): boolean {
+function act(kind: string, id: string, arg: string, object: GObject | null): boolean {
   switch (kind) {
     case "click":
       if (!(object instanceof GtkButton)) return false;
@@ -65,6 +76,15 @@ function act(kind: string, id: string, object: GObject | null): boolean {
       if (!(object instanceof GtkButton)) return false;
       console.log(`${id}.icon ${object.icon_name}`);
       return true;
+    case "value":
+      if (object instanceof GtkSpinButton) object.set_value(Number(arg));
+      else if (object instanceof GtkRange) object.set_value(Number(arg));
+      else return false;
+      return true;
+    case "spin":
+      if (!(object instanceof GtkSpinButton)) return false;
+      object.spin(SpinType.STEP_FORWARD, 1);
+      return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;
       console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
@@ -75,8 +95,14 @@ function act(kind: string, id: string, object: GObject | null): boolean {
 }
 
 function drive(builder: GtkBuilder, path: string): void {
-  for (const [kind, id] of actions(path)) {
-    if (!act(kind, id, builder.get_object(id))) console.log("driver: cannot " + kind + " " + id);
+  for (const words of actions(path)) {
+    const [kind, id] = words;
+    // A workaround, not the idiom: `const [kind, id, arg] = words` answers
+    // `undefined` in GJS and aborts in nts for a two-word line. Pinned as
+    // tooling/conformance/outcomes/a-read-past-the-end-of-an-array-aborts;
+    // back to the destructure when that is decided.
+    const arg = words.length > 2 ? words[2] : "";
+    if (!act(kind, id, arg, builder.get_object(id))) console.log("driver: cannot " + kind + " " + id);
   }
 }
 

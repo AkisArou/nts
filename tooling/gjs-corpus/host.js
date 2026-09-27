@@ -13,6 +13,8 @@
 //   visible <id>   print `visible`
 //   icon <id>      print a button's `icon_name`
 //   classes <id>   print a widget's CSS classes, comma separated
+//   value <id> <n> set a range's or spin button's value
+//   spin <id>      step a spin button forward by one
 //
 // The demo's own `console.log` lines are the log; nothing else prints.
 import Adw from "gi://Adw";
@@ -45,7 +47,7 @@ application.connect("activate", async () => {
     preview() {},
   };
   await import(`file://${main}`);
-  for (const [kind, id] of actions) {
+  for (const [kind, id, arg] of actions) {
     const object = builder.get_object(id);
     if (kind === "click") object.emit("clicked");
     else if (kind === "toggle") object.active = !object.active;
@@ -53,6 +55,8 @@ application.connect("activate", async () => {
     else if (kind === "active") console.log(`${id}.active ${object.active}`);
     else if (kind === "visible") console.log(`${id}.visible ${object.visible}`);
     else if (kind === "icon") console.log(`${id}.icon ${object.icon_name}`);
+    else if (kind === "value") object.set_value(Number(arg));
+    else if (kind === "spin") object.spin(Gtk.SpinType.STEP_FORWARD, 1);
     else if (kind === "classes") console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
     else throw new Error(`unknown action ${kind}`);
   }
