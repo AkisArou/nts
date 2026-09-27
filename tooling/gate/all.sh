@@ -1842,12 +1842,28 @@ phantoms() {
 # tooling/conformance/integrity.known -- any other fails, and one that stops
 # occurring prints "remove it". A listing that does not reconcile with its own
 # "N function(s)" is NOT MEASURED. See tooling/conformance/integrity.mjs. The
-# runtime modules (`--runtime`) join once their 208 unrecorded roots are
-# recorded. About 30 s.
+# runtime modules are `integrity-runtime`, below. About 30 s.
 integrity() {
   out=$(node tooling/conformance/integrity.mjs 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '!/^$/'
+  return $status
+}
+
+# The same six rules over runtime/node/* and runtime/web-platform -- where the
+# recorder bug lived: a refused member filed as `Owner#m` while every caller
+# and dispatch table held `Owner<12971>#m`, so 1,732 cascades named a cause no
+# record held, and `http` shipped a descriptor with a null `destroy` slot that
+# nothing reported. b95a02b13 fixed the members. What remains is named in
+# tooling/conformance/integrity.known, one entry per unrecorded root (not per
+# cascade, so a new caller of a known root is not a new failure). About 6 min
+# at four workers: every module is lowered twice, prepared and plain.
+integrity_runtime() {
+  out=$(node tooling/conformance/integrity.mjs --runtime 2>&1)
+  status=$?
+  # One line per open root is still a hundred lines; the verdict and anything
+  # new or expired are what a gate reader needs.
+  printf '%s\n' "$out" | awk '!/^$/ && !/^  known /'
   return $status
 }
 
@@ -2023,6 +2039,7 @@ step "outcomes" outcomes
 step "phantoms" phantoms
 step "integrity" integrity
 step "definitions" definitions
+step "integrity-runtime" integrity_runtime
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly

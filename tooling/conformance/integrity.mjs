@@ -69,7 +69,10 @@
 // # Known violations are named, never counted
 //
 // `tooling/conformance/integrity.known`, one per line:
-// `project<TAB>rule<TAB>detail<TAB>why`. A violation listed there is printed
+// `project<TAB>rule<TAB>subject<TAB>why`. The subject is the violation's text,
+// except under cascade-has-root, where it is the blamed cause alone: an entry
+// names the unrecorded root once, and covers every cascade through it, so a
+// new caller of an already-known cause is not a new violation. A violation listed there is printed
 // and passes; any other fails. A listed one that no longer occurs prints
 // "remove it" and passes -- going red on a fix is the wrong direction.
 //
@@ -182,10 +185,10 @@ const generic = (name) => name.replace(/<\d+>/g, "");
 /**
  * A violation's text with the compiler's numbering taken out, for matching
  * known entries: a closure's number and a generic's type id move with
- * unrelated changes, and an entry keyed on `Closure524274` would expire and
- * reappear as "new" the day they did.
+ * unrelated changes (`Closure524274`, `R<3054>`, `map@0obj7889`), and an
+ * entry keyed on one would expire and reappear as "new" the day they did.
  */
-const stable = (detail) => detail.replace(/Closure\d+/g, "ClosureN").replace(/<\d+>/g, "<N>");
+const stable = (detail) => detail.replace(/Closure\d+/g, "ClosureN").replace(/<\d+>/g, "<N>").replace(/obj\d+/g, "objN");
 
 // --- the rules ----------------------------------------------------------------
 
@@ -201,7 +204,10 @@ export function judge({ prepared, plain, layouts, refusals }) {
   const refused = readRefusals(refusals);
   const refusedGenerically = new Set([...refused].map(generic));
   const out = [];
-  const say = (rule, detail) => out.push({ rule, detail });
+  // `subject` is what a known entry names: the violation itself, except for a
+  // cascade, where the open item is the cause and not each function that calls
+  // it -- one unrecorded root stands behind 62 cascades in one module.
+  const say = (rule, detail, subject = detail) => out.push({ rule, detail, subject });
 
   for (const callee of new Set(hir.calls)) {
     const n = hir.defined.get(callee) ?? 0;
@@ -239,17 +245,17 @@ export function judge({ prepared, plain, layouts, refusals }) {
   const isRefused = (name) => refused.has(name) || refusedGenerically.has(generic(name));
   const cascades = readCascades(prepared);
   for (const { who, cause } of cascades.calls) {
-    if (!isRefused(cause)) say("cascade-has-root", `\`${who}\` blames \`${cause}\`, which has no refusal of its own`);
+    if (!isRefused(cause)) say("cascade-has-root", `\`${who}\` blames \`${cause}\`, which has no refusal of its own`, cause);
   }
   const uncompiled = new Set(cascades.initializers.map((i) => i.global));
   for (const { who, global } of cascades.reads) {
-    if (!uncompiled.has(global)) say("cascade-has-root", `\`${who}\` blames the initializer of \`${global}\`, and no line says it was not compiled`);
+    if (!uncompiled.has(global)) say("cascade-has-root", `\`${who}\` blames the initializer of \`${global}\`, and no line says it was not compiled`, `the initializer of ${global}`);
   }
   for (const { global, cause } of cascades.initializers) {
-    if (!isRefused(cause)) say("cascade-has-root", `the initializer of \`${global}\` blames \`${cause}\`, which has no refusal of its own`);
+    if (!isRefused(cause)) say("cascade-has-root", `the initializer of \`${global}\` blames \`${cause}\`, which has no refusal of its own`, cause);
   }
   for (const { cause } of cascades.statements) {
-    if (!isRefused(cause)) say("cascade-has-root", `a dropped module-scope statement blames \`${cause}\`, which has no refusal of its own`);
+    if (!isRefused(cause)) say("cascade-has-root", `a dropped module-scope statement blames \`${cause}\`, which has no refusal of its own`, cause);
   }
 
   // A call to a refused function that preparation cut from the top level must
@@ -364,7 +370,7 @@ const known = new Map(
     .split("\n")
     .filter((l) => l.trim() !== "" && !l.startsWith("#"))
     .map((l) => l.split("\t"))
-    .map(([project, rule, detail, why]) => [`${project}\t${rule}\t${stable(detail ?? "")}`, why ?? ""]),
+    .map(([project, rule, subject, why]) => [`${project}\t${rule}\t${stable(subject ?? "")}`, why ?? ""]),
 );
 
 const run = (args) =>
@@ -417,7 +423,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, asy
   while (next < projects.length) await scan(projects[next++]);
 }));
 
-const key = (v) => `${v.project}\t${v.rule}\t${stable(v.detail)}`;
+const key = (v) => `${v.project}\t${v.rule}\t${stable(v.subject)}`;
 const fresh = found.filter((v) => !known.has(key(v))).sort((a, b) => key(a).localeCompare(key(b)));
 const held = found.filter((v) => known.has(key(v)));
 const seen = new Set(found.map(key));
@@ -427,7 +433,15 @@ const expired = [...known.keys()].filter((k) => projects.includes(k.split("\t")[
 console.log(`  compiler ${NTS}`);
 console.log(`  ${measured} of ${projects.length} project(s) measured, ${functions} function(s), in ${Math.round((Date.now() - started) / 1000)} s`);
 for (const v of fresh) console.log(`  ${v.rule.padEnd(18)} ${v.project}: ${v.detail}`);
-for (const v of held) console.log(`  known             ${v.project}: ${v.detail} -- ${known.get(key(v))}`);
+// One line per known entry, with how many violations it holds: the open item,
+// not every function standing behind it.
+const heldBy = new Map();
+for (const v of held) heldBy.set(key(v), [...(heldBy.get(key(v)) ?? []), v]);
+for (const [k, vs] of [...heldBy].sort(([a], [b]) => a.localeCompare(b))) {
+  const [project, rule, subject] = k.split("\t");
+  const what = vs.length === 1 ? vs[0].detail : `${rule} \`${subject}\`, ${vs.length} violations`;
+  console.log(`  known             ${project}: ${what} -- ${known.get(k)}`);
+}
 for (const k of expired) console.log(`  ^ no longer occurs, remove it from tooling/conformance/integrity.known: ${k.replaceAll("\t", " | ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED       ${u}`);
 for (const s of skipped.sort()) console.log(`  skipped            ${s}`);
