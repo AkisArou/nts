@@ -3945,6 +3945,23 @@ export class AdwAboutDialogNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return aboutDialogSignal(this.gtk, key, slot);
   }
+  // Presented over the window of the widget it is rendered in, at commit
+  // (React places a new tree during render, which can be thrown away),
+  // and closed when React takes it out, as a window is opened.
+  private presenter: GtkWidget | null = null;
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    this.presenter = parent.widget;
+  }
+  takeOutOf(_parent: WidgetNode): void {
+    this.gtk.force_close();
+    this.presenter = null;
+  }
+  needsCommitMount(): boolean {
+    return true;
+  }
+  commitMount(): void {
+    this.gtk.present(this.presenter);
+  }
   protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
@@ -3995,6 +4012,23 @@ export class AdwAlertDialogNode extends WidgetNode {
   }
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return alertDialogSlot(this.gtk, slot, widget);
+  }
+  // Presented over the window of the widget it is rendered in, at commit
+  // (React places a new tree during render, which can be thrown away),
+  // and closed when React takes it out, as a window is opened.
+  private presenter: GtkWidget | null = null;
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    this.presenter = parent.widget;
+  }
+  takeOutOf(_parent: WidgetNode): void {
+    this.gtk.force_close();
+    this.presenter = null;
+  }
+  needsCommitMount(): boolean {
+    return true;
+  }
+  commitMount(): void {
+    this.gtk.present(this.presenter);
   }
   protected place(child: WidgetNode): void {
     this.holdOnly(child);
@@ -4303,6 +4337,23 @@ export class AdwDialogNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return dialogSignal(this.gtk, key, slot);
   }
+  // Presented over the window of the widget it is rendered in, at commit
+  // (React places a new tree during render, which can be thrown away),
+  // and closed when React takes it out, as a window is opened.
+  private presenter: GtkWidget | null = null;
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    this.presenter = parent.widget;
+  }
+  takeOutOf(_parent: WidgetNode): void {
+    this.gtk.force_close();
+    this.presenter = null;
+  }
+  needsCommitMount(): boolean {
+    return true;
+  }
+  commitMount(): void {
+    this.gtk.present(this.presenter);
+  }
   protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
@@ -4593,6 +4644,23 @@ export class AdwPreferencesDialogNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return preferencesDialogSignal(this.gtk, key, slot);
   }
+  // Presented over the window of the widget it is rendered in, at commit
+  // (React places a new tree during render, which can be thrown away),
+  // and closed when React takes it out, as a window is opened.
+  private presenter: GtkWidget | null = null;
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    this.presenter = parent.widget;
+  }
+  takeOutOf(_parent: WidgetNode): void {
+    this.gtk.force_close();
+    this.presenter = null;
+  }
+  needsCommitMount(): boolean {
+    return true;
+  }
+  commitMount(): void {
+    this.gtk.present(this.presenter);
+  }
   protected place(child: WidgetNode): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
@@ -4752,6 +4820,23 @@ export class AdwShortcutsDialogNode extends WidgetNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return shortcutsDialogSignal(this.gtk, key, slot);
+  }
+  // Presented over the window of the widget it is rendered in, at commit
+  // (React places a new tree during render, which can be thrown away),
+  // and closed when React takes it out, as a window is opened.
+  private presenter: GtkWidget | null = null;
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    this.presenter = parent.widget;
+  }
+  takeOutOf(_parent: WidgetNode): void {
+    this.gtk.force_close();
+    this.presenter = null;
+  }
+  needsCommitMount(): boolean {
+    return true;
+  }
+  commitMount(): void {
+    this.gtk.present(this.presenter);
   }
   protected place(child: WidgetNode): void {
     this.holdOnly(child);

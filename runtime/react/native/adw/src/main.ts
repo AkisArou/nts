@@ -23,6 +23,8 @@
 //             ViewStack's visibleChildName, applied before its pages existed,
 //             shows the page it names; a title updates in place; switched from
 //             GTK's side, the controlled page goes back to the props' one
+//   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
+//             it is presented within the Box's window, and taken out it closes
 //   unknown   a root without the adw set creates no Adw widget
 //   reset     removing the Adw prop restores libadwaita's default, and
 //             removing the inherited GTK one clears it
@@ -37,6 +39,7 @@ import {
   AdwPreferencesGroup,
   AdwToolbarView,
   AdwViewStack,
+  AdwWindow,
 } from "c:Adw-1";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { g_main_context_iteration } from "c:GLib-2.0";
@@ -221,6 +224,27 @@ function main(): void {
     viewing += " switched=" + String(views.get_visible_child_name());
   }
   react_gtk_log("viewstack " + viewing);
+
+  // A dialog is presented within a shown libadwaita window, as an app's is
+  // (over a plain GtkWindow, libadwaita opens it as a window of its own).
+  const adwWindow = new AdwWindow();
+  const shown = new WindowRoot(adwWindow, [adw]);
+  const anchor = createInstance("GtkBox", {}, shown, 0, {});
+  adwWindow.set_content(widget(anchor));
+  adwWindow.set_default_size(640, 480);
+  adwWindow.present();
+  idle();
+  const dialog = createInstance("AdwAlertDialog", { heading: "Sure?" }, shown, 0, {});
+  const dialogWantsMount = finalizeInitialChildren(dialog, "AdwAlertDialog", { heading: "Sure?" }, 0);
+  appendInitialChild(anchor, dialog);
+  const unplaced = widget(dialog).get_root() === null;
+  commitMount(dialog, "AdwAlertDialog", { heading: "Sure?" }, {});
+  idle();
+  const within = widget(dialog).get_root() === shown.window;
+  removeChild(anchor, dialog);
+  idle();
+  const closed = widget(dialog).get_root() === null;
+  react_gtk_log("dialog " + String(dialogWantsMount) + " " + String(unplaced) + " " + String(within) + " " + String(closed));
 
   const application = new AdwApplication({ application_id: "org.nts.ReactAdw", flags: ApplicationFlags.NON_UNIQUE });
   application.register(null, null);

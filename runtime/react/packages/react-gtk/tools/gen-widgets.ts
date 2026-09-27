@@ -561,6 +561,22 @@ const childElements = new Map([
   ["Adw.ViewStack", { members: "ViewStackChildren", elements: [["AdwViewStack.Page", "ViewStackPageNode"]], use: "<ViewStack.Page name title>" }],
 ]);
 
+// Widgets presented over the window of the widget they are rendered in, as a
+// window opens over its opener (HostNode.ts): libadwaita's dialogs, which are
+// neither children nor windows. The methods that present and close one.
+const presented = new Map([["Adw.Dialog", { present: "present", close: "force_close" }]]);
+
+/** How `t` is presented, if a class in its chain is presented; null otherwise. */
+function presentedOf(t: WidgetType): { present: string; close: string } | null {
+  for (let c: WidgetType | null = t; c !== null; c = c.parent) {
+    const how = presented.get(qualified(c.gir));
+    if (how !== undefined) {
+      return how;
+    }
+  }
+  return null;
+}
+
 /** The elements `t` takes: its own class's, or the nearest ancestor's with some. */
 function childElementsOf(t: WidgetType): (typeof childElements extends Map<string, infer E> ? E : never) | null {
   for (let c: WidgetType | null = t; c !== null; c = c.parent) {
@@ -1090,6 +1106,27 @@ function emit(m: Model, target: Target): string {
       types.add("GtkWidget");
       line("  fillSlot(slot: string, widget: GtkWidget | null): boolean {");
       line(`    return ${ref(owner, `${lower(owner)}Slot`)}(this.gtk, slot, widget);`);
+      line("  }");
+    }
+    const presentedBy = presentedOf(w);
+    if (presentedBy !== null) {
+      types.add("GtkWidget");
+      line("  // Presented over the window of the widget it is rendered in, at commit");
+      line("  // (React places a new tree during render, which can be thrown away),");
+      line("  // and closed when React takes it out, as a window is opened.");
+      line("  private presenter: GtkWidget | null = null;");
+      line("  placeIn(parent: WidgetNode, _before: HostNode | null): void {");
+      line("    this.presenter = parent.widget;");
+      line("  }");
+      line("  takeOutOf(_parent: WidgetNode): void {");
+      line(`    this.gtk.${presentedBy.close}();`);
+      line("    this.presenter = null;");
+      line("  }");
+      line("  needsCommitMount(): boolean {");
+      line("    return true;");
+      line("  }");
+      line("  commitMount(): void {");
+      line(`    this.gtk.${presentedBy.present}(this.presenter);`);
       line("  }");
     }
     const controlled = [];

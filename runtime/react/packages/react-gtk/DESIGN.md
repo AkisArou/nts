@@ -404,6 +404,12 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
 - A ViewStack's pages are `<ViewStack.Page name title iconName badgeNumber>`,
   as GTK's Stack's are, and its `visibleChildName` is controlled and set only
   once the page it names exists.
+- A dialog (`<AlertDialog>`, `<AboutDialog>`, `<PreferencesDialog>`) is
+  presented, not placed: rendered in a widget, it is presented over that
+  widget's window at commit (`present`), and closed when React takes it out
+  (`force_close`), as a window opens over its opener. libadwaita presents it
+  within its own windows (AdwApplicationWindow, AdwWindow), and as a window
+  of its own over a plain GtkWindow.
 - A container's subclasses take its elements (a SwitchRow is an ActionRow).
 - libadwaita's rows take children only through their groups (GtkListBoxRow's
   `set_child` would replace the row's own layout), and its windows only
