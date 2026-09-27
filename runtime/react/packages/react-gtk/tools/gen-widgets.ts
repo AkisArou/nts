@@ -209,6 +209,13 @@ interface Bindings {
   setters: Map<string, Map<string, string>>;
   /** Child methods taking one widget (`add`, `add_row`, `remove`), by type: the type they take. */
   childMethods: Map<string, Map<string, string>>;
+  /**
+   * Each property's accessors as the bindings name them (`@ntsGet`/`@ntsSet`),
+   * by type and property (`width_request`): its own methods, or ones the
+   * binder made for it (`$ntsPropSet_orientation`, where an inherited
+   * `set_orientation` is another type's).
+   */
+  accessors: Map<string, Map<string, { get?: string; set?: string }>>;
   /** Getters taking nothing, the same way: `get_text` → `string`. */
   getters: Map<string, Map<string, string>>;
   /** Each signal's handler as bind-gir declared `connect` for it, by type and signal name. */
@@ -280,6 +287,11 @@ function readSignature(line: string): Signature | null {
 function readBindings(dir: string): Bindings {
   const setters = new Map<string, Map<string, string>>();
   const childMethods = new Map<string, Map<string, string>>();
+  const accessors = new Map<string, Map<string, { get?: string; set?: string }>>();
+  // The OwnMethods interface being read, and the tags of the doc comment
+  // before the next property.
+  let accessorsOf: Map<string, { get?: string; set?: string }> | null = null;
+  let tagged: { get?: string; set?: string } = {};
   const getters = new Map<string, Map<string, string>>();
   const signals = new Map<string, Map<string, Signature>>();
   const constructible = new Set<string>();
@@ -299,9 +311,26 @@ function readBindings(dir: string): Bindings {
       imports[1]!.split(", ").forEach((name) => modules.set(name, imports[2]!));
       continue;
     }
-    const getter = /^ {4}(get_\w+)\(this: (\w+)\): (.+);$/.exec(line);
+    const getter = /^ {4}(get_\w+|\$ntsPropGet_\w+)\(this: (\w+)\): (.+);$/.exec(line);
     if (getter !== null) {
       entry(getters, getter[2]!, () => new Map()).set(getter[1]!, getter[3]!);
+      continue;
+    }
+    const ownMethods = /^ {2}export interface (\w+)OwnMethods \{$/.exec(line);
+    if (ownMethods !== null) {
+      accessorsOf = entry(accessors, ownMethods[1]!, () => new Map());
+      tagged = {};
+      continue;
+    }
+    const tag = /^ {5}\* @nts(Get|Set) (\S+)$/.exec(line);
+    if (tag !== null) {
+      tagged = { ...tagged, [tag[1] === "Get" ? "get" : "set"]: tag[2]! };
+      continue;
+    }
+    const property = /^ {4}(?:readonly )?(\w+): [^(]+;$/.exec(line);
+    if (property !== null && accessorsOf !== null && (tagged.get !== undefined || tagged.set !== undefined)) {
+      accessorsOf.set(property[1]!, tagged);
+      tagged = {};
       continue;
     }
     const childMethod = /^ {4}(add|add_row|remove)\(this: (\w+), \w+: (\w+)\): void;$/.exec(line);
@@ -309,7 +338,7 @@ function readBindings(dir: string): Bindings {
       entry(childMethods, childMethod[2]!, () => new Map()).set(childMethod[1]!, childMethod[3]!);
       continue;
     }
-    const setter = /^ {4}(set_\w+)\(this: (\w+), \w+: (.+)\): void;$/.exec(line);
+    const setter = /^ {4}(set_\w+|\$ntsPropSet_\w+)\(this: (\w+), \w+: (.+)\): void;$/.exec(line);
     if (setter !== null) {
       entry(setters, setter[2]!, () => new Map()).set(setter[1]!, setter[3]!);
       continue;
@@ -372,7 +401,7 @@ function readBindings(dir: string): Bindings {
     // Topmost: a class whose parent also implements it is covered by the parent's check.
     implementers.set(name, all.filter((c) => !implementing(gobjectClasses.get(c)!.parent)).sort());
   }
-  return { setters, childMethods, getters, signals, constructible, classes, modules, implementers };
+  return { setters, childMethods, accessors, getters, signals, constructible, classes, modules, implementers };
 }
 
 // ---- the model ---------------------------------------------------------------
@@ -734,7 +763,11 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
         }
         declared.add(p.name);
         const where = `${sourceTs}.${p.name}`;
-        const setter = p.setter ?? `set_${p.name.replace(/-/g, "_")}`;
+        // The accessors the bindings name for the property, before GIR's or a
+        // derived name: where the class inherits a `set_<prop>` that is
+        // another type's, the binder names its own for the property.
+        const named = bindings.accessors.get(sourceTs)?.get(p.name.replace(/-/g, "_"));
+        const setter = named?.set ?? p.setter ?? `set_${p.name.replace(/-/g, "_")}`;
         const type = bindings.setters.get(sourceTs)?.get(setter);
         if (childProps.has(p.name) || !p.writable) {
           continue;
@@ -762,7 +795,7 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
           }
           // `onNotifyText`: the property changed, from any side, and here is
           // its new value -- what a controlled prop needs to hear.
-          const getter = p.getter ?? `get_${p.name.replace(/-/g, "_")}`;
+          const getter = named?.get ?? p.getter ?? `get_${p.name.replace(/-/g, "_")}`;
           const read = bindings.getters.get(sourceTs)?.get(getter);
           const readType = p.readable && read !== undefined ? handlerType(read, handlerTypes) : null;
           const controlled = readType !== null && controlledProps.get(qualified(source))?.includes(p.name) === true;
