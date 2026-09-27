@@ -31,7 +31,8 @@
 //   tabs      TabView.Page elements add titled tabs in React's order, one
 //             inserted before another and one moved; the moved tab stays
 //             selected; a close the user asks for is refused and reported
-//             as onClose, and taking the element out closes the tab; a
+//             as onClose, and taking the element out closes the tab; the
+//             TabView's onPageAttached hears each tab's page and position; a
 //             tab's `selected` selects it, the user selecting another is
 //             heard as that tab's onSelect and put back after the flush, and
 //             the app moving `selected` moves the selection
@@ -51,6 +52,7 @@ import {
   AdwNavigationSplitView,
   AdwPreferencesGroup,
   AdwTabView,
+  type AdwTabPage,
   AdwToolbarView,
   AdwViewStack,
   AdwViewSwitcher,
@@ -269,7 +271,13 @@ function main(): void {
   }
   react_gtk_log("split " + splitting);
 
-  const tabView = createInstance("AdwTabView", {}, root, 0, {});
+  let attachedAt = "";
+  let lastAttached: AdwTabPage | null = null;
+  const onPageAttached = (page: AdwTabPage, position: number): void => {
+    attachedAt += String(position);
+    lastAttached = page;
+  };
+  const tabView = createInstance("AdwTabView", { onPageAttached }, root, 0, {});
   let asked = 0;
   const tabs: HostNode[] = [];
   for (const title of ["A", "B", "C", "D"]) {
@@ -300,6 +308,7 @@ function main(): void {
     tabbing += ">" + titles() + " selected=" + String(tabbed.get_selected_page() === pageOf(tabs[2]!));
     tabbed.close_page(pageOf(tabs[3]!));
     tabbing += " asked=" + String(asked) + " kept=" + String(tabbed.get_n_pages());
+    tabbing += " attached=" + attachedAt + " " + String(lastAttached === pageOf(tabs[3]!));
     let heard = "";
     const tabProps = (title: string, selected: boolean): Props => ({
       title,

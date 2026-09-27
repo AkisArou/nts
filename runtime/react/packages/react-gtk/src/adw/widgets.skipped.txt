@@ -63,16 +63,13 @@ AdwMessageDialog.heading-use-markup	deprecated
 AdwMessageDialog::response	deprecated
 AdwMultiLayoutView.layout	removing it leaves its value: GIR gives no default
 AdwNavigationView::get-next-page	its handler returns a AdwNavigationPage | null: not generated yet
-AdwNavigationView::popped	a handler argument JSX cannot type yet: AdwNavigationPage
 AdwPreferencesDialog.visible-page	removing it leaves its value: GIR gives no default
 AdwPreferencesWindow.can-navigate-back	deprecated
 AdwPreferencesWindow.search-enabled	deprecated
 AdwPreferencesWindow.visible-page	deprecated
 AdwPreferencesWindow.visible-page-name	deprecated
-AdwSidebar::drop	a handler argument JSX cannot type yet: CNumber<"uint">, GValue, CEnum<GdkDragAction, c_uint>
 AdwSidebar::drop-enter	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwSidebar::drop-value-loaded	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
-AdwSidebar::setup-menu	a handler argument JSX cannot type yet: AdwSidebarItem | null
 AdwSpinRow::input	its handler returns a CNumber<"int">: not generated yet
 AdwSqueezer.allow-none	deprecated
 AdwSqueezer.homogeneous	deprecated
@@ -82,21 +79,13 @@ AdwSqueezer.transition-duration	deprecated
 AdwSqueezer.transition-type	deprecated
 AdwSqueezer.xalign	deprecated
 AdwSqueezer.yalign	deprecated
-AdwTabBar::extra-drag-drop	a handler argument JSX cannot type yet: AdwTabPage, GValue
 AdwTabBar::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwTabOverview::create-tab	its handler returns a AdwTabPage: not generated yet
-AdwTabOverview::extra-drag-drop	a handler argument JSX cannot type yet: AdwTabPage, GValue
 AdwTabOverview::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwTabView.default-icon	removing it leaves its value: GIR gives no default
 AdwTabView.selected-page	removing it leaves its value: GIR gives no default
 AdwTabView.shortcuts	no setter in the bindings
-AdwTabView::close-page	a handler argument JSX cannot type yet: AdwTabPage
 AdwTabView::create-window	its handler returns a AdwTabView | null: not generated yet
-AdwTabView::indicator-activated	a handler argument JSX cannot type yet: AdwTabPage
-AdwTabView::page-attached	a handler argument JSX cannot type yet: AdwTabPage, CNumber<"int">
-AdwTabView::page-detached	a handler argument JSX cannot type yet: AdwTabPage, CNumber<"int">
-AdwTabView::page-reordered	a handler argument JSX cannot type yet: AdwTabPage, CNumber<"int">
-AdwTabView::setup-menu	a handler argument JSX cannot type yet: AdwTabPage | null
 AdwViewStack.visible-child	removing it leaves its value: GIR gives no default
 AdwViewSwitcherTitle.stack	deprecated
 AdwViewSwitcherTitle.subtitle	deprecated

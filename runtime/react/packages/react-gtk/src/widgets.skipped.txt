@@ -4,8 +4,6 @@ GtkActionable.action-target	no setter in the bindings
 GtkAppChooser.content-type	construct-only: a change would need a new widget
 GtkAppChooserButton::custom-item-activated	no connect overload in the bindings
 GtkAppChooserDialog.gfile	construct-only: a change would need a new widget
-GtkAppChooserWidget::application-activated	a handler argument JSX cannot type yet: GAppInfo
-GtkAppChooserWidget::application-selected	a handler argument JSX cannot type yet: GAppInfo
 GtkAssistant.use-header-bar	construct-only: a change would need a new widget
 GtkAssistant::apply	deprecated
 GtkAssistant::cancel	deprecated
@@ -57,7 +55,6 @@ GtkFontDialogButton.language	a PangoLanguage | null, which a JSX attribute does 
 GtkGLArea.allowed-apis	no setter in the bindings
 GtkGLArea.use-es	deprecated
 GtkGLArea::create-context	its handler returns a GdkGLContext: not generated yet
-GtkGLArea::render	a handler argument JSX cannot type yet: GdkGLContext
 GtkIconView.cell-area	construct-only: a change would need a new widget
 GtkImage.gicon	removing it leaves its value: GIR gives no default
 GtkInscription.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
@@ -72,7 +69,7 @@ GtkLockButton.tooltip-not-authorized	deprecated
 GtkLockButton.tooltip-unlock	deprecated
 GtkMessageDialog.buttons	construct-only: a change would need a new widget
 GtkNotebook::create-window	its handler returns a GtkNotebook | null: not generated yet
-GtkOverlay::get-child-position	a handler argument JSX cannot type yet: GtkWidget, GdkRectangle
+GtkOverlay::get-child-position	its handler fills `allocation`: not generated yet
 GtkPicture.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkPicture.keep-aspect-ratio	deprecated
 GtkPopoverMenu.flags	no setter in the bindings

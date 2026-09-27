@@ -47,6 +47,7 @@ import {
   AdwShortcutsDialog,
   AdwShortcutsSection,
   AdwSidebar,
+  type AdwSidebarItem,
   type AdwSidebarMode,
   AdwSpinRow,
   AdwSpinner,
@@ -75,7 +76,12 @@ import {
   type AdwWrapPolicy,
 } from "c:Adw-1";
 import {
+  type GValue,
+} from "c:GObject-2.0";
+import {
+  type GdkCursor,
   type GdkDragAction,
+  type GdkPaintable,
   GdkTexture,
 } from "c:Gdk-4.0";
 import {
@@ -86,6 +92,8 @@ import {
   GEmblem,
   GEmblemedIcon,
   GFileIcon,
+  type GIcon,
+  type GListModel,
   GListStore,
   GMenuModel,
   GThemedIcon,
@@ -270,6 +278,7 @@ export interface AvatarProps extends Gtk.WidgetProps {
   showInitials?: boolean;
   size?: number;
   text?: string | null;
+  onNotifyCustomImage?: (value: GdkPaintable | null) => void;
   onNotifyIconName?: (value: string | null) => void;
   onNotifyShowInitials?: (value: boolean) => void;
   onNotifySize?: (value: number) => void;
@@ -366,6 +375,7 @@ export interface CarouselProps extends Gtk.WidgetProps {
 export interface CarouselIndicatorDotsProps extends Gtk.WidgetProps {
   carousel?: AdwCarousel | null;
   orientation?: GtkOrientation;
+  onNotifyCarousel?: (value: AdwCarousel | null) => void;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
@@ -373,6 +383,7 @@ export interface CarouselIndicatorDotsProps extends Gtk.WidgetProps {
 export interface CarouselIndicatorLinesProps extends Gtk.WidgetProps {
   carousel?: AdwCarousel | null;
   orientation?: GtkOrientation;
+  onNotifyCarousel?: (value: AdwCarousel | null) => void;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
@@ -422,6 +433,7 @@ export interface ComboRowProps extends ActionRowProps {
   onNotifyFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyHeaderFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyListFactory?: (value: GtkListItemFactory | null) => void;
+  onNotifyModel?: (value: GListModel | null) => void;
   onNotifySearchMatchMode?: (value: GtkStringFilterMatchMode) => void;
   onNotifySelected?: (value: number) => void;
   onNotifyUseSubtitle?: (value: boolean) => void;
@@ -500,6 +512,7 @@ export interface InlineViewSwitcherProps extends Gtk.WidgetProps {
   onNotifyCanShrink?: (value: boolean) => void;
   onNotifyDisplayMode?: (value: AdwInlineViewSwitcherDisplayMode) => void;
   onNotifyHomogeneous?: (value: boolean) => void;
+  onNotifyStack?: (value: AdwViewStack | null) => void;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
@@ -507,6 +520,7 @@ export interface InlineViewSwitcherProps extends Gtk.WidgetProps {
 export interface MultiLayoutViewProps extends Gtk.WidgetProps {
   layout?: AdwLayout;
   layoutName?: string;
+  onNotifyLayout?: (value: AdwLayout | null) => void;
   onNotifyLayoutName?: (value: string | null) => void;
 }
 
@@ -552,6 +566,7 @@ export interface NavigationViewProps extends Gtk.WidgetProps {
   onNotifyHhomogeneous?: (value: boolean) => void;
   onNotifyPopOnEscape?: (value: boolean) => void;
   onNotifyVhomogeneous?: (value: boolean) => void;
+  onPopped?: (page: AdwNavigationPage) => void;
   onPushed?: () => void;
   onReplaced?: () => void;
 }
@@ -590,6 +605,7 @@ export interface PreferencesDialogProps extends DialogProps {
   visiblePage?: AdwPreferencesPage;
   visiblePageName?: string;
   onNotifySearchEnabled?: (value: boolean) => void;
+  onNotifyVisiblePage?: (value: AdwPreferencesPage | null) => void;
   onNotifyVisiblePageName?: (value: string | null) => void;
 }
 
@@ -640,9 +656,12 @@ export interface SidebarProps extends Gtk.WidgetProps {
   selected?: number;
   onNotifyDropPreload?: (value: boolean) => void;
   onNotifyFilter?: (value: GtkFilter | null) => void;
+  onNotifyMenuModel?: (value: GMenuModel | null) => void;
   onNotifyMode?: (value: AdwSidebarMode) => void;
   onNotifySelected?: (value: number) => void;
   onActivated?: (index: number) => void;
+  onDrop?: (index: number, value: GValue, preferred_action: GdkDragAction) => boolean;
+  onSetupMenu?: (item: AdwSidebarItem | null) => void;
 }
 
 /** `<Spinner>`'s props: AdwSpinner's own properties and signals. */
@@ -702,6 +721,7 @@ export interface SplitButtonProps extends Gtk.WidgetProps {
   onNotifyDropdownTooltip?: (value: string) => void;
   onNotifyIconName?: (value: string | null) => void;
   onNotifyLabel?: (value: string | null) => void;
+  onNotifyMenuModel?: (value: GMenuModel | null) => void;
   onNotifyPopover?: (value: GtkPopover | null) => void;
   onNotifyUseUnderline?: (value: boolean) => void;
   onActivate?: () => void;
@@ -717,6 +737,7 @@ export interface StatusPageProps extends Gtk.WidgetProps {
   title?: string;
   onNotifyDescription?: (value: string | null) => void;
   onNotifyIconName?: (value: string | null) => void;
+  onNotifyPaintable?: (value: GdkPaintable | null) => void;
   onNotifyTitle?: (value: string) => void;
 }
 
@@ -737,12 +758,15 @@ export interface TabBarProps extends Gtk.WidgetProps {
   onNotifyExpandTabs?: (value: boolean) => void;
   onNotifyExtraDragPreload?: (value: boolean) => void;
   onNotifyInverted?: (value: boolean) => void;
+  onNotifyView?: (value: AdwTabView | null) => void;
+  onExtraDragDrop?: (page: AdwTabPage, value: GValue) => boolean;
 }
 
 /** `<TabButton>`'s props: AdwTabButton's own properties and signals. */
 export interface TabButtonProps extends Gtk.WidgetProps {
   view?: AdwTabView | null;
   actionName?: string | null;
+  onNotifyView?: (value: AdwTabView | null) => void;
   onActivate?: () => void;
   onClicked?: () => void;
   onNotifyActionName?: (value: string | null) => void;
@@ -764,8 +788,11 @@ export interface TabOverviewProps extends Gtk.WidgetProps {
   onNotifyExtraDragPreload?: (value: boolean) => void;
   onNotifyInverted?: (value: boolean) => void;
   onNotifyOpen?: (value: boolean) => void;
+  onNotifySecondaryMenu?: (value: GMenuModel | null) => void;
   onNotifyShowEndTitleButtons?: (value: boolean) => void;
   onNotifyShowStartTitleButtons?: (value: boolean) => void;
+  onNotifyView?: (value: AdwTabView | null) => void;
+  onExtraDragDrop?: (page: AdwTabPage, value: GValue) => boolean;
 }
 
 /** `<TabView>`'s props: AdwTabView's own properties and signals. */
@@ -773,6 +800,15 @@ export interface TabViewProps extends Gtk.WidgetProps {
   defaultIcon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
   menuModel?: GMenuModel | null;
   selectedPage?: AdwTabPage;
+  onNotifyDefaultIcon?: (value: GIcon) => void;
+  onNotifyMenuModel?: (value: GMenuModel | null) => void;
+  onNotifySelectedPage?: (value: AdwTabPage | null) => void;
+  onClosePage?: (page: AdwTabPage) => boolean;
+  onIndicatorActivated?: (page: AdwTabPage) => void;
+  onPageAttached?: (page: AdwTabPage, position: number) => void;
+  onPageDetached?: (page: AdwTabPage, position: number) => void;
+  onPageReordered?: (page: AdwTabPage, position: number) => void;
+  onSetupMenu?: (page: AdwTabPage | null) => void;
 }
 
 /** `<ToastOverlay>`'s props: AdwToastOverlay's own properties and signals. */
@@ -830,6 +866,7 @@ export interface ViewSwitcherProps extends Gtk.WidgetProps {
   policy?: AdwViewSwitcherPolicy;
   stack?: AdwViewStack | null;
   onNotifyPolicy?: (value: AdwViewSwitcherPolicy) => void;
+  onNotifyStack?: (value: AdwViewStack | null) => void;
 }
 
 /** `<ViewSwitcherBar>`'s props: AdwViewSwitcherBar's own properties and signals. */
@@ -837,6 +874,7 @@ export interface ViewSwitcherBarProps extends Gtk.WidgetProps {
   reveal?: boolean;
   stack?: AdwViewStack | null;
   onNotifyReveal?: (value: boolean) => void;
+  onNotifyStack?: (value: AdwViewStack | null) => void;
 }
 
 /** `<ViewSwitcherSidebar>`'s props: AdwViewSwitcherSidebar's own properties and signals. */
@@ -846,6 +884,7 @@ export interface ViewSwitcherSidebarProps extends Gtk.WidgetProps {
   stack?: AdwViewStack | null;
   onNotifyFilter?: (value: GtkFilter | null) => void;
   onNotifyMode?: (value: AdwSidebarMode) => void;
+  onNotifyStack?: (value: AdwViewStack | null) => void;
   onActivated?: () => void;
 }
 
@@ -1600,6 +1639,11 @@ export function avatarProp(gtk: AdwAvatar, key: string, value: unknown): boolean
 
 export function avatarSignal(gtk: AdwAvatar, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyCustomImage":
+      gtk.connect("notify::custom-image", () => {
+        slot.dispatch(() => (slot.handler as (value: GdkPaintable | null) => void)(gtk.get_custom_image()));
+      });
+      return true;
     case "onNotifyIconName":
       gtk.connect("notify::icon-name", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_icon_name()));
@@ -1944,6 +1988,11 @@ export function carouselIndicatorDotsProp(gtk: AdwCarouselIndicatorDots, key: st
 
 export function carouselIndicatorDotsSignal(gtk: AdwCarouselIndicatorDots, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyCarousel":
+      gtk.connect("notify::carousel", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwCarousel | null) => void)(gtk.get_carousel()));
+      });
+      return true;
     case "onNotifyOrientation":
       gtk.connect("notify::orientation", () => {
         slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
@@ -1967,6 +2016,11 @@ export function carouselIndicatorLinesProp(gtk: AdwCarouselIndicatorLines, key: 
 
 export function carouselIndicatorLinesSignal(gtk: AdwCarouselIndicatorLines, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyCarousel":
+      gtk.connect("notify::carousel", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwCarousel | null) => void)(gtk.get_carousel()));
+      });
+      return true;
     case "onNotifyOrientation":
       gtk.connect("notify::orientation", () => {
         slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
@@ -2168,6 +2222,11 @@ export function comboRowSignal(gtk: AdwComboRow, key: string, slot: SignalSlot):
     case "onNotifyListFactory":
       gtk.connect("notify::list-factory", () => {
         slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_list_factory()));
+      });
+      return true;
+    case "onNotifyModel":
+      gtk.connect("notify::model", () => {
+        slot.dispatch(() => (slot.handler as (value: GListModel | null) => void)(gtk.get_model()));
       });
       return true;
     case "onNotifySearchMatchMode":
@@ -2466,6 +2525,11 @@ export function inlineViewSwitcherSignal(gtk: AdwInlineViewSwitcher, key: string
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_homogeneous()));
       });
       return true;
+    case "onNotifyStack":
+      gtk.connect("notify::stack", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwViewStack | null) => void)(gtk.get_stack()));
+      });
+      return true;
     case "onNotifyOrientation":
       gtk.connect("notify::orientation", () => {
         slot.dispatch(() => (slot.handler as (value: GtkOrientation) => void)(gtk.get_orientation()));
@@ -2489,6 +2553,11 @@ export function multiLayoutViewProp(gtk: AdwMultiLayoutView, key: string, value:
 
 export function multiLayoutViewSignal(gtk: AdwMultiLayoutView, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyLayout":
+      gtk.connect("notify::layout", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwLayout | null) => void)(gtk.get_layout()));
+      });
+      return true;
     case "onNotifyLayoutName":
       gtk.connect("notify::layout-name", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_layout_name()));
@@ -2654,6 +2723,11 @@ export function navigationViewSignal(gtk: AdwNavigationView, key: string, slot: 
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_vhomogeneous()));
       });
       return true;
+    case "onPopped":
+      gtk.connect("popped", (_self, _page) => {
+        slot.dispatch(() => (slot.handler as (page: AdwNavigationPage) => void)(_page));
+      });
+      return true;
     case "onPushed":
       gtk.connect("pushed", () => slot.fire());
       return true;
@@ -2784,6 +2858,11 @@ export function preferencesDialogSignal(gtk: AdwPreferencesDialog, key: string, 
     case "onNotifySearchEnabled":
       gtk.connect("notify::search-enabled", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_search_enabled()));
+      });
+      return true;
+    case "onNotifyVisiblePage":
+      gtk.connect("notify::visible-page", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwPreferencesPage | null) => void)(gtk.get_visible_page()));
       });
       return true;
     case "onNotifyVisiblePageName":
@@ -2960,6 +3039,11 @@ export function sidebarSignal(gtk: AdwSidebar, key: string, slot: SignalSlot): b
         slot.dispatch(() => (slot.handler as (value: GtkFilter | null) => void)(gtk.get_filter()));
       });
       return true;
+    case "onNotifyMenuModel":
+      gtk.connect("notify::menu-model", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_menu_model()));
+      });
+      return true;
     case "onNotifyMode":
       gtk.connect("notify::mode", () => {
         slot.dispatch(() => (slot.handler as (value: AdwSidebarMode) => void)(gtk.get_mode()));
@@ -2973,6 +3057,14 @@ export function sidebarSignal(gtk: AdwSidebar, key: string, slot: SignalSlot): b
     case "onActivated":
       gtk.connect("activated", (_self, _index) => {
         slot.dispatch(() => (slot.handler as (index: number) => void)(_index));
+      });
+      return true;
+    case "onDrop":
+      gtk.connect("drop", (_self, _index, _value, _preferred_action) => slot.decide(() => (slot.handler as (index: number, value: GValue, preferred_action: GdkDragAction) => boolean)(_index, _value, _preferred_action)));
+      return true;
+    case "onSetupMenu":
+      gtk.connect("setup-menu", (_self, _item) => {
+        slot.dispatch(() => (slot.handler as (item: AdwSidebarItem | null) => void)(_item));
       });
       return true;
   }
@@ -3190,6 +3282,11 @@ export function splitButtonSignal(gtk: AdwSplitButton, key: string, slot: Signal
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_label()));
       });
       return true;
+    case "onNotifyMenuModel":
+      gtk.connect("notify::menu-model", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_menu_model()));
+      });
+      return true;
     case "onNotifyPopover":
       gtk.connect("notify::popover", () => {
         slot.dispatch(() => (slot.handler as (value: GtkPopover | null) => void)(gtk.get_popover()));
@@ -3249,6 +3346,11 @@ export function statusPageSignal(gtk: AdwStatusPage, key: string, slot: SignalSl
     case "onNotifyIconName":
       gtk.connect("notify::icon-name", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_icon_name()));
+      });
+      return true;
+    case "onNotifyPaintable":
+      gtk.connect("notify::paintable", () => {
+        slot.dispatch(() => (slot.handler as (value: GdkPaintable | null) => void)(gtk.get_paintable()));
       });
       return true;
     case "onNotifyTitle":
@@ -3323,6 +3425,14 @@ export function tabBarSignal(gtk: AdwTabBar, key: string, slot: SignalSlot): boo
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_inverted()));
       });
       return true;
+    case "onNotifyView":
+      gtk.connect("notify::view", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwTabView | null) => void)(gtk.get_view()));
+      });
+      return true;
+    case "onExtraDragDrop":
+      gtk.connect("extra-drag-drop", (_self, _page, _value) => slot.decide(() => (slot.handler as (page: AdwTabPage, value: GValue) => boolean)(_page, _value)));
+      return true;
   }
   return Gtk.widgetSignal(gtk, key, slot);
 }
@@ -3341,6 +3451,11 @@ export function tabButtonProp(gtk: AdwTabButton, key: string, value: unknown): b
 
 export function tabButtonSignal(gtk: AdwTabButton, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyView":
+      gtk.connect("notify::view", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwTabView | null) => void)(gtk.get_view()));
+      });
+      return true;
     case "onActivate":
       gtk.connect("activate", () => slot.fire());
       return true;
@@ -3416,6 +3531,11 @@ export function tabOverviewSignal(gtk: AdwTabOverview, key: string, slot: Signal
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_open()));
       });
       return true;
+    case "onNotifySecondaryMenu":
+      gtk.connect("notify::secondary-menu", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_secondary_menu()));
+      });
+      return true;
     case "onNotifyShowEndTitleButtons":
       gtk.connect("notify::show-end-title-buttons", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_end_title_buttons()));
@@ -3425,6 +3545,14 @@ export function tabOverviewSignal(gtk: AdwTabOverview, key: string, slot: Signal
       gtk.connect("notify::show-start-title-buttons", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_start_title_buttons()));
       });
+      return true;
+    case "onNotifyView":
+      gtk.connect("notify::view", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwTabView | null) => void)(gtk.get_view()));
+      });
+      return true;
+    case "onExtraDragDrop":
+      gtk.connect("extra-drag-drop", (_self, _page, _value) => slot.decide(() => (slot.handler as (page: AdwTabPage, value: GValue) => boolean)(_page, _value)));
       return true;
   }
   return Gtk.widgetSignal(gtk, key, slot);
@@ -3452,6 +3580,51 @@ export function tabViewProp(gtk: AdwTabView, key: string, value: unknown): boole
 }
 
 export function tabViewSignal(gtk: AdwTabView, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyDefaultIcon":
+      gtk.connect("notify::default-icon", () => {
+        slot.dispatch(() => (slot.handler as (value: GIcon) => void)(gtk.get_default_icon()));
+      });
+      return true;
+    case "onNotifyMenuModel":
+      gtk.connect("notify::menu-model", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_menu_model()));
+      });
+      return true;
+    case "onNotifySelectedPage":
+      gtk.connect("notify::selected-page", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwTabPage | null) => void)(gtk.get_selected_page()));
+      });
+      return true;
+    case "onClosePage":
+      gtk.connect("close-page", (_self, _page) => slot.decide(() => (slot.handler as (page: AdwTabPage) => boolean)(_page)));
+      return true;
+    case "onIndicatorActivated":
+      gtk.connect("indicator-activated", (_self, _page) => {
+        slot.dispatch(() => (slot.handler as (page: AdwTabPage) => void)(_page));
+      });
+      return true;
+    case "onPageAttached":
+      gtk.connect("page-attached", (_self, _page, _position) => {
+        slot.dispatch(() => (slot.handler as (page: AdwTabPage, position: number) => void)(_page, _position));
+      });
+      return true;
+    case "onPageDetached":
+      gtk.connect("page-detached", (_self, _page, _position) => {
+        slot.dispatch(() => (slot.handler as (page: AdwTabPage, position: number) => void)(_page, _position));
+      });
+      return true;
+    case "onPageReordered":
+      gtk.connect("page-reordered", (_self, _page, _position) => {
+        slot.dispatch(() => (slot.handler as (page: AdwTabPage, position: number) => void)(_page, _position));
+      });
+      return true;
+    case "onSetupMenu":
+      gtk.connect("setup-menu", (_self, _page) => {
+        slot.dispatch(() => (slot.handler as (page: AdwTabPage | null) => void)(_page));
+      });
+      return true;
+  }
   return Gtk.widgetSignal(gtk, key, slot);
 }
 
@@ -3654,6 +3827,11 @@ export function viewSwitcherSignal(gtk: AdwViewSwitcher, key: string, slot: Sign
         slot.dispatch(() => (slot.handler as (value: AdwViewSwitcherPolicy) => void)(gtk.get_policy()));
       });
       return true;
+    case "onNotifyStack":
+      gtk.connect("notify::stack", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwViewStack | null) => void)(gtk.get_stack()));
+      });
+      return true;
   }
   return Gtk.widgetSignal(gtk, key, slot);
 }
@@ -3675,6 +3853,11 @@ export function viewSwitcherBarSignal(gtk: AdwViewSwitcherBar, key: string, slot
     case "onNotifyReveal":
       gtk.connect("notify::reveal", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_reveal()));
+      });
+      return true;
+    case "onNotifyStack":
+      gtk.connect("notify::stack", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwViewStack | null) => void)(gtk.get_stack()));
       });
       return true;
   }
@@ -3706,6 +3889,11 @@ export function viewSwitcherSidebarSignal(gtk: AdwViewSwitcherSidebar, key: stri
     case "onNotifyMode":
       gtk.connect("notify::mode", () => {
         slot.dispatch(() => (slot.handler as (value: AdwSidebarMode) => void)(gtk.get_mode()));
+      });
+      return true;
+    case "onNotifyStack":
+      gtk.connect("notify::stack", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwViewStack | null) => void)(gtk.get_stack()));
       });
       return true;
     case "onActivated":

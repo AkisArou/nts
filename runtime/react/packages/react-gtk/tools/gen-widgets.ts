@@ -98,6 +98,8 @@ interface GirSignal {
   name: string;
   takesArguments: boolean;
   returnsValue: boolean;
+  /** A parameter the handler fills (an Overlay's `get-child-position` allocation). */
+  fillsArgument: string | undefined;
   deprecated: boolean;
 }
 
@@ -195,6 +197,7 @@ function readType(element: XmlElement, namespace: string, prefix: string): GirTy
     signals: children("glib:signal").map((s) => ({
       name: s.attrs.get("name")!,
       takesArguments: child(s, "parameters") !== undefined,
+      fillsArgument: (child(s, "parameters")?.children ?? []).find((p) => p.name === "parameter" && p.attrs.get("direction") === "out")?.attrs.get("name"),
       returnsValue: child(child(s, "return-value") ?? s, "type")?.attrs.get("name") !== "none",
       deprecated: flag(s, "deprecated"),
     })),
@@ -228,13 +231,15 @@ interface Bindings {
   classes: Set<string>;
   /** The module each type from another namespace comes from: `PangoWrapMode` → `c:Pango-1.0`. */
   modules: Map<string, string>;
-  /**
-   * Boxed records with a constructor, in any namespace (`GdkRGBA`): a boxed
-   * value's GType is recorded, so `instanceof` checks one as it does a class.
-   * A record whose value holds only functions (`PangoAttrList.from_string`)
-   * is not a right-hand side `instanceof` takes.
-   */
+  /** Boxed records, in any namespace: `GdkRGBA`, `PangoAttrList`, `GtkTreePath`. */
   boxed: Set<string>;
+  /**
+   * The types whose value has a constructor, classes and boxed records alike:
+   * what `instanceof` takes as its right-hand side. A boxed value's GType is
+   * recorded, so `instanceof` checks one as it does a class; a record whose
+   * value holds only functions (`PangoAttrList.from_string`) is not checked.
+   */
+  newable: Set<string>;
   /**
    * For each GObject interface, the classes with a constructor that implement
    * it, topmost only (a subclass is an `instanceof` its parent): what a value
@@ -418,8 +423,7 @@ function readBindings(dir: string): Bindings {
     // Topmost: a class whose parent also implements it is covered by the parent's check.
     implementers.set(name, all.filter((c) => !implementing(gobjectClasses.get(c)!.parent)).sort());
   }
-  const boxed = new Set([...boxedTypes].filter((name) => newable.has(name)));
-  return { setters, childMethods, accessors, getters, signals, constructible, classes, modules, implementers, boxed };
+  return { setters, childMethods, accessors, getters, signals, constructible, classes, modules, implementers, boxed: boxedTypes, newable };
 }
 
 // ---- the model ---------------------------------------------------------------
@@ -468,14 +472,19 @@ interface Signal {
 }
 
 /**
- * A handler parameter's type as an app writes it: a widget, a string, a
+ * A handler parameter's type as an app writes it: an object, a string, a
  * number, a boolean or an enum, without the C spelling (`CNumber<"double">` is
- * `number`); null for one a handler cannot be written against yet.
+ * `number`); null for one a handler cannot be written against yet. An object
+ * is any class, interface or boxed record the bindings declare, in any
+ * namespace (a ListBox's row, a TabView's AdwTabPage, a TreeView's
+ * GtkTreePath). The bridge copies a boxed record the emission lends into a
+ * box of the program's, so a handler may keep it.
  */
-function handlerType(type: string, types: Set<string>): string | null {
-  const widget = /^(Gtk\w+)( \| null)?$/.exec(type);
-  if (widget !== null) {
-    types.add(widget[1]!);
+function handlerType(type: string, types: Set<string>, bindings: Bindings): string | null {
+  const object = /^(\w+)( \| null)?$/.exec(type);
+  const name = object === null ? "" : object[1]!;
+  if (object !== null && (bindings.classes.has(name) || bindings.implementers.has(name) || bindings.boxed.has(name))) {
+    types.add(name);
     return type;
   }
   if (type === "string" || type === "string | null") return type;
@@ -673,7 +682,7 @@ function valueKind(type: string, bindings: Bindings, reference = false): ValueKi
   // rectangle. Its setter may take it as `Const<…>`; the app passes the record.
   const boxed = /^(?:Const<(\w+)>|(\w+))( \| null)?$/.exec(type);
   const boxedName = boxed === null ? undefined : (boxed[1] ?? boxed[2]);
-  if (boxedName !== undefined && bindings.boxed.has(boxedName)) {
+  if (boxedName !== undefined && bindings.boxed.has(boxedName) && bindings.newable.has(boxedName)) {
     return { kind: "object", type: boxedName, classes: [boxedName], nullable: boxed![3] !== undefined };
   }
   if (object === null || (object[1] === "GtkWidget" && !reference)) {
@@ -852,7 +861,7 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
           // its new value -- what a controlled prop needs to hear.
           const getter = named?.get ?? p.getter ?? `get_${p.name.replace(/-/g, "_")}`;
           const read = bindings.getters.get(sourceTs)?.get(getter);
-          const readType = p.readable && read !== undefined ? handlerType(read, handlerTypes) : null;
+          const readType = p.readable && read !== undefined ? handlerType(read, handlerTypes, bindings) : null;
           const controlled = readType !== null && controlledProps.get(qualified(source))?.includes(p.name) === true;
           const namesChildBy = childNamingProps.get(qualified(source))?.get(p.name);
           props.push({
@@ -877,13 +886,17 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
       for (const s of source.signals) {
         const where = `${sourceTs}::${s.name}`;
         const signature = bindings.signals.get(sourceTs)?.get(s.name);
-        const params = signature?.params.map((p) => ({ name: p.name, type: handlerType(p.type, handlerTypes) }));
+        const params = signature?.params.map((p) => ({ name: p.name, type: handlerType(p.type, handlerTypes, bindings) }));
         if (s.deprecated) {
           skip(`${where}\tdeprecated`);
         } else if (signature === undefined || params === undefined) {
           skip(`${where}\tno connect overload in the bindings`);
         } else if (signature.returns !== "void" && !/^CBool<\w+>$/.test(signature.returns)) {
           skip(`${where}\tits handler returns a ${signature.returns}: not generated yet`);
+        } else if (s.fillsArgument !== undefined) {
+          // The bridge hands a handler its own copy of a record, so what it
+          // wrote would not reach GTK.
+          skip(`${where}\tits handler fills \`${s.fillsArgument}\`: not generated yet`);
         } else if (params.some((p) => p.type === null)) {
           skip(`${where}\ta handler argument JSX cannot type yet: ${signature.params.map((p) => p.type).join(", ")}`);
         } else {

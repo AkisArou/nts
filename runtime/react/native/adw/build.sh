@@ -37,7 +37,7 @@ row p1>p2 s1>s2 e1>e2
 viewstack b B>Bee switched=b
 switcher true true
 split true true true
-tabs A,B,C>A,D,B,C>C,A,D,B selected=true asked=1 kept=4 selected=A user=B>A heard=B app=B heard=B C,A,B
+tabs A,B,C>A,D,B,C>C,A,D,B selected=true asked=1 kept=4 attached=0121 true selected=A user=B>A heard=B app=B heard=B C,A,B
 dialog true true true true
 application true true
 unknown true true

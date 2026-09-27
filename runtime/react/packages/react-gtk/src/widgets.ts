@@ -4,6 +4,8 @@
 import {
   GdkCursor,
   GdkDisplay,
+  type GdkGLContext,
+  type GdkPaintable,
   GdkRGBA,
   GdkRectangle,
   GdkTexture,
@@ -12,10 +14,13 @@ import {
   GdkPixbuf,
 } from "c:GdkPixbuf-2.0";
 import {
+  type GAppInfo,
   GBytesIcon,
   GEmblem,
   GEmblemedIcon,
   GFileIcon,
+  type GIcon,
+  type GListModel,
   GListStore,
   GMenuModel,
   GThemedIcon,
@@ -221,6 +226,7 @@ export interface WidgetProps extends HostProps, ControllerProps {
   widthRequest?: number;
   onNotifyCanFocus?: (value: boolean) => void;
   onNotifyCanTarget?: (value: boolean) => void;
+  onNotifyCursor?: (value: GdkCursor | null) => void;
   onNotifyFocusOnClick?: (value: boolean) => void;
   onNotifyFocusable?: (value: boolean) => void;
   onNotifyHalign?: (value: GtkAlign) => void;
@@ -330,6 +336,7 @@ export interface AboutDialogProps extends WindowProps {
   onNotifyCopyright?: (value: string | null) => void;
   onNotifyLicense?: (value: string | null) => void;
   onNotifyLicenseType?: (value: GtkLicense) => void;
+  onNotifyLogo?: (value: GdkPaintable | null) => void;
   onNotifyLogoIconName?: (value: string | null) => void;
   onNotifyProgramName?: (value: string | null) => void;
   onNotifySystemInformation?: (value: string | null) => void;
@@ -505,6 +512,7 @@ export interface DropDownProps extends WidgetProps {
   onNotifyFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyHeaderFactory?: (value: GtkListItemFactory | null) => void;
   onNotifyListFactory?: (value: GtkListItemFactory | null) => void;
+  onNotifyModel?: (value: GListModel | null) => void;
   onNotifySearchMatchMode?: (value: GtkStringFilterMatchMode) => void;
   onNotifySelected?: (value: number) => void;
   onNotifyShowArrow?: (value: boolean) => void;
@@ -599,6 +607,7 @@ export interface EntryProps extends WidgetProps {
   onNotifyActivatesDefault?: (value: boolean) => void;
   onNotifyBuffer?: (value: GtkEntryBuffer) => void;
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
+  onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyHasFrame?: (value: boolean) => void;
   onNotifyImModule?: (value: string | null) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
@@ -724,6 +733,7 @@ export interface GLAreaProps extends WidgetProps {
   onNotifyAutoRender?: (value: boolean) => void;
   onNotifyHasDepthBuffer?: (value: boolean) => void;
   onNotifyHasStencilBuffer?: (value: boolean) => void;
+  onRender?: (context: GdkGLContext) => boolean;
   onResize?: (width: number, height: number) => void;
 }
 
@@ -805,8 +815,10 @@ export interface ImageProps extends WidgetProps {
   resource?: string;
   useFallback?: boolean;
   onNotifyFile?: (value: string | null) => void;
+  onNotifyGicon?: (value: GIcon | null) => void;
   onNotifyIconName?: (value: string | null) => void;
   onNotifyIconSize?: (value: GtkIconSize) => void;
+  onNotifyPaintable?: (value: GdkPaintable | null) => void;
   onNotifyPixelSize?: (value: number) => void;
   onNotifyResource?: (value: string | null) => void;
   onNotifyUseFallback?: (value: boolean) => void;
@@ -855,6 +867,7 @@ export interface LabelProps extends WidgetProps {
   xalign?: number;
   yalign?: number;
   onNotifyEllipsize?: (value: PangoEllipsizeMode) => void;
+  onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyJustify?: (value: GtkJustification) => void;
   onNotifyLabel?: (value: string) => void;
   onNotifyLines?: (value: number) => void;
@@ -978,6 +991,7 @@ export interface MenuButtonProps extends WidgetProps {
   onNotifyHasFrame?: (value: boolean) => void;
   onNotifyIconName?: (value: string | null) => void;
   onNotifyLabel?: (value: string | null) => void;
+  onNotifyMenuModel?: (value: GMenuModel | null) => void;
   onNotifyPrimary?: (value: boolean) => void;
   onNotifyUseUnderline?: (value: boolean) => void;
   onActivate?: () => void;
@@ -1053,6 +1067,7 @@ export interface PasswordEntryProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyPlaceholderText?: (value: string | null) => void;
   onNotifyShowPeekIcon?: (value: boolean) => void;
   onActivate?: () => void;
@@ -1078,6 +1093,7 @@ export interface PictureProps extends WidgetProps {
   onNotifyCanShrink?: (value: boolean) => void;
   onNotifyContentFit?: (value: GtkContentFit) => void;
   onNotifyIsolateContents?: (value: boolean) => void;
+  onNotifyPaintable?: (value: GdkPaintable | null) => void;
 }
 
 /** `<PopoverBin>`'s props: GtkPopoverBin's own properties and signals. */
@@ -1085,18 +1101,21 @@ export interface PopoverBinProps extends WidgetProps {
   handleInput?: boolean;
   menuModel?: GMenuModel | null;
   onNotifyHandleInput?: (value: boolean) => void;
+  onNotifyMenuModel?: (value: GMenuModel | null) => void;
 }
 
 /** `<PopoverMenu>`'s props: GtkPopoverMenu's own properties and signals. */
 export interface PopoverMenuProps extends PopoverProps {
   menuModel?: GMenuModel | null;
   visibleSubmenu?: string;
+  onNotifyMenuModel?: (value: GMenuModel | null) => void;
   onNotifyVisibleSubmenu?: (value: string | null) => void;
 }
 
 /** `<PopoverMenuBar>`'s props: GtkPopoverMenuBar's own properties and signals. */
 export interface PopoverMenuBarProps extends WidgetProps {
   menuModel?: GMenuModel | null;
+  onNotifyMenuModel?: (value: GMenuModel | null) => void;
 }
 
 /** `<ProgressBar>`'s props: GtkProgressBar's own properties and signals. */
@@ -1393,6 +1412,7 @@ export interface TextProps extends WidgetProps {
   onNotifyActivatesDefault?: (value: boolean) => void;
   onNotifyBuffer?: (value: GtkEntryBuffer) => void;
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
+  onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyImModule?: (value: string | null) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
@@ -1455,6 +1475,7 @@ export interface TextViewProps extends WidgetProps {
   onNotifyBuffer?: (value: GtkTextBuffer) => void;
   onNotifyCursorVisible?: (value: boolean) => void;
   onNotifyEditable?: (value: boolean) => void;
+  onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyImModule?: (value: string | null) => void;
   onNotifyIndent?: (value: number) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
@@ -1919,6 +1940,11 @@ export function widgetSignal(gtk: GtkWidget, key: string, slot: SignalSlot): boo
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_can_target()));
       });
       return true;
+    case "onNotifyCursor":
+      gtk.connect("notify::cursor", () => {
+        slot.dispatch(() => (slot.handler as (value: GdkCursor | null) => void)(gtk.get_cursor()));
+      });
+      return true;
     case "onNotifyFocusOnClick":
       gtk.connect("notify::focus-on-click", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_focus_on_click()));
@@ -2347,6 +2373,11 @@ export function aboutDialogSignal(gtk: GtkAboutDialog, key: string, slot: Signal
     case "onNotifyLicenseType":
       gtk.connect("notify::license-type", () => {
         slot.dispatch(() => (slot.handler as (value: GtkLicense) => void)(gtk.get_license_type()));
+      });
+      return true;
+    case "onNotifyLogo":
+      gtk.connect("notify::logo", () => {
+        slot.dispatch(() => (slot.handler as (value: GdkPaintable | null) => void)(gtk.get_logo()));
       });
       return true;
     case "onNotifyLogoIconName":
@@ -3008,6 +3039,11 @@ export function dropDownSignal(gtk: GtkDropDown, key: string, slot: SignalSlot):
         slot.dispatch(() => (slot.handler as (value: GtkListItemFactory | null) => void)(gtk.get_list_factory()));
       });
       return true;
+    case "onNotifyModel":
+      gtk.connect("notify::model", () => {
+        slot.dispatch(() => (slot.handler as (value: GListModel | null) => void)(gtk.get_model()));
+      });
+      return true;
     case "onNotifySearchMatchMode":
       gtk.connect("notify::search-match-mode", () => {
         slot.dispatch(() => (slot.handler as (value: GtkStringFilterMatchMode) => void)(gtk.get_search_match_mode()));
@@ -3348,6 +3384,11 @@ export function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boole
     case "onNotifyEnableEmojiCompletion":
       gtk.connect("notify::enable-emoji-completion", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_emoji_completion()));
+      });
+      return true;
+    case "onNotifyExtraMenu":
+      gtk.connect("notify::extra-menu", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_extra_menu()));
       });
       return true;
     case "onNotifyHasFrame":
@@ -3839,6 +3880,9 @@ export function gLAreaSignal(gtk: GtkGLArea, key: string, slot: SignalSlot): boo
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_has_stencil_buffer()));
       });
       return true;
+    case "onRender":
+      gtk.connect("render", (_self, _context) => slot.decide(() => (slot.handler as (context: GdkGLContext) => boolean)(_context)));
+      return true;
     case "onResize":
       gtk.connect("resize", (_self, _width, _height) => {
         slot.dispatch(() => (slot.handler as (width: number, height: number) => void)(_width, _height));
@@ -4148,6 +4192,11 @@ export function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boole
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_file()));
       });
       return true;
+    case "onNotifyGicon":
+      gtk.connect("notify::gicon", () => {
+        slot.dispatch(() => (slot.handler as (value: GIcon | null) => void)(gtk.get_gicon()));
+      });
+      return true;
     case "onNotifyIconName":
       gtk.connect("notify::icon-name", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_icon_name()));
@@ -4156,6 +4205,11 @@ export function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boole
     case "onNotifyIconSize":
       gtk.connect("notify::icon-size", () => {
         slot.dispatch(() => (slot.handler as (value: GtkIconSize) => void)(gtk.get_icon_size()));
+      });
+      return true;
+    case "onNotifyPaintable":
+      gtk.connect("notify::paintable", () => {
+        slot.dispatch(() => (slot.handler as (value: GdkPaintable | null) => void)(gtk.get_paintable()));
       });
       return true;
     case "onNotifyPixelSize":
@@ -4326,6 +4380,11 @@ export function labelSignal(gtk: GtkLabel, key: string, slot: SignalSlot): boole
     case "onNotifyEllipsize":
       gtk.connect("notify::ellipsize", () => {
         slot.dispatch(() => (slot.handler as (value: PangoEllipsizeMode) => void)(gtk.get_ellipsize()));
+      });
+      return true;
+    case "onNotifyExtraMenu":
+      gtk.connect("notify::extra-menu", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_extra_menu()));
       });
       return true;
     case "onNotifyJustify":
@@ -4802,6 +4861,11 @@ export function menuButtonSignal(gtk: GtkMenuButton, key: string, slot: SignalSl
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_label()));
       });
       return true;
+    case "onNotifyMenuModel":
+      gtk.connect("notify::menu-model", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_menu_model()));
+      });
+      return true;
     case "onNotifyPrimary":
       gtk.connect("notify::primary", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_primary()));
@@ -5069,6 +5133,11 @@ export function passwordEntrySignal(gtk: GtkPasswordEntry, key: string, slot: Si
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
       });
       return true;
+    case "onNotifyExtraMenu":
+      gtk.connect("notify::extra-menu", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_extra_menu()));
+      });
+      return true;
     case "onNotifyPlaceholderText":
       gtk.connect("notify::placeholder-text", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_placeholder_text()));
@@ -5177,6 +5246,11 @@ export function pictureSignal(gtk: GtkPicture, key: string, slot: SignalSlot): b
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_isolate_contents()));
       });
       return true;
+    case "onNotifyPaintable":
+      gtk.connect("notify::paintable", () => {
+        slot.dispatch(() => (slot.handler as (value: GdkPaintable | null) => void)(gtk.get_paintable()));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -5200,6 +5274,11 @@ export function popoverBinSignal(gtk: GtkPopoverBin, key: string, slot: SignalSl
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_handle_input()));
       });
       return true;
+    case "onNotifyMenuModel":
+      gtk.connect("notify::menu-model", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_menu_model()));
+      });
+      return true;
   }
   return widgetSignal(gtk, key, slot);
 }
@@ -5218,6 +5297,11 @@ export function popoverMenuProp(gtk: GtkPopoverMenu, key: string, value: unknown
 
 export function popoverMenuSignal(gtk: GtkPopoverMenu, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyMenuModel":
+      gtk.connect("notify::menu-model", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_menu_model()));
+      });
+      return true;
     case "onNotifyVisibleSubmenu":
       gtk.connect("notify::visible-submenu", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_visible_submenu()));
@@ -5237,6 +5321,13 @@ export function popoverMenuBarProp(gtk: GtkPopoverMenuBar, key: string, value: u
 }
 
 export function popoverMenuBarSignal(gtk: GtkPopoverMenuBar, key: string, slot: SignalSlot): boolean {
+  switch (key) {
+    case "onNotifyMenuModel":
+      gtk.connect("notify::menu-model", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_menu_model()));
+      });
+      return true;
+  }
   return widgetSignal(gtk, key, slot);
 }
 
@@ -6324,6 +6415,11 @@ export function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_emoji_completion()));
       });
       return true;
+    case "onNotifyExtraMenu":
+      gtk.connect("notify::extra-menu", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_extra_menu()));
+      });
+      return true;
     case "onNotifyImModule":
       gtk.connect("notify::im-module", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_im_module()));
@@ -6562,6 +6658,11 @@ export function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot):
     case "onNotifyEditable":
       gtk.connect("notify::editable", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_editable()));
+      });
+      return true;
+    case "onNotifyExtraMenu":
+      gtk.connect("notify::extra-menu", () => {
+        slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_extra_menu()));
       });
       return true;
     case "onNotifyImModule":
