@@ -1814,22 +1814,6 @@ outcomes() {
   return $status
 }
 
-# Refusals that are not: a name `nts refusals` lists (`Program::uncompiled`)
-# that `nts hir --prepared` shows was compiled after all -- a lie in the one
-# place a reader asks "why is this export missing?". Over examples/ and every
-# conformance blocker. `tooling/conformance/phantoms.mjs` reconciles each
-# project's parsed functions against its own "N function(s)" summary, so it
-# cannot pass by parsing nothing, and prints a phantom as the pair -- the
-# refusal and the line that contradicts it. Its first scan found the
-# structural-copy phantom that 1cf4c99d7 then guarded against. Exit status
-# decides. About 3 s.
-phantoms() {
-  out=$(node tooling/conformance/phantoms.mjs 2>&1)
-  status=$?
-  printf '%s\n' "$out" | awk '!/^$/'
-  return $status
-}
-
 # Is what the backend receives the program the source says? Seven rules over
 # `hir --prepared`, `hir`, `layouts` and `refusals` of examples/ and every
 # conformance blocker, each one a defect that shipped silently on 2026-09-27:
@@ -1844,6 +1828,14 @@ phantoms() {
 # occurring prints "remove it". A listing that does not reconcile with its own
 # "N function(s)" is NOT MEASURED. See tooling/conformance/integrity.mjs. The
 # runtime modules are `integrity-runtime`, below. About 30 s.
+#
+# Phantom refusals -- a name `nts refusals` lists that the prepared program
+# compiles -- are its `refusal-not-compiled` rule. A `phantoms` step asked the
+# same question over examples and blockers only, so the runtime was never
+# measured, and runtime/node/punycode had four. It was retired once the two
+# agreed line for line on one tree (0 and 0 there, the same four over the
+# runtime). tooling/conformance/phantoms.mjs stays as the standalone probe:
+# it takes any project directory and runs in seconds.
 integrity() {
   out=$(node tooling/conformance/integrity.mjs 2>&1)
   status=$?
@@ -2073,7 +2065,6 @@ step "test262" test262
 step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases
 step "outcomes" outcomes
-step "phantoms" phantoms
 step "integrity" integrity
 step "definitions" definitions
 step "integrity-runtime" integrity_runtime
