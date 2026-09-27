@@ -54,143 +54,168 @@ import { execFileSync, spawnSync } from "node:child_process";
 const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 
 /**
+ * What each instrument asks, and of which kind -- because the failure this
+ * file exists for is rarely "forgot to run a step". It is "ran four steps that
+ * all asked one question". An unsound narrowing passed a fixture, two
+ * differentials, a census reading -22 refusals and +146 definitions, and
+ * clippy (2026-09): every one counted *whether* code compiles, and the defect
+ * was a wrong answer -- and more code compiling is exactly what unsoundness
+ * looks like from a reach instrument.
+ *
+ *   answers   what the program does, against node or against itself
+ *   whether   whether code is emitted: a count, which rises with unsoundness too
+ *   valid     whether an artefact or record is well-formed
+ *   hygiene   the tree's own rules
+ */
+export const ASKS = {
+  build: ["hygiene", "does it build"],
+  clippy: ["hygiene", "does it lint clean"],
+  tests: ["answers", "do the unit tests pass, including the runtime tables"],
+  format: ["hygiene", "is runtime/c formatted"],
+  examples: ["answers", "does every example answer as node does, on C"],
+  llvm: ["answers", "the same on LLVM"],
+  "llvm-rc": ["answers", "the same on LLVM with reference counting"],
+  jvm: ["answers", "the same on the JVM, whose verifier types what C (`T *`) and LLVM (`ptr`) agree on by construction"],
+  dex: ["valid", "does d8 accept what the JVM backend emits"],
+  rc: ["answers", "the same on C with reference counting, where a lifetime error shows"],
+  outcomes: ["answers", "does each pinned defect still do exactly what it did"],
+  integrity: ["valid", "is every refusal, cut and location honest, over examples, blockers and outcomes"],
+  "integrity-runtime": ["valid", "the same over the runtime"],
+  definitions: ["whether", "did the runtime's reach go down, per module"],
+  assembles: ["valid", "is the runtime's LLVM valid IR"],
+  "snapshot-cache": ["valid", "is a cached snapshot the same program as a fresh one"],
+  types: ["valid", "is the snapshot's type table consistent"],
+  "bench-agree": ["answers", "does every backend build and agree on the benchmarks"],
+  addons: ["valid", "does each runtime module build, load and publish something"],
+};
+
+/** The comparisons a lowering change owes, each with the question only it answers. */
+const COMPARE = [
+  { kind: "answers", asks: "which code is emitted: does every example answer as it did, case by case", run: "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1" },
+  { kind: "whether", asks: "whether code is emitted: which functions stopped, started, or lost their root", run: "node tooling/conformance/refusal-diff.mjs <before> <after>   # 0 moves is not no effect" },
+  { kind: "answers", asks: "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them", run: "node tooling/conformance/emitted-diff.mjs <before> <after> --axis" },
+];
+
+/**
  * What a change owes, as data. `when` sees one changed path and whether it is
- * new; `steps` are gate steps and `arms` what the gate cannot do, each shown
- * once however many paths matched.
+ * new; `steps` are gate steps, `arms` what the gate cannot do, each a question
+ * first. An arm with `if` depends on what the change *is* -- a type rule, a
+ * representation -- which no path says; it is printed as a condition rather
+ * than dropped.
  */
 export const RULES = [
   {
     name: "a new example",
     when: (p, added) => added && /^examples\/[^/]+\/tsconfig\.json$/.test(p),
-    why: "an example is an input to every backend step and must agree on each; one that passes before the change as well measured nothing",
     steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity"],
     arms: [
-      "node tooling/differential/agree.mjs <before> <after> --only=<example>   # must not read `unchanged` if it guards the change",
-      "commit it before a pinned gate run: a worktree gate cannot see an uncommitted example",
+      { kind: "answers", asks: "does it agree on every backend -- by hand, because the differential reads the shared tree and cannot see an example not yet in it", run: "node tooling/differential/agree.mjs <after> --only=<example>   # and NTS_BACKEND=llvm, llvm+NTS_RC=1, jvm, NTS_RC=1" },
+      { kind: "answers", asks: "does it guard the change: it must not agree on the binary before", run: "node tooling/differential/agree.mjs <before> <after> --only=<example>" },
+      { kind: "hygiene", asks: "can a pinned gate see it", run: "commit it before a pinned gate run: a worktree gate cannot see an uncommitted example" },
     ],
   },
   {
     name: "an example changed",
     when: (p, added) => !added && /^examples\/[^/]+\//.test(p),
-    why: "the same backend steps read it",
     steps: ["examples", "llvm", "llvm-rc", "jvm", "rc"],
     arms: [],
   },
   {
     name: "lowering",
     when: (p) => /^compiler\/core\//.test(p),
-    why: "a lowering change moves refusals, definitions and answers; each is a different instrument",
     steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions"],
     arms: [
-      "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1",
-      "node tooling/conformance/refusal-diff.mjs <before> <after>   # 0 moves is not no effect",
-      "node tooling/conformance/emitted-diff.mjs <before> <after> --axis   # which runtime modules emit differently, and node's tests for those",
-      "a full test262 census against a baseline if it should make programs compile (--recorded cannot see a gain)",
+      ...COMPARE,
+      { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.mjs --rows, both binaries)" },
+      { if: "a representation change", kind: "answers", asks: "only the JVM types references; C and LLVM agree by construction", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" },
+      { if: "meant to make programs compile", kind: "answers", asks: "did it buy cases, per file -- --recorded cannot see a gain", run: "a full census for both binaries, per-case diff; check the prediction against the last run's rows first" },
     ],
   },
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    why: "the differential on that backend, under both memory providers, and emitted C byte-identical across the cache",
     steps: ["examples", "rc", "outcomes", "snapshot-cache"],
-    arms: [
-      "node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...",
-      "node tooling/conformance/emitted-diff.mjs <before> <after> --axis   # which runtime modules emit differently, and node's tests for those",
-    ],
+    arms: [COMPARE[0], COMPARE[2]],
   },
   {
     name: "the LLVM backend",
     when: (p) => /^compiler\/codegen\/llvm\//.test(p),
-    why: "the differential only reaches examples; the runtime's IR is only ever assembled by `assembles`",
     steps: ["llvm", "llvm-rc", "assembles"],
-    arms: ["NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..."],
+    arms: [{ kind: "answers", asks: "which code is emitted, on LLVM", run: "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..." }],
   },
   {
     name: "the JVM backend",
     when: (p) => /^compiler\/codegen\/jvm\//.test(p),
-    why: "the JVM verifier sees type confusions C and LLVM agree on by luck",
     steps: ["jvm", "dex"],
-    arms: ["NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>"],
+    arms: [{ kind: "answers", asks: "which code is emitted, on the JVM", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" }],
   },
   {
     name: "the frontend or the snapshot schema",
     when: (p) => /^compiler\/(frontend-ts|semantic-schema)\//.test(p),
-    why: "a schema field bumps SCHEMA_VERSION; a cache identity is a claim nothing else cross-checks",
-    steps: ["snapshot-cache", "examples"],
+    steps: ["snapshot-cache", "types", "examples"],
     arms: [
-      "bump SCHEMA_VERSION if a semantic-schema struct changed",
-      "NTS_BIN=<after> node tooling/conformance/types-check.mjs; ... --examples   # the snapshot's tables: ids resolve, bases acyclic, instantiations match their declarations",
-      "a new TypeKind variant: add it to types-check.mjs's KINDS, or every type of it reads as unread",
+      { kind: "hygiene", asks: "does a cache written by the old schema get rejected", run: "bump SCHEMA_VERSION if a semantic-schema struct changed" },
+      { kind: "valid", asks: "the examples' type tables too, not only the runtime's", run: "NTS_BIN=<after> node tooling/conformance/types-check.mjs --examples" },
+      { if: "a new TypeKind variant", kind: "valid", asks: "can types-check read it", run: "add it to types-check.mjs's KINDS, or every type of it reads as unread" },
     ],
   },
   {
     name: "a runtime helper",
     when: (p) => /^runtime\/c\/nts_runtime\.h$/.test(p),
-    why: "a new nts_* helper owes four cross-check tables and two core tests (all in `tests`), and `bench-agree` builds every backend",
     steps: ["tests", "bench-agree"],
     arms: [
-      "the tables `tests` reads: nts-core runtime_signatures, nts-codegen-llvm signatures, nts-codegen-c ERASES_CLASS, nts-codegen-jvm REFUSED_FLOOR; nts-core's sorted table",
+      { kind: "valid", asks: "do the four cross-check tables and nts-core's sorted table name it", run: "nts-core runtime_signatures, nts-codegen-llvm signatures, nts-codegen-c ERASES_CLASS, nts-codegen-jvm REFUSED_FLOOR -- all read by `tests`" },
     ],
   },
   {
     name: "the C runtime",
     when: (p) => /^runtime\/c\//.test(p),
-    why: "runtime/c is include_str!-ed into the compiler, and the gate formats it",
     steps: ["format", "examples", "rc", "llvm", "assembles"],
     arms: [
-      "node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...; NTS_BACKEND=llvm ...",
-      "node tooling/conformance/emitted-diff.mjs <before> <after> --axis   # which runtime modules emit differently, and node's tests for those",
+      { kind: "hygiene", asks: "is the binary testing the new runtime", run: "rebuild nts: runtime/c is include_str!-ed, so an old binary tests the old runtime" },
+      COMPARE[0],
+      COMPARE[2],
     ],
   },
   {
     name: "a runtime module",
     when: (p) => /^runtime\/(node|web-platform)\//.test(p),
-    why: "the runtime is a corpus: its definitions, integrity, IR and addons are each measured separately",
     steps: ["definitions", "integrity-runtime", "assembles", "addons"],
-    arms: ["node tooling/conformance/compiled-axis-floor.mjs   # node's own tests per module; lane-local, ~16 min"],
+    arms: [{ kind: "answers", asks: "what node's own tests say of each compiled module", run: "node tooling/conformance/compiled-axis-floor.mjs   # lane-local, ~16 min" }],
   },
   {
     name: "an instrument",
     when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|sh)$/.test(p),
-    why: "an instrument first finds itself; a loop that has never had input is untested code",
     steps: [],
     arms: [
-      "its --self-test, if it has one, and the gate step that runs it",
-      "a sabotage arm: break the thing it guards and watch it fail, naming the thing",
-      "feed any list it loops over one entry, in a scratch copy, before relying on it",
-      "run it from a worktree, and every mode it has: the one its author tests is the easy one",
-      "if it parses a node helper's output: process.stdout.write(String(x)), never console.log(x)",
+      { kind: "valid", asks: "does it catch what it guards", run: "its --self-test, and a sabotage arm: break the thing it guards and watch it fail, naming the thing" },
+      { kind: "valid", asks: "has every loop in it had input", run: "feed any list it loops over one entry, in a scratch copy, before relying on it" },
+      { kind: "valid", asks: "does a clean result mean it judged something", run: "print the population beside the verdict" },
+      { kind: "valid", asks: "does it work where it will be run", run: "run it from a worktree, and every mode it has: the one its author tests is the easy one" },
     ],
   },
   {
     name: "the gate script",
     when: (p) => p === "tooling/gate/all.sh",
-    why: "shared by every lane, and bash reads a running script incrementally",
     steps: [],
     arms: [
-      "sh -n tooling/gate/all.sh, then the steps you touched with NTS_GATE_STEPS, from a worktree",
-      "announce it to the lanes; never edit it while a run from this tree is executing",
+      { kind: "valid", asks: "does it parse, and do the touched steps run", run: "sh -n tooling/gate/all.sh, then those steps with NTS_GATE_STEPS, from a worktree" },
+      { kind: "hygiene", asks: "do the lanes know", run: "announce it; never edit it while a run from this tree is executing" },
     ],
   },
   {
     name: "an outcomes fixture",
     when: (p) => /^tooling\/conformance\/outcomes\//.test(p),
-    why: "a record is a claim about main: recorded from a clean build, with a control that differs in one thing",
     steps: ["outcomes", "integrity"],
     arms: [
-      "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.mjs --record <name>",
-      "the control arm, measured: the same program differing in one thing agrees",
+      { kind: "hygiene", asks: "is the record a claim about main", run: "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.mjs --record <name>" },
+      { kind: "answers", asks: "is the defect specific to what the fixture names", run: "a control differing in one thing, measured" },
     ],
   },
 ];
 
 /** Every change, whatever it touched: the gate's first two steps. */
-const ALWAYS = {
-  name: "every change",
-  why: "a one-line edit is not exempt; the gate fails clippy on any warning, and `tests` stops at the first failing target",
-  steps: ["clippy", "tests"],
-  arms: [],
-};
+const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests"], arms: [] };
 
 /** `{ path, added }` for the change asked about. */
 function changedPaths(argv) {
@@ -244,6 +269,13 @@ function selfTest() {
   if (owed([]).length !== 0) return "an empty change owed something";
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
   if (order.join(" ") !== "build clippy tests llvm llvm-rc assembles") return `the LLVM backend's steps: ${order.join(" ")}`;
+  // A step without its question could not say what it asks.
+  for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
+  for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;
+  const lowering = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
+  const asked = new Set(lowering.arms.filter((a) => !a.if).map((a) => a.kind));
+  if (!asked.has("answers") || !asked.has("whether")) return `a lowering change owes only ${[...asked].join(", ")}`;
+  if (!lowering.arms.some((a) => /emitted-diff/.test(a.run))) return "a lowering change does not owe the emitted-C diff that tells neutral's two causes apart";
   return null;
 }
 
@@ -254,7 +286,7 @@ if (broken) {
   process.exit(2);
 }
 if (argv.includes("--self-test")) {
-  console.log("  self-test: a new example, an instrument, a backend and a runtime header each select their arms");
+  console.log("  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff");
   process.exit(0);
 }
 
@@ -271,14 +303,25 @@ if (changes.length === 0) {
 const rules = owed(changes);
 const steps = gateSteps(rules);
 const gate = `NTS_GATE_STEPS="${steps.join(" ")}" sh tooling/gate/all.sh`;
+const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
 console.log(`  ${changes.length} path(s) changed in ${TREE}`);
 for (const r of rules) {
   console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
-  console.log(`    why: ${r.why}`);
+  for (const a of r.arms) console.log(`    [ ] [${a.kind}] ${arm(a)}`);
   if (r.steps.length > 0) console.log(`    gate: ${r.steps.join(" ")}`);
-  for (const a of r.arms) console.log(`    [ ] ${a}`);
 }
-console.log(`\n  the gate steps owed, in one run:\n    ${gate}`);
+console.log("\n  the gate steps owed, and what each asks:");
+for (const step of steps) console.log(`    ${step.padEnd(18)} [${ASKS[step][0]}] ${ASKS[step][1]}`);
+console.log(`  in one run:\n    ${gate}`);
+// Which questions the change owes, by kind: four instruments asking one
+// question is the failure this prints against.
+const kinds = new Map();
+for (const k of [...steps.map((st) => ASKS[st][0]), ...rules.flatMap((r) => r.arms.filter((a) => !a.if).map((a) => a.kind))]) kinds.set(k, (kinds.get(k) ?? 0) + 1);
+console.log(`\n  owed, by what they ask: ${[...kinds].map(([k, n]) => `${n} ${k}`).join(", ")}`);
+const compiler = rules.some((r) => ["lowering", "the C backend", "the LLVM backend", "the JVM backend", "the frontend or the snapshot schema", "the C runtime"].includes(r.name));
+if (compiler && !rules.some((r) => r.arms.some((a) => a.kind === "answers" && !a.if && /<before> <after>/.test(a.run)))) {
+  console.log("  NOTE: nothing owed here compares what programs answer across the change; counts rise with unsoundness too");
+}
 if (argv.includes("--run")) {
   console.log(`\n  running them in ${TREE}\n`);
   const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env: { ...process.env, NTS_GATE_STEPS: steps.join(" ") } });
