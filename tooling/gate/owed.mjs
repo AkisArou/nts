@@ -29,10 +29,16 @@
 // which is whichever session linked last.
 
 import { execFileSync } from "node:child_process";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
+/**
+ * The tree whose change is asked about: the one the command is run from, not
+ * the one this script lives in. "The repo" is two things here -- the rules
+ * travel with the script, the change belongs to the worktree you stand in --
+ * and every lane works in a worktree. Resolving it from the script's path
+ * answered, confidently, about the shared checkout's uncommitted files. The
+ * `--commit` mode reads history and could not show it.
+ */
+const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 
 /**
  * What a change owes, as data. `when` sees one changed path and whether it is
@@ -193,7 +199,7 @@ const ALWAYS = {
 
 /** `{ path, added }` for the change asked about. */
 function changedPaths(argv) {
-  const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" });
+  const git = (...args) => execFileSync("git", args, { cwd: TREE, encoding: "utf8" });
   const parse = (text) => text.split("\n").filter(Boolean).map((l) => {
     const [status, ...rest] = l.split("\t");
     return { path: rest[rest.length - 1], added: status.startsWith("A") };
@@ -246,11 +252,11 @@ if (argv.includes("--self-test")) {
 
 const changes = changedPaths(argv);
 if (changes.length === 0) {
-  console.log("  no change: nothing owed");
+  console.log(`  no change in ${TREE}: nothing owed`);
   process.exit(0);
 }
 const rules = owed(changes);
-console.log(`  ${changes.length} path(s) changed; owed:`);
+console.log(`  ${changes.length} path(s) changed in ${TREE}; owed:`);
 for (const r of rules) {
   console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
   console.log(`    why: ${r.why}`);
