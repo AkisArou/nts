@@ -89,7 +89,8 @@ export function summarise(program, header = "") {
   const helpers = new Map();
   for (const m of program.matchAll(HELPER)) helpers.set(m[0], (helpers.get(m[0]) ?? 0) + 1);
   const bodies = new Map();
-  const add = (name, text) => bodies.set(name, [...(bodies.get(name) ?? []), alphaRename(text)]);
+  let order = 0;
+  const add = (name, text) => bodies.set(name, [...(bodies.get(name) ?? []), { renamed: alphaRename(text), raw: text, order: order++ }]);
   const declarations = [header];
   const lines = program.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -107,8 +108,8 @@ export function summarise(program, header = "") {
     i = end;
   }
   add("(declarations)", declarations.join("\n"));
-  for (const list of bodies.values()) list.sort();
-  return { helpers, bodies, bytes: program.length };
+  for (const list of bodies.values()) list.sort((a, b) => (a.renamed < b.renamed ? -1 : a.renamed > b.renamed ? 1 : 0));
+  return { helpers, bodies, bytes: program.length, text: `${header}\n${program}` };
 }
 
 /** How `after` differs from `before`: helper deltas, changed/added/removed functions, bytes. */
@@ -124,18 +125,26 @@ export function compare(before, after) {
   let added = 0;
   let removed = 0;
   const names = [];
+  const renumbered = [];
+  const sameMultiset = (xs, ys) => xs.length === ys.length && [...xs].sort().every((x, i) => x === [...ys].sort()[i]);
   for (const name of new Set([...before.bodies.keys(), ...after.bodies.keys()])) {
     const a = before.bodies.get(name) ?? [];
     const b = after.bodies.get(name) ?? [];
     // A multiset difference: `Closure#__call` names many bodies.
-    const left = [...a];
+    const left = a.map((x) => x.renamed);
     let only = 0;
-    for (const body of b) {
+    for (const body of b.map((x) => x.renamed)) {
       const at = left.indexOf(body);
       if (at >= 0) left.splice(at, 1);
       else only += 1;
     }
-    if (left.length === 0 && only === 0) continue;
+    if (left.length === 0 && only === 0) {
+      // The same program up to renaming -- and still a fact when the text
+      // moved: a value added or removed where no C shows it shifts every id
+      // after it, and that shift is the only evidence it happened.
+      if (!sameMultiset(a.map((x) => x.raw), b.map((x) => x.raw))) renumbered.push({ name, order: Math.min(...b.map((x) => x.order)) });
+      continue;
+    }
     names.push(name);
     const both = Math.min(left.length, only);
     changed += both;
@@ -143,7 +152,9 @@ export function compare(before, after) {
     added += only - both;
   }
   const functions = before.bodies.size;
-  return { helpers, changed, added, removed, names: names.sort(), functions, bytes: after.bytes - before.bytes, differs: names.length > 0 };
+  renumbered.sort((x, y) => x.order - y.order);
+  const identical = before.text === after.text;
+  return { helpers, changed, added, removed, names: names.sort(), functions, bytes: after.bytes - before.bytes, differs: names.length > 0, renumbered: renumbered.map((r) => r.name), renumberedOnly: names.length === 0 && !identical, identical };
 }
 
 // **Seen to tell renumbering from change before it is trusted.**
@@ -161,6 +172,12 @@ function selfTest() {
   const base = summarise(prog(12, 3, 7));
   const renumbered = compare(base, summarise(prog(19, 5, 2)));
   if (renumbered.differs) return `a renumbering read as a change: ${renumbered.names.join(", ")}`;
+  // ...and never as "the same": the shift is the only evidence a value came or went.
+  if (!renumbered.renumberedOnly || !renumbered.renumbered.includes("f#")) return `a renumbering read as nothing: ${JSON.stringify(renumbered.renumbered)}`;
+  const same = compare(base, summarise(prog(12, 3, 7)));
+  if (!same.identical || same.renumberedOnly || same.differs) return "an identical program read as moved";
+  const shifted = compare(base, summarise(prog(12, 4, 7)));
+  if (shifted.renumbered.join() !== "f#" || shifted.differs) return `one function's shifted value: ${JSON.stringify(shifted)}`;
   const literal = compare(base, summarise(prog(12, 3, 7, "2")));
   if (!literal.differs || literal.names.join() !== "f#" || literal.changed !== 1) return `a changed literal: ${JSON.stringify(literal.names)}`;
   const swapped = summarise(prog(12, 3, 7).replace("return v3", "return v0"));
@@ -179,7 +196,7 @@ if (broken) {
   process.exit(2);
 }
 if (argv.includes("--self-test")) {
-  console.log("  self-test: a renumbering is the same program; a literal, a swapped operand, a new call and a declaration each differ");
+  console.log("  self-test: a renumbering is the same program and reported as renumbered, never as identical; a literal, a swapped operand, a new call and a declaration each differ");
   process.exit(0);
 }
 
@@ -264,6 +281,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, asy
 console.log(`  before ${beforeBin}, after ${afterBin} (both pinned), ${projects.length} project(s) in ${Math.round((Date.now() - started) / 1000)} s`);
 const unmeasured = [];
 const differing = [];
+const renumberedOnly = [];
 for (const project of projects) {
   const { before, after } = results.get(project);
   if (before.unmeasured || after.unmeasured) {
@@ -271,6 +289,10 @@ for (const project of projects) {
     continue;
   }
   const d = compare(before, after);
+  if (d.renumberedOnly) {
+    renumberedOnly.push({ project, d });
+    continue;
+  }
   if (!d.differs) continue;
   differing.push(project);
   const helpers = d.helpers.slice(0, 6).map((h) => `${h.name} ${h.before} -> ${h.after}`).join(", ");
@@ -278,9 +300,21 @@ for (const project of projects) {
   console.log(`    functions  ${d.changed} changed, ${d.added} added, ${d.removed} removed, of ${d.functions}; ${d.bytes >= 0 ? "+" : ""}${d.bytes} bytes`);
   console.log(`    helpers    ${helpers || "no call count moved"}${d.helpers.length > 6 ? `, +${d.helpers.length - 6} more` : ""}`);
   console.log(`    in         ${d.names.slice(0, 8).join(", ")}${d.names.length > 8 ? `, +${d.names.length - 8} more` : ""}`);
+  if (d.renumbered.length > 0) console.log(`    renumbered ${d.renumbered.slice(0, 4).join(", ")}${d.renumbered.length > 4 ? `, +${d.renumbered.length - 4} more` : ""}`);
+}
+// **Renumbered only is a finding, not a "no".** The same program up to
+// renaming, and different text: a value was added or removed where no C
+// shows it, and every id after it shifted. The first function in file order
+// is where the shift starts. On 2026-09-28 this was the whole of the evidence
+// for a `ConstUndefined` produced at a generator's frame pointer -- no count
+// moved, and a diff that normalised it away would have said nothing changed.
+for (const { project, d } of renumberedOnly) {
+  console.log(`\n  ${project}: RENUMBERED ONLY -- a value came or went where no C shows it`);
+  console.log(`    starts in  ${d.renumbered[0] ?? "(the text moved, no function's body did)"}${d.renumbered.length > 1 ? `; ${d.renumbered.length} function(s) shifted: ${d.renumbered.slice(0, 6).join(", ")}${d.renumbered.length > 6 ? ", ..." : ""}` : ""}`);
 }
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
-console.log(`\n  ${differing.length} of ${projects.length - unmeasured.length} measured project(s) emit a different program; ${projects.length - unmeasured.length - differing.length} the same`);
+const measuredCount = projects.length - unmeasured.length;
+console.log(`\n  of ${measuredCount} measured project(s): ${differing.length} emit a different program, ${renumberedOnly.length} the same program renumbered, ${measuredCount - differing.length - renumberedOnly.length} byte-identical`);
 
 const axisModules = differing.filter((p) => p.startsWith("runtime/node/")).map((p) => p.slice("runtime/node/".length));
 if (!argv.includes("--axis")) {
