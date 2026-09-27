@@ -149,6 +149,39 @@ pub fn snapshot<S: SemanticSource>(
             std::fs::read(file).is_ok_and(|bytes| hash_of(&bytes) == *seen)
         })
     {
+        // **Touched, which is what makes the sweep an LRU rather than a cull by
+        // age.** An entry is written once and then only *read*, so its mtime is
+        // its creation time and a hot entry looks exactly as old as a dead one.
+        // Without this, `bound_the_cache` would evict whatever happened to be
+        // compiled first, which for this tree is the same handful of fixtures on
+        // every gate run.
+        //
+        // **At most hourly, and that is the granularity rather than a dodge.** A
+        // cap measured in gigabytes needs to tell "used this week" from "compiled
+        // once in June"; recording access to the *second* is precision it cannot
+        // spend, bought with a write on every hit. And a write on every hit is
+        // exactly what `a_second_build_hits_the_snapshot_cache_rather_than_
+        // rewriting_it` forbids: that test proves a hit by the entry's timestamp
+        // not moving between two builds a second apart, and it cannot prove it by
+        // content, because a *miss* now rewrites byte-identical content -- the
+        // digest was made deterministic in `05ecc8ed1`. So an unconditional touch
+        // would take away the only signal that test has, and an hourly one leaves
+        // it untouched while still answering the question the sweep asks.
+        //
+        // Failure is ignored on purpose: a cache whose timestamps cannot be
+        // updated should still answer, and the only cost is that the sweep falls
+        // back to by-age for that entry.
+        const REFRESH_AFTER: std::time::Duration = std::time::Duration::from_hours(1);
+        let stale = std::fs::metadata(&path)
+            .and_then(|meta| meta.modified())
+            .is_ok_and(|at| {
+                std::time::SystemTime::now()
+                    .duration_since(at)
+                    .is_ok_and(|since| since > REFRESH_AFTER)
+            });
+        if stale && let Ok(file) = std::fs::File::options().write(true).open(&path) {
+            let _ = file.set_modified(std::time::SystemTime::now());
+        }
         return Ok(entry.snapshot);
     }
 
@@ -205,7 +238,92 @@ pub fn snapshot<S: SemanticSource>(
             let _ = std::fs::write(&path, bytes);
         }
     }
+    // After the store, so this run's own entry carries a current stamp and is the
+    // last thing a sweep would take rather than the first.
+    bound_the_cache(&dir);
     Ok(snapshot)
+}
+
+/// Hold the cache under a size cap, least-recently-used first.
+///
+/// **An entry's path is keyed by the project and the questions asked, so a miss
+/// *overwrites* rather than adds** -- which is why the count is not bounded by how
+/// often the compiler is rebuilt, and is bounded by how many distinct projects have
+/// ever been compiled. That is the growth nobody was watching: one-off projects.
+/// Probes, reductions, fixtures and test262 cases are each their own project,
+/// compiled once and never again, and each leaves an entry that no run will ever
+/// read. `/tmp/nts-snapshots` reached **8.4 GiB in 17,095 entries** that way, on a
+/// per-UID quota with no grace period, and `c7856d689` moved the cache somewhere
+/// with room rather than giving it a bound. That commit said so in as many words:
+/// the move makes the growth *survivable, not safe*.
+///
+/// **Eviction by stale schema was the obvious policy and is not available.** A
+/// schema-stale entry can never be read by any binary, so it looks like the safe
+/// thing to delete -- but the schema is *inside* the entry, and finding it means
+/// deserialising every file in the directory. Seventeen thousand postcard decodes
+/// on the path of a compile is not a cache, it is a tax. The name carries a hash
+/// and nothing else, deliberately, so the cheap questions are size and time.
+///
+/// **And eviction by compiler stamp would be wrong rather than merely slow.**
+/// `built_by` changes on every relink, so "not mine" is most of the directory --
+/// and the binaries sharing this cache are not one compiler over time but several
+/// at once: `pin.mjs` builds one per revision, and a differential runs two arms
+/// against each other. Evicting the other arm's entries would make every
+/// comparison cold in the direction it was just measured in.
+///
+/// So: a size cap, oldest-accessed first, once per process and only after a miss.
+/// A hit already cost nothing and should keep costing nothing; a miss has just run
+/// the whole frontend, and a directory scan beside that is not measurable.
+///
+/// The default is 2 GiB, against the 8.4 GiB observed and the ~170 MiB a full
+/// corpus run leaves. `NTS_SNAPSHOT_CACHE_MAX` overrides it, in bytes, for a
+/// machine where either number is the wrong one.
+fn bound_the_cache(dir: &Utf8Path) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static SWEPT: AtomicBool = AtomicBool::new(false);
+    if SWEPT.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let cap: u64 = std::env::var("NTS_SNAPSHOT_CACHE_MAX")
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(2 * 1024 * 1024 * 1024);
+    sweep(dir, cap);
+}
+
+/// The sweep itself, separated from the once-per-process guard and the environment
+/// so that it can be *run* by a test.
+///
+/// A policy behind a `static` that fires once is a policy no test can call twice,
+/// and a cap read from the environment is one a test has to mutate a global to
+/// choose. Both are the wrapper's business; this takes the directory and the number.
+fn sweep(dir: &Utf8Path, cap: u64) {
+    let Ok(listing) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut found: Vec<(std::time::SystemTime, u64, std::path::PathBuf)> = Vec::new();
+    let mut total: u64 = 0;
+    for entry in listing.flatten() {
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_file() {
+            continue;
+        }
+        let when = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        total = total.saturating_add(meta.len());
+        found.push((when, meta.len(), entry.path()));
+    }
+    if total <= cap {
+        return;
+    }
+    found.sort_by_key(|(when, _, _)| *when);
+    for (_, size, path) in found {
+        if total <= cap {
+            break;
+        }
+        if std::fs::remove_file(&path).is_ok() {
+            total = total.saturating_sub(size);
+        }
+    }
 }
 
 /// What identifies the compiler that built a snapshot.
@@ -488,5 +606,72 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).ok();
         assert_eq!(before, after, "only sources belong in the listing");
+    }
+}
+
+#[cfg(test)]
+mod bounding {
+    use super::sweep;
+    use camino::Utf8PathBuf;
+    use std::time::{Duration, SystemTime};
+
+    /// A directory of this test's own, named after it so two cannot share one.
+    /// The `tempfile` crate is not a dependency here and a test is not a reason to
+    /// make it one.
+    fn scratch(name: &str) -> Utf8PathBuf {
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .expect("a utf8 temporary directory")
+            .join(format!("nts-cache-sweep-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create");
+        dir
+    }
+
+    /// Four entries of 100 bytes, staggered an hour apart so the order is
+    /// unambiguous: entry 0 is the oldest, entry 3 the newest.
+    fn four(dir: &Utf8PathBuf) -> Vec<Utf8PathBuf> {
+        let now = SystemTime::now();
+        let mut made = Vec::new();
+        for index in 0_u64..4 {
+            let path = dir.join(format!("{index}.postcard"));
+            std::fs::write(&path, vec![0_u8; 100]).expect("write");
+            let file = std::fs::File::options().write(true).open(&path).expect("open");
+            file.set_modified(now - Duration::from_secs(3600 * (4 - index)))
+                .expect("stamp");
+            made.push(path);
+        }
+        made
+    }
+
+    #[test]
+    fn the_least_recently_used_go_first() {
+        let dir = scratch("lru");
+        let paths = four(&dir);
+        // 400 bytes held, 250 allowed: the two oldest go and the two newest stay.
+        sweep(&dir, 250);
+        assert!(!paths[0].exists(), "the oldest entry should be gone");
+        assert!(!paths[1].exists(), "the second-oldest entry should be gone");
+        assert!(paths[2].exists(), "a recent entry should be kept");
+        assert!(paths[3].exists(), "the newest entry should be kept");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn under_the_cap_nothing_moves() {
+        // The control, and the arm that matters most: a sweep that evicts while
+        // under its cap is a cache that never hits, which passes every other test
+        // in this module and every test outside it.
+        let dir = scratch("under");
+        let paths = four(&dir);
+        sweep(&dir, 4096);
+        for path in &paths {
+            assert!(path.exists(), "{path} should survive a cap it is under");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_directory_that_is_not_there_is_not_an_error() {
+        sweep(&Utf8PathBuf::from("/nonexistent/nts-snapshots-should-not-exist"), 0);
     }
 }
