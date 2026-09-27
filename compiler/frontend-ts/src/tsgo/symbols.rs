@@ -429,6 +429,38 @@ pub(super) fn intern_declared(
 /// would otherwise land in the snapshot and from there in every artifact derived
 /// from it. RFC §20.4 forbids that for sources; a symbol name is no different.
 fn normalize_name(name: &str, root: &camino::Utf8Path) -> String {
+    // **The private-name counter first, because it is not reproducible.** A
+    // private member is interned as `__#21@#encoding`: the number is there
+    // because a file's private names share one symbol table and two classes may
+    // both declare `#encoding`. tsgo assigns it in an order that varies between
+    // runs, so the same field came back `__#21@#encoding` one run and
+    // `__#1@#encoding` the next -- and `SemanticSnapshot::digest` serialises
+    // every symbol, so the snapshot cache key changed on every build and the
+    // cache **never hit**.
+    //
+    // Three measurements found it, each doing what the others could not. The
+    // Apple lane saw it from outside, and their detail that *their own programs
+    // were stable* is what made it tractable. The Assistant lane bounded the
+    // population: unstable in exactly the 15 projects that include
+    // web-platform's 70 files, stable in the 12 that include at most 4, and
+    // stable across 595 examples and blockers -- `url` being mid-sized and
+    // stable killed "it is a size effect" before anyone spent time on it. A
+    // per-field digest probe then put it in `symbols` alone, every other field
+    // byte-stable, and a per-record one in 436 of 19,207 records, each differing
+    // only in this number.
+    //
+    // **`emit-c` is byte-identical across runs**, which is why nothing caught it:
+    // a cache that never hits passes every correctness test.
+    //
+    // `written_name` is the normaliser `decompose` already applies to a *member*
+    // name, and its doc states why this is safe in as many words: "a layout is
+    // per type, so nothing downstream needs it and everything downstream is
+    // looking for what the program wrote". Applying it here makes that true of
+    // the record too, which also keeps the mangling out of diagnostics --
+    // `lower.rs` records 16 `test/language` files once refused as ``  `name`,
+    // which `__#1@#method` does not declare ``, a sentence naming the frontend's
+    // mangling of the very declaration that answers the question.
+    let name = super::decompose::written_name(name);
     let unquoted = name.trim_matches('"');
     match unquoted.strip_prefix(root.as_str()) {
         Some(relative) => format!("nts-workspace://{relative}"),
@@ -445,6 +477,22 @@ pub fn module_count(snapshot: &SemanticSnapshot) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_private_members_mangled_counter_is_not_kept() {
+        // tsgo numbers a file's private names in an order that varies between
+        // runs, so keeping the number made the snapshot's digest -- and with it
+        // the cache key -- change on every build. Two runs' spellings of one
+        // field must normalise to one name.
+        let root = camino::Utf8Path::new("/w");
+        assert_eq!(normalize_name("__#21@#encoding", root), "#encoding");
+        assert_eq!(normalize_name("__#1@#encoding", root), "#encoding");
+        // And an ordinary name is untouched, including one that merely begins
+        // with underscores or carries a number that is not the counter.
+        assert_eq!(normalize_name("encoding", root), "encoding");
+        assert_eq!(normalize_name("__proto__", root), "__proto__");
+        assert_eq!(normalize_name("__#notanumber@#x", root), "__#notanumber@#x");
+    }
 
     #[test]
     fn a_declaration_handle_yields_its_index() {

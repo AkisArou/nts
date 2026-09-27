@@ -1741,7 +1741,7 @@ fn to_constant(value: &serde_json::Value) -> Option<ConstantValue> {
 /// of that refusal and the largest single blocker in it. It also made `own`
 /// false for every private member, because that is decided by comparing
 /// against the *declaration's* name, which is never mangled.
-fn written_name(interned: &str) -> &str {
+pub(super) fn written_name(interned: &str) -> &str {
     let Some(rest) = interned.strip_prefix("__#") else {
         return interned;
     };
