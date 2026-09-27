@@ -4,6 +4,7 @@
 //   node tooling/gate/owed.mjs                  uncommitted and untracked changes
 //   node tooling/gate/owed.mjs --since <rev>    everything since <rev>, plus uncommitted
 //   node tooling/gate/owed.mjs --commit <rev>   one commit's changes
+//   node tooling/gate/owed.mjs --run            also run the owed gate steps
 //   node tooling/gate/owed.mjs --self-test
 //
 // # Why
@@ -23,12 +24,24 @@
 // the moment. A list of rules is read by nobody, so this takes the change as
 // its input: the paths `git` says were touched, and whether they are new.
 //
-// It prints, it does not run: most of the value is the list, and the arms
-// take minutes to an hour. `<before>` is a clean build of the base the change
-// sits on and `<after>` a clean build with it -- never `target/release/nts`,
-// which is whichever session linked last.
+// # Two kinds of arm
+//
+// **Gate steps**, by the name `all.sh` gives them. `--run` runs exactly those,
+// in one `NTS_GATE_STEPS=... sh tooling/gate/all.sh` in the tree, so what runs
+// is the gate's own command and not one resembling it, and a misspelt name
+// fails there rather than selecting nothing. `build` goes first: most steps
+// drive this tree's `target/release/nts`. The environment passes through, and
+// a worktree's missing inputs are the gate's to name, not this script's: a
+// fresh one stops at "no frontend at <tree>/target/tsgo", and `NTS_TSGO=` the
+// main tree's, as `pinned.sh` passes it, is the answer.
+//
+// **Everything else** is printed and left to the author: a comparison of two
+// binaries, a sabotage, an announcement. The gate is a floor, not a
+// comparison, so what it cannot say is exactly this list. `<before>` is a
+// clean build of the base the change sits on and `<after>` a clean build with
+// it -- never `target/release/nts`, which is whichever session linked last.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 /**
  * The tree whose change is asked about: the one the command is run from, not
@@ -42,129 +55,99 @@ const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
 
 /**
  * What a change owes, as data. `when` sees one changed path and whether it is
- * new; `arms` are the commands, shown once however many paths matched.
+ * new; `steps` are gate steps and `arms` what the gate cannot do, each shown
+ * once however many paths matched.
  */
 export const RULES = [
   {
     name: "a new example",
     when: (p, added) => added && /^examples\/[^/]+\/tsconfig\.json$/.test(p),
     why: "an example is an input to every backend step and must agree on each; one that passes before the change as well measured nothing",
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity"],
     arms: [
-      "node tooling/differential/agree.mjs <after> --only=<example>",
-      "NTS_BACKEND=llvm node tooling/differential/agree.mjs <after> --only=<example>",
-      "NTS_BACKEND=llvm NTS_RC=1 node tooling/differential/agree.mjs <after> --only=<example>",
-      "NTS_BACKEND=jvm node tooling/differential/agree.mjs <after> --only=<example>",
-      "NTS_RC=1 node tooling/differential/agree.mjs <after> --only=<example>",
       "node tooling/differential/agree.mjs <before> <after> --only=<example>   # must not read `unchanged` if it guards the change",
-      "node tooling/conformance/integrity.mjs examples/<example>",
       "commit it before a pinned gate run: a worktree gate cannot see an uncommitted example",
     ],
   },
   {
     name: "an example changed",
     when: (p, added) => !added && /^examples\/[^/]+\//.test(p),
-    why: "the same six backend arms read it",
-    arms: [
-      "node tooling/differential/agree.mjs <after> --only=<example>   # and NTS_BACKEND=llvm, jvm, NTS_RC=1",
-    ],
+    why: "the same backend steps read it",
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc"],
+    arms: [],
   },
   {
     name: "lowering",
     when: (p) => /^compiler\/core\//.test(p),
     why: "a lowering change moves refusals, definitions and answers; each is a different instrument",
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions"],
     arms: [
       "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1",
       "node tooling/conformance/refusal-diff.mjs <before> <after>   # 0 moves is not no effect",
-      "NTS_BIN=<after> node tooling/census/definitions.mjs   # a rise is read, not raised",
-      "NTS_BIN=<after> node tooling/conformance/outcomes-check.mjs",
-      "NTS_BIN=<after> node tooling/conformance/integrity.mjs; ... --runtime",
       "a full test262 census against a baseline if it should make programs compile (--recorded cannot see a gain)",
-      "cargo test -p nts-core",
     ],
   },
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    why: "the differential on that backend, under both memory providers",
-    arms: [
-      "node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...",
-      "NTS_BIN=<after> node tooling/conformance/outcomes-check.mjs",
-      "NTS_BIN=<after> node tooling/conformance/snapshot-cache.mjs   # emitted C byte-identical across the cache",
-      "cargo test -p nts-codegen-c",
-    ],
+    why: "the differential on that backend, under both memory providers, and emitted C byte-identical across the cache",
+    steps: ["examples", "rc", "outcomes", "snapshot-cache"],
+    arms: ["node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..."],
   },
   {
     name: "the LLVM backend",
     when: (p) => /^compiler\/codegen\/llvm\//.test(p),
     why: "the differential only reaches examples; the runtime's IR is only ever assembled by `assembles`",
-    arms: [
-      "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...",
-      "NTS_BIN=<after> node tooling/conformance/assembles.mjs",
-      "cargo test -p nts-codegen-llvm",
-    ],
+    steps: ["llvm", "llvm-rc", "assembles"],
+    arms: ["NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..."],
   },
   {
     name: "the JVM backend",
     when: (p) => /^compiler\/codegen\/jvm\//.test(p),
     why: "the JVM verifier sees type confusions C and LLVM agree on by luck",
-    arms: [
-      "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>",
-      "cargo test -p nts-codegen-jvm",
-    ],
+    steps: ["jvm", "dex"],
+    arms: ["NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>"],
   },
   {
     name: "the frontend or the snapshot schema",
     when: (p) => /^compiler\/(frontend-ts|semantic-schema)\//.test(p),
     why: "a schema field bumps SCHEMA_VERSION; a cache identity is a claim nothing else cross-checks",
-    arms: [
-      "bump SCHEMA_VERSION if a semantic-schema struct changed",
-      "NTS_BIN=<after> node tooling/conformance/snapshot-cache.mjs",
-      "node tooling/differential/agree.mjs <before> <after>",
-    ],
+    steps: ["snapshot-cache", "examples"],
+    arms: ["bump SCHEMA_VERSION if a semantic-schema struct changed"],
   },
   {
     name: "a runtime helper",
     when: (p) => /^runtime\/c\/nts_runtime\.h$/.test(p),
-    why: "a new nts_* helper owes four cross-check tables and two core tests; missing them has turned main red twice",
+    why: "a new nts_* helper owes four cross-check tables and two core tests (all in `tests`), and `bench-agree` builds every backend",
+    steps: ["tests", "bench-agree"],
     arms: [
-      "cargo test -p nts-core --test runtime_signatures",
-      "cargo test -p nts-codegen-llvm --test signatures",
-      "cargo test -p nts-codegen-c --lib   # ERASES_CLASS for an NtsHeader * parameter",
-      "cargo test -p nts-codegen-jvm --test runtime_agrees_with_hir   # REFUSED_FLOOR",
-      "cargo test -p nts-core --lib   # the table is sorted; an nts_array_* helper says whether it changes a length",
+      "the tables `tests` reads: nts-core runtime_signatures, nts-codegen-llvm signatures, nts-codegen-c ERASES_CLASS, nts-codegen-jvm REFUSED_FLOOR; nts-core's sorted table",
     ],
   },
   {
     name: "the C runtime",
     when: (p) => /^runtime\/c\//.test(p),
     why: "runtime/c is include_str!-ed into the compiler, and the gate formats it",
-    arms: [
-      "clang-format the runtime/c files you touched (the gate's `format` step)",
-      "rebuild nts: runtime/c is compiled into the binary, so an old one tests the old runtime",
-      "node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...; NTS_BACKEND=llvm ...",
-      "NTS_BIN=<after> node tooling/conformance/assembles.mjs",
-    ],
+    steps: ["format", "examples", "rc", "llvm", "assembles"],
+    arms: ["node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ...; NTS_BACKEND=llvm ..."],
   },
   {
     name: "a runtime module",
     when: (p) => /^runtime\/(node|web-platform)\//.test(p),
     why: "the runtime is a corpus: its definitions, integrity, IR and addons are each measured separately",
-    arms: [
-      "NTS_BIN=<after> node tooling/census/definitions.mjs",
-      "NTS_BIN=<after> node tooling/conformance/integrity.mjs --runtime",
-      "NTS_BIN=<after> node tooling/conformance/assembles.mjs",
-      "the `addons` step (build-floor.sh), which also asks whether each module publishes anything",
-      "node tooling/conformance/compiled-axis-floor.mjs   # node's own tests per module; lane-local, ~16 min",
-    ],
+    steps: ["definitions", "integrity-runtime", "assembles", "addons"],
+    arms: ["node tooling/conformance/compiled-axis-floor.mjs   # node's own tests per module; lane-local, ~16 min"],
   },
   {
     name: "an instrument",
     when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|sh)$/.test(p),
     why: "an instrument first finds itself; a loop that has never had input is untested code",
+    steps: [],
     arms: [
-      "its --self-test, if it has one",
+      "its --self-test, if it has one, and the gate step that runs it",
       "a sabotage arm: break the thing it guards and watch it fail, naming the thing",
       "feed any list it loops over one entry, in a scratch copy, before relying on it",
+      "run it from a worktree, and every mode it has: the one its author tests is the easy one",
       "if it parses a node helper's output: process.stdout.write(String(x)), never console.log(x)",
     ],
   },
@@ -172,9 +155,9 @@ export const RULES = [
     name: "the gate script",
     when: (p) => p === "tooling/gate/all.sh",
     why: "shared by every lane, and bash reads a running script incrementally",
+    steps: [],
     arms: [
-      "sh -n tooling/gate/all.sh",
-      "NTS_GATE_STEPS=\"<the steps you touched>\" sh tooling/gate/all.sh, from a worktree",
+      "sh -n tooling/gate/all.sh, then the steps you touched with NTS_GATE_STEPS, from a worktree",
       "announce it to the lanes; never edit it while a run from this tree is executing",
     ],
   },
@@ -182,19 +165,20 @@ export const RULES = [
     name: "an outcomes fixture",
     when: (p) => /^tooling\/conformance\/outcomes\//.test(p),
     why: "a record is a claim about main: recorded from a clean build, with a control that differs in one thing",
+    steps: ["outcomes", "integrity"],
     arms: [
-      "NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.mjs --record <name>",
+      "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.mjs --record <name>",
       "the control arm, measured: the same program differing in one thing agrees",
-      "node tooling/conformance/integrity.mjs tooling/conformance/outcomes/<name>   # name a deliberate cut in integrity.known",
     ],
   },
 ];
 
-/** Every change, whatever it touched. */
+/** Every change, whatever it touched: the gate's first two steps. */
 const ALWAYS = {
   name: "every change",
-  why: "the gate runs these first, and a one-line edit is not exempt",
-  arms: ["cargo clippy --workspace --all-targets   # the gate fails on any warning", "cargo test --workspace"],
+  why: "a one-line edit is not exempt; the gate fails clippy on any warning, and `tests` stops at the first failing target",
+  steps: ["clippy", "tests"],
+  arms: [],
 };
 
 /** `{ path, added }` for the change asked about. */
@@ -224,6 +208,17 @@ export function owed(changes) {
   return out;
 }
 
+/**
+ * The gate steps a set of rules owes, deduplicated, `build` first and the
+ * cheap always-owed ones next: `all.sh` stops at the first failing step, so
+ * clippy failing in a minute beats it failing after an hour of backends.
+ */
+export function gateSteps(rules) {
+  const always = new Set(ALWAYS.steps);
+  const rest = rules.flatMap((r) => r.steps).filter((s) => !always.has(s));
+  return rules.length === 0 ? [] : ["build", ...ALWAYS.steps, ...new Set(rest)];
+}
+
 // **Seen to select before it is trusted**, on the three changes that motivated it.
 function selfTest() {
   const names = (changes) => owed(changes).map((r) => r.name).join(", ");
@@ -236,6 +231,8 @@ function selfTest() {
   const helper = names([{ path: "runtime/c/nts_runtime.h", added: false }]);
   if (!helper.includes("a runtime helper") || !helper.includes("the C runtime")) return `a runtime header change: ${helper}`;
   if (owed([]).length !== 0) return "an empty change owed something";
+  const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
+  if (order.join(" ") !== "build clippy tests llvm llvm-rc assembles") return `the LLVM backend's steps: ${order.join(" ")}`;
   return null;
 }
 
@@ -250,15 +247,31 @@ if (argv.includes("--self-test")) {
   process.exit(0);
 }
 
+// The gate runs the tree as it stands, which is not the tree of a past commit.
+if (argv.includes("--run") && argv.includes("--commit")) {
+  console.log("  --run with --commit would gate today's tree for another commit's change; check that commit out in a worktree and run from there");
+  process.exit(2);
+}
 const changes = changedPaths(argv);
 if (changes.length === 0) {
   console.log(`  no change in ${TREE}: nothing owed`);
   process.exit(0);
 }
 const rules = owed(changes);
-console.log(`  ${changes.length} path(s) changed in ${TREE}; owed:`);
+const steps = gateSteps(rules);
+const gate = `NTS_GATE_STEPS="${steps.join(" ")}" sh tooling/gate/all.sh`;
+console.log(`  ${changes.length} path(s) changed in ${TREE}`);
 for (const r of rules) {
   console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
   console.log(`    why: ${r.why}`);
+  if (r.steps.length > 0) console.log(`    gate: ${r.steps.join(" ")}`);
   for (const a of r.arms) console.log(`    [ ] ${a}`);
+}
+console.log(`\n  the gate steps owed, in one run:\n    ${gate}`);
+if (argv.includes("--run")) {
+  console.log(`\n  running them in ${TREE}\n`);
+  const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env: { ...process.env, NTS_GATE_STEPS: steps.join(" ") } });
+  const left = rules.flatMap((r) => r.arms).length;
+  console.log(`\n  gate steps: ${run.status === 0 ? "green" : `FAILED (exit ${run.status ?? run.signal})`}; ${left} arm(s) above are still yours`);
+  process.exit(run.status === 0 ? 0 : 1);
 }
