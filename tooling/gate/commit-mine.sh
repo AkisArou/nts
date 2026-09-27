@@ -76,13 +76,17 @@ done
 # the `records` check reads the tree and passed.
 #
 # "Tracking" means HEAD or the index. After `git mv` the old name is gone from
-# the *index* too, so asking only the index refused exactly the rename this
-# paragraph was written for (2026-09-27, an outcomes fixture renamed).
+# the *index* too, and `git commit -- <path>` matches its pathspec against the
+# index -- so a rename was refused twice, here and then by git (2026-09-27, an
+# outcomes fixture renamed). A path HEAD has and the index does not is put
+# back in the index as HEAD has it: only that path, and harmless, because the
+# partial commit records its working-tree state, which is "deleted".
 for path in "$@"; do
   [ -e "$path" ] && continue
-  git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 \
-    || git cat-file -e "HEAD:$path" 2>/dev/null \
+  git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 && continue
+  git cat-file -e "HEAD:$path" 2>/dev/null \
     || { echo "commit-mine: $path does not exist and git does not know it" >&2; exit 2; }
+  git reset -q HEAD -- "$path"
 done
 
 # A partial commit can only name paths git already knows, so a new file needs
