@@ -1,0 +1,9 @@
+attributes label
+action label text.bold
+attributes label
+action label text.italic
+attributes label
+action label text.color red
+attributes label
+action label text.bold
+attributes label

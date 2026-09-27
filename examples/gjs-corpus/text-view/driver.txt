@@ -1,0 +1,9 @@
+click copy
+click cut
+click select
+click copy
+click cut
+click copy
+click paste
+click clear
+click cut

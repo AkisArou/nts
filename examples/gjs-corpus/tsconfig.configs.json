@@ -30,6 +30,7 @@
     "level-bars/nts.config.ts",
     "list-view/nts.config.ts",
     "menu-button/nts.config.ts",
+    "menu/nts.config.ts",
     "navigation-view/nts.config.ts",
     "overlay-split-view/nts.config.ts",
     "overlay/nts.config.ts",
@@ -45,6 +46,7 @@
     "styling-with-css/nts.config.ts",
     "switch/nts.config.ts",
     "text-colors/nts.config.ts",
+    "text-view/nts.config.ts",
     "toggle-button/nts.config.ts"
   ]
 }

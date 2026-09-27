@@ -15,7 +15,7 @@
 //   close <id>     emit a popover's `closed`
 //   pick <id> <text> emit an emoji chooser's `emoji-picked`
 //   day <id> <y> <m> <d> select a calendar's day
-//   action <id> <name> <text> activate a widget's action with a string
+//   action <id> <name> [text] activate a widget's action, with a string or none
 //   file <id>      print the name of a picture's or image's file
 //   sidebar-position <id> print a split view's `sidebar_position`
 //   text <id> <words> set an entry's text
@@ -103,7 +103,7 @@ application.connect("activate", async () => {
     else if (kind === "close") object.emit("closed");
     else if (kind === "pick") object.emit("emoji-picked", args[0]);
     else if (kind === "day") object.select_day(GLib.DateTime.new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0));
-    else if (kind === "action") object.activate_action(args[0], GLib.Variant.new_string(args[1]));
+    else if (kind === "action") object.activate_action(args[0], args.length > 1 ? GLib.Variant.new_string(args[1]) : null);
     else if (kind === "activate-child") object.get_child_at_index(Number(args[0])).activate();
     else if (kind === "file") console.log(`${id}.file ${object instanceof Gtk.Picture ? object.file?.get_basename() : GLib.path_get_basename(object.file ?? "")}`);
     else if (kind === "sidebar-position") console.log(`${id}.sidebar_position ${object.sidebar_position}`);

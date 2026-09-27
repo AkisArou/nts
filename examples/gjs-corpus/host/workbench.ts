@@ -148,7 +148,7 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
       return true;
     case "action":
       if (!(object instanceof GtkWidget)) return false;
-      object.activate_action(args[0], g_variant_new_string(args[1]));
+      object.activate_action(args[0], args.length > 1 ? g_variant_new_string(args[1]) : null);
       return true;
     case "activate-child": {
       const child = object instanceof GtkFlowBox ? object.get_child_at_index(Number(args[0])) : null;
