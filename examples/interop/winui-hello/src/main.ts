@@ -52,7 +52,7 @@ import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
-import { Button, Frame, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { Button, Frame, Page, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
 import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
 
 // The overridable interface, as XAML reaches an override: bindings keep it
@@ -202,10 +202,11 @@ class App extends Application {
     const navigated = frame.Navigate({ name: "Microsoft.UI.Xaml.Controls.Page", kind: TypeKind.Metadata }, null);
     const page = frame.sourcePageType;
     const current = frame.currentSourcePageType;
+    const onPage = frame.content instanceof Page;
     console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " rebuilt=" + String(this.rebuilt()),
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " rebuilt=" + String(this.rebuilt()),
     );
     this.exit();
   }

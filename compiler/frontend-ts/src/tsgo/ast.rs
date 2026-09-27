@@ -425,6 +425,9 @@ fn carries_native_attributes(kind: NodeKind) -> bool {
                 | nts_semantic_schema::syntax::CONSTRUCT_SIGNATURE
                 | nts_semantic_schema::syntax::CLASS_DECLARATION
                 | nts_semantic_schema::syntax::INTERFACE_DECLARATION
+                // `export type IPage = ComClass<...>`: a Windows Runtime
+                // interface, and the IID it is asked for by (`@ntsQuery`).
+                | nts_semantic_schema::syntax::TYPE_ALIAS_DECLARATION
                 | nts_semantic_schema::syntax::METHOD_DECLARATION
                 | nts_semantic_schema::syntax::PROPERTY_DECLARATION
                 | nts_semantic_schema::syntax::GET_ACCESSOR

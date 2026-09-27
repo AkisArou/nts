@@ -448,7 +448,12 @@ impl Writer<'_> {
             methods.push_str(&self.then_declaration(name, None));
         }
         self.brands.insert("ComClass");
-        let _ = writeln!(body, "  /** IID {iid} */");
+        // A generic interface's IID is its instantiation's, computed where
+        // one is specialized; any other's is the interface's own, which its
+        // type declares below.
+        if !self.generics.is_empty() {
+            let _ = writeln!(body, "  /** IID {iid} */");
+        }
         let _ = writeln!(body, "  export interface {name}Methods{parameters} {{");
         body.push_str(&methods);
         let _ = writeln!(body, "  }}");
@@ -466,6 +471,11 @@ impl Writer<'_> {
         // The tag is the C struct a handle points at, so a C identifier: the
         // namespace kept, since two namespaces may name an interface alike.
         let tag = format!("{}_{name}", self.namespace.replace('.', "_"));
+        // The IID the interface is asked for by, which a query, a
+        // conversion and an `instanceof` of a class whose default it is ask.
+        if self.generics.is_empty() {
+            let _ = writeln!(body, "  /**\n   * @ntsQuery {iid}\n   */");
+        }
         if let Some(base) = &base {
             let _ = write!(body, "  export type {this} = ComClass<\"{tag}\", {base}> & {name}Methods{parameters}");
             for methods in &inherited {

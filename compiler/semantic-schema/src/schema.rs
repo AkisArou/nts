@@ -46,8 +46,9 @@ use crate::origin::Origin;
 /// interface a Windows Runtime class's member is called through. 33:
 /// `listener`, a Windows Runtime class's `addEventListener`. 34: `iterate`, a
 /// Windows Runtime vector's `for...of`. 35: `SourceFile::rewritten_map`,
-/// where a rewritten file's text came from.
-pub const SCHEMA_VERSION: u32 = 35;
+/// where a rewritten file's text came from. 36: a type alias carries its
+/// `native` tags, a Windows Runtime interface's `@ntsQuery` IID.
+pub const SCHEMA_VERSION: u32 = 36;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

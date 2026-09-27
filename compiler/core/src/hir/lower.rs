@@ -1170,8 +1170,15 @@ fn com_interface_ids(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<Strin
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let Some(iid) = node.native.as_ref().and_then(|native| native.query.clone()) else { continue };
         let declaration = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        let Some(signature) = super::generics::declared_signature(snapshot, declaration) else { continue };
-        if let Some(super::native::Pointee::Opaque(handle)) = super::native::pointer(snapshot, signature.return_type)
+        // The interface itself -- `export type IPage = ComClass<...>` -- or
+        // a query answering one (`as_IButton(): IButton`).
+        let interface = if node.kind == NodeKind::Syntax(syntax::TYPE_ALIAS_DECLARATION) {
+            snapshot.node_types.get(&declaration).copied()
+        } else {
+            super::generics::declared_signature(snapshot, declaration).map(|signature| signature.return_type)
+        };
+        let Some(interface) = interface else { continue };
+        if let Some(super::native::Pointee::Opaque(handle)) = super::native::pointer(snapshot, interface)
             && handle.family == super::native::Family::Com
         {
             ids.entry(handle.tag.clone()).or_insert(iid);
