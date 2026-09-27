@@ -4,10 +4,11 @@
 #
 # The arms:
 #
-# - **Binding:** none is committed. `nts build` generates it from what
-#   `src/main.ts` imports from `objc:CoreGraphics`: `CGContext`, `CGColor` and
-#   `CGColorSpace` as the classes Swift makes of them, their methods the C
-#   functions Swift makes members.
+# - **Binding:** none is committed. Core Graphics comes from
+#   `@nts/platform-macos`: `CGContext`, `CGColor` and `CGColorSpace` as the
+#   classes Swift makes of them, their methods the C functions Swift makes
+#   members. `apple-binding.sh` asserts it was read and nothing was
+#   generated for the imports.
 # - **Oracle:** `reference/draw.c`, compiled with the SDK's headers and run on
 #   the same Mac.
 # - **Main (C) and LLVM:** under `--rc` the program prints exactly what the
@@ -55,10 +56,9 @@ build() {
     exit 1
   fi
 }
+touch "$out/.started"
 build "$out" --rc
-ls "$source"/.nts/objc/*/CoreGraphics.d.ts >/dev/null 2>&1 ||
-  { echo "macos-draw: nts build did not generate the CoreGraphics binding in .nts/objc" >&2; exit 1; }
-echo "binding: generated from the program's imports"
+sh "$root/examples/interop/apple-binding.sh" macos-draw "$source" "$out" macos CoreGraphics platform
 for arch in x86_64 aarch64; do
   file -b "$out/draw/macos-13-$arch/draw" | grep -q "Mach-O" ||
     { echo "macos-draw: no $arch Mach-O executable" >&2; exit 1; }

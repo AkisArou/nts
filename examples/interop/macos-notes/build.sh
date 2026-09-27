@@ -4,6 +4,11 @@
 #
 # The arms:
 #
+# - **Binding:** none is committed. AppKit comes from `@nts/platform-macos`,
+#   including what AppKit adds to Foundation's classes: the program prints
+#   `measured true` through `NSString.size(withAttributes:)`, a member of
+#   Foundation's class in AppKit's package. `apple-binding.sh` asserts the
+#   package was read and nothing was generated for the imports.
 # - **First run:** no file, so the throwing read gives an empty list. The
 #   application delegate hears the launch. Three notes are typed and added
 #   by the button's action, the third through the main menu's item, the
@@ -49,8 +54,7 @@ fi
 
 mkdir -p "$out"
 log="$out/build.log"
-# What this build writes is newer than this, so a binding an earlier build
-# generated under .nts is not taken for one of its own.
+# For apple-binding.sh: what this build generates is newer.
 touch "$out/.started"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
@@ -59,16 +63,7 @@ if grep -qE "refused|NTS[0-9]{4}" "$log"; then
   echo "macos-notes: nts build refused part of the program and exited 0" >&2
   exit 1
 fi
-# AppKit from the platform packages (`docs/nts-config.md` 3a), not from a
-# binding generated for the program's imports, which is only the fallback
-# for a framework no package provides.
-[ -f "$source/node_modules/@nts/platform-macos/index.d.ts" ] ||
-  { echo "macos-notes: nts build did not link @nts/platform-macos into node_modules" >&2; exit 1; }
-if [ -n "$(find "$source/.nts/objc" -name AppKit.d.ts -newer "$out/.started" 2>/dev/null)" ]; then
-  echo "macos-notes: nts build generated an AppKit binding for the imports, though the platform package provides AppKit" >&2
-  exit 1
-fi
-echo "binding: the macOS platform packages"
+sh "$root/examples/interop/apple-binding.sh" macos-notes "$source" "$out" macos AppKit platform
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out/rc" --rc >"$out/rc.log" 2>&1 ||
   { cat "$out/rc.log" >&2; exit 1; }
 if grep -qE "refused|NTS[0-9]{4}" "$out/rc.log"; then
