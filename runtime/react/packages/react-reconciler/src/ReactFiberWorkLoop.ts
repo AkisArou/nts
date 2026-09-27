@@ -781,8 +781,11 @@ export function scheduleViewTransitionEvent(
       if (pendingViewTransitionEvents === null) {
         pendingViewTransitionEvents = [];
       }
+      // The closure takes its own consts: natively a capture of a parameter
+      // narrowed from null has no representation (the narrowed value's).
       const boundInstance = instance;
-      pendingViewTransitionEvents.push((types) => callback(boundInstance, types));
+      const boundCallback = callback;
+      pendingViewTransitionEvents.push((types) => boundCallback(boundInstance, types));
     }
   }
 }
