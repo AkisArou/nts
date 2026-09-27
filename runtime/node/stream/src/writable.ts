@@ -768,8 +768,8 @@ function onwrite(stream: WritableImplementation, error?: unknown): void {
   state.writelen = 0;
 
   if (error) {
-    if (error instanceof Error) void error.stack;
-
+    // Node reads `error.stack` first, a V8 workaround with nothing to do in a
+    // binary that captures no frames; `recordError` in `destroy.ts` has why.
     if (!state.errored) state.errored = error;
 
     // A duplex's readable side has to learn about it too, or a consumer

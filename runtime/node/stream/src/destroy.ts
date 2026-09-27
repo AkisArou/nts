@@ -87,13 +87,25 @@ export const kConstruct = Symbol("kConstruct");
  * one.
  *
  * The first error is the one that explains the failure; a later one is usually
- * a consequence. Reading `err.stack` looks pointless and is not: V8 builds the
- * stack lazily, and an error object that outlives the frames it refers to
- * without ever being asked keeps them alive.
+ * a consequence.
+ *
+ * **Node's `checkError` reads `err.stack` here first, and this does not.** That
+ * read is a V8 workaround (nodejs/node#34103): V8 formats a stack lazily, and an
+ * error that is stored without ever being asked for its stack keeps the frames
+ * it captured alive for as long as the error lives. A compiled binary captures
+ * no frames -- its `Error` has no `stack` at all -- so there is nothing to
+ * release, and the read was the first refusal on `destroy`, `errorOrDestroy`
+ * and `onwrite` -- every stream's error path -- standing in front of the
+ * compiler gaps behind it. `errorOrDestroy` below and `onwrite` in
+ * `writable.ts` drop the same read for the same reason.
+ *
+ * On the interpreted lane, where this TypeScript runs on V8, the retention the
+ * read prevented is back: an errored stream holds its error's frames until the
+ * error is collected. That costs memory in a long-lived process; node's stream
+ * tests pass unchanged without it.
  */
 function recordError(error: unknown, w?: DestroyState, r?: DestroyState): void {
   if (!error) return;
-  if (error instanceof Error) void error.stack;
   if (w && !w.errored) w.errored = error;
   if (r && !r.errored) r.errored = error;
 }
@@ -266,8 +278,7 @@ export function errorOrDestroy(
   if ((r?.autoDestroy || w?.autoDestroy) && stream.destroy !== undefined) {
     stream.destroy(error);
   } else if (error) {
-    if (error instanceof Error) void error.stack;
-
+    // Node reads `error.stack` first; see `recordError` for why this does not.
     if (w && !w.errored) w.errored = error;
     if (r && !r.errored) r.errored = error;
 
