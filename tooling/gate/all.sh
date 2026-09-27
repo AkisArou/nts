@@ -1888,6 +1888,22 @@ snapshot_cache() {
   return $status
 }
 
+# Does what `emit-llvm` writes for the runtime assemble? The `llvm` steps run
+# the examples, and nothing emitted -- let alone assembled -- LLVM for
+# runtime/node/* and runtime/web-platform, so 24 of 27 modules produced
+# invalid IR with no instrument noticing: one `validateArray` read the length
+# of an erased value through its tagged pair as a pointer (87cf3bea7). Per
+# module, `emit-llvm` then `llvm-as -o /dev/null`, a parse plus the verifier.
+# It stops at the first error, so a module's first error masks the rest;
+# known failures are named per module in tooling/conformance/assembles.known.
+# See tooling/conformance/assembles.mjs. About 80 s.
+assembles() {
+  out=$(node tooling/conformance/assembles.mjs 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^$/'
+  return $status
+}
+
 # How many functions the compiler emits, per runtime/node module and
 # runtime/web-platform, against tooling/gate/definitions -- the number the
 # `profile` refusal ceiling cannot see. A change can take refusals *and*
@@ -2062,6 +2078,7 @@ step "integrity" integrity
 step "definitions" definitions
 step "integrity-runtime" integrity_runtime
 step "snapshot-cache" snapshot_cache
+step "assembles" assembles
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly

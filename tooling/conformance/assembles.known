@@ -1,0 +1,4 @@
+# Runtime modules whose `nts emit-llvm` output does not assemble, known and owned.
+# One per line: project<TAB>why. Any other module that fails, fails the step;
+# one listed here that assembles again prints "remove it".
+runtime/node/process	a module-scope global and a function share the LLVM symbol @environment (process/src/env.ts's `const environment` and internal/color-depth.ts's `function environment`); C names module globals apart, LLVM does not (compiler lane, 2026-09-27)
