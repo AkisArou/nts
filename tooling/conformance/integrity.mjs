@@ -1,7 +1,7 @@
 // Is what the backend receives whole? Nine facts about a program, checked from
 // the compiler's own listings, each one a defect that shipped silently.
 //
-//   node tooling/conformance/integrity.mjs [project ...]   (default: examples/*, blockers/*)
+//   node tooling/conformance/integrity.mjs [project ...]   (default: examples/*, blockers/*, outcomes/*)
 //   node tooling/conformance/integrity.mjs --runtime       runtime/node/* and runtime/web-platform
 //   node tooling/conformance/integrity.mjs --self-test
 //   NTS_BIN=<a pinned copy> node tooling/conformance/integrity.mjs
@@ -45,6 +45,11 @@
 //                      called `X` that `nts refusals` lists (a generic instance
 //                      matching its generic -- `R<3054>#m` is filed as `R#m`),
 //                      or a read global whose initializer has its own line.
+//                      It asks whether a blamed cause *has* a record, not
+//                      whether the record is the *right* one: an attribution
+//                      that overwrote a nested function's own reason with its
+//                      enclosing function's (ffd44917d, corrected) passed it.
+//                      Truth needs a fixture that varies what a change decides.
 //                      The runtime has 208 distinct causes with none on
 //                      47cba8c15 -- 76 symbol-keyed and 70 private methods,
 //                      51 functions -- whose roots print at lowering and are
@@ -110,9 +115,12 @@
 // violation or a project not measured. Exit 2: the tool could not start.
 
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -491,11 +499,29 @@ const under = (base) =>
     .filter((e) => e.isDirectory() && existsSync(join(ROOT, base, e.name, "tsconfig.json")))
     .map((e) => join(base, e.name));
 const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+/**
+ * What `nts` is pointed at for each project. An outcomes fixture does not
+ * typecheck on its own -- its `main.ts` calls the harness's `observe` and
+ * `done` -- so it is read through the project outcomes-check builds, from
+ * the one definition of it, and reported under its own path.
+ */
+const pathOf = new Map();
+function outcomes() {
+  const base = join(homedir(), ".cache/nts-integrity");
+  mkdirSync(base, { recursive: true });
+  const scratch = mkdtempSync(join(base, "run-"));
+  process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
+  return outcomeFixtures().map((name) => {
+    const label = `tooling/conformance/outcomes/${name}`;
+    pathOf.set(label, materialise(scratch, name, join(OUTCOMES, name, "src"), runMode(name)));
+    return label;
+  });
+}
 const projects = (named.length > 0
   ? named
   : process.argv.includes("--runtime")
     ? [...under("runtime/node"), "runtime/web-platform"]
-    : [...under("examples"), ...under("tooling/conformance/blockers")]
+    : [...under("examples"), ...under("tooling/conformance/blockers"), ...outcomes()]
 ).sort();
 
 /**
@@ -533,7 +559,8 @@ let functions = 0;
 
 async function scan(project) {
   const listings = {};
-  for (const [key, args] of [["prepared", ["hir", "--prepared", project]], ["plain", ["hir", project]], ["layouts", ["layouts", project]], ["refusals", ["refusals", project]]]) {
+  const at = pathOf.get(project) ?? project;
+  for (const [key, args] of [["prepared", ["hir", "--prepared", at]], ["plain", ["hir", at]], ["layouts", ["layouts", at]], ["refusals", ["refusals", at]]]) {
     const done = await run(args);
     if (done.error || done.signal) {
       unmeasured.push(`${project}: nts ${args[0]} ${done.signal ?? done.error?.message}`);

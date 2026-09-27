@@ -101,17 +101,16 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.mjs";
+import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const FIXTURES = join(HERE, "outcomes");
-const HARNESS = readFileSync(join(HERE, "outcomes-harness.ts"), "utf8");
 const PRELOAD = join(HERE, "outcomes-node-preload.mjs");
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const CC = process.env.CC ?? "cc";
@@ -139,26 +138,8 @@ process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
 
 // --- one project in a scratch directory --------------------------------------
 
-/**
- * The fixture's sources, copied, with the harness prepended to `main.ts` in
- * build mode, and a tsconfig whose `extends` is **absolute**: a copied relative
- * `extends` resolves to nothing, silently, and the options vanish.
- */
-function materialise(name, sources, mode) {
-  const dir = join(SCRATCH, name);
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
-  cpSync(sources, join(dir, "src"), { recursive: true });
-  writeFileSync(
-    join(dir, "tsconfig.json"),
-    `${JSON.stringify({ extends: join(ROOT, "tsconfig.fixtures.json"), include: ["src"] }, null, 2)}\n`,
-  );
-  if (mode === "build") {
-    const main = join(dir, "src/main.ts");
-    writeFileSync(main, `${HARNESS}\n${readFileSync(main, "utf8")}`);
-  }
-  return dir;
-}
+/** A fixture as a project under this run's scratch: see outcomes-project.mjs. */
+const materialise = (name, sources, mode) => materialiseIn(SCRATCH, name, sources, mode);
 
 // `NTS_TSGO` from the caller when it names one: `tooling/gate/pinned.sh` runs the
 // gate in a worktree with no `target/` of its own and passes the main tree's
@@ -284,10 +265,8 @@ function runCheck(dir) {
 }
 
 function measure(name) {
-  const fixture = join(FIXTURES, name);
-  const main = readFileSync(join(fixture, "src/main.ts"), "utf8");
-  const mode = /^\/\/\s*run:\s*check\b/m.test(main) ? "check" : "build";
-  const dir = materialise(name, join(fixture, "src"), mode);
+  const mode = runMode(name);
+  const dir = materialise(name, join(FIXTURES, name, "src"), mode);
   if (mode === "check") return { run: "check", ...runCheck(dir), node: null };
   const nts = runBuild(dir);
   if (nts.category === "refused" && nts.ran === null) return { run: "build", category: "not-measured", nts: "a refused program's artefact could not be run to the end", node: null };
@@ -326,9 +305,7 @@ function selfCheck() {
 
 // --- the run ----------------------------------------------------------------------
 
-const all = existsSync(FIXTURES)
-  ? readdirSync(FIXTURES, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
-  : [];
+const all = outcomeFixtures();
 const chosen = named.length > 0 ? named : all;
 if (chosen.length === 0) {
   console.log("  NOT MEASURED: no fixtures under tooling/conformance/outcomes");
