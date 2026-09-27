@@ -2031,3 +2031,32 @@ export class ERR_INTERNAL_ASSERTION extends NodeError {
     super(message === undefined ? suffix : `${message}\n${suffix}`);
   }
 }
+
+/**
+ * `c-ares failed to set servers: "There are pending queries." [ '1.2.3.4' ]`:
+ * the resolver refused a new server list, with c-ares's reason and the list as
+ * the caller gave it.
+ */
+export class ERR_DNS_SET_SERVERS_FAILED extends NodeError {
+  override readonly code = "ERR_DNS_SET_SERVERS_FAILED";
+
+  constructor(reason: string, servers: readonly string[]) {
+    super(`c-ares failed to set servers: "${reason}" [${inspectValue(servers)}]`);
+  }
+}
+
+/**
+ * `ERR_INVALID_ARG_VALUE` as a binding throws it, with a bare message and none
+ * of the template's `The argument ... Received`: the resolver's
+ * `setLocalAddress` validates in C++ and says only `Invalid IP address.`.
+ */
+export class ERR_INVALID_ARG_VALUE_BINDING extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_INVALID_ARG_VALUE";
+
+  constructor(message: string) {
+    super(message);
+  }
+}

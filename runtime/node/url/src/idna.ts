@@ -65,8 +65,13 @@ function isDisallowed(c: number): boolean {
   // Noncharacters: permanently unassigned, and so never part of a name.
   if (c >= 0xfdd0 && c <= 0xfdef) return true;
   if ((c & 0xfffe) === 0xfffe) return true;
-  // C0 and C1 controls, and the space that separates words rather than labels.
-  if (c <= 0x20 || (c >= 0x7f && c <= 0x9f)) return true;
+  // C1 controls. The ASCII controls, the space and DEL are *valid* here --
+  // UTS-46 with STD3 rules off, which is how the URL Standard and node's ada
+  // both run it -- and it is the URL Standard's forbidden set that refuses
+  // them in a host, afterwards. Refusing them here as well made no difference
+  // to a URL and a wrong one to `idnaToASCII`: node sends `a b.com` to c-ares,
+  // which is what refuses it.
+  if (c >= 0x80 && c <= 0x9f) return true;
   // Surrogates, which cannot appear in well-formed text.
   if (c >= 0xd800 && c <= 0xdfff) return true;
   return false;
@@ -164,6 +169,23 @@ export function hostToASCII(domain: string): string {
     return punycodeToASCII(mapped);
   } catch {
     // A label that is not valid Punycode -- `xn--` followed by nonsense.
+    return "";
+  }
+}
+
+/**
+ * UTS-46 to ASCII without the URL Standard's forbidden-code-point check: what
+ * `ada::idna::to_ascii` does, which node's DNS resolver runs every query name
+ * through. A name with `%` or a space in it maps to itself, and it is the
+ * resolver, not this, that refuses it (`EBADNAME`). `""` for a name the
+ * mapping itself rejects.
+ */
+export function idnaToASCII(domain: string): string {
+  const mapped = map(domain);
+  if (mapped === null) return "";
+  try {
+    return punycodeToASCII(mapped);
+  } catch {
     return "";
   }
 }

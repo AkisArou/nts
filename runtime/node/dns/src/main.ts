@@ -9,10 +9,8 @@
 // `setServers` and `getServers` go through **c-ares**, a DNS client that speaks
 // the wire protocol itself and ignores the platform entirely.
 //
-// This module implements the first and not the second, because the first is a
-// binding this profile already has. The omission is named in `not-applicable`
-// file by file rather than hidden behind a pattern, so adding c-ares later is a
-// list to work through rather than a rule to remember to delete.
+// Both are here. This file is the `getaddrinfo` half; `resolver.ts` is the
+// c-ares half, over the same c-ares node links.
 //
 // The distinction is observable and node documents it: `lookup` honours
 // `/etc/hosts` and `resolve4` does not.
@@ -32,6 +30,28 @@ import {
   ERR_MISSING_ARGS,
 } from "../../internal/errors.ts";
 import { isIP } from "../../net/src/address.ts";
+import { resolverPromises } from "./resolver.ts";
+
+export {
+  Resolver,
+  getServers,
+  resolve,
+  resolve4,
+  resolve6,
+  resolveAny,
+  resolveCaa,
+  resolveCname,
+  resolveMx,
+  resolveNaptr,
+  resolveNs,
+  resolvePtr,
+  resolveSoa,
+  resolveSrv,
+  resolveTlsa,
+  resolveTxt,
+  reverse,
+  setServers,
+} from "./resolver.ts";
 
 /**
  * One address, resolved. `errno` is 0 on success and a negative libuv code
@@ -141,6 +161,16 @@ function validateStringWithoutNullBytes(value: unknown, name: string): void {
  * better TypeScript either way: the cast erased every one of these names from
  * the checker.
  */
+/**
+ * Node's name for a libuv errno. `EAI_NODATA` and `EAI_NONAME` are both
+ * reported as `ENOTFOUND` -- "not a proper POSIX error", node's comment says,
+ * and kept because programs have matched on it for a decade.
+ */
+function codeOf(errno: number): string {
+  const name = nts_dns_errname(errno);
+  return name === "EAI_NODATA" || name === "EAI_NONAME" ? "ENOTFOUND" : name;
+}
+
 class DNSException extends Error {
   errno: number;
   code: string;
@@ -148,7 +178,7 @@ class DNSException extends Error {
   hostname: string;
 
   constructor(errno: number, syscall: string, hostname: string) {
-    const code = nts_dns_errname(errno);
+    const code = codeOf(errno);
     super(`${syscall} ${code} ${hostname}`);
     this.errno = errno;
     this.code = code;
@@ -177,6 +207,16 @@ class DNSException extends Error {
  */
 function dnsException(errno: number, syscall: string, hostname: string): Error {
   return new DNSException(errno, syscall, hostname);
+}
+
+/**
+ * Node's `validateHints`: only `ADDRCONFIG`, `ALL` and `V4MAPPED` may be set,
+ * because those are the `getaddrinfo` flags node defines and passes through.
+ */
+function validateHints(hints: number): void {
+  if ((hints & ~(ADDRCONFIG | ALL | V4MAPPED)) !== 0) {
+    throw new ERR_INVALID_ARG_VALUE("hints", hints);
+  }
 }
 
 function orderOf(dnsOrder: string): number {
@@ -223,6 +263,7 @@ export function lookup(
     if (given !== undefined && given.hints !== undefined && given.hints !== null) {
       validateNumber(given.hints, "options.hints");
       hints = given.hints >>> 0;
+      validateHints(hints);
     }
     if (given !== undefined && given.family !== undefined && given.family !== null) {
       if (given.family === "IPv4") {
@@ -397,38 +438,127 @@ export interface LookupServiceResult {
   service: string;
 }
 
+/** A promise `lookup`'s answer: `null` is the address of an empty hostname, as node has it. */
+export interface PromiseLookupAddress {
+  address: string | null;
+  family: number;
+}
+
+/**
+ * Upstream `dns.promises.lookup`, node `lib/internal/dns/promises.js:197`.
+ *
+ * Its own parsing rather than the callback form's: it checks as it is called,
+ * so a bad argument throws rather than rejects, it has no `"IPv4"` spelling of
+ * a family, and an empty hostname resolves to `{ address: null }` at once.
+ */
 function promiseLookup(
   hostname: string,
   options?: LookupOptions | number,
-): Promise<LookupAddress | LookupAddress[]> {
-  return new Promise<LookupAddress | LookupAddress[]>((resolve, reject) => {
-    const done = (error: Error | null, address: string | LookupAddress[] | null, family?: number): void => {
-      if (error !== null) {
-        reject(error);
-        return;
+): Promise<PromiseLookupAddress | LookupAddress[]> {
+  let hints = 0;
+  let family = 0;
+  let all = false;
+  let dnsOrder = getDefaultResultOrder();
+
+  if (hostname) {
+    validateStringWithoutNullBytes(hostname, "hostname");
+  }
+
+  if (typeof options === "number") {
+    validateOneOf(options, "family", validFamilies);
+    family = options + 0;
+  } else if (options !== undefined && typeof options !== "object") {
+    throw new ERR_INVALID_ARG_TYPE("options", ["integer", "object"], options);
+  } else if (options !== undefined && options !== null) {
+    if (options.hints !== undefined && options.hints !== null) {
+      validateNumber(options.hints, "options.hints");
+      hints = options.hints >>> 0;
+      validateHints(hints);
+    }
+    if (options.family !== undefined && options.family !== null) {
+      validateOneOf(options.family, "options.family", validFamilies);
+      family = (options.family as number) + 0;
+    }
+    if (options.all !== undefined && options.all !== null) {
+      validateBoolean(options.all, "options.all");
+      all = options.all;
+    }
+    if (options.verbatim !== undefined && options.verbatim !== null) {
+      validateBoolean(options.verbatim, "options.verbatim");
+      dnsOrder = options.verbatim ? "verbatim" : "ipv4first";
+    }
+    if (options.order !== undefined && options.order !== null) {
+      validateOneOf(options.order, "options.order", validDnsOrders);
+      dnsOrder = options.order;
+    }
+  }
+
+  return new Promise<PromiseLookupAddress | LookupAddress[]>((resolve, reject) => {
+    if (!hostname) {
+      if (all) {
+        const noAddresses: LookupAddress[] = [];
+        resolve(noAddresses);
+      } else {
+        resolve({ address: null, family: family === 6 ? 6 : 4 });
       }
-      if (Array.isArray(address)) {
-        resolve(address);
-        return;
-      }
-      resolve({ address: (address as string) ?? "", family: family ?? 0 });
-    };
-    if (options === undefined) {
-      lookup(hostname, done);
+      return;
+    }
+
+    const matchedFamily = isIP(hostname);
+    if (matchedFamily !== 0) {
+      const result: LookupAddress = { address: hostname, family: matchedFamily };
+      if (all) resolve([result]);
+      else resolve(result);
+      return;
+    }
+
+    const order = orderOf(dnsOrder);
+    if (all) {
+      nts_dns_getaddrinfo_all(hostname, family, hints, order, (errno, addresses, families) => {
+        if (errno !== 0) {
+          reject(dnsException(errno, "getaddrinfo", hostname));
+          return;
+        }
+        const out: LookupAddress[] = [];
+        for (let index = 0; index < addresses.length; index++) {
+          const address = addresses[index];
+          const each = families[index];
+          if (address === undefined || each === undefined) continue;
+          out.push({ address, family: each });
+        }
+        resolve(out);
+      });
     } else {
-      lookup(hostname, options, done);
+      nts_dns_getaddrinfo(hostname, family, hints, order, (errno, address, resolvedFamily) => {
+        if (errno !== 0) {
+          reject(dnsException(errno, "getaddrinfo", hostname));
+          return;
+        }
+        resolve({ address, family: resolvedFamily });
+      });
     }
   });
 }
 
-function promiseLookupService(address: string, port: number): Promise<LookupServiceResult> {
+/**
+ * Upstream `dns.promises.lookupService`, node
+ * `lib/internal/dns/promises.js:282`: exactly two arguments, an address, and
+ * a port, all checked before the promise exists.
+ */
+function promiseLookupService(...args: [address?: unknown, port?: unknown]): Promise<LookupServiceResult> {
+  if (args.length !== 2) throw new ERR_MISSING_ARGS("address", "port");
+  const address = args[0];
+  if (typeof address !== "string" || isIP(address) === 0) {
+    throw new ERR_INVALID_ARG_VALUE("address", address);
+  }
+  const port = validatePort(args[1]);
   return new Promise<LookupServiceResult>((resolve, reject) => {
-    lookupService(address, port, (error, hostname, service) => {
-      if (error !== null) {
-        reject(error);
+    nts_dns_getnameinfo(address, port, (errno, hostname, service) => {
+      if (errno !== 0) {
+        reject(dnsException(errno, "getnameinfo", address));
         return;
       }
-      resolve({ hostname: hostname ?? "", service: service ?? "" });
+      resolve({ hostname, service });
     });
   });
 }
@@ -436,6 +566,7 @@ function promiseLookupService(address: string, port: number): Promise<LookupServ
 export const promises = {
   lookup: promiseLookup,
   lookupService: promiseLookupService,
+  ...resolverPromises,
   getDefaultResultOrder,
   setDefaultResultOrder,
   NODATA,

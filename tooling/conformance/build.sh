@@ -289,6 +289,36 @@ case "$module" in
       module_libraries=(-lz -lbrotlienc -lbrotlidec -lzstd)
     fi
     ;;
+  dns)
+    # **Node's c-ares, for the same reason as its compression libraries.**
+    # `dns.resolve*` answers are c-ares's parse of the wire, so which c-ares it
+    # is decides what a program sees -- node v24.20.0 vendors 1.34.8 and says
+    # so in `process.versions.ares`. Built from `cares.gyp`'s source list with
+    # node's defines; `config/<os>` is the configure step node ships
+    # pre-run.
+    cares_config=linux
+    case "$(uname -s)" in
+      Darwin) cares_config=darwin ;;
+      FreeBSD) cares_config=freebsd ;;
+    esac
+    if [ -f "$node_deps/cares/cares.gyp" ] \
+      && [ -f "$node_deps/cares/config/$cares_config/ares_config.h" ]; then
+      add_vendored "$node_deps/cares"
+      module_extra_flags=(
+        -DCARES_STATICLIB
+        -DHAVE_CONFIG_H
+        -D_LARGEFILE_SOURCE
+        -D_FILE_OFFSET_BITS=64
+        -I"$node_deps/cares/include"
+        -I"$node_deps/cares/src/lib"
+        -I"$node_deps/cares/src/lib/include"
+        -I"$node_deps/cares/config/$cares_config"
+      )
+    else
+      echo "note: $node_deps/cares is missing -- linking the system c-ares instead" >&2
+      module_libraries=(-lcares)
+    fi
+    ;;
 esac
 
 # Everything the compiler emitted, rather than the three files it used to

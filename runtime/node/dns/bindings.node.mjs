@@ -16,7 +16,10 @@
 //
 // The resolver itself is compared only on the compiled lane, where the binding
 // is `getaddrinfo` rather than node's.
-import { lookup, lookupService } from "node:dns";
+// The shared stand-ins first, as every module's are: `lookup` of an empty name
+// answers on the next tick, and the tick queue's async context is one of them.
+import "../internal/bindings.node.mjs";
+import { lookup, lookupService, Resolver } from "node:dns";
 import { getSystemErrorName } from "node:util";
 
 const errnoOf = (error) => {
@@ -65,4 +68,152 @@ globalThis.nts_dns_errname = (errno) => {
   } catch {
     return "UNKNOWN";
   }
+};
+
+// # The resolver's channel, stood in for by node's own
+//
+// Each channel is one of node's `dns.Resolver`s, so a query is c-ares's answer
+// parsed by node, flattened here into the layout `src/resolver.ts` documents
+// and rebuilt there. What this lane tests is the TypeScript around the channel
+// -- validation, server parsing and formatting, error construction, the
+// callback and promise forms -- for the reason the header gives for `lookup`.
+// Server lists go through the channel's own handle (`_handle`, node's
+// `ChannelWrap`), because that is the binding the TypeScript stands where
+// node's JavaScript stands.
+const channels = new Map();
+let nextChannel = 1;
+const channelOf = (id) => channels.get(id);
+
+globalThis.nts_dns_channel_new = (timeout, tries, maxTimeout) => {
+  const id = nextChannel++;
+  channels.set(id, new Resolver({ timeout, tries, maxTimeout }));
+  return id;
+};
+
+globalThis.nts_dns_channel_cancel = (id) => channelOf(id).cancel();
+
+globalThis.nts_dns_channel_server_hosts = (id) =>
+  (channelOf(id)._handle.getServers() || []).map((server) => server[0]);
+
+globalThis.nts_dns_channel_server_ports = (id) =>
+  (channelOf(id)._handle.getServers() || []).map((server) => server[1]);
+
+globalThis.nts_dns_channel_set_servers = (id, families, hosts, ports) =>
+  channelOf(id)._handle.setServers(families.map((family, index) => [family, hosts[index], ports[index]]));
+
+globalThis.nts_dns_channel_set_local_address = (id, ipv4, ipv6) => {
+  const resolver = channelOf(id);
+  if (ipv4 !== "" && ipv6 !== "") resolver.setLocalAddress(ipv4, ipv6);
+  else resolver.setLocalAddress(ipv4 !== "" ? ipv4 : ipv6);
+};
+
+const caresWrap = process.binding("cares_wrap");
+globalThis.nts_dns_strerror = (status) => caresWrap.strerror(status);
+
+// The query kinds, as `src/resolver.ts` numbers them.
+const methods = [
+  "resolveAny", "resolve4", "resolve6", "resolveCaa", "resolveCname", "resolveMx",
+  "resolveNs", "resolveTlsa", "resolveTxt", "resolveSrv", "resolvePtr", "resolveNaptr",
+  "resolveSoa", "reverse",
+];
+const kAny = 0;
+const kA = 1;
+const kAaaa = 2;
+const kCaa = 3;
+const kCname = 4;
+const kMx = 5;
+const kNs = 6;
+const kTlsa = 7;
+const kTxt = 8;
+const kSrv = 9;
+const kPtr = 10;
+const kNaptr = 11;
+const kSoa = 12;
+const kReverse = 13;
+const kindOfType = {
+  A: kA, AAAA: kAaaa, CAA: kCaa, CNAME: kCname, MX: kMx, NS: kNs, TLSA: kTlsa,
+  TXT: kTxt, SRV: kSrv, PTR: kPtr, NAPTR: kNaptr, SOA: kSoa,
+};
+
+/** One record of `kind` into `texts` and `numbers`, in the documented layout. */
+function flatten(kind, record, texts, numbers, inAny) {
+  switch (kind) {
+    case kA:
+    case kAaaa:
+      texts.push(record.address);
+      numbers.push(record.ttl);
+      return;
+    case kCname:
+    case kNs:
+    case kPtr:
+    case kReverse:
+      texts.push(inAny ? record.value : record);
+      return;
+    case kMx:
+      texts.push(record.exchange);
+      numbers.push(record.priority);
+      return;
+    case kTxt: {
+      const entries = inAny ? record.entries : record;
+      texts.push(...entries);
+      numbers.push(entries.length);
+      return;
+    }
+    case kSrv:
+      texts.push(record.name);
+      numbers.push(record.priority, record.weight, record.port);
+      return;
+    case kNaptr:
+      texts.push(record.flags, record.service, record.regexp, record.replacement);
+      numbers.push(record.order, record.preference);
+      return;
+    case kSoa:
+      texts.push(record.nsname, record.hostmaster);
+      numbers.push(record.serial, record.refresh, record.retry, record.expire, record.minttl);
+      return;
+    case kCaa: {
+      const property = Object.keys(record).find((key) => key !== "critical" && key !== "type");
+      texts.push(property, record[property]);
+      numbers.push(record.critical);
+      return;
+    }
+    case kTlsa: {
+      const bytes = new Uint8Array(record.data);
+      numbers.push(record.certUsage, record.selector, record.match, bytes.length, ...bytes);
+      return;
+    }
+  }
+}
+
+globalThis.nts_dns_channel_query = (id, kind, name, callback) => {
+  const done = (error, result) => {
+    if (error) {
+      callback(error.code, [], []);
+      return;
+    }
+    const texts = [];
+    const numbers = [];
+    if (kind === kAny) {
+      for (const record of result) {
+        const each = kindOfType[record.type];
+        numbers.push(each);
+        flatten(each, record, texts, numbers, true);
+      }
+    } else if (kind === kSoa) {
+      flatten(kind, result, texts, numbers, false);
+    } else {
+      for (const record of result) flatten(kind, record, texts, numbers, false);
+    }
+    callback("", texts, numbers);
+  };
+  try {
+    if (kind === kA || kind === kAaaa) channelOf(id)[methods[kind]](name, { ttl: true }, done);
+    else channelOf(id)[methods[kind]](name, done);
+  } catch (error) {
+    // Only `reverse` fails before it is sent, for a name that is not an
+    // address, and it fails with a libuv errno as the native does.
+    if (typeof error.errno === "number") return error.errno;
+    throw error;
+  }
+  return 0;
 };
