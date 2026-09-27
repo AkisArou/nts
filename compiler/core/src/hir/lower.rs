@@ -18058,6 +18058,63 @@ impl<'a> FuncBuilder<'a> {
 
     /// The same again, told whether the merge's **other** arm is the
     /// short-circuit's `undefined`. See [`Self::absence_at_excluding`].
+    /// Why these two managed types cannot share a pointer: one keeps its members
+    /// as fields at fixed offsets and the other as keys looked up at run time.
+    ///
+    /// `coerce_arm`'s managed-to-managed branch checks the pairs it was written
+    /// for -- two arrays whose elements differ in width, and two structs that
+    /// disagree about where a shared field is -- and then hands the pointer back
+    /// as an upcast. That is true of those pairs and false of an object wanted
+    /// where a `Record<string, V>` is: the pointer arrives as an `NtsMap` and
+    /// every keyed read finds nothing.
+    ///
+    /// The React lane found it, and the symptom depends on where the value lives.
+    /// `const mixed = { children: ["a", 1] }` handed to
+    /// `describe(props: Record<string, unknown>)` reads **undefined** at module
+    /// scope and **segfaults inside a function**, with no diagnostic either way.
+    /// An *annotated* literal is built as a table from the start by
+    /// `lower_table_literal`, which is why an inline argument -- contextually
+    /// typed, so built as what it is wanted as -- never showed it. Their sweep is
+    /// the other half of the evidence: all five operations React needs from a
+    /// props record (`for...in` with `Object.hasOwn`, `in`, `Object.keys`, a
+    /// spread, a keyed read) agree with node on an annotated `Record`, so the
+    /// table machinery is sound and this conversion is the whole defect.
+    ///
+    /// Refused rather than converted, for the reason both arms above give and the
+    /// spread path already gives in as many words -- "a spread of something that
+    /// is not a table into a table". A conversion is a copy, `===` then answers
+    /// differently, and building the table would mean walking the layout's names
+    /// into `nts_map_new`/`nts_map_set`, which is `lower_table_literal`'s job and
+    /// a feature of its own.
+    fn crossing_storage(&self, have: &HirType, want: &HirType) -> Option<String> {
+        let keyed = |ty: &HirType| {
+            matches!(
+                ty,
+                HirType::Managed(ManagedType::Table(_, _) | ManagedType::Map(_, _))
+            )
+        };
+        let laid_out = |ty: &HirType| matches!(ty, HirType::Managed(ManagedType::Object(_)));
+        if !((laid_out(have) && keyed(want)) || (keyed(have) && laid_out(want))) {
+            return None;
+        }
+        // The article belongs to the phrase, not to the format: a name comes back
+        // as ``a `Thing` `` and the nameless cases carry their own, so the
+        // sentence reads the same either way.
+        let named = |ty: &HirType| match ty {
+            HirType::Managed(ManagedType::Object(at)) => self.name_of_type(*at).map_or_else(
+                || "an anonymous object type".to_owned(),
+                |name| format!("a `{name}`"),
+            ),
+            _ => "a table".to_owned(),
+        };
+        let (from, to) = (named(have), named(want));
+        Some(format!(
+            "{from} where {to} is wanted -- one keeps its members as fields at fixed offsets \
+             and the other as keys looked up at run time, so a pointer to either is not a \
+             pointer to the other and every read through it finds nothing"
+        ))
+    }
+
     fn coerce_arm(
         &mut self,
         value: ValueId,
@@ -18231,6 +18288,9 @@ impl<'a> FuncBuilder<'a> {
                     self.name_of_type(*to).unwrap_or("an anonymous type").to_owned(),
                 );
                 return Err(self.unsupported(id, &why.spell(&from, &to)));
+            }
+            if let Some(why) = self.crossing_storage(&have, want) {
+                return Err(self.unsupported(id, &why));
             }
             return Ok(value);
         }
