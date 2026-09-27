@@ -1,3 +1,12 @@
+// **Now a guard.** 8482afb63 fixed it, and this record was taken from a clean
+// build of that commit, where it agrees with node (3). The cause: three places
+// build the name a class member is emitted under. `naming()` disambiguates
+// classes (its comment names `dgram` and `net` both exporting `Socket`), but
+// `hierarchy.name`, which spells an instance method's definition, read the
+// identifier. So the method table asked for `Thing#value`, found neither
+// `Thing@a#value` nor `Thing@b#value`, and silently emitted no table at all.
+// The history is kept beneath.
+//
 // **Two modules that each export a class named `Thing` crash the program, and
 // nothing refuses.** nts emits one `struct NtsObj_Thing` and two descriptors
 // whose method tables are 0, so the virtual call below goes through a null
