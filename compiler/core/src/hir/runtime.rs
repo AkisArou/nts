@@ -134,6 +134,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_handle_family_register", &[Some(HirType::Int { bits: 32, signed: false }), None, None, None], None),
     ("nts_has_pending_work", &[], Some(HirType::Bool)),
     ("nts_hresult_message", &[Some(HirType::Int { bits: 32, signed: true })], None),
+    ("nts_hstrings_release", &[None, None], None),
     ("nts_index", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
     ("nts_index_fn", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
     ("nts_is_array", &[None], Some(HirType::Bool)),
@@ -253,6 +254,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_string_truthy", &[None], Some(HirType::Bool)),
     ("nts_strings_from_cstrings", &[None, Some(HirType::Bool)], None),
     ("nts_strings_to_cstrings", &[None], None),
+    ("nts_strings_to_hstrings", &[None], None),
     ("nts_symbol_description", &[None], None),
     ("nts_symbol_for", &[None], None),
     ("nts_symbol_key_for", &[None], None),
@@ -298,6 +300,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_winrt_listen", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
     ("nts_winrt_received", &[None, Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Float { bits: 64 })], None),
     ("nts_winrt_received_handles", &[None, None, Some(HirType::Int { bits: 32, signed: false })], None),
+    ("nts_winrt_received_strings", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_winrt_unbox", &[None], None),
     ("nts_winrt_unlisten", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
 ];

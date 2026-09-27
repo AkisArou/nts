@@ -1975,6 +1975,11 @@ void nts_utf16_release(const NtsString *s, const uint16_t *units);
  * nothing here needs <windows.h>. */
 void *nts_string_to_hstring(const NtsString *s);
 void nts_hstring_release(const NtsString *s, void *h);
+/* A `string[]` as a block of `HSTRING`s for one call, each lent as
+ * `nts_string_to_hstring` lends one, and all given back after the call by
+ * `nts_hstrings_release`. NULL for an empty array. */
+void *nts_strings_to_hstrings(const NtsArray *array);
+void nts_hstrings_release(const NtsArray *array, void *block);
 NtsString *nts_string_from_hstring(void *h);
 /* The text of an HSTRING the caller keeps, where `nts_string_from_hstring`
  * takes one it is given: an argument the Windows Runtime lends a method the
@@ -2035,6 +2040,10 @@ NTS_ALLOCATES_OR_NULL NtsView *nts_winrt_received(void *elements,
  * now owns each -- they came +1 -- and the block freed. A null element stays
  * null, as the Windows Runtime allows. */
 void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count);
+/* An array of strings a Windows Runtime call handed back: each `HSTRING` of
+ * the callee's block copied into a `string` of an array of the program's and
+ * deleted, and the block freed. */
+NtsArray *nts_winrt_received_strings(void *block, uint32_t count);
 /* `value instanceof C` for a Windows Runtime class: whether the value is a
  * COM object that answers the interface `iid` names, C's default. */
 bool nts_winrt_is(NtsValue value, uint64_t iid_low, uint64_t iid_high);

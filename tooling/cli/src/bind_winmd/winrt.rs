@@ -204,7 +204,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 /// The brands `c:types` declares, beside its `c_` scalars.
 const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "CHandles", "ConstPtr"];
 /// The brands `winrt:types` declares.
-const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "Copied", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
+const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
 /// The namespace a `winrt:` module names.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
@@ -1604,6 +1604,10 @@ impl Writer<'_> {
         if let Ok(typed) = typed_array(element) {
             return Ok(typed);
         }
+        // Strings, each copied into a `string` and deleted.
+        if matches!(element, Type::String) {
+            return Ok("string[]".to_owned());
+        }
         let object = match element {
             Type::ClassName(named) if self.index.get(&named.namespace, generic_base(&named.name)).next().is_some_and(|def| def.category() != TypeCategory::Delegate) => {
                 self.spell(element, false)?
@@ -1637,6 +1641,9 @@ impl Writer<'_> {
             self.brands.insert("CElements");
             let spelled = if written { spelled.to_owned() } else { format!("const {spelled}") };
             format!("CElements<{array}, \"{spelled}\">")
+        } else if !written && matches!(element, Type::String) {
+            self.brands.insert("HStrings");
+            "HStrings".to_owned()
         } else if !written && let Some(handle) = self.handle_element(element)? {
             self.brands.insert("CHandles");
             format!("CHandles<{handle}>")
@@ -2019,6 +2026,10 @@ impl Writer<'_> {
         // with the other names it declares.
         let mut own: BTreeSet<String> = self.thens.keys().cloned().collect();
         own.extend(self.references.get(self.namespace).into_iter().flatten().filter(|name| used.contains(name.as_str())).cloned());
+        // And the other specialisations it declares that an operation's
+        // result names: an `IAsyncOperation<IVector<HString>>`'s value is
+        // this module's `IVectorOfString`.
+        own.extend(self.specialized.keys().filter(|name| used.contains(name.as_str())).cloned());
         for (namespace, names) in self.references.iter().filter(|(namespace, _)| namespace.as_str() != self.namespace) {
             let names: Vec<String> = names
                 .iter()

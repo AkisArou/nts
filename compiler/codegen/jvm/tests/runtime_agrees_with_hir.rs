@@ -296,4 +296,8 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// 123 for `nts_com_query_array` and `nts_com_release_array`, an array of
 /// objects asked for the interface a Windows Runtime call takes, element by
 /// element, and given back after: Windows again.
-const REFUSED_FLOOR: usize = 123;
+///
+/// 126 for `nts_strings_to_hstrings`, `nts_hstrings_release` and
+/// `nts_winrt_received_strings`, a `string[]` lent to or handed back by a
+/// Windows Runtime call as `HSTRING`s: Windows again.
+const REFUSED_FLOOR: usize = 126;

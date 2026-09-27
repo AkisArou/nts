@@ -159,6 +159,11 @@ the same vtable calls on the VM measured the behaviour first.
     a COM object's interfaces are different pointers. XAML's own `ReplaceAll`
     happens to ask each element itself, so only the C test can tell the two
     apart; the ABI promises nothing of the kind.
+  - **an array of strings, both ways**: a `string[]` a call takes is lent as
+    `HSTRING`s (`HStrings`), and one it hands back is copied into a
+    `string[]`. `Inspectable` holds one too, boxed with `CreateStringArray`
+    and unboxed back, as the JavaScript projection boxed one:
+    `PropertyValue.CreateInspectable(["a", "b"])` reads back `["a", "b"]`.
   - **Under rc, a foreign object lives to the end of what it reaches**, not
     to its last read: every `@ntsHresult` call branches to a throwing exit, so
     "held to the end" had asked a handle made after any call to dominate
@@ -166,10 +171,10 @@ the same vtable calls on the VM measured the behaviour first.
     between `get_Children` and `get_Size` -- XAML cleared the destroyed
     panel's children and the size read 0.
 - **What is left refused**, measured over winui-hello's bindings (the 83
-  namespaces its imports reach), 2026-09-27: 426 items, 312 of them a
+  namespaces its imports reach), 2026-09-27: 422 items, 312 of them a
   factory interface's composable `CreateInstance`, which is its class's
-  constructor and bound as that. Of the other 114: 49 arrays -- `GetMany`'s
-  buffer, and arrays of strings, structs, booleans or 64-bit integers
+  constructor and bound as that. Of the other 110: 45 arrays -- `GetMany`'s
+  buffer, and arrays of structs, booleans or 64-bit integers
   (`PropertyValue`'s boxing statics most of them); 25 delegates that return a value, are answered or are
   generic; 10 structs holding an `IReference`; 6 holding a `boolean`; 7
   generic members with no signature; 7 idiomatic names two surfaces give.

@@ -267,6 +267,12 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
     // An array of objects the callee allocated is an array of the
     // program's, each element perhaps `null`.
     assert!(module.contains("GetInspectableArray(this: IPropertyValue): { value: (IInspectable | null)[] };"), "{module}");
+    // Strings both ways: `HSTRING`s lent for the call, and copied back out.
+    assert!(module.contains("GetStringArray(this: IPropertyValue): { value: string[] };"), "{module}");
+    assert!(
+        module.contains("CreateStringArray(this: IPropertyValueStatics, value: Counted<HStrings, CNumber<\"uint32\">, \"before\">): Inspectable;"),
+        "{module}"
+    );
     // And one the call is passed, as the handles of the interface it takes,
     // their count before them.
     assert!(
@@ -537,7 +543,7 @@ fn a_received_array_is_a_typed_array() {
         "{foundation}"
     );
     let refused = std::fs::read_to_string(out.join("Windows.Foundation.refused.txt")).unwrap();
-    assert!(refused.contains("IPropertyValue.GetStringArray\tan array of strings, which no typed array holds"), "{refused}");
+    assert!(refused.contains("IPropertyValue.GetBooleanArray\tan array of booleans, which no typed array holds"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
 

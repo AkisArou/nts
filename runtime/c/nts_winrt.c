@@ -108,6 +108,32 @@ void nts_hstring_release(const NtsString *s, void *h) {
   abort();
 }
 
+void *nts_strings_to_hstrings(const NtsArray *array) {
+  uint32_t count = array->header.length;
+  if (count == 0) {
+    return 0;
+  }
+  void **block = malloc((size_t)count * sizeof(void *));
+  if (block == 0) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  NtsString *const *items = NTS_ITEMS(array, NtsString *);
+  for (uint32_t at = 0; at < count; at++) {
+    block[at] = nts_string_to_hstring(items[at]);
+  }
+  return block;
+}
+
+void nts_hstrings_release(const NtsArray *array, void *block) {
+  void **handles = block;
+  NtsString *const *items = NTS_ITEMS(array, NtsString *);
+  for (uint32_t at = 0; handles != 0 && at < array->header.length; at++) {
+    nts_hstring_release(items[at], handles[at]);
+  }
+  free(block);
+}
+
 /* An HSTRING a WinRT method returned, as a `string`: copied, and the HSTRING
  * deleted, since the caller owned it. NULL is the empty string. */
 NtsString *nts_string_copy_hstring(void *h) {
@@ -512,8 +538,27 @@ void *nts_winrt_box(NtsValue value) {
     break;
   }
   /* A typed array, as the JavaScript projection boxed one: an
-   * `IPropertyValue` of the array, whose elements Windows copies. */
+   * `IPropertyValue` of the array, whose elements Windows copies -- and an
+   * array of strings the same way, each lent as an `HSTRING` for the call. */
   case NTS_TAG_OBJECT: {
+    if (nts_is_array(value)) {
+      const NtsArray *array = (const NtsArray *)nts_value_reference(value);
+      NtsHeader *const *items = NTS_ITEMS(array, NtsHeader *);
+      for (uint32_t at = 0; at < array->header.length; at++) {
+        if (items[at] == 0 || items[at]->descriptor->kind != NTS_KIND_STRING) {
+          fprintf(stderr, "nts: an array where the Windows Runtime takes an "
+                          "object, which is boxed only when it holds "
+                          "strings\n");
+          abort();
+        }
+      }
+      void *statics = nts_property_value_statics();
+      void *block = nts_strings_to_hstrings(array);
+      hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, uint32_t, void *, void **))(*(
+          void ***)statics)[37])(statics, array->header.length, block, &boxed);
+      nts_hstrings_release(array, block);
+      break;
+    }
     const NtsView *view = nts_value_is_view(value)
                               ? (const NtsView *)nts_value_reference(value)
                               : 0;
@@ -644,6 +689,16 @@ NtsValue nts_winrt_unbox(void *object) {
     value = nts_value_of_boolean(flag != 0);
   } else if (read && nts_property_number(boxed, type, &number)) {
     value = nts_value_of_number(number);
+  } else if (read && type == 1036) { /* StringArray */
+    uint32_t count = 0;
+    void *handles = 0;
+    read =
+        SUCCEEDED(((HRESULT(STDMETHODCALLTYPE *)(void *, uint32_t *, void **))(
+            *(void ***)boxed)[37])(boxed, &count, &handles));
+    if (read) {
+      NtsArray *strings = nts_winrt_received_strings(handles, count);
+      value = nts_value_of_reference((NtsHeader *)strings, NTS_TAG_OBJECT);
+    }
   } else if (read && nts_property_array_of_type(type)) {
     /* A numeric array, unboxed as the JavaScript projection unboxed one:
      * a typed array of the program's, copied, the block freed. */
@@ -663,7 +718,7 @@ NtsValue nts_winrt_unbox(void *object) {
   nts_unknown_release(boxed);
   if (!read) {
     /* A boxed value of a type the program has no primitive for -- a
-     * `DateTime`, an array of strings -- is the object. */
+     * `DateTime`, an array of objects -- is the object. */
     return nts_value_of_handle(object, NTS_TAG_HANDLE_COM);
   }
   nts_com_release(object);
@@ -1435,6 +1490,16 @@ void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count) {
     memcpy(NTS_ITEMS(into, void *), block, (size_t)count * sizeof(void *));
   }
   CoTaskMemFree(block);
+}
+
+NtsArray *nts_winrt_received_strings(void *block, uint32_t count) {
+  NtsArray *strings = nts_array_new(&nts_desc_ref, count);
+  void **handles = block;
+  for (uint32_t at = 0; at < count; at++) {
+    NTS_ITEMS(strings, NtsString *)[at] = nts_string_from_hstring(handles[at]);
+  }
+  CoTaskMemFree(block);
+  return strings;
 }
 
 /* The message an `Error` thrown for a failed HRESULT carries: the code, and

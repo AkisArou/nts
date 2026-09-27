@@ -396,6 +396,11 @@ pub enum Role {
     /// `c:types`), lent for the call and released after it
     /// (`nts_strings_to_cstrings` / `nts_cstrings_release`).
     Strings,
+    /// A `string[]` as the Windows Runtime's block of `HSTRING`s (`HStrings`
+    /// in `winrt:types`), its count a parameter of its own: each string lent
+    /// for the call as an `HString` argument is, and all given back after it
+    /// (`nts_strings_to_hstrings` / `nts_hstrings_release`).
+    HStrings,
     /// A typed array's storage, borrowed in place for the call -- a
     /// `Uint8Array`'s bytes (`CBytes<Q>`) or any typed array's elements
     /// (`CElements<A, Q>`): `nts_view_bytes`, no copy. The view is the
@@ -519,6 +524,10 @@ pub enum Written {
     /// array of the program's, made for them and owning each, and the block
     /// freed (`nts_winrt_received_handles`).
     ReceivedHandles,
+    /// An array of strings the callee allocated (`ReceiveArray` of
+    /// `HSTRING`s): each copied into a `string` of an array of the program's
+    /// and deleted, and the block freed (`nts_winrt_received_strings`).
+    ReceivedStrings,
     /// A struct the program reads as a plain object (`Copied<T>`): the slot
     /// is the struct, copied field by field into a new object of the
     /// result's type -- each `HSTRING` into a `string`, and deleted, since
@@ -654,6 +663,7 @@ impl Function {
                 | Role::Delegate { .. }
                 | Role::Box
                 | Role::Strings
+                | Role::HStrings
                 | Role::Bytes
                 | Role::Handles
                 | Role::Copied
@@ -2578,6 +2588,8 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     let value = value?;
     let char = Pointee::Scalar(Scalar::Char);
     let (role, managed, c) = match (strings, bytes, elements, handles) {
+        // Windows Runtime strings, `HStrings` in `winrt:types`.
+        (Some(spelling), None, None, None) if spelling == "hstring" => hstrings_array(snapshot, value)?,
         // A typed array's elements, spelled as C spells them: the spelling
         // names the element, and must name the array's own. Borrowed as bytes
         // are -- `nts_view_bytes` is the elements' address whatever they are.
@@ -2651,6 +2663,18 @@ fn borrowed_elements(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str)
 
 /// A `CHandles<H, Q>` array's parts: its block is C's array of pointers to
 /// the handles, typed as the handle's own struct, or `void` where `Q` says.
+/// `HStrings`: a `string[]` as the Windows Runtime's block of `HSTRING`s,
+/// one per element, which the runtime makes and nothing else reads.
+fn hstrings_array(snapshot: &SemanticSnapshot, value: TypeId) -> Option<(Role, HirType, Type)> {
+    let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let TypeKind::Array(element) = kind_of(value)? else { return None };
+    if !matches!(kind_of(*element)?, TypeKind::String) {
+        return None;
+    }
+    let managed = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
+    Some((Role::HStrings, managed, Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void)))))
+}
+
 fn handles_array(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str) -> Option<(Role, HirType, Type)> {
     let managed = super::lower::representation(snapshot, value)?;
     let HirType::Managed(ManagedType::Array(element)) = &managed else { return None };
@@ -2816,7 +2840,7 @@ fn hresult_result(
 /// The count slot a received array's comes after: the Windows Runtime's
 /// `ReceiveArray` is `UINT32 *count, T **elements`, in that order.
 fn received_count(written: Written, (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>)) {
-    if matches!(written, Written::Received { .. } | Written::ReceivedHandles) {
+    if matches!(written, Written::Received { .. } | Written::ReceivedHandles | Written::ReceivedStrings) {
         parameters.push(Type::Pointer(Pointee::Scalar(Scalar::UInt32)));
         roles.push(Role::ReceivedCount);
     }
@@ -2835,6 +2859,14 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
     if received_handles(snapshot, ty) {
         let block = Pointee::Pointer(Box::new(Pointee::Void));
         return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(block))), Written::ReceivedHandles)));
+    }
+    // An array of strings, as its block of `HSTRING`s, which only the
+    // runtime reads.
+    if matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Array(element))
+        if matches!(snapshot.types.get(element.0 as usize).map(|record| &record.kind), Some(TypeKind::String)))
+    {
+        let block = Pointee::Pointer(Box::new(Pointee::Void));
+        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(block))), Written::ReceivedStrings)));
     }
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
@@ -3298,6 +3330,9 @@ fn boxable(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
         match kind(*member)? {
             TypeKind::String | TypeKind::Number | TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => primitive = true,
             TypeKind::Null | TypeKind::Undefined => {}
+            // An array of strings, which the runtime boxes as an
+            // `IPropertyValue` of `HSTRING`s and unboxes back into one.
+            TypeKind::Array(element) if matches!(kind(*element), Some(TypeKind::String)) => {}
             // A numeric typed array, which the runtime boxes as an
             // `IPropertyValue` of the array (`nts_winrt_box`) and unboxes back
             // into one -- except an `Int8Array`, which no `PropertyType` holds.

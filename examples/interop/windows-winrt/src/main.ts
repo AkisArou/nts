@@ -169,8 +169,16 @@ function bytes(): string {
 function elements(): string {
   const ints = PropertyValue.CreateInt32Array(new Int32Array([-7, 65536, 2147483647]));
   const doubles = PropertyValue.CreateInspectable(new Float64Array([0.5, -1e300]));
+  // And strings: a `string[]` lent as `HSTRING`s -- the empty one is NULL --
+  // and the `IPropertyValue` Windows made of them unboxed into a `string[]`
+  // of the program's, each copied and deleted.
+  // A `string[]` where an object is taken is boxed the same way.
+  const texts = PropertyValue.CreateStringArray(["one", "", "three"]);
+  const boxed = PropertyValue.CreateInspectable(["boxed", "too"]);
   return (ints instanceof Int32Array ? ints.join(":") : "not an Int32Array") + "/" +
-    (doubles instanceof Float64Array ? doubles.join(":") : "not a Float64Array");
+    (doubles instanceof Float64Array ? doubles.join(":") : "not a Float64Array") + "/" +
+    (Array.isArray(texts) ? texts.join("|") + ":" + String(texts.length) : "not an array") + "/" +
+    (Array.isArray(boxed) ? boxed.join("|") : "not an array");
 }
 
 // A runtime class whose default interface is an instantiation: `StringMap`

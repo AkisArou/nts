@@ -13563,6 +13563,8 @@ enum Lent {
     Count { slot: ValueId },
     /// A `char **` made from a `string[]`.
     Strings { pointer: ValueId },
+    /// A block of `HSTRING`s lent from a `string[]`, one per element.
+    HStrings { array: ValueId, block: ValueId },
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
     /// view must outlive the call.
     View { view: ValueId },
@@ -47554,6 +47556,18 @@ impl<'a> FuncBuilder<'a> {
             // The objects moved into an array of the program's made for
             // them, and the callee's block freed. Zeroed on a failed call,
             // which reads as empty.
+            super::native::Written::ReceivedStrings => {
+                let Some(count) = count else {
+                    return Err(self.unsupported(id, "a received array with no count slot before it"));
+                };
+                let ty = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
+                let index = first(self);
+                let block = HirType::NativePointer(super::native::Pointee::Pointer(Box::new(super::native::Pointee::Void)));
+                let block = self.push(OpKind::NativeLoad { pointer: slot, index }, block, origin.clone());
+                let index = first(self);
+                let length = self.push(OpKind::NativeLoad { pointer: count, index }, HirType::Int { bits: 32, signed: false }, origin.clone());
+                self.runtime_call("nts_winrt_received_strings", vec![block, length], ty, origin.clone())
+            }
             super::native::Written::ReceivedHandles => {
                 let Some(count) = count else {
                     return Err(self.unsupported(id, "a received array with no count slot before it"));
@@ -48805,6 +48819,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::Strings { pointer } => {
                     self.runtime_call("nts_cstrings_release", vec![pointer], HirType::Void, origin.clone());
                 }
+                Lent::HStrings { array, block } => {
+                    self.runtime_call("nts_hstrings_release", vec![array, block], HirType::Void, origin.clone());
+                }
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
@@ -49035,6 +49052,17 @@ impl<'a> FuncBuilder<'a> {
             let storage = this.runtime_call("nts_view_bytes", vec![view], bytes.clone(), origin.clone());
             if want == bytes { storage } else { this.push(OpKind::Convert(storage), want, origin.clone()) }
         })
+    }
+
+    /// A `string[]` as a block of `HSTRING`s, each lent for the call, NULL for
+    /// a `null` array, and all given back after it (`Lent::HStrings`).
+    fn lend_hstrings(&mut self, array: ValueId, want: HirType, lent: &mut Vec<Lent>, origin: &Origin) -> ValueId {
+        let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+        let block = self.unless_null(array, absent, origin, |this| {
+            this.runtime_call("nts_strings_to_hstrings", vec![array], want, origin.clone())
+        });
+        lent.push(Lent::HStrings { array, block });
+        block
     }
 
     /// A `string[]` as C's NULL-terminated `char **`, converted for the call
@@ -49369,6 +49397,9 @@ impl<'a> FuncBuilder<'a> {
                 }
                 // A `string[]` converted for the call, and freed after it.
                 Role::Strings => c_args.extend(argument.map(|array| self.lend_strings(array, target.parameters[at].representation(), &mut lent, &origin))),
+                // Each string an `HSTRING` lent for the call, NULL for a
+                // `null` array, and all given back after it.
+                Role::HStrings => c_args.extend(argument.map(|array| self.lend_hstrings(array, target.parameters[at].representation(), &mut lent, &origin))),
                 // A `Uint8Array` in place: its bytes, for the call, and the
                 // view given back after it. The give-back does nothing at run
                 // time; it is the view's last use, without which reference
@@ -49752,7 +49783,7 @@ impl<'a> FuncBuilder<'a> {
         // either profile reaches. The binding says it does not, or the call
         // is refused: that is the direction this check fails safe in.
         if native.slots().any(|(slot, role, _)| {
-            matches!(role, super::native::Role::Strings | super::native::Role::Bytes | super::native::Role::Handles)
+            matches!(role, super::native::Role::Strings | super::native::Role::HStrings | super::native::Role::Bytes | super::native::Role::Handles)
                 && native.retention[slot] != super::native::Retention::NotRetained
         }) {
             return Err(self.unsupported(call, "a `CStrings`, `CBytes` or `CHandles` parameter without `@ntsNoEscape`, which is what says C does not keep the array it is lent"));

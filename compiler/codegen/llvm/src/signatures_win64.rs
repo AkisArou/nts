@@ -216,6 +216,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_host_install", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_hresult_message", returns: "ptr", params: &["i32"], attributes: &[] },
     Signature { name: "nts_hstring_release", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_hstrings_release", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_in_callback", returns: "zeroext i1", params: &[], attributes: &[] },
     Signature { name: "nts_index_fn", returns: "i32", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_is_array", returns: "zeroext i1", params: &["ptr dead_on_return"], attributes: &["nounwind", "willreturn", "memory(read, argmem: readwrite)"] },
@@ -396,6 +397,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_string_truthy", returns: "zeroext i1", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_strings_from_cstrings", returns: "ptr", params: &["ptr", "i1 zeroext"], attributes: &[] },
     Signature { name: "nts_strings_to_cstrings", returns: "noalias ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_strings_to_hstrings", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_symbol_description", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_symbol_for", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_symbol_key_for", returns: "ptr", params: &["ptr"], attributes: &[] },
@@ -454,6 +456,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_winrt_listen", returns: "i32", params: &["ptr", "i64", "i64", "i32", "ptr"], attributes: &[] },
     Signature { name: "nts_winrt_received", returns: "noalias ptr", params: &["ptr", "i32", "double"], attributes: &[] },
     Signature { name: "nts_winrt_received_handles", returns: "void", params: &["ptr", "ptr", "i32"], attributes: &[] },
+    Signature { name: "nts_winrt_received_strings", returns: "ptr", params: &["ptr", "i32"], attributes: &[] },
     Signature { name: "nts_winrt_unbox", returns: "void", params: &["ptr dead_on_unwind writable sret({ i32, i64 }) align 8", "ptr"], attributes: &[] },
     Signature { name: "nts_winrt_unlisten", returns: "i32", params: &["ptr", "i64", "i64", "i32", "i32", "ptr"], attributes: &[] },
 ];

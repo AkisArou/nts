@@ -42,10 +42,11 @@ declare module "winrt:types" {
   // becomes something more particular.
   export type IInspectable = ComClass<"IInspectable">;
   // What a method taking an object takes: the object, or a string, number,
-  // boolean or numeric typed array, which is boxed into an `IPropertyValue`
-  // for the call, as the Windows Runtime's JavaScript projection boxed one --
-  // `button.content = "Press"`. What a method answering an object answers is
-  // the same set, unboxed: an `IPropertyValue` of an `Int32Array` is one.
+  // boolean, numeric typed array or array of strings, which is boxed into an
+  // `IPropertyValue` for the call, as the Windows Runtime's JavaScript
+  // projection boxed one -- `button.content = "Press"`. What a method
+  // answering an object answers is the same set, unboxed: an `IPropertyValue`
+  // of an `Int32Array` is one, and of `HSTRING`s a `string[]`.
   export type Inspectable =
     | IInspectable
     | string
@@ -57,12 +58,17 @@ declare module "winrt:types" {
     | Int32Array
     | Uint32Array
     | Float32Array
-    | Float64Array;
+    | Float64Array
+    | string[];
 
   // A `string` as the Windows Runtime's `HSTRING`: made for the call and
   // deleted after it, and a returned one copied into a `string` and deleted.
   // The brand is optional, so any `string` passes.
   export type HString = string & { readonly __c_hstring?: true };
+  // A `string[]` as the Windows Runtime's array of `HSTRING`s, where a call
+  // takes one (`Counted<HStrings, ...>`): each string lent for the call, as an
+  // `HString` argument is, and all of them given back after it.
+  export type HStrings = readonly string[] & { readonly __c_strings?: "hstring" };
 
   // A struct holding a string -- `TypeName { Name: HSTRING; Kind }` -- as a
   // plain object, as the Windows Runtime's JavaScript projection held one:
