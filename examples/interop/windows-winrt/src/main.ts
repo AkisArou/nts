@@ -89,6 +89,7 @@ import { GuidHelper, MemoryBuffer, PropertyValue, Uri } from "winrt:Windows.Foun
 import { StringMap } from "winrt:Windows.Foundation.Collections";
 import { ThreadPool } from "winrt:Windows.System.Threading";
 import { StorageFolder } from "winrt:Windows.Storage";
+import { HttpClient } from "winrt:Windows.Web.Http";
 import type { IAsyncOperationOfStorageFolder } from "winrt:Windows.Storage";
 import type { DateTime } from "winrt:Windows.Foundation";
 import { ApplicationLanguages, Calendar } from "winrt:Windows.Globalization";
@@ -387,8 +388,17 @@ async function awaited(): Promise<string> {
   // operation that fails rejects with its own error.
   const again = await failure(operation);
   const missing = await failure(StorageFolder.GetFolderFromPathAsync("C:\\nts-no-such-folder"));
+  // An HTTP operation, which reports progress as `HttpProgress` -- a struct
+  // holding objects, which awaiting reads none of -- asked of a host that
+  // never resolves (`.invalid`), so it rejects without a network.
+  let http = "resolved";
+  try {
+    await new HttpClient().getStringAsync(new Uri("https://nts.invalid/"));
+  } catch (error) {
+    http = error instanceof Error ? "rejected" : "not an Error";
+  }
   return "status=" + String(status) + " refused=" + refused + " folder=" + folder.as_IStorageItem().get_Name() +
-    " completed=" + String(completed) + " again=" + again + " missing=" + missing + " pending=" + String(pending());
+    " completed=" + String(completed) + " again=" + again + " missing=" + missing + " http=" + http + " pending=" + String(pending());
 }
 
 async function reportAwaited(): Promise<void> {

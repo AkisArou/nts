@@ -1195,6 +1195,15 @@ impl Writer<'_> {
                     Ok(_) => Some(format!("`{}`", named.name)),
                     Err(why) => Some(why),
                 },
+                // An object -- `HttpProgress`'s `IReference<UInt64>` -- held
+                // as its handle: a counted one, so the struct never crosses
+                // by value (`by_value_record_is_passable` refuses the copy a
+                // second owner would be), but it is declared, and so is what
+                // names it: `HttpClient.GetStringAsync`'s operation.
+                Type::ClassName(named) => match self.index.get(&named.namespace, generic_base(&named.name)).next() {
+                    Some(inner) if matches!(inner.category(), TypeCategory::Interface | TypeCategory::Class) => None,
+                    _ => Some(format!("`{}`", named.name)),
+                },
                 other => Some(format!("{other:?}")),
             };
             if let Some(why) = why {
@@ -1248,6 +1257,8 @@ impl Writer<'_> {
                 self.brands.insert("c_uint8");
                 Ok("CBool<c_uint8>".to_owned())
             }
+            // An object's handle, which may be null.
+            Type::ClassName(_) => Ok(format!("{} | null", self.spell(ty, false)?)),
             Type::String => {
                 self.brands.insert("HString");
                 Ok("HString".to_owned())
