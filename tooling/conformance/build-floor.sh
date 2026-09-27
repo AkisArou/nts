@@ -32,9 +32,16 @@ cd "$(dirname "$0")/../.."
 # loads are 20 of 22 with and without it, which is what the refusal counts
 # predicted. A stale floor does not just miss a regression, it manufactures
 # progress, and the second failure is louder than the first.
-FLOOR="assert async_hooks buffer console dgram diagnostics_channel dns events fs http
-net os path process punycode querystring readline stream string_decoder timers tty url
-util zlib"
+#
+# **`child_process` joined on 2026-09-27, having never been built by anything.**
+# Not a regression and not new coverage of a fixed bug: it compiles, loads and has
+# no undefined `nts_*` symbol, and was simply in neither list -- see the
+# reconciliation below, which is what now makes that state impossible.
+# `cluster`, the other unlisted one, went to `BLOCKED` for the reason recorded
+# there.
+FLOOR="assert async_hooks buffer child_process console dgram
+diagnostics_channel dns events fs http net os path process punycode querystring
+readline stream string_decoder timers tty url util zlib"
 
 # And the ones that do not, which is the half that rots.
 #
@@ -104,7 +111,33 @@ util zlib"
 #
 # Putting it here rather than leaving it out is what made the fix announce
 # itself: the run printed `dns NOW BUILDS` without either lane going to look.
-BLOCKED=""
+# **`cluster`, from 2026-09-27.** It compiles and it loads, and it would abort on
+# first call: four undefined `nts_*` symbols, none of them pinned, and they are
+# two different faults.
+#
+# `nts_child_process_end_stdin`, `nts_child_process_kill` and
+# `nts_child_process_write` are **defined** in
+# `runtime/node/child_process/child_process.c` and are not linked into a module
+# that imports `child_process`'s TypeScript. That is the `dgram` shape this file
+# already records forty lines down -- "a binding whose C exists in `net/net.c` and
+# was not being linked into a module that imports `net`'s TypeScript" -- so it is
+# the same linking gap a second time, in a module nothing ever built.
+#
+# `nts_cluster_self_connected` is the other fault and the worse one: **no C
+# definition anywhere in the tree.** A binding declared on the TypeScript side
+# with nothing behind it.
+#
+# **That falsifies the invariant `KNOWN_UNRESOLVED` is empty for.** The note there
+# says "the native half is complete: 331 declared bindings and none without C" and
+# that `nm -D` finds "no undefined `nts_` symbol at all" -- and both were measured
+# over the modules this floor built, which was 24 of the 26 on disk. One of the two
+# it never built has a binding with no C. The claim was true of its population and
+# the population was not the tree.
+#
+# So this entry is not "cluster does not compile". It is "cluster compiles into
+# something that cannot run", which a floor measuring only `bytes$` would have
+# called a pass -- and did not, because the undefined-symbol check exists.
+BLOCKED="cluster"
 
 # **Empty, and it held `fs` and `process` an hour ago.**
 #
@@ -185,6 +218,69 @@ built=0
 # `NTS_CONFORMANCE_OUT` and `build.sh` ignored it, so setting it sent the floor
 # looking for addons where none are written.
 out_dir=${NTS_ADDON_OUT:-${NTS_CONFORMANCE_OUT:-$PWD/target/node}}
+# The undefined `nts_*` symbols an addon still needs, and the ones nobody pinned.
+#
+# Two functions rather than four inline lines, because **both loops need the same
+# standard**: a module leaves `BLOCKED` by the test `FLOOR` holds it to, or the two
+# lists disagree about what "builds" means and the run tells somebody to move a
+# module into a list it would fail on arrival. `cluster` is exactly that case -- it
+# compiles, it loads, and it has four unpinned symbols -- so with only `bytes$` to
+# go on the blocked loop would have reported it as newly building.
+undefined_nts() {
+  nm -D --undefined-only "$1" 2>/dev/null | grep -oE '\bnts_[a-z0-9_]+' | sort -u
+}
+unpinned_of() {
+  comm -23 <(printf '%s\n' "$1" | grep -v '^$' | sort) \
+           <(printf '%s\n' $KNOWN_UNRESOLVED | sort)
+}
+
+# **Every module on disk is in one of the two lists, or this is not a floor.**
+#
+# The lists are written out above rather than derived, deliberately -- a derived
+# list cannot say *why* a module is expected to fail -- and that leaves a third
+# state neither list can express: a module in **neither**. The loops below walk
+# the lists, so such a module is never handed to clang by anything, and nothing
+# says so.
+#
+# `child_process` and `cluster` were in that state from 2026-09-13, when
+# `cluster` arrived as "the 26th module", until 2026-09-27: `profile` emitted
+# their C and counted it and `snapshot-cache` diffed it, and neither ever
+# compiled. The comment on `FLOOR` says a stale floor "does not just miss a
+# regression, it manufactures progress"; a floor that does not cover the
+# directory does the same thing one level up, and reads as 24 of 24 while the
+# tree holds 26.
+#
+# Newlines folded to spaces first, because `FLOOR` is written across three lines
+# and a name at the end of one is followed by a newline rather than a space --
+# which a ` $module ` match would miss, and the check would then pass by
+# accident for exactly the modules at a line break.
+listed=" $(printf '%s %s' "$FLOOR" "$BLOCKED" | tr '\n' ' ') "
+unlisted=""
+seen=0
+for config in runtime/node/*/tsconfig.json; do
+  # An unexpanded glob is a literal `*`, which would otherwise be reported as an
+  # unlisted module -- loud, and about the wrong thing. Counted instead, so that
+  # "no modules found" is its own sentence: a reconciliation that walked nothing
+  # would *pass*, which is the vacuous-guard shape this file records elsewhere
+  # ("the `listing` guard that would have caught the collision was vacuous").
+  [ -f "$config" ] || continue
+  seen=$((seen + 1))
+  module=$(basename "$(dirname "$config")")
+  case "$listed" in
+    *" $module "*) ;;
+    *) unlisted="$unlisted $module" ;;
+  esac
+done
+if [ "$seen" -eq 0 ]; then
+  echo "  INSTRUMENT FAILURE: no runtime/node/*/tsconfig.json found -- run this from the repository"
+  exit 2
+fi
+if [ -n "$unlisted" ]; then
+  echo "  INSTRUMENT FAILURE: in neither FLOOR nor BLOCKED:$unlisted"
+  echo "  Add each to FLOOR if it builds and loads, or to BLOCKED with the reason it does not."
+  exit 2
+fi
+
 for module in $FLOOR; do
   printf '  %-22s ' "$module"
   out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
@@ -221,10 +317,8 @@ for module in $FLOOR; do
       # same reason the ABSENT lists in the surface tests are: a number that
       # nobody wrote down can grow one at a time and never look like a change.
       # KNOWN_UNRESOLVED is the set as measured; anything outside it is loud.
-      unresolved=$(nm -D --undefined-only "$out_dir/$module.node" 2>/dev/null |
-        grep -oE '\bnts_[a-z0-9_]+' | sort -u)
-      novel=$(comm -23 <(printf '%s\n' "$unresolved" | grep -v '^$' | sort) \
-                       <(printf '%s\n' $KNOWN_UNRESOLVED | sort))
+      unresolved=$(undefined_nts "$out_dir/$module.node")
+      novel=$(unpinned_of "$unresolved")
       count=$(printf '%s\n' "$unresolved" | grep -c . )
       if [ -n "$novel" ]; then
         echo "loads with UNPINNED undefined symbol(s) -- would abort on first call"
@@ -245,7 +339,21 @@ for module in $FLOOR; do
     fi
     continue
   fi
-  echo "REGRESSED -- was building on 2026-09-08 and no longer does"
+  # **"Could not run" is not "does not build".** A missing `target/tsgo` -- which
+  # is every run from a worktree -- makes *every* module print `REGRESSED`, and
+  # the reader's first thought is that the compiler broke twenty-six modules at
+  # once. The reason line below has always said so underneath, and the verdict
+  # word is the half that gets quoted. Same shape as the clang-probe contention
+  # this file's own header worries about: an environment failure reported as a
+  # finding about the subject.
+  #
+  # Still counted as a failure, because a floor that measured nothing is not a
+  # pass. Only the label changes.
+  if printf '%s' "$out" | grep -qE 'could not start|transport failed'; then
+    echo "NOT MEASURED -- the frontend could not run"
+  else
+    echo "REGRESSED -- was building on 2026-09-08 and no longer does"
+  fi
   # **The verdict names its reason, or says it has none.**
   #
   # This grepped `error:` alone, which is clang's spelling. A *typecheck* refusal
@@ -275,8 +383,17 @@ for module in $BLOCKED; do
   out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
     timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1)
   if printf '%s' "$out" | grep -q 'bytes$'; then
-    printf '  %-22s NOW BUILDS -- move it into FLOOR and say what changed\n' "$module"
-    joined=$((joined + 1))
+    # **Compiling is not the standard.** `FLOOR` requires compile, load, and no
+    # unpinned undefined symbol; a blocked module that only compiles is not ready
+    # to move, and saying it is sends the next reader to break the run.
+    if ! node -e 'require(process.argv[1])' "$out_dir/$module.node" > /dev/null 2>&1; then
+      printf '  %-22s compiles but does not load -- still blocked\n' "$module"
+    elif [ -n "$(unpinned_of "$(undefined_nts "$out_dir/$module.node")")" ]; then
+      printf '  %-22s compiles and loads, unpinned symbols remain -- still blocked\n' "$module"
+    else
+      printf '  %-22s NOW BUILDS -- move it into FLOOR and say what changed\n' "$module"
+      joined=$((joined + 1))
+    fi
   fi
 done
 
