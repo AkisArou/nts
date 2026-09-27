@@ -12,8 +12,10 @@
 # - **Oracle:** `reference/draw.c`, compiled with the SDK's headers and run on
 #   the same Mac.
 # - **Main (C) and LLVM:** under `--rc` the program prints exactly what the
-#   oracle prints: every pixel of the drawing, a colour's property, and the
-#   colours released once nothing holds them. stderr is empty.
+#   oracle prints: every pixel of the drawing, a colour's property, the
+#   colours released once nothing holds them, a colour read back through a
+#   pointer, a traced path's pixels, two paths compared and a key's state.
+#   stderr is empty.
 # - **Control:** under NoGc the colour outlives its last use, so the one
 #   lifetime line, and only that, differs from the oracle.
 # - **arm64:** built and linked, never run here (tooling/apple/vm.md).
@@ -89,8 +91,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 7 ] ||
-  { echo "macos-draw: the oracle printed $(wc -l <"$out/expected.txt") lines, not 7" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 12 ] ||
+  { echo "macos-draw: the oracle printed $(wc -l <"$out/expected.txt") lines, not 12" >&2; exit 1; }
 
 run_quietly "$out/draw/macos-13-x86_64/draw" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"

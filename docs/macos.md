@@ -14,8 +14,12 @@ how each piece was built and measured, and what is refused.
   to `~/.cache/nts/apple/MacOSX.sdk`. The compiler never runs on the Mac, and
   builds on Linux against this copy.
 - **Swift's names.** `tooling/apple/symbolgraph.sh AppKit Foundation
-  CoreGraphics` runs `swift-symbolgraph-extract` on the Mac once per SDK. The
-  binding generator reads those graphs.
+  CoreGraphics` runs `swift-symbolgraph-extract` on the Mac once per SDK, into
+  `~/.cache/nts/apple/symbolgraph/private/<SDK>`. The binding generator reads
+  those graphs. They are extracted at every access level, so a declaration
+  Swift refines in its overlay is there too, under a `__` name
+  (`CGContextMoveToPoint` is `__moveTo(x:y:)` under `move(to:)`), and it binds
+  under the name without the prefix: `context.moveTo({ x, y })`.
 - **A Mac to run on.** `tooling/apple/run.sh <artifact>` copies an executable
   or an `.app` there and runs it. `tooling/apple/vm.md` sets up the VM.
 

@@ -999,7 +999,8 @@ correctness does not depend on arm64 running by luck.
        AppKit's, so timers and promises run inside `UIApplicationMain`.
      - bind-objc knows the platform from the target. Availability is read for
        `iOS` rather than `macOS`, and an iOS SDK's graphs live under its
-       canonical name (`symbolgraph/iphonesimulator26.5`), which
+       canonical name (`symbolgraph/private/iphonesimulator26.5` since the
+       graphs carry Swift's refined names), which
        `NTS_APPLE_PLATFORM=iphonesimulator symbolgraph.sh` writes.
      - An `async` form's arguments are shaped as the method it calls takes
        them. A block before the completion handler, such as

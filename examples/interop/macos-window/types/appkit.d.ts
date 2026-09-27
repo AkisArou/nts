@@ -7,9 +7,9 @@
  * @ntsFramework CoreGraphics
  */
 declare module "objc:AppKit" {
-  import type { ByValue, CEnum, Fields, Ptr, Struct } from "c:types";
+  import type { ByValue, CEnum, ConstPtr, Fields, Ptr, Struct } from "c:types";
   import type { ClassObject, Selector } from "objc:runtime";
-  import type { BridgedString, CGFloat, CString, Double, Float, Int, Int16, Int32, Int64, ObjCBool, ObjcClass, TimeInterval, UInt, UInt16, UInt32, UInt64 } from "objc:types";
+  import type { BridgedString, CGFloat, CString, Double, Float, Int, Int16, Int32, Int64, ObjCBool, ObjcClass, TimeInterval, UInt, UInt16, UInt32, UInt64, UInt8 } from "objc:types";
 
   export type CGAffineTransform = Struct<{ a: Double; b: Double; c: Double; d: Double; tx: Double; ty: Double }, "CGAffineTransform">;
 
@@ -24,6 +24,12 @@ declare module "objc:AppKit" {
   export type NSRange = Struct<{ location: UInt; length: UInt }, "_NSRange">;
 
   export const enum CGBitmapInfo {
+    alphaInfoMask = 31,
+    componentInfoMask = 3840,
+    byteOrderInfoMask = 28672,
+    pixelFormatInfoMask = 983040,
+    floatInfoMask = 3840,
+    byteOrderMask = 28672,
     floatComponents = 256,
     byteOrderDefault = 0,
     byteOrder16Little = 4096,
@@ -953,8 +959,8 @@ declare module "objc:AppKit" {
     responds(labels: { to: Selector }): boolean;
     // Not bound, each for the reason given:
     //   -finalize: deprecated
-    //   -methodForSelector:: a `void (*)(void)`
-    //   +instanceMethodForSelector:: a `void (*)(void)`
+    //   -methodForSelector:: a C function pointer, `void (*)(void)`, which a function type here would pass as a block
+    //   +instanceMethodForSelector:: a C function pointer, `void (*)(void)`, which a function type here would pass as a block
   }
 
   /** @ntsClass NSResponder */
@@ -1124,6 +1130,7 @@ declare module "objc:AppKit" {
     get utf8String(): CString | null;
     get fastestEncoding(): UInt;
     get smallestEncoding(): UInt;
+    static get availableStringEncodings(): ConstPtr<UInt>;
     static get defaultCStringEncoding(): UInt;
     get decomposedStringWithCanonicalMapping(): string;
     get precomposedStringWithCanonicalMapping(): string;
@@ -1160,6 +1167,22 @@ declare module "objc:AppKit" {
     constructor(labels: { utf8String: CString });
     /** @ntsSelector initWithString: */
     constructor(labels: { string: string });
+    /**
+     * @ntsSelector initWithContentsOfURL:usedEncoding:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    constructor(labels: { contentsOf: NSURL; usedEncoding: Ptr<UInt> | null });
+    /**
+     * @ntsSelector initWithContentsOfFile:usedEncoding:error:
+     * @ntsThrows error nts_nserror_message
+     */
+    constructor(labels: { contentsOfFile: string; usedEncoding: Ptr<UInt> | null });
+    /** @ntsSelector initWithCharactersNoCopy:length:freeWhenDone: */
+    constructor(labels: { charactersNoCopy: Ptr<UInt16>; length: UInt; freeWhenDone: boolean });
+    /** @ntsSelector initWithCharactersNoCopy:length:deallocator: */
+    constructor(labels: { charactersNoCopy: Ptr<UInt16>; length: UInt }, deallocator: ((arg0: Ptr<UInt16>, arg1: UInt) => void) | null);
+    /** @ntsSelector initWithCharacters:length: */
+    constructor(labels: { characters: ConstPtr<UInt16>; length: UInt });
     /** @ntsSelector initWithData:encoding: */
     constructor(labels: { data: NSData; encoding: UInt });
     /** @ntsSelector initWithBytes:length:encoding: */
@@ -1184,6 +1207,10 @@ declare module "objc:AppKit" {
     substring(labels: { from: UInt }): string;
     /** @ntsSelector substringToIndex: */
     substring(labels: { to: UInt }): string;
+    /** @ntsSelector getCharacters:range: */
+    getCharacters(buffer: Ptr<UInt16>, labels: { range: ByValue<NSRange> | Fields<NSRange> }): void;
+    /** @ntsSelector getCharacters: */
+    getCharacters(buffer: Ptr<UInt16>): void;
     /** @ntsSelector compare: */
     compare(string: string): CEnum<ComparisonResult, Int>;
     /** @ntsSelector compare:options: */
@@ -1337,19 +1364,11 @@ declare module "objc:AppKit" {
     /** @ntsSelector self */
     self(): NSString;
     // Not bound, each for the reason given:
-    //   @property availableStringEncodings: a `const NSStringEncoding *`
-    //   -getCharacters:range:: a `unichar *`
-    //   -initWithCharactersNoCopy:length:freeWhenDone:: a `unichar *`
-    //   -initWithCharactersNoCopy:length:deallocator:: a `unichar *`
-    //   -initWithCharacters:length:: a `const unichar *`
     //   -initWithFormat:arguments:: a `struct __va_list_tag *`
     //   -initWithFormat:locale:arguments:: a `struct __va_list_tag *`
     //   -initWithBytesNoCopy:length:encoding:deallocator:: a `void *`
-    //   -initWithContentsOfURL:usedEncoding:error:: a `NSStringEncoding *`
-    //   -initWithContentsOfFile:usedEncoding:error:: a `NSStringEncoding *`
     //   +stringEncodingForData:encodingOptions:convertedString:usedLossyConversion:: a `NSString * _Nullable *`
     //   -propertyListFromStringsFileFormat: a dictionary whose key type the header does not name
-    //   -getCharacters:: a `unichar *`
     //   -completePathIntoString:caseSensitive:matchesIntoArray:filterTypes:: a `NSString * _Nullable *`
     //   -stringByAddingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
     //   -stringByReplacingPercentEscapesUsingEncoding:: deprecated in macOS 10.11
@@ -1866,6 +1885,8 @@ declare module "objc:AppKit" {
     static get didUpdateTrackingAreasNotification(): BridgedString;
     /** @ntsSymbol NSViewFrameDidChangeNotification */
     static get frameDidChangeNotification(): BridgedString;
+    /** @ntsSymbol NSViewNoIntrinsicMetric */
+    static get noIntrinsicMetric(): CGFloat;
     // Not bound, each for the reason given:
     //   @property canDraw: deprecated in macOS 10.14
     //   @property acceptsTouchEvents: deprecated in macOS 10.12
@@ -1874,7 +1895,7 @@ declare module "objc:AppKit" {
     //   @property wantsBestResolutionOpenGLSurface: deprecated in macOS 10.14
     //   @property wantsExtendedDynamicRangeOpenGLSurface: deprecated in macOS 10.14
     //   -getRectsBeingDrawn:count:: a `const NSRect * _Nullable *`
-    //   -sortSubviewsUsingFunction:context:: a `NSComparisonResult (*)(__kindof NSView * _Nonnull, __kindof NSView * _Nonnull, void * _Nullable)`
+    //   -sortSubviewsUsingFunction:context:: a C function pointer, `NSComparisonResult (*)(__kindof NSView * _Nonnull, __kindof NSView * _Nonnull, void * _Nullable)`, which a function type here would pass as a block
     //   -lockFocus: deprecated in macOS 10.14
     //   -unlockFocus: deprecated in macOS 10.14
     //   -lockFocusIfCanDraw: deprecated in macOS 10.14
@@ -1890,8 +1911,10 @@ declare module "objc:AppKit" {
     //   -releaseGState: deprecated in macOS 10.10
     //   -setUpGState: deprecated in macOS 10.10
     //   -renewGState: deprecated in macOS 10.10
+    //   -layoutGuideForLayoutRegion:: introduced in macOS 26.0
+    //   -edgeInsetsForLayoutRegion:: introduced in macOS 26.0
+    //   -rectForLayoutRegion:: introduced in macOS 26.0
     //   NSViewGlobalFrameDidChangeNotification: deprecated in macOS 10.14
-    //   NSViewNoIntrinsicMetric: a `const double`
   }
 
   /** @ntsClass NSWindow */
@@ -2796,6 +2819,8 @@ declare module "objc:AppKit" {
     paths(labels: { forResourcesOfType: string | null; inDirectory: string | null; forLocalization: string | null }): string[];
     /** @ntsSelector localizedStringForKey:value:table: */
     localizedString(labels: { forKey: string; value: string | null; table: string | null }): string;
+    /** @ntsSelector localizedAttributedStringForKey:value:table: */
+    localizedAttributedString(labels: { forKey: string; value: string | null; table: string | null }): NSAttributedString;
     /** @ntsSelector objectForInfoDictionaryKey: */
     object(labels: { forInfoDictionaryKey: string }): NSObject | null;
     /** @ntsSelector classNamed: */
@@ -2813,6 +2838,7 @@ declare module "objc:AppKit" {
     /** @ntsSymbol NSBundleDidLoadNotification */
     static get didLoadNotification(): BridgedString;
     // Not bound, each for the reason given:
+    //   -localizedStringForKey:value:table:localizations:: introduced in macOS 15.4
     //   -loadNibNamed:owner:topLevelObjects:: a `NSArray * _Nullable *`
   }
 
@@ -2982,7 +3008,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector +colorWithCIColor: */
     constructor(labels: { ciColor: CIColor });
     /** @ntsSelector +colorWithColorSpace:components:count: */
-    constructor(labels: { colorSpace: NSColorSpace; components: Ptr<CGFloat>; count: Int });
+    constructor(labels: { colorSpace: NSColorSpace; components: ConstPtr<CGFloat>; count: Int });
     /** @ntsSelector colorUsingType: */
     usingType(type: CEnum<NSColor.ColorType, Int>): NSColor | null;
     /** @ntsSelector colorUsingColorSpace: */
@@ -3289,11 +3315,12 @@ declare module "objc:AppKit" {
     static removeMonitor(eventMonitor: NSObject): void;
     /** @ntsSelector self */
     self(): NSEvent;
+    /** @ntsSymbol NSEventDurationForever */
+    static get foreverDuration(): TimeInterval;
     // Not bound, each for the reason given:
     //   @property context: deprecated in macOS 10.12
     //   @property CGEvent: a `struct __CGEvent *`
     //   +eventWithCGEvent:: a `struct __CGEvent *`
-    //   NSEventDurationForever: a `const double`
   }
 
   /** @ntsClass NSGraphicsContext */
@@ -3423,6 +3450,7 @@ declare module "objc:AppKit" {
 
   /** @ntsClass NSBitmapImageRep */
   export class NSBitmapImageRep extends NSImageRep {
+    get bitmapData(): Ptr<UInt8> | null;
     get isPlanar(): boolean;
     get samplesPerPixel(): Int;
     get bitsPerPixel(): Int;
@@ -3494,7 +3522,6 @@ declare module "objc:AppKit" {
     /** @ntsSelector self */
     self(): NSBitmapImageRep;
     // Not bound, each for the reason given:
-    //   @property bitmapData: a `unsigned char *`
     //   @property CGImage: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
     //   -initWithFocusedViewRect:: deprecated in macOS 10.14
     //   -initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:bitsPerPixel:: a `unsigned char * _Nullable *`
@@ -3709,16 +3736,30 @@ declare module "objc:AppKit" {
   }
 
   export interface CGContextOwnMethods {
+    /** @ntsSymbol CGContextAddArc */
+    addArc(this: CGContext, labels: { centerX: CGFloat; y: CGFloat; radius: CGFloat; startAngle: CGFloat; endAngle: CGFloat; clockwise: Int32 }): void;
+    /** @ntsSymbol CGContextAddArcToPoint */
+    addArc(this: CGContext, labels: { x1: CGFloat; y1: CGFloat; x2: CGFloat; y2: CGFloat; radius: CGFloat }): void;
+    /** @ntsSymbol CGContextAddCurveToPoint */
+    addCurveTo(this: CGContext, labels: { cp1x: CGFloat; cp1y: CGFloat; cp2x: CGFloat; cp2y: CGFloat; endingAtX: CGFloat; y: CGFloat }): void;
     /** @ntsSymbol CGContextAddEllipseInRect */
     addEllipse(this: CGContext, labels: { in: ByValue<CGRect> | Fields<CGRect> }): void;
+    /** @ntsSymbol CGContextAddLineToPoint */
+    addLineTo(this: CGContext, labels: { x: CGFloat; y: CGFloat }): void;
+    /** @ntsSymbol CGContextAddLines */
+    addLines(this: CGContext, labels: { between: ConstPtr<CGPoint> | null; count: UInt }): void;
+    /** @ntsSymbol CGContextAddQuadCurveToPoint */
+    addQuadCurveTo(this: CGContext, labels: { cpx: CGFloat; cpy: CGFloat; endingAtX: CGFloat; y: CGFloat }): void;
     /** @ntsSymbol CGContextAddRect */
     addRect(this: CGContext, rect: ByValue<CGRect> | Fields<CGRect>): void;
+    /** @ntsSymbol CGContextAddRects */
+    addRects(this: CGContext, rects: ConstPtr<CGRect> | null, labels: { count: UInt }): void;
     /** @ntsSymbol CGBitmapContextGetAlphaInfo */
     CGBitmapContextGetAlphaInfo(this: CGContext): CEnum<CGImageAlphaInfo, UInt32>;
     /** @ntsGet CGBitmapContextGetAlphaInfo */
     readonly alphaInfo: CEnum<CGImageAlphaInfo, UInt32>;
     /** @ntsSymbol CGContextBeginPage */
-    beginPage(this: CGContext, labels: { mediaBox: Ptr<CGRect> | null }): void;
+    beginPage(this: CGContext, labels: { mediaBox: ConstPtr<CGRect> | null }): void;
     /** @ntsSymbol CGContextBeginPath */
     beginPath(this: CGContext): void;
     /** @ntsSymbol CGBitmapContextGetBitmapInfo */
@@ -3747,8 +3788,12 @@ declare module "objc:AppKit" {
     readonly bytesPerRow: UInt;
     /** @ntsSymbol CGContextClearRect */
     clear(this: CGContext, rect: ByValue<CGRect> | Fields<CGRect>): void;
+    /** @ntsSymbol CGContextClip */
+    clip(this: CGContext): void;
     /** @ntsSymbol CGContextClipToRect */
     clip(this: CGContext, labels: { to: ByValue<CGRect> | Fields<CGRect> }): void;
+    /** @ntsSymbol CGContextClipToRects */
+    clip(this: CGContext, labels: { to: ConstPtr<CGRect>; count: UInt }): void;
     /** @ntsSymbol CGPDFContextClose */
     closePDF(this: CGContext): void;
     /** @ntsSymbol CGContextClosePath */
@@ -3787,10 +3832,18 @@ declare module "objc:AppKit" {
     endPage(this: CGContext): void;
     /** @ntsSymbol CGContextEndTransparencyLayer */
     endTransparencyLayer(this: CGContext): void;
+    /** @ntsSymbol CGContextEOClip */
+    eoClip(this: CGContext): void;
+    /** @ntsSymbol CGContextEOFillPath */
+    eoFillPath(this: CGContext): void;
     /** @ntsSymbol CGContextFillRect */
     fill(this: CGContext, rect: ByValue<CGRect> | Fields<CGRect>): void;
+    /** @ntsSymbol CGContextFillRects */
+    fill(this: CGContext, rects: ConstPtr<CGRect> | null, labels: { count: UInt }): void;
     /** @ntsSymbol CGContextFillEllipseInRect */
     fillEllipse(this: CGContext, labels: { in: ByValue<CGRect> | Fields<CGRect> }): void;
+    /** @ntsSymbol CGContextFillPath */
+    fillPath(this: CGContext): void;
     /** @ntsSymbol CGContextFlush */
     flush(this: CGContext): void;
     /** @ntsSymbol CGBitmapContextGetHeight */
@@ -3805,6 +3858,8 @@ declare module "objc:AppKit" {
     CGContextIsPathEmpty(this: CGContext): boolean;
     /** @ntsGet CGContextIsPathEmpty */
     readonly isPathEmpty: boolean;
+    /** @ntsSymbol CGContextMoveToPoint */
+    moveTo(this: CGContext, labels: { x: CGFloat; y: CGFloat }): void;
     /** @ntsSymbol CGContextPathContainsPoint */
     pathContains(this: CGContext, point: ByValue<CGPoint> | Fields<CGPoint>, labels: { mode: CEnum<CGPathDrawingMode, Int32> }): boolean;
     /** @ntsSymbol CGContextReplacePathWithStrokedPath */
@@ -3834,7 +3889,7 @@ declare module "objc:AppKit" {
     /** @ntsSymbol CGContextSetCharacterSpacing */
     setCharacterSpacing(this: CGContext, spacing: CGFloat): void;
     /** @ntsSymbol CGContextSetFillColor */
-    setFillColor(this: CGContext, components: Ptr<CGFloat> | null): void;
+    setFillColor(this: CGContext, components: ConstPtr<CGFloat> | null): void;
     /** @ntsSymbol CGContextSetCMYKFillColor */
     setFillColor(this: CGContext, labels: { cyan: CGFloat; magenta: CGFloat; yellow: CGFloat; black: CGFloat; alpha: CGFloat }): void;
     /** @ntsSymbol CGContextSetGrayFillColor */
@@ -3847,6 +3902,8 @@ declare module "objc:AppKit" {
     setFontSize(this: CGContext, size: CGFloat): void;
     /** @ntsSymbol CGContextSetLineCap */
     setLineCap(this: CGContext, cap: CEnum<CGLineCap, Int32>): void;
+    /** @ntsSymbol CGContextSetLineDash */
+    setLineDash(this: CGContext, labels: { phase: CGFloat; lengths: ConstPtr<CGFloat> | null; count: UInt }): void;
     /** @ntsSymbol CGContextSetLineJoin */
     setLineJoin(this: CGContext, join: CEnum<CGLineJoin, Int32>): void;
     /** @ntsSymbol CGContextSetLineWidth */
@@ -3868,7 +3925,7 @@ declare module "objc:AppKit" {
     /** @ntsSymbol CGContextSetShouldSubpixelQuantizeFonts */
     setShouldSubpixelQuantizeFonts(this: CGContext, shouldSubpixelQuantizeFonts: boolean): void;
     /** @ntsSymbol CGContextSetStrokeColor */
-    setStrokeColor(this: CGContext, components: Ptr<CGFloat> | null): void;
+    setStrokeColor(this: CGContext, components: ConstPtr<CGFloat> | null): void;
     /** @ntsSymbol CGContextSetCMYKStrokeColor */
     setStrokeColor(this: CGContext, labels: { cyan: CGFloat; magenta: CGFloat; yellow: CGFloat; black: CGFloat; alpha: CGFloat }): void;
     /** @ntsSymbol CGContextSetGrayStrokeColor */
@@ -3877,12 +3934,18 @@ declare module "objc:AppKit" {
     setStrokeColor(this: CGContext, labels: { red: CGFloat; green: CGFloat; blue: CGFloat; alpha: CGFloat }): void;
     /** @ntsSymbol CGContextSetTextDrawingMode */
     setTextDrawingMode(this: CGContext, mode: CEnum<CGTextDrawingMode, Int32>): void;
+    /** @ntsSymbol CGContextSetTextPosition */
+    setTextPosition(this: CGContext, labels: { x: CGFloat; y: CGFloat }): void;
+    /** @ntsSymbol CGContextShowGlyphsAtPositions */
+    showGlyphs(this: CGContext, glyphs: ConstPtr<UInt16> | null, labels: { atPositions: ConstPtr<CGPoint> | null; count: UInt }): void;
     /** @ntsSymbol CGContextStrokeRect */
     stroke(this: CGContext, rect: ByValue<CGRect> | Fields<CGRect>): void;
     /** @ntsSymbol CGContextStrokeRectWithWidth */
     stroke(this: CGContext, rect: ByValue<CGRect> | Fields<CGRect>, labels: { width: CGFloat }): void;
     /** @ntsSymbol CGContextStrokeEllipseInRect */
     strokeEllipse(this: CGContext, labels: { in: ByValue<CGRect> | Fields<CGRect> }): void;
+    /** @ntsSymbol CGContextStrokeLineSegments */
+    strokeLineSegments(this: CGContext, labels: { between: ConstPtr<CGPoint> | null; count: UInt }): void;
     /** @ntsSymbol CGContextStrokePath */
     strokePath(this: CGContext): void;
     /** @ntsSymbol CGContextSynchronize */
@@ -3891,6 +3954,10 @@ declare module "objc:AppKit" {
     CGContextGetTextMatrix(this: CGContext): ByValue<CGAffineTransform>;
     /** @ntsGet CGContextGetTextMatrix */
     readonly textMatrix: ByValue<CGAffineTransform>;
+    /** @ntsSymbol CGContextGetTextPosition */
+    CGContextGetTextPosition(this: CGContext): ByValue<CGPoint>;
+    /** @ntsGet CGContextGetTextPosition */
+    readonly textPosition: ByValue<CGPoint>;
     /** @ntsSymbol CGContextTranslateCTM */
     translateBy(this: CGContext, labels: { x: CGFloat; y: CGFloat }): void;
     /** @ntsSymbol CGContextGetUserSpaceToDeviceSpaceTransform */
@@ -3902,25 +3969,30 @@ declare module "objc:AppKit" {
     /** @ntsGet CGBitmapContextGetWidth */
     readonly width: UInt;
     // Not bound, each for the reason given:
-    //   CGPDFContextAddDestinationAtPoint: a `const struct __CFString *`
-    //   CGPDFContextAddDocumentMetadata: a `const struct __CFData *`
+    //   CGPDFContextAddDestinationAtPoint: a `CFStringRef`, toll-free as `NSString`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say
+    //   CGPDFContextAddDocumentMetadata: a `CFDataRef`, toll-free as `NSData`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say
     //   CGContextAddPath: a `const struct CGPath *`
-    //   CGPDFContextBeginPage: a `const struct __CFDictionary *`
-    //   CGContextBeginTransparencyLayer: a `const struct __CFDictionary *`
-    //   CGContextBeginTransparencyLayerWithRect: a `const struct __CFDictionary *`
+    //   CGPDFContextBeginPage: a `CFDictionaryRef`, toll-free as `NSDictionary`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say
+    //   CGContextBeginTransparencyLayer: a `CFDictionaryRef`, toll-free as `NSDictionary`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say
+    //   CGContextBeginTransparencyLayerWithRect: a `CFDictionaryRef`, toll-free as `NSDictionary`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say
     //   CGContextClipToMask: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
     //   CGBitmapContextGetColorSpace: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
+    //   CGContextDrawLayerAtPoint: `CGLayer`, a Core Foundation class this binding does not bind (`--class CGLayer`)
+    //   CGContextDrawTiledImage: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
+    //   CGContextDrawImage: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
+    //   CGContextDrawImageApplyingToneMapping: introduced in macOS 15.0
+    //   CGContextDrawLayerInRect: `CGLayer`, a Core Foundation class this binding does not bind (`--class CGLayer`)
     //   CGContextDrawLinearGradient: `CGGradient`, a Core Foundation class this binding does not bind (`--class CGGradient`)
     //   CGContextDrawPDFPage: `CGPDFPage`, a Core Foundation class this binding does not bind (`--class CGPDFPage`)
     //   CGContextDrawRadialGradient: `CGGradient`, a Core Foundation class this binding does not bind (`--class CGGradient`)
     //   CGContextDrawShading: `CGShading`, a Core Foundation class this binding does not bind (`--class CGShading`)
-    //   CGPDFContextCreateWithURL: a `const struct __CFURL *`
+    //   CGPDFContextCreateWithURL: a `CFURLRef`, toll-free as `NSURL`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say
     //   CGPDFContextCreate: `CGDataConsumer`, a Core Foundation class this binding does not bind (`--class CGDataConsumer`)
     //   CGBitmapContextCreate: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
     //   CGBitmapContextCreateWithData: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
     //   CGBitmapContextCreateImage: `CGImage`, a Core Foundation class this binding does not bind (`--class CGImage`)
     //   CGContextCopyPath: a `const struct CGPath *`
-    //   CGPDFContextSetDestinationForRect: a `const struct __CFString *`
+    //   CGPDFContextSetDestinationForRect: a `CFStringRef`, toll-free as `NSString`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say
     //   CGContextSetEDRTargetHeadroom: introduced in macOS 15.0
     //   CGContextSetFillColorWithColor: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
     //   CGContextSetFillColorSpace: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
@@ -3930,9 +4002,9 @@ declare module "objc:AppKit" {
     //   CGContextSetStrokeColorWithColor: `CGColor`, a Core Foundation class this binding does not bind (`--class CGColor`)
     //   CGContextSetStrokeColorSpace: `CGColorSpace`, a Core Foundation class this binding does not bind (`--class CGColorSpace`)
     //   CGContextSetStrokePattern: `CGPattern`, a Core Foundation class this binding does not bind (`--class CGPattern`)
-    //   CGPDFContextSetURLForRect: a `const struct __CFURL *`
+    //   CGPDFContextSetURLForRect: a `CFURLRef`, toll-free as `NSURL`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say
     //   CGContextSynchronizeAttributes: introduced in macOS 26.0
-    //   CGContextGetTypeID: a `swift.type.property`, which is not bound yet
+    //   CGContextGetTypeID: a class property, which is a call with no receiver and no property of any value
   }
   export type CGContext = ObjcClass<"CGContext"> & CGContextOwnMethods;
 

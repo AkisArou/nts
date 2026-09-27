@@ -123,7 +123,9 @@ impl Binder for ApplePlatform {
             symbols: Some(symbols.clone()),
             records: records.clone(),
             lent,
-            provided: std::collections::BTreeSet::new(),
+            // The platform's other frameworks: a class one of them owns is
+            // imported from it, whichever is generated first.
+            provided: self.modules().filter(|other| *other != framework).map(str::to_owned).collect(),
         };
         let run = |request: &bind_objc::Request| bind_objc::run(request).with_context(|| format!("generating the `{}` package", request.module));
         // Each framework once, in order: the structs it declares are the
@@ -137,13 +139,7 @@ impl Binder for ApplePlatform {
             let output = run(&request(framework, reads, &seen, bind_objc::Lent::default()))?;
             records.extend(output.records.iter().map(|record| (record.clone(), format!("objc:{framework}"))));
             for (owner, lent) in &output.lends {
-                let into = lends.entry(owner.clone()).or_default();
-                for (class, members) in &lent.members {
-                    into.members.entry(class.clone()).or_default().extend(members.iter().cloned());
-                }
-                for (module, names) in &lent.imports {
-                    into.imports.entry(module.clone()).or_default().extend(names.iter().cloned());
-                }
+                lends.entry(owner.clone()).or_default().absorb(lent);
             }
             outputs.push((*framework, *reads, seen, output));
         }
@@ -260,6 +256,7 @@ mod tests {
             records.into_iter().collect::<Vec<_>>(),
             [("CGPoint".to_owned(), "objc:CoreGraphics".to_owned()), ("_NSRange".to_owned(), "objc:CoreGraphics".to_owned())]
         );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// **Each platform's packages typecheck**, whole and together, with their
@@ -312,6 +309,26 @@ mod tests {
             }
         }
         assert!(owners.len() > 100 && structs > 3, "{os}: {} declarations, {structs} structs: the scan does not match the packages", owners.len());
+        // What the packages leave unbound, held to a ceiling: a change that
+        // stops binding a shape adds a reason line and nothing else, which no
+        // typecheck sees. Deprecated and too-new members are left out by
+        // choice; a bare "a `T`" is a type no spelling handles yet.
+        let reasons: Vec<&str> = packages.iter().flat_map(|package| not_bound(&package.declarations)).collect();
+        let chosen = reasons.iter().filter(|why| why.starts_with("deprecated in") || why.starts_with("introduced in")).count();
+        let unhandled = reasons.iter().filter(|why| why.starts_with("a `") && why.ends_with('`') && why.matches('`').count() == 2).count();
+        // Measured 2026-09-27. Lower them when a shape is bound: the largest
+        // named one is a toll-free type in a C function, whose prototype
+        // lowering cannot yet write as the header's `CFStringRef`.
+        let (most, most_unhandled) = match os {
+            "macos" => (750, 173),
+            "ios" => (551, 160),
+            _ => unreachable!("the test names macos and ios"),
+        };
+        assert!(
+            reasons.len() - chosen <= most && unhandled <= most_unhandled,
+            "{os}: {} not bound, {chosen} of them by choice, {unhandled} of a type nothing spells; the ceilings are {most} and {most_unhandled}",
+            reasons.len()
+        );
         let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
         let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-apple-packages-{os}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -321,7 +338,12 @@ mod tests {
         for package in &packages {
             let at = dir.join("node_modules").join(&package.name);
             std::fs::create_dir_all(&at).unwrap();
-            std::fs::write(at.join("package.json"), format!(r#"{{ "name": {:?}, "types": "index.d.ts" }}"#, package.name)).unwrap();
+            // A surface, as the store writes it: without `"nts": { "surface" }`
+            // the frontend reads a package's `.d.ts` as an external library,
+            // which it does not check, and this test passed over declarations
+            // it never read. The control below keeps that honest.
+            let manifest = format!(r#"{{ "name": {:?}, "types": "index.d.ts", "nts": {{ "surface": {:?} }} }}"#, package.name, package.surface.as_str());
+            std::fs::write(at.join("package.json"), manifest).unwrap();
             std::fs::write(at.join("index.d.ts"), &package.declarations).unwrap();
             if let Some((name, text)) = &package.values {
                 std::fs::write(dir.join(name), text).unwrap();
@@ -338,15 +360,45 @@ mod tests {
             ),
         )
         .unwrap();
-        let snapshot = nts_frontend_ts::TsgoApi::new(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
-        let errors: Vec<String> = snapshot
-            .diagnostics
-            .iter()
-            .filter(|diagnostic| diagnostic.severity == nts_diagnostics::Severity::Error)
-            .take(10)
-            .map(|diagnostic| format!("{} {}", diagnostic.code, diagnostic.message))
-            .collect();
-        assert!(errors.is_empty(), "the {os} packages do not typecheck: {errors:#?}");
+        let errors = || -> Vec<String> {
+            let snapshot = nts_frontend_ts::TsgoApi::new(tsgo.clone()).snapshot(&dir.join("tsconfig.json")).unwrap();
+            snapshot
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.severity == nts_diagnostics::Severity::Error)
+                .map(|diagnostic| format!("{} {}", diagnostic.code, diagnostic.message))
+                .collect()
+        };
+        let found = errors();
+        if !found.is_empty() {
+            let mut codes: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+            for error in &found {
+                *codes.entry(error.split(' ').next().unwrap_or_default()).or_default() += 1;
+            }
+            panic!("the {os} packages do not typecheck: {} errors, by code {codes:?}, the first {:#?}", found.len(), &found[..found.len().min(10)]);
+        }
+        // The control: one unresolved name in one package's declarations is
+        // an error, so a clean answer above was a check of them.
+        let first = dir.join("node_modules").join(&packages[0].name).join("index.d.ts");
+        std::fs::write(&first, format!("{}\nexport type Unresolved = NoSuchName;\n", packages[0].declarations)).unwrap();
+        let found = errors();
+        assert!(found.iter().any(|error| error.contains("NoSuchName")), "{os}: an unresolved name in {} went unreported: {found:#?}", packages[0].name);
+        // Kept when an assertion above fails, to be read; removed when none
+        // does, or every run leaves the platform's packages in /tmp.
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Each reason a package gives for what it leaves unbound: a class
+    /// member's `//   name: why`, and a free function's `// Not bound: name: why`.
+    fn not_bound(declarations: &str) -> Vec<&str> {
+        declarations
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim_start();
+                let rest = line.strip_prefix("// Not bound: ").or_else(|| line.strip_prefix("//   "))?;
+                rest.split_once(": ").map(|(_, why)| why)
+            })
+            .collect()
     }
 
     /// The files [`super::GENERATOR`] hashes are every file of the

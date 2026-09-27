@@ -121,8 +121,29 @@ pub(crate) struct Request {
 pub(crate) struct Lent {
     /// Each member as rendered, by the Objective-C class it is added to.
     pub(crate) members: BTreeMap<String, Vec<String>>,
+    /// The instance members it adds, by the class it adds them to: those
+    /// reach the class by merging, but a descendant declaring the same name
+    /// must repeat them. `UIKit` adds `encode(_: CGPoint, forKey:)` to
+    /// `NSCoder`, and `NSKeyedArchiver`'s own `encode`s without it would not
+    /// be `NSCoder`'s subtype (TS2416).
+    pub(crate) inherited: BTreeMap<String, Vec<String>>,
     /// The names those members use, by the module to import each from.
     pub(crate) imports: BTreeMap<String, BTreeSet<String>>,
+}
+
+impl Lent {
+    /// `other`'s members added to these.
+    pub(crate) fn absorb(&mut self, other: &Lent) {
+        for (class, members) in &other.members {
+            self.members.entry(class.clone()).or_default().extend(members.iter().cloned());
+        }
+        for (class, members) in &other.inherited {
+            self.inherited.entry(class.clone()).or_default().extend(members.iter().cloned());
+        }
+        for (module, names) in &other.imports {
+            self.imports.entry(module.clone()).or_default().extend(names.iter().cloned());
+        }
+    }
 }
 
 /// What `nts bind-objc` writes: the binding, and the witness that checks it.
@@ -169,7 +190,12 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
         Some(directory) => directory.clone(),
         None => default_symbols(&request.sdk)?,
     };
-    let swift = Swift::read(&symbols, &request.frameworks)?;
+    // The frameworks it reads, and those whose declarations it imports --
+    // read for who owns what, so a class of theirs its signatures name is
+    // imported from its framework rather than declared here as a stub.
+    let mut modules = request.frameworks.clone();
+    modules.extend(request.provided.iter().filter(|framework| !request.frameworks.contains(framework)).cloned());
+    let swift = Swift::read(&symbols, &modules)?;
     let owned;
     let request = if request.package {
         owned = Request { names: swift.declared_by(framework_of(request)), ..request.clone() };
@@ -204,6 +230,7 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     model.read_cf(&bodies.functions, &request.functions);
     model.read_constants(&constants, &bodies.variables);
     model.settle_protocols();
+    model.widen_overridden_getters();
     let adoptions = if request.names.is_empty() { BTreeMap::new() } else { swift.adoptions(&bound, &headers.adopts) };
     let records = model.records.iter().filter(|name| !request.records.contains_key(*name)).cloned().collect();
     let binding = render(request, &model);
@@ -299,7 +326,9 @@ pub(crate) fn default_symbols(sdk: &str) -> Result<std::path::PathBuf> {
     let version = settings.get("Version").and_then(Value::as_str).context("SDKSettings.json names no `Version`")?;
     let canonical = settings.get("CanonicalName").and_then(Value::as_str).unwrap_or("macosx");
     let directory = if canonical.starts_with("macosx") { version } else { canonical };
-    Ok(sdk.parent().unwrap_or(sdk).join("symbolgraph").join(directory))
+    // `private/`: extracted at every access level, as `symbolgraph.sh` says
+    // why. A graph from before that is in the directory above, never read.
+    Ok(sdk.parent().unwrap_or(sdk).join("symbolgraph").join("private").join(directory))
 }
 
 /// The platform a clang target is for, as a symbol graph's availability names
@@ -566,6 +595,42 @@ fn file(out: &mut Dumped, wanted: &Wanted<'_>, declared: Declared) {
     }
 }
 
+/// The Foundation class a toll-free bridged Core Foundation type is, by the
+/// struct its `Ref` points at: `const struct __CFString` is `NSString`, and
+/// the mutable `struct __CFString` is `NSMutableString`.
+fn toll_free(pointee: &str) -> Option<&'static str> {
+    let constant = pointee.trim_start().starts_with("const ");
+    let tag = pointee.trim().trim_start_matches("const ").trim().strip_prefix("struct ")?.trim();
+    Some(match (tag, constant) {
+        ("__CFString", true) => "NSString",
+        ("__CFString", false) => "NSMutableString",
+        ("__CFArray", true) => "NSArray",
+        ("__CFArray", false) => "NSMutableArray",
+        ("__CFDictionary", true) => "NSDictionary",
+        ("__CFDictionary", false) => "NSMutableDictionary",
+        ("__CFSet", true) => "NSSet",
+        ("__CFSet", false) => "NSMutableSet",
+        ("__CFData", true) => "NSData",
+        ("__CFData", false) => "NSMutableData",
+        ("__CFAttributedString", true) => "NSAttributedString",
+        ("__CFAttributedString", false) => "NSMutableAttributedString",
+        ("__CFURL", _) => "NSURL",
+        ("__CFNumber", _) => "NSNumber",
+        ("__CFDate", _) => "NSDate",
+        ("__CFCharacterSet", true) => "NSCharacterSet",
+        ("__CFCharacterSet", false) => "NSMutableCharacterSet",
+        ("__CFError", _) => "NSError",
+        ("__CFLocale", _) => "NSLocale",
+        ("__CFTimeZone", _) => "NSTimeZone",
+        ("__CFCalendar", _) => "NSCalendar",
+        ("__CFNull", _) => "NSNull",
+        ("__CFRunLoopTimer", _) => "NSTimer",
+        ("__CFReadStream", _) => "NSInputStream",
+        ("__CFWriteStream", _) => "NSOutputStream",
+        _ => return None,
+    })
+}
+
 /// `{"name": ...}`, which is how clang refers to another declaration.
 fn named(value: &Value) -> Option<String> {
     value.get("name").and_then(Value::as_str).map(str::to_owned)
@@ -686,6 +751,25 @@ struct Symbol {
     availability: Vec<Availability>,
     #[serde(default, rename = "declarationFragments")]
     fragments: Vec<Fragment>,
+    #[serde(default, rename = "accessLevel")]
+    access: String,
+    #[serde(default, rename = "functionSignature")]
+    signature: Option<Signature>,
+}
+
+/// A function's parameters, as Swift declares them.
+#[derive(serde::Deserialize, Clone)]
+struct Signature {
+    #[serde(default)]
+    parameters: Vec<SignatureParameter>,
+}
+
+/// One parameter: its label, and the C parameter's name where that differs.
+#[derive(serde::Deserialize, Clone)]
+struct SignatureParameter {
+    name: String,
+    #[serde(default, rename = "internalName")]
+    internal: Option<String>,
 }
 
 /// See [`Symbol::optionality`].
@@ -706,6 +790,47 @@ struct Fragment {
 }
 
 impl Symbol {
+    /// Whether this is a declaration a header offers a caller, as a public
+    /// extraction would keep it. The graphs are extracted at every access
+    /// level for [`Symbol::unrefined`]'s sake, which brings in two things no
+    /// program calls: Swift's own `internal` helpers, and the declarations
+    /// C reserves by a leading underscore -- `__CGPointEqualToPoint`, the
+    /// inline body of `CGPointEqualToPoint`, and ivars such as `_pi`.
+    fn offered(&self) -> bool {
+        let usr = self.identifier.identifier.split("::SYNTHESIZED::").next().unwrap_or_default();
+        let own = usr.rsplit(['@', ')']).next().unwrap_or_default();
+        matches!(self.access.as_str(), "public" | "open") && !own.starts_with('_')
+    }
+
+    /// The C names of the parameters Swift's declaration keeps.
+    fn parameter_names(&self) -> Vec<&str> {
+        self.signature
+            .iter()
+            .flat_map(|signature| &signature.parameters)
+            .map(|parameter| parameter.internal.as_deref().unwrap_or(&parameter.name))
+            .collect()
+    }
+
+    /// The name a refinement hides, restored. A declaration Swift refines in
+    /// its overlay (`NS_REFINED_FOR_SWIFT`, or `SwiftPrivate` in the
+    /// framework's API notes) is imported under a `__` name, which the
+    /// overlay's Swift wraps: `CGContextMoveToPoint` is
+    /// `CGContext.__moveTo(self:x:y:)` under `move(to:)`, and
+    /// `-initWithConfiguration:` is `init(__configuration:)`. The wrapper is
+    /// Swift, which nothing here can call; the C function or the message it
+    /// wraps is what a program calls, by the name without the prefix.
+    ///
+    /// Only a name Swift made: a declaration whose own name has the prefix
+    /// is not [`offered`](Symbol::offered).
+    fn unrefined(mut self) -> Self {
+        let restore = |name: &str| name.strip_prefix("__").unwrap_or(name).replacen("(__", "(", 1);
+        self.names.title = restore(&self.names.title);
+        for component in &mut self.path {
+            *component = restore(component);
+        }
+        self
+    }
+
     /// How Swift's declaration gives the value -- a property's type, or a
     /// method's result: optional (`T?`), implicitly unwrapped (`T!`, a
     /// `null_resettable` property, read never nil and written nil to reset),
@@ -817,7 +942,8 @@ impl Swift {
                     serde_json::from_slice(&text).with_context(|| format!("reading {}", path.display()))?;
             // Clang's declarations only: an `s:` symbol is Swift's own, which
             // an Objective-C message cannot reach.
-                for symbol in graph.symbols.into_iter().filter(|s| s.identifier.identifier.starts_with("c:")) {
+                let symbols = graph.symbols.into_iter().filter(|s| s.identifier.identifier.starts_with("c:") && s.offered());
+                for symbol in symbols.map(Symbol::unrefined) {
                     // `NSObject` is Swift's `ObjectiveC` module's, which has no
                     // framework header; a Swift programmer has it from Foundation.
                     let declared_by = if module == "ObjectiveC" { "Foundation" } else { module };
@@ -1934,9 +2060,12 @@ impl<'a> Model<'a> {
         // A Core Foundation class: `CGContextRef` is `CGContext`.
         if let Some(name) = self.cf_types.get(desugared.as_str()).cloned() {
             self.import("objc:types", "ObjcClass");
-            return Ok(or_null(name));
+            return Ok(or_null(self.cf_handle(&desugared, name)));
         }
         if let Some(pointee) = desugared.strip_suffix(" *") {
+            if let Some(spelled) = self.toll_free_object(class, &written, pointee, position) {
+                return spelled;
+            }
             let pointee = pointee.trim_start_matches("__kindof ");
             let base = pointee.split('<').next().unwrap_or_default().trim();
             if base == "NSString" && position != Position::Block {
@@ -1980,11 +2109,37 @@ impl<'a> Model<'a> {
         if let Some(name) = desugared.strip_prefix("struct ").filter(|name| !name.ends_with('*')) {
             return self.by_value(name, position);
         }
+        // A C function pointer -- `CGPathApply`'s, an event tap's callback: in
+        // an `objc:` module a function type is a block, which the call passes
+        // as one, and a function pointer is not.
+        if desugared.contains("(*") {
+            return Err(format!("a C function pointer, `{desugared}`, which a function type here would pass as a block"));
+        }
         Err(format!("a `{desugared}`"))
     }
 
     /// A pointer to something that is not an object: Swift's `Unsafe...Pointer`
     /// types, each as the address a program passes or is handed.
+    /// The Swift number a pointer's pointee is: named directly (`CGFloat`,
+    /// `double`), or through the typedefs that lead to one (`CGGlyph`).
+    fn pointee_number(&self, written: &str, pointee: &str) -> Option<&'static str> {
+        let clean = |text: &str| text.replace("_Nullable", "").replace("_Nonnull", "").trim().trim_start_matches("const ").trim().to_owned();
+        let written = clean(written.split('*').next().unwrap_or_default());
+        let pointee = clean(pointee);
+        if let Some(number) = swift_number(&written, &pointee) {
+            return Some(number);
+        }
+        let mut name = if pointee.contains(' ') { written } else { pointee };
+        for _ in 0..8 {
+            let aliased = clean(self.typedefs.get(&name)?);
+            if let Some(number) = swift_number(&aliased, &aliased) {
+                return Some(number);
+            }
+            name = aliased;
+        }
+        None
+    }
+
     fn unsafe_pointer(&mut self, written: &str, pointee: &str, desugared: &str, position: Position) -> Spelled {
         let or_null = |text: String| if written.contains("_Nullable") { format!("{text} | null") } else { text };
         if position == Position::Parameter && (pointee == "const char" || pointee == "char") {
@@ -2018,31 +2173,32 @@ impl<'a> Model<'a> {
             self.import("c:types", "Ptr");
             return Ok(or_null("Ptr<ObjCBool>".to_owned()));
         }
-        // Swift's `UnsafeMutablePointer<CGFloat>`, an out parameter like
-        // `getRed(_:green:blue:alpha:)`'s: the address of the number, which
-        // a program passes as `local<CGFloat>()` and reads as `[0]`.
-        if position == Position::Parameter
-            && !pointee.contains('*')
-            && let Some(number) = swift_number(
-                written.split('*').next().unwrap_or_default().trim().trim_start_matches("const ").trim(),
-                pointee.trim_start_matches("const "),
-            )
-        {
+        // Swift's `UnsafeMutablePointer<CGFloat>` -- an out parameter like
+        // `getRed(_:green:blue:alpha:)`'s, which a program passes as
+        // `local<CGFloat>()` and reads as `[0]` -- and `UnsafePointer<CGGlyph>`,
+        // a buffer C only reads: the address of numbers, the number reached
+        // through the typedefs Swift sees through (`CGGlyph`, `unichar` and
+        // `size_t` are `UInt16`, `UInt16` and `UInt`). `ConstPtr` where C
+        // promises not to write, which a `Ptr` still satisfies.
+        if !pointee.contains('*') && let Some(number) = self.pointee_number(written, pointee) {
+            let constant = pointee.trim_start().starts_with("const ");
+            let brand = if constant { "ConstPtr" } else { "Ptr" };
             self.import("objc:types", number);
-            self.import("c:types", "Ptr");
-            return Ok(or_null(format!("Ptr<{number}>")));
+            self.import("c:types", brand);
+            return Ok(or_null(format!("{brand}<{number}>")));
         }
         // Swift's `UnsafeMutablePointer<NSRange>` -- an out parameter, or
-        // a record read in place -- as the address a program passes:
-        // `local<NSRange>()`.
-        if position == Position::Parameter
-            && let Some(name) = struct_through_typedefs(&self.typedefs, pointee.trim_start_matches("const "))
+        // a record read in place -- as the address a program passes,
+        // `local<NSRange>()`, is handed, or a block is given: `ConstPtr`
+        // where C promises not to write.
+        if let Some(name) = struct_through_typedefs(&self.typedefs, pointee.trim_start_matches("const "))
             && self.headers.records.contains_key(&name)
         {
             let name = name.as_str();
             self.record(name)?;
-            self.import("c:types", "Ptr");
-            return Ok(or_null(format!("Ptr<{}>", record_name(&self.typedefs, name))));
+            let brand = if pointee.trim_start().starts_with("const ") { "ConstPtr" } else { "Ptr" };
+            self.import("c:types", brand);
+            return Ok(or_null(format!("{brand}<{}>", record_name(&self.typedefs, name))));
         }
         // Swift's `UnsafeMutableRawPointer`: an address the program
         // passes, or is handed, and does not read as any type.
@@ -2225,6 +2381,43 @@ impl<'a> Model<'a> {
     /// members agree with its own and with each other, and never itself. An
     /// interface cannot extend a type it contradicts (TS2430), nor itself
     /// (TS2310). What is left out is said, with why.
+    /// A property an override may answer `nil` for is nullable on the
+    /// ancestor too: `UIKeyCommand`'s `action` is `Selector?` where
+    /// `UICommand`'s is `Selector`, and a `UICommand` may be a
+    /// `UIKeyCommand`. TypeScript holds an override to its ancestor's type
+    /// (TS2416), and narrowing the override would read a `nil` as a value.
+    fn widen_overridden_getters(&mut self) {
+        let getter = |name: &str| format!("get {name}()");
+        let mut widen: Vec<(usize, String)> = Vec::new();
+        for class in &self.classes {
+            for (name, texts) in member_texts(&class.members) {
+                if !texts.iter().any(|text| text.starts_with(&getter(&name)) && text.ends_with(" | null;")) {
+                    continue;
+                }
+                let mut at = class.parent.as_ref().and_then(|parent| self.classes.iter().position(|c| c.swift == *parent));
+                while let Some(index) = at {
+                    let ancestor = &self.classes[index];
+                    if member_texts(&ancestor.members).get(&name).is_some_and(|texts| texts.iter().any(|text| text.starts_with(&getter(&name)) && !text.ends_with(" | null;"))) {
+                        widen.push((index, name.clone()));
+                    }
+                    at = ancestor.parent.as_ref().and_then(|parent| self.classes.iter().position(|c| c.swift == *parent));
+                }
+            }
+        }
+        for (index, name) in widen {
+            for entry in &mut self.classes[index].members {
+                *entry = entry
+                    .lines()
+                    .map(|line| match line.strip_suffix(';') {
+                        Some(head) if line.trim_start().starts_with(&getter(&name)) && !head.ends_with(" | null") => format!("{head} | null;"),
+                        _ => line.to_owned(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+            }
+        }
+    }
+
     fn settle_protocols(&mut self) {
         let chain_texts = |model: &Self, start: &str| {
             let mut texts: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -2301,7 +2494,14 @@ impl<'a> Model<'a> {
     /// `NSAccessibilityElementProtocol` and `NSAccessibilityProtocol` both
     /// declare `accessibilityFrame` differently. A protocol left out keeps its
     /// members on a value of the protocol's type.
-    fn agreeing(&self, class: &Class, conformances: Vec<String>) -> Vec<String> {
+    ///
+    /// With them, what the merged interface must redeclare: a member of the
+    /// protocols' base the class inherits from an ancestor that declares it
+    /// differently. `NSPurgeableData` has `NSData`'s two `isEqual`s, and its
+    /// `NSDiscardableContent` brings `NSObject`'s one: an interface inheriting
+    /// both is TS2320, and one declaring the member itself -- as the class
+    /// already has it, so nothing changes for the class -- is not.
+    fn agreeing(&self, class: &Class, conformances: Vec<String>) -> (Vec<String>, Vec<String>) {
         // Each name's overloads as every declarer in the chain has them: the
         // merged interface is checked against each ancestor's, not only the
         // nearest redeclaration (`NSTextView` against `NSText`'s too).
@@ -2317,6 +2517,7 @@ impl<'a> Model<'a> {
         }
         let by_name: BTreeMap<&str, &Protocol> = self.protocols.iter().map(|p| (p.swift.rsplit('.').next().unwrap_or_default(), p)).collect();
         let mut accepted = Vec::new();
+        let mut redeclared: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for conformance in conformances {
             let mut members: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
             let mut pending = vec![conformance.as_str()];
@@ -2337,13 +2538,30 @@ impl<'a> Model<'a> {
             // and comparing them read `UITextField`'s covariant `self():
             // UITextField` and its constructors as clashes with `NSObject`'s,
             // which left it no conformance at all -- `insertText` included.
-            for base in bases.into_iter().filter(|base| !ancestry.contains(base)) {
-                let mut at = self.classes.iter().find(|c| c.swift == base);
+            for base in bases.iter().filter(|base| !ancestry.contains(*base)) {
+                let mut at = self.classes.iter().find(|c| c.swift == *base);
                 while let Some(current) = at {
                     for (member, texts) in member_texts(&current.members) {
                         members.entry(member).or_insert(texts);
                     }
                     at = current.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+                }
+            }
+            // A base the class descends from: its members are the class's
+            // own inheritance, except where an ancestor between them
+            // redeclares one, which the interface then redeclares as that
+            // ancestor has it.
+            for base in bases.iter().filter(|base| ancestry.contains(*base)) {
+                let Some(base) = self.classes.iter().find(|c| c.swift == *base) else { continue };
+                for (member, texts) in member_texts(&base.members) {
+                    if redeclared.contains_key(&member) {
+                        continue;
+                    }
+                    if let Some(entries) = self.nearest_declaration(class, &member).filter(|(declarer, _)| declarer.swift != base.swift && declarer.swift != class.swift).map(|(_, entries)| entries)
+                        && member_texts(&entries).get(&member) != Some(&texts)
+                    {
+                        redeclared.insert(member, entries);
+                    }
                 }
             }
             if members.iter().all(|(name, texts)| known.get(name).is_none_or(|declared| declared.iter().all(|known| known == texts))) {
@@ -2353,7 +2571,98 @@ impl<'a> Model<'a> {
                 accepted.push(conformance);
             }
         }
-        accepted
+        // Only for a conformance that is merged: with none there is no second
+        // base to disagree with.
+        let redeclared = if accepted.is_empty() { Vec::new() } else { redeclared.into_values().flatten().collect() };
+        (accepted, redeclared)
+    }
+
+    /// The instance members other frameworks add to `class`'s ancestors under
+    /// a name `class` declares itself: its own overloads of that name would
+    /// otherwise be all it has, and not the ancestor's subtype.
+    fn repeated_lent<'l>(&self, class: &Class, lent: &'l Lent) -> Vec<&'l String> {
+        let own = member_texts(&class.members);
+        let mut repeated = Vec::new();
+        let mut at = class.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+        while let Some(ancestor) = at {
+            for member in lent.inherited.get(&ancestor.objc).into_iter().flatten() {
+                if member_texts(std::slice::from_ref(member)).keys().any(|name| own.contains_key(name)) {
+                    repeated.push(member);
+                }
+            }
+            at = ancestor.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+        }
+        repeated
+    }
+
+    /// The requirements of the protocols merged into `class`'s ancestors
+    /// under a name `class` declares itself, which it repeats for the same
+    /// reason as [`Model::repeated_lent`]: `NSTextContentManager` merges
+    /// `NSTextElementProvider`'s `location(location, offset)`, and
+    /// `NSTextContentStorage`'s own `location(_, { offsetBy })` alone would not
+    /// be its subtype (TS2416). What `class`'s own conformances merge in, it
+    /// has already, and a signature it declares itself needs no second copy.
+    ///
+    /// Methods only, and as required: a class's overloads of a name are all
+    /// required or all optional (TS2386), and its own are required. A
+    /// property is not repeated -- a second declaration of one is TS2300 --
+    /// and none has been met that disagrees.
+    fn repeated_requirements(&self, class: &Class) -> Vec<String> {
+        let own = member_texts(&class.members);
+        let mine = self.merged_requirements(class);
+        let mut repeated: Vec<String> = Vec::new();
+        let mut at = class.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+        while let Some(ancestor) = at {
+            for (name, entries) in self.merged_requirements(ancestor) {
+                let Some(declared) = own.get(&name).filter(|_| !mine.contains_key(&name)) else { continue };
+                for entry in entries {
+                    let optional = format!("{name}?(");
+                    let required = format!("{name}(");
+                    let entry = entry.lines().map(|line| if line.trim_start().starts_with(&optional) { line.replacen(&optional, &required, 1) } else { line.to_owned() }).collect::<Vec<_>>().join("\n");
+                    let is_method = member_texts(std::slice::from_ref(&entry)).get(&name).is_some_and(|texts| texts.iter().all(|text| text.starts_with(&required)));
+                    let texts = member_texts(std::slice::from_ref(&entry)).remove(&name).unwrap_or_default();
+                    if is_method && !texts.is_subset(declared) && !repeated.contains(&entry) {
+                        repeated.push(entry);
+                    }
+                }
+            }
+            at = ancestor.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+        }
+        repeated
+    }
+
+    /// The members the protocols merged into `class` bring, and those they
+    /// refine, by name.
+    fn merged_requirements(&self, class: &Class) -> BTreeMap<String, Vec<String>> {
+        let by_name: BTreeMap<&str, &Protocol> = self.protocols.iter().map(|p| (p.swift.rsplit('.').next().unwrap_or_default(), p)).collect();
+        let (accepted, _) = self.agreeing(class, self.conformances(&class.objc));
+        let mut pending: Vec<&str> = accepted.iter().map(String::as_str).collect();
+        let mut seen = BTreeSet::new();
+        let mut members: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        while let Some(name) = pending.pop() {
+            let Some(protocol) = by_name.get(name).filter(|_| seen.insert(name)) else { continue };
+            for entry in &protocol.members {
+                for member in member_texts(std::slice::from_ref(entry)).into_keys() {
+                    members.entry(member).or_default().push(entry.clone());
+                }
+            }
+            pending.extend(protocol.refines.iter().map(String::as_str));
+        }
+        members
+    }
+
+    /// The class in `class`'s chain, itself first, that declares `member`,
+    /// with the entries declaring it.
+    fn nearest_declaration<'c>(&'c self, class: &'c Class, member: &str) -> Option<(&'c Class, Vec<String>)> {
+        let mut at = Some(class);
+        while let Some(current) = at {
+            let entries: Vec<String> = current.members.iter().filter(|entry| member_texts(std::slice::from_ref(*entry)).contains_key(member)).cloned().collect();
+            if !entries.is_empty() {
+                return Some((current, entries));
+            }
+            at = current.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+        }
+        None
     }
 
     /// The Swift name of the one protocol `id<P>` names, where this binding
@@ -2364,6 +2673,30 @@ impl<'a> Model<'a> {
             return None;
         }
         Some(self.swift.get(&format!("c:objc(pl){inner}")).map_or_else(|| inner.to_owned(), |s| s.names.title.clone()))
+    }
+
+    /// A toll-free bridged Core Foundation pointer, spelled as its Foundation
+    /// class, or `None` where `pointee` is not one.
+    fn toll_free_object(&mut self, class: &Class, written: &str, pointee: &str, position: Position) -> Option<Spelled> {
+        // A toll-free bridged Core Foundation type is the Foundation
+        // object it is: a `CFStringRef` is an `NSString *` to the runtime,
+        // and a message's `CFStringRef` spells as the `NSString *` does, as
+        // Swift imports `CFString` as `NSString`'s twin.
+        //
+        // Not a C function's: the prototype lowering writes from
+        // `BridgedString` says `struct NSString *`, the header says `const
+        // struct __CFString *`, and the witness compares the two. Saying
+        // which C type the object crosses as needs a brand lowering reads.
+        let foundation = toll_free(pointee)?;
+        if self.c_function {
+            return Some(Err(format!(
+                "a `{}`, toll-free as `{foundation}`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say",
+                written.trim_end_matches(" _Nullable").trim_end_matches(" _Nonnull")
+            )));
+        }
+        let nullable = if written.contains("_Nullable") { " _Nullable" } else { "" };
+        let object = serde_json::json!({ "qualType": format!("{foundation} *{nullable}"), "desugaredQualType": format!("{foundation} *") });
+        Some(self.spell(class, &object, position))
     }
 
     fn array_element(&mut self, pointee: &str) -> Spelled {
@@ -2755,6 +3088,9 @@ const SWIFT_NUMBERS: [&str; 14] = [
 /// name Swift keeps (`CGFloat`, `NSInteger` as `Int`), and otherwise by its C
 /// type.
 fn swift_number(written: &str, desugared: &str) -> Option<&'static str> {
+    // A `const` scalar is the scalar: by value, C's qualifier changes nothing
+    // a caller passes or a constant holds.
+    let (written, desugared) = (written.trim().trim_start_matches("const ").trim(), desugared.trim().trim_start_matches("const ").trim());
     Some(match written.split_whitespace().next().unwrap_or_default() {
         "CGFloat" => "CGFloat",
         "NSTimeInterval" => "TimeInterval",
@@ -2914,6 +3250,54 @@ fn nest(out: &mut String, path: &[String], text: &str) {
     }
 }
 
+/// A class, with what its body repeats from elsewhere, and the interface
+/// merging its conformances into it: nested where Swift nests it.
+fn render_class(out: &mut String, request: &Request, model: &Model, class: &Class) {
+    let section = |text: &mut String, heading: &str, lines: &[&String]| {
+        if !lines.is_empty() {
+            let _ = writeln!(text, "    // {heading}");
+            for line in lines {
+                let _ = writeln!(text, "{line}");
+            }
+        }
+    };
+    let extends = class.parent.as_ref().map(|p| format!(" extends {p}")).unwrap_or_default();
+    let path: Vec<String> = class.swift.split('.').map(str::to_owned).collect();
+    let name = path.last().map_or("", String::as_str);
+    let mut text = String::new();
+    let _ = writeln!(text, "  /** @ntsClass {} */\n  export class {name}{extends} {{", class.objc);
+    for line in &class.members {
+        let _ = writeln!(text, "{line}");
+    }
+    let lent: Vec<&String> = request.lent.members.get(&class.objc).into_iter().flatten().collect();
+    section(&mut text, "What the platform's other frameworks add, which only this declaration can hold:", &lent);
+    let repeated = model.repeated_lent(class, &request.lent);
+    section(&mut text, "What the platform's other frameworks add to an ancestor, under a name this class declares:", &repeated);
+    let required = model.repeated_requirements(class);
+    section(&mut text, "What an ancestor's protocols require, under a name this class declares:", &required.iter().collect::<Vec<_>>());
+    if !class.skipped.is_empty() {
+        let _ = writeln!(text, "    // Not bound, each for the reason given:");
+        for line in &class.skipped {
+            let _ = writeln!(text, "    //   {line}");
+        }
+    }
+    let _ = writeln!(text, "  }}");
+    // Its conformances, merged into the class as TypeScript merges an
+    // interface of the same name: the protocols' methods are its own.
+    let (conformances, redeclared) = model.agreeing(class, model.conformances(&class.objc));
+    if !conformances.is_empty() {
+        let _ = write!(text, "  export interface {name} extends {} {{", conformances.join(", "));
+        if redeclared.is_empty() {
+            let _ = writeln!(text, "}}");
+        } else {
+            let _ = writeln!(text);
+            section(&mut text, "As the class inherits it, where the protocols' base declares it otherwise:", &redeclared.iter().collect::<Vec<_>>());
+            let _ = writeln!(text, "  }}");
+        }
+    }
+    nest(out, &path, &text);
+}
+
 /// A protocol as the interface a class the program writes implements, and
 /// the type a value of it has: nested where Swift nests it.
 fn render_protocol(out: &mut String, protocol: &Protocol) {
@@ -3004,33 +3388,7 @@ fn render(request: &Request, model: &Model) -> String {
     }
     render_enums(&mut out, model);
     for class in model.classes.iter().filter(|class| model.owns(&class.objc)) {
-        let extends = class.parent.as_ref().map(|p| format!(" extends {p}")).unwrap_or_default();
-        let path: Vec<String> = class.swift.split('.').map(str::to_owned).collect();
-        let mut text = String::new();
-        let _ = writeln!(text, "  /** @ntsClass {} */\n  export class {}{extends} {{", class.objc, path.last().map_or("", String::as_str));
-        for line in &class.members {
-            let _ = writeln!(text, "{line}");
-        }
-        if let Some(lent) = request.lent.members.get(&class.objc) {
-            let _ = writeln!(text, "    // What the platform's other frameworks add, which only this declaration can hold:");
-            for line in lent {
-                let _ = writeln!(text, "{line}");
-            }
-        }
-        if !class.skipped.is_empty() {
-            let _ = writeln!(text, "    // Not bound, each for the reason given:");
-            for line in &class.skipped {
-                let _ = writeln!(text, "    //   {line}");
-            }
-        }
-        let _ = writeln!(text, "  }}");
-        // Its conformances, merged into the class as TypeScript merges an
-        // interface of the same name: the protocols' methods are its own.
-        let conformances = model.agreeing(class, model.conformances(&class.objc));
-        if !conformances.is_empty() {
-            let _ = writeln!(text, "  export interface {} extends {} {{}}", path.last().map_or("", String::as_str), conformances.join(", "));
-        }
-        nest(&mut out, &path, &text);
+        render_class(&mut out, request, model, class);
     }
     for protocol in &model.protocols {
         render_protocol(&mut out, protocol);
@@ -3135,9 +3493,10 @@ fn lends(request: &Request, model: &Model, binding: &str) -> BTreeMap<String, Le
     let mut lends: BTreeMap<String, Lent> = BTreeMap::new();
     for class in model.classes.iter().filter(|class| !class.extensions.is_empty()) {
         let Some(owner) = model.swift.class_owner(&class.objc).filter(|owner| owner != package) else { continue };
-        for member in class.extensions.iter().filter(|member| class_side(member).is_some()) {
+        for member in &class.extensions {
             let lent = lends.entry(owner.to_owned()).or_default();
-            lent.members.entry(class.objc.clone()).or_default().push(tagged(member, &format!("{owner} {package}")));
+            let into = if class_side(member).is_some() { &mut lent.members } else { &mut lent.inherited };
+            into.entry(class.objc.clone()).or_default().push(tagged(member, &format!("{owner} {package}")));
             for word in member.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')) {
                 if let Some(module) = from.get(word).filter(|module| **module != format!("objc:{owner}")) {
                     lent.imports.entry(module.clone()).or_default().insert(word.to_owned());
@@ -3573,12 +3932,12 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
     fn graph() -> String {
         let symbol = |usr: &str, kind: &str, title: &str, path: &[&str], availability: &str| {
             format!(
-                r#"{{"identifier":{{"precise":"{usr}","interfaceLanguage":"swift"}},"kind":{{"identifier":"{kind}"}},"names":{{"title":"{title}"}},"pathComponents":{path:?},"availability":[{availability}]}}"#
+                r#"{{"identifier":{{"precise":"{usr}","interfaceLanguage":"swift"}},"kind":{{"identifier":"{kind}"}},"names":{{"title":"{title}"}},"accessLevel":"public","pathComponents":{path:?},"availability":[{availability}]}}"#
             )
         };
         // Swift's two imports of one completion-handler method, under one USR.
-        let asynchronous = r#"{"identifier":{"precise":"c:objc(cs)Shape(im)settleWith:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"settle(with:)"},"pathComponents":["Shape","settle(with:)"],"availability":[],"declarationFragments":[{"kind":"keyword","spelling":"func"},{"kind":"text","spelling":" settle(with other: Shape) "},{"kind":"keyword","spelling":"async"},{"kind":"text","spelling":" -> Int"}]}"#;
-        let throwing = r#"{"identifier":{"precise":"c:objc(cs)Shape(im)fetchNamed:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"fetch(named:)"},"pathComponents":["Shape","fetch(named:)"],"availability":[],"declarationFragments":[{"kind":"keyword","spelling":"func"},{"kind":"text","spelling":" fetch(named name: String) "},{"kind":"keyword","spelling":"async"},{"kind":"text","spelling":" "},{"kind":"keyword","spelling":"throws"},{"kind":"text","spelling":" -> Shape"}]}"#;
+        let asynchronous = r#"{"identifier":{"precise":"c:objc(cs)Shape(im)settleWith:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"settle(with:)"},"accessLevel":"public","pathComponents":["Shape","settle(with:)"],"availability":[],"declarationFragments":[{"kind":"keyword","spelling":"func"},{"kind":"text","spelling":" settle(with other: Shape) "},{"kind":"keyword","spelling":"async"},{"kind":"text","spelling":" -> Int"}]}"#;
+        let throwing = r#"{"identifier":{"precise":"c:objc(cs)Shape(im)fetchNamed:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"fetch(named:)"},"accessLevel":"public","pathComponents":["Shape","fetch(named:)"],"availability":[],"declarationFragments":[{"kind":"keyword","spelling":"func"},{"kind":"text","spelling":" fetch(named name: String) "},{"kind":"keyword","spelling":"async"},{"kind":"text","spelling":" "},{"kind":"keyword","spelling":"throws"},{"kind":"text","spelling":" -> Shape"}]}"#;
         let old = r#"{"domain":"macOS","introduced":{"major":10,"minor":0},"deprecated":{"major":10,"minor":10}}"#;
         let symbols = [
             symbol("c:objc(cs)Root", "swift.class", "Root", &["Root"], ""),
@@ -3628,8 +3987,8 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             symbol("c:objc(cs)Shape(cpy)unit", "swift.type.property", "unit", &["Shape", "unit"], ""),
             // What Swift makes of two properties clang's printed type does not
             // say: a weak one is optional, a `null_resettable` one unwrapped.
-            r#"{"identifier":{"precise":"c:objc(cs)Shape(py)owner","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"owner"},"pathComponents":["Shape","owner"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"weak var owner: Shape? { get }"}]}"#.to_owned(),
-            r#"{"identifier":{"precise":"c:objc(cs)Shape(py)label","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"label"},"pathComponents":["Shape","label"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"var label: String! { get set }"}]}"#.to_owned(),
+            r#"{"identifier":{"precise":"c:objc(cs)Shape(py)owner","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"owner"},"accessLevel":"public","pathComponents":["Shape","owner"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"weak var owner: Shape? { get }"}]}"#.to_owned(),
+            r#"{"identifier":{"precise":"c:objc(cs)Shape(py)label","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"label"},"accessLevel":"public","pathComponents":["Shape","label"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"var label: String! { get set }"}]}"#.to_owned(),
             symbol("c:@E@Mode", "swift.enum", "Shape.Mode", &["Shape", "Mode"], ""),
             symbol("c:@E@Mode@ModeA", "swift.enum.case", "Shape.Mode.a", &["Shape", "Mode", "a"], ""),
             symbol("c:@E@Mode@ModeB", "swift.enum.case", "Shape.Mode.b", &["Shape", "Mode", "b"], ""),
@@ -3642,7 +4001,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             symbol("c:objc(pl)ShapeDelegate(im)shapeDidRename:", "swift.method", "shapeDidRename(_:)", &["ShapeWatching", "shapeDidRename(_:)"], ""),
             symbol("c:objc(pl)ShapeDelegate(im)shape:didRenameTo:", "swift.method", "shape(_:didRename:)", &["ShapeWatching", "shape(_:didRename:)"], ""),
             symbol("c:objc(pl)ShapeDelegate(im)shape:shouldHide:", "swift.method", "shape(_:shouldHide:)", &["ShapeWatching", "shape(_:shouldHide:)"], ""),
-            r#"{"identifier":{"precise":"c:objc(pl)ShapeDelegate(py)partner","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"partner"},"pathComponents":["ShapeWatching","partner"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"var partner: Shape? { get set }"}]}"#.to_owned(),
+            r#"{"identifier":{"precise":"c:objc(pl)ShapeDelegate(py)partner","interfaceLanguage":"swift"},"kind":{"identifier":"swift.property"},"names":{"title":"partner"},"accessLevel":"public","pathComponents":["ShapeWatching","partner"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"var partner: Shape? { get set }"}]}"#.to_owned(),
             symbol("c:objc(pl)ShapeDelegate(py)visible", "swift.property", "isVisible", &["ShapeWatching", "isVisible"], ""),
             symbol("c:objc(pl)ShapeDelegate(py)size", "swift.property", "size", &["ShapeWatching", "size"], ""),
             symbol("c:objc(cs)Shape(im)settleWith:completionHandler:", "swift.method", "settle(with:completionHandler:)", &["Shape", "settle(with:completionHandler:)"], ""),
@@ -3659,8 +4018,8 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             symbol("c:@F@PenCopyTwin", "swift.method", "twin(_:)", &["Pen", "twin(_:)"], ""),
             symbol("c:objc(cs)Shape(im)pairWithCompletionHandler:", "swift.method", "pair(completionHandler:)", &["Shape", "pair(completionHandler:)"], ""),
             symbol("c:objc(cs)Shape(cm)runGroup:completionHandler:", "swift.type.method", "runGroup(_:completionHandler:)", &["Shape", "runGroup(_:completionHandler:)"], ""),
-            r#"{"identifier":{"precise":"c:objc(cs)Shape(cm)runGroup:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.type.method"},"names":{"title":"runGroup(_:)"},"pathComponents":["Shape","runGroup(_:)"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"class func runGroup(_ changes: (Shape) -> Void) async"}]}"#.to_owned(),
-            r#"{"identifier":{"precise":"c:objc(cs)Shape(im)pairWithCompletionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"pair()"},"pathComponents":["Shape","pair()"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"func pair() async throws -> (Shape, String)"}]}"#.to_owned(),
+            r#"{"identifier":{"precise":"c:objc(cs)Shape(cm)runGroup:completionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.type.method"},"names":{"title":"runGroup(_:)"},"accessLevel":"public","pathComponents":["Shape","runGroup(_:)"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"class func runGroup(_ changes: (Shape) -> Void) async"}]}"#.to_owned(),
+            r#"{"identifier":{"precise":"c:objc(cs)Shape(im)pairWithCompletionHandler:","interfaceLanguage":"swift"},"kind":{"identifier":"swift.method"},"names":{"title":"pair()"},"accessLevel":"public","pathComponents":["Shape","pair()"],"availability":[],"declarationFragments":[{"kind":"text","spelling":"func pair() async throws -> (Shape, String)"}]}"#.to_owned(),
         ];
         let optional = ["(im)shapeDidRename:", "(im)shape:didRenameTo:", "(im)shape:shouldHide:", "(py)visible", "(py)size"].map(|member| {
             format!(r#"{{"kind":"optionalRequirementOf","source":"c:objc(pl)ShapeDelegate{member}","target":"c:objc(pl)ShapeDelegate"}}"#)
@@ -3708,6 +4067,39 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             records: BTreeMap::new(),
             lent: Lent::default(),
             provided: BTreeSet::new(),
+        }
+    }
+
+    /// A graph extracted at every access level: a declaration Swift refines
+    /// keeps the name its `__` hides, and what a public extraction would have
+    /// left out -- a name C reserves, an ivar, Swift's own `internal` helper
+    /// -- is not offered.
+    #[test]
+    fn a_refined_name_is_restored_and_a_reserved_one_is_not_offered() {
+        let symbol = |usr: &str, path: &[&str], access: &str| -> Symbol {
+            serde_json::from_value(serde_json::json!({
+                "identifier": { "precise": usr },
+                "kind": { "identifier": "swift.method" },
+                "names": { "title": path.last().copied().unwrap_or_default() },
+                "pathComponents": path,
+                "accessLevel": access,
+            }))
+            .unwrap()
+        };
+        let moved = symbol("c:@F@CGContextMoveToPoint", &["CGContext", "__moveTo(x:y:)"], "public");
+        assert!(moved.offered());
+        let moved = moved.unrefined();
+        assert_eq!(moved.names.title, "moveTo(x:y:)");
+        assert_eq!(moved.path, ["CGContext", "moveTo(x:y:)"]);
+        let init = symbol("c:objc(cs)UIListContentView(im)initWithConfiguration:", &["UIListContentView", "init(__configuration:)"], "open").unrefined();
+        assert_eq!(init.names.title, "init(configuration:)");
+        for (usr, path, access) in [
+            ("c:@F@__CGPointEqualToPoint", "__CGPointEqualToPoint(_:_:)", "public"),
+            ("c:@S@NSMapEnumerator@FI@_pi", "_pi", "public"),
+            ("c:@CM@UIKit@@objc(cs)UITableViewCell(py)_bridgedConfigurationState", "configurationState", "public"),
+            ("c:@F@CGFloatNearlyEqualToFloat", "CGFloatNearlyEqualToFloat(_:_:)", "internal"),
+        ] {
+            assert!(!symbol(usr, &[path], access).offered(), "{usr} is offered");
         }
     }
 

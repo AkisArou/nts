@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Asks the lane's Mac how Swift imports each framework, and keeps the answer:
 # `swift-symbolgraph-extract` for every framework named, copied to
-# ${NTS_APPLE_ROOT:-~/.cache/nts/apple}/symbolgraph/<SDK version>/<Framework>.symbols.json,
+# ${NTS_APPLE_ROOT:-~/.cache/nts/apple}/symbolgraph/private/<SDK version>/<Framework>.symbols.json,
 # with the `<Framework>@<Other>.symbols.json` files beside it: a framework's
 # category on another's class (UIKit's `row` on Foundation's `NSIndexPath`)
 # is written to the graph of the module it extends.
@@ -11,6 +11,12 @@
 # NSTimer, `var title: String` -- rather than reproducing the importer's
 # rules itself. Each symbol is keyed by the clang USR the headers give it,
 # which is how the generator joins it to what clang says about the ABI.
+#
+# Every access level, `private` included: a C function Swift refines in its
+# overlay is imported under a `__` name (`CGContextMoveToPoint` is
+# `CGContext.__moveTo(self:x:y:)`, which `move(to:)` calls), and a public
+# extraction leaves it out, so the generator never saw it at all. The
+# directory is `private/` so a graph extracted without them is never read.
 #
 # Once per SDK: the files are keyed by the synced SDK's version, and after
 # that generation needs no Mac. ~90 s for AppKit.
@@ -37,15 +43,15 @@ remote_version=$(ssh -o BatchMode=yes "$dest" "plutil -extract Version raw \"\$(
 # macOS under its version, as bind-objc has always looked; any other platform
 # under the SDK's canonical name, since iOS and macOS number their SDKs alike.
 if [ "$platform" = macosx ]; then
-  out="$root/symbolgraph/$version"
+  out="$root/symbolgraph/private/$version"
 else
-  out="$root/symbolgraph/$platform$version"
+  out="$root/symbolgraph/private/$platform$version"
 fi
 mkdir -p "$out"
 for framework in "$@"; do
   ssh -o BatchMode=yes "$dest" "rm -rf /tmp/nts-symbolgraph && mkdir -p /tmp/nts-symbolgraph && \
     xcrun swift-symbolgraph-extract -module-name '$framework' -target $triple \
-      -sdk \"\$(xcrun --sdk $platform --show-sdk-path)\" -output-dir /tmp/nts-symbolgraph -minimum-access-level public >/dev/null"
+      -sdk \"\$(xcrun --sdk $platform --show-sdk-path)\" -output-dir /tmp/nts-symbolgraph -minimum-access-level private >/dev/null"
   rm -rf "$out/.partial" && mkdir "$out/.partial"
   scp -q "$dest:/tmp/nts-symbolgraph/*.symbols.json" "$out/.partial/"
   rm -f "$out/$framework.symbols.json" "$out/$framework"@*.symbols.json

@@ -37,6 +37,9 @@ pub(super) struct CfClass {
     pub(super) members: Vec<String>,
     /// The overloads of the function named for the class: its initializers.
     pub(super) inits: Vec<String>,
+    /// Swift's `static func`s on the class, as functions of a namespace of
+    /// its name: `CGEventSource.keyState(_:key:)`.
+    pub(super) statics: Vec<String>,
     pub(super) skipped: Vec<String>,
 }
 
@@ -99,12 +102,18 @@ fn declared<'v>(decl: &'v Value, typedefs: &BTreeMap<String, String>) -> Option<
         }
     }
     let result = function[..open?].trim().to_owned();
-    let bare = result
-        .split_whitespace()
-        .filter(|word| !matches!(*word, "_Nullable" | "_Nonnull" | "_Null_unspecified" | "const"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let desugared = typedefs.get(&bare).cloned().unwrap_or(bare);
+    let words = |also: &[&str]| {
+        result
+            .split_whitespace()
+            .filter(|word| !matches!(*word, "_Nullable" | "_Nonnull" | "_Null_unspecified") && !also.contains(word))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    // A typedef's name, found without its `const`, which then qualifies the
+    // pointer (`const CGColorRef`) and not what it points to; anything else
+    // keeps it: `const CGFloat *` is a read-only buffer.
+    let bare = words(&["const"]);
+    let desugared = typedefs.get(&bare).cloned().unwrap_or_else(|| words(&[]));
     Some(Declared { parameters, result: serde_json::json!({ "qualType": result, "desugaredQualType": desugared }) })
 }
 
@@ -121,7 +130,7 @@ impl Model<'_> {
         let classes: Vec<(String, String)> = self.cf_types.iter().map(|(pointer, name)| (pointer.clone(), name.clone())).collect();
         for (pointer, name) in classes {
             let tag = pointer.trim_start_matches("const ").trim_start_matches("struct ").trim_end_matches(" *").trim().to_owned();
-            let mut class = CfClass { swift: name.clone(), tag, members: Vec::new(), inits: Vec::new(), skipped: Vec::new() };
+            let mut class = CfClass { swift: name.clone(), tag, members: Vec::new(), inits: Vec::new(), statics: Vec::new(), skipped: Vec::new() };
             let mut symbols: Vec<(&String, &Value, &Symbol)> = functions
                 .iter()
                 .filter_map(|(function, decl)| {
@@ -136,10 +145,15 @@ impl Model<'_> {
                     "swift.method" => self.cf_method(&class, &pointer, function, decl, symbol),
                     "swift.init" => self.cf_init(&class, function, decl, symbol),
                     "swift.property" => self.cf_property(&class, &pointer, function, decl, symbol),
+                    "swift.type.method" => self.cf_static(&class, function, decl, symbol),
+                    // `static var typeID`: a class property is read without a
+                    // call, and a function with no receiver is only a call.
+                    "swift.type.property" => Err("a class property, which is a call with no receiver and no property of any value".to_owned()),
                     kind => Err(format!("a `{kind}`, which is not bound yet")),
                 });
                 match bound {
                     Ok(text) if kind == "swift.init" => class.inits.push(text),
+                    Ok(text) if kind == "swift.type.method" => class.statics.push(text),
                     Ok(text) => class.members.push(text),
                     Err(why) => class.skipped.push(format!("{function}: {why}")),
                 }
@@ -172,18 +186,59 @@ impl Model<'_> {
     }
 
     /// The parameters of a function Swift makes a member, less `self`: the
-    /// one parameter of the class's own type. `None` where there is none.
-    fn without_self<'v>(parameters: &[&'v Value], pointer: &str) -> std::result::Result<Vec<&'v Value>, String> {
-        let is_self = |parameter: &&Value| parameter.get("type").and_then(super::desugared).is_some_and(|ty| ty == pointer);
-        match parameters.iter().filter(|p| is_self(p)).count() {
-            1 => Ok(parameters.iter().filter(|p| !is_self(p)).copied().collect()),
-            0 => Err("no parameter of the class's type to be `self`".to_owned()),
-            _ => Err("more than one parameter of the class's type, and no way to tell which is `self`".to_owned()),
+    /// parameter of the class's own type. Where there are several --
+    /// `CGPathEqualToPath(path1, path2)` -- Swift's declaration names the
+    /// ones it keeps, and `self` is the one it does not.
+    ///
+    /// `self` must come first: a `this:` method's receiver is the C
+    /// function's first argument, so any other would pass the arguments out
+    /// of order.
+    fn without_self<'v>(parameters: &[&'v Value], pointer: &str, symbol: &Symbol) -> std::result::Result<Vec<&'v Value>, String> {
+        let is_self = |parameter: &Value| parameter.get("type").and_then(super::desugared).is_some_and(|ty| ty == pointer);
+        let candidates: Vec<usize> = (0..parameters.len()).filter(|&at| is_self(parameters[at])).collect();
+        let at = match candidates.as_slice() {
+            [] => return Err("no parameter of the class's type to be `self`".to_owned()),
+            [one] => *one,
+            several => {
+                let kept = symbol.parameter_names();
+                let unkept: Vec<usize> =
+                    several.iter().copied().filter(|&at| parameters[at].get("name").and_then(Value::as_str).is_some_and(|name| !kept.contains(&name))).collect();
+                match unkept.as_slice() {
+                    [one] => *one,
+                    _ => return Err("more than one parameter of the class's type, and no way to tell which is `self`".to_owned()),
+                }
+            }
+        };
+        if at != 0 {
+            return Err("`self` is not the first parameter, and a method's receiver is passed first".to_owned());
+        }
+        Ok(parameters[1..].to_vec())
+    }
+
+    /// A Core Foundation class as C declares its reference: `CGPathRef` is
+    /// `const struct CGPath *`, which is `Const<CGPath>` -- the prototype says
+    /// `const`, as the header does and the witness compares -- and
+    /// `CGMutablePathRef`, the same struct without it, is `CGMutablePath`.
+    pub(super) fn cf_handle(&mut self, pointer: &str, name: String) -> String {
+        if pointer.starts_with("const ") {
+            self.import("c:types", "Const");
+            format!("Const<{name}>")
+        } else {
+            name
         }
     }
 
     /// The result, as a member or a function returns it.
     fn cf_result(&mut self, class: &Class, function: &str, result: &Value, symbol: Option<&Symbol>) -> std::result::Result<String, String> {
+        // A toll-free object the create rule hands over is a +1 reference,
+        // and a Foundation object's result is read as borrowed: copied into
+        // the program's string or held as the object, never released.
+        if creates(function)
+            && let Some(pointee) = super::desugared(result).as_deref().and_then(|text| text.strip_suffix(" *").map(str::to_owned))
+            && let Some(object) = super::toll_free(&pointee)
+        {
+            return Err(format!("a `{object}` the create rule hands over, which a borrowed result would never release"));
+        }
         let spelled = self.in_c_function(|model| model.spell(class, result, Position::Result))?;
         // Swift's word on whether it is optional, where there is one: the
         // SDK's API notes give Swift nullability the header leaves loose, as
@@ -193,7 +248,8 @@ impl Model<'_> {
             Some(symbol) => symbol.optionality() == super::Optionality::Optional,
             None => spelled.ends_with(" | null") || written(result).contains("_Nullable"),
         };
-        let owned = if creates(function) && self.cf_types.values().any(|name| *name == value) {
+        let class_valued = self.cf_types.iter().any(|(pointer, name)| value == name.as_str() || pointer.starts_with("const ") && value == format!("Const<{name}>"));
+        let owned = if creates(function) && class_valued {
             self.import("c:types", "Owned");
             format!("Owned<{value}>")
         } else {
@@ -205,17 +261,29 @@ impl Model<'_> {
     /// `fill(this: CGContext, rect: ...): void`, tagged with its function.
     fn cf_method(&mut self, class: &CfClass, pointer: &str, function: &str, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
         let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
-        let parameters = Self::without_self(&declared.parameters, pointer)?;
+        let parameters = Self::without_self(&declared.parameters, pointer, symbol)?;
         let (base, labels) = swift_name(&symbol.names.title);
         let spelling = Self::cf_spelling_class(class);
         let arguments = self.cf_arguments(&spelling, &symbol.names.title, &parameters, &labels)?;
         let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
-        let this = if arguments.is_empty() { format!("this: {}", class.swift) } else { format!("this: {}, {arguments}", class.swift) };
+        let receiver = self.cf_handle(pointer, class.swift.clone());
+        let this = if arguments.is_empty() { format!("this: {receiver}") } else { format!("this: {receiver}, {arguments}") };
         Ok(format!("    /** @ntsSymbol {function} */\n    {}({this}): {result};", quoted_key(&base)))
     }
 
     /// `export function CGColor(labels: { red: CGFloat; ... }): Owned<CGColor>`:
     /// Swift's `CGColor(red:green:blue:alpha:)`, as TypeScript calls it.
+    /// A `static func` Swift gives the class: the C function it is, as a
+    /// function of the class's namespace, every parameter an argument.
+    fn cf_static(&mut self, class: &CfClass, function: &str, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
+        let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
+        let (name, labels) = swift_name(&symbol.names.title);
+        let spelling = Self::cf_spelling_class(class);
+        let arguments = self.cf_arguments(&spelling, &symbol.names.title, &declared.parameters, &labels)?;
+        let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
+        Ok(format!("    /** @ntsSymbol {function} */\n    export function {name}({arguments}): {result};"))
+    }
+
     fn cf_init(&mut self, class: &CfClass, function: &str, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
         let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
         let (_, labels) = swift_name(&symbol.names.title);
@@ -225,7 +293,9 @@ impl Model<'_> {
         // `init?(...)`: Swift's failable initializer, which answers nil.
         let failable = symbol.fragments.iter().any(|f| f.spelling.contains("init?"));
         let result = if failable && !result.ends_with(" | null") { format!("{result} | null") } else { result };
-        if result.trim_end_matches(" | null").trim_start_matches("Owned<").trim_end_matches('>') != class.swift {
+        // The class itself, handed over and perhaps `const`: `Owned<Const<CGPath>>`.
+        let unwrap = |text: &'_ str, brand: &str| text.strip_prefix(brand).and_then(|inner| inner.strip_suffix('>')).map_or_else(|| text.to_owned(), str::to_owned);
+        if unwrap(&unwrap(result.trim_end_matches(" | null"), "Owned<"), "Const<") != class.swift {
             return Err(format!("an initializer answering a `{result}`, not a `{}`", class.swift));
         }
         Ok(format!("  /** @ntsSymbol {function} */\n  export function {}({arguments}): {result};", class.swift))
@@ -236,16 +306,14 @@ impl Model<'_> {
     /// property's `@ntsGet` to name.
     fn cf_property(&mut self, class: &CfClass, pointer: &str, function: &str, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
         let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
-        if !Self::without_self(&declared.parameters, pointer)?.is_empty() {
+        if !Self::without_self(&declared.parameters, pointer, symbol)?.is_empty() {
             return Err("a property read through a function taking more than the instance".to_owned());
         }
         let spelling = Self::cf_spelling_class(class);
         let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
         let name = quoted_key(&symbol.names.title);
-        Ok(format!(
-            "    /** @ntsSymbol {function} */\n    {function}(this: {}): {result};\n    /** @ntsGet {function} */\n    readonly {name}: {result};",
-            class.swift
-        ))
+        let receiver = self.cf_handle(pointer, class.swift.clone());
+        Ok(format!("    /** @ntsSymbol {function} */\n    {function}(this: {receiver}): {result};\n    /** @ntsGet {function} */\n    readonly {name}: {result};"))
     }
 
     /// A free function Swift imports as one: `CGColorSpaceCreateDeviceRGB()`.
@@ -288,5 +356,12 @@ pub(super) fn render(out: &mut String, class: &CfClass) {
     let _ = writeln!(out, "  export type {0} = ObjcClass<\"{1}\"> & {0}OwnMethods;", class.swift, class.tag);
     for line in &class.inits {
         let _ = writeln!(out, "{line}");
+    }
+    if !class.statics.is_empty() {
+        let _ = writeln!(out, "  export namespace {} {{", class.swift);
+        for line in &class.statics {
+            let _ = writeln!(out, "{line}");
+        }
+        let _ = writeln!(out, "  }}");
     }
 }

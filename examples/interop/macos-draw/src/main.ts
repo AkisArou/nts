@@ -15,18 +15,30 @@
 //   alpha 0.5     a colour's property
 //   color gone    the colours this program made, released: a `Create`
 //                 function hands over a reference, which the program owns
-import { CGColor, CGColorSpaceCreateDeviceRGB, CGContext, CGImageAlphaInfo } from "objc:CoreGraphics";
+//   components    a colour made from a buffer of components, a `const
+//                 CGFloat *`, and read back through the pointer Swift hides
+//                 behind its `components` array (`__unsafeComponents`)
+//   triangle 0..1 a path traced point by point, `CGContextMoveToPoint` and
+//                 `CGContextAddLineToPoint`, which Swift refines into
+//                 `move(to:)` and `addLine(to:)` and which bind under the
+//                 names the refinement hides: `moveTo`, `addLineTo`
+//   paths         two paths compared, `CGPathEqualToPath(path1, path2)`,
+//                 whose receiver is the parameter Swift does not name
+//   key a up      a class method of a Core Foundation type,
+//                 `CGEventSource.keyState(_:key:)`
+import { CGColor, CGColorSpaceCreateDeviceRGB, CGContext, CGEventSource, CGEventSourceStateID, CGImageAlphaInfo, CGPath } from "objc:CoreGraphics";
 import { weak_alive, weak_watch } from "c:support";
-import { malloc } from "c:stdlib";
+import { free, malloc } from "c:stdlib";
 import type { Ptr, c_int, c_uint8 } from "c:types";
+import type { CGFloat } from "objc:types";
 
 const WIDTH = 8;
 const HEIGHT = 4;
 
-function row(pixels: Ptr<c_uint8>, y: number): string {
+function row(pixels: Ptr<c_uint8>, y: number, width: number): string {
   let text = "";
-  for (let x = 0; x < WIDTH; x++) {
-    const at = (y * WIDTH + x) * 4;
+  for (let x = 0; x < width; x++) {
+    const at = (y * width + x) * 4;
     let pixel = "";
     for (let channel = 0; channel < 4; channel++) {
       pixel += pixels[at + channel].toString(16).padStart(2, "0");
@@ -56,6 +68,65 @@ function paint(context: CGContext): string {
   return `alpha ${blue.alpha}`;
 }
 
+function components(): string {
+  const values = malloc<CGFloat>(4 * 8);
+  if (values === null) {
+    return "components none";
+  }
+  values[0] = 0.25;
+  values[1] = 0.5;
+  values[2] = 0.75;
+  values[3] = 1;
+  const color = CGColor({ colorSpace: CGColorSpaceCreateDeviceRGB(), components: values });
+  free(values);
+  const read = color.unsafeComponents;
+  if (read === null) {
+    return "components none";
+  }
+  let text = `components ${color.numberOfComponents}`;
+  for (let at = 0; at < color.numberOfComponents; at++) {
+    text += ` ${read[at]}`;
+  }
+  return text;
+}
+
+function triangle(): void {
+  const width = 4;
+  const height = 2;
+  const pixels = malloc<c_uint8>(width * height * 4);
+  if (pixels === null) {
+    return;
+  }
+  for (let at = 0; at < width * height * 4; at++) {
+    pixels[at] = 0 as c_uint8;
+  }
+  const context = CGContext({
+    data: pixels,
+    width,
+    height,
+    bitsPerComponent: 8,
+    bytesPerRow: width * 4,
+    space: CGColorSpaceCreateDeviceRGB(),
+    bitmapInfo: CGImageAlphaInfo.premultipliedLast as number,
+  });
+  context.setFillColor({ red: 0, green: 1, blue: 0, alpha: 1 });
+  context.moveTo({ x: 0, y: 0 });
+  context.addLineTo({ x: 4, y: 0 });
+  context.addLineTo({ x: 0, y: 2 });
+  context.closePath();
+  context.fillPath();
+  for (let y = 0; y < height; y++) {
+    console.log(`triangle ${y} ${row(pixels, y, width)}`);
+  }
+  free(pixels);
+}
+
+function paths(): string {
+  const oval = CGPath({ ellipseIn: { size: { width: 4, height: 2 } }, transform: null });
+  const box = CGPath({ rect: { size: { width: 4, height: 2 } }, transform: null });
+  return `paths ${oval.equalTo(oval.copy())} ${oval.equalTo(box)}`;
+}
+
 function main(): void {
   const pixels = malloc<c_uint8>(WIDTH * HEIGHT * 4);
   if (pixels === null) {
@@ -79,10 +150,15 @@ function main(): void {
   // A later colour replaces the one the context's state held.
   context.setFillColor({ red: 0, green: 0, blue: 0, alpha: 0 });
   for (let y = 0; y < HEIGHT; y++) {
-    console.log(`row ${y} ${row(pixels, y)}`);
+    console.log(`row ${y} ${row(pixels, y, WIDTH)}`);
   }
   console.log(alpha);
   console.log(`color ${weak_alive(watch) ? "alive" : "gone"}`);
+  console.log(components());
+  triangle();
+  console.log(paths());
+  const down = CGEventSource.keyState(CGEventSourceStateID.combinedSessionState, { key: 0 });
+  console.log(`key a ${down ? "down" : "up"}`);
 }
 
 main();
