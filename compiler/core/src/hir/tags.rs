@@ -158,6 +158,30 @@ pub fn of_representation(ty: &super::HirType) -> u32 {
         HirType::Bool => BOOLEAN,
         HirType::Managed(managed) => of_reference(managed),
         HirType::Void => UNDEFINED,
+        // **A counted handle carries its family's tag**, which is exactly what
+        // `Erase` emits for one: the C backend's erase asks
+        // [`erased_handle_tag`] and so does the JVM's. This function's own doc
+        // calls itself "the inverse of what `Erase` emits", and for a handle it
+        // was not -- a `NativePointer` fell to the catch-all below and answered
+        // `NUMBER`.
+        //
+        // What that cost is a **silent wrong answer** on the GObject lane, found
+        // by the GTK lane across five of seven Workbench demo ports. Where an
+        // `unknown` parameter has one caller and that caller passes a handle, the
+        // parameter is re-typed to `native<_GObject>` after lowering -- and the
+        // tag test `lower_gobject_instanceof` had already emitted for the erased
+        // form was then folded through this table to `const 2`, compared against
+        // `HANDLE_GOBJECT`, and so **always false**. `g_type_check_instance_is_a`
+        // sits behind that test, so `object instanceof GtkButton` answered `false`
+        // for a value that was one, with nothing said. Their four arms are the
+        // measurement: the same program with a second call `isButton(1)` keeps the
+        // parameter erased and answers correctly, which is why it looked like it
+        // depended on what else the program did.
+        //
+        // `Family::C` keeps the catch-all: `handle_tag`'s own doc says no erased
+        // value holds a C pointer, so there is no tag to give and nothing to be
+        // the inverse of.
+        HirType::NativePointer(pointee) => erased_handle_tag(pointee).unwrap_or(NUMBER),
         _ => NUMBER,
     }
 }
@@ -332,4 +356,52 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
         folded += 1;
     }
     folded
+}
+
+#[cfg(test)]
+mod representation {
+    use super::super::native::{Family, Handle, Pointee};
+    use super::{handle_tag, of_representation};
+    use crate::hir::HirType;
+
+    fn handle(family: Family) -> HirType {
+        HirType::NativePointer(Pointee::Opaque(Handle {
+            tag: "_Anything".to_owned(),
+            ancestors: Vec::new(),
+            family,
+            interface: false,
+        }))
+    }
+
+    /// **The inverse claim, for every family.**
+    ///
+    /// [`of_representation`]'s doc says it is "the inverse of what `Erase`
+    /// emits", and `Erase` asks [`super::erased_handle_tag`] for a handle in
+    /// every backend. The two disagreed for all three counted families: a
+    /// handle answered `NUMBER` here, so a folded tag test compared 2 against
+    /// its family's tag and was always false, and `instanceof` on a `GObject`
+    /// received from a binding answered `false` silently.
+    ///
+    /// Written over the families rather than over one of them because the arm
+    /// that was missing was missing for all three, and a test naming `GObject`
+    /// alone would have let the next one through.
+    #[test]
+    fn a_handles_representation_tag_is_its_familys() {
+        for family in [Family::GObject, Family::Objc, Family::Com] {
+            let wanted = handle_tag(family).expect("a counted family has a tag");
+            assert_eq!(
+                of_representation(&handle(family)),
+                wanted,
+                "{family:?} erases with {wanted} and this table must say so",
+            );
+        }
+    }
+
+    /// And the boundary: a plain C pointer has no tag, because no erased value
+    /// holds one. The catch-all is what it keeps.
+    #[test]
+    fn a_c_pointer_has_no_family_tag_to_give() {
+        assert_eq!(handle_tag(Family::C), None);
+        assert_eq!(of_representation(&handle(Family::C)), super::NUMBER);
+    }
 }
