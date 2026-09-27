@@ -65,7 +65,12 @@
 //   aborted         the program died without an uncaught throw -- a signal, a
 //                   runtime refusal (`nts: refused: index 1 is outside [0, 1)`)
 //   refused         a compile-time refusal: `blockers/` holds these, so a case
-//                   that starts refusing is handed back, with its expect line
+//                   that starts refusing is handed back, with its expect line.
+//                   Under `build` the record also has `ran`: what the artefact
+//                   did anyway. `emit-c` can exit 0 past a refusal, and an app
+//                   whose top level called the refused function runs without
+//                   that statement -- a silently different program, which a
+//                   record that stopped at the refusal could not see
 //   agrees          nts and node say the same: a regression guard
 //
 // # Verdicts, in the test262 step's vocabulary
@@ -183,9 +188,22 @@ function runBuild(dir) {
   if (invalid) return { category: "invalid-hir", nts: `invalid HIR: ${invalid[1].trim()}` };
   if (/^fatal error: out of memory$/m.test(said)) return { category: "not-measured", nts: "the memory cap" };
   const roots = rawRoots(said);
-  if (roots.length > 0) return { category: "refused", nts: rootLine(roots[0]), roots: roots.map(rootLine) };
+  if (roots.length > 0) {
+    // **A refusal does not always stop the program.** `emit-c` exits 0 with a
+    // refusal printed, and an app whose top level called the refused function
+    // runs without that statement (`excise_from_initializer`). React's refused
+    // `main` "printed nothing", exit 0. So a refused record also says what the
+    // artefact did, and a program that runs past its refusal is compared
+    // rather than filed.
+    const ran = emit.status === 0 ? buildAndRun(emit, out) : { category: "no artefact", nts: `emit-c exited ${emit.status}` };
+    return { category: "refused", nts: rootLine(roots[0]), roots: roots.map(rootLine), ran: ran.category === "completed" || ran.category === "aborted" ? ran.nts : ran.category === "not-measured" ? null : `${ran.category}: ${ran.nts}` };
+  }
   if (emit.status !== 0) return { category: "not-measured", nts: `emit-c exited ${emit.status}: ${said.trim().split("\n")[0]}` };
+  return buildAndRun(emit, out);
+}
 
+/** Link what `emit-c` wrote into `out` and run it: completed, aborted or uncompilable-c. */
+function buildAndRun(emit, out) {
   const printed = linkCommand(emit.stdout ?? "");
   if (!printed) return { category: "not-measured", nts: "no link command in the emit output" };
   let args;
@@ -272,6 +290,7 @@ function measure(name) {
   const dir = materialise(name, join(fixture, "src"), mode);
   if (mode === "check") return { run: "check", ...runCheck(dir), node: null };
   const nts = runBuild(dir);
+  if (nts.category === "refused" && nts.ran === null) return { run: "build", category: "not-measured", nts: "a refused program's artefact could not be run to the end", node: null };
   if (nts.category !== "completed") return { run: "build", ...nts, node: nts.category === "not-measured" ? null : runNode(dir) };
   const node = runNode(dir);
   return { run: "build", category: nts.nts === node ? "agrees" : "wrong-answer", nts: nts.nts, node };
@@ -299,6 +318,9 @@ function selfCheck() {
   }
   const refused = probe('function classify(text: string): boolean { return /^[a-z]+$/.test(text); }\nobserve("r", String(classify("abc")));\ndone();\n');
   if (refused.nts.category !== "refused") return `refusal arm came back ${refused.nts.category}: ${refused.nts.nts}`;
+  // The refused call sits at the top level, so the artefact runs without it:
+  // the harness must say so rather than stop at the refusal.
+  if (typeof refused.nts.ran !== "string" || !/^exit /.test(refused.nts.ran)) return `refusal arm's artefact was not run: ran=${refused.nts.ran}`;
   return null;
 }
 
@@ -334,7 +356,7 @@ if (broken) {
   console.log("  a harness that cannot tell agreement from disagreement cannot hold a record");
   process.exit(2);
 }
-console.log("  self-checks: control agrees with node, refusal arm refused");
+console.log("  self-checks: control agrees with node, refusal arm refused and its artefact run");
 
 let unexpected = 0;
 let loud = 0;
@@ -348,9 +370,13 @@ for (const name of chosen) {
       unexpected += 1;
       continue;
     }
-    const record = { run: now.run, category: now.category, nts: now.nts, node: now.node, measured_with: FINGERPRINT, source: "measured" };
+    const record = {
+      run: now.run, category: now.category, nts: now.nts,
+      ...(now.category === "refused" && now.run === "build" ? { ran: now.ran } : {}),
+      node: now.node, measured_with: FINGERPRINT, source: "measured",
+    };
     writeFileSync(recordFile, `${JSON.stringify(record, null, 2)}\n`);
-    console.log(`  recorded      ${name}: ${now.category} -- ${now.nts}${now.node ? `  (node: ${now.node})` : ""}`);
+    console.log(`  recorded      ${name}: ${now.category} -- ${now.nts}${now.ran !== undefined ? `; ran: ${now.ran}` : ""}${now.node ? `  (node: ${now.node})` : ""}`);
     continue;
   }
   if (!existsSync(recordFile)) {
@@ -372,8 +398,14 @@ function judge(was, now) {
   if (now.node !== was.node && was.node !== null && now.node !== null && now.category !== "refused") {
     return { word: "ORACLE CHANGED", ok: false, why: `node said ${was.node}, now ${now.node}` };
   }
-  const same = was.category === now.category && was.nts === now.nts;
-  if (same) return { word: was.category === "agrees" ? "holds" : "reproduces", ok: true, why: `${now.category} -- ${now.nts}` };
+  // A refused build record says what its artefact did; one written before it
+  // did has no `ran`, and reads as CHANGED until re-recorded, never as the same.
+  const ranTo = (r) => (r.category === "refused" && r.run === "build" ? r.ran : undefined);
+  const same = was.category === now.category && was.nts === now.nts && ranTo(was) === ranTo(now);
+  const past = ranTo(now) !== undefined && ranTo(now) !== now.node && /^exit /.test(ranTo(now))
+    ? ` -- and the program still ran, answering ${ranTo(now)} where node answers ${now.node}`
+    : "";
+  if (same) return { word: was.category === "agrees" ? "holds" : "reproduces", ok: true, why: `${now.category} -- ${now.nts}${past}` };
   if (was.category === "agrees") return { word: "REGRESSED", ok: false, why: `agreed with node; now ${now.category} -- ${now.nts}` };
   if (now.category === "agrees") {
     return { word: "FIXED", ok: true, loud: true, why: `was ${was.category} (${was.nts}); agrees with node now -- move it to examples/ or re-record it as a guard` };
@@ -385,6 +417,9 @@ function judge(was, now) {
       loud: true,
       why: `was ${was.category}; hand it to tooling/conformance/blockers/ with\n                // expect: ${now.nts}`,
     };
+  }
+  if (was.category === now.category && was.nts === now.nts) {
+    return { word: "CHANGED", ok: false, why: `refused as before; its artefact ran to ${ranTo(was) ?? "(not recorded)"}, now ${ranTo(now)}` };
   }
   return { word: "CHANGED", ok: false, why: `${was.category} (${was.nts}) -> ${now.category} (${now.nts})` };
 }

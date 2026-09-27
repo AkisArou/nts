@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 a `yield` of nothing",
+  "ran": "exit 1; nts: uncaught Observed: what the top level did=before;after;;",
+  "node": "exit 1; nts: uncaught Observed: what the top level did=before;main ran 1;after;;",
+  "measured_with": "3eb7ce6cc662fa19",
+  "source": "measured"
+}
