@@ -175,7 +175,29 @@ pub(super) fn apply(
         return Ok((opened, Vec::new()));
     }
     let paths: Vec<String> = changed.iter().map(|(path, _)| path.clone()).collect();
-    let mut current = client.update_files(&paths)?;
+    // **An update replaces the snapshot, not the choice of project.**
+    //
+    // `update_files` answers with every project the client has open, and by this
+    // point one of them has already been *chosen*: `open_generated` retains the
+    // generated project alone, because the project opened from the original
+    // `tsconfig.json` does not contain the generated store files. Taking the
+    // update's response whole put the other project back, and the next question
+    // asked it about a file only the generated one has -- tsgo answering `source
+    // file not found: .../@nts/gir-glib-2.0/index.d.ts` about a file that exists.
+    //
+    // So the snapshot handle is the only thing an update has to say here. The
+    // project handles are carried forward, which this function already relies on
+    // one loop down: `changed` holds the `ProjectHandle`s captured before the
+    // update and hands them to `file_diagnostics` against the *new* snapshot.
+    //
+    // Reported by the React lane with a one-difference control -- a GTK port that
+    // builds until `react: { compiler: true }` is added to its config -- and it
+    // survived this long because a transform is what calls `update_files`, so it
+    // takes a project with **both** a generator and a transform to reach. Nothing
+    // in `examples/` has both, and the GIR types were project-local until
+    // `6178f7d75` moved them into the store.
+    let mut current = opened;
+    current.snapshot = client.update_files(&paths)?.snapshot;
     for _ in 0..REVISION_ROUNDS {
         let mut revised = Vec::new();
         for (path, project) in &changed {
@@ -196,7 +218,8 @@ pub(super) fn apply(
         if revised.is_empty() {
             return Ok((current, paths));
         }
-        current = client.update_files(&revised)?;
+        // The snapshot again, and not the projects: see above.
+        current.snapshot = client.update_files(&revised)?.snapshot;
     }
     Err(TsgoError::TransformUnsettled { rounds: REVISION_ROUNDS, identity: transform.identity() })
 }
