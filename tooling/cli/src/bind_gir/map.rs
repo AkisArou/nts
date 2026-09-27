@@ -586,9 +586,9 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 get_by_name(mapper, class, &c_type, &property.name, param);
             }
             let Some(param) = &property.set_by_name else { continue };
-            let ident = identifier(&property.name.replace('-', "_"));
+            let ident = member(&property.name);
             let mut method = format!("set_{ident}");
-            if class.callables.iter().any(|callable| identifier(&callable.name) == method) {
+            if class.callables.iter().any(|callable| member(&callable.name) == method) {
                 continue;
             }
             if mapper.inherits_method(namespace, class, &method) {
@@ -689,9 +689,9 @@ fn value_kind(c: &Type) -> Option<char> {
 /// copied, and freed once read -- or a `GObject`, owned. Anything else is left
 /// unreadable, as it was: the lowering refuses a read no `@ntsGet` names.
 fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &str, param: &Param) {
-    let ident = identifier(&property.replace('-', "_"));
+    let ident = member(property);
     let mut method = format!("get_{ident}");
-    if class.callables.iter().any(|callable| identifier(&callable.name) == method) {
+    if class.callables.iter().any(|callable| member(&callable.name) == method) {
         return;
     }
     if mapper.inherits_method(mapper.namespace, class, &method) {
@@ -807,7 +807,7 @@ fn method_of(callable: &Callable, parameters: &[(String, Mapped)]) -> Option<(St
     match &instance.shape {
         // A NULL instance C accepts too -- `g_cancellable_cancel(NULL)` does
         // nothing -- is a method all the same: a receiver is never NULL.
-        Shape::Handle { class, .. } => Some((class.clone(), identifier(&callable.name))),
+        Shape::Handle { class, .. } => Some((class.clone(), member(&callable.name))),
         // An instance C takes as `gpointer`, `Erased<GObject>`: a method all
         // the same, as a signal's `connect` is -- `source.bind_property(...)`
         // is `g_object_bind_property(source, ...)`.
@@ -816,7 +816,7 @@ fn method_of(callable: &Callable, parameters: &[(String, Mapped)]) -> Option<(St
             .strip_prefix("Erased<")
             .and_then(|rest| rest.strip_suffix('>'))
             .filter(|class| is_type_name(class))
-            .map(|class| (class.to_owned(), identifier(&callable.name))),
+            .map(|class| (class.to_owned(), member(&callable.name))),
         _ => None,
     }
 }
@@ -962,7 +962,7 @@ impl<'a> Mapper<'a> {
                 class
                     .properties
                     .iter()
-                    .map(|p| Accessor { name: identifier(&p.name.replace('-', "_")), getter: p.getter.clone(), setter: p.setter.clone() })
+                    .map(|p| Accessor { name: member(&p.name), getter: p.getter.clone(), setter: p.setter.clone() })
                     .collect(),
             );
             if counted {
@@ -1055,7 +1055,7 @@ impl<'a> Mapper<'a> {
     /// be another thing entirely -- `GtkShortcutsShortcut`'s `direction`
     /// property is not `gtk_widget_get_direction`.
     fn inherits_method(&self, namespace: &'a Namespace, class: &'a Class, method: &str) -> bool {
-        let named = |class: &Class| class.callables.iter().any(|callable| identifier(&callable.name) == method);
+        let named = |class: &Class| class.callables.iter().any(|callable| member(&callable.name) == method);
         let mut interfaces = self.merged_interfaces(namespace, class);
         let mut at = self.parent_class(namespace, class);
         // Bounded, so a cycle in malformed GIR ends.
@@ -2382,7 +2382,17 @@ impl<'a> Mapper<'a> {
     }
 }
 
-/// A GIR parameter name as a TypeScript identifier.
+/// A name as a member of a TypeScript type -- a method or a property --
+/// where every word is allowed: GJS writes `buffer.delete(start, end)`, and
+/// so does a program here. `identifier`'s escape is for a name that stands
+/// alone, a parameter's. `icon-name` is `icon_name`, as GJS spells it.
+fn member(name: &str) -> String {
+    name.replace('-', "_")
+}
+
+/// A GIR parameter name as a TypeScript identifier: a name that stands
+/// alone, escaped where it is a word TypeScript reserves -- `delete` is
+/// `delete_`.
 fn identifier(name: &str) -> String {
     const RESERVED: &[&str] = &[
         "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",

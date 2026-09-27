@@ -276,6 +276,12 @@ mod tests {
             gtk.declarations.contains("     * @ntsSet set_from_file\n     */\n    file: string | null;"),
             "GtkImage:file is not written through gtk_image_set_from_file"
         );
+        // A member is named as GIR names it, a word TypeScript reserves
+        // included: GJS writes `buffer.delete(start, end)`.
+        assert!(
+            gtk.declarations.contains("    delete(this: GtkTextBuffer, start: GtkTextIter, end: GtkTextIter): void;"),
+            "GtkTextBuffer's delete is not named delete"
+        );
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-gir-packages-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
