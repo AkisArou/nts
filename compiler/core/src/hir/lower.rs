@@ -5510,11 +5510,36 @@ fn an_uninstantiated_generic(
     let Some(diagnostic) = uninstantiated(snapshot, &shared.generics, id) else {
         return false;
     };
+    note_a_refused_function(snapshot, shared, foreign, lowered, id, diagnostic);
+    true
+}
+
+/// Report a refusal of a whole function declaration **and record it**.
+///
+/// Two sites reach here and one of them recorded nothing at all. `refused_by_name`
+/// pushed its diagnostic and never told `uncompiled`, so `stream`'s `map` --
+/// refused as "a `finally` that spans a `yield`, which is iterator closing" -- was
+/// printed and never written down, and `filter` and `forEach`, which call it, said
+/// "which nothing in this program defines" about a function refused for a stated
+/// reason. The Assistant lane's `integrity` counted that family: it is most of the
+/// 200 cascade lines that blamed a plain function with no record, the generator
+/// fixtures' `guarded` among them.
+///
+/// The emitted name, for the reason `b95a02b13` and `f00d70011` give: the record's
+/// key has to be the name a caller writes. Neither site has a copy, so the builder
+/// is a default one made to ask that question and dropped.
+fn note_a_refused_function(
+    snapshot: &SemanticSnapshot,
+    shared: &Shared,
+    foreign: &super::runtime::ForeignTable,
+    lowered: &mut Lowered,
+    id: NodeId,
+    diagnostic: Diagnostic,
+) {
     let asking = shared.builder(snapshot, foreign, Copy::default());
     let emitted = asking.emitted_function_name(id);
     note_uncompiled(snapshot, &mut lowered.program, id, emitted.as_deref(), &diagnostic);
     lowered.diagnostics.push(diagnostic);
-    true
 }
 
 fn uninstantiated(
@@ -9501,7 +9526,9 @@ pub fn lower_with(
         // hard part were not there. Checking them first means they are live and
         // testable now, and stay so.
         if let Some(what) = refused_by_name(snapshot, id) {
-            lowered.diagnostics.push(refusal_by_name(snapshot, id, what));
+            refused_functions.insert(id);
+            let diagnostic = refusal_by_name(snapshot, id, what);
+            note_a_refused_function(snapshot, &shared, foreign, &mut lowered, id, diagnostic);
             continue;
         }
 
