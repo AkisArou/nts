@@ -74,9 +74,15 @@ done
 # naming it here failed, so record 0191's rename landed as an add with the
 # removal left behind -- HEAD carried two copies while the tree carried one, and
 # the `records` check reads the tree and passed.
+#
+# "Tracking" means HEAD or the index. After `git mv` the old name is gone from
+# the *index* too, so asking only the index refused exactly the rename this
+# paragraph was written for (2026-09-27, an outcomes fixture renamed).
 for path in "$@"; do
   [ -e "$path" ] && continue
-  git ls-files --error-unmatch -- "$path" >/dev/null 2>&1     || { echo "commit-mine: $path does not exist and git does not know it" >&2; exit 2; }
+  git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 \
+    || git cat-file -e "HEAD:$path" 2>/dev/null \
+    || { echo "commit-mine: $path does not exist and git does not know it" >&2; exit 2; }
 done
 
 # A partial commit can only name paths git already knows, so a new file needs
