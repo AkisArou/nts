@@ -1,8 +1,8 @@
 {
   "run": "build",
   "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: object=2;unknown=5;",
-  "node": "exit 1; nts: uncaught Observed: object=-1;unknown=-1;",
-  "measured_with": "6c9ab2ad9b9af234",
+  "nts": "exit 1; nts: uncaught Observed: object=2;unknown=5;a narrowing that travels, read with `as Leaf` elsewhere=203;the same read under its own test=203;",
+  "node": "exit 1; nts: uncaught Observed: object=-1;unknown=-1;a narrowing that travels, read with `as Leaf` elsewhere=203;the same read under its own test=203;",
+  "measured_with": "9f2572f7db962864",
   "source": "measured"
 }
