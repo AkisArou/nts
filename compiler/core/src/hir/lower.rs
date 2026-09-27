@@ -5487,6 +5487,36 @@ fn ambiguous_name(snapshot: &SemanticSnapshot, id: NodeId) -> Diagnostic {
 /// invisible to every census, because a census reads diagnostics.
 ///
 /// `None` for the dead case, which is the one that was right all along.
+/// Report and record a generic no call pins down, and say whether that is what
+/// this declaration is.
+///
+/// **The emitted name, asked the one way the copy path asks it.** This recorded
+/// `None`, which is the bare declared name only, so a generic declared in two
+/// modules -- qualified as `isReadableStream@readable` everywhere a caller names
+/// it -- was filed under a spelling no cascade uses. The record carried a real
+/// cause and 36 cascade lines said "refused above" instead of printing it.
+///
+/// No copy exists here, which is what `copies.is_empty()` means at the call site,
+/// so the builder is a default one made to ask a naming question and dropped.
+/// Reading `naming.qualified` directly would be a second derivation of the very
+/// name this exists to get right.
+fn an_uninstantiated_generic(
+    snapshot: &SemanticSnapshot,
+    shared: &Shared,
+    foreign: &super::runtime::ForeignTable,
+    lowered: &mut Lowered,
+    id: NodeId,
+) -> bool {
+    let Some(diagnostic) = uninstantiated(snapshot, &shared.generics, id) else {
+        return false;
+    };
+    let asking = shared.builder(snapshot, foreign, Copy::default());
+    let emitted = asking.emitted_function_name(id);
+    note_uncompiled(snapshot, &mut lowered.program, id, emitted.as_deref(), &diagnostic);
+    lowered.diagnostics.push(diagnostic);
+    true
+}
+
 fn uninstantiated(
     snapshot: &SemanticSnapshot,
     generics: &super::generics::GenericFunctions,
@@ -9513,12 +9543,8 @@ pub fn lower_with(
         // `generics.unpinned` is what tells them apart: it is written only
         // where a call matched the declaration and left a type parameter
         // unbound.
-        if copies.is_empty()
-            && let Some(diagnostic) = uninstantiated(snapshot, &shared.generics, id)
-        {
+        if copies.is_empty() && an_uninstantiated_generic(snapshot, &shared, foreign, &mut lowered, id) {
             refused_functions.insert(id);
-            note_uncompiled(snapshot, &mut lowered.program, id, None, &diagnostic);
-            lowered.diagnostics.push(diagnostic);
             continue;
         }
         for copy in copies {
