@@ -1,0 +1,30 @@
+# Real passes of node's own tests per runtime/node module as a compiled addon,
+# from tooling/conformance/compiled-axis.sh (passes that survive emptying the
+# module's exports are not counted). Held by compiled-axis-floor.mjs: a drop
+# fails, a rise is a note -- raise a row once each new pass is known to belong.
+assert 0
+async_hooks 2
+buffer 2
+child_process 0
+cluster 0
+console 1
+dgram 0
+diagnostics_channel 0
+dns 0
+events 0
+fs 3
+http 3
+net 4
+os 5
+path 15
+process 1
+punycode 3
+querystring 1
+readline 1
+stream 1
+string_decoder 0
+timers 2
+tty 1
+url 0
+util 2
+zlib 1
