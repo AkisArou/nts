@@ -4,6 +4,10 @@
 // `if (enableX)` shape so that each file stays diffable against upstream at
 // the next pin; the constants fold away at build time.
 //
+// esbuild inlines them only because tools/build-js.ts replaces the one import
+// below with a literal: it does not inline a constant from a module that
+// imports anything. Add no other import here.
+//
 // Leave each flag's type literal (`= false`, never `: boolean = false`).
 // esbuild folds on the value, but nts folds a branch on its condition's
 // *type*: a widened flag compiles every branch it gates into the native
