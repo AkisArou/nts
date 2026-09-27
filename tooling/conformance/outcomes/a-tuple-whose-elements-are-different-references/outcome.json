@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 an array of Float { bits: 64 } where an array of Managed(String) is wanted -- the two hold different widths, so a pointer to one is not a pointer to the other",
+  "ran": "exit 1; nts: uncaught Observed: [number, number]=34;[string, number]=k6;[Box, number]=67;",
+  "node": "exit 1; nts: uncaught Observed: [string[], number[]] destructured=2/3/16;[string[], number[]] by index=2/3/16;[Box, Label] destructured=6/12/hi;[Box, Label] by index=6/12/hi;[Map, Counts] destructured=1/2/3;[Map, Counts] by index=1/2/3;[number, number]=34;[string, number]=k6;[Box, number]=67;",
+  "measured_with": "15faa53f3c9c7620",
+  "source": "measured"
+}
