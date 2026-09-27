@@ -269,6 +269,104 @@ export function run(): string {
     windows_syntax(&dir, &emitted);
 }
 
+/// `TypeName`, a struct holding a string, as `Frame.Navigate` takes it and
+/// `SourcePageType` answers it: `Copied<T>`, a plain object copied at the
+/// call. `{program}` is spliced into `run`.
+fn copied(program: &str) -> (String, String) {
+    let binding = r#"declare module "winrt:Windows.UI.Xaml.Interop" {
+  import type { c_int32, CEnum, Struct } from "c:types";
+  import type { ComClass, Copied, HString } from "winrt:types";
+  export const enum TypeKind { Primitive = 0, Metadata = 1, Custom = 2 }
+  export type TypeName = Struct<{ name: HString; kind: CEnum<TypeKind, c_int32> }, "Windows_UI_Xaml_Interop_TypeName">;
+  export interface IFrameMethods {
+    /**
+     * @ntsVtable 10 Navigate
+     * @ntsHresult
+     */
+    Navigate(this: IFrame, sourcePageType: Copied<TypeName>): boolean;
+    /**
+     * @ntsVtable 11 get_SourcePageType
+     * @ntsHresult
+     */
+    get_SourcePageType(this: IFrame): Copied<TypeName>;
+  }
+  export type IFrame = ComClass<"IFrame"> & IFrameMethods;
+}
+"#;
+    let source = format!(
+        r#"import {{ type IFrame, TypeKind }} from "winrt:Windows.UI.Xaml.Interop";
+export function run(frame: IFrame): string {{
+{program}
+}}
+"#
+    );
+    (binding.to_owned(), source)
+}
+
+/// In, a literal is written straight into the struct in the frame -- no
+/// object is built -- and an object the program holds is copied into one,
+/// each string an HSTRING lent for the call and given back after it. Out, the
+/// struct is copied into a new object, its HSTRING into a `string`, deleted.
+#[test]
+fn a_struct_holding_a_string_is_copied_at_the_call() {
+    let (binding, source) = copied(
+        r#"  const held = { name: "App.Held", kind: TypeKind.Custom };
+  const literal = frame.Navigate({ name: "App.Page", kind: TypeKind.Metadata });
+  const copied = frame.Navigate(held);
+  const page = frame.get_SourcePageType();
+  return String(literal) + String(copied) + page.name + String(page.kind);"#,
+    );
+    let Some((dir, prepared)) = prepare("copied", &binding, &source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert!(
+        text.contains("struct Windows_UI_Xaml_Interop_TypeName {\n    struct HSTRING__ * name;\n    int32_t kind;\n};"),
+        "the struct does not hold an HSTRING and its kind:\n{text}"
+    );
+    // Two arguments, each passed by value, each string lent and given back
+    // on both of the call's paths.
+    assert_eq!(text.matches("nts_string_to_hstring(").count(), 2, "not one HSTRING per argument:\n{text}");
+    assert_eq!(text.matches("nts_hstring_release(").count(), 4, "an HSTRING is not given back on both paths:\n{text}");
+    assert_eq!(text.matches("struct Windows_UI_Xaml_Interop_TypeName, void *))").count(), 2, "not passed by value:\n{text}");
+    // The literal's fields are stored into the struct, not into an object:
+    // the only objects given a `kind` are the one held and the result.
+    assert_eq!(text.matches("->kind = ").count(), 2, "the literal was built as an object:\n{text}");
+    let copied_out = text.find("nts_string_from_hstring(").unwrap_or_else(|| panic!("the result's HSTRING is not copied out:\n{text}"));
+    let checked = text.rfind("[11])(").unwrap_or_else(|| panic!("no call through slot 11:\n{text}"));
+    assert!(copied_out > checked, "the result is read before the call:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
+/// A struct holding a string is only ever `Copied<T>`: as storage the
+/// program holds, no one would own its HSTRING, so it is no native type at
+/// all and the declaration taking it is refused.
+#[test]
+fn a_struct_holding_a_string_is_never_storage() {
+    let (binding, source) = copied(r#"  return frame.Held(local<TypeName>()) ? "yes" : "no";"#);
+    let binding = binding
+        .replace(
+            "  export interface IFrameMethods {",
+            "  import type { ByValue } from \"c:types\";\n  export interface IFrameMethods {\n    /**\n     * @ntsVtable 12 Held\n     * @ntsHresult\n     */\n    Held(this: IFrame, sourcePageType: ByValue<TypeName>): boolean;",
+        );
+    let source = source
+        .replace("import { type IFrame, TypeKind }", "import { local } from \"c:memory\";\nimport { type IFrame, type TypeName }");
+    let Some((_, prepared)) = prepare("copied-storage", &binding, &source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("`Held`'s parameter `sourcePageType`") && d.message.contains("only ever `Copied<T>`")),
+        "a struct holding a string was taken as storage: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// A runtime class's static taking bytes: the factory is C parameter 0, which
 /// the declaration does not spell, so every index recorded before it was
 /// prepended moves up one -- the count's array, and the parameter

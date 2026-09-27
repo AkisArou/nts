@@ -31,7 +31,7 @@
 // One tag to a line. The slot and the method name are both the metadata's, and the compiler
 // refuses a declaration whose name is not the method its slot is said to be.
 declare module "winrt:types" {
-  import type { CArray, Class, ClassChain, c_int64, c_uint8, c_uint16, c_uint32, Struct } from "c:types";
+  import type { CArray, CEnum, Class, ClassChain, c_int64, c_uint8, c_uint16, c_uint32, Struct } from "c:types";
 
   export type ComClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
     readonly __com: true;
@@ -63,6 +63,32 @@ declare module "winrt:types" {
   // deleted after it, and a returned one copied into a `string` and deleted.
   // The brand is optional, so any `string` passes.
   export type HString = string & { readonly __c_hstring?: true };
+
+  // A struct holding a string -- `TypeName { Name: HSTRING; Kind }` -- as a
+  // plain object, as the Windows Runtime's JavaScript projection held one:
+  // `frame.navigate({ name: "App.MainPage", kind: TypeKind.metadata })`.
+  // Never storage, since its strings are HSTRINGs nobody would own: an
+  // argument is copied into the struct for the call, each string made for
+  // it and deleted after; a result is copied out into a new object, each
+  // string copied and deleted. `T` is the struct's layout.
+  //
+  // One object type rather than an intersection of the fields and the
+  // marker, which is what a value's layout is read from.
+  export type Copied<T extends Struct<object, string>> = Flat<
+    ([T] extends [Struct<infer F, string>] ? { [K in keyof F]: CopiedField<F[K]> } : never) & {
+      readonly __c_copied?: T;
+    }
+  >;
+  type Flat<O> = { [K in keyof O]: O[K] };
+  type CopiedField<V> = [V] extends [Struct<object, string>]
+    ? Copied<V>
+    : [V] extends [HString]
+      ? string
+      : [V] extends [CEnum<infer E, number>]
+        ? E
+        : [V] extends [number]
+          ? number
+          : V;
 
   // A TypeScript function where the Windows Runtime takes a delegate: a COM
   // object made for the call, whose `Invoke` calls the function and whose

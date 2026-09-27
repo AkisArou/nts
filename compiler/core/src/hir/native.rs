@@ -476,6 +476,11 @@ pub enum Role {
     /// hands back (`ReceiveArray`), just before the slot for the array itself
     /// (`Written::Received`), which is read with it. Hidden from TypeScript.
     ReceivedCount,
+    /// A struct the program holds as a plain object (`Copied<T>`, in
+    /// `winrt:types`), passed by value: copied field by field into storage in
+    /// the frame for the call -- each string an `HSTRING` made for it and
+    /// deleted after, as a `Role::String(Encoding::HString)` is.
+    Copied,
 }
 
 /// What C writes to an `@ntsHresult` call's result slot, which decides how the
@@ -508,6 +513,12 @@ pub enum Written {
     /// (`NTS_ELEMENT_*`, `builtin::element_kind`), a copy the program owns,
     /// and the block freed (`nts_winrt_received`).
     Received { kind: u32 },
+    /// A struct the program reads as a plain object (`Copied<T>`): the slot
+    /// is the struct, copied field by field into a new object of the
+    /// result's type -- each `HSTRING` into a `string`, and deleted, since
+    /// the caller owns a returned struct's strings. The slot is dead after,
+    /// so none of `Record`'s storage rules reach the program.
+    Copied,
 }
 
 /// What an array crossing an Objective-C message holds, as Swift bridges
@@ -563,7 +574,14 @@ pub(crate) fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(
 /// which is a missing word rather than a diagnostic. The advice moves inside the
 /// sentence so it still ends on the thing that is unsupported, and both messages
 /// are built here so they cannot drift apart again.
-fn no_abi_type(function: &str, parameter: Option<&str>) -> String {
+fn no_abi_type(snapshot: &SemanticSnapshot, ty: TypeId, function: &str, parameter: Option<&str>) -> String {
+    // Named for the rule it breaks rather than for what else it could be.
+    if let Some(record) = schema::string_struct_as_storage(snapshot, ty) {
+        let what = parameter.map_or_else(|| "return".to_owned(), |name| format!("parameter `{name}`"));
+        return format!(
+            "foreign function `{function}`'s {what}, `{record}` as storage -- a struct holding a Windows Runtime string, which is only ever `Copied<T>`,"
+        );
+    }
     let wants = "a c_int or c_double brand, a boolean, or a string";
     match parameter {
         Some(name) => format!(
@@ -632,6 +650,7 @@ impl Function {
                 | Role::Strings
                 | Role::Bytes
                 | Role::Handles
+                | Role::Copied
                 | Role::ErrorSlot { .. } => {
                     ts += 1;
                     Some(ts - 1)
@@ -1173,6 +1192,14 @@ impl Handle {
     #[must_use]
     pub fn ns_string() -> Self {
         Self::objc("NSString")
+    }
+
+    /// The Windows Runtime's string, `HSTRING`: `struct HSTRING__ *`, a
+    /// handle nothing of the program counts -- a `Copied<T>` struct's string
+    /// field, made for a call or copied out of one.
+    #[must_use]
+    pub fn hstring() -> Self {
+        Self { tag: "HSTRING__".to_owned(), ancestors: Vec::new(), family: Family::C, interface: false }
     }
 
     /// A Foundation class a bridge makes or reads -- `NSString`, `NSArray` --
@@ -1994,7 +2021,7 @@ impl Function {
             }
             let ty = abi_type(parameter.ty)
                 .filter(|ty| *ty != Type::Void)
-                .ok_or_else(|| no_abi_type(&name, Some(&parameter.name)))?;
+                .ok_or_else(|| no_abi_type(snapshot, parameter.ty, &name, Some(&parameter.name)))?;
             if consumed(snapshot, &name, parameter, &ty)? { consumes.push(parameters.len()); }
             parameters.push(ty);
             roles.push(Role::Plain);
@@ -2753,7 +2780,7 @@ fn hresult_result(
             };
             // The slot is the record's storage, which cannot also be a field
             // of an object of the program's.
-            if written == Written::Record {
+            if matches!(written, Written::Record | Written::Copied) {
                 return Err(format!(
                     "foreign function `{name}` is `@ntsHresult out` with a struct field `{field}`, which is refused"
                 ));
@@ -2798,6 +2825,9 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
     }
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
+    } else if let Some(record) = schema::copied(snapshot, ty) {
+        by_value_record_is_passable(name, &record)?;
+        (Type::Record(record), Written::Copied)
     } else if boxable(snapshot, ty).is_some() {
         (Type::Pointer(Pointee::Void), Written::Boxed)
     } else {
@@ -2929,7 +2959,7 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
         (Some(text), _) => text,
         (None, Some((c, _))) => c.clone(),
         (None, None) => if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
-            .ok_or_else(|| no_abi_type(name, None))?,
+            .ok_or_else(|| no_abi_type(snapshot, ty, name, None))?,
     };
     Ok(Returned {
         result,
@@ -3169,6 +3199,11 @@ fn c_parameter(
     parameter: &nts_semantic_schema::ParameterRecord,
     at: usize,
 ) -> Result<Option<Vec<(Type, Role)>>, String> {
+    // A struct the program holds as a plain object (`Copied<T>`), before the
+    // labels an object type literal would otherwise be read as.
+    if let Some(record) = schema::copied(snapshot, parameter.ty) {
+        return Ok(Some(vec![(Type::Record(record), Role::Copied)]));
+    }
     // Labels: one slot per property, in the order the literal declares them.
     if let Some(labels) = labels_of(snapshot, parameter.ty) {
         return labels
@@ -3188,7 +3223,7 @@ fn c_parameter(
                 } else {
                     let ty = abi_type(snapshot, *ty)
                         .filter(|ty| *ty != Type::Void)
-                        .ok_or_else(|| no_abi_type(name, Some(&format!("{}.{key}", parameter.name))))?;
+                        .ok_or_else(|| no_abi_type(snapshot, *ty, name, Some(&format!("{}.{key}", parameter.name))))?;
                     (ty, Role::Plain)
                 };
                 Ok((ty, Role::Label { key: key.clone(), last: at + 1 == labels.len(), inner: Box::new(inner) }))

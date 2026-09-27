@@ -13402,6 +13402,14 @@ struct FuncBuilder<'a> {
     /// arguments are lowered: each is lowered a property at a time and never
     /// built (`Role::Label`).
     labels_pending: rustc_hash::FxHashSet<NodeId>,
+    /// Object literals a native call passes where it takes a `Copied<T>`,
+    /// marked with the struct's storage type before its arguments are
+    /// lowered: each is written straight into the struct and never built
+    /// (`Role::Copied`).
+    copied_pending: rustc_hash::FxHashMap<NodeId, HirType>,
+    /// What each such literal's storage was lent -- an `HSTRING` per string
+    /// field -- until the call passing it takes it into its own `Lent`s.
+    copied_lent: rustc_hash::FxHashMap<ValueId, Vec<Lent>>,
     /// A `GObject` class's state field that is a property (`Property<T>`),
     /// as a place resolved it -- the state object and the field -- with the
     /// instance and the thunk a write of it calls to notify.
@@ -13664,6 +13672,8 @@ impl<'a> FuncBuilder<'a> {
             sources: super::generics::Sources::default(),
             omitting_for: None,
             labels_pending: rustc_hash::FxHashSet::default(),
+            copied_pending: rustc_hash::FxHashMap::default(),
+            copied_lent: rustc_hash::FxHashMap::default(),
             notifying: rustc_hash::FxHashMap::default(),
             unboxed: rustc_hash::FxHashMap::default(),
             labels_lowered: rustc_hash::FxHashMap::default(),
@@ -21101,6 +21111,8 @@ impl<'a> FuncBuilder<'a> {
             let want = match (tail, tail_from) {
                 (Some(element), Some(from)) if args.len() >= from => Some((*element).clone()),
                 _ if self.lends_handles(call, args.len()) => None,
+                // A `Copied<T>` literal, which is the struct's storage.
+                _ if self.copied_pending.contains_key(argument) => None,
                 _ => self.parameter_representation(call, args.len()),
             };
             let value = match &want {
@@ -35453,9 +35465,19 @@ impl<'a> FuncBuilder<'a> {
         self.literal_object_type(id, ty).ok().map(|(ty, _)| ty)
     }
 
-    fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+    /// A literal a native call marked as never built (`mark_literals`):
+    /// labels, a property at a time, or a `Copied<T>`'s fields, written
+    /// straight into the struct.
+    fn unbuilt_literal(&mut self, id: NodeId) -> Option<Result<ValueId, Diagnostic>> {
         if self.labels_pending.remove(&id) {
-            return self.lower_labels(id);
+            return Some(self.lower_labels(id));
+        }
+        self.copied_pending.remove(&id).map(|ty| self.copied_literal(id, ty))
+    }
+
+    fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if let Some(unbuilt) = self.unbuilt_literal(id) {
+            return unbuilt;
         }
         // A C record's fields, where C takes the record by value.
         if let Some(ty) = self.native_record_wanted(id) { return self.native_record_literal(id, ty); }
@@ -37206,6 +37228,13 @@ impl<'a> FuncBuilder<'a> {
             // -- nothing reads those back -- and a representation given there
             // would change what a function returning `null` hands over, which is
             // a much larger claim than a field needing a width.
+            // `Copied<T>`'s marker names the struct the object is copied to
+            // and from, for the checker and a native call to read. It holds
+            // nothing, so it has no field, and the object is laid out as the
+            // plain object of its fields is.
+            if property.name == "___c_copied" && property.optional && property.readonly {
+                continue;
+            }
             let held = if self.holds_only_absences(property.ty) {
                 HirType::Erased
             } else {
@@ -47236,7 +47265,7 @@ impl<'a> FuncBuilder<'a> {
         let mut value = None;
         let mut fields = Vec::new();
         for (slot, written, field, count) in written {
-            let read = self.read_written(id, (slot, count), written, &origin)?;
+            let read = self.read_written(id, (slot, count), written, typed.as_ref(), &origin)?;
             match field {
                 Some(field) => fields.push((field, read)),
                 None => value = Some(read),
@@ -47286,6 +47315,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         (slot, count): (ValueId, Option<ValueId>),
         written: super::native::Written,
+        typed: Option<&HirType>,
         origin: &Origin,
     ) -> Result<ValueId, Diagnostic> {
         let first = |this: &mut Self| this.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
@@ -47333,6 +47363,11 @@ impl<'a> FuncBuilder<'a> {
             // why a record result is still refused in a loop, as a C
             // function's is.
             super::native::Written::Record => slot,
+            // Copied out into an object of the program's, the slot dead after.
+            super::native::Written::Copied => {
+                let ty = typed.cloned().or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a copied struct"))?;
+                self.object_from_copied(id, slot, &ty)?
+            }
             super::native::Written::Bool => {
                 let index = first(self);
                 let byte_type = HirType::Int { bits: 8, signed: false };
@@ -48918,7 +48953,7 @@ impl<'a> FuncBuilder<'a> {
         let spelled = receiver.is_some()
             && !matches!(callee, Callee::Native(target) if target.roles.first() == Some(&super::native::Role::Receiver));
         if let Callee::Native(target) = callee {
-            self.mark_labels(target, arguments, spelled);
+            self.mark_literals(target, arguments, spelled);
         }
         let args = self.lower_written_arguments(id, callee, arguments, spelled, tail.as_ref())?;
         let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
@@ -48950,16 +48985,25 @@ impl<'a> FuncBuilder<'a> {
         Ok(None)
     }
 
-    /// Mark each argument a native call passes as an object literal of
+    /// Mark each object literal a native call passes that is never built:
     /// labels -- the call's own spelling of them, as Swift's are -- whose
-    /// properties are passed without building it. Labels passed any other way
-    /// are an object like any other, and each is read from its field.
-    fn mark_labels(&mut self, target: &super::native::Function, arguments: &[NodeId], method: bool) {
-        for (_, role, fed) in target.slots() {
-            let (super::native::Role::Label { last: true, .. }, Some(ts)) = (role, fed) else { continue };
-            let Some(&argument) = ts.checked_sub(usize::from(method)).and_then(|at| arguments.get(at)) else { continue };
-            if self.kind_of(argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
-                self.labels_pending.insert(argument);
+    /// properties are passed as they are, and a `Copied<T>`'s fields, written
+    /// straight into the struct. Either passed any other way is an object
+    /// like any other, and each field is read from it.
+    fn mark_literals(&mut self, target: &super::native::Function, arguments: &[NodeId], method: bool) {
+        for (at, role, fed) in target.slots() {
+            let Some(&argument) = fed.and_then(|ts| ts.checked_sub(usize::from(method))).and_then(|ts| arguments.get(ts)) else { continue };
+            if self.kind_of(argument) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+                continue;
+            }
+            match role {
+                super::native::Role::Label { last: true, .. } => {
+                    self.labels_pending.insert(argument);
+                }
+                super::native::Role::Copied => {
+                    self.copied_pending.insert(argument, target.parameters[at].representation());
+                }
+                _ => {}
             }
         }
     }
@@ -49109,6 +49153,10 @@ impl<'a> FuncBuilder<'a> {
                 Role::Result { .. } | Role::ReceivedCount | Role::Outer | Role::Inner => {
                     c_args.push(self.hresult_slot(&role, target.parameters[at].representation(), &mut lent, &origin));
                 }
+                // The struct, copied into the frame, its strings lent.
+                Role::Copied => c_args.extend(
+                    argument.map(|value| self.copied_argument(id, value, target.parameters[at].representation(), &mut lent)).transpose()?,
+                ),
                 Role::String(encoding) => {
                     let Some(string) = argument else { continue };
                     let pointer = self.runtime_call(

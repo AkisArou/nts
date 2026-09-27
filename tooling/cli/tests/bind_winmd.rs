@@ -319,6 +319,37 @@ fn winrt_structs_cross_by_value() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+/// A struct holding a string -- `TypeName`, which `Frame.Navigate` takes and
+/// `SourcePageType` answers -- is a plain object copied at the call
+/// (`Copied<T>`), and not refused: its string is an `HString` field.
+#[test]
+fn a_struct_holding_a_string_is_copied() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-copied-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.UI.Xaml.Controls", "Windows.UI.Xaml.Interop", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let interop = std::fs::read_to_string(out.join("Windows.UI.Xaml.Interop.d.ts")).unwrap();
+    let controls = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.d.ts")).unwrap();
+    let refused = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
+    assert!(
+        interop.contains("export type TypeName = Struct<{ name: HString; kind: CEnum<TypeKind, c_int32> }, \"Windows_UI_Xaml_Interop_TypeName\">;"),
+        "{interop}"
+    );
+    assert!(controls.contains("Navigate(this: IFrame, sourcePageType: Copied<TypeName>, parameter: Inspectable | null): boolean;"), "{controls}");
+    assert!(controls.contains("sourcePageType: Copied<TypeName>;"), "{controls}");
+    assert!(!refused.contains("TypeName"), "{refused}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
 /// A composable class is constructed as itself: its public factory's methods
 /// without the outer and inner objects, tagged for the compiler to supply
 /// them. A protected factory, which only a subclass calls, is not bound.

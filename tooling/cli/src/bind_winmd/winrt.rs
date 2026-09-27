@@ -204,7 +204,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 /// The brands `c:types` declares, beside its `c_` scalars.
 const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "ConstPtr"];
 /// The brands `winrt:types` declares.
-const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
+const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "Copied", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
 /// The namespace a `winrt:` module names.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
@@ -1106,7 +1106,9 @@ impl Writer<'_> {
         for field in def.fields() {
             let ty = field.ty();
             let why = match &ty {
-                Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 => None,
+                // A string makes the struct one the program holds as a plain
+                // object, copied at the call (`Copied<T>`).
+                Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 | Type::String => None,
                 Type::ValueName(named) if is_guid(named) => None,
                 Type::ValueName(named) => match self.find(&named.namespace, &named.name) {
                     Ok(inner) if inner.category() == TypeCategory::Enum => None,
@@ -1117,7 +1119,6 @@ impl Writer<'_> {
                     Err(why) => Some(why),
                 },
                 Type::Bool => Some("a `boolean`".to_owned()),
-                Type::String => Some("a string".to_owned()),
                 other => Some(format!("{other:?}")),
             };
             if let Some(why) = why {
@@ -1127,8 +1128,8 @@ impl Writer<'_> {
         None
     }
 
-    /// A struct field's type: a C scalar, an enum, or another struct, held
-    /// inside the record rather than pointed at.
+    /// A struct field's type: a C scalar, an enum, a string, or another
+    /// struct, held inside the record rather than pointed at.
     fn field(&mut self, ty: &Type) -> Result<String, String> {
         let brand = |brand: &'static str, writer: &mut Self| {
             writer.brands.insert(brand);
@@ -1167,9 +1168,25 @@ impl Writer<'_> {
                 }
             }
             Type::Bool => Err("a `boolean`".to_owned()),
-            Type::String => Err("a string".to_owned()),
+            Type::String => {
+                self.brands.insert("HString");
+                Ok("HString".to_owned())
+            }
             other => Err(format!("{other:?}")),
         }
+    }
+
+    /// Whether a struct holds a string, itself or in a struct it holds: one
+    /// the program holds as a plain object, copied at the call, and never
+    /// as storage (`Copied<T>`).
+    fn holds_string(&self, def: TypeDef, depth: u32) -> bool {
+        def.fields().any(|field| match field.ty() {
+            Type::String => true,
+            Type::ValueName(named) if !is_guid(&named) => self
+                .find(&named.namespace, &named.name)
+                .is_ok_and(|inner| inner.category() == TypeCategory::Struct && depth < 8 && self.holds_string(inner, depth + 1)),
+            _ => false,
+        })
     }
 
     /// `JsonValueType`: a `const enum` of its members.
@@ -1442,6 +1459,9 @@ impl Writer<'_> {
             // storage, `const T *`, which C reads and does not keep.
             Type::RefConst(inner) if argument && matches!(&**inner, Type::ValueName(_)) => {
                 let by_value = self.spell(inner, true)?;
+                if by_value.starts_with("Copied<") {
+                    return Err(format!("{ty:?}, a reference to a struct holding a string, which is copied only by value"));
+                }
                 let Some(record) = by_value.strip_prefix("ByValue<").and_then(|rest| rest.strip_suffix('>')) else {
                     return Err(format!("{ty:?}, a reference to something other than a struct"));
                 };
@@ -1514,12 +1534,17 @@ impl Writer<'_> {
             return Ok("EventRegistrationToken".to_owned());
         }
         // A struct crosses by value: the program holds its storage, a
-        // `Ptr` to it, and C copies it in or writes it out.
+        // `Ptr` to it, and C copies it in or writes it out -- or, for one
+        // holding a string, a plain object copied in and out at the call.
         if def.category() == TypeCategory::Struct {
             if let Some(why) = self.struct_refusal(def, 0) {
                 return Err(format!("`{}`, {why}", name.name));
             }
             let record = self.named(&name.namespace, &name.name);
+            if self.holds_string(def, 0) {
+                self.brands.insert("Copied");
+                return Ok(format!("Copied<{record}>"));
+            }
             self.brands.insert("ByValue");
             return Ok(format!("ByValue<{record}>"));
         }

@@ -1,7 +1,7 @@
 //! Native places are addresses. Member access and addrOf share this path so
 //! evaluating a receiver never performs an accidental aggregate copy/load.
-use super::{Branch, Diagnostic, FuncBuilder, HirType, ManagedType, NodeId, OpKind, Place, ValueId};
-use crate::hir::native::Pointee;
+use super::{Branch, Diagnostic, FuncBuilder, HirType, Lent, ManagedType, NodeId, OpKind, Place, ValueId};
+use crate::hir::native::{Encoding, Handle, Pointee};
 use nts_semantic_schema::{LiteralValue, TypeKind, syntax};
 
 impl FuncBuilder<'_> {
@@ -131,15 +131,112 @@ impl FuncBuilder<'_> {
     /// Nothing is allocated: it is C's compound literal.
     pub(super) fn native_record_literal(&mut self, id: NodeId, ty: HirType) -> Result<ValueId, Diagnostic> {
         let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
-        self.fill_native_record(id, storage)?;
+        self.fill_native_record(id, storage, None)?;
         Ok(storage)
+    }
+
+    /// A literal a native call passes where it takes a `Copied<T>`
+    /// (`Role::Copied`), written straight into the struct in the frame --
+    /// no object is built -- with each string an `HSTRING` lent for the
+    /// call. What was lent waits beside the storage (`copied_lent`) for the
+    /// call to take it (`copied_argument`), which gives it back after.
+    pub(super) fn copied_literal(&mut self, id: NodeId, ty: HirType) -> Result<ValueId, Diagnostic> {
+        let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
+        let mut lent = Vec::new();
+        self.fill_native_record(id, storage, Some(&mut lent))?;
+        self.copied_lent.insert(storage, lent);
+        Ok(storage)
+    }
+
+    /// A `Copied<T>` argument as the struct C takes by value: the literal's
+    /// storage as `copied_literal` wrote it, or an object the program holds
+    /// copied field by field into storage in the frame. Either way, the
+    /// strings lent for it join the call's `lent`.
+    pub(super) fn copied_argument(&mut self, id: NodeId, value: ValueId, want: HirType, lent: &mut Vec<Lent>) -> Result<ValueId, Diagnostic> {
+        if let Some(strings) = self.copied_lent.remove(&value) {
+            lent.extend(strings);
+            return Ok(value);
+        }
+        let storage = self.push(OpKind::NativeLocal { count: 1 }, want, self.origin(id));
+        self.copy_into_native_record(id, value, storage, Some(lent))?;
+        Ok(storage)
+    }
+
+    /// A struct a Windows Runtime call wrote (`Written::Copied`), as a new
+    /// object of `ty`, the program's `Copied<T>`: each field read out of the
+    /// storage at `pointer` -- a nested struct into an object of its own,
+    /// an `HSTRING` into a `string`, which deletes it, since the caller owns
+    /// a returned struct's strings.
+    pub(super) fn object_from_copied(&mut self, id: NodeId, pointer: ValueId, ty: &HirType) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Object(type_id)) = ty.clone() else {
+            return Err(self.unsupported(id, "a copied struct read as something other than an object"));
+        };
+        let HirType::NativePointer(Pointee::Record(record)) = self.values[pointer.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "a copied struct read from something other than its storage"));
+        };
+        let layout = self.layout_of(id, type_id)?;
+        // Every field is one of the struct's, and each is written below.
+        if layout.fields.len() != record.fields.len() {
+            return Err(self.unsupported(id, "a copied struct whose object type has fields the struct does not"));
+        }
+        let object = self.push(OpKind::ObjectNew { frame: false }, ty.clone(), origin.clone());
+        for native in &record.fields {
+            let Some(field) = layout.index_of(&native.name) else {
+                return Err(self.unsupported(id, &format!("a copied struct's field `{}` its object type does not declare", native.name)));
+            };
+            let want = layout.fields[field as usize].ty.clone();
+            let value = if matches!(native.ty, Pointee::Record(_)) {
+                let inner = self.native_field_address(id, pointer, &native.name)?;
+                self.object_from_copied(id, inner, &want)?
+            } else {
+                let place = self.native_field_place(id, pointer, &native.name)?;
+                let read = self.read_place(id, &place)?;
+                if is_hstring_field(&native.ty) {
+                    let handle = self.push(OpKind::Convert(read), Encoding::HString.c_type().representation(), origin.clone());
+                    self.runtime_call("nts_string_from_hstring", vec![handle], HirType::Managed(ManagedType::String), origin.clone())
+                } else {
+                    read
+                }
+            };
+            let value = self.coerce(value, &want, id)?;
+            self.field_set(object, field, value, &origin);
+        }
+        Ok(object)
+    }
+
+    /// `value` written into the field `key` of the record at `pointer`: an
+    /// `HSTRING` field -- only ever a `Copied<T>`'s -- as a string lent for
+    /// the call into `lent`, and any other as a store converts it.
+    fn write_native_field(&mut self, id: NodeId, pointer: ValueId, key: &str, value: ValueId, lent: Option<&mut Vec<Lent>>) -> Result<(), Diagnostic> {
+        let place = self.native_field_place(id, pointer, key)?;
+        let Place::NativeElement { pointer: field, index } = place else {
+            return self.write_place(id, &place, value);
+        };
+        let HirType::NativePointer(slot) = self.values[field.0 as usize].ty.clone() else {
+            return self.write_place(id, &place, value);
+        };
+        if !is_hstring_field(&slot) {
+            return self.write_place(id, &place, value);
+        }
+        let Some(lent) = lent else {
+            return Err(self.unsupported(id, "a Windows Runtime string written into a struct the program holds; a struct holding one is `Copied<T>`"));
+        };
+        let origin = self.origin(id);
+        let string = self.coerce(value, &HirType::Managed(ManagedType::String), id)?;
+        let handle = self.runtime_call(Encoding::HString.to_c(), vec![string], Encoding::HString.c_type().representation(), origin.clone());
+        lent.push(Lent::String { string, pointer: handle, encoding: Encoding::HString });
+        let element = self.native_element_type(id, field)?;
+        let stored = self.push(OpKind::Convert(handle), element, origin.clone());
+        self.push(OpKind::NativeStore { pointer: field, index, value: stored }, HirType::Void, origin);
+        Ok(())
     }
 
     /// Each property of the literal `id` written into its field of the record
     /// at `pointer`, in the order the literal gives them, which is when
     /// JavaScript evaluates them. A record field written as a literal is
     /// filled in place, and a field left out keeps the zero it has.
-    fn fill_native_record(&mut self, id: NodeId, pointer: ValueId) -> Result<(), Diagnostic> {
+    fn fill_native_record(&mut self, id: NodeId, pointer: ValueId, mut lent: Option<&mut Vec<Lent>>) -> Result<(), Diagnostic> {
         for property in self.syntax_children_of(id) {
             let parts = self.syntax_children_of(property);
             let (name, value) = match (self.kind_of(property), parts.as_slice()) {
@@ -151,18 +248,17 @@ impl FuncBuilder<'_> {
             if let Some(value) = value.filter(|value| self.kind_of(*value) == Some(syntax::OBJECT_LITERAL_EXPRESSION)) {
                 let field = self.native_field_address(property, pointer, &key)?;
                 if matches!(&self.values[field.0 as usize].ty, HirType::NativePointer(view) if matches!(view.viewed(), Pointee::Record(_))) {
-                    self.fill_native_record(value, field)?;
+                    self.fill_native_record(value, field, lent.as_deref_mut())?;
                     continue;
                 }
             }
-            let place = self.native_field_place(property, pointer, &key)?;
             let written = if let Some(value) = value {
                 self.lower_expression(value)?
             } else {
                 let symbol = self.shorthand_value_symbol(name, &key)?;
                 self.lower_named_value(name, symbol)?
             };
-            self.write_place(property, &place, written)?;
+            self.write_native_field(property, pointer, &key, written, lent.as_deref_mut())?;
         }
         Ok(())
     }
@@ -173,11 +269,11 @@ impl FuncBuilder<'_> {
     /// A field the object does not have stays zero, as a literal's does.
     pub(super) fn native_record_from_object(&mut self, id: NodeId, object: ValueId, ty: HirType) -> Result<ValueId, Diagnostic> {
         let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
-        self.copy_into_native_record(id, object, storage)?;
+        self.copy_into_native_record(id, object, storage, None)?;
         Ok(storage)
     }
 
-    fn copy_into_native_record(&mut self, id: NodeId, object: ValueId, pointer: ValueId) -> Result<(), Diagnostic> {
+    fn copy_into_native_record(&mut self, id: NodeId, object: ValueId, pointer: ValueId, mut lent: Option<&mut Vec<Lent>>) -> Result<(), Diagnostic> {
         let HirType::Managed(ManagedType::Object(type_id)) = self.values[object.0 as usize].ty.clone() else {
             return Err(self.unsupported(id, "a C record's fields held in something other than an object"));
         };
@@ -205,11 +301,10 @@ impl FuncBuilder<'_> {
             let value = self.push(OpKind::FieldGet { object, field }, ty.clone(), self.origin(id));
             if matches!(ty, HirType::Managed(ManagedType::Object(_))) && matches!(native.ty, Pointee::Record(_)) {
                 let inner = self.native_field_address(id, pointer, &native.name)?;
-                self.copy_into_native_record(id, value, inner)?;
+                self.copy_into_native_record(id, value, inner, lent.as_deref_mut())?;
                 continue;
             }
-            let place = self.native_field_place(id, pointer, &native.name)?;
-            self.write_place(id, &place, value)?;
+            self.write_native_field(id, pointer, &native.name, value, lent.as_deref_mut())?;
         }
         Ok(())
     }
@@ -530,4 +625,10 @@ impl FuncBuilder<'_> {
         };
         Ok(self.push(kind, ty, self.origin(id)))
     }
+}
+
+/// Whether a record field is a Windows Runtime string: `struct HSTRING__ *`,
+/// which only a `Copied<T>` record holds (`schema::structure`).
+fn is_hstring_field(field: &Pointee) -> bool {
+    matches!(field, Pointee::Pointer(held) if matches!(&**held, Pointee::Opaque(handle) if *handle == Handle::hstring()))
 }

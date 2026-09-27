@@ -174,6 +174,37 @@ pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::s
     }
 }
 
+/// `Copied<T>`: the struct `T`, where the program holds it as a plain object
+/// copied in and out at the call rather than as storage -- a Windows Runtime
+/// struct holding a string (`winrt:types`).
+///
+/// `{ [K in keyof F]: ... } & { readonly __c_copied?: T }`. The marker is
+/// optional, so any object of the fields' shape is one.
+#[must_use]
+pub(crate) fn copied(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::sync::Arc<Record>> {
+    let marker = property(snapshot, ty, "___c_copied")?;
+    if !(marker.readonly && marker.optional && marker.kind == MemberKind::Field) {
+        return None;
+    }
+    // The optional marker's type, through the `undefined` optionality adds.
+    let record = match &snapshot.types.get(marker.ty.0 as usize)?.kind {
+        TypeKind::Union(parts) => parts.iter().copied().find(|part| is_layout(snapshot, *part))?,
+        _ => marker.ty,
+    };
+    structure(snapshot, record, &mut Vec::new(), false, true).map(std::sync::Arc::new)
+}
+
+/// The C name of the struct `ty` is storage of (`Ptr<T>`, `ByValue<T>`),
+/// where that struct holds a Windows Runtime string: no native type at all,
+/// since no storage could own the string. What a refusal of one says.
+pub(crate) fn string_struct_as_storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
+    let element = marker(snapshot, stored(snapshot, ty), "___c_pointer")?;
+    if structure(snapshot, element, &mut Vec::new(), false, false).is_some() {
+        return None;
+    }
+    structure(snapshot, element, &mut Vec::new(), false, true).map(|record| record.name)
+}
+
 /// The Objective-C class a class type's instances are: a class a binding
 /// declares with `@ntsClass NSTimer` -- the name Objective-C knows, where
 /// TypeScript may say `Timer` as Swift does -- with every ancestor's, root
@@ -609,7 +640,7 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         return Some(qualify(Pointee::Void));
     }
     if let Some(scalar) = scalar(snapshot, element) { return Some(qualify(Pointee::Scalar(scalar))); }
-    if let Some(layout) = structure(snapshot, element, visiting, false) { return Some(qualify(Pointee::Record(layout.into()))); }
+    if let Some(layout) = structure(snapshot, element, visiting, false, false) { return Some(qualify(Pointee::Record(layout.into()))); }
     pointer_within(snapshot, element, visiting).map(|p| qualify(Pointee::Pointer(Box::new(p))))
 }
 
@@ -623,11 +654,17 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
 /// header's own untagged one. That inference is why the surface has no marker
 /// for it: the author would have been restating what the enclosing tag already
 /// says.
+///
+/// `copied` is whether the record is read for `Copied<T>`, the only way a
+/// record may hold a Windows Runtime string: storage holding an `HSTRING`
+/// would be storage nobody owns the string in, so for any other reader such
+/// a record is no record at all, and nothing can hold one.
 fn structure(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     visiting: &mut Vec<TypeId>,
     within_header: bool,
+    copied: bool,
 ) -> Option<Record> {
     // `Struct<F, Tag>` and `Union<F, Tag>` differ in one marker and nothing
     // else: the same member list, read the same way, laid out differently.
@@ -700,12 +737,16 @@ fn structure(
         } else if !visiting.contains(&property.ty)
             && let Some(inner) = {
                 visiting.push(property.ty);
-                let inner = structure(snapshot, property.ty, visiting, members_are_the_header_s);
+                let inner = structure(snapshot, property.ty, visiting, members_are_the_header_s, copied);
                 visiting.pop();
                 inner
             }
         {
             Pointee::Record(inner.into())
+        } else if copied && super::is_hstring(snapshot, property.ty) {
+            // A Windows Runtime string, `HSTRING` -- `struct HSTRING__ *`, as
+            // Windows spells it.
+            Pointee::Pointer(Box::new(Pointee::Opaque(super::Handle::hstring())))
         } else if let Some(signature) = super::fn_pointer(snapshot, property.ty) {
             // A member written as an ordinary TypeScript function type, which
             // at a C boundary can mean one thing -- `struct sigaction` and
@@ -768,6 +809,6 @@ pub(crate) fn declaring_module(
 #[must_use]
 pub fn storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     if let Some(scalar) = scalar(snapshot, ty) { return Some(Pointee::Scalar(scalar)); }
-    if let Some(layout) = structure(snapshot, ty, &mut Vec::new(), false) { return Some(Pointee::Record(layout.into())); }
+    if let Some(layout) = structure(snapshot, ty, &mut Vec::new(), false, false) { return Some(Pointee::Record(layout.into())); }
     pointer(snapshot, ty).map(|p| Pointee::Pointer(Box::new(p)))
 }

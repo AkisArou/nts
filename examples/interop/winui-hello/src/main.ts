@@ -52,7 +52,8 @@ import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
-import { Button, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { Button, Frame, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
 
 // The overridable interface, as XAML reaches an override: bindings keep it
 // off a class's queries, since it is a subclass's contract with its base, so
@@ -194,10 +195,17 @@ class App extends Application {
     // A record written as its fields, where the call takes one by value.
     button.measure({ width: 1000, height: 1000 });
     const desired = button.desiredSize.width > 0;
+    // Navigation by type, as C# writes `frame.Navigate(typeof(Page))`: the
+    // `TypeName` a plain object copied into the struct, its name an HSTRING
+    // made for the call, and the frame's page type copied back out.
+    const frame = new Frame();
+    const navigated = frame.Navigate({ name: "Microsoft.UI.Xaml.Controls.Page", kind: TypeKind.Metadata }, null);
+    const page = frame.sourcePageType;
+    const current = frame.currentSourcePageType;
     console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " rebuilt=" + String(this.rebuilt()),
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " rebuilt=" + String(this.rebuilt()),
     );
     this.exit();
   }
