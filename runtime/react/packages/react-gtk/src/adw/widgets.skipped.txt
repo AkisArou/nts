@@ -22,7 +22,6 @@ AdwAboutWindow.version	deprecated
 AdwAboutWindow.website	deprecated
 AdwAboutWindow::activate-link	deprecated
 AdwActionRow.icon-name	deprecated
-AdwAlertDialog::response	no connect overload in the bindings
 AdwCarousel.scroll-params	a AdwSpringParams, which a JSX attribute does not carry yet
 AdwComboRow.expression	a GtkExpression | null, which a JSX attribute does not carry yet
 AdwEntryRow.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet

@@ -355,7 +355,9 @@ function readBindings(dir: string): Bindings {
       entry(setters, setter[2]!, () => new Map()).set(setter[1]!, setter[3]!);
       continue;
     }
-    const signal = /^ {4}connect\(this: Erased<(\w+)>, detailed_signal: "([^"]+)", handler: ErasedClosure</.exec(line);
+    // A detailed signal also takes `"response::cancel"`; its prop connects
+    // to the plain name, which hears every detail.
+    const signal = /^ {4}connect\(this: Erased<(\w+)>, detailed_signal: "([^"]+)"(?: \| `[\w-]+::\$\{string\}`)?, handler: ErasedClosure</.exec(line);
     const signature = signal === null ? null : readSignature(line);
     if (signal !== null && signature !== null) {
       entry(signals, signal[1]!, () => new Map()).set(signal[2]!, signature);
@@ -1231,8 +1233,11 @@ function emit(m: Model, target: Target): string {
       line("  placeIn(parent: WidgetNode, _before: HostNode | null): void {");
       line("    this.presenter = parent.widget;");
       line("  }");
+      needs.add("writeAsReact");
+      line("  // React's close, not the user's: a dialog reports it as its `close`");
+      line("  // response, which no handler hears.");
       line("  takeOutOf(_parent: WidgetNode): void {");
-      line(`    this.gtk.${presentedBy.close}();`);
+      line(`    writeAsReact(() => this.gtk.${presentedBy.close}());`);
       line("    this.presenter = null;");
       line("  }");
       line("  needsCommitMount(): boolean {");
@@ -1384,7 +1389,7 @@ function emit(m: Model, target: Target): string {
     byModule.set(module, names);
   }
   const imports = [...byModule.keys()].sort().map((module) => `import {\n${byModule.get(module)!.map((n) => `  ${n},`).join("\n")}\n} from "${module}";`);
-  const fromHostNode = ["type HostNode", "insertAt", "type SignalSlot", "SlotNode", "stringsOf", "WidgetNode"].filter((n) => needs.has(n));
+  const fromHostNode = ["type HostNode", "insertAt", "type SignalSlot", "SlotNode", "stringsOf", "WidgetNode", "writeAsReact"].filter((n) => needs.has(n));
   return out
     .join("\n")
     .replace("__IMPORTS__", imports.join("\n"))

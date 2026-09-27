@@ -37,13 +37,16 @@
 //             heard as that tab's onSelect and put back after the flush, and
 //             the app moving `selected` moves the selection
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
-//             it is presented within the Box's window, and taken out it closes
+//             it is presented within the Box's window, its onResponse hears
+//             the response id, and taken out it closes, which onResponse
+//             does not hear
 //   unknown   a root without the adw set creates no Adw widget
 //   reset     removing the Adw prop restores libadwaita's default, and
 //             removing the inherited GTK one clears it
 
 import {
   AdwActionRow,
+  AdwAlertDialog,
   adw_init,
   AdwApplication,
   AdwApplicationWindow,
@@ -346,17 +349,32 @@ function main(): void {
   adwWindow.set_default_size(640, 480);
   adwWindow.present();
   idle();
-  const dialog = createInstance("AdwAlertDialog", { heading: "Sure?" }, shown, 0, {});
-  const dialogWantsMount = finalizeInitialChildren(dialog, "AdwAlertDialog", { heading: "Sure?" }, 0);
+  // Every response heard: React's own close (`force_close`, which libadwaita
+  // reports as the `close` response) is not one.
+  let responded = "";
+  const dialogProps: Props = {
+    heading: "Sure?",
+    onResponse: (response: string) => {
+      responded += (responded === "" ? "" : ",") + response;
+    },
+  };
+  const dialog = createInstance("AdwAlertDialog", dialogProps, shown, 0, {});
+  const dialogWantsMount = finalizeInitialChildren(dialog, "AdwAlertDialog", dialogProps, 0);
   appendInitialChild(anchor, dialog);
   const unplaced = widget(dialog).get_root() === null;
-  commitMount(dialog, "AdwAlertDialog", { heading: "Sure?" }, {});
+  commitMount(dialog, "AdwAlertDialog", dialogProps, {});
   idle();
   const within = widget(dialog).get_root() === shown.window;
+  // The response a user's button gives, as the dialog emits it: a detailed
+  // signal, heard whatever its detail.
+  const alert = widget(dialog);
+  if (alert instanceof AdwAlertDialog) {
+    alert.emit("response", "cancel");
+  }
   removeChild(anchor, dialog);
   idle();
   const closed = widget(dialog).get_root() === null;
-  react_gtk_log("dialog " + String(dialogWantsMount) + " " + String(unplaced) + " " + String(within) + " " + String(closed));
+  react_gtk_log("dialog " + String(dialogWantsMount) + " " + String(unplaced) + " " + String(within) + " " + String(closed) + " responded=" + responded);
 
   const application = new AdwApplication({ application_id: "org.nts.ReactAdw", flags: ApplicationFlags.NON_UNIQUE });
   application.register(null, null);

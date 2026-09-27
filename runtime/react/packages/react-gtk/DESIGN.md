@@ -224,7 +224,10 @@ property's new value when it changes (`onNotifyText={(text) => ...}`), what
 a controlled prop needs to hear. A handler hears the user and not React:
 nothing is dispatched while props are applied, so setting `text` or
 `active` from props does not call `onNotifyText` or `onToggled`, as React
-DOM does not call `onChange` for the value it sets.
+DOM does not call `onChange` for the value it sets. The same holds for
+what React does beyond props (`writeAsReact`): closing a dialog it no
+longer renders, which libadwaita reports as the `close` response, is not
+heard by `onResponse`, and selecting a tab is not heard by `onSelect`.
 
 **Input is a prop on every widget.** GTK 4 delivers keys, clicks, pointer
 motion and scrolling through event controllers added to a widget, not

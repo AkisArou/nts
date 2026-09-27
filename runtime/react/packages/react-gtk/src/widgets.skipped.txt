@@ -2,7 +2,6 @@
 GtkAccessible.accessible-role	no setter in the bindings
 GtkActionable.action-target	no setter in the bindings
 GtkAppChooser.content-type	construct-only: a change would need a new widget
-GtkAppChooserButton::custom-item-activated	no connect overload in the bindings
 GtkAppChooserDialog.gfile	construct-only: a change would need a new widget
 GtkAssistant.use-header-bar	construct-only: a change would need a new widget
 GtkAssistant::apply	deprecated
@@ -60,7 +59,6 @@ GtkImage.gicon	removing it leaves its value: GIR gives no default
 GtkInscription.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 GtkLabel.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 GtkLabel.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
-GtkLevelBar::offset-changed	no connect overload in the bindings
 GtkLockButton.permission	deprecated
 GtkLockButton.text-lock	deprecated
 GtkLockButton.text-unlock	deprecated

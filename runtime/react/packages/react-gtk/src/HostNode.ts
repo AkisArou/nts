@@ -52,8 +52,25 @@ function discreteEvent(handler: () => void): void {
 // A handler hears the user, not React's own writes: setting `text` or
 // `active` from props makes GTK emit `notify::text` or `toggled`, and React
 // DOM does not call `onChange` for the value it sets either. So nothing is
-// dispatched while props are being applied.
-let applyingProps = 0;
+// dispatched while React writes: while props are applied, and while React
+// closes, selects or destroys what it rendered (`writeAsReact`).
+let reactWriting = 0;
+
+/**
+ * Runs `write`, a change React makes to what it rendered beyond its props:
+ * closing a dialog, which libadwaita reports as its `close` response, or
+ * selecting a tab. No handler hears the signals it causes.
+ */
+export function writeAsReact(write: () => void): void {
+  reactWriting++;
+  write();
+  reactWriting--;
+}
+
+/** Whether a signal now comes from React's own write (`writeAsReact`), not the user. */
+export function isReactWriting(): boolean {
+  return reactWriting > 0;
+}
 
 // What runs between a user's change and putting a controlled prop back: the
 // reconciler's sync flush, so that state the handler set is committed first,
@@ -115,7 +132,7 @@ export class SignalSlot {
   /** A signal without arguments: calls the handler. */
   fire(): void {
     const handler = this.handler;
-    if (handler !== null && applyingProps === 0) {
+    if (handler !== null && reactWriting === 0) {
       discreteEvent(handler as () => void);
     }
   }
@@ -125,7 +142,7 @@ export class SignalSlot {
    * the handler; with no handler, not handled, so GTK's own default runs.
    */
   decide(call: () => boolean): boolean {
-    if (this.handler === null || applyingProps > 0) {
+    if (this.handler === null || reactWriting > 0) {
       return false;
     }
     const previous = getCurrentUpdatePriority();
@@ -143,7 +160,7 @@ export class SignalSlot {
 
   /** A signal with arguments: runs `call`, which passes them to the handler. */
   dispatch(call: () => void): void {
-    if (applyingProps > 0) {
+    if (reactWriting > 0) {
       return;
     }
     if (this.handler !== null) {
@@ -372,10 +389,10 @@ export abstract class WidgetNode extends HostNode {
   applyProps(previous: Props | null, next: Props): void {
     // What is wrong is thrown once the props are applied and dispatch is on
     // again, so a bad prop cannot leave every handler silenced.
-    applyingProps++;
+    reactWriting++;
     const error = this.applyAll(previous, next);
     this.props = next;
-    applyingProps--;
+    reactWriting--;
     if (error !== null) {
       throw new Error(error);
     }
@@ -443,9 +460,9 @@ export abstract class WidgetNode extends HostNode {
   private restoreProp(key: string): void {
     const wanted = this.props === null ? undefined : this.props[key];
     if (wanted !== undefined && this.readControlled(key) !== wanted) {
-      applyingProps++;
+      reactWriting++;
       this.setProp(key, wanted);
-      applyingProps--;
+      reactWriting--;
     }
   }
 
@@ -557,9 +574,9 @@ export abstract class WidgetNode extends HostNode {
   }
   /** A window, closed. */
   close(): void {
-    const window = this.widget;
-    if (window instanceof GtkWindow) {
-      window.destroy();
+    const window = this.widget instanceof GtkWindow ? this.widget : null;
+    if (window !== null) {
+      writeAsReact(() => window.destroy());
     }
     this.opener = null;
   }

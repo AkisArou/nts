@@ -148,7 +148,7 @@ import {
 } from "c:Pango-1.0";
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
-import { type HostNode, type SignalSlot, SlotNode, stringsOf, WidgetNode } from "../HostNode.ts";
+import { type HostNode, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
 import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
@@ -263,6 +263,7 @@ export interface AlertDialogProps extends DialogProps {
   onNotifyHeading?: (value: string | null) => void;
   onNotifyHeadingUseMarkup?: (value: boolean) => void;
   onNotifyPreferWideLayout?: (value: boolean) => void;
+  onResponse?: (response: string) => void;
 }
 
 /** `<ApplicationWindow>`'s props: AdwApplicationWindow's own properties and signals. */
@@ -1584,6 +1585,11 @@ export function alertDialogSignal(gtk: AdwAlertDialog, key: string, slot: Signal
     case "onNotifyPreferWideLayout":
       gtk.connect("notify::prefer-wide-layout", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_prefer_wide_layout()));
+      });
+      return true;
+    case "onResponse":
+      gtk.connect("response", (_self, _response) => {
+        slot.dispatch(() => (slot.handler as (response: string) => void)(_response));
       });
       return true;
   }
@@ -4240,8 +4246,10 @@ export class AdwAboutDialogNode extends WidgetNode {
   placeIn(parent: WidgetNode, _before: HostNode | null): void {
     this.presenter = parent.widget;
   }
+  // React's close, not the user's: a dialog reports it as its `close`
+  // response, which no handler hears.
   takeOutOf(_parent: WidgetNode): void {
-    this.gtk.force_close();
+    writeAsReact(() => this.gtk.force_close());
     this.presenter = null;
   }
   needsCommitMount(): boolean {
@@ -4308,8 +4316,10 @@ export class AdwAlertDialogNode extends WidgetNode {
   placeIn(parent: WidgetNode, _before: HostNode | null): void {
     this.presenter = parent.widget;
   }
+  // React's close, not the user's: a dialog reports it as its `close`
+  // response, which no handler hears.
   takeOutOf(_parent: WidgetNode): void {
-    this.gtk.force_close();
+    writeAsReact(() => this.gtk.force_close());
     this.presenter = null;
   }
   needsCommitMount(): boolean {
@@ -4632,8 +4642,10 @@ export class AdwDialogNode extends WidgetNode {
   placeIn(parent: WidgetNode, _before: HostNode | null): void {
     this.presenter = parent.widget;
   }
+  // React's close, not the user's: a dialog reports it as its `close`
+  // response, which no handler hears.
   takeOutOf(_parent: WidgetNode): void {
-    this.gtk.force_close();
+    writeAsReact(() => this.gtk.force_close());
     this.presenter = null;
   }
   needsCommitMount(): boolean {
@@ -4942,8 +4954,10 @@ export class AdwPreferencesDialogNode extends WidgetNode {
   placeIn(parent: WidgetNode, _before: HostNode | null): void {
     this.presenter = parent.widget;
   }
+  // React's close, not the user's: a dialog reports it as its `close`
+  // response, which no handler hears.
   takeOutOf(_parent: WidgetNode): void {
-    this.gtk.force_close();
+    writeAsReact(() => this.gtk.force_close());
     this.presenter = null;
   }
   needsCommitMount(): boolean {
@@ -5122,8 +5136,10 @@ export class AdwShortcutsDialogNode extends WidgetNode {
   placeIn(parent: WidgetNode, _before: HostNode | null): void {
     this.presenter = parent.widget;
   }
+  // React's close, not the user's: a dialog reports it as its `close`
+  // response, which no handler hears.
   takeOutOf(_parent: WidgetNode): void {
-    this.gtk.force_close();
+    writeAsReact(() => this.gtk.force_close());
     this.presenter = null;
   }
   needsCommitMount(): boolean {

@@ -902,6 +902,7 @@ export interface LevelBarProps extends WidgetProps {
   onNotifyMinValue?: (value: number) => void;
   onNotifyMode?: (value: GtkLevelBarMode) => void;
   onNotifyValue?: (value: number) => void;
+  onOffsetChanged?: (name: string) => void;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
@@ -4529,6 +4530,11 @@ export function levelBarSignal(gtk: GtkLevelBar, key: string, slot: SignalSlot):
     case "onNotifyValue":
       gtk.connect("notify::value", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_value()));
+      });
+      return true;
+    case "onOffsetChanged":
+      gtk.connect("offset-changed", (_self, _name) => {
+        slot.dispatch(() => (slot.handler as (name: string) => void)(_name));
       });
       return true;
     case "onNotifyOrientation":

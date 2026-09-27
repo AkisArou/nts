@@ -27,7 +27,7 @@ import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { GroupNode, GroupPlacement, type PackProps } from "../children.ts";
-import { PlacedNode, scheduleRestore, SignalSlot, type WidgetNode } from "../HostNode.ts";
+import { isReactWriting, PlacedNode, scheduleRestore, SignalSlot, type WidgetNode, writeAsReact } from "../HostNode.ts";
 
 export interface HeaderBarChildren {
   /** `<HeaderBar.Start>`: its children, packed at the bar's start, left to right. */
@@ -247,16 +247,11 @@ class TabState {
   closingByReact = false;
 }
 
-// Above zero while React changes which tab is selected: selecting a tab from
-// props, or closing the selected one, after which libadwaita selects
-// another. The user did neither, so no tab's `onSelect` hears it.
-let selectingByReact = 0;
-
+// Selecting a tab from props, or closing the selected one (libadwaita then
+// selects another), is React's write: no tab's `onSelect` hears it.
 function selectByReact(view: AdwTabView, page: AdwTabPage): void {
   if (view.get_selected_page() !== page) {
-    selectingByReact++;
-    view.set_selected_page(page);
-    selectingByReact--;
+    writeAsReact(() => view.set_selected_page(page));
   }
 }
 
@@ -294,7 +289,7 @@ export class TabViewPageNode extends PlacedNode {
     // `self`, not `view`: a handler holding the TabView would keep it alive.
     this.selectHandler = view.connect("notify::selected-page", (self) => {
       const notified = self instanceof AdwTabView ? self : null;
-      if (notified === null || selectingByReact > 0) {
+      if (notified === null || isReactWriting()) {
         return;
       }
       if (notified.get_selected_page() === page) {
@@ -309,15 +304,13 @@ export class TabViewPageNode extends PlacedNode {
     });
   }
   protected detach(owner: WidgetNode, widget: GtkWidget): void {
-    const view = owner.widget;
-    if (!(view instanceof AdwTabView)) {
+    const view = owner.widget instanceof AdwTabView ? owner.widget : null;
+    if (view === null) {
       return;
     }
     g_signal_handler_disconnect(view, this.selectHandler);
     this.state.closingByReact = true;
-    selectingByReact++;
-    view.close_page(view.get_page(widget));
-    selectingByReact--;
+    writeAsReact(() => view.close_page(view.get_page(widget)));
     this.state.closingByReact = false;
     g_signal_handler_disconnect(view, this.closeHandler);
   }
