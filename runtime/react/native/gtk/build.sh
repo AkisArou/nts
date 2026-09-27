@@ -5,6 +5,8 @@
 # any GTK complaint -- a widget parented twice, a source removed twice -- into
 # an end. It builds with reference counting, as the GTK examples do; the
 # default build passes too (since d8889f02 it sinks every widget it makes).
+# The program is built twice, through the C and the LLVM backends
+# (nts.config.ts), and each must log the same.
 # Further arguments after the output directory go to `nts build`.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
@@ -72,10 +74,13 @@ if ! node "$root/runtime/react/packages/react-gtk/tools/gen-widgets.ts" "$source
   echo "FAILED react-gtk: src/widgets.ts is stale for this nts's bindings; run tools/gen-widgets.ts ../../native/gtk/types/gir" >&2
   exit 1
 fi
-log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-warnings \
-  timeout 30 "$root/examples/interop/with-display.sh" "$out/host/linux-gnu-x86_64/host" 2>/dev/null || true)
-if [ "$log" != "$expected" ]; then
-  printf 'FAILED react-gtk: expected\n%s\ngot\n%s\n' "$expected" "$log" >&2
-  exit 1
-fi
-echo "react-gtk's host config on GTK widgets: OK"
+# One program per backend (nts.config.ts): each must log the same.
+for product in host host-llvm; do
+  log=$(env GSK_RENDERER=cairo G_DEBUG=fatal-warnings \
+    timeout 30 "$root/examples/interop/with-display.sh" "$out/$product/linux-gnu-x86_64/$product" 2>/dev/null || true)
+  if [ "$log" != "$expected" ]; then
+    printf 'FAILED react-gtk (%s): expected\n%s\ngot\n%s\n' "$product" "$expected" "$log" >&2
+    exit 1
+  fi
+done
+echo "react-gtk's host config on GTK widgets, C and LLVM: OK"

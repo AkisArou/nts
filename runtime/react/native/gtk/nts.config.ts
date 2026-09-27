@@ -8,6 +8,8 @@ import { defineConfig, app, sources } from "../../../../tooling/config/src/index
 export default defineConfig({
   products: {
     host: app.linux({ entry: "./src/main.ts", backend: "c" }),
+    // The same program through LLVM, checked against the same log.
+    "host-llvm": app.linux({ entry: "./src/main.ts", backend: "llvm" }),
   },
   native: [sources({ dir: "native" })],
   dependencies: {

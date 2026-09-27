@@ -6,6 +6,8 @@
 # `GDK_DEBUG=no-portals` keeps GTK from reading the colour scheme through the
 # settings portal, which libadwaita warns about when it is dark (and so only
 # some hours of the day, on a desktop that switches).
+# The program is built twice, through the C and the LLVM backends
+# (nts.config.ts), and each must log the same.
 # Further arguments after the output directory go to `nts build`.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
@@ -59,12 +61,15 @@ if ! node "$root/runtime/react/packages/react-gtk/tools/gen-widgets.ts" "$source
   echo "FAILED react-gtk/adw: src/adw/widgets.ts is stale for this nts's bindings; run tools/gen-widgets.ts ../../native/adw/types/gir --namespace Adw-1" >&2
   exit 1
 fi
-config=$(mktemp -d)
-log=$(env XDG_CONFIG_HOME="$config" GDK_DEBUG=no-portals GSK_RENDERER=cairo G_DEBUG=fatal-warnings \
-  timeout 30 "$root/examples/interop/with-display.sh" "$out/host/linux-gnu-x86_64/host" 2>/dev/null || true)
-rmdir "$config"
-if [ "$log" != "$expected" ]; then
-  printf 'FAILED react-gtk/adw: expected\n%s\ngot\n%s\n' "$expected" "$log" >&2
-  exit 1
-fi
-echo "react-gtk's libadwaita widgets: OK"
+# One program per backend (nts.config.ts): each must log the same.
+for product in host host-llvm; do
+  config=$(mktemp -d)
+  log=$(env XDG_CONFIG_HOME="$config" GDK_DEBUG=no-portals GSK_RENDERER=cairo G_DEBUG=fatal-warnings \
+    timeout 30 "$root/examples/interop/with-display.sh" "$out/$product/linux-gnu-x86_64/$product" 2>/dev/null || true)
+  rmdir "$config"
+  if [ "$log" != "$expected" ]; then
+    printf 'FAILED react-gtk/adw (%s): expected\n%s\ngot\n%s\n' "$product" "$expected" "$log" >&2
+    exit 1
+  fi
+done
+echo "react-gtk's libadwaita widgets, C and LLVM: OK"
