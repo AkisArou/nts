@@ -1,4 +1,4 @@
-// Is what the backend receives whole? Eight facts about a program, checked from
+// Is what the backend receives whole? Nine facts about a program, checked from
 // the compiler's own listings, each one a defect that shipped silently.
 //
 //   node tooling/conformance/integrity.mjs [project ...]   (default: examples/*, blockers/*)
@@ -69,6 +69,12 @@
 //                      a clean 1075648be about 2,200 of them, `map`'s at a
 //                      type alias among them. One cause, so known entries
 //                      name a project and a code, not each location.
+//   refusal-not-compiled
+//                      no name `nts refusals` lists is compiled by the
+//                      prepared program (a `declare func` shell is not). This
+//                      is phantoms.mjs's question, asked here so the runtime is
+//                      covered: the gate's phantoms step never ran over it, and
+//                      runtime/node/punycode had four.
 //   top-level-cut      every reported cut, named: a dropped statement, an
 //                      initializer not compiled, a refused `module#init`.
 //                      Honest, and still a program that does less than its
@@ -128,16 +134,19 @@ export function readHir(text) {
   const defined = new Map();
   /** instance method -> the type id of its `this`, the compiler's own identity for its class */
   const methods = new Map();
-  for (const m of text.matchAll(/^(?:export )?(?:declare )?func (.+?)\((?:this: managed<obj#(\d+)>)?/gm)) {
-    defined.set(m[1], (defined.get(m[1]) ?? 0) + 1);
-    if (m[2]) methods.set(m[1], m[2]);
+  /** Definitions with a body: a `declare func` shell is emitted for dispatch and compiles nothing. */
+  const compiled = new Set();
+  for (const m of text.matchAll(/^(?:export )?(declare )?func (.+?)\((?:this: managed<obj#(\d+)>)?/gm)) {
+    defined.set(m[2], (defined.get(m[2]) ?? 0) + 1);
+    if (!m[1]) compiled.add(m[2]);
+    if (m[3]) methods.set(m[2], m[3]);
   }
   const calls = [...text.matchAll(/= call (.+?)\(/g)].map((m) => m[1]);
   const init = /^(?:export )?func module#init\(.*?^\}/ms.exec(text)?.[0] ?? "";
   const initCalls = new Set([...init.matchAll(/= call (.+?)\(/g)].map((m) => m[1]));
   const stated = /^(\d+) function\(s\)/m.exec(text);
   const lines = [...defined.values()].reduce((a, n) => a + n, 0);
-  return { defined, methods, calls, initCalls, lines, stated: stated ? Number(stated[1]) : null };
+  return { defined, compiled, methods, calls, initCalls, lines, stated: stated ? Number(stated[1]) : null };
 }
 
 /**
@@ -336,6 +345,15 @@ export function judge({ prepared, plain, layouts, refusals }, sourceLine = readS
   }
   if (refused.has("module#init")) say("top-level-cut", "module#init is refused, so none of the module's evaluation runs", "module#init");
 
+  // A refusal that is not one: a name `nts refusals` lists, which the prepared
+  // program compiles. `phantoms.mjs`'s question, asked here so the runtime is
+  // covered too: `runtime/node/punycode` had four, a refused module-scope
+  // binding (`export const toASCII = codec.toASCII`) filed under the bare name
+  // of the function it holds, which compiles.
+  for (const name of refused) {
+    if (hir.compiled.has(name)) say("refusal-not-compiled", `\`${name}\` is listed as refused, and the prepared program compiles it`, name);
+  }
+
   // A refused `module#init` is itself the report for every call it held:
   // `runtime/node/console`'s reads an uncompiled `stdout`, and all of it goes.
   const reported = new Set([...cascades.initializers, ...cascades.statements].map((c) => c.cause));
@@ -395,17 +413,23 @@ function selfTest() {
   if (!lost.violations?.some((v) => v.rule === "override-in-table")) return "an override missing from its table was not caught";
   // A refused `main` cut from the top level.
   const cut = clean.prepared.replace("  %2 = call total(%1) : f64\n", "");
-  const excised = judge({ ...clean, prepared: cut, refusals: "total\tsomething\n" });
+  // A refused `total` is also absent from the prepared program -- a fixture
+  // listing it as refused while still compiling it would be a phantom.
+  const gone = (t) => t.replace(/func total\(t: f64\) -> f64 \{\n.*?\n\}\n/s, "").replace(summary(5), summary(4));
+  const excised = judge({ ...clean, prepared: gone(cut), refusals: "total\tsomething\n" });
   if (!excised.violations?.some((v) => v.rule === "top-level-kept" && /total/.test(v.detail))) return "a silently excised top-level call was not caught";
   // The same cut, reported as 47cba8c15 reports it, is not silent.
   // The same cut, reported as 47cba8c15 reports it, is not silent -- and is
   // still a cut, named for the ratchet.
-  const said = judge({ ...clean, prepared: `${cut}\n  -- main.ts:11:23 NTS1003 this module-scope statement was dropped because it calls \`total\`, which was refused above\n`, refusals: "total\tsomething\n" });
+  const said = judge({ ...clean, prepared: `${gone(cut)}\n  -- main.ts:11:23 NTS1003 this module-scope statement was dropped because it calls \`total\`, which was refused above\n`, refusals: "total\tsomething\n" });
   if (said.violations?.length !== 1 || said.violations[0].rule !== "top-level-cut") return `a reported cut read as silent, or went unnamed: ${JSON.stringify(said)}`;
   // A call to a function that compiles, folded away, is not a loss.
   if (judge({ ...clean, prepared: cut }).violations?.length !== 0) return "a folded call to a compiled function read as a lost statement";
   // A refused module#init reports every call it held.
-  const whole = judge({ ...clean, prepared: cut, refusals: "total\tx\nmodule#init\tit reads `stdout`\n" }).violations ?? [];
+  // A refused module#init is absent from the prepared program; plain `hir`,
+  // before the drops, still has it and its calls.
+  const noInit = gone(cut).replace(/export func module#init\(\) -> void \{\n(?:.*?\n)?\}/s, "").replace(summary(4), summary(3));
+  const whole = judge({ ...clean, prepared: noInit, refusals: "total\tx\nmodule#init\tit reads `stdout`\n" }).violations ?? [];
   if (whole.length !== 1 || whole[0].rule !== "top-level-cut") return `a refused module#init read as silently cut, or went unnamed: ${JSON.stringify(whole)}`;
   // A cascade whose cause is filed under another name; its generic is not.
   const blamed = (cause, refusals) => judge({ ...clean, prepared: `${clean.prepared}\n  -- main.ts:9:1 NTS1003 \`walk\` cannot be compiled because it calls \`${cause}\`, which was refused above\n`, refusals });
@@ -435,6 +459,10 @@ function selfTest() {
   if (located("5:34").length !== 0 || located("5:20").length !== 0) return "a location on punctuation after an identifier was flagged";
   // Inside a character: the second byte of `é`.
   if (!/inside a character/.test(located("6:10")[0]?.detail ?? "")) return "a location inside a multi-byte character was not caught";
+  // A phantom: refused and compiled. A declaration shell is neither.
+  const phantom = judge({ ...clean, refusals: "total\tsomething\n" }).violations ?? [];
+  if (!phantom.some((v) => v.rule === "refusal-not-compiled" && /total/.test(v.detail))) return "a refusal naming a compiled function was not caught";
+  if (judge({ ...clean, refusals: "Base#value\tno class implements it\n" }).violations?.length !== 0) return "a refused declaration shell was called a phantom";
   // A field named `methods` is not a table.
   if (readLayouts("C [1]\n  methods : Erased\n").byName.get("C").methods.length !== 0) return "a field named `methods` read as a table";
   // A listing that lost a function is not a clean program.
