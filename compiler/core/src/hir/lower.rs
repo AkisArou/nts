@@ -5539,62 +5539,6 @@ fn note_a_refused_function(
     let asking = shared.builder(snapshot, foreign, Copy::default());
     let emitted = asking.emitted_function_name(id);
     note_uncompiled(snapshot, &mut lowered.program, id, emitted.as_deref(), &diagnostic);
-    // **A nested function of a refused function is lowered nowhere, and nothing
-    // said so.** `runtime/node/events`'s `on` is refused as an exported generic
-    // this program never instantiates; the object literal inside it still becomes
-    // `EventAsyncIterator#return`, which calls the *nested* `closeHandler` --
-    // never lowered, because the body it is declared in never was. So the cascade
-    // read
-    //
-    //     EventAsyncIterator#return  it calls `closeHandler`, which nothing in
-    //                                this program defines
-    //
-    // which is true and unactionable: nothing in it leads to `on`. Forty-six of
-    // the conformance lane's 104 remaining `cascade-has-root` violations are this
-    // one shape -- `closeHandler`, `errorHandler`, `filterFn`, `forEachFn` -- and
-    // each names a function whose *enclosing* declaration has a recorded reason
-    // sitting right there.
-    //
-    // So the reason is attributed down. `note_uncompiled`'s `funcs` guard is what
-    // makes doing it unconditionally safe: a nested function that *was* lowered
-    // is already in `funcs`, and the entry is dropped rather than becoming a
-    // phantom -- a claim about the output that the output contradicts, which
-    // `emit-c`'s `published_symbols` and every cascade would then read as a fact.
-    // `tooling/conformance/phantoms.mjs` is the arm for that, and it must stay at
-    // zero.
-    let outer = emitted.unwrap_or_else(|| "an enclosing function".to_owned());
-    let mut nested = Vec::new();
-    walk(snapshot, id, &mut |child| {
-        if child != id && kind_at(snapshot, child) == Some(syntax::FUNCTION_DECLARATION) {
-            nested.push(child);
-        }
-    });
-    for child in nested {
-        let Some(name) = asking.emitted_function_name(child) else {
-            continue;
-        };
-        // Only the message is read out of this, but the location is the nested
-        // declaration's own rather than the enclosing one's, so that an entry
-        // which does grow a reader later points at the right line.
-        let at = snapshot
-            .nodes
-            .get(child.0 as usize)
-            .map_or(diagnostic.primary, |node| node.origin.location);
-        let attributed = Diagnostic::error(
-            "NTS1003",
-            // **Names the enclosing function rather than quoting its reason.**
-            // A refusal message is built as a terminal sentence -- "... is not
-            // supported by this lowering yet" -- so embedding one mid-sentence
-            // reads as "...for the export to name is not supported by this
-            // lowering yet", and it repeats the whole reason once per nested
-            // function. The enclosing function's own row is always present,
-            // because this runs from the site that records it, so one grep
-            // finishes the trail and both sentences stay grammatical.
-            format!("it is declared inside `{outer}`, which was not compiled"),
-            at,
-        );
-        note_uncompiled(snapshot, &mut lowered.program, child, Some(&name), &attributed);
-    }
     lowered.diagnostics.push(diagnostic);
 }
 
@@ -9744,10 +9688,73 @@ pub fn lower_with(
         ));
     }
 
+    // Before the sweep, which then drops any attribution for a nested function
+    // that turned out to be emitted after all.
+    attribute_nested_to_their_refused_outer(snapshot, &shared, foreign, &mut lowered, &refused_functions);
     // Last, because it asks what the program contains and every function that
     // will be emitted is now in it.
     drop_refusals_the_program_contradicts(&mut lowered);
     lowered
+}
+
+/// Give a nested function of a refused function its enclosing function's name,
+/// where nothing else has explained it.
+///
+/// A nested function declared inside a refused body is lowered nowhere, and the
+/// cascade through it said only "which nothing in this program defines" -- true,
+/// and with nothing in it leading to the reason, which is sitting on the enclosing
+/// function's own row. `runtime/node/events` declares `closeHandler` and
+/// `errorHandler` inside `export function on(...)`, refused as an exported generic
+/// nothing instantiates, while the object literal in the same body still becomes
+/// `EventAsyncIterator#return` and calls them.
+///
+/// **Late, and that is the whole correction over `ffd44917d`.** Recording this at
+/// the moment the *outer* refusal is noted made it win: `note_uncompiled` keeps the
+/// first entry for a key, so a nested function with a refusal of its own -- a
+/// regular expression literal, say -- was described as "declared inside `outer`"
+/// and its real cause was lost. Measured with a two-arm probe: an `inner` holding a
+/// regex under a refused generic `outer` reported the nesting, while the same
+/// `inner` under a compiling outer reported the regex. Here every specific reason
+/// has already been recorded, so this fills gaps and overwrites nothing.
+///
+/// Sorted rather than taken in `FxHashSet` order, so the list this produces does
+/// not depend on a hash: `uncompiled` is printed, and a diagnostic whose order
+/// varies between runs is the same class of defect as a digest that does.
+fn attribute_nested_to_their_refused_outer(
+    snapshot: &SemanticSnapshot,
+    shared: &Shared,
+    foreign: &super::runtime::ForeignTable,
+    lowered: &mut Lowered,
+    refused: &rustc_hash::FxHashSet<NodeId>,
+) {
+    let asking = shared.builder(snapshot, foreign, Copy::default());
+    let mut outers: Vec<NodeId> = refused.iter().copied().collect();
+    outers.sort_unstable();
+    for outer in outers {
+        let Some(outer_name) = asking.emitted_function_name(outer) else {
+            continue;
+        };
+        let mut nested = Vec::new();
+        walk(snapshot, outer, &mut |child| {
+            if child != outer && kind_at(snapshot, child) == Some(syntax::FUNCTION_DECLARATION) {
+                nested.push(child);
+            }
+        });
+        for child in nested {
+            let Some(name) = asking.emitted_function_name(child) else {
+                continue;
+            };
+            if lowered.program.uncompiled.iter().any(|(at, _)| *at == name)
+                || lowered.program.funcs.iter().any(|func| func.name == name)
+            {
+                continue;
+            }
+            lowered.program.uncompiled.push((
+                name,
+                format!("it is declared inside `{outer_name}`, which was not compiled"),
+            ));
+        }
+    }
 }
 
 /// Drop any refusal record naming a function the finished program contains.
