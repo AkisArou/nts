@@ -10,6 +10,8 @@
 import "../internal/bindings.node.mjs";
 import "../stream/bindings.node.mjs";
 import "../timers/bindings.node.mjs";
+// `connect` reports `net` performance entries through perf_hooks' observers.
+import "../perf_hooks/bindings.node.mjs";
 import net from "node:net";
 import { lookup } from "node:dns";
 import { Buffer } from "node:buffer";

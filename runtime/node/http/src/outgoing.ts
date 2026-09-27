@@ -51,6 +51,12 @@ import {
 import type { IncomingMessage } from "./incoming.ts";
 import { STATUS_CODES } from "./status.ts";
 import { channel } from "../../diagnostics_channel/src/main.ts";
+import {
+  hasObserver,
+  startPerf,
+  stopPerf,
+  type PerfContext,
+} from "../../perf_hooks/src/observe.ts";
 
 const serverResponseCreatedChannel = channel("http.server.response.created");
 
@@ -1297,6 +1303,8 @@ export class ServerResponse extends OutgoingMessage {
   req: IncomingMessage;
   _sent100 = false;
   _expect_continue = false;
+  /** The `http` performance entry under way, while something observes the type. */
+  #perf: PerfContext | undefined = undefined;
 
   constructor(request: IncomingMessage, options: OutgoingMessageOptions = {}) {
     super(options);
@@ -1325,9 +1333,30 @@ export class ServerResponse extends OutgoingMessage {
     }
     this[kHasBody] = request.method !== "HEAD";
     this.sendDate = true;
+    if (hasObserver("http")) {
+      // Node's `HttpRequest` entry, timed from the response's creation to
+      // its last byte handed to the socket.
+      this.#perf = startPerf("http", "HttpRequest", {
+        req: { method: request.method, url: request.url, headers: request.headers },
+      });
+    }
     if (serverResponseCreatedChannel.hasSubscribers) {
       serverResponseCreatedChannel.publish({ request, response: this });
     }
+  }
+
+  /** Node's `ServerResponse.prototype._finish`: the entry reported before the message's own. */
+  protected override _finish(): void {
+    if (this.#perf !== undefined && hasObserver("http")) {
+      stopPerf(this.#perf, {
+        res: {
+          statusCode: this.statusCode,
+          statusMessage: this.statusMessage,
+          headers: this.getHeaders(),
+        },
+      });
+    }
+    super._finish();
   }
 
   /**

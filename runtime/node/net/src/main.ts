@@ -60,6 +60,12 @@ import { BlockList, SocketAddress } from "./block-list.ts";
 // `Timeout` object it can `refresh()`, which is what makes resetting the clock
 // on every byte one pointer write rather than a new timer per byte.
 import { clearTimeout, getTimerDuration, setTimeout } from "../../timers/src/main.ts";
+import {
+  hasObserver,
+  startPerf,
+  stopPerf,
+  type PerfContext,
+} from "../../perf_hooks/src/observe.ts";
 import type { Timeout } from "../../timers/src/main.ts";
 import { AsyncContextFrame } from "../../internal/async-context.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
@@ -704,6 +710,11 @@ export class Socket extends Duplex {
   #resetOnDestroy = false;
   #typeOfService: number | undefined;
   #multipleConnect: MultipleConnectContext | null = null;
+  /**
+   * The `net` performance entry for this socket's connect, started only while
+   * something observes the type -- node's `kPerfHooksNetConnectContext`.
+   */
+  #connectPerf: PerfContext | undefined = undefined;
   #attemptedAddresses: string[] | undefined;
   #attemptedAddressCount = 0;
 
@@ -1238,7 +1249,7 @@ export class Socket extends Duplex {
           return;
         }
         if (errno >= 0) {
-          this.#winMultipleConnect(context, handle);
+          this.#winMultipleConnect(context, handle, destination.address);
           return;
         }
 
@@ -1297,7 +1308,7 @@ export class Socket extends Duplex {
     socket.#startNextConnectAttempt(context);
   }
 
-  #winMultipleConnect(context: MultipleConnectContext, winner: number): void {
+  #winMultipleConnect(context: MultipleConnectContext, winner: number, address: string): void {
     if (context.timer !== null) clearTimeout(context.timer);
     context.timer = null;
     this.#multipleConnect = null;
@@ -1308,6 +1319,11 @@ export class Socket extends Duplex {
       }
     }
     this._handle = new NetNativeHandle(winner);
+    // Node times the racing form from the winning attempt's completion, so its
+    // entry measures the handover rather than the race.
+    if (hasObserver("net")) {
+      this.#connectPerf = startPerf("net", "connect", { host: address, port: context.port });
+    }
     this.#completeConnection(context.options);
   }
 
@@ -1373,8 +1389,16 @@ export class Socket extends Duplex {
       onConnected,
     );
 
-    if (handle < 0) nextTick(onConnected, handle);
-    else this._handle = new NetNativeHandle(handle);
+    if (handle < 0) {
+      nextTick(onConnected, handle);
+      return;
+    }
+    this._handle = new NetNativeHandle(handle);
+    // A TCP connect under way is timed from here, as node's `internalConnect`
+    // does once its `connect` call returns; a pipe is not.
+    if (!isPipe && hasObserver("net")) {
+      this.#connectPerf = startPerf("net", "connect", { host, port });
+    }
   }
 
   #completeConnection(options: ConnectOptions): void {
@@ -1391,6 +1415,8 @@ export class Socket extends Duplex {
     this.emit("ready");
     // The same first read as above, for the same reason.
     if (!this.isPaused()) this.read(0);
+    if (this.#connectPerf !== undefined && hasObserver("net")) stopPerf(this.#connectPerf, {});
+    this.#connectPerf = undefined;
   }
 
   #maybeStartReading(): void {

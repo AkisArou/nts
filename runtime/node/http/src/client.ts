@@ -50,6 +50,12 @@ import { emitHttpDebugWarning } from "./debug.ts";
 import { selectProxy } from "./proxy.ts";
 import type { ProxyConfig } from "./proxy.ts";
 import { channel } from "../../diagnostics_channel/src/main.ts";
+import {
+  hasObserver,
+  startPerf,
+  stopPerf,
+  type PerfContext,
+} from "../../perf_hooks/src/observe.ts";
 
 const clientRequestCreatedChannel = channel("http.client.request.created");
 const clientRequestStartChannel = channel("http.client.request.start");
@@ -314,7 +320,7 @@ function rewriteForProxiedHTTP(
   authority: ProxyAuthority,
   explicitHost: string | undefined,
   headerPairs: readonly RequestHeaderPair[] | undefined,
-): void {
+): boolean {
   let requestURL: URL | undefined;
   if (request.method !== "CONNECT" && !(request.method === "OPTIONS" && request.path === "*")) {
     const validated = validateProxyAuthority(
@@ -335,6 +341,7 @@ function rewriteForProxiedHTTP(
   if (proxy.auth !== undefined) request.setHeader("proxy-authorization", proxy.auth);
   request.setHeader("proxy-connection", request.shouldKeepAlive ? "keep-alive" : "close");
   if (requestURL !== undefined) request.path = requestURL.href;
+  return requestURL !== undefined;
 }
 
 export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
@@ -359,6 +366,12 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
   #connectionOptions: AgentConnectionOptions | undefined;
   #errorEmitted = false;
   #joinDuplicateHeaders = false;
+  /** Node's `kAuthority`: the `Host` the options name, for the performance entry. */
+  #authority = "";
+  /** Node's `kProxyRewrittenToAbsolute`: the path is already the whole URL. */
+  #absoluteForm = false;
+  /** The `http` performance entry under way, while something observes the type. */
+  #perf: PerfContext | undefined = undefined;
   #path = "";
 
   get path(): string {
@@ -494,14 +507,17 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
     const explicitHost = rawHeaderArray ? undefined : this.getHeader("host");
     const setHost =
       opts.setHost !== undefined ? Boolean(opts.setHost) : opts.setDefaultHeaders !== false;
+    // Node's `hostHeaderFromOptions`: the host, bracketed if it is an IPv6
+    // address, with the port when it is not the scheme's. It is also the
+    // authority the `http` performance entry reports the request's URL with.
+    const firstColon = this.host.indexOf(":");
+    const bracketedHost =
+      firstColon !== -1 && this.host.includes(":", firstColon + 1) && !this.host.startsWith("[")
+        ? `[${this.host}]`
+        : this.host;
+    this.#authority = Number(port) !== defaultPort ? `${bracketedHost}:${port}` : bracketedHost;
     if (!rawHeaderArray && setHost && !this.hasHeader("host")) {
-      const needsPort = Number(port) !== defaultPort;
-      const firstColon = this.host.indexOf(":");
-      const hostHeader =
-        firstColon !== -1 && this.host.includes(":", firstColon + 1) && !this.host.startsWith("[")
-          ? `[${this.host}]`
-          : this.host;
-      this.setHeader("Host", needsPort ? `${hostHeader}:${port}` : hostHeader);
+      this.setHeader("Host", this.#authority);
     }
 
     const hostHeader = this.getHeader("host");
@@ -527,7 +543,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
           })
         : null;
     if (proxy !== null) {
-      rewriteForProxiedHTTP(
+      this.#absoluteForm = rewriteForProxiedHTTP(
         this,
         proxy,
         proxyAuthority,
@@ -617,6 +633,17 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
 
   protected override _finish(): void {
     super._finish();
+    if (hasObserver("http")) {
+      // Node's `HttpClient` entry. A path already rewritten to absolute-form
+      // for a proxy is the whole URL.
+      this.#perf = startPerf("http", "HttpClient", {
+        req: {
+          method: this.method,
+          url: this.#absoluteForm ? this.path : `${this.protocol}//${this.#authority}${this.path}`,
+          headers: this.getHeaders(),
+        },
+      });
+    }
     if (clientRequestStartChannel.hasSubscribers) {
       clientRequestStartChannel.publish({ request: this });
     }
@@ -911,6 +938,15 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
       // public request state and the later pool decision agree.
       if (this.shouldKeepAlive && !info.shouldKeepAlive) this.shouldKeepAlive = false;
 
+      if (this.#perf !== undefined && hasObserver("http")) {
+        stopPerf(this.#perf, {
+          res: {
+            statusCode: message.statusCode,
+            statusMessage: message.statusMessage,
+            headers: message.headers,
+          },
+        });
+      }
       if (clientResponseFinishChannel.hasSubscribers) {
         clientResponseFinishChannel.publish({ request: this, response: message });
       }

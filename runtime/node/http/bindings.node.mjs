@@ -8,3 +8,5 @@
 import "../internal/bindings.node.mjs";
 import "../net/bindings.node.mjs";
 import "../stream/bindings.node.mjs";
+// Requests and responses report `http` performance entries through perf_hooks' observers.
+import "../perf_hooks/bindings.node.mjs";

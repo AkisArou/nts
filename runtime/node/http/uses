@@ -3,3 +3,4 @@ events
 net
 stream
 diagnostics_channel
+perf_hooks
