@@ -3747,11 +3747,30 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
     }
     for (name, at, origin) in refused {
         let global = &lowered.program.globals[at as usize];
+        // **"See the refusal above that says which" was a claim about the output,
+        // and it was false in every case that reaches here.** The React lane's
+        // module-scope capture reports ``Closure0#call ... reads `label`, whose
+        // initializer was not compiled -- see the refusal above that says which``
+        // with no refusal above it, and sends the reader hunting for a line that
+        // does not exist. Same family as `51b5d5414`, where "which this backend
+        // refused above" was said of a member nothing had refused.
+        //
+        // **The clause is removed rather than made conditional, because the case it
+        // described cannot arrive here.** A global whose initializer was *refused*
+        // never reaches this pass: it is reported at the declaration instead ("a
+        // module-scope variable whose initializer was refused above"), and its
+        // readers are dropped by that. What reaches here is the other thing -- a
+        // store that lowering silently never emitted -- and for that, by
+        // construction, there is no refusal to point at. A conditional pointer
+        // would have been a branch with no witness, which reads as protection.
+        //
+        // Zero occurrences across `runtime/node` and `runtime/web-platform`, so the
+        // population is the shape React found and whatever shares it.
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!(
                 "`{name}` cannot be compiled because it reads `{}`, whose initializer was not \
-                 compiled -- see the refusal above that says which",
+                 compiled",
                 global.name
             ),
             origin.location,
