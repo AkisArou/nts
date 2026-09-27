@@ -243,6 +243,26 @@ function readSourceLine(file, n) {
 
 /** The first column of `nts refusals`. */
 export const readRefusals = (text) => new Set(text.split("\n").map((l) => l.split("\t")[0]).filter(Boolean));
+/** `nts refusals` as name -> reason. */
+export const readReasons = (text) => new Map(text.split("\n").filter((l) => l.includes("\t")).map((l) => [l.slice(0, l.indexOf("\t")), l.slice(l.indexOf("\t") + 1)]));
+
+/**
+ * The refusal a name finally rests on, followed through "it calls `Y`" to the
+ * function whose reason is its own. A cut is ranked by this: thirty of the
+ * runtime's cuts were two globals, and whether those two share one root is
+ * what decides the order of the work. `null` when the name has no reason.
+ */
+export function rootOf(name, reasons) {
+  const seen = new Set();
+  let at = reasons.has(name) ? name : reasons.has(generic(name)) ? generic(name) : null;
+  while (at && !seen.has(at)) {
+    seen.add(at);
+    const next = /^it calls `([^`]+)`/.exec(reasons.get(at))?.[1];
+    if (!next || !(reasons.has(next) || reasons.has(generic(next)))) return { name: at, reason: reasons.get(at).replace(/^it calls `[^`]+`, and /, "") };
+    at = reasons.has(next) ? next : generic(next);
+  }
+  return at ? { name: at, reason: `a cycle through \`${at}\`` } : null;
+}
 
 /**
  * NTS1003 cascades, in the four shapes lowering prints, each with the kind of
@@ -421,11 +441,13 @@ export function judge({ prepared, plain, layouts, refusals }, sourceLine = readS
   // Every cut is named. A reported cut is honest, and it still makes a
   // program that does less than its source says; the known file is the
   // ratchet that lets `nts build` treat one as an error the day it is empty.
+  const reasons = readReasons(refusals);
+  const cut = (detail, subject, cause) => out.push({ rule: "top-level-cut", detail, subject, root: rootOf(cause, reasons) });
   for (const { global, cause } of cascades.initializers) {
-    say("top-level-cut", `the initializer of \`${global}\` was not compiled (it calls \`${cause}\`)`, `the initializer of ${global}`);
+    cut(`the initializer of \`${global}\` was not compiled (it calls \`${cause}\`)`, `the initializer of ${global}`, cause);
   }
   for (const { cause } of cascades.statements) {
-    say("top-level-cut", `a module-scope statement calling \`${cause}\` was dropped`, `a statement calling ${cause}`);
+    cut(`a module-scope statement calling \`${cause}\` was dropped`, `a statement calling ${cause}`, cause);
   }
   if (refused.has("module#init")) say("top-level-cut", "module#init is refused, so none of the module's evaluation runs", "module#init");
 
@@ -568,6 +590,10 @@ function selfTest() {
     [resembles("extractSize", ["extractSizeAlgorithm<str>"]), "plain nothing"],
   ];
   for (const [got, want] of kinds) if (got !== want) return `a rootless cause read as ${got}, not ${want}`;
+  // A cut's root is followed through "it calls", to the reason of its own.
+  const chain = readReasons("a\tit calls `b`, and x\nb\tit calls `c<7>`, and y\nc\ty\nloop\tit calls `loop`\n");
+  if (rootOf("a", chain)?.name !== "c" || rootOf("a", chain)?.reason !== "y") return `a cut's root read as ${JSON.stringify(rootOf("a", chain))}`;
+  if (rootOf("loop", chain)?.reason !== "a cycle through `loop`" || rootOf("nowhere", chain) !== null) return "a cyclic or unknown root";
   const rules = (t) => (judge(t).violations ?? []).map((v) => v.rule);
   if (!rules({ ...clean, prepared: clean.prepared.replace("  %2 = call total(%1) : f64", "  %2 = call nowhere(%1) : f64") }).includes("call-resolves")) return "a direct call to a function nothing defines was not caught";
   if (!rules({ ...clean, prepared: clean.prepared.replace("func total(t: f64) -> f64 {", "func total(t: f64) -> f64 {\n}\nfunc total(t: f64) -> f64 {").replace(summary(5), summary(6)) }).includes("call-resolves")) return "a function defined twice was not caught";
@@ -733,6 +759,22 @@ for (const v of found.filter((f) => f.resemblance)) {
   row.entries.add(key(v));
   row.violations += 1;
   tally.set(t, row);
+}
+// Cuts by the refusal they finally rest on: the order to clear them in.
+const roots = new Map();
+for (const v of found.filter((f) => f.rule === "top-level-cut")) {
+  const r = v.root ? `\`${stable(v.root.name)}\`: ${stable(v.root.reason).slice(0, 110)}` : "(no recorded reason)";
+  const row = roots.get(r) ?? { entries: new Set(), projects: new Set() };
+  row.entries.add(key(v));
+  row.projects.add(v.project);
+  roots.set(r, row);
+}
+if (roots.size > 0) {
+  console.log("  top-level cuts, by the refusal each finally rests on:");
+  for (const [r, row] of [...roots].sort(([, a], [, b]) => b.entries.size - a.entries.size).slice(0, 25)) {
+    console.log(`    ${String(row.entries.size).padStart(4)} cut(s) in ${String(row.projects.size).padStart(2)} project(s)  ${r}`);
+  }
+  if (roots.size > 25) console.log(`    ... ${roots.size - 25} more root(s)`);
 }
 if (tally.size > 0) {
   console.log("  rootless causes, by the blamed name's shape / what the program has under it:");
