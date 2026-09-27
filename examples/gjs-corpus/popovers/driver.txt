@@ -1,0 +1,3 @@
+close plain_popover
+close popover_menu
+close plain_popover

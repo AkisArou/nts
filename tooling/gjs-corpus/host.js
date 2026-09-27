@@ -8,7 +8,10 @@
 //
 //   click <id>     emit `clicked` on the builder's object <id>
 //   toggle <id>    flip `active` on a check button, toggle button or switch
-//   label <id>     print a label's `label`
+//   label <id>     print a label's or button's `label`
+//   close <id>     emit a popover's `closed`
+//   pick <id> <text> emit an emoji chooser's `emoji-picked`
+//   day <id> <y> <m> <d> select a calendar's day
 //   active <id>    print `active`
 //   visible <id>   print `visible`
 //   sensitive <id> print `sensitive`
@@ -72,7 +75,7 @@ application.connect("activate", async () => {
     preview() {},
   };
   await import(`file://${main}`);
-  for (const [kind, id, arg] of actions) {
+  for (const [kind, id, ...args] of actions) {
     const object = builder.get_object(id);
     if (kind === "click") object.emit("clicked");
     else if (kind === "toggle") object.active = !object.active;
@@ -81,13 +84,16 @@ application.connect("activate", async () => {
     else if (kind === "sensitive") console.log(`${id}.sensitive ${object.sensitive}`);
     else if (kind === "visible") console.log(`${id}.visible ${object.visible}`);
     else if (kind === "icon") console.log(`${id}.icon ${object.icon_name}`);
-    else if (kind === "value") object.set_value(Number(arg));
+    else if (kind === "value") object.set_value(Number(args[0]));
     else if (kind === "spin") object.spin(Gtk.SpinType.STEP_FORWARD, 1);
     else if (kind === "activate") object.emit(object instanceof Adw.Banner ? "button-clicked" : "activated");
-    else if (kind === "select") object.selected = Number(arg);
+    else if (kind === "select") object.selected = Number(args[0]);
     else if (kind === "revealed") console.log(`${id}.revealed ${object.revealed}`);
     else if (kind === "children") console.log(`${id}.children ${children(object)}`);
     else if (kind === "orientation") console.log(`${id}.orientation ${object.orientation}`);
+    else if (kind === "close") object.emit("closed");
+    else if (kind === "pick") object.emit("emoji-picked", args[0]);
+    else if (kind === "day") object.select_day(GLib.DateTime.new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0));
     else if (kind === "classes") console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
     else throw new Error(`unknown action ${kind}`);
   }

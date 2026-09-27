@@ -18,8 +18,12 @@ import {
   GtkBox,
   GtkBuilder,
   GtkButton,
+  GtkCalendar,
   GtkCheckButton,
+  GtkEmojiChooser,
   GtkLabel,
+  GtkMenuButton,
+  GtkPopover,
   GtkRange,
   GtkSpinButton,
   GtkSwitch,
@@ -29,7 +33,7 @@ import {
 } from "c:Gtk-4.0";
 import { ApplicationFlags, g_data_input_stream_new, g_file_new_for_path } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
-import { g_getenv, g_timeout_add_full } from "c:GLib-2.0";
+import { g_date_time_new_local, g_getenv, g_timeout_add_full } from "c:GLib-2.0";
 
 export interface Workbench {
   readonly application: AdwApplication;
@@ -53,7 +57,7 @@ function actions(path: string): string[][] {
 }
 
 /** One action on the builder's object `id`, as host.js applies it. */
-function act(kind: string, id: string, arg: string, object: GObject | null): boolean {
+function act(kind: string, id: string, args: string[], object: GObject | null): boolean {
   switch (kind) {
     case "click":
       if (!(object instanceof GtkButton)) return false;
@@ -67,9 +71,25 @@ function act(kind: string, id: string, arg: string, object: GObject | null): boo
       else return false;
       return true;
     case "label":
-      if (!(object instanceof GtkLabel)) return false;
-      console.log(`${id}.label ${object.label}`);
+      if (object instanceof GtkLabel) console.log(`${id}.label ${object.label}`);
+      else if (object instanceof GtkMenuButton) console.log(`${id}.label ${object.label}`);
+      else if (object instanceof GtkButton) console.log(`${id}.label ${object.label}`);
+      else return false;
       return true;
+    case "close":
+      if (!(object instanceof GtkPopover)) return false;
+      object.emit("closed");
+      return true;
+    case "pick":
+      if (!(object instanceof GtkEmojiChooser)) return false;
+      object.emit("emoji-picked", args[0]);
+      return true;
+    case "day": {
+      const date = g_date_time_new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0);
+      if (!(object instanceof GtkCalendar) || date === null) return false;
+      object.select_day(date);
+      return true;
+    }
     case "active":
       if (object instanceof GtkCheckButton) console.log(`${id}.active ${object.active}`);
       else if (object instanceof GtkToggleButton) console.log(`${id}.active ${object.active}`);
@@ -90,8 +110,8 @@ function act(kind: string, id: string, arg: string, object: GObject | null): boo
       console.log(`${id}.icon ${object.icon_name}`);
       return true;
     case "value":
-      if (object instanceof GtkSpinButton) object.set_value(Number(arg));
-      else if (object instanceof GtkRange) object.set_value(Number(arg));
+      if (object instanceof GtkSpinButton) object.set_value(Number(args[0]));
+      else if (object instanceof GtkRange) object.set_value(Number(args[0]));
       else return false;
       return true;
     case "spin":
@@ -105,7 +125,7 @@ function act(kind: string, id: string, arg: string, object: GObject | null): boo
       return true;
     case "select":
       if (!(object instanceof AdwComboRow)) return false;
-      object.selected = Number(arg);
+      object.selected = Number(args[0]);
       return true;
     case "revealed":
       if (object instanceof GtkActionBar) console.log(`${id}.revealed ${object.revealed}`);
@@ -139,12 +159,7 @@ function children(widget: GtkWidget): number {
 function drive(builder: GtkBuilder, path: string): void {
   for (const words of actions(path)) {
     const [kind, id] = words;
-    // A workaround, not the idiom: `const [kind, id, arg] = words` answers
-    // `undefined` in GJS and aborts in nts for a two-word line. Pinned as
-    // tooling/conformance/outcomes/a-read-past-the-end-of-an-array-aborts;
-    // back to the destructure when that is decided.
-    const arg = words.length > 2 ? words[2] : "";
-    if (!act(kind, id, arg, builder.get_object(id))) console.log("driver: cannot " + kind + " " + id);
+    if (!act(kind, id, words.slice(2), builder.get_object(id))) console.log("driver: cannot " + kind + " " + id);
   }
 }
 
