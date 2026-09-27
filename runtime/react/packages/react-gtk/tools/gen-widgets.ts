@@ -611,6 +611,7 @@ const controlledProps = new Map([
   ["Adw.OverlaySplitView", ["show-sidebar"]],
   ["Adw.NavigationSplitView", ["show-content"]],
   ["Adw.BottomSheet", ["open"]],
+  ["Adw.TabOverview", ["open"]],
 ]);
 
 // Widget-typed properties that name another widget rather than place one: an

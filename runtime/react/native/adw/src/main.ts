@@ -12,7 +12,8 @@
 //             user's edit goes back to the props' value when the app keeps it;
 //             so do a SwitchRow's active, an ExpanderRow's expanded, a
 //             SpinRow's value, a ComboRow's selected, an OverlaySplitView's
-//             sidebar, a NavigationSplitView's content and a BottomSheet's open
+//             sidebar, a NavigationSplitView's content, a BottomSheet's open
+//             and a TabOverview's open
 //   application  an AdwApplication's root: an ApplicationWindow rendered there
 //             joins the application at commit
 //   group     a PreferencesGroup adds its rows in React's order: a row
@@ -85,6 +86,7 @@ import {
   AdwPreferencesGroup,
   AdwSpinRow,
   AdwSwitchRow,
+  AdwTabOverview,
   AdwTabView,
   type AdwTabPage,
   AdwToolbarView,
@@ -94,7 +96,7 @@ import {
 } from "c:Adw-1";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { g_main_context_iteration, g_main_loop_new, g_timeout_add_full } from "c:GLib-2.0";
-import { GtkAdjustment, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
+import { GtkAdjustment, GtkLabel, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { react_gtk_emit, react_gtk_log } from "c:react-gtk-shim";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
 import { adw } from "../../../packages/react-gtk/src/adw/index.ts";
@@ -190,6 +192,10 @@ function main(): void {
   const overlaySplit = createInstance("AdwOverlaySplitView", { showSidebar: true }, root, 0, {});
   const navigationSplit = createInstance("AdwNavigationSplitView", { showContent: false }, root, 0, {});
   const sheet = createInstance("AdwBottomSheet", { open: false }, root, 0, {});
+  // An overview opens on a view with pages: libadwaita warns about an empty one.
+  const overviewView = new AdwTabView();
+  overviewView.append(new GtkLabel());
+  const overview = createInstance("AdwTabOverview", { view: overviewView, open: true }, root, 0, {});
   const switchWidget = widget(switchRow);
   const expanderWidget = widget(expanderRow);
   const spinWidget = widget(spinRow);
@@ -197,6 +203,7 @@ function main(): void {
   const overlayWidget = widget(overlaySplit);
   const navigationWidget = widget(navigationSplit);
   const sheetWidget = widget(sheet);
+  const overviewWidget = widget(overview);
   if (switchWidget instanceof AdwSwitchRow) switchWidget.set_active(true);
   if (expanderWidget instanceof AdwExpanderRow) expanderWidget.set_expanded(true);
   if (spinWidget instanceof AdwSpinRow) spinWidget.set_value(5);
@@ -204,6 +211,7 @@ function main(): void {
   if (overlayWidget instanceof AdwOverlaySplitView) overlayWidget.set_show_sidebar(false);
   if (navigationWidget instanceof AdwNavigationSplitView) navigationWidget.set_show_content(true);
   if (sheetWidget instanceof AdwBottomSheet) sheetWidget.set_open(true);
+  if (overviewWidget instanceof AdwTabOverview) overviewWidget.set_open(false);
   idle();
   const inputs =
     String(switchWidget instanceof AdwSwitchRow && switchWidget.get_active()) +
@@ -218,7 +226,9 @@ function main(): void {
     " " +
     String(navigationWidget instanceof AdwNavigationSplitView && navigationWidget.get_show_content()) +
     " " +
-    String(sheetWidget instanceof AdwBottomSheet && sheetWidget.get_open());
+    String(sheetWidget instanceof AdwBottomSheet && sheetWidget.get_open()) +
+    " " +
+    String(overviewWidget instanceof AdwTabOverview && overviewWidget.get_open());
   react_gtk_log("controlled " + (entryWidget instanceof AdwEntryRow ? entryWidget.get_text() : "not an entry row") + " " + inputs);
 
   const group = createInstance("AdwPreferencesGroup", { title: "Group" }, root, 0, {});

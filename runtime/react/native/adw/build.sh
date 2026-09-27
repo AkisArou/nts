@@ -30,7 +30,7 @@ fi
 expected="props true true
 slot true true
 signal 1
-controlled kept false false 3 0 true false false
+controlled kept false false 3 0 true false false true
 group A,X,B B,A,X B,X X,B suffix=true
 toolbar true true
 row p1>p2 s1>s2 e1>e2 r1>r2 t1>t2

@@ -5427,6 +5427,13 @@ export class AdwTabOverviewNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return tabOverviewSignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "open":
+        return this.gtk.get_open();
+    }
+    return undefined;
+  }
   protected place(child: WidgetNode, _moving: boolean): void {
     this.holdOnly(child);
     this.gtk.set_child(child.widget);
