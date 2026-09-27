@@ -22,8 +22,10 @@ import {
   GtkCheckButton,
   GtkEmojiChooser,
   GtkFlowBox,
+  GtkImage,
   GtkLabel,
   GtkMenuButton,
+  GtkPicture,
   GtkPopover,
   GtkRange,
   GtkSpinButton,
@@ -34,7 +36,7 @@ import {
 } from "c:Gtk-4.0";
 import { ApplicationFlags, g_data_input_stream_new, g_file_new_for_path } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
-import { g_date_time_new_local, g_getenv, g_timeout_add_full, g_variant_new_string } from "c:GLib-2.0";
+import { g_date_time_new_local, g_getenv, g_path_get_basename, g_timeout_add_full, g_variant_new_string } from "c:GLib-2.0";
 
 export interface Workbench {
   readonly application: AdwApplication;
@@ -151,6 +153,11 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
       child.activate();
       return true;
     }
+    case "file":
+      if (object instanceof GtkPicture) console.log(`${id}.file ${object.file?.get_basename() ?? "undefined"}`);
+      else if (object instanceof GtkImage) console.log(`${id}.file ${g_path_get_basename(object.file ?? "")}`);
+      else return false;
+      return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;
       console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
@@ -177,6 +184,9 @@ function drive(builder: GtkBuilder, path: string): void {
 /** Run `demo` as Workbench does, then drive it, then quit. */
 export function run(demo: (workbench: Workbench) => void): void {
   const dir = g_getenv("NTS_CORPUS_DEMO") ?? ".";
+  // The original's directory, where its assets are: what `resolve` is
+  // relative to, as in Workbench.
+  const upstream = g_getenv("NTS_CORPUS_UPSTREAM") ?? dir;
   const application = new AdwApplication({ application_id: "dev.nts.Corpus", flags: ApplicationFlags.NON_UNIQUE });
   application.connect("activate", () => {
     const window = new AdwApplicationWindow({ application });
@@ -186,7 +196,7 @@ export function run(demo: (workbench: Workbench) => void): void {
       application,
       window,
       builder,
-      resolve: (path) => g_file_new_for_path(dir).resolve_relative_path(path).get_uri(),
+      resolve: (path) => g_file_new_for_path(upstream).resolve_relative_path(path).get_uri(),
     });
     drive(builder, dir + "/driver.txt");
     g_timeout_add_full(0, 0, () => {

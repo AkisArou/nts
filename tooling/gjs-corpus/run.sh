@@ -77,7 +77,7 @@ for port in "$root"/examples/gjs-corpus/*/; do
       log="$out/$name.$mode.$product.log"
       if [ ! -x "$binary" ]; then
         verdict=refused
-      elif ! NTS_CORPUS_DEMO="$port" G_DEBUG=fatal-criticals timeout 30 "$root/examples/interop/with-display.sh" "$binary" > "$log" 2>/dev/null; then
+      elif ! NTS_CORPUS_DEMO="$port" NTS_CORPUS_UPSTREAM="$demos/$upstream" G_DEBUG=fatal-criticals timeout 30 "$root/examples/interop/with-display.sh" "$binary" > "$log" 2>/dev/null; then
         verdict=crashed
       elif cmp -s "$log" "$expected" && [ -s "$expected" ]; then
         verdict=ok

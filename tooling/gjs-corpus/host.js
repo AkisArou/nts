@@ -3,6 +3,9 @@
 //
 //   NTS_CORPUS_DEMO=<port dir> gjs -m host.js <demo's main.js>
 //
+// `workbench.resolve(path)` is relative to the demo's own directory, where
+// its assets are, as Workbench resolves it.
+//
 // The port's directory holds the demo's Blueprint compiled to `main.ui` and
 // `driver.txt`, one action a line, which the nts port's host reads too:
 //
@@ -13,6 +16,7 @@
 //   pick <id> <text> emit an emoji chooser's `emoji-picked`
 //   day <id> <y> <m> <d> select a calendar's day
 //   action <id> <name> <text> activate a widget's action with a string
+//   file <id>      print the name of a picture's or image's file
 //   activate-child <id> <n> activate a flow box's nth child
 //   active <id>    print `active`
 //   visible <id>   print `visible`
@@ -72,7 +76,7 @@ application.connect("activate", async () => {
     builder,
     template: null,
     resolve(path) {
-      return port.resolve_relative_path(path).get_uri();
+      return Gio.File.new_for_path(main).get_parent().resolve_relative_path(path).get_uri();
     },
     preview() {},
   };
@@ -98,6 +102,7 @@ application.connect("activate", async () => {
     else if (kind === "day") object.select_day(GLib.DateTime.new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0));
     else if (kind === "action") object.activate_action(args[0], GLib.Variant.new_string(args[1]));
     else if (kind === "activate-child") object.get_child_at_index(Number(args[0])).activate();
+    else if (kind === "file") console.log(`${id}.file ${object instanceof Gtk.Picture ? object.file?.get_basename() : GLib.path_get_basename(object.file ?? "")}`);
     else if (kind === "classes") console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
     else throw new Error(`unknown action ${kind}`);
   }

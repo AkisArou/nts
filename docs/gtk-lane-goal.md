@@ -1715,6 +1715,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 14 | 2 (Button, Button Row); ten stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer |
 | 2026-09-27 | 16 | 2 on main; 13 with the captured-handle fix (verified, waiting on the compiler hold), and Spin Button's last blocker is already on main |
 | 2026-09-27 | 19 | 3 on main (Button, Button Row, Popovers); 16 with the captured-handle fix. Left: Scale (`Object.entries` over a table), Stack (a `let` of a handle with no initializer), Spin Button (its enum lookup, fixed on main after the fix binary was built) |
+| 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 
 ## Completeness: the binding census
 
