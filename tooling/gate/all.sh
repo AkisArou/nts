@@ -1830,6 +1830,27 @@ phantoms() {
   return $status
 }
 
+# Is what the backend receives the program the source says? Six rules over
+# `hir --prepared`, `hir`, `layouts` and `refusals` of examples/ and every
+# conformance blocker, each one a defect that shipped silently on 2026-09-27:
+# a call or method-table entry that resolves to no definition or two; an
+# instance method whose class has no layout, or that overrides a dispatched
+# method its class's table does not hold (two modules exporting `Thing`: no
+# table at all, a virtual call through null, 8482afb63); a cascade whose cause
+# has no refusal of its own; a refused call cut from the top level with no line
+# saying so. Known violations are named, with an owner, in
+# tooling/conformance/integrity.known -- any other fails, and one that stops
+# occurring prints "remove it". A listing that does not reconcile with its own
+# "N function(s)" is NOT MEASURED. See tooling/conformance/integrity.mjs. The
+# runtime modules (`--runtime`) join once their 208 unrecorded roots are
+# recorded. About 30 s.
+integrity() {
+  out=$(node tooling/conformance/integrity.mjs 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^$/'
+  return $status
+}
+
 # How many functions the compiler emits, per runtime/node module and
 # runtime/web-platform, against tooling/gate/definitions -- the number the
 # `profile` refusal ceiling cannot see. A change can take refusals *and*
@@ -2000,6 +2021,7 @@ step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases
 step "outcomes" outcomes
 step "phantoms" phantoms
+step "integrity" integrity
 step "definitions" definitions
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
