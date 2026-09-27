@@ -36,7 +36,8 @@
 //             widget), passed as a ref's `current` is: the other node's widget
 //   boxed     a boxed record as a prop: a colour reaches a ColorDialogButton
 //             and a new one replaces it; a Popover's rectangle is cleared
-//             when its prop goes
+//             when its prop goes; a Label's attributes, a record made by
+//             `from_string`, are held and cleared
 //   text      text around an expression (an array to JSX) is one text, the
 //             Label's label, updated in place; an element among it is not text
 //   decision  a signal whose handler answers whether it handled it: the
@@ -102,6 +103,7 @@
 //   timer     a timer fired, and a cancelled one did not
 
 import { GdkRectangle, GdkRGBA } from "c:Gdk-4.0";
+import { PangoAttrList } from "c:Pango-1.0";
 import { ApplicationFlags } from "c:Gio-2.0";
 import {
   gtk_init,
@@ -437,7 +439,19 @@ function main(): void {
   commitUpdate(pointed, "GtkPopover", { pointingTo: new GdkRectangle() }, {}, {});
   const stillPointing = pointing();
   removeChild(pointedFrom, pointed);
-  react_gtk_log("boxed " + first + ">" + shade() + " " + String(wasPointing) + ">" + String(stillPointing));
+  // A record with no constructor, made by `from_string`: a Label's attributes.
+  const bold = PangoAttrList.from_string("0 3 weight bold");
+  const boldLabel = createInstance("GtkLabel", { label: "Bold", attributes: bold }, container, 0, {});
+  const attrsOf = (): string => {
+    if (!(boldLabel instanceof LabelNode)) {
+      return "not a label";
+    }
+    const attributes = boldLabel.gtk.get_attributes();
+    return attributes === null ? "none" : attributes.to_string();
+  };
+  const styledWith = attrsOf();
+  commitUpdate(boldLabel, "GtkLabel", { label: "Bold", attributes: bold }, { label: "Bold" }, {});
+  react_gtk_log("boxed " + first + ">" + shade() + " " + String(wasPointing) + ">" + String(stillPointing) + " " + styledWith + ">" + attrsOf());
 
   // Text around an expression is what JSX makes an array of: one text, the
   // label, where `false` renders as nothing; an element among them is not text.

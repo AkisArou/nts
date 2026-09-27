@@ -234,12 +234,13 @@ interface Bindings {
   /** Boxed records, in any namespace: `GdkRGBA`, `PangoAttrList`, `GtkTreePath`. */
   boxed: Set<string>;
   /**
-   * The types whose value has a constructor, classes and boxed records alike:
-   * what `instanceof` takes as its right-hand side. A boxed value's GType is
-   * recorded, so `instanceof` checks one as it does a class; a record whose
-   * value holds only functions (`PangoAttrList.from_string`) is not checked.
+   * The types whose value `instanceof` takes as its right-hand side, classes
+   * and boxed records alike: a value with a constructor, or with a
+   * `[Symbol.hasInstance]` (every boxed record's, `PangoAttrList`'s among
+   * them, whose value holds no constructor). A boxed value's GType is
+   * recorded, so `instanceof` checks one as it does a class.
    */
-  newable: Set<string>;
+  checkable: Set<string>;
   /**
    * For each GObject interface, the classes with a constructor that implement
    * it, topmost only (a subclass is an `instanceof` its parent): what a value
@@ -374,7 +375,7 @@ function readBindings(dir: string): Bindings {
   }
   const classes = new Set(constructible);
   const boxedTypes = new Set<string>();
-  const newable = new Set<string>();
+  const checkable = new Set<string>();
   // Each GObject class's parent and the interfaces it implements, inherited
   // ones included: `GObjectClass<"_GtkSingleSelection", GObject, "_GListModel" | ...>`.
   const gobjectClasses = new Map<string, { parent: string; implements: string[] }>();
@@ -396,9 +397,9 @@ function readBindings(dir: string): Bindings {
       if (boxedType !== null) {
         boxedTypes.add(boxedType[1]!);
       }
-      const boxedConstructor = /^ {4}new \([^)]*\): (\w+);$/.exec(line);
-      if (boxedConstructor !== null) {
-        newable.add(boxedConstructor[1]!);
+      const checked = /^ {4}(?:new \([^)]*\): (\w+)|\[Symbol\.hasInstance\]\(value: unknown\): value is (\w+));$/.exec(line);
+      if (checked !== null) {
+        checkable.add(checked[1] ?? checked[2]!);
       }
       const gobjectInterface = /^ {2}export type (\w+) = GObjectInterface</.exec(line);
       if (gobjectInterface !== null) {
@@ -425,7 +426,7 @@ function readBindings(dir: string): Bindings {
     // Topmost: a class whose parent also implements it is covered by the parent's check.
     implementers.set(name, all.filter((c) => !implementing(gobjectClasses.get(c)!.parent)).sort());
   }
-  return { setters, childMethods, accessors, getters, signals, constructible, classes, modules, implementers, boxed: boxedTypes, newable };
+  return { setters, childMethods, accessors, getters, signals, constructible, classes, modules, implementers, boxed: boxedTypes, checkable };
 }
 
 // ---- the model ---------------------------------------------------------------
@@ -709,7 +710,7 @@ function valueKind(type: string, bindings: Bindings, reference = false): ValueKi
   // rectangle. Its setter may take it as `Const<…>`; the app passes the record.
   const boxed = /^(?:Const<(\w+)>|(\w+))( \| null)?$/.exec(type);
   const boxedName = boxed === null ? undefined : (boxed[1] ?? boxed[2]);
-  if (boxedName !== undefined && bindings.boxed.has(boxedName) && bindings.newable.has(boxedName)) {
+  if (boxedName !== undefined && bindings.boxed.has(boxedName) && bindings.checkable.has(boxedName)) {
     return { kind: "object", type: boxedName, classes: [boxedName], nullable: boxed![3] !== undefined };
   }
   if (object === null || (object[1] === "GtkWidget" && !reference)) {

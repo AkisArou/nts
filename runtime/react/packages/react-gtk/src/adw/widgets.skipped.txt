@@ -22,9 +22,8 @@ AdwAboutWindow.version	deprecated
 AdwAboutWindow.website	deprecated
 AdwAboutWindow::activate-link	deprecated
 AdwActionRow.icon-name	deprecated
-AdwCarousel.scroll-params	a AdwSpringParams, which a JSX attribute does not carry yet
+AdwCarousel.scroll-params	removing it leaves its value: GIR gives no default
 AdwComboRow.expression	a GtkExpression | null, which a JSX attribute does not carry yet
-AdwEntryRow.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 AdwEntryRow.input-hints	no setter in the bindings
 AdwExpanderRow.icon-name	deprecated
 AdwFlap.content	deprecated

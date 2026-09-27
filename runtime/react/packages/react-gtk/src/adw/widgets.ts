@@ -53,6 +53,7 @@ import {
   AdwSpinner,
   AdwSpinnerPaintable,
   AdwSplitButton,
+  AdwSpringParams,
   AdwStatusPage,
   AdwSwitchRow,
   AdwTabBar,
@@ -143,6 +144,7 @@ import {
   type GtkWindowGravity,
 } from "c:Gtk-4.0";
 import {
+  PangoAttrList,
   PangoFontFamily,
   PangoFontMap,
 } from "c:Pango-1.0";
@@ -360,6 +362,7 @@ export interface CarouselProps extends Gtk.WidgetProps {
   allowScrollWheel?: boolean;
   interactive?: boolean;
   revealDuration?: number;
+  scrollParams?: AdwSpringParams;
   spacing?: number;
   orientation?: GtkOrientation;
   onNotifyAllowLongSwipes?: (value: boolean) => void;
@@ -443,6 +446,7 @@ export interface ComboRowProps extends ActionRowProps {
 /** `<EntryRow>`'s props: AdwEntryRow's own properties and signals. */
 export interface EntryRowProps extends PreferencesRowProps {
   activatesDefault?: boolean;
+  attributes?: PangoAttrList | null;
   enableEmojiCompletion?: boolean;
   inputPurpose?: GtkInputPurpose;
   maxLength?: number;
@@ -1922,6 +1926,9 @@ export function carouselProp(gtk: AdwCarousel, key: string, value: unknown): boo
     case "revealDuration":
       gtk.set_reveal_duration(typeof value === "number" ? value : 0);
       return true;
+    case "scrollParams":
+      if (value instanceof AdwSpringParams) gtk.set_scroll_params(value);
+      return true;
     case "spacing":
       gtk.set_spacing(typeof value === "number" ? value : 0);
       return true;
@@ -2256,6 +2263,9 @@ export function entryRowProp(gtk: AdwEntryRow, key: string, value: unknown): boo
   switch (key) {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
+      return true;
+    case "attributes":
+      gtk.set_attributes(value instanceof PangoAttrList ? value : null);
       return true;
     case "enableEmojiCompletion":
       gtk.set_enable_emoji_completion(typeof value === "boolean" ? value : false);

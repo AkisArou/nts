@@ -178,9 +178,13 @@ import {
   type GtkWrapMode,
 } from "c:Gtk-4.0";
 import {
+  PangoAttrList,
   type PangoEllipsizeMode,
+  PangoFontDescription,
   PangoFontFamily,
   PangoFontMap,
+  PangoLanguage,
+  PangoTabArray,
   type PangoWrapMode,
 } from "c:Pango-1.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
@@ -578,6 +582,7 @@ export interface EmojiChooserProps extends PopoverProps {
 /** `<Entry>`'s props: GtkEntry's own properties and signals. */
 export interface EntryProps extends WidgetProps {
   activatesDefault?: boolean;
+  attributes?: PangoAttrList;
   buffer?: GtkEntryBuffer;
   enableEmojiCompletion?: boolean;
   extraMenu?: GMenuModel | null;
@@ -608,6 +613,7 @@ export interface EntryProps extends WidgetProps {
   secondaryIconTooltipMarkup?: string;
   secondaryIconTooltipText?: string;
   showEmojiIcon?: boolean;
+  tabs?: PangoTabArray | null;
   truncateMultiline?: boolean;
   visibility?: boolean;
   editable?: boolean;
@@ -617,6 +623,7 @@ export interface EntryProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyAttributes?: (value: PangoAttrList | null) => void;
   onNotifyBuffer?: (value: GtkEntryBuffer) => void;
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
   onNotifyExtraMenu?: (value: GMenuModel | null) => void;
@@ -643,6 +650,7 @@ export interface EntryProps extends WidgetProps {
   onNotifySecondaryIconTooltipMarkup?: (value: string | null) => void;
   onNotifySecondaryIconTooltipText?: (value: string | null) => void;
   onNotifyShowEmojiIcon?: (value: boolean) => void;
+  onNotifyTabs?: (value: PangoTabArray | null) => void;
   onNotifyTruncateMultiline?: (value: boolean) => void;
   onNotifyVisibility?: (value: boolean) => void;
   onActivate?: () => void;
@@ -716,11 +724,14 @@ export interface FlowBoxChildProps extends WidgetProps {
 /** `<FontDialogButton>`'s props: GtkFontDialogButton's own properties and signals. */
 export interface FontDialogButtonProps extends WidgetProps {
   dialog?: GtkFontDialog;
+  fontDesc?: PangoFontDescription;
   fontFeatures?: string | null;
+  language?: PangoLanguage | null;
   level?: GtkFontLevel;
   useFont?: boolean;
   useSize?: boolean;
   onNotifyDialog?: (value: GtkFontDialog | null) => void;
+  onNotifyFontDesc?: (value: PangoFontDescription | null) => void;
   onNotifyFontFeatures?: (value: string | null) => void;
   onNotifyLevel?: (value: GtkFontLevel) => void;
   onNotifyUseFont?: (value: boolean) => void;
@@ -837,6 +848,7 @@ export interface ImageProps extends WidgetProps {
 
 /** `<Inscription>`'s props: GtkInscription's own properties and signals. */
 export interface InscriptionProps extends WidgetProps {
+  attributes?: PangoAttrList | null;
   markup?: string | null;
   minChars?: number;
   minLines?: number;
@@ -847,6 +859,7 @@ export interface InscriptionProps extends WidgetProps {
   wrapMode?: PangoWrapMode;
   xalign?: number;
   yalign?: number;
+  onNotifyAttributes?: (value: PangoAttrList | null) => void;
   onNotifyMinChars?: (value: number) => void;
   onNotifyMinLines?: (value: number) => void;
   onNotifyNatChars?: (value: number) => void;
@@ -860,6 +873,7 @@ export interface InscriptionProps extends WidgetProps {
 
 /** `<Label>`'s props: GtkLabel's own properties and signals. */
 export interface LabelProps extends WidgetProps {
+  attributes?: PangoAttrList | null;
   ellipsize?: PangoEllipsizeMode;
   extraMenu?: GMenuModel | null;
   justify?: GtkJustification;
@@ -870,6 +884,7 @@ export interface LabelProps extends WidgetProps {
   naturalWrapMode?: GtkNaturalWrapMode;
   selectable?: boolean;
   singleLineMode?: boolean;
+  tabs?: PangoTabArray | null;
   useMarkup?: boolean;
   useUnderline?: boolean;
   widthChars?: number;
@@ -877,6 +892,7 @@ export interface LabelProps extends WidgetProps {
   wrapMode?: PangoWrapMode;
   xalign?: number;
   yalign?: number;
+  onNotifyAttributes?: (value: PangoAttrList | null) => void;
   onNotifyEllipsize?: (value: PangoEllipsizeMode) => void;
   onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyJustify?: (value: GtkJustification) => void;
@@ -1399,6 +1415,7 @@ export interface SwitchProps extends WidgetProps {
 /** `<Text>`'s props: GtkText's own properties and signals. */
 export interface TextProps extends WidgetProps {
   activatesDefault?: boolean;
+  attributes?: PangoAttrList | null;
   buffer?: GtkEntryBuffer;
   enableEmojiCompletion?: boolean;
   extraMenu?: GMenuModel | null;
@@ -1410,6 +1427,7 @@ export interface TextProps extends WidgetProps {
   overwriteMode?: boolean;
   placeholderText?: string | null;
   propagateTextWidth?: boolean;
+  tabs?: PangoTabArray | null;
   truncateMultiline?: boolean;
   visibility?: boolean;
   editable?: boolean;
@@ -1419,6 +1437,7 @@ export interface TextProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyAttributes?: (value: PangoAttrList | null) => void;
   onNotifyBuffer?: (value: GtkEntryBuffer) => void;
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
   onNotifyExtraMenu?: (value: GMenuModel | null) => void;
@@ -1430,6 +1449,7 @@ export interface TextProps extends WidgetProps {
   onNotifyOverwriteMode?: (value: boolean) => void;
   onNotifyPlaceholderText?: (value: string | null) => void;
   onNotifyPropagateTextWidth?: (value: boolean) => void;
+  onNotifyTabs?: (value: PangoTabArray | null) => void;
   onNotifyTruncateMultiline?: (value: boolean) => void;
   onNotifyVisibility?: (value: boolean) => void;
   onActivate?: () => void;
@@ -1472,6 +1492,7 @@ export interface TextViewProps extends WidgetProps {
   pixelsBelowLines?: number;
   pixelsInsideWrap?: number;
   rightMargin?: number;
+  tabs?: PangoTabArray;
   topMargin?: number;
   wrapMode?: GtkWrapMode;
   hadjustment?: GtkAdjustment | null;
@@ -3234,6 +3255,9 @@ export function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
       return true;
+    case "attributes":
+      if (value instanceof PangoAttrList) gtk.set_attributes(value);
+      return true;
     case "buffer":
       if (value instanceof GtkEntryBuffer) gtk.set_buffer(value);
       return true;
@@ -3344,6 +3368,9 @@ export function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "showEmojiIcon":
       gtk.set_show_emoji_icon(typeof value === "boolean" ? value : false);
       return true;
+    case "tabs":
+      gtk.set_tabs(value instanceof PangoTabArray ? value : null);
+      return true;
     case "truncateMultiline":
       gtk.set_truncate_multiline(typeof value === "boolean" ? value : false);
       return true;
@@ -3377,6 +3404,11 @@ export function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boole
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyAttributes":
+      gtk.connect("notify::attributes", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoAttrList | null) => void)(gtk.get_attributes()));
       });
       return true;
     case "onNotifyBuffer":
@@ -3507,6 +3539,11 @@ export function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boole
     case "onNotifyShowEmojiIcon":
       gtk.connect("notify::show-emoji-icon", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_show_emoji_icon()));
+      });
+      return true;
+    case "onNotifyTabs":
+      gtk.connect("notify::tabs", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoTabArray | null) => void)(gtk.get_tabs()));
       });
       return true;
     case "onNotifyTruncateMultiline":
@@ -3768,8 +3805,14 @@ export function fontDialogButtonProp(gtk: GtkFontDialogButton, key: string, valu
     case "dialog":
       if (value instanceof GtkFontDialog) gtk.set_dialog(value);
       return true;
+    case "fontDesc":
+      if (value instanceof PangoFontDescription) gtk.set_font_desc(value);
+      return true;
     case "fontFeatures":
       gtk.set_font_features(typeof value === "string" ? value : null);
+      return true;
+    case "language":
+      gtk.set_language(value instanceof PangoLanguage ? value : null);
       return true;
     case "level":
       gtk.set_level(typeof value === "number" ? value as GtkFontLevel : 2 as GtkFontLevel);
@@ -3789,6 +3832,11 @@ export function fontDialogButtonSignal(gtk: GtkFontDialogButton, key: string, sl
     case "onNotifyDialog":
       gtk.connect("notify::dialog", () => {
         slot.dispatch(() => (slot.handler as (value: GtkFontDialog | null) => void)(gtk.get_dialog()));
+      });
+      return true;
+    case "onNotifyFontDesc":
+      gtk.connect("notify::font-desc", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoFontDescription | null) => void)(gtk.get_font_desc()));
       });
       return true;
     case "onNotifyFontFeatures":
@@ -4231,6 +4279,9 @@ export function imageSignal(gtk: GtkImage, key: string, slot: SignalSlot): boole
 
 export function inscriptionProp(gtk: GtkInscription, key: string, value: unknown): boolean {
   switch (key) {
+    case "attributes":
+      gtk.set_attributes(value instanceof PangoAttrList ? value : null);
+      return true;
     case "markup":
       gtk.set_markup(typeof value === "string" ? value : null);
       return true;
@@ -4267,6 +4318,11 @@ export function inscriptionProp(gtk: GtkInscription, key: string, value: unknown
 
 export function inscriptionSignal(gtk: GtkInscription, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAttributes":
+      gtk.connect("notify::attributes", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoAttrList | null) => void)(gtk.get_attributes()));
+      });
+      return true;
     case "onNotifyMinChars":
       gtk.connect("notify::min-chars", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_min_chars()));
@@ -4318,6 +4374,9 @@ export function inscriptionSignal(gtk: GtkInscription, key: string, slot: Signal
 
 export function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
   switch (key) {
+    case "attributes":
+      gtk.set_attributes(value instanceof PangoAttrList ? value : null);
+      return true;
     case "ellipsize":
       gtk.set_ellipsize(typeof value === "number" ? value as PangoEllipsizeMode : 0 as PangoEllipsizeMode);
       return true;
@@ -4348,6 +4407,9 @@ export function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
     case "singleLineMode":
       gtk.set_single_line_mode(typeof value === "boolean" ? value : false);
       return true;
+    case "tabs":
+      gtk.set_tabs(value instanceof PangoTabArray ? value : null);
+      return true;
     case "useMarkup":
       gtk.set_use_markup(typeof value === "boolean" ? value : false);
       return true;
@@ -4375,6 +4437,11 @@ export function labelProp(gtk: GtkLabel, key: string, value: unknown): boolean {
 
 export function labelSignal(gtk: GtkLabel, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAttributes":
+      gtk.connect("notify::attributes", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoAttrList | null) => void)(gtk.get_attributes()));
+      });
+      return true;
     case "onNotifyEllipsize":
       gtk.connect("notify::ellipsize", () => {
         slot.dispatch(() => (slot.handler as (value: PangoEllipsizeMode) => void)(gtk.get_ellipsize()));
@@ -6325,6 +6392,9 @@ export function textProp(gtk: GtkText, key: string, value: unknown): boolean {
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
       return true;
+    case "attributes":
+      gtk.set_attributes(value instanceof PangoAttrList ? value : null);
+      return true;
     case "buffer":
       if (value instanceof GtkEntryBuffer) gtk.set_buffer(value);
       return true;
@@ -6357,6 +6427,9 @@ export function textProp(gtk: GtkText, key: string, value: unknown): boolean {
       return true;
     case "propagateTextWidth":
       gtk.set_propagate_text_width(typeof value === "boolean" ? value : false);
+      return true;
+    case "tabs":
+      gtk.set_tabs(value instanceof PangoTabArray ? value : null);
       return true;
     case "truncateMultiline":
       gtk.set_truncate_multiline(typeof value === "boolean" ? value : false);
@@ -6391,6 +6464,11 @@ export function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyAttributes":
+      gtk.connect("notify::attributes", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoAttrList | null) => void)(gtk.get_attributes()));
       });
       return true;
     case "onNotifyBuffer":
@@ -6446,6 +6524,11 @@ export function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean
     case "onNotifyPropagateTextWidth":
       gtk.connect("notify::propagate-text-width", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_propagate_text_width()));
+      });
+      return true;
+    case "onNotifyTabs":
+      gtk.connect("notify::tabs", () => {
+        slot.dispatch(() => (slot.handler as (value: PangoTabArray | null) => void)(gtk.get_tabs()));
       });
       return true;
     case "onNotifyTruncateMultiline":
@@ -6593,6 +6676,9 @@ export function textViewProp(gtk: GtkTextView, key: string, value: unknown): boo
       return true;
     case "rightMargin":
       gtk.set_right_margin(typeof value === "number" ? value : 0);
+      return true;
+    case "tabs":
+      if (value instanceof PangoTabArray) gtk.set_tabs(value);
       return true;
     case "topMargin":
       gtk.set_top_margin(typeof value === "number" ? value : 0);

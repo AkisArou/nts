@@ -29,7 +29,7 @@ GtkDialog::close	deprecated
 GtkDialog::response	deprecated
 GtkDropDown.expression	a GtkExpression | null, which a JSX attribute does not carry yet
 GtkEditable::insert-text	no connect overload in the bindings
-GtkEntry.attributes	a PangoAttrList, which a JSX attribute does not carry yet
+GtkEntry.attributes	removing it leaves its value: GIR gives no default
 GtkEntry.buffer	removing it leaves its value: GIR gives no default
 GtkEntry.completion	deprecated
 GtkEntry.input-hints	no setter in the bindings
@@ -37,7 +37,6 @@ GtkEntry.primary-icon-gicon	removing it leaves its value: GIR gives no default
 GtkEntry.primary-icon-paintable	removing it leaves its value: GIR gives no default
 GtkEntry.secondary-icon-gicon	removing it leaves its value: GIR gives no default
 GtkEntry.secondary-icon-paintable	removing it leaves its value: GIR gives no default
-GtkEntry.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
 GtkFileChooser.action	deprecated
 GtkFileChooser.create-folders	deprecated
 GtkFileChooser.filter	deprecated
@@ -50,16 +49,12 @@ GtkFontChooser.preview-text	deprecated
 GtkFontChooser.show-preview-entry	deprecated
 GtkFontChooser::font-activated	deprecated
 GtkFontDialogButton.dialog	removing it leaves its value: GIR gives no default
-GtkFontDialogButton.font-desc	a Const<PangoFontDescription>, which a JSX attribute does not carry yet
-GtkFontDialogButton.language	a PangoLanguage | null, which a JSX attribute does not carry yet
+GtkFontDialogButton.font-desc	removing it leaves its value: GIR gives no default
 GtkGLArea.allowed-apis	no setter in the bindings
 GtkGLArea.use-es	deprecated
 GtkGLArea::create-context	its handler returns a GdkGLContext: not generated yet
 GtkIconView.cell-area	construct-only: a change would need a new widget
 GtkImage.gicon	removing it leaves its value: GIR gives no default
-GtkInscription.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
-GtkLabel.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
-GtkLabel.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
 GtkLockButton.permission	deprecated
 GtkLockButton.text-lock	deprecated
 GtkLockButton.text-unlock	deprecated
@@ -114,12 +109,10 @@ GtkStack.visible-child	removing it leaves its value: GIR gives no default
 GtkStackSidebar.stack	removing it leaves its value: GIR gives no default
 GtkStatusbar::text-popped	deprecated
 GtkStatusbar::text-pushed	deprecated
-GtkText.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 GtkText.buffer	removing it leaves its value: GIR gives no default
 GtkText.input-hints	no setter in the bindings
-GtkText.tabs	a PangoTabArray | null, which a JSX attribute does not carry yet
 GtkTextView.input-hints	no setter in the bindings
-GtkTextView.tabs	a PangoTabArray, which a JSX attribute does not carry yet
+GtkTextView.tabs	removing it leaves its value: GIR gives no default
 GtkVideo.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkVolumeButton.use-symbolic	deprecated
 GtkWidget.css-name	construct-only: a change would need a new widget
