@@ -62,6 +62,9 @@
 //             two goes between them and updates in place; its onResponse hears
 //             the response id, and taken out it closes, which onResponse
 //             does not hear
+//   preferences  a PreferencesDialog's children are its pages, added to it
+//             and not made its content: the first is shown, another taken out
+//             leaves it
 //   toasts    a ToastOverlay's Toast elements show while rendered: one React
 //             takes out is dismissed unheard; the user dismissing one is heard
 //   breakpoints  a BreakpointBin's Breakpoint elements: of those whose
@@ -91,6 +94,7 @@ import {
   AdwNavigationSplitView,
   AdwNavigationView,
   AdwOverlaySplitView,
+  AdwPreferencesDialog,
   AdwPreferencesGroup,
   AdwSpinRow,
   AdwSwitchRow,
@@ -692,6 +696,21 @@ function main(): void {
   idle();
   const closed = widget(dialog).get_root() === null;
   react_gtk_log("dialog " + String(dialogWantsMount) + " " + String(unplaced) + " " + String(within) + " " + String(closed) + " responded=" + responded + " " + responses);
+
+  // A PreferencesDialog's children are its pages, added, not its content.
+  const prefs = createInstance("AdwPreferencesDialog", {}, shown, 0, {});
+  const pageOne = createInstance("AdwPreferencesPage", { name: "one", title: "One" }, shown, 0, {});
+  const pageTwo = createInstance("AdwPreferencesPage", { name: "two", title: "Two" }, shown, 0, {});
+  appendInitialChild(prefs, pageOne);
+  appendInitialChild(prefs, pageTwo);
+  const prefsWidget = widget(prefs);
+  let preferring = "not a preferences dialog";
+  if (prefsWidget instanceof AdwPreferencesDialog) {
+    preferring = String(prefsWidget.get_visible_page_name());
+    removeChild(prefs, pageTwo);
+    preferring += " removed=" + String(widget(pageTwo).get_parent() === null) + " shown=" + String(prefsWidget.get_visible_page_name());
+  }
+  react_gtk_log("preferences " + preferring);
 
   // Toasts shown while rendered: React taking one out is not heard; the
   // user dismissing one is.

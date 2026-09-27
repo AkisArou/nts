@@ -4256,14 +4256,6 @@ export class AdwAboutDialogNode extends WidgetNode {
   commitMount(): void {
     this.gtk.present(this.presenter);
   }
-  protected place(child: WidgetNode, _moving: boolean): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
-  }
 }
 
 /** `<ActionRow>`: an AdwActionRow. */
@@ -4325,14 +4317,6 @@ export class AdwAlertDialogNode extends WidgetNode {
   }
   commitMount(): void {
     this.gtk.present(this.presenter);
-  }
-  protected place(child: WidgetNode, _moving: boolean): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
   }
 }
 
@@ -5022,13 +5006,47 @@ export class AdwPreferencesDialogNode extends WidgetNode {
   commitMount(): void {
     this.gtk.present(this.presenter);
   }
-  protected place(child: WidgetNode, _moving: boolean): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
+  // It only adds: a child inserted before another takes out what follows
+  // and adds it again, so the order is React's.
+  private readonly items: WidgetNode[] = [];
+  private adds(child: WidgetNode): void {
+    const widget = child.widget;
+    if (!(widget instanceof AdwPreferencesPage)) {
+      throw new Error(`<PreferencesDialog> holds PreferencesPages, not <${child.name()}>.`);
+    }
+    this.gtk.add(widget);
+    this.items.push(child);
+  }
+  private takes(child: WidgetNode): void {
+    const at = this.items.indexOf(child);
+    if (at < 0) {
+      return;
+    }
+    const widget = child.widget;
+    if (!(widget instanceof AdwPreferencesPage)) {
+      throw new Error(`<PreferencesDialog> holds PreferencesPages, not <${child.name()}>.`);
+    }
+    this.gtk.remove(widget);
+    this.items.splice(at, 1);
+  }
+  // A child placed again is a move to the end: out, then added last.
+  protected place(child: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
+    this.adds(child);
+  }
+  protected placeBefore(child: WidgetNode, before: WidgetNode, moving: boolean): void {
+    if (moving) {
+      this.takes(child);
+    }
+    const after = this.items.slice(this.items.indexOf(before));
+    after.forEach((item) => this.takes(item));
+    this.adds(child);
+    after.forEach((item) => this.adds(item));
   }
   protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
+    this.takes(child);
   }
 }
 
@@ -5215,14 +5233,6 @@ export class AdwShortcutsDialogNode extends WidgetNode {
   }
   commitMount(): void {
     this.gtk.present(this.presenter);
-  }
-  protected place(child: WidgetNode, _moving: boolean): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
   }
 }
 

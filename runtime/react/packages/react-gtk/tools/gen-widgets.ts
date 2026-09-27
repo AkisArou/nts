@@ -565,16 +565,31 @@ const tsName = (t: GirType): string => `${t.prefix}${t.name}`;
 
 // A list container's accessor for the row it made for a child, by index: a
 // moved child is taken back out of it before the row goes.
-// A widget that adds its children with a method other than `add`: an
-// ExpanderRow's children are its rows. It comes before a protocol the widget
-// inherits.
-const addsBy = new Map([["Adw.ExpanderRow", "add_row"]]);
+// A widget that adds its children with a method of its own: an ExpanderRow's
+// are its rows (`add_row`), a PreferencesDialog's its pages (`add`). It comes
+// before a protocol the widget inherits.
+const addsBy = new Map([
+  ["Adw.ExpanderRow", "add_row"],
+  // Its pages; `set_child`, a Dialog's, would replace the dialog's own view.
+  ["Adw.PreferencesDialog", "add"],
+]);
 
 // Widgets whose inherited child protocol is wrong for them, by a class in
 // their chain: libadwaita's rows build their own child (GtkListBoxRow's
 // `set_child` would replace it), and its windows take their content through
 // their Content slot. They take children only through their elements.
-const noChildProtocol = new Set(["Adw.PreferencesRow", "Adw.ApplicationWindow", "Adw.Window"]);
+const noChildProtocol = new Set([
+  "Adw.PreferencesRow",
+  "Adw.ApplicationWindow",
+  "Adw.Window",
+  // Dialogs that build their own content, which `set_child` would replace:
+  // an AlertDialog's extra child is a slot element.
+  "Adw.AlertDialog",
+  "Adw.AboutDialog",
+  "Adw.ShortcutsDialog",
+  "Gtk.AboutDialog",
+  "Gtk.EmojiChooser",
+]);
 
 // Widgets whose children mean more than a place, held by a class of the
 // module's own children.ts, to which the node passes each placement: a

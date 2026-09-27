@@ -1695,7 +1695,7 @@ export declare const DropDown: HostComponent<"GtkDropDown", DropDownProps & NoCh
 export declare const EditableLabel: HostComponent<"GtkEditableLabel", EditableLabelProps & NoChildren>;
 
 /** `<EmojiChooser>`: a GtkEmojiChooser. */
-export declare const EmojiChooser: HostComponent<"GtkEmojiChooser", EmojiChooserProps>;
+export declare const EmojiChooser: HostComponent<"GtkEmojiChooser", EmojiChooserProps & NoChildren>;
 
 /** `<Entry>`: a GtkEntry. */
 export declare const Entry: HostComponent<"GtkEntry", EntryProps & NoChildren>;
@@ -7193,14 +7193,6 @@ export class AboutDialogNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return windowSlot(this.gtk, slot, widget);
   }
-  protected place(child: WidgetNode, _moving: boolean): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
-  }
 }
 
 /** `<ActionBar>`: a GtkActionBar. */
@@ -7551,14 +7543,6 @@ export class EmojiChooserNode extends WidgetNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return emojiChooserSignal(this.gtk, key, slot);
-  }
-  protected place(child: WidgetNode, _moving: boolean): void {
-    this.holdOnly(child);
-    this.gtk.set_child(child.widget);
-  }
-  protected unplace(child: WidgetNode): void {
-    this.gtk.set_child(null);
-    this.release(child);
   }
 }
 
