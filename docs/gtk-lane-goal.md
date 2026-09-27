@@ -1293,6 +1293,14 @@ writes a list model as `new Gio.ListStore({ item_type: Task.$gtype })` over a
   Before this, the test was refused, as "no class for" the record. gtk-values'
   `boxes` line asks it of a colour, a text iter, a plain object, a number and
   `null`; with the `GType` comparison removed, the iter reads as a colour.
+  - Every boxed record's value declares `[Symbol.hasInstance](value:
+    unknown): value is X`, and the lowering finds the record by that
+    predicate. A record with no constructor (`PangoAttrList`,
+    `PangoFontDescription`, `AdwSpringParams`) had a value holding only
+    statics, which tsgo refuses on the right of `instanceof` (TS2359), and
+    an opaque one had no value at all. The construct signature was the
+    lowering's route before, and a record without one had none. gtk-values
+    asks it of an attribute list (`attrs:0 3 weight bold`).
 - **`C.$gtype`** is `C`'s `GType`. The binder declares it on every class
   value, and a program class inherits it as a static but answers its own
   `nts_gobject_type_C`.

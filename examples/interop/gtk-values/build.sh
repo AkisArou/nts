@@ -24,7 +24,7 @@ for mode in plain rc; do
   dropped="alive alive"
   copies="alive"
   [ "$mode" = rc ] && watch="held gone" && dropped="gone gone" && copies="gone"
-  expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch temporary $watch dropped $dropped copies c $copies kept boxes rgba:rgb(255,0,0) iter other other other typed "
+  expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch temporary $watch dropped $dropped copies c $copies kept boxes rgba:rgb(255,0,0) iter attrs:0 3 weight bold other other other typed "
   flag=""
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086

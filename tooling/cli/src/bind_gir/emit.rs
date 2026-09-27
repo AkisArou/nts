@@ -359,17 +359,18 @@ fn made_by(name: &str, gobject: bool) -> (&'static str, String) {
     }
 }
 
-/// A boxed record's value: `new GtkTextIter()`, a zeroed record of the
-/// headers' size for C to fill (the compiler allocates it by the record's
+/// A boxed record's value: what `x instanceof PangoAttrList` asks of --
+/// `[Symbol.hasInstance]`, whose predicate names the record, which is how the
+/// compiler finds its `GType` -- then `new GtkTextIter()`, a zeroed record of
+/// the headers' size for C to fill (the compiler allocates it by the record's
 /// `GType`), and the record's constructors and functions as statics, as a
-/// class's are. No `new` for a record the headers keep opaque.
+/// class's are. No `new` for a record the headers keep opaque; every record
+/// has the predicate, so an opaque one is still asked about by `instanceof`.
 fn boxed_value(out: &mut String, binding: &Binding, name: &str, size: u64) {
     let statics: Vec<&Function> =
         binding.functions.iter().filter(|f| f.statics.as_ref().is_some_and(|(class, _)| class == name)).collect();
-    if size == 0 && statics.is_empty() {
-        return;
-    }
     let _ = writeln!(out, "  export const {name}: {{");
+    let _ = writeln!(out, "    [Symbol.hasInstance](value: unknown): value is {name};");
     if size > 0 {
         let _ = writeln!(out, "    new (): {name};");
     }

@@ -49924,15 +49924,14 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// `value instanceof GdkRGBA` for a boxed record a binding declares: the
-    /// record whose construct signature (`new (): GdkRGBA`) makes one, by
-    /// `schema::boxed` of what it returns -- the reading the result path's
-    /// boxing uses. Of an erased value, the runtime answers
+    /// record its value's `[Symbol.hasInstance]` predicate names, by
+    /// `schema::boxed` -- the reading the result path's boxing uses. Of an erased value, the runtime answers
     /// (`nts_gobject_is_boxed`: a box that `nts_gobject_boxed_free` frees, of
     /// this `GType`);
     /// of one already held as the box, it is whether it is there. `None` for
     /// any other class.
     fn lower_boxed_instanceof(&mut self, id: NodeId, lhs: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
-        let Some(record) = self.boxed_constructed(symbol) else { return Ok(None) };
+        let Some(record) = self.boxed_asked(symbol) else { return Ok(None) };
         let value = self.lower_expression(lhs)?;
         let origin = self.origin(id);
         match self.values[value.0 as usize].ty.clone() {
@@ -49948,10 +49947,12 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// The boxed record a binding's value constructs (`export const GdkRGBA:
-    /// { new (): GdkRGBA }`): what its construct signature returns, when that
-    /// is a boxed record. `None` for anything else.
-    fn boxed_constructed(&self, symbol: nts_semantic_schema::SymbolId) -> Option<super::native::schema::BoxedRecord> {
+    /// The boxed record a binding's value answers `instanceof` for
+    /// (`export const PangoAttrList: { [Symbol.hasInstance](value: unknown):
+    /// value is PangoAttrList }`): the type its predicate names, when that is
+    /// a boxed record. Every boxed record's value has one, a record with no
+    /// constructor too. `None` for anything else.
+    fn boxed_asked(&self, symbol: nts_semantic_schema::SymbolId) -> Option<super::native::schema::BoxedRecord> {
         let value = self
             .snapshot
             .symbols
@@ -49962,10 +49963,9 @@ impl<'a> FuncBuilder<'a> {
             .find(|declaration| self.kind_of(*declaration) == Some(syntax::VARIABLE_DECLARATION))?;
         let mut pending = vec![value];
         while let Some(at) = pending.pop() {
-            // Its return type, `GdkRGBA`: the one child whose recorded type
-            // is a boxed record. A construct signature has no signature type
-            // of its own in the snapshot.
-            if self.kind_of(at) == Some(syntax::CONSTRUCT_SIGNATURE) {
+            // `value is PangoAttrList`: the one child whose recorded type is
+            // a boxed record, beside the parameter's name.
+            if self.kind_of(at) == Some(syntax::TYPE_PREDICATE) {
                 return self.children(at).into_iter().find_map(|child| {
                     let ty = *self.snapshot.node_types.get(&child)?;
                     super::native::schema::boxed(self.snapshot, ty)

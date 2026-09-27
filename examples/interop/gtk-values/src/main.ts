@@ -41,6 +41,7 @@
 //                 references only, so its release was one too many
 import { GtkButton, GtkLabel, GtkListBox, GtkTextIter, gtk_init } from "c:Gtk-4.0";
 import { GdkRGBA } from "c:Gdk-4.0";
+import { PangoAttrList } from "c:Pango-1.0";
 import { sub_gone, sub_log, sub_watch } from "c:sub";
 
 function describe(x: unknown): string {
@@ -191,13 +192,14 @@ function kept(): string {
 function boxed(value: unknown): string {
   if (value instanceof GdkRGBA) return "rgba:" + value.to_string();
   if (value instanceof GtkTextIter) return "iter";
+  if (value instanceof PangoAttrList) return "attrs:" + value.to_string();
   return "other";
 }
 
 function boxes(): string {
   const red = new GdkRGBA();
   red.parse("red");
-  const values: unknown[] = [red, new GtkTextIter(), { a: 1 }, 3, null];
+  const values: unknown[] = [red, new GtkTextIter(), PangoAttrList.from_string("0 3 weight bold"), { a: 1 }, 3, null];
   let told = "";
   for (const value of values) told += boxed(value) + " ";
   return told + (red instanceof GdkRGBA ? "typed" : "untyped");
