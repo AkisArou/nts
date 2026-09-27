@@ -248,21 +248,45 @@ fn properties(class: Node<'_, '_>) -> Vec<Property> {
         .children()
         .filter(|n| is(*n, "property"))
         .filter_map(|property| {
+            let getter = accessor_method(class, property, "getter", "org.gtk.Property.get");
+            let setter = accessor_method(class, property, "setter", "org.gtk.Property.set");
             Some(Property {
                 name: attribute(property, "name")?.to_owned(),
-                getter: attribute(property, "getter").map(str::to_owned),
-                setter: attribute(property, "setter").map(str::to_owned),
                 construct_only: attribute(property, "construct-only") == Some("1")
                     && attribute(property, "writable") == Some("1"),
                 set_by_name: (attribute(property, "writable") == Some("1")
                     && attribute(property, "construct-only") != Some("1")
-                    && attribute(property, "setter").is_none())
+                    && setter.is_none())
                 .then(|| param(property, false)),
-                get_by_name: (attribute(property, "readable") != Some("0") && attribute(property, "getter").is_none())
+                get_by_name: (attribute(property, "readable") != Some("0") && getter.is_none())
                     .then(|| param(property, false)),
+                getter,
+                setter,
             })
         })
         .collect()
+}
+
+/// The method of `class` a property is read or written through: its
+/// `getter`/`setter` attribute, or where the scanner wrote none -- it writes
+/// one only for a method named after the property -- the `org.gtk.Property`
+/// annotation, which names the method by its C symbol. `GtkImage:file` is
+/// written through `gtk_image_set_from_file`, which takes `NULL`; the by-name
+/// thunk it fell to without this took only a string.
+fn accessor_method(class: Node<'_, '_>, property: Node<'_, '_>, attr: &str, annotation: &str) -> Option<String> {
+    if let Some(name) = attribute(property, attr) {
+        return Some(name.to_owned());
+    }
+    let symbol = property
+        .children()
+        .find(|n| is(*n, "attribute") && attribute(*n, "name") == Some(annotation))
+        .and_then(|n| attribute(n, "value"))?;
+    class
+        .children()
+        .filter(|n| is(*n, "method"))
+        .find(|method| c_attribute(*method, "identifier") == Some(symbol))
+        .and_then(|method| attribute(method, "name"))
+        .map(str::to_owned)
 }
 
 fn callables(owner: Node<'_, '_>) -> Vec<Callable> {

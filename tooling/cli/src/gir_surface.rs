@@ -268,6 +268,14 @@ mod tests {
             }
         }
         assert!(owners.len() > 1000, "{} declarations: the scan does not match the packages", owners.len());
+        // A property whose setter GIR names only by an `org.gtk.Property.set`
+        // annotation is written through that method, which takes `NULL`, and
+        // not through a by-name thunk typed from the property, which does not.
+        let gtk = packages.iter().find(|p| p.name == "@nts/gir-gtk-4.0").unwrap();
+        assert!(
+            gtk.declarations.contains("     * @ntsSet set_from_file\n     */\n    file: string | null;"),
+            "GtkImage:file is not written through gtk_image_set_from_file"
+        );
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-gir-packages-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
