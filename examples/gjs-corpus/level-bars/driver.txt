@@ -1,0 +1,12 @@
+text entry a
+label label_strength
+classes label_strength
+text entry abcd
+label label_strength
+classes label_strength
+text entry abcdefghij
+label label_strength
+classes label_strength
+text entry
+label label_strength
+classes label_strength

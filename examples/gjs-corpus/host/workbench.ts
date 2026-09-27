@@ -22,10 +22,12 @@ import {
   GtkCalendar,
   GtkCheckButton,
   GtkEmojiChooser,
+  GtkEntry,
   GtkFlowBox,
   GtkImage,
   GtkLabel,
   GtkMenuButton,
+  GtkPasswordEntry,
   GtkPicture,
   GtkPopover,
   GtkRange,
@@ -162,6 +164,15 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
     case "sidebar-position":
       if (!(object instanceof AdwOverlaySplitView)) return false;
       console.log(`${id}.sidebar_position ${object.sidebar_position}`);
+      return true;
+    case "text":
+      if (object instanceof GtkPasswordEntry) object.text = args.join(" ");
+      else if (object instanceof GtkEntry) object.text = args.join(" ");
+      else return false;
+      return true;
+    case "attributes":
+      if (!(object instanceof GtkLabel)) return false;
+      console.log(`${id}.attributes ${object.attributes?.to_string() ?? ""}`);
       return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;
