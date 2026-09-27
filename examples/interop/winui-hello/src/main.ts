@@ -52,7 +52,7 @@ import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
-import { Button, Frame, Page, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { Button, Frame, Page, StackPanel, TextBlock, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
 import { ContentIsland } from "winrt:Microsoft.UI.Content";
 import { ElementCompositionPreview } from "winrt:Microsoft.UI.Xaml.Hosting";
 import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
@@ -216,10 +216,22 @@ class App extends Application {
     const islands = ContentIsland.findAllForCurrentThread();
     const first = islands.length > 0 ? islands[0] : null;
     const island = first !== null && first.isConnected;
+    // An array of objects where a call takes an array of one interface: a
+    // literal is made of `IUIElement`s as it is written, and lent as it is;
+    // an array the program holds of `Button`s is asked, element by element,
+    // for `IUIElement` -- another pointer of each object's.
+    const panel = new StackPanel();
+    const caption = TextBlock.create();
+    caption.text = "caption";
+    panel.children.ReplaceAll([new Button(), caption]);
+    const lentAsItIs = panel.children.size;
+    const buttons: Button[] = [new Button(), new Button(), new Button()];
+    panel.children.ReplaceAll(buttons);
+    const replaced = String(lentAsItIs) + ":" + String(panel.children.size);
     console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " islands=" + String(island) + " rebuilt=" + String(this.rebuilt()),
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " rebuilt=" + String(this.rebuilt()),
     );
     this.exit();
   }

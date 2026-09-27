@@ -151,12 +151,26 @@ the same vtable calls on the VM measured the behaviour first.
   - **a delegate by its own name** (`DragCompletedEventHandler`), declared as
     a parameter taking one spells it; a generic one has no one IID, so no one
     type.
+  - **an array of objects, both ways.** One a call allocates is
+    `(T | null)[]`, the callee's references moved into an array of the
+    program's (`ContentIsland.findAllForCurrentThread()`). One a call takes
+    (`ReplaceAll`) is lent as its block of handles, in place where each is the
+    interface the call takes and asked for it element by element otherwise --
+    a COM object's interfaces are different pointers. XAML's own `ReplaceAll`
+    happens to ask each element itself, so only the C test can tell the two
+    apart; the ABI promises nothing of the kind.
+  - **Under rc, a foreign object lives to the end of what it reaches**, not
+    to its last read: every `@ntsHresult` call branches to a throwing exit, so
+    "held to the end" had asked a handle made after any call to dominate
+    exits it never reaches, and `panel.children.size` released the panel
+    between `get_Children` and `get_Size` -- XAML cleared the destroyed
+    panel's children and the size read 0.
 - **What is left refused**, measured over winui-hello's bindings (the 83
-  namespaces its imports reach), 2026-09-27: 441 items, 312 of them a
+  namespaces its imports reach), 2026-09-27: 426 items, 312 of them a
   factory interface's composable `CreateInstance`, which is its class's
-  constructor and bound as that. Of the other 129: 64 arrays -- `GetMany`'s
-  and `ReplaceAll`'s, and arrays of objects, strings, structs, booleans or
-  64-bit integers; 25 delegates that return a value, are answered or are
+  constructor and bound as that. Of the other 114: 49 arrays -- `GetMany`'s
+  buffer, and arrays of strings, structs, booleans or 64-bit integers
+  (`PropertyValue`'s boxing statics most of them); 25 delegates that return a value, are answered or are
   generic; 10 structs holding an `IReference`; 6 holding a `boolean`; 7
   generic members with no signature; 7 idiomatic names two surfaces give.
   Before `Copied<T>`, struct `[out]` parameters and named delegates, the

@@ -380,6 +380,35 @@ void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high) {
   return nts_query(object, &wanted);
 }
 
+void *nts_com_query_array(const NtsArray *array, uint64_t iid_low,
+                          uint64_t iid_high) {
+  uint32_t count = array->header.length;
+  if (count == 0) {
+    return 0;
+  }
+  void **block = malloc((size_t)count * sizeof(void *));
+  if (block == 0) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  IID wanted = nts_iid(iid_low, iid_high);
+  void *const *items = NTS_ITEMS(array, void *);
+  for (uint32_t at = 0; at < count; at++) {
+    block[at] = items[at] == 0 ? 0 : nts_query(items[at], &wanted);
+  }
+  return block;
+}
+
+void nts_com_release_array(const NtsArray *array, void *block) {
+  void **items = block;
+  for (uint32_t at = 0; items != 0 && at < array->header.length; at++) {
+    if (items[at] != 0) {
+      nts_unknown_release(items[at]);
+    }
+  }
+  free(block);
+}
+
 /* `Windows.Foundation.PropertyValue`'s statics, activated once: what boxes a
  * string, a number or a boolean for a slot taking an object. */
 static const IID nts_iid_property_value_statics = {

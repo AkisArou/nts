@@ -1982,6 +1982,13 @@ NtsString *nts_string_from_hstring(void *h);
 NtsString *nts_string_copy_hstring(void *h);
 void *nts_com_take(void *slot);
 void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high);
+/* An array of objects where a call takes an array of the interface `iid`,
+ * whose elements are other interfaces of theirs: each asked for it (+1) into
+ * a block of the call's, `NULL` staying `NULL`, and all given back after the
+ * call by `nts_com_release_array`, which is also the array's last use. */
+void *nts_com_query_array(const NtsArray *array, uint64_t iid_low,
+                          uint64_t iid_high);
+void nts_com_release_array(const NtsArray *array, void *block);
 void *nts_com_addref(void *object);
 void nts_com_release(void *object);
 /* The end of a COM object's loan to something that depends on it without a

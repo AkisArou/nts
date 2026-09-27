@@ -202,7 +202,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 }
 
 /// The brands `c:types` declares, beside its `c_` scalars.
-const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "ConstPtr"];
+const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "CHandles", "ConstPtr"];
 /// The brands `winrt:types` declares.
 const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "Copied", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
@@ -1268,37 +1268,14 @@ impl Writer<'_> {
         for (at, ty) in signature.types.iter().enumerate().take(declared) {
             let row = named.params().get(at).copied().flatten();
             let name = row.map_or_else(|| format!("param{at}"), |row| safe(row.name()));
-            // Bytes: a `Uint8Array` borrowed in place, its length the
-            // `UINT32` C takes before it. An `[in]` array is read (`const`); an
-            // `[out]` one the caller allocates, and the callee fills it where
-            // it is -- so it is an argument too, the program's buffer.
+            // An array lent in place, its `UINT32` count before it.
             if let Type::Array(element) = ty
-                && matches!(**element, Type::U8)
+                && let Some(lent_as) = self.lent_array(element, out(at))?
             {
                 if !outs.is_empty() {
                     return Err("an `in` parameter after an `out` one".to_owned());
                 }
-                for brand in ["Counted", "CBytes", "CNumber"] {
-                    self.brands.insert(brand);
-                }
-                let pointee = if out(at) { "uint8_t" } else { "const uint8_t" };
-                parameters.push(format!("{name}: Counted<CBytes<\"{pointee}\">, CNumber<\"uint32\">, \"before\">"));
-                lent.push(name);
-                continue;
-            }
-            // Numbers: a typed array's elements, borrowed in place as bytes
-            // are, and read or filled as bytes are.
-            if let Type::Array(element) = ty
-                && let Some((array, spelled)) = elements_of(element)
-            {
-                if !outs.is_empty() {
-                    return Err("an `in` parameter after an `out` one".to_owned());
-                }
-                for brand in ["Counted", "CElements", "CNumber"] {
-                    self.brands.insert(brand);
-                }
-                let spelled = if out(at) { spelled.to_owned() } else { format!("const {spelled}") };
-                parameters.push(format!("{name}: Counted<CElements<{array}, \"{spelled}\">, CNumber<\"uint32\">, \"before\">"));
+                parameters.push(format!("{name}: Counted<{lent_as}, CNumber<\"uint32\">, \"before\">"));
                 lent.push(name);
                 continue;
             }
@@ -1638,6 +1615,55 @@ impl Writer<'_> {
             other => return typed_array(other),
         };
         Ok(format!("({object} | null)[]"))
+    }
+
+    /// How an array parameter is lent in place, `None` where it is not one
+    /// of these. `written` is an `[out]` array, which the caller allocates
+    /// and the callee fills where it is -- so it is an argument too, the
+    /// program's buffer.
+    ///
+    /// - Bytes: a `Uint8Array`'s, read (`const`) or filled.
+    /// - Numbers: a typed array's elements, read or filled as bytes are.
+    /// - Objects: an array of the program's, whose block of handles is lent
+    ///   in place where each is the interface C takes, and asked for it
+    ///   element by element otherwise. `[in]` only: a buffer the callee fills
+    ///   (`GetMany`) is not built.
+    fn lent_array(&mut self, element: &Type, written: bool) -> Result<Option<String>, String> {
+        let lent_as = if matches!(element, Type::U8) {
+            self.brands.insert("CBytes");
+            let pointee = if written { "uint8_t" } else { "const uint8_t" };
+            format!("CBytes<\"{pointee}\">")
+        } else if let Some((array, spelled)) = elements_of(element) {
+            self.brands.insert("CElements");
+            let spelled = if written { spelled.to_owned() } else { format!("const {spelled}") };
+            format!("CElements<{array}, \"{spelled}\">")
+        } else if !written && let Some(handle) = self.handle_element(element)? {
+            self.brands.insert("CHandles");
+            format!("CHandles<{handle}>")
+        } else {
+            return Ok(None);
+        };
+        self.brands.insert("Counted");
+        self.brands.insert("CNumber");
+        Ok(Some(lent_as))
+    }
+
+    /// The interface an array of objects passes each element as: a class's
+    /// default interface, an interface itself, or `IInspectable` for any
+    /// object. `None` for anything else.
+    fn handle_element(&mut self, element: &Type) -> Result<Option<String>, String> {
+        Ok(match element {
+            Type::ClassName(named)
+                if self.index.get(&named.namespace, generic_base(&named.name)).next().is_some_and(|def| def.category() != TypeCategory::Delegate) =>
+            {
+                Some(self.type_argument(element)?)
+            }
+            Type::Object => {
+                self.brands.insert("IInspectable");
+                Some("IInspectable".to_owned())
+            }
+            _ => None,
+        })
     }
 
     /// A struct an `[out]` parameter writes, which is a field of the call's

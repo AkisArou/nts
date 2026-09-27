@@ -182,7 +182,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
     // the instantiation: the value Windows answered `QueryInterface` for, in
     // `examples/interop/windows-winrt`.
     assert!(
-        module.contains("@ntsQuery D44662BC-DCE3-59A8-9272-4B210F33908B\n     */\n    as_IVector(this: JsonArray): IVector<IJsonValue>;"),
+        module.contains("@ntsQuery D44662BC-DCE3-59A8-9272-4B210F33908B\n     */\n    as_IVector(this: JsonArray): IVectorOfIJsonValue;"),
         "JsonArray is not queried for IVector<IJsonValue> by its computed IID:\n{module}"
     );
     assert!(module.contains("export type JsonArray = IJsonArray & JsonArrayInterfaces & JsonArrayMembers;"), "{module}");
@@ -267,6 +267,12 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
     // An array of objects the callee allocated is an array of the
     // program's, each element perhaps `null`.
     assert!(module.contains("GetInspectableArray(this: IPropertyValue): { value: (IInspectable | null)[] };"), "{module}");
+    // And one the call is passed, as the handles of the interface it takes,
+    // their count before them.
+    assert!(
+        module.contains("CreateInspectableArray(this: IPropertyValueStatics, value: Counted<CHandles<IInspectable>, CNumber<\"uint32\">, \"before\">): Inspectable;"),
+        "{module}"
+    );
     // An interface declares the IID it is asked for by, which an
     // `instanceof` of a class whose default it is reads.
     assert!(
@@ -561,9 +567,11 @@ fn composable_classes_are_constructed_as_themselves() {
     // to call with an outer object and answer an inner one: refused, saying
     // so, rather than as the `[out]` parameter its inner object is.
     // A class whose default interface is an instantiation is that
-    // instantiation: a panel's children are an `IVector<IUIElement>`.
+    // instantiation: a panel's children are an `IVector<IUIElement>`, the
+    // specialisation that declares the members its argument decides
+    // (`ReplaceAll` takes the `IUIElement`s' handles).
     assert!(
-        module.contains("export type UIElementCollection = IVector<IUIElement> & UIElementCollectionInterfaces & UIElementCollectionMembers;"),
+        module.contains("export type UIElementCollection = IVectorOfUIElement & UIElementCollectionInterfaces & UIElementCollectionMembers;"),
         "UIElementCollection is not its IVector<IUIElement>:\n{}",
         module.lines().filter(|line| line.contains("UIElementCollection")).collect::<Vec<_>>().join("\n")
     );

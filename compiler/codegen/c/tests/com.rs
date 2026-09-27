@@ -419,7 +419,73 @@ export function run(): number {
     windows_syntax(&dir, &emitted);
 }
 
+/// An array of objects where a call takes an array of one interface: an
+/// array whose elements are that interface is lent as its element block, in
+/// place; one of another interface is asked, element by element, for the one
+/// the call takes -- a COM object's interfaces are different pointers -- into
+/// a block given back after the call.
+#[test]
+fn an_array_of_objects_is_lent_as_the_interface_the_call_takes() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { CHandles, CNumber, Counted } from "c:types";
+  import type { ComClass, HString } from "winrt:types";
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 10 ReplaceAll
+     * @ntsHresult
+     * @ntsNoEscape items
+     */
+    ReplaceAll(this: IJsonValue, items: Counted<CHandles<IJsonValue>, CNumber<"uint32">, "before">): void;
+  }
+  /**
+   * @ntsQuery A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E
+   */
+  export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
+  export interface IJsonObjectMethods {}
+  export type IJsonObject = ComClass<"IJsonObject", IJsonValue> & IJsonObjectMethods & IJsonValueMethods;
+  /**
+   * @ntsVtable 6 Parse
+   * @ntsHresult
+   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+   */
+  export function Parse(input: HString): IJsonValue;
+  export namespace JsonObject {
+    /**
+     * @ntsVtable 6 Parse
+     * @ntsHresult
+     * @ntsFactory Windows.Data.Json.JsonObject 2289F159-54DE-45D8-ABCC-22603FA066A0
+     */
+    function Parse(input: HString): IJsonObject;
+  }
+}
+"#;
+    let source = r#"import { JsonObject, Parse, type IJsonObject, type IJsonValue } from "winrt:Windows.Data.Json";
+export function run(): number {
+  const target = Parse("[]");
+  const values: IJsonValue[] = [Parse("1"), Parse("2")];
+  target.ReplaceAll(values);
+  const objects: IJsonObject[] = [JsonObject.Parse("{}")];
+  target.ReplaceAll(objects);
+  return values.length + objects.length;
+}
+"#;
+    let Some((dir, prepared)) = prepare("handles", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert_eq!(text.matches("nts_array_handles(").count(), 1, "the array of the interface itself is not lent in place:\n{text}");
+    assert_eq!(text.matches("nts_com_query_array(").count(), 1, "the array of another interface is not asked for the one taken:\n{text}");
+    // Given back on both of the call's paths, the array's last use.
+    assert_eq!(text.matches("nts_com_release_array(").count(), 2, "the queried block is not given back on both paths:\n{text}");
 
+    windows_syntax(&dir, &emitted);
+}
+
+/// A struct holding a string is only ever `Copied<T>`: as storage the
 /// program holds, no one would own its HSTRING, so it is no native type at
 /// all and the declaration taking it is refused.
 #[test]

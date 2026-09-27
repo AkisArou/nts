@@ -13572,6 +13572,10 @@ enum Lent {
     /// which releases a temporary at the end of its statement; necessary once
     /// a release moves to the last read (see the header).
     Array { array: ValueId },
+    /// An array of objects asked, element by element, for the interface a
+    /// Windows Runtime call takes (`nts_com_query_array`): the block of the
+    /// references that made, given back after the call with the array.
+    Queried { array: ValueId, block: ValueId },
     /// The compiler's own error slot, for an `@ntsThrows` parameter the caller
     /// left out: read after the call, and a failure reported there thrown.
     Error { slot: ValueId, converter: String },
@@ -48653,6 +48657,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::Array { array } => {
                     self.runtime_call("nts_array_unlend", vec![array], HirType::Void, origin.clone());
                 }
+                Lent::Queried { array, block } => {
+                    self.runtime_call("nts_com_release_array", vec![array, block], HirType::Void, origin.clone());
+                }
                 Lent::Boxed { boxed } => {
                     self.runtime_call("nts_boxed_unlend", vec![boxed], HirType::Void, origin.clone());
                 }
@@ -48900,8 +48907,29 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Array(element)) = &self.values[array.0 as usize].ty else {
             return Err(self.unsupported(id, "a `CHandles` argument that is not an array"));
         };
-        if !matches!(**element, HirType::NativePointer(super::native::Pointee::Opaque(_))) {
+        let HirType::NativePointer(super::native::Pointee::Opaque(held)) = &**element else {
             return Err(self.unsupported(id, "a `CHandles` argument whose elements are not handles"));
+        };
+        // A COM object's interfaces are different pointers, so an array of
+        // one interface's is not an array of another's: each element is asked
+        // for the one C takes, into a block of the call's. Every interface
+        // is an `IInspectable` as it is, as a single argument's is.
+        if let HirType::NativePointer(super::native::Pointee::Pointer(wanted)) = &want
+            && let super::native::Pointee::Opaque(wanted) = &**wanted
+            && wanted.family == super::native::Family::Com
+            && held.tag != wanted.tag
+            && wanted.tag != "IInspectable"
+        {
+            let Some(iid) = self.hierarchy.com_iids.get(&wanted.tag).cloned() else {
+                return Err(self.unsupported(id, &format!("an array of objects as `{}`, an interface no binding asks for by IID", wanted.tag)));
+            };
+            let [low, high] = self.iid_arguments(&iid, origin);
+            let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+            let block = self.unless_null(array, absent, origin, |this| {
+                this.runtime_call("nts_com_query_array", vec![array, low, high], want, origin.clone())
+            });
+            lent.push(Lent::Queried { array, block });
+            return Ok(block);
         }
         let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
         let block = self.unless_null(array, absent, origin, |this| {
