@@ -257,6 +257,19 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         "{module}"
     );
     assert!(refused.contains("IAsyncOperation.get_Completed\t`AsyncOperationCompletedHandler`, a delegate as a result"), "{refused}");
+    // A delegate is a type of its own name, as a parameter taking it spells
+    // it; a generic one has no one IID, so no one type.
+    assert!(
+        module.contains("export type AsyncActionCompletedHandler = Delegate<(asyncInfo: IAsyncAction, asyncStatus: CEnum<AsyncStatus, c_int32>) => void, \"A4ED5C81-76C9-40BD-8BE6-B1D90FB20AE7\">;"),
+        "{module}"
+    );
+    assert!(refused.contains("AsyncOperationCompletedHandler`1\ta generic delegate"), "{refused}");
+    // An interface declares the IID it is asked for by, which an
+    // `instanceof` of a class whose default it is reads.
+    assert!(
+        module.contains("  /**\n   * @ntsQuery 30D5A829-7FA4-4026-83BB-D75BAE4EA99E\n   */\n  export type IClosable = ComClass<"),
+        "{module}"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 

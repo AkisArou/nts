@@ -290,7 +290,7 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
             }
             TypeCategory::Enum => Writer::enumeration(*def, &mut body),
             TypeCategory::Struct => writer.structure(*def, &mut body),
-            TypeCategory::Delegate => writer.refuse(name, "a delegate"),
+            TypeCategory::Delegate => writer.delegate_type(*def, &mut body),
             TypeCategory::Attribute => {}
         }
     }
@@ -1635,6 +1635,21 @@ impl Writer<'_> {
                 .find(|implemented| implemented.has_attribute("DefaultAttribute"))
                 .map(|implemented| implemented.interface(&[]))
             && interface.generics.is_empty()
+    /// `DragCompletedEventHandler`: the delegate as a parameter taking one
+    /// spells it, under its own name, so a program can name a handler's
+    /// type as C# does. A generic one's IID is its instantiation's, so it
+    /// has no one type, and is refused before this.
+    fn delegate_type(&mut self, def: TypeDef, body: &mut String) {
+        let name = def.name();
+        let ty = Type::ClassName(windows_metadata::TypeName { namespace: self.namespace.to_owned(), name: name.to_owned(), generics: Vec::new() });
+        match self.delegate(&ty, def, true) {
+            Ok(spelled) => {
+                let _ = writeln!(body, "  export type {name} = {spelled};");
+            }
+            Err(why) => self.refuse(name, &why),
+        }
+    }
+
         {
             return Ok(self.named(&interface.namespace, &interface.name));
         }
