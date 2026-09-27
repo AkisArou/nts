@@ -1936,6 +1936,26 @@ types_check() {
   return $status
 }
 
+# Does the runtime's JVM output pass the JVM's own verifier? The JVM is the
+# backend that types what C (`T *`) and LLVM (`ptr`) agree on by construction,
+# and the `jvm` step runs the examples only -- so the runtime's class files
+# were emitted by nobody and checked by none until 2026-09-28, when the first
+# run failed 18 of 28 modules for five distinct emitter causes. Per module,
+# `emit-jvm`, then each class loaded without initialising and linked under
+# `-Xverify:all`. tooling/conformance/jvm-verifies.known is the ratchet: a
+# module leaving it is the signal. About 95 s. See jvm-verifies.mjs.
+jvm_verifies() {
+  if ! command -v java > /dev/null 2>&1 && [ ! -x "${JAVA_HOME-}/bin/java" ]; then
+    echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
+    return 1
+  fi
+  out=$(node tooling/conformance/jvm-verifies.mjs 2>&1)
+  status=$?
+  # One line per known module is the ratchet's content, not news.
+  printf '%s\n' "$out" | awk '!/^$/ && !/^  known /'
+  return $status
+}
+
 # How many functions the compiler emits, per runtime/node module and
 # runtime/web-platform, against tooling/gate/definitions -- the number the
 # `profile` refusal ceiling cannot see. A change can take refusals *and*
@@ -2111,6 +2131,7 @@ step "integrity-runtime" integrity_runtime
 step "snapshot-cache" snapshot_cache
 step "assembles" assembles
 step "types" types_check
+step "jvm-verifies" jvm_verifies
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does
 # `docs/primitives.md` name ratchets that exist. The table is nine claims about
 # what is measured, and a claim nothing checks is how a closed primitive quietly
