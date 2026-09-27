@@ -56,22 +56,16 @@ import { trackHostMutation } from "./ReactFiberMutationTracking.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
 import { commitNewChildToFragmentInstances, getParentFragmentInstances } from "./ReactFiberFragmentInstance.ts";
 
-// Runs a host operation with the fiber as the current fiber in development,
-// where component stacks in warnings need it.
-function runHostOperation<Args extends unknown[]>(fiber: Fiber, operation: (...args: Args) => void, ...args: Args): void {
-  if (isDevelopment) {
-    runWithFiberInDEV(fiber, operation, ...args);
-  } else {
-    operation(...args);
-  }
-}
-
 export function commitHostMount(finishedWork: Fiber): void {
   const type = finishedWork.type as string;
   const props = finishedWork.memoizedProps as Props;
   const instance = finishedWork.stateNode as Instance;
   try {
-    runHostOperation(finishedWork, commitMount, instance, type, props, finishedWork);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, commitMount, instance, type, props, finishedWork);
+    } else {
+      commitMount(instance, type, props, finishedWork);
+    }
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -82,7 +76,11 @@ export function commitHostHydratedInstance(finishedWork: Fiber): void {
   const props = finishedWork.memoizedProps as Props;
   const instance = finishedWork.stateNode as Instance;
   try {
-    runHostOperation(finishedWork, commitHydratedInstance, instance, type, props, finishedWork);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, commitHydratedInstance, instance, type, props, finishedWork);
+    } else {
+      commitHydratedInstance(instance, type, props, finishedWork);
+    }
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -90,15 +88,19 @@ export function commitHostHydratedInstance(finishedWork: Fiber): void {
 
 export function commitHostUpdate(finishedWork: Fiber, newProps: Props, oldProps: Props): void {
   try {
-    runHostOperation(
-      finishedWork,
-      commitUpdate,
-      finishedWork.stateNode as Instance,
-      finishedWork.type as string,
-      oldProps,
-      newProps,
-      finishedWork,
-    );
+    if (isDevelopment) {
+      runWithFiberInDEV(
+        finishedWork,
+        commitUpdate,
+        finishedWork.stateNode as Instance,
+        finishedWork.type as string,
+        oldProps,
+        newProps,
+        finishedWork,
+      );
+    } else {
+      commitUpdate(finishedWork.stateNode as Instance, finishedWork.type as string, oldProps, newProps, finishedWork);
+    }
     // Mutations are tracked manually from within commitUpdate.
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
@@ -108,7 +110,11 @@ export function commitHostUpdate(finishedWork: Fiber, newProps: Props, oldProps:
 export function commitHostTextUpdate(finishedWork: Fiber, newText: string, oldText: string): void {
   const textInstance = finishedWork.stateNode as TextInstance;
   try {
-    runHostOperation(finishedWork, commitTextUpdate, textInstance, oldText, newText);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, commitTextUpdate, textInstance, oldText, newText);
+    } else {
+      commitTextUpdate(textInstance, oldText, newText);
+    }
     trackHostMutation();
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
@@ -118,7 +124,11 @@ export function commitHostTextUpdate(finishedWork: Fiber, newText: string, oldTe
 export function commitHostResetTextContent(finishedWork: Fiber): void {
   const instance = finishedWork.stateNode as Instance;
   try {
-    runHostOperation(finishedWork, resetTextContent, instance);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, resetTextContent, instance);
+    } else {
+      resetTextContent(instance);
+    }
     trackHostMutation();
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
@@ -129,9 +139,17 @@ export function commitShowHideSuspenseBoundary(node: Fiber, isHidden: boolean): 
   try {
     const instance = node.stateNode as SuspenseInstance;
     if (isHidden) {
-      runHostOperation(node, hideDehydratedBoundary, instance);
+      if (isDevelopment) {
+        runWithFiberInDEV(node, hideDehydratedBoundary, instance);
+      } else {
+        hideDehydratedBoundary(instance);
+      }
     } else {
-      runHostOperation(node, unhideDehydratedBoundary, instance);
+      if (isDevelopment) {
+        runWithFiberInDEV(node, unhideDehydratedBoundary, instance);
+      } else {
+        unhideDehydratedBoundary(instance);
+      }
     }
   } catch (error) {
     captureCommitPhaseError(node, node.return, error);
@@ -142,9 +160,17 @@ export function commitShowHideHostInstance(node: Fiber, isHidden: boolean): void
   try {
     const instance = node.stateNode as Instance;
     if (isHidden) {
-      runHostOperation(node, hideInstance, instance);
+      if (isDevelopment) {
+        runWithFiberInDEV(node, hideInstance, instance);
+      } else {
+        hideInstance(instance);
+      }
     } else {
-      runHostOperation(node, unhideInstance, instance, node.memoizedProps as Props);
+      if (isDevelopment) {
+        runWithFiberInDEV(node, unhideInstance, instance, node.memoizedProps as Props);
+      } else {
+        unhideInstance(instance, node.memoizedProps as Props);
+      }
     }
   } catch (error) {
     captureCommitPhaseError(node, node.return, error);
@@ -155,9 +181,17 @@ export function commitShowHideHostTextInstance(node: Fiber, isHidden: boolean): 
   try {
     const instance = node.stateNode as TextInstance;
     if (isHidden) {
-      runHostOperation(node, hideTextInstance, instance);
+      if (isDevelopment) {
+        runWithFiberInDEV(node, hideTextInstance, instance);
+      } else {
+        hideTextInstance(instance);
+      }
     } else {
-      runHostOperation(node, unhideTextInstance, instance, node.memoizedProps as string);
+      if (isDevelopment) {
+        runWithFiberInDEV(node, unhideTextInstance, instance, node.memoizedProps as string);
+      } else {
+        unhideTextInstance(instance, node.memoizedProps as string);
+      }
     }
     trackHostMutation();
   } catch (error) {
@@ -433,7 +467,11 @@ function commitImmutablePlacementNodeToFragmentInstances(
 
 export function commitHostPlacement(finishedWork: Fiber): void {
   try {
-    runHostOperation(finishedWork, commitPlacement, finishedWork);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, commitPlacement, finishedWork);
+    } else {
+      commitPlacement(finishedWork);
+    }
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -446,7 +484,11 @@ export function commitHostRemoveChildFromContainer(
   hostInstance: Instance | TextInstance,
 ): void {
   try {
-    runHostOperation(deletedFiber, removeChildFromContainer, parentContainer, hostInstance);
+    if (isDevelopment) {
+      runWithFiberInDEV(deletedFiber, removeChildFromContainer, parentContainer, hostInstance);
+    } else {
+      removeChildFromContainer(parentContainer, hostInstance);
+    }
     trackHostMutation();
   } catch (error) {
     captureCommitPhaseError(deletedFiber, nearestMountedAncestor, error);
@@ -460,7 +502,11 @@ export function commitHostRemoveChild(
   hostInstance: Instance | TextInstance,
 ): void {
   try {
-    runHostOperation(deletedFiber, removeChild, parentInstance, hostInstance);
+    if (isDevelopment) {
+      runWithFiberInDEV(deletedFiber, removeChild, parentInstance, hostInstance);
+    } else {
+      removeChild(parentInstance, hostInstance);
+    }
     trackHostMutation();
   } catch (error) {
     captureCommitPhaseError(deletedFiber, nearestMountedAncestor, error);
@@ -471,7 +517,11 @@ export function commitHostRootContainerChildren(root: FiberRoot, finishedWork: F
   const containerInfo = root.containerInfo;
   const pendingChildren = root.pendingChildren as ChildSet;
   try {
-    runHostOperation(finishedWork, replaceContainerChildren, containerInfo, pendingChildren);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, replaceContainerChildren, containerInfo, pendingChildren);
+    } else {
+      replaceContainerChildren(containerInfo, pendingChildren);
+    }
     trackHostMutation();
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
@@ -485,7 +535,11 @@ export function commitHostPortalContainerChildren(
 ): void {
   const containerInfo = portal.containerInfo;
   try {
-    runHostOperation(finishedWork, replaceContainerChildren, containerInfo, pendingChildren);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, replaceContainerChildren, containerInfo, pendingChildren);
+    } else {
+      replaceContainerChildren(containerInfo, pendingChildren);
+    }
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -493,7 +547,11 @@ export function commitHostPortalContainerChildren(
 
 export function commitHostHydratedContainer(root: FiberRoot, finishedWork: Fiber): void {
   try {
-    runHostOperation(finishedWork, commitHydratedContainer, root.containerInfo);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, commitHydratedContainer, root.containerInfo);
+    } else {
+      commitHydratedContainer(root.containerInfo);
+    }
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -501,7 +559,11 @@ export function commitHostHydratedContainer(root: FiberRoot, finishedWork: Fiber
 
 export function commitHostHydratedActivity(activityInstance: ActivityInstance, finishedWork: Fiber): void {
   try {
-    runHostOperation(finishedWork, commitHydratedActivityInstance, activityInstance);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, commitHydratedActivityInstance, activityInstance);
+    } else {
+      commitHydratedActivityInstance(activityInstance);
+    }
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -509,7 +571,11 @@ export function commitHostHydratedActivity(activityInstance: ActivityInstance, f
 
 export function commitHostHydratedSuspense(suspenseInstance: SuspenseInstance, finishedWork: Fiber): void {
   try {
-    runHostOperation(finishedWork, commitHydratedSuspenseInstance, suspenseInstance);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, commitHydratedSuspenseInstance, suspenseInstance);
+    } else {
+      commitHydratedSuspenseInstance(suspenseInstance);
+    }
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -522,7 +588,11 @@ export function commitHostSingletonAcquisition(finishedWork: Fiber): void {
   try {
     // This was a new mount, acquire the DOM instance and set initial
     // properties
-    runHostOperation(finishedWork, acquireSingletonInstance, finishedWork.type as string, props, singleton, finishedWork);
+    if (isDevelopment) {
+      runWithFiberInDEV(finishedWork, acquireSingletonInstance, finishedWork.type as string, props, singleton, finishedWork);
+    } else {
+      acquireSingletonInstance(finishedWork.type as string, props, singleton, finishedWork);
+    }
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -531,5 +601,9 @@ export function commitHostSingletonAcquisition(finishedWork: Fiber): void {
 export function commitHostSingletonRelease(releasingWork: Fiber): void {
   // Upstream passes the type and props as well; the host contract only
   // takes the instance, as every upstream host config does.
-  runHostOperation(releasingWork, releaseSingletonInstance, releasingWork.stateNode as Instance);
+  if (isDevelopment) {
+    runWithFiberInDEV(releasingWork, releaseSingletonInstance, releasingWork.stateNode as Instance);
+  } else {
+    releaseSingletonInstance(releasingWork.stateNode as Instance);
+  }
 }
