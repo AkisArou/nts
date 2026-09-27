@@ -282,4 +282,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 118 for `nts_array_handles` and `nts_array_unlend`, an array of handles
 /// lent to C as its element block (`CHandles`): the JVM holds no C handles.
-const REFUSED_FLOOR: usize = 118;
+///
+/// 119 for `nts_array_from_handles`, C's array of objects made an array of
+/// the program's for a callback: native calls again.
+const REFUSED_FLOOR: usize = 119;

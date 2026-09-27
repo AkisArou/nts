@@ -773,6 +773,60 @@ pub struct BoxedParameter {
     pub get_type: String,
 }
 
+/// A parameter a bridge receives as C's array of objects and its length --
+/// `GFile **files, gint n_files` -- each at its index among the bridge's C
+/// parameters, which the compiled function takes as one `readonly GFile[]`
+/// (`CHandles`, `nts_array_from_handles`). The two travel together so that
+/// nothing can separate the array from the length that says how long it is.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HandleArrayParameter {
+    pub at: u32,
+    pub length_at: u32,
+}
+
+/// What a bridge converts between C's arguments and the compiled function's
+/// parameters. Derived once, with the bridge's C signature
+/// (`native::callback_slots`), and read by both backends through
+/// [`Bridging::parameter`]: a C argument and a compiled parameter differ in
+/// number only where an array's length rides beside it, and that is decided
+/// here and nowhere else.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct Bridging {
+    pub boxed: Vec<BoxedParameter>,
+    pub arrays: Vec<HandleArrayParameter>,
+}
+
+impl Bridging {
+    /// The compiled function's parameter (after its receiver) that C's
+    /// argument `at` becomes, or `None` for an array's length, which becomes
+    /// part of its array instead.
+    #[must_use]
+    pub fn parameter(&self, at: usize) -> Option<usize> {
+        let length = |array: &HandleArrayParameter| array.length_at as usize;
+        if self.arrays.iter().any(|array| length(array) == at) {
+            return None;
+        }
+        Some(at - self.arrays.iter().filter(|array| length(array) < at).count())
+    }
+
+    /// The boxed record C's argument `at` is, if it is one.
+    #[must_use]
+    pub fn boxed(&self, at: usize) -> Option<&BoxedParameter> {
+        self.boxed.iter().find(|parameter| parameter.at as usize == at)
+    }
+
+    /// The array of objects C's argument `at` is, if it is one.
+    #[must_use]
+    pub fn array(&self, at: usize) -> Option<&HandleArrayParameter> {
+        self.arrays.iter().find(|array| array.at as usize == at)
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.boxed.is_empty() && self.arrays.is_empty()
+    }
+}
+
 /// What an operation does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
@@ -864,11 +918,13 @@ pub enum OpKind {
     /// `GAsyncReadyCallback`, GIR's `scope="async"` -- so the bridge gives
     /// the closure back itself (`nts_closure_unlend`) after that one call.
     ///
-    /// **And `boxed`**: the parameters C passes as a boxed record's pointer
-    /// (`cairo_t *` to a draw function, a `GdkRGBA *` to a signal handler),
-    /// which the compiled function takes in a box of the program's. The bridge
-    /// boxes each, a copy by the record's `GType`, as a result is boxed.
-    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool, once: bool, boxed: Vec<BoxedParameter> },
+    /// **And `bridging`**: the parameters C passes as a boxed record's
+    /// pointer (`cairo_t *` to a draw function, a `GdkRGBA *` to a signal
+    /// handler), which the compiled function takes in a box of the program's
+    /// -- the bridge boxes each, a copy by the record's `GType`, as a result
+    /// is boxed -- and those it passes as an array of objects and its length
+    /// (`GFile **files, gint n_files`), which it takes as one array.
+    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool, once: bool, bridging: Bridging },
     /// An Objective-C block in this function's frame, which is what clang
     /// passes for `^{ ... }`: the address is the value, and it is valid until
     /// the function returns. A callee that keeps it copies it (`_Block_copy`),
@@ -5471,6 +5527,8 @@ mod tests {
             // its end: C reads the block, and nothing resizes the array.
             "nts_array_handles",
             "nts_array_unlend",
+            // An array made from C's, for a callback: the result is new.
+            "nts_array_from_handles",
         ];
         let mut unclassified = Vec::new();
         for name in crate::hir::runtime::declared_names() {

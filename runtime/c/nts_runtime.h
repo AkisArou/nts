@@ -2168,6 +2168,18 @@ void *nts_array_handles(const NtsArray *array);
  * `nts_view_unlend` necessary for views. That condition, not today's
  * placement, is why it stays. */
 void nts_array_unlend(const NtsArray *array);
+/* The other direction: C's array of objects and its length -- `GFile **files,
+ * gint n_files` passed to a signal handler -- as an array of the program's,
+ * whose `descriptor` is the element family's (`NTS_ARRAY_FOREIGN`), each
+ * element counted through the family as `slice` counts one. C may free its
+ * array once the handler returns; the program's holds references of its own.
+ *
+ * A NULL element ends the process naming the platform as its source and the
+ * index, and so does a NULL array said to have elements: the program's type
+ * says every element is an object, and the platform broke that, not the
+ * program. A NULL array of length 0 is an empty one. */
+NtsArray *nts_array_from_handles(void *const *items, uint32_t count,
+                                 const NtsDescriptor *descriptor);
 
 /* A boxed record the program holds (`NTS_KIND_BOXED`): `boxed` is the C
  * struct, and `free(boxed, data)` gives it back when the box dies.

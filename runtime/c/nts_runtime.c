@@ -5063,6 +5063,31 @@ void *nts_array_handles(const NtsArray *array) {
 
 void nts_array_unlend(const NtsArray *array) { (void)array; }
 
+NtsArray *nts_array_from_handles(void *const *items, uint32_t count,
+                                 const NtsDescriptor *descriptor) {
+  if (items == NULL && count > 0) {
+    fprintf(stderr,
+            "nts: the platform passed no array where it said there were %u "
+            "objects\n",
+            (unsigned)count);
+    abort();
+  }
+  NtsArray *out = nts_array_allocate(descriptor, count);
+  void *(*retain)(void *) = descriptor->foreign_slots[0].ops->retain;
+  void **into = NTS_ITEMS(out, void *);
+  for (uint32_t at = 0; at < count; at++) {
+    if (items[at] == NULL) {
+      fprintf(stderr,
+              "nts: the platform passed a null element at index %u in an "
+              "array of objects\n",
+              (unsigned)at);
+      abort();
+    }
+    into[at] = retain(items[at]);
+  }
+  return out;
+}
+
 void nts_boxed_unlend(const void *box) { (void)box; }
 
 /* One descriptor for every boxed record: the box holds no reference -- a

@@ -398,6 +398,48 @@ at the end of its statement, after the call. It guards against a release
 moved to the last use, which is what made `nts_view_unlend` necessary for
 views.
 
+### Arrays of objects a handler is given
+
+`app.connect("open", (app, files, hint) => ...)` is how every GJS
+application that opens files (`HANDLES_OPEN`) takes them. C passes
+`GFile **files, gint n_files`, and the signal was refused "as an array".
+
+- **The binder** types the handler's parameter as it types a function's
+  (`Counted<CHandles<GFile, "void">, …>`) and drops the length from the
+  handler's parameters: it rides in the array. GIR spells a signal's array
+  `gpointer`, the value the signal marshals; the handler is passed its
+  address, a `gpointer *`.
+- **One walker decides the arity.** `native::callback_slots` reads a
+  callback's TypeScript signature once and answers both the bridge's C
+  signature and what the bridge converts (`Bridging`): boxed records, and
+  arrays with the C index of their length. Both backends map a C argument
+  to the compiled function's parameter through `Bridging::parameter` and
+  nowhere else, because two places deciding "how many parameters does this
+  entry take" is how a callback becomes invalid HIR rather than a refusal.
+  A boxed record inside a rest tuple was at the wrong index before; it is
+  read by the same walk now.
+- **The bridge** makes one array of the program's
+  (`nts_array_from_handles`), each element counted through its family as
+  `slice` counts one, so C may free its array when the handler returns.
+  Under `--rc` the array is given back after the call, as a boxed copy is.
+  A NULL element, or a NULL array said to have elements, ends the process,
+  naming the platform as the source.
+- **The type** is the array: a `CHandles` intersection is represented as its
+  value, as `Property<T>` is its `T`, since the markers are optional and
+  never exist.
+
+Witness: `examples/interop/gtk-open`. The program opens two files itself
+through `app.open([a, b], "hint")`, which lends the array out, and the
+handler gets `open 2 a.txt,b.txt hint`. It stores the array, which is read
+after the handler returns (`kept a.txt,b.txt`). That runs on C and LLVM,
+plain and `--rc`. The `--rc` C build under AddressSanitizer is clean;
+`tooling/memory` and gtk-cycles are green. With the per-element count
+removed, the `--rc` arms die reading the kept array, so the count is
+load-bearing.
+
+This also found that an element-typed loan (`GFile **`, where `splice` is
+`gpointer *`) did not compile in C; see "Arrays of objects, lent in place".
+
 ### A handler's out parameters: refused, not bound wrong
 
 GIR gives a signal's parameters no C type, so the binder spells one from the

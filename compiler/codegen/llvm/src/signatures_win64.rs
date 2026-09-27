@@ -44,6 +44,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_array_fill_from_nsarray", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_fill_ref", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_fill_strings_from_nsarray", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_array_from_handles", returns: "ptr", params: &["ptr", "i32", "ptr"], attributes: &[] },
     Signature { name: "nts_array_handles", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_array_includes", returns: "zeroext i1", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_includes_ref", returns: "zeroext i1", params: &["ptr", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },

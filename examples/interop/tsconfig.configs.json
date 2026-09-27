@@ -38,6 +38,7 @@
     "gtk-cairo/nts.config.ts",
     "gtk-journal/nts.config.ts",
     "gtk-list/nts.config.ts",
+    "gtk-open/nts.config.ts",
     "gtk-widgets/nts.config.ts",
     "gtk-subclass/nts.config.ts",
     "gtk-values/nts.config.ts",

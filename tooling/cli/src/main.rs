@@ -2408,10 +2408,10 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
         // Named by the function it bridges rather than by the closure value, so
         // reading the dump answers "which function does C get" without first
         // resolving a layout by hand.
-        OpKind::NativeBridge { closure, signature, context, once, boxed } => {
+        OpKind::NativeBridge { closure, signature, context, once, bridging } => {
             let with = if *context { " with context" } else { "" };
             let once = if *once { ", once" } else { "" };
-            format!("bridge %{} as {}{with}{once}{}", closure.0, signature.name, boxed_note(boxed))
+            format!("bridge %{} as {}{with}{once}{}", closure.0, signature.name, bridging_note(bridging))
         }
         OpKind::NativeBlock { invoke, context, signature } => {
             format!("block %{} with %{} as {}", invoke.0, context.0, signature.name)
@@ -2563,10 +2563,10 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::NativeCopy { destination, source } => {
             format!("native.copy %{} <- %{}", destination.0, source.0)
         }
-        OpKind::NativeBridge { closure, signature, context, once, boxed } => {
+        OpKind::NativeBridge { closure, signature, context, once, bridging } => {
             let with = if *context { " with context" } else { "" };
             let once = if *once { ", once" } else { "" };
-            format!("%{index} = native.bridge %{} as {}{with}{once}{} : {ty}", closure.0, signature.name, boxed_note(boxed))
+            format!("%{index} = native.bridge %{} as {}{with}{once}{} : {ty}", closure.0, signature.name, bridging_note(bridging))
         }
         OpKind::NativeBlock { invoke, context, signature } => {
             format!("%{index} = native.block %{} with %{} as {} : {ty}", invoke.0, context.0, signature.name)
@@ -7522,14 +7522,18 @@ fn deps(rest: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// A bridge's boxed parameters as the dumps print them: `, boxing 1 by
-/// cairo_gobject_context_get_type`.
-fn boxed_note(boxed: &[nts_core::hir::BoxedParameter]) -> String {
+/// What a bridge converts, as the dumps print it: `, boxing 1 by
+/// cairo_gobject_context_get_type`, `, an array of 1 counted by 2`.
+fn bridging_note(bridging: &nts_core::hir::Bridging) -> String {
     use std::fmt::Write as _;
-    boxed.iter().fold(String::new(), |mut note, parameter| {
+    let mut note = bridging.boxed.iter().fold(String::new(), |mut note, parameter| {
         let _ = write!(note, ", boxing {} by {}", parameter.at, parameter.get_type);
         note
-    })
+    });
+    for array in &bridging.arrays {
+        let _ = write!(note, ", an array of {} counted by {}", array.at, array.length_at);
+    }
+    note
 }
 
 #[cfg(test)]

@@ -447,14 +447,19 @@ fn escaped(c: char) -> String {
 /// the compiled function C calls through it. One spelling for every backend,
 /// since the name is what a native operation and its definition agree on.
 #[must_use]
-pub fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer, once: bool, boxed: &[nts_core::hir::BoxedParameter]) -> String {
+pub fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer, once: bool, bridging: &nts_core::hir::Bridging) -> String {
     let kind = if once { "Once" } else { "" };
-    // A bridge that boxes a parameter is another bridge than one that does
-    // not, for the same closure and signature.
+    // A bridge that converts a parameter -- boxes a record, makes an array --
+    // is another bridge than one that does not, for the same closure and
+    // signature.
     let mut name = format!("NtsBridge{kind}_{}_{}", c_identifier(target), signature.name);
-    for parameter in boxed {
+    for parameter in &bridging.boxed {
         name.push_str("_B");
         name.push_str(&parameter.at.to_string());
+    }
+    for array in &bridging.arrays {
+        name.push_str("_H");
+        name.push_str(&array.at.to_string());
     }
     name
 }

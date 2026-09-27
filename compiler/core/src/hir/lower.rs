@@ -12471,6 +12471,13 @@ fn representation_of(
             let rest = property_branded(snapshot, parts)?;
             representation_within(snapshot, rest, path, subst)?
         }
+        // An array of objects C hands a callback (`CHandles`, `Counted`): the
+        // array beside markers that are optional and never exist, so exactly
+        // the array. The markers are read where the bridge is made.
+        TypeKind::Intersection(_) if super::native::lent_handles_value(snapshot, ty).is_some() => {
+            let array = super::native::lent_handles_value(snapshot, ty)?;
+            representation_within(snapshot, array, path, subst)?
+        }
         // And one half of a `CBool` (`true & brand`): exactly a boolean, for
         // the same reason -- its brand is optional and never exists. A whole
         // `CBool` is the union of both, which the union arm above builds from
@@ -48125,7 +48132,7 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         id: NodeId,
         closure: ValueId,
-        (bridge, boxed): (&std::sync::Arc<super::native::FnPointer>, Vec<super::BoxedParameter>),
+        (bridge, bridging): (&std::sync::Arc<super::native::FnPointer>, super::Bridging),
         once: bool,
         want: HirType,
         origin: &Origin,
@@ -48141,7 +48148,7 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let bridged = self.push(
-            OpKind::NativeBridge { closure, signature: bridge.clone(), context: true, once, boxed },
+            OpKind::NativeBridge { closure, signature: bridge.clone(), context: true, once, bridging },
             HirType::NativePointer(super::native::Pointee::FnPointer(bridge.clone())),
             origin.clone(),
         );
@@ -48169,7 +48176,7 @@ impl<'a> FuncBuilder<'a> {
         let invoke = self.bridge_closure(
             id,
             closure,
-            (&bridge, Vec::new()),
+            (&bridge, super::Bridging::default()),
             false,
             HirType::NativePointer(super::native::Pointee::FnPointer(bridge.clone())),
             origin,
@@ -48298,7 +48305,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a `Delegate` whose interface ID is not 8-4-4-4-12 hexadecimal digits"));
         }
         let pointer = HirType::NativePointer(super::native::Pointee::Void);
-        let invoke = self.bridge_closure(id, closure, (&bridge, Vec::new()), false, pointer.clone(), origin)?;
+        let invoke = self.bridge_closure(id, closure, (&bridge, super::Bridging::default()), false, pointer.clone(), origin)?;
         let adapter = self.push(OpKind::DelegateInvoke { signature }, pointer.clone(), origin.clone());
         let context = self.runtime_call("nts_closure_lend", vec![closure], pointer.clone(), origin.clone());
         let [low, high] = self.iid_arguments(iid, origin);
@@ -48665,11 +48672,11 @@ impl<'a> FuncBuilder<'a> {
                     lent.push(Lent::String { string, pointer, encoding });
                     c_args.push(pointer);
                 }
-                Role::Closure { lifetime, bridge, boxed } => {
+                Role::Closure { lifetime, bridge, bridging } => {
                     let Some(closure) = argument else { continue };
                     let want = target.parameters[at].representation();
                     let once = lifetime == super::native::Lifetime::Once;
-                    c_args.push(self.bridge_closure(id, closure, (&bridge, boxed), once, want, &origin)?);
+                    c_args.push(self.bridge_closure(id, closure, (&bridge, bridging), once, want, &origin)?);
                     lending = Some((closure, lifetime));
                 }
                 Role::Block { bridge, signature } => c_args.extend(
@@ -48759,7 +48766,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(at);
         Ok(self.push(
-            OpKind::NativeBridge { closure: value, signature: signature.clone(), context: false, once: false, boxed: Vec::new() },
+            OpKind::NativeBridge { closure: value, signature: signature.clone(), context: false, once: false, bridging: super::Bridging::default() },
             HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
             origin,
         ))
@@ -48829,7 +48836,7 @@ impl<'a> FuncBuilder<'a> {
             // bridges existed -- a `void *` says nothing a wrong value would
             // contradict.
             *argument = self.push(
-                OpKind::NativeBridge { closure: *argument, signature: signature.clone(), context: false, once: false, boxed: Vec::new() },
+                OpKind::NativeBridge { closure: *argument, signature: signature.clone(), context: false, once: false, bridging: super::Bridging::default() },
                 HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
                 origin,
             );

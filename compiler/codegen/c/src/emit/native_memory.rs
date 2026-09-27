@@ -1,6 +1,6 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
-use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, value_name, native_prototype, native_function_type, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, virtual_signature, Spelling};
+use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, ManagedType, value_name, native_prototype, native_function_type, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, virtual_signature, Spelling};
 use std::fmt::Write as _;
 
 use nts_core::hir::Callee;
@@ -713,11 +713,11 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
     #[allow(clippy::type_complexity)]
     let mut wanted: std::collections::BTreeMap<
         String,
-        (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>, bool, Option<u32>, &[nts_core::hir::BoxedParameter]),
+        (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>, bool, Option<u32>, &nts_core::hir::Bridging),
     > = std::collections::BTreeMap::new();
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
-            let OpKind::NativeBridge { closure, signature, context, once, boxed } = &op.kind else { continue };
+            let OpKind::NativeBridge { closure, signature, context, once, bridging } = &op.kind else { continue };
             let layout = layout_of(program, &func.values[closure.0 as usize].ty, origin)?;
             let target = layout
                 .closure_call()
@@ -739,7 +739,9 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             // passes -- `() => count++` is a perfectly good handler for a signal
             // that passes the instance -- so C's extra trailing arguments are
             // accepted and dropped. More than C passes is the mismatch.
+            // An array's length is not one of them: it rides into its array.
             let foreign = signature.parameters.len() - usize::from(*context);
+            let foreign = (0..foreign).filter_map(|at| bridging.parameter(at)).count();
             if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
                 return Err(refuse("a callback bridge whose foreign signature and compiled function disagree about arity"));
             }
@@ -748,8 +750,8 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 return Err(refuse("a callback bridge with no context whose closure is not known here"));
             }
             wanted.insert(
-                bridge_name(target, signature, *once, boxed),
-                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout)), *once, dispatched, boxed.as_slice()),
+                bridge_name(target, signature, *once, bridging),
+                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout)), *once, dispatched, bridging),
             );
         }
     }
@@ -757,10 +759,10 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         return Ok(false);
     }
     let mut declared = std::collections::BTreeSet::new();
-    for (name, (signature, compiled, receiver, once, dispatched, boxed)) in &wanted {
+    for (name, (signature, compiled, receiver, once, dispatched, bridging)) in &wanted {
         // Each boxed parameter's `GType` function, declared once before the
         // first bridge that boxes by it.
-        for parameter in *boxed {
+        for parameter in &bridging.boxed {
             if declared.insert(parameter.get_type.clone()) {
                 writer.line(origin, format!("size_t {}(void);", parameter.get_type));
             }
@@ -784,12 +786,13 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             if receiver.is_none() && at == last {
                 continue;
             }
-            // Passed by C and not taken by the compiled function.
-            if at + 1 >= compiled.params.len() {
+            // An array's length, which its array reads; or passed by C and
+            // not taken by the compiled function.
+            let Some(parameter) = bridging.parameter(at) else { continue };
+            if parameter + 1 >= compiled.params.len() {
                 continue;
             }
-            let boxing = boxed.iter().find(|parameter| parameter.at as usize == at);
-            arguments.push(bridge_argument(program, compiled, (at, ty), boxing, (&mut copies, &mut releases))?);
+            arguments.push(bridge_argument(program, compiled, (at, parameter, ty), bridging, (&mut copies, &mut releases))?);
         }
         let parameters = if parameters.is_empty() { "void".to_owned() } else { parameters.join(", ") };
         let call = match dispatched {
@@ -832,17 +835,18 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 fn bridge_argument(
     program: &Program,
     compiled: &Func,
-    (at, ty): (usize, &nts_core::hir::native::Type),
-    boxing: Option<&nts_core::hir::BoxedParameter>,
+    (at, parameter, ty): (usize, usize, &nts_core::hir::native::Type),
+    bridging: &nts_core::hir::Bridging,
     (copies, releases): (&mut String, &mut String),
 ) -> Result<String, Diagnostic> {
     let slot = format!("a{at}");
+    let param = &compiled.params[parameter + 1];
     // The compiled function takes the managed representation -- a `number`
     // is a `double` there and an `int` here -- so each argument is converted
     // on the way in and the result on the way out. C's own conversions do the
     // work; what this supplies is the target type, which is the compiled
     // function's and not the foreign one's.
-    let want = c_type_of(program, &compiled.params[at + 1].ty, &compiled.params[at + 1].origin)?;
+    let want = c_type_of(program, &param.ty, &param.origin)?;
     // A boxed record C lends, in a box of the program's: a copy by its
     // `GType` (`cairo_reference` for a `cairo_t`), as a result is boxed. Under
     // reference counting the bridge owns this copy and releases it after the
@@ -853,15 +857,37 @@ fn bridge_argument(
     // release is the use-after-free. Without counting nothing is given back,
     // a box included: nothing counted a store either, and a release here
     // would run the box's free under a program that kept it.
-    if let Some(parameter) = boxing {
-        let _ = write!(copies, " {want} b{at} = ({want})nts_gobject_boxed_copy({slot}, {}());", parameter.get_type);
+    if let Some(boxed) = bridging.boxed(at) {
+        let _ = write!(copies, " {want} b{at} = ({want})nts_gobject_boxed_copy({slot}, {}());", boxed.get_type);
         if program.provider == nts_core::hir::Provider::ReferenceCounting {
             let _ = write!(releases, " nts_release((NtsHeader *)b{at});");
         }
         return Ok(format!("b{at}"));
     }
+    // C's array of objects and its length, as one array of the program's
+    // whose elements each hold a count of their own: C may free its array
+    // once the call returns. Given back after the call under counting, as a
+    // boxed copy is, for the same reason -- anything that keeps it counts it.
+    if let Some(array) = bridging.array(at) {
+        let HirType::Managed(ManagedType::Array(element)) = &param.ty else {
+            return Err(Diagnostic::error("NTS2006", "a callback's array of objects taken as something else", param.origin.location));
+        };
+        let counting = nts_codegen_common::counting::counted_element(element).ok_or_else(|| {
+            Diagnostic::error("NTS2006", "a callback's array of objects whose elements are not counted", param.origin.location)
+        })?;
+        let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
+        let _ = write!(
+            copies,
+            " {want} h{at} = ({want})nts_array_from_handles((void *const *){slot}, (uint32_t)a{}, &{descriptor});",
+            array.length_at
+        );
+        if program.provider == nts_core::hir::Provider::ReferenceCounting {
+            let _ = write!(releases, " nts_release((NtsHeader *)h{at});");
+        }
+        return Ok(format!("h{at}"));
+    }
     // A string C lends: copied in for the call, given back after it.
-    if nts_core::hir::native::lent_string(ty, &compiled.params[at + 1].ty) {
+    if nts_core::hir::native::lent_string(ty, &param.ty) {
         let _ = write!(copies, " NtsString *s{at} = nts_string_from_cstring({slot});");
         let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
         return Ok(format!("s{at}"));

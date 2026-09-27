@@ -366,7 +366,7 @@ pub enum Role {
     ///
     /// `boxed`: the callback's parameters that are boxed records, which the
     /// bridge boxes (`OpKind::NativeBridge`).
-    Closure { lifetime: Lifetime, bridge: std::sync::Arc<FnPointer>, boxed: Vec<super::BoxedParameter> },
+    Closure { lifetime: Lifetime, bridge: std::sync::Arc<FnPointer>, bridging: super::Bridging },
     /// A TypeScript function as an Objective-C block (`Block<F>`): one C
     /// parameter, the block's address. `bridge` is the trampoline's type,
     /// `signature` with the context after it; `signature` is the block's own.
@@ -1712,32 +1712,7 @@ impl Type {
             // point where it would have been emitted.
             TypeKind::Function(id) => {
                 let signature = snapshot.signatures.get(id.0 as usize)?;
-                // A rest parameter of a fixed tuple is its elements, which is
-                // what TypeScript means by it: `(self: S, ...args: [by: number])`
-                // is a handler taking `self` and a `double`, the shape a signal
-                // map (`WithSignals`) instantiates to. A rest of an array has no
-                // fixed arity for C to call with, and stays refused.
-                let mut parameters = Vec::with_capacity(signature.parameters.len());
-                for parameter in &signature.parameters {
-                    match &snapshot.types.get(parameter.ty.0 as usize)?.kind {
-                        TypeKind::Tuple(elements) if parameter.rest => {
-                            for element in elements {
-                                if is_c_string_parameter(snapshot, *element) {
-                                    parameters.push(Encoding::Utf8.c_type());
-                                } else {
-                                    parameters.push(abi_type(snapshot, *element)?);
-                                }
-                            }
-                        }
-                        _ if parameter.rest => return None,
-                        // A `string` C passes a callback, lent for the call: its
-                        // `const char *`, which the bridge copies into a string
-                        // and gives back after. A `string` a callback *returns*
-                        // has an owner nothing here can name, and stays refused.
-                        _ if is_c_string_parameter(snapshot, parameter.ty) => parameters.push(Encoding::Utf8.c_type()),
-                        _ => parameters.push(abi_type(snapshot, parameter.ty)?),
-                    }
-                }
+                let (parameters, _) = callback_slots(snapshot, signature)?;
                 let result = abi_type(snapshot, signature.return_type)?;
                 // A callback taking or returning a record by value would need
                 // its bridge to do what a call does here; nothing does yet.
@@ -1792,6 +1767,69 @@ pub fn lent_ns_string(foreign: &Type, compiled: &super::HirType) -> bool {
 #[must_use]
 pub fn answered_ns_string(foreign: &Type, compiled: &super::HirType) -> bool {
     lent_ns_string(foreign, compiled)
+}
+
+/// A callback's C parameters, read from its TypeScript signature, and what
+/// its bridge converts among them (`Bridging`): the one derivation of both,
+/// so the C signature and the bridge cannot disagree about which argument
+/// is which.
+///
+/// - A rest parameter of a fixed tuple is its elements, which is what
+///   TypeScript means by it: `(self: S, ...args: [by: number])` is a handler
+///   taking `self` and a `double`, the shape a signal map (`WithSignals`)
+///   instantiates to. A rest of an array has no fixed arity for C to call
+///   with, and stays refused.
+/// - A `string` C passes a callback, lent for the call: its `const char *`,
+///   which the bridge copies into a string and gives back after. A `string`
+///   a callback *returns* has an owner nothing here can name, and stays
+///   refused.
+/// - A boxed record: C's pointer to it, which the bridge boxes.
+/// - An array of objects (`CHandles`, `Counted`): C's array and its length,
+///   two C parameters, which the bridge makes one array of.
+fn callback_slots(
+    snapshot: &SemanticSnapshot,
+    signature: &nts_semantic_schema::SignatureRecord,
+) -> Option<(Vec<Type>, super::Bridging)> {
+    let mut parameters = Vec::with_capacity(signature.parameters.len());
+    let mut bridging = super::Bridging::default();
+    let one = |parameters: &mut Vec<Type>, bridging: &mut super::Bridging, ty: TypeId| -> Option<()> {
+        let at = u32::try_from(parameters.len()).ok()?;
+        if is_c_string_parameter(snapshot, ty) {
+            parameters.push(Encoding::Utf8.c_type());
+        } else if let Some(array) = native_array(snapshot, ty).filter(|array| array.role == Role::Handles) {
+            let slots = array_slots(snapshot, "a callback", "an array", &array, parameters.len()).ok()?;
+            let (mut elements, mut length) = (None, None);
+            for (offset, (c, role)) in slots.into_iter().enumerate() {
+                let slot = at + u32::try_from(offset).ok()?;
+                match role {
+                    Role::Handles => elements = Some(slot),
+                    Role::Length { .. } => length = Some(slot),
+                    _ => return None,
+                }
+                parameters.push(c);
+            }
+            // Only a counted one: C says how long by nothing else.
+            bridging.arrays.push(super::HandleArrayParameter { at: elements?, length_at: length? });
+        } else {
+            if let Some(record) = schema::boxed(snapshot, ty) {
+                bridging.boxed.push(super::BoxedParameter { at, get_type: record.get_type });
+            }
+            parameters.push(abi_type(snapshot, ty)?);
+        }
+        Some(())
+    };
+    for parameter in &signature.parameters {
+        match &snapshot.types.get(parameter.ty.0 as usize)?.kind {
+            TypeKind::Tuple(elements) if parameter.rest => {
+                for element in elements {
+                    one(&mut parameters, &mut bridging, *element)?;
+                }
+            }
+            _ if parameter.rest => return None,
+            _ => one(&mut parameters, &mut bridging, parameter.ty)?,
+        }
+    }
+    Some((parameters, bridging))
 }
 
 /// `string` or `string | null`: what a callback's bridge reads from a lent
@@ -2105,23 +2143,18 @@ pub(crate) fn listener_delegate(snapshot: &SemanticSnapshot, ty: TypeId) -> Resu
     }
 }
 
-/// The parameters of the callback type `function` that are boxed records
-/// (`schema::boxed`), each at its index among the callback's C parameters,
-/// which are the function's own in order.
-fn boxed_parameters(snapshot: &SemanticSnapshot, function: TypeId) -> Vec<super::BoxedParameter> {
+/// What the bridge of the callback type `function` converts among its C
+/// parameters (`callback_slots`), which are the function's own in order.
+fn bridging_of(snapshot: &SemanticSnapshot, function: TypeId) -> super::Bridging {
     let Some(TypeKind::Function(signature)) = snapshot.types.get(function.0 as usize).map(|record| &record.kind) else {
-        return Vec::new();
+        return super::Bridging::default();
     };
-    let Some(signature) = snapshot.signatures.get(signature.0 as usize) else { return Vec::new() };
-    signature
-        .parameters
-        .iter()
-        .enumerate()
-        .filter_map(|(at, parameter)| {
-            let record = schema::boxed(snapshot, parameter.ty)?;
-            Some(super::BoxedParameter { at: u32::try_from(at).ok()?, get_type: record.get_type })
-        })
-        .collect()
+    snapshot
+        .signatures
+        .get(signature.0 as usize)
+        .and_then(|signature| callback_slots(snapshot, signature))
+        .map(|(_, bridging)| bridging)
+        .unwrap_or_default()
 }
 
 /// The C parameters one `Closure<F>` or `ScopedClosure<F>` becomes: the
@@ -2174,8 +2207,8 @@ fn closure_slots(
             Type::FnPointer(bridge.clone())
         }
     };
-    let boxed = boxed_parameters(snapshot, function);
-    let mut slots = vec![(slot, Role::Closure { lifetime, bridge, boxed }), (context.clone(), Role::ClosureData)];
+    let bridging = bridging_of(snapshot, function);
+    let mut slots = vec![(slot, Role::Closure { lifetime, bridge, bridging }), (context.clone(), Role::ClosureData)];
     match kind {
         ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Block | ClosureKind::Delegate(_) => {}
         ClosureKind::Retained => slots.push((
@@ -2415,6 +2448,8 @@ struct NativeArray {
     nullable: bool,
     /// The length slot's C type, and whether it comes after the array.
     count: Option<(TypeId, bool)>,
+    /// The part the markers are intersected with: the array itself.
+    value: TypeId,
 }
 
 /// The argument's representation where a parameter is `CStrings`, `CBytes`
@@ -2422,6 +2457,13 @@ struct NativeArray {
 /// the markers have none.
 pub(crate) fn native_array_argument(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType> {
     native_array(snapshot, ty).map(|array| array.managed)
+}
+
+/// The array a `CHandles` type is, beside its markers: what a callback that
+/// C hands an array of objects (`nts_array_from_handles`) takes it as. The
+/// markers are optional and never exist, so the value is exactly the array.
+pub(crate) fn lent_handles_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<TypeId> {
+    native_array(snapshot, ty).filter(|array| array.role == Role::Handles && !array.nullable).map(|array| array.value)
 }
 
 /// Whether a parameter is `CHandles`: an array of handles C is lent as its
@@ -2544,7 +2586,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         (None, None, None, Some(spelling)) => handles_array(snapshot, value, &spelling)?,
         _ => return None,
     };
-    Some(NativeArray { role, managed, c, nullable, count: count.map(|ty| (ty, after)) })
+    Some(NativeArray { role, managed, c, nullable, count: count.map(|ty| (ty, after)), value })
 }
 
 /// A typed array's elements (`CElements<A, Q>`), spelled as C spells them:

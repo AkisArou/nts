@@ -54,6 +54,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_array_extend_ref", &[None, None], None),
     ("nts_array_fill", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_array_fill_bool", &[None, Some(HirType::Bool)], None),
+    ("nts_array_from_handles", &[None, Some(HirType::Int { bits: 32, signed: false }), None], None),
     ("nts_array_handles", &[None], None),
     ("nts_array_includes", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Bool)),
     ("nts_array_includes_ref", &[None, None], Some(HirType::Bool)),

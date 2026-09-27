@@ -240,6 +240,10 @@ pub(crate) enum Shape {
     Length { value: String },
 }
 
+/// A signal's handler parameters as TypeScript spells them, and the named
+/// parameters its `emit` form takes.
+type SignalParameters = (Vec<String>, Vec<(String, Mapped)>);
+
 /// Why something was not bound. Counted, so the most common one is the next
 /// thing to build.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -1770,6 +1774,75 @@ impl<'a> Mapper<'a> {
         }
     }
 
+    /// A signal's handler parameters as TypeScript declares them -- `self`
+    /// first -- and as the `emit` form takes them (`SignalParameters`).
+    fn signal_parameters(&mut self, signal: &super::model::Signal, local: &str) -> Result<SignalParameters, Reason> {
+        let mut ts_parameters = vec![format!("self: {local}")];
+        let mut emitted = Vec::new();
+        // GIR gives a signal's parameters no C type; each spelled from its
+        // name, for an array's length to be read at.
+        let spelled: Vec<Param> = signal.signature.parameters.iter().map(|param| self.with_c_type(param)).collect();
+        // An array's length rides in its array (`Counted`), not as a
+        // parameter of its own.
+        let lengths: Vec<usize> = signal
+            .signature
+            .parameters
+            .iter()
+            .filter_map(|param| match &param.ty {
+                TypeRef::Array(array) => array.length,
+                _ => None,
+            })
+            .collect();
+        for (at, param) in signal.signature.parameters.iter().enumerate() {
+            if lengths.contains(&at) {
+                continue;
+            }
+            // A slot the handler writes -- `GtkSpinButton::input`'s `gdouble
+            // *new_value`, `GtkOverlay::get-child-position`'s caller-allocated
+            // rectangle, `GtkEditable::insert-text`'s `gint *position`. GIR
+            // gives a signal's parameters no C type, so the one `with_c_type`
+            // spells from the name has no `*`: the handler was declared taking
+            // a `double` where C passes a pointer, and a boxed one was copied,
+            // so whatever it wrote never reached C. Refused until a handler
+            // can answer them, as GJS's returns them. The rule behind it: a
+            // signal parameter's missing `c:type` is unknown, not a default --
+            // what `with_c_type` spells is a guess that holds only for `in`.
+            if param.direction != Direction::In {
+                return Err(Reason::OutParameter);
+            }
+            // A UTF-8 string GLib passes the handler, lent for the call: the
+            // handler's bridge copies it (`native::abi_type`). A `filename`
+            // is in the file system's encoding, which a `string` is not.
+            if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8") {
+                let ts = if param.nullable { "string | null" } else { "string" };
+                ts_parameters.push(format!("{}: {ts}", identifier(&param.name)));
+                let c = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))));
+                emitted.push((identifier(&param.name), Mapped { shape: Shape::Other, ts: ts.to_owned(), c }));
+                continue;
+            }
+            if matches!(&param.ty, TypeRef::Named { name, .. } if name == "filename") {
+                return Err(Reason::StringInCallback);
+            }
+            // An array of objects and its length: `GApplication::open`'s
+            // `GFile **files, gint n_files`. GIR spells it `gpointer`, the
+            // value the signal marshals; the handler is passed the array's
+            // address, `gpointer *`, which is what the bridge declares.
+            if let TypeRef::Array(array) = &param.ty {
+                let array = super::model::ArrayRef { c_type: Some("gpointer*".to_owned()), ..array.clone() };
+                let mapped = self.array_parameter(param, &array, at, &spelled)?;
+                ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
+                emitted.push((identifier(&param.name), mapped));
+                continue;
+            }
+            let param = self.with_c_type(param);
+            let mapped = self.typed(&param)?;
+            let mapped = self.truth(&param, mapped);
+            ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
+            emitted.push((identifier(&param.name), mapped));
+        }
+        Ok((ts_parameters, emitted))
+    }
+
     /// A typed view of `g_signal_connect_data` for one signal of one class:
     ///
     /// ```text
@@ -1806,39 +1879,7 @@ impl<'a> Mapper<'a> {
         let prefix = class.symbol_prefix.as_deref().ok_or(Reason::NoSymbol)?;
         let local = c_type.clone();
         self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "CNumber"]);
-        let mut ts_parameters = vec![format!("self: {local}")];
-        let mut emitted = Vec::new();
-        for param in &signal.signature.parameters {
-            // A slot the handler writes -- `GtkSpinButton::input`'s `gdouble
-            // *new_value`, `GtkOverlay::get-child-position`'s caller-allocated
-            // rectangle, `GtkEditable::insert-text`'s `gint *position`. GIR
-            // gives a signal's parameters no C type, so the one `with_c_type`
-            // spells from the name has no `*`: the handler was declared taking
-            // a `double` where C passes a pointer, and a boxed one was copied,
-            // so whatever it wrote never reached C. Refused until a handler
-            // can answer them, as GJS's returns them.
-            if param.direction != Direction::In {
-                return Err(Reason::OutParameter);
-            }
-            // A UTF-8 string GLib passes the handler, lent for the call: the
-            // handler's bridge copies it (`native::abi_type`). A `filename`
-            // is in the file system's encoding, which a `string` is not.
-            if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8") {
-                let ts = if param.nullable { "string | null" } else { "string" };
-                ts_parameters.push(format!("{}: {ts}", identifier(&param.name)));
-                let c = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))));
-                emitted.push((identifier(&param.name), Mapped { shape: Shape::Other, ts: ts.to_owned(), c }));
-                continue;
-            }
-            if matches!(&param.ty, TypeRef::Named { name, .. } if name == "filename") {
-                return Err(Reason::StringInCallback);
-            }
-            let param = self.with_c_type(param);
-            let mapped = self.typed(&param)?;
-            let mapped = self.truth(&param, mapped);
-            ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
-            emitted.push((identifier(&param.name), mapped));
-        }
+        let (ts_parameters, emitted) = self.signal_parameters(signal, &local)?;
         let result = match &signal.signature.result.ty {
             TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
             TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => return Err(Reason::StringInCallback),

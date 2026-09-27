@@ -1172,12 +1172,12 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
     let mut declared = false;
     for func in &program.funcs {
         for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| func.value(*value)) {
-            let OpKind::NativeBridge { closure, signature, context, once, boxed } = &op.kind else { continue };
+            let OpKind::NativeBridge { closure, signature, context, once, bridging } = &op.kind else { continue };
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
                 .closure_call()
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
-            let name = nts_codegen_common::symbols::bridge_name(target, signature, *once, boxed);
+            let name = nts_codegen_common::symbols::bridge_name(target, signature, *once, bridging);
             if !seen.insert(name.clone()) {
                 continue;
             }
@@ -1186,16 +1186,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 out.push_str("declare void @nts_callback_enter()\n");
                 out.push_str("declare void @nts_callback_leave()\n");
             }
-            // Each boxed parameter's `GType` function, once, unless the
-            // program declares it by calling it: LLVM refuses a second.
-            for parameter in boxed {
-                let called = program.funcs.iter().flat_map(|f| &f.values).any(|op| {
-                    matches!(&op.kind, OpKind::Call { callee: Callee::Native(t), .. } if t.name == parameter.get_type)
-                });
-                if !called && types.insert(parameter.get_type.clone()) {
-                    let _ = writeln!(out, "declare i64 @{}()", parameter.get_type);
-                }
-            }
+            declare_types(program, bridging, &mut types, &mut out);
             let compiled = program
                 .funcs
                 .iter()
@@ -1209,7 +1200,9 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             // count++` handles a signal that passes the instance -- so C's
             // extra trailing arguments are accepted and dropped. More is the
             // mismatch.
+            // An array's length is not one of them: it rides into its array.
             let foreign = signature.parameters.len() - usize::from(*context);
+            let foreign = (0..foreign).filter_map(|at| bridging.parameter(at)).count();
             if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
                 return Err(refuse(func, "a callback bridge whose foreign signature and compiled function disagree about arity"));
             }
@@ -1228,16 +1221,25 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             let mut releases = String::new();
             for (at, foreign) in signature.parameters.iter().enumerate() {
                 let from = foreign.abi(platform.abi);
-                // The context, which became the receiver, and any argument C
-                // passes that the compiled function does not take.
-                if (*context && at == last) || at + 1 >= compiled.params.len() {
-                    parameters.push(format!("{} %a{at}", ty_of(&from, compiled)?));
+                parameters.push(format!("{} %a{at}", ty_of(&from, compiled)?));
+                // The context, which became the receiver; an array's length,
+                // which its array reads; and any argument C passes that the
+                // compiled function does not take.
+                let Some(parameter) = bridging.parameter(at).filter(|_| !(*context && at == last)) else { continue };
+                if parameter + 1 >= compiled.params.len() {
                     continue;
                 }
-                parameters.push(format!("{} %a{at}", ty_of(&from, compiled)?));
-                let boxing = boxed.iter().find(|parameter| parameter.at as usize == at);
                 let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
-                let passed = bridge_argument(compiled, (at, foreign, from), (boxing, counted), (&mut body, &mut releases))?;
+                let length = bridging.array(at).map(|array| {
+                    let at = array.length_at as usize;
+                    (at, signature.parameters[at].abi(platform.abi))
+                });
+                let passed = bridge_argument(
+                    compiled,
+                    (at, parameter, foreign, from),
+                    (bridging.boxed(at), length, counted),
+                    (&mut body, &mut releases),
+                )?;
                 arguments.push(passed);
             }
             let want = signature.result.abi(platform.abi);
@@ -1288,13 +1290,26 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
 /// C's value converted, a string C lends copied in, or a boxed record C lends
 /// boxed. What the conversion needs goes into `body`, what gives it back after
 /// the call into `releases`.
+/// Each boxed parameter's `GType` function, once, unless the program declares
+/// it by calling it: LLVM refuses a second.
+fn declare_types(program: &Program, bridging: &nts_core::hir::Bridging, types: &mut std::collections::BTreeSet<String>, out: &mut String) {
+    for parameter in &bridging.boxed {
+        let called = program.funcs.iter().flat_map(|f| &f.values).any(|op| {
+            matches!(&op.kind, OpKind::Call { callee: Callee::Native(t), .. } if t.name == parameter.get_type)
+        });
+        if !called && types.insert(parameter.get_type.clone()) {
+            let _ = writeln!(out, "declare i64 @{}()", parameter.get_type);
+        }
+    }
+}
+
 fn bridge_argument(
     compiled: &Func,
-    (at, foreign, from): (usize, &nts_core::hir::native::Type, HirType),
-    (boxing, counted): (Option<&nts_core::hir::BoxedParameter>, bool),
+    (at, parameter, foreign, from): (usize, usize, &nts_core::hir::native::Type, HirType),
+    (boxing, length, counted): (Option<&nts_core::hir::BoxedParameter>, Option<(usize, HirType)>, bool),
     (body, releases): (&mut String, &mut String),
 ) -> Result<String, Diagnostic> {
-    let to = compiled.params[at + 1].ty.clone();
+    let to = compiled.params[parameter + 1].ty.clone();
     let (from_ty, to_ty) = (ty_of(&from, compiled)?, ty_of(&to, compiled)?);
     // A boxed record C lends, in a box of the program's: a copy by its
     // `GType`, as the C bridge makes. Under reference counting the bridge owns
@@ -1308,6 +1323,29 @@ fn bridge_argument(
             let _ = writeln!(releases, "  call void @nts_release(ptr %b{at})");
         }
         return Ok(format!("ptr %b{at}"));
+    }
+    // C's array of objects and its length, as one array of the program's, as
+    // the C bridge makes it; given back after the call under counting.
+    if let Some((length_at, length_ty)) = length {
+        let HirType::Managed(nts_core::hir::ManagedType::Array(element)) = &to else {
+            return Err(Diagnostic::error("NTS2006", "a callback's array of objects taken as something else", compiled.origin.location));
+        };
+        let counting = nts_codegen_common::counting::counted_element(element).ok_or_else(|| {
+            Diagnostic::error("NTS2006", "a callback's array of objects whose elements are not counted", compiled.origin.location)
+        })?;
+        let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
+        let wide = ty_of(&length_ty, compiled)?;
+        let count = if wide == "i32" {
+            format!("%a{length_at}")
+        } else {
+            let _ = writeln!(body, "  %n{at} = trunc {wide} %a{length_at} to i32");
+            format!("%n{at}")
+        };
+        let _ = writeln!(body, "  %h{at} = call ptr @nts_array_from_handles(ptr %a{at}, i32 {count}, ptr @{descriptor})");
+        if counted {
+            let _ = writeln!(releases, "  call void @nts_release(ptr %h{at})");
+        }
+        return Ok(format!("ptr %h{at}"));
     }
     // A string C lends: copied in for the call, given back after it, as the C
     // bridge does.
@@ -1785,6 +1823,8 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     // (`Unerase`), for the same reason as the rest of this list.
     // A boxed record a callback's bridge boxes (`bridge_argument`), in raw IR.
     "nts_gobject_boxed_copy",
+    // And an array of objects it makes from C's, likewise.
+    "nts_array_from_handles",
     "nts_handle_check",
     // The growing pair, here for the reason the view trio is: `index_lines`
     // writes the call as raw IR, so `externals` -- which reads `OpKind::Call` --
@@ -2813,14 +2853,14 @@ fn allocation(
         // A bridge's address is its symbol. `getelementptr i8, ptr @f, i64 0` for
         // the same reason the static closure below uses one: a value needs a
         // name, and there is no no-op cast between two `ptr`s.
-        OpKind::NativeBridge { closure, signature, once, boxed, .. } => {
+        OpKind::NativeBridge { closure, signature, once, bridging, .. } => {
             let layout = closure_layout(program, func, *closure)?;
             let target = layout
                 .closure_call()
                 .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
             format!(
                 "{out} = getelementptr i8, ptr @{}, i64 0",
-                nts_codegen_common::symbols::bridge_name(target, signature, *once, boxed)
+                nts_codegen_common::symbols::bridge_name(target, signature, *once, bridging)
             )
         }
         OpKind::NativeBlock { invoke, context, signature } => objc::block(&out, *invoke, *context, signature),
