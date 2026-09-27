@@ -97,6 +97,37 @@ for path in "$@"; do
   git ls-files --error-unmatch -- "$path" > /dev/null 2>&1 || git add -N -- "$path"
 done
 
+# **And an untracked file under a named path is refused, not added.**
+#
+# The loop above only fires for a path git does not know at all. A *directory*
+# that holds any tracked file is known, so it never fired for one -- and
+# `git commit -- <dir>` then takes the tracked changes and leaves the new files
+# behind, silently. That happened on 2026-09-28: `runtime/node/dns` landed without
+# three files, so a committed `main.ts` imported a `./resolver.ts` that did not
+# exist and a header declared natives with no C. Main was broken for every lane
+# until the follow-up, and nothing in the commit said so.
+#
+# **Refused rather than added, and that is the safer half of a real tension.** This
+# script already commits a *tracked* modification a peer left in a path you name,
+# and its header says so -- the remedy being `git diff <path>` first. Extending
+# that to untracked files would sweep a peer's scratch file out of a directory you
+# happened to name, and `git diff` cannot warn you about a file it has nothing to
+# diff. So the author is told, and names them or moves them.
+#
+# After the `add -N` above, deliberately: a directory that is *entirely* new has
+# just been registered whole and has nothing left untracked, which is the ordinary
+# case for a new example or fixture. What is left is the mixed directory, which is
+# the one that loses files.
+for path in "$@"; do
+  new=$(git ls-files --others --exclude-standard -- "$path")
+  [ -n "$new" ] || continue
+  echo "commit-mine: REFUSING -- untracked file(s) under $path that this commit would leave behind:" >&2
+  printf '%s\n' "$new" | while IFS= read -r file; do echo "    $file" >&2; done
+  echo "  Name them too if they are yours; move them aside if they are not. A" >&2
+  echo "  partial commit takes tracked changes only, so a directory is not a net." >&2
+  exit 1
+done
+
 # Clippy before the commit, not after the floor.
 #
 # The gate is a serialised shared resource: three sessions queue on it, and a
