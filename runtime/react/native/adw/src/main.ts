@@ -23,6 +23,11 @@
 //             ViewStack's visibleChildName, applied before its pages existed,
 //             shows the page it names; a title updates in place; switched from
 //             GTK's side, the controlled page goes back to the props' one
+//   switcher  a ViewSwitcher's `stack` names the ViewStack rendered beside it,
+//             and removing the prop unsets it
+//   split     a NavigationSplitView's Sidebar and Content slot elements fill
+//             its pages with the NavigationPages they hold; taken out, the
+//             sidebar is empty
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window, and taken out it closes
 //   unknown   a root without the adw set creates no Adw widget
@@ -36,9 +41,11 @@ import {
   AdwApplicationWindow,
   AdwEntryRow,
   AdwHeaderBar,
+  AdwNavigationSplitView,
   AdwPreferencesGroup,
   AdwToolbarView,
   AdwViewStack,
+  AdwViewSwitcher,
   AdwWindow,
 } from "c:Adw-1";
 import { ApplicationFlags } from "c:Gio-2.0";
@@ -224,6 +231,34 @@ function main(): void {
     viewing += " switched=" + String(views.get_visible_child_name());
   }
   react_gtk_log("viewstack " + viewing);
+
+  const switcher = createInstance("AdwViewSwitcher", { stack: stackWidget }, root, 0, {});
+  const switcherWidget = widget(switcher);
+  let switching = "not a view switcher";
+  if (switcherWidget instanceof AdwViewSwitcher) {
+    switching = String(switcherWidget.get_stack() === stackWidget);
+    commitUpdate(switcher, "AdwViewSwitcher", { stack: stackWidget }, {}, {});
+    switching += " " + String(switcherWidget.get_stack() === null);
+  }
+  react_gtk_log("switcher " + switching);
+
+  const split = createInstance("AdwNavigationSplitView", {}, root, 0, {});
+  const sidebar = createInstance("AdwNavigationSplitView.Sidebar", {}, root, 0, {});
+  const splitContent = createInstance("AdwNavigationSplitView.Content", {}, root, 0, {});
+  const folders = createInstance("AdwNavigationPage", { title: "Folders" }, root, 0, {});
+  const inbox = createInstance("AdwNavigationPage", { title: "Inbox" }, root, 0, {});
+  appendInitialChild(sidebar, folders);
+  appendInitialChild(splitContent, inbox);
+  appendInitialChild(split, sidebar);
+  appendInitialChild(split, splitContent);
+  const splitWidget = widget(split);
+  let splitting = "not a split view";
+  if (splitWidget instanceof AdwNavigationSplitView) {
+    splitting = String(splitWidget.get_sidebar() === widget(folders)) + " " + String(splitWidget.get_content() === widget(inbox));
+    removeChild(split, sidebar);
+    splitting += " " + String(splitWidget.get_sidebar() === null);
+  }
+  react_gtk_log("split " + splitting);
 
   // A dialog is presented within a shown libadwaita window, as an app's is
   // (over a plain GtkWindow, libadwaita opens it as a window of its own).

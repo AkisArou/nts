@@ -30,6 +30,7 @@ import {
   AdwInlineViewSwitcher,
   type AdwInlineViewSwitcherDisplayMode,
   type AdwJustifyMode,
+  AdwLayout,
   type AdwLengthUnit,
   AdwMultiLayoutView,
   AdwNavigationPage,
@@ -56,6 +57,7 @@ import {
   AdwTabBar,
   AdwTabButton,
   AdwTabOverview,
+  AdwTabPage,
   AdwTabView,
   AdwToastOverlay,
   AdwToggleGroup,
@@ -362,12 +364,14 @@ export interface CarouselProps extends Gtk.WidgetProps {
 
 /** `<CarouselIndicatorDots>`'s props: AdwCarouselIndicatorDots's own properties and signals. */
 export interface CarouselIndicatorDotsProps extends Gtk.WidgetProps {
+  carousel?: AdwCarousel | null;
   orientation?: GtkOrientation;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
 
 /** `<CarouselIndicatorLines>`'s props: AdwCarouselIndicatorLines's own properties and signals. */
 export interface CarouselIndicatorLinesProps extends Gtk.WidgetProps {
+  carousel?: AdwCarousel | null;
   orientation?: GtkOrientation;
   onNotifyOrientation?: (value: GtkOrientation) => void;
 }
@@ -491,6 +495,7 @@ export interface InlineViewSwitcherProps extends Gtk.WidgetProps {
   canShrink?: boolean;
   displayMode?: AdwInlineViewSwitcherDisplayMode;
   homogeneous?: boolean;
+  stack?: AdwViewStack | null;
   orientation?: GtkOrientation;
   onNotifyCanShrink?: (value: boolean) => void;
   onNotifyDisplayMode?: (value: AdwInlineViewSwitcherDisplayMode) => void;
@@ -500,6 +505,7 @@ export interface InlineViewSwitcherProps extends Gtk.WidgetProps {
 
 /** `<MultiLayoutView>`'s props: AdwMultiLayoutView's own properties and signals. */
 export interface MultiLayoutViewProps extends Gtk.WidgetProps {
+  layout?: AdwLayout;
   layoutName?: string;
   onNotifyLayoutName?: (value: string | null) => void;
 }
@@ -581,6 +587,7 @@ export interface PasswordEntryRowProps extends EntryRowProps {
 /** `<PreferencesDialog>`'s props: AdwPreferencesDialog's own properties and signals. */
 export interface PreferencesDialogProps extends DialogProps {
   searchEnabled?: boolean;
+  visiblePage?: AdwPreferencesPage;
   visiblePageName?: string;
   onNotifySearchEnabled?: (value: boolean) => void;
   onNotifyVisiblePageName?: (value: string | null) => void;
@@ -725,6 +732,7 @@ export interface TabBarProps extends Gtk.WidgetProps {
   expandTabs?: boolean;
   extraDragPreload?: boolean;
   inverted?: boolean;
+  view?: AdwTabView | null;
   onNotifyAutohide?: (value: boolean) => void;
   onNotifyExpandTabs?: (value: boolean) => void;
   onNotifyExtraDragPreload?: (value: boolean) => void;
@@ -733,6 +741,7 @@ export interface TabBarProps extends Gtk.WidgetProps {
 
 /** `<TabButton>`'s props: AdwTabButton's own properties and signals. */
 export interface TabButtonProps extends Gtk.WidgetProps {
+  view?: AdwTabView | null;
   actionName?: string | null;
   onActivate?: () => void;
   onClicked?: () => void;
@@ -749,6 +758,7 @@ export interface TabOverviewProps extends Gtk.WidgetProps {
   secondaryMenu?: GMenuModel | null;
   showEndTitleButtons?: boolean;
   showStartTitleButtons?: boolean;
+  view?: AdwTabView | null;
   onNotifyEnableNewTab?: (value: boolean) => void;
   onNotifyEnableSearch?: (value: boolean) => void;
   onNotifyExtraDragPreload?: (value: boolean) => void;
@@ -762,6 +772,7 @@ export interface TabOverviewProps extends Gtk.WidgetProps {
 export interface TabViewProps extends Gtk.WidgetProps {
   defaultIcon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
   menuModel?: GMenuModel | null;
+  selectedPage?: AdwTabPage;
 }
 
 /** `<ToastOverlay>`'s props: AdwToastOverlay's own properties and signals. */
@@ -817,12 +828,14 @@ export interface ViewStackProps extends Gtk.WidgetProps {
 /** `<ViewSwitcher>`'s props: AdwViewSwitcher's own properties and signals. */
 export interface ViewSwitcherProps extends Gtk.WidgetProps {
   policy?: AdwViewSwitcherPolicy;
+  stack?: AdwViewStack | null;
   onNotifyPolicy?: (value: AdwViewSwitcherPolicy) => void;
 }
 
 /** `<ViewSwitcherBar>`'s props: AdwViewSwitcherBar's own properties and signals. */
 export interface ViewSwitcherBarProps extends Gtk.WidgetProps {
   reveal?: boolean;
+  stack?: AdwViewStack | null;
   onNotifyReveal?: (value: boolean) => void;
 }
 
@@ -830,6 +843,7 @@ export interface ViewSwitcherBarProps extends Gtk.WidgetProps {
 export interface ViewSwitcherSidebarProps extends Gtk.WidgetProps {
   filter?: GtkFilter | null;
   mode?: AdwSidebarMode;
+  stack?: AdwViewStack | null;
   onNotifyFilter?: (value: GtkFilter | null) => void;
   onNotifyMode?: (value: AdwSidebarMode) => void;
   onActivated?: () => void;
@@ -914,6 +928,12 @@ export interface HeaderBarSlots {
   readonly TitleWidget: HostComponent<"AdwHeaderBar.TitleWidget", Gtk.HostProps>;
 }
 
+/** `<NavigationSplitView>`'s slot elements: each holds one child, which fills AdwNavigationSplitView's property of that name. */
+export interface NavigationSplitViewSlots {
+  readonly Content: HostComponent<"AdwNavigationSplitView.Content", Gtk.HostProps>;
+  readonly Sidebar: HostComponent<"AdwNavigationSplitView.Sidebar", Gtk.HostProps>;
+}
+
 /** `<OverlaySplitView>`'s slot elements: each holds one child, which fills AdwOverlaySplitView's property of that name. */
 export interface OverlaySplitViewSlots {
   readonly Content: HostComponent<"AdwOverlaySplitView.Content", Gtk.HostProps>;
@@ -923,6 +943,11 @@ export interface OverlaySplitViewSlots {
 /** `<PreferencesGroup>`'s slot elements: each holds one child, which fills AdwPreferencesGroup's property of that name. */
 export interface PreferencesGroupSlots {
   readonly HeaderSuffix: HostComponent<"AdwPreferencesGroup.HeaderSuffix", Gtk.HostProps>;
+}
+
+/** `<PreferencesPage>`'s slot elements: each holds one child, which fills AdwPreferencesPage's property of that name. */
+export interface PreferencesPageSlots {
+  readonly Banner: HostComponent<"AdwPreferencesPage.Banner", Gtk.HostProps>;
 }
 
 /** `<Sidebar>`'s slot elements: each holds one child, which fills AdwSidebar's property of that name. */
@@ -1019,7 +1044,7 @@ export declare const MultiLayoutView: HostComponent<"AdwMultiLayoutView", MultiL
 export declare const NavigationPage: HostComponent<"AdwNavigationPage", NavigationPageProps>;
 
 /** `<NavigationSplitView>`: an AdwNavigationSplitView. */
-export declare const NavigationSplitView: HostComponent<"AdwNavigationSplitView", NavigationSplitViewProps>;
+export declare const NavigationSplitView: HostComponent<"AdwNavigationSplitView", NavigationSplitViewProps> & NavigationSplitViewSlots;
 
 /** `<NavigationView>`: an AdwNavigationView. */
 export declare const NavigationView: HostComponent<"AdwNavigationView", NavigationViewProps>;
@@ -1037,7 +1062,7 @@ export declare const PreferencesDialog: HostComponent<"AdwPreferencesDialog", Pr
 export declare const PreferencesGroup: HostComponent<"AdwPreferencesGroup", PreferencesGroupProps> & PreferencesGroupSlots;
 
 /** `<PreferencesPage>`: an AdwPreferencesPage. */
-export declare const PreferencesPage: HostComponent<"AdwPreferencesPage", PreferencesPageProps>;
+export declare const PreferencesPage: HostComponent<"AdwPreferencesPage", PreferencesPageProps> & PreferencesPageSlots;
 
 /** `<PreferencesRow>`: an AdwPreferencesRow. */
 export declare const PreferencesRow: HostComponent<"AdwPreferencesRow", PreferencesRowProps>;
@@ -1907,6 +1932,9 @@ export function carouselSignal(gtk: AdwCarousel, key: string, slot: SignalSlot):
 
 export function carouselIndicatorDotsProp(gtk: AdwCarouselIndicatorDots, key: string, value: unknown): boolean {
   switch (key) {
+    case "carousel":
+      gtk.set_carousel(value instanceof AdwCarousel ? value : null);
+      return true;
     case "orientation":
       gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
       return true;
@@ -1927,6 +1955,9 @@ export function carouselIndicatorDotsSignal(gtk: AdwCarouselIndicatorDots, key: 
 
 export function carouselIndicatorLinesProp(gtk: AdwCarouselIndicatorLines, key: string, value: unknown): boolean {
   switch (key) {
+    case "carousel":
+      gtk.set_carousel(value instanceof AdwCarousel ? value : null);
+      return true;
     case "orientation":
       gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
       return true;
@@ -2408,6 +2439,9 @@ export function inlineViewSwitcherProp(gtk: AdwInlineViewSwitcher, key: string, 
     case "homogeneous":
       gtk.set_homogeneous(typeof value === "boolean" ? value : false);
       return true;
+    case "stack":
+      gtk.set_stack(value instanceof AdwViewStack ? value : null);
+      return true;
     case "orientation":
       gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
       return true;
@@ -2443,6 +2477,9 @@ export function inlineViewSwitcherSignal(gtk: AdwInlineViewSwitcher, key: string
 
 export function multiLayoutViewProp(gtk: AdwMultiLayoutView, key: string, value: unknown): boolean {
   switch (key) {
+    case "layout":
+      if (value instanceof AdwLayout) gtk.set_layout(value);
+      return true;
     case "layoutName":
       gtk.set_layout_name(typeof value === "string" ? value : "");
       return true;
@@ -2731,6 +2768,9 @@ export function preferencesDialogProp(gtk: AdwPreferencesDialog, key: string, va
   switch (key) {
     case "searchEnabled":
       gtk.set_search_enabled(typeof value === "boolean" ? value : false);
+      return true;
+    case "visiblePage":
+      if (value instanceof AdwPreferencesPage) gtk.set_visible_page(value);
       return true;
     case "visiblePageName":
       gtk.set_visible_page_name(typeof value === "string" ? value : "");
@@ -3254,6 +3294,9 @@ export function tabBarProp(gtk: AdwTabBar, key: string, value: unknown): boolean
     case "inverted":
       gtk.set_inverted(typeof value === "boolean" ? value : false);
       return true;
+    case "view":
+      gtk.set_view(value instanceof AdwTabView ? value : null);
+      return true;
   }
   return Gtk.widgetProp(gtk, key, value);
 }
@@ -3286,6 +3329,9 @@ export function tabBarSignal(gtk: AdwTabBar, key: string, slot: SignalSlot): boo
 
 export function tabButtonProp(gtk: AdwTabButton, key: string, value: unknown): boolean {
   switch (key) {
+    case "view":
+      gtk.set_view(value instanceof AdwTabView ? value : null);
+      return true;
     case "actionName":
       gtk.set_action_name(typeof value === "string" ? value : null);
       return true;
@@ -3335,6 +3381,9 @@ export function tabOverviewProp(gtk: AdwTabOverview, key: string, value: unknown
       return true;
     case "showStartTitleButtons":
       gtk.set_show_start_title_buttons(typeof value === "boolean" ? value : true);
+      return true;
+    case "view":
+      gtk.set_view(value instanceof AdwTabView ? value : null);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3394,6 +3443,9 @@ export function tabViewProp(gtk: AdwTabView, key: string, value: unknown): boole
       return true;
     case "menuModel":
       gtk.set_menu_model(value instanceof GMenuModel ? value : null);
+      return true;
+    case "selectedPage":
+      if (value instanceof AdwTabPage) gtk.set_selected_page(value);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3588,6 +3640,9 @@ export function viewSwitcherProp(gtk: AdwViewSwitcher, key: string, value: unkno
     case "policy":
       gtk.set_policy(typeof value === "number" ? value as AdwViewSwitcherPolicy : 0 as AdwViewSwitcherPolicy);
       return true;
+    case "stack":
+      gtk.set_stack(value instanceof AdwViewStack ? value : null);
+      return true;
   }
   return Gtk.widgetProp(gtk, key, value);
 }
@@ -3607,6 +3662,9 @@ export function viewSwitcherBarProp(gtk: AdwViewSwitcherBar, key: string, value:
   switch (key) {
     case "reveal":
       gtk.set_reveal(typeof value === "boolean" ? value : false);
+      return true;
+    case "stack":
+      gtk.set_stack(value instanceof AdwViewStack ? value : null);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3630,6 +3688,9 @@ export function viewSwitcherSidebarProp(gtk: AdwViewSwitcherSidebar, key: string
       return true;
     case "mode":
       gtk.set_mode(typeof value === "number" ? value as AdwSidebarMode : 0 as AdwSidebarMode);
+      return true;
+    case "stack":
+      gtk.set_stack(value instanceof AdwViewStack ? value : null);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3868,6 +3929,30 @@ export function headerBarSlot(gtk: AdwHeaderBar, slot: string, widget: GtkWidget
   return false;
 }
 
+export function navigationSplitViewSlot(gtk: AdwNavigationSplitView, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "AdwNavigationSplitView.Content":
+      if (widget === null) {
+        gtk.set_content(null);
+      } else if (widget instanceof AdwNavigationPage) {
+        gtk.set_content(widget);
+      } else {
+        throw new Error("<NavigationSplitView.Content> holds a <NavigationPage>.");
+      }
+      return true;
+    case "AdwNavigationSplitView.Sidebar":
+      if (widget === null) {
+        gtk.set_sidebar(null);
+      } else if (widget instanceof AdwNavigationPage) {
+        gtk.set_sidebar(widget);
+      } else {
+        throw new Error("<NavigationSplitView.Sidebar> holds a <NavigationPage>.");
+      }
+      return true;
+  }
+  return false;
+}
+
 export function overlaySplitViewSlot(gtk: AdwOverlaySplitView, slot: string, widget: GtkWidget | null): boolean {
   switch (slot) {
     case "AdwOverlaySplitView.Content":
@@ -3884,6 +3969,21 @@ export function preferencesGroupSlot(gtk: AdwPreferencesGroup, slot: string, wid
   switch (slot) {
     case "AdwPreferencesGroup.HeaderSuffix":
       gtk.set_header_suffix(widget);
+      return true;
+  }
+  return false;
+}
+
+export function preferencesPageSlot(gtk: AdwPreferencesPage, slot: string, widget: GtkWidget | null): boolean {
+  switch (slot) {
+    case "AdwPreferencesPage.Banner":
+      if (widget === null) {
+        gtk.set_banner(null);
+      } else if (widget instanceof AdwBanner) {
+        gtk.set_banner(widget);
+      } else {
+        throw new Error("<PreferencesPage.Banner> holds a <Banner>.");
+      }
       return true;
   }
   return false;
@@ -4530,6 +4630,9 @@ export class AdwNavigationSplitViewNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return navigationSplitViewSignal(this.gtk, key, slot);
   }
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return navigationSplitViewSlot(this.gtk, slot, widget);
+  }
 }
 
 /** `<NavigationView>`: an AdwNavigationView. */
@@ -4733,6 +4836,9 @@ export class AdwPreferencesPageNode extends WidgetNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return preferencesPageSignal(this.gtk, key, slot);
+  }
+  fillSlot(slot: string, widget: GtkWidget | null): boolean {
+    return preferencesPageSlot(this.gtk, slot, widget);
   }
   // It only adds: a child inserted before another takes out what follows
   // and adds it again, so the order is React's.
@@ -5407,9 +5513,12 @@ export function createNode(type: string): HostNode | null {
     case "AdwBottomSheet.Content":
     case "AdwBottomSheet.Sheet":
     case "AdwHeaderBar.TitleWidget":
+    case "AdwNavigationSplitView.Content":
+    case "AdwNavigationSplitView.Sidebar":
     case "AdwOverlaySplitView.Content":
     case "AdwOverlaySplitView.Sidebar":
     case "AdwPreferencesGroup.HeaderSuffix":
+    case "AdwPreferencesPage.Banner":
     case "AdwSidebar.Placeholder":
     case "AdwTabBar.EndActionWidget":
     case "AdwTabBar.StartActionWidget":

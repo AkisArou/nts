@@ -416,6 +416,14 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   (`force_close`), as a window opens over its opener. libadwaita presents it
   within its own windows (AdwApplicationWindow, AdwWindow), and as a window
   of its own over a plain GtkWindow.
+- A prop typed as a particular widget class names another widget, as GTK's
+  StackSwitcher `stack` does: `<ViewSwitcher stack={viewStack}>`, a TabBar's
+  `view`, a carousel indicator's `carousel`. A few such props place a child
+  instead, and GIR types both the same way, so the generator lists them
+  (`typedSlots`): a NavigationSplitView's `<NavigationSplitView.Sidebar>` and
+  `<NavigationSplitView.Content>` hold a `<NavigationPage>` each, and a
+  PreferencesPage's `<PreferencesPage.Banner>` a `<Banner>`. A slot of that
+  kind refuses any other child, naming what it holds.
 - A container's subclasses take its elements (a SwitchRow is an ActionRow).
 - libadwaita's rows take children only through their groups (GtkListBoxRow's
   `set_child` would replace the row's own layout), and its windows only

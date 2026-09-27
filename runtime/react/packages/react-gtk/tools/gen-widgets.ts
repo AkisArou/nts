@@ -452,6 +452,8 @@ interface Slot {
   jsx: string; // StartChild
   hostType: string; // GtkPaned.StartChild
   setter: string; // set_start_child
+  /** The class the slot takes, where it takes one: AdwNavigationPage. */
+  holds?: string;
 }
 
 interface Signal {
@@ -574,6 +576,15 @@ const controlledProps = new Map([
 // window's titlebar): a slot element, whose child React parents.
 const widgetReferences = new Set(["mnemonic-widget", "default-widget", "focus-widget", "key-capture-widget", "visible-child"]);
 
+// A property typed as a particular widget class names another widget (a
+// StackSwitcher's `stack`, a window's `transientFor`, a TabBar's `view`),
+// except these, which place a child of that class: a slot element whose child
+// must be one. GIR types both the same way.
+const typedSlots = new Map([
+  ["Adw.NavigationSplitView", ["sidebar", "content"]],
+  ["Adw.PreferencesPage", ["banner"]],
+]);
+
 // Children arrive as React children, never as a prop.
 const childProps = new Set(["child"]);
 
@@ -656,7 +667,7 @@ function valueKind(type: string, bindings: Bindings, reference = false): ValueKi
   // An object the app makes and hands over: a model, an adjustment, a menu.
   // Not a widget, which React makes and an app would need a ref to; not a
   // boxed Pango type, a handle of another kind.
-  const object = /^((?:Gtk|Gdk|G)[A-Z]\w+)( \| null)?$/.exec(type);
+  const object = /^((?:Gtk|Gdk|G|Adw)[A-Z]\w+)( \| null)?$/.exec(type);
   // A boxed record the app makes and hands over: a colour, a font, a
   // rectangle. Its setter may take it as `Const<…>`; the app passes the record.
   const boxed = /^(?:Const<(\w+)>|(\w+))( \| null)?$/.exec(type);
@@ -682,6 +693,20 @@ function valueKind(type: string, bindings: Bindings, reference = false): ValueKi
     return { kind: "object", type: name, classes: implementers, nullable };
   }
   return null;
+}
+
+/**
+ * The class a property listed in `typedSlots` takes. The list is kept by
+ * hand, so a property that does not take a class or null (the bindings
+ * changed) fails the generator rather than making a slot that cannot be
+ * emptied.
+ */
+function typedSlotClass(where: string, type: string | undefined, bindings: Bindings): string {
+  const taken = /^(\w+) \| null$/.exec(type ?? "");
+  if (taken === null || !bindings.classes.has(taken[1]!)) {
+    throw new Error(`${where} is listed in typedSlots but takes ${type ?? "nothing it has a setter for"}, not a class or null.`);
+  }
+  return taken[1]!;
 }
 
 /**
@@ -798,7 +823,11 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
           continue;
         }
         const value = type === undefined ? null : valueKind(type, bindings, widgetReferences.has(p.name));
-        if (p.constructOnly) {
+        const holds = typedSlots.get(qualified(source))?.includes(p.name) === true ? typedSlotClass(where, type, bindings) : null;
+        if (holds !== null) {
+          const jsx = camel(`-${p.name}`);
+          slots.push({ jsx, hostType: `${ts}.${jsx}`, setter, holds });
+        } else if (p.constructOnly) {
           skip(`${where}\tconstruct-only: a change would need a new widget`);
         } else if (p.deprecated) {
           skip(`${where}\tdeprecated`);
@@ -1082,7 +1111,19 @@ function emit(m: Model, target: Target): string {
     line("  switch (slot) {");
     for (const slot of t.slots) {
       line(`    case "${slot.hostType}":`);
-      line(`      gtk.${slot.setter}(widget);`);
+      const holds = slot.holds;
+      if (holds === undefined) {
+        line(`      gtk.${slot.setter}(widget);`);
+      } else {
+        values.add(holds);
+        line("      if (widget === null) {");
+        line(`        gtk.${slot.setter}(null);`);
+        line(`      } else if (widget instanceof ${holds}) {`);
+        line(`        gtk.${slot.setter}(widget);`);
+        line("      } else {");
+        line(`        throw new Error("<${t.jsx}.${slot.jsx}> holds a <${holds.replace(/^[A-Z][a-z]+/, "")}>.");`);
+        line("      }");
+      }
       line("      return true;");
     }
     line("  }");

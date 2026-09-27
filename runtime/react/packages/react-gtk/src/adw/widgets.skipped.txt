@@ -24,8 +24,6 @@ AdwAboutWindow::activate-link	deprecated
 AdwActionRow.icon-name	deprecated
 AdwAlertDialog::response	no connect overload in the bindings
 AdwCarousel.scroll-params	a AdwSpringParams, which a JSX attribute does not carry yet
-AdwCarouselIndicatorDots.carousel	a AdwCarousel | null, which a JSX attribute does not carry yet
-AdwCarouselIndicatorLines.carousel	a AdwCarousel | null, which a JSX attribute does not carry yet
 AdwComboRow.expression	a GtkExpression | null, which a JSX attribute does not carry yet
 AdwEntryRow.attributes	a PangoAttrList | null, which a JSX attribute does not carry yet
 AdwEntryRow.input-hints	no setter in the bindings
@@ -44,7 +42,6 @@ AdwFlap.separator	deprecated
 AdwFlap.swipe-to-close	deprecated
 AdwFlap.swipe-to-open	deprecated
 AdwFlap.transition-type	deprecated
-AdwInlineViewSwitcher.stack	a AdwViewStack | null, which a JSX attribute does not carry yet
 AdwLayoutSlot.id	construct-only: a change would need a new widget
 AdwLeaflet.can-navigate-back	deprecated
 AdwLeaflet.can-navigate-forward	deprecated
@@ -64,13 +61,10 @@ AdwMessageDialog.extra-child	deprecated
 AdwMessageDialog.heading	deprecated
 AdwMessageDialog.heading-use-markup	deprecated
 AdwMessageDialog::response	deprecated
-AdwMultiLayoutView.layout	a AdwLayout, which a JSX attribute does not carry yet
-AdwNavigationSplitView.content	a AdwNavigationPage | null, which a JSX attribute does not carry yet
-AdwNavigationSplitView.sidebar	a AdwNavigationPage | null, which a JSX attribute does not carry yet
+AdwMultiLayoutView.layout	removing it leaves its value: GIR gives no default
 AdwNavigationView::get-next-page	its handler returns a AdwNavigationPage | null: not generated yet
 AdwNavigationView::popped	a handler argument JSX cannot type yet: AdwNavigationPage
-AdwPreferencesDialog.visible-page	a AdwPreferencesPage, which a JSX attribute does not carry yet
-AdwPreferencesPage.banner	a AdwBanner | null, which a JSX attribute does not carry yet
+AdwPreferencesDialog.visible-page	removing it leaves its value: GIR gives no default
 AdwPreferencesWindow.can-navigate-back	deprecated
 AdwPreferencesWindow.search-enabled	deprecated
 AdwPreferencesWindow.visible-page	deprecated
@@ -88,16 +82,13 @@ AdwSqueezer.transition-duration	deprecated
 AdwSqueezer.transition-type	deprecated
 AdwSqueezer.xalign	deprecated
 AdwSqueezer.yalign	deprecated
-AdwTabBar.view	a AdwTabView | null, which a JSX attribute does not carry yet
 AdwTabBar::extra-drag-drop	a handler argument JSX cannot type yet: AdwTabPage, GValue
 AdwTabBar::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
-AdwTabButton.view	a AdwTabView | null, which a JSX attribute does not carry yet
-AdwTabOverview.view	a AdwTabView | null, which a JSX attribute does not carry yet
 AdwTabOverview::create-tab	its handler returns a AdwTabPage: not generated yet
 AdwTabOverview::extra-drag-drop	a handler argument JSX cannot type yet: AdwTabPage, GValue
 AdwTabOverview::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwTabView.default-icon	removing it leaves its value: GIR gives no default
-AdwTabView.selected-page	a AdwTabPage, which a JSX attribute does not carry yet
+AdwTabView.selected-page	removing it leaves its value: GIR gives no default
 AdwTabView.shortcuts	no setter in the bindings
 AdwTabView::close-page	a handler argument JSX cannot type yet: AdwTabPage
 AdwTabView::create-window	its handler returns a AdwTabView | null: not generated yet
@@ -107,9 +98,6 @@ AdwTabView::page-detached	a handler argument JSX cannot type yet: AdwTabPage, CN
 AdwTabView::page-reordered	a handler argument JSX cannot type yet: AdwTabPage, CNumber<"int">
 AdwTabView::setup-menu	a handler argument JSX cannot type yet: AdwTabPage | null
 AdwViewStack.visible-child	removing it leaves its value: GIR gives no default
-AdwViewSwitcher.stack	a AdwViewStack | null, which a JSX attribute does not carry yet
-AdwViewSwitcherBar.stack	a AdwViewStack | null, which a JSX attribute does not carry yet
-AdwViewSwitcherSidebar.stack	a AdwViewStack | null, which a JSX attribute does not carry yet
 AdwViewSwitcherTitle.stack	deprecated
 AdwViewSwitcherTitle.subtitle	deprecated
 AdwViewSwitcherTitle.title	deprecated
