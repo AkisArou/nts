@@ -1,7 +1,7 @@
 {
   "run": "build",
   "category": "refused",
-  "nts": "NTS1001 a parameter of unrepresentable type (a union of `CallableFunction` | undefined)",
+  "nts": "NTS1001 `init`, where a `Map` or a `Set` has only `size`",
   "ran": "exit 1; nts: uncaught Observed: init at arity 4 (control): type=;init at arity 1: asyncId is a number=false;init at arity 0: called=false;",
   "node": "exit 1; nts: uncaught Observed: init at arity 4 (control): type=Witness;init at arity 1: asyncId is a number=true;init at arity 0: called=true;",
   "measured_with": "82c65520cbe233b6",

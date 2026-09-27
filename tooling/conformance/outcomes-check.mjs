@@ -184,7 +184,7 @@ function runBuild(dir) {
     // artefact did, and a program that runs past its refusal is compared
     // rather than filed.
     const ran = emit.status === 0 ? buildAndRun(emit, out) : { category: "no artefact", nts: `emit-c exited ${emit.status}` };
-    return { category: "refused", nts: rootLine(roots[0]), roots: roots.map(rootLine), ran: ran.category === "completed" || ran.category === "aborted" ? ran.nts : ran.category === "not-measured" ? null : `${ran.category}: ${ran.nts}` };
+    return { category: "refused", nts: rootLine(rootOfTheProgram(said, roots, join(dir, "src/main.ts"))), roots: roots.map(rootLine), ran: ran.category === "completed" || ran.category === "aborted" ? ran.nts : ran.category === "not-measured" ? null : `${ran.category}: ${ran.nts}` };
   }
   if (emit.status !== 0) return { category: "not-measured", nts: `emit-c exited ${emit.status}: ${said.trim().split("\n")[0]}` };
   return buildAndRun(emit, out);
@@ -222,6 +222,33 @@ function rawRoots(said) {
     if (m && !CASCADE.has(m[1])) raw.push({ code: m[1], raw: m[2].replace(/ is not supported by this lowering yet$/, "") });
   }
   return raw;
+}
+
+/**
+ * The root a refused program's record names: the one its **own** first cut
+ * rests on, when it has cuts, else the first root printed. A fixture that
+ * imports runtime code prints that code's refusals first -- an-init-hook-of-
+ * one-parameter's record named `captureStackTrace`, in `internal/errors.ts`,
+ * while what emptied the program was `AsyncHook#enable`'s refusal cutting its
+ * three `createHook(...).enable()` statements. A cut names the function it
+ * calls; that function's cascade line carries the root's text inline
+ * ("`X` cannot be compiled because it calls `Y`, and <root>").
+ */
+export function rootOfTheProgram(said, roots, main) {
+  const lines = said.split("\n").map((l) => l.trim());
+  const reasons = new Map();
+  for (const l of lines) {
+    const m = /NTS1003 `([^`]+)` cannot be compiled because it calls `[^`]+`, and (.*?)(?: is not supported by this lowering yet)?$/.exec(l);
+    if (m && !reasons.has(m[1])) reasons.set(m[1], m[2]);
+  }
+  for (const l of lines) {
+    if (!l.startsWith(`${main}:`)) continue;
+    const cut = /NTS1003 (?:this module-scope statement was dropped|the initializer of `[^`]+` was not compiled) because it calls `([^`]+)`/.exec(l);
+    const reason = cut && reasons.get(cut[1]);
+    const root = reason && roots.find((r) => r.raw === reason);
+    if (root) return root;
+  }
+  return roots[0];
 }
 
 /** `program.c:147:5: error: 'v1' undeclared` -> `error: 'vN' undeclared`: stable across unrelated codegen. */
