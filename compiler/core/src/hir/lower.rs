@@ -22581,6 +22581,183 @@ impl<'a> FuncBuilder<'a> {
         Some(Param { name: name.to_owned(), shape: ParamShape::Ordinary, ty: handle_ty, origin, known: Facts::TOP })
     }
 
+    /// A `return`, which has three destinations and a value for each.
+    ///
+    /// Its own function because it is the last statement kind that was not:
+    /// `lower_if`, `lower_while`, `lower_switch`, `lower_for` and the rest are
+    /// each one, and this arm had grown past all of them inside
+    /// `lower_statement`'s match. Clippy's line count is what said so, and
+    /// extracting the concept is the answer this file has taken for that signal
+    /// three times now rather than an `allow`.
+    fn lower_return(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+            let expression = self.children(id).first().copied();
+            // **At the type the signature declares**, where that is this
+            // function's own return. A local declaration lowers its
+            // initializer at its annotation and a call argument at its
+            // parameter, and a `return` did neither -- so
+            // `function make(): Opts[] { return [{ a: 1 }] }` built the
+            // literal at its *own* element type and met `coerce` one line
+            // later, refused as *an array of ... where an array of ... is
+            // wanted*: a cast this never had to make.
+            //
+            // Decided **before** lowering rather than at the coercion below,
+            // because the three destinations a `return` can have want three
+            // different types, and two of them are knowable here.
+            //
+            // A **callback** return hands the value to an iteration's
+            // accumulator, whose type the loop decides and this cannot see,
+            // so that one is left alone.
+            //
+            // An **`async`** settle hands it to a promise, and the payload
+            // is written on `AsyncResult` for exactly the reason this needs
+            // it. That was excluded at first, which left `async function
+            // make(): Promise<P> { return { x: 1 } }` refusing — ``an
+            // anonymous type` where a `P` is wanted` for a literal that
+            // simply had not been told what it was, while the identical
+            // `return` in a synchronous function lowered. One fact, and the
+            // exclusion was mine.
+            //
+            // `Void` is excluded on both paths for the same reason the arm
+            // below drops the value entirely.
+            let want = if self.callback_returns.last().is_some() {
+                None
+            } else if let Some(result) = &self.async_result {
+                Some(result.payload.clone())
+            } else {
+                Some(self.returns.clone())
+            }
+            .filter(|ty| !matches!(ty, HirType::Void));
+            let value = match (expression, &want) {
+                (Some(expression), Some(want)) => {
+                    Some(self.lower_expecting(expression, want)?)
+                }
+                (Some(expression), None) => Some(self.lower_expression(expression)?),
+                (None, _) => None,
+            };
+            if let Some(target) = self.callback_returns.last().copied() {
+                // Only the `try`s inside the callback. A `return` here means
+                // "this element is done", so it leaves the `try`s written in
+                // the callback body and *not* one the call itself is inside
+                // -- the enclosing `try` is not being left at all.
+                let floor = self.breakables[target.depth].exits_at;
+                self.run_finallys_to(floor)?;
+                if self.is_terminated() {
+                    return Ok(());
+                }
+                return self.return_from_callback(id, target, value);
+            }
+            if let Some(result) = self.async_result.clone() {
+                // The whole function is being left, so every one of them.
+                self.run_finallys_to(0)?;
+                if self.is_terminated() {
+                    return Ok(());
+                }
+                return self.settle_and_return(id, &result, value);
+            }
+            // At the type the *signature* declares, and only on this path:
+            // a callback return and an `async` settle both hand the value
+            // somewhere else, at a type of their own. `function f():
+            // unknown { return n }` returns an erased value, and returning
+            // the raw double instead lowered with nothing refused and then
+            // failed in C -- the verifier checks call arguments and not
+            // returns, so this had nothing watching it.
+            let value = match (value, expression) {
+                // `return f();` where the function returns nothing. Legal
+                // JavaScript -- the result is `undefined` either way -- and
+                // the expression has already been lowered, so its effects
+                // happen and its value is dropped.
+                //
+                // Keeping it produced `Return(Some(v))` on a function whose
+                // C signature says `void`, and `v` was a call typed void,
+                // which the emitter declares no variable for. `return v4;`
+                // with no `v4`: uncompilable C from a function the lowering
+                // called complete.
+                (Some(_), _) if matches!(self.returns, HirType::Void) => None,
+                (Some(value), Some(expression)) => {
+                    let want = self.returns.clone();
+                    Some(self.coerce(value, &want, expression)?)
+                }
+                // **A bare `return;` still produces a value**, wherever the
+                // signature says the function returns one.
+                //
+                // `function maybe(): number | undefined { return; }` is
+                // ordinary TypeScript -- a bare `return` is legal exactly
+                // where the declared type admits `undefined` -- and it
+                // terminated with `Return(None)` against a signature
+                // returning `Erased`. `verify` refuses that (`ReturnType {
+                // expected: Erased, found: None }`) and `emit-c` then writes
+                // nothing for the **whole program**, so one such function
+                // costs every other one beside it. The full test262 census
+                // found one file in 29,586 doing it; the same shape reaches
+                // `unknown`, `any` and a nullable class.
+                //
+                // **Both `Void` and `Never` are excluded here, and the arm
+                // above is not what does it.** That arm drops a value a
+                // `void` function's `return f();` produced, which needs an
+                // expression to have produced one; `return;` has none, so it
+                // falls straight through to this arm and a first version of
+                // it gave a `void` function an operand -- `ReturnType {
+                // expected: Void, found: Some(Void) }` on a bare `return`
+                // inside an `if`. The comment here said the arm above
+                // excluded it, which was a claim about a mechanism rather
+                // than a reading of it. The fixture's `void` control is what
+                // caught it.
+                //
+                // `Never` for the neighbouring reason: a function returning
+                // `never` has no reachable `return` to give a value to, and
+                // inventing one would put an operand on a terminator two
+                // backends spell as `V`.
+                //
+                // **And a generator is excluded, which only the corpus could
+                // say.** In a generator body `self.returns` is the *frame*
+                // type, so this arm produced `ConstUndefined` at a frame
+                // pointer -- a bare `return;` in a generator is not "return
+                // undefined", it is the end of the walk, which is why the
+                // fall-off arm terminates `Return(None)` there and lets
+                // `hir::suspend` turn it into the *done* a resumption
+                // answers. The only thing that made it harmless was `suspend`
+                // discarding the operand afterwards.
+                //
+                // Found by comparing emitted C over both corpora, where the
+                // counts were byte-for-byte identical and fifteen modules'
+                // programs differed anyway: one function, `Headers#entrySteps`
+                // in web-platform, gaining a value and renumbering every one
+                // after it. No fixture of mine had a generator in it, and no
+                // refusal, definition or occurrence count moved.
+                //
+                // The *value* is [`Self::absent_at`]'s to choose, not this
+                // arm's, so a `return;` and a written `undefined` cannot
+                // come to disagree about what an absence is at a nullable
+                // pointer.
+                (None, None)
+                    if self.generator.is_none()
+                        && !matches!(self.returns, HirType::Void | HirType::Never) =>
+                {
+                    let want = self.returns.clone();
+                    Some(self.absent_at(OpKind::ConstUndefined, Some(want), id)?)
+                }
+                (value, _) => value,
+            };
+            // A `return` leaves every `try` it is inside, so every pending
+            // `finally` runs before it -- after the returned expression has
+            // been evaluated, which is the order the language specifies.
+            self.run_finallys_to(0)?;
+            if self.is_terminated() {
+                // A `finally` returned or threw, which replaces this
+                // return outright.
+                return Ok(());
+            }
+            if let (Some(out), Some(value)) = (self.record_out, value) {
+                let origin = self.origin(id);
+                self.push(OpKind::NativeCopy { destination: out, source: value }, HirType::Void, origin);
+                self.terminate(Terminator::Return(None));
+                return Ok(());
+            }
+            self.terminate(Terminator::Return(value));
+            Ok(())
+        
+    }
+
     fn lower_block(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         for statement in self.children(id) {
             // Everything after a `return` in the same block is dead. Lowering it
@@ -23488,14 +23665,38 @@ impl<'a> FuncBuilder<'a> {
     /// Terminate whatever block a body ended in.
     ///
     /// Falling off the end of a `void` function returns nothing, which is what
-    /// it means. Falling off the end of one that returns a value cannot happen:
-    /// TypeScript rejects a function that might, so the point is unreachable
-    /// and saying `return;` there is a type error in C rather than a
-    /// conservative choice.
+    /// it means.
     ///
-    /// `while (true) { ... return x; }` is the ordinary way to arrive here. The
-    /// loop's exit is a real edge — the condition is constant but the branch is
-    /// not folded when this runs — and nothing follows it.
+    /// **The sentence that stood here said falling off the end of a function
+    /// that returns a value "cannot happen: TypeScript rejects a function that
+    /// might". That is not true of the language.** TypeScript rejects it only
+    /// where the return type is *declared* and excludes `undefined`; where the
+    /// type is inferred, falling off the end is what *puts* `undefined` in it.
+    /// `function pick(c: boolean) { if (c) return 42; }` is ordinary TypeScript
+    /// returning `number | undefined`, and it arrives here with nothing produced
+    /// for the path that falls off. `tooling/conformance/outcomes/
+    /// a-function-that-can-fall-off-its-end` pins it, found by the full test262
+    /// census in four `for-in/return` files.
+    ///
+    /// `FellThrough` stays, because **two different arrivals reach this and only
+    /// one of them is that case.** `while (true) { ... return x; }` is the
+    /// ordinary other one: the loop's exit is a real edge, the condition is
+    /// constant but the branch is not folded when this runs, and nothing follows
+    /// it -- so the point genuinely is dead and `FellThrough` is the assertion
+    /// that says so, held by the verifier rather than asserted by
+    /// `Unreachable`. And the unconditional `Return(None)` this once had "built
+    /// closures that promised an array and returned none", which is the comment
+    /// at the third call site.
+    ///
+    /// **What tells the two apart is the checker's type and not the
+    /// representation**, which is why this is not fixed here yet: a nullable
+    /// class and a non-nullable one are one `HirType`, so "does an absence fit
+    /// this representation" answers yes for a closure that owes a real array.
+    /// The discriminator is whether the declared or inferred return type
+    /// *includes* `undefined`, which the callers know and this does not receive.
+    /// Its sibling -- a written `return;` at such a type -- is fixed, through
+    /// [`Self::absent_at`], and that is the function this would ask once it has
+    /// the type to ask about.
     fn close_body(&mut self, return_type: &HirType) {
         if matches!(return_type, HirType::Void) {
             self.terminate(Terminator::Return(None));
@@ -34369,114 +34570,7 @@ impl<'a> FuncBuilder<'a> {
 
     fn lower_statement(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         match self.kind_of(id) {
-            Some(syntax::RETURN_STATEMENT) => {
-                let expression = self.children(id).first().copied();
-                // **At the type the signature declares**, where that is this
-                // function's own return. A local declaration lowers its
-                // initializer at its annotation and a call argument at its
-                // parameter, and a `return` did neither -- so
-                // `function make(): Opts[] { return [{ a: 1 }] }` built the
-                // literal at its *own* element type and met `coerce` one line
-                // later, refused as *an array of ... where an array of ... is
-                // wanted*: a cast this never had to make.
-                //
-                // Decided **before** lowering rather than at the coercion below,
-                // because the three destinations a `return` can have want three
-                // different types, and two of them are knowable here.
-                //
-                // A **callback** return hands the value to an iteration's
-                // accumulator, whose type the loop decides and this cannot see,
-                // so that one is left alone.
-                //
-                // An **`async`** settle hands it to a promise, and the payload
-                // is written on `AsyncResult` for exactly the reason this needs
-                // it. That was excluded at first, which left `async function
-                // make(): Promise<P> { return { x: 1 } }` refusing — ``an
-                // anonymous type` where a `P` is wanted` for a literal that
-                // simply had not been told what it was, while the identical
-                // `return` in a synchronous function lowered. One fact, and the
-                // exclusion was mine.
-                //
-                // `Void` is excluded on both paths for the same reason the arm
-                // below drops the value entirely.
-                let want = if self.callback_returns.last().is_some() {
-                    None
-                } else if let Some(result) = &self.async_result {
-                    Some(result.payload.clone())
-                } else {
-                    Some(self.returns.clone())
-                }
-                .filter(|ty| !matches!(ty, HirType::Void));
-                let value = match (expression, &want) {
-                    (Some(expression), Some(want)) => {
-                        Some(self.lower_expecting(expression, want)?)
-                    }
-                    (Some(expression), None) => Some(self.lower_expression(expression)?),
-                    (None, _) => None,
-                };
-                if let Some(target) = self.callback_returns.last().copied() {
-                    // Only the `try`s inside the callback. A `return` here means
-                    // "this element is done", so it leaves the `try`s written in
-                    // the callback body and *not* one the call itself is inside
-                    // -- the enclosing `try` is not being left at all.
-                    let floor = self.breakables[target.depth].exits_at;
-                    self.run_finallys_to(floor)?;
-                    if self.is_terminated() {
-                        return Ok(());
-                    }
-                    return self.return_from_callback(id, target, value);
-                }
-                if let Some(result) = self.async_result.clone() {
-                    // The whole function is being left, so every one of them.
-                    self.run_finallys_to(0)?;
-                    if self.is_terminated() {
-                        return Ok(());
-                    }
-                    return self.settle_and_return(id, &result, value);
-                }
-                // At the type the *signature* declares, and only on this path:
-                // a callback return and an `async` settle both hand the value
-                // somewhere else, at a type of their own. `function f():
-                // unknown { return n }` returns an erased value, and returning
-                // the raw double instead lowered with nothing refused and then
-                // failed in C -- the verifier checks call arguments and not
-                // returns, so this had nothing watching it.
-                let value = match (value, expression) {
-                    // `return f();` where the function returns nothing. Legal
-                    // JavaScript -- the result is `undefined` either way -- and
-                    // the expression has already been lowered, so its effects
-                    // happen and its value is dropped.
-                    //
-                    // Keeping it produced `Return(Some(v))` on a function whose
-                    // C signature says `void`, and `v` was a call typed void,
-                    // which the emitter declares no variable for. `return v4;`
-                    // with no `v4`: uncompilable C from a function the lowering
-                    // called complete.
-                    (Some(_), _) if matches!(self.returns, HirType::Void) => None,
-                    (Some(value), Some(expression)) => {
-                        let want = self.returns.clone();
-                        Some(self.coerce(value, &want, expression)?)
-                    }
-                    (value, _) => value,
-                };
-                // A `return` leaves every `try` it is inside, so every pending
-                // `finally` runs before it -- after the returned expression has
-                // been evaluated, which is the order the language specifies.
-                self.run_finallys_to(0)?;
-                if self.is_terminated() {
-                    // A `finally` returned or threw, which replaces this
-                    // return outright.
-                    return Ok(());
-                }
-                if let (Some(out), Some(value)) = (self.record_out, value) {
-                    let origin = self.origin(id);
-                    self.push(OpKind::NativeCopy { destination: out, source: value }, HirType::Void, origin);
-                    self.terminate(Terminator::Return(None));
-                    return Ok(());
-                }
-                self.terminate(Terminator::Return(value));
-                Ok(())
-            }
+            Some(syntax::RETURN_STATEMENT) => self.lower_return(id),
             Some(syntax::BLOCK) => self.lower_block(id),
             Some(syntax::IF_STATEMENT) => self.lower_if(id),
             Some(syntax::WHILE_STATEMENT) => self.lower_while(id),
@@ -56407,6 +56501,32 @@ impl<'a> FuncBuilder<'a> {
         } else {
             OpKind::ConstUndefined
         };
+        self.absent_at(literal, ty, id)
+    }
+
+    /// An absence at a representation somebody else chose.
+    ///
+    /// Split out of [`Self::lower_absent`] for a second caller with no literal
+    /// to read a type from: a bare `return;` in a function whose declared return
+    /// type is not `void`. That is legal TypeScript wherever the type admits
+    /// `undefined` -- `function maybe(): number | undefined { return; }` -- and
+    /// it produced `Terminator::Return(None)` against a signature returning
+    /// `Erased`, which `verify` refuses as `ReturnType { expected: Erased, found:
+    /// None }`. Invalid HIR costs the **whole program**, because `emit-c` writes
+    /// nothing from a program that does not verify; found by the full test262
+    /// census, one file in 29,586.
+    ///
+    /// One function rather than a rule of its own at the `return`, because
+    /// "which op stands for an absence at this representation" is the fact
+    /// `lower_absent` exists to answer, and a second answer to it is how
+    /// `ConstNull` and `ConstUndefined` would come to disagree about a nullable
+    /// pointer. The `return` supplies the type and asks; it decides nothing.
+    fn absent_at(
+        &mut self,
+        literal: OpKind,
+        ty: Option<HirType>,
+        id: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
         if matches!(ty, Some(HirType::Erased | HirType::Void)) {
             let origin = self.origin(id);
             return Ok(self.push(literal, HirType::Erased, origin));
