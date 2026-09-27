@@ -4584,6 +4584,45 @@ fn excise_from_initializer(
     true
 }
 
+/// What to say about a callee that is not in the program, for a cascade to carry.
+fn why_a_callee_is_missing(program: &Program, callee: &str) -> String {
+    // **Which silence it is**, where `uncompiled` has nothing either. That
+    // fallback was one sentence for two situations, and the Assistant lane's
+    // `integrity` counts the difference: with the member half recorded, 269
+    // cascades over the 27 runtime modules still blame a name with no refusal of
+    // its own, and every one of them is a *plain function*.
+    //
+    // The larger group says something specific, so it should say it.
+    // `extractSizeAlgorithm` is a generic: the program defines
+    // `extractSizeAlgorithm<erased>`, `<str>` and `<viewu8>` and nothing under
+    // the bare name, and `WritableStream<4943>#constructor` emits
+    // `call extractSizeAlgorithm` -- a call naming none of the three. Nothing
+    // refused it; the **call** is wrong, and it is the same defect as two statics
+    // of one name emitting one call, which `8482afb63` fixed a table over. Saying
+    // "refused above" there sends a reader looking for a refusal nobody made;
+    // naming the instantiations points at the call.
+    if let Some((_, reason)) = program.uncompiled.iter().find(|(name, _)| name == callee) {
+        return format!("and {reason}");
+    }
+    let instantiated: Vec<&str> = program
+        .funcs
+        .iter()
+        .filter(|func| {
+            func.name.starts_with(callee) && func.name[callee.len()..].starts_with('<')
+        })
+        .map(|func| func.name.as_str())
+        .take(3)
+        .collect();
+    if instantiated.is_empty() {
+        return "which nothing in this program defines".to_owned();
+    }
+    format!(
+        "which this program compiles only as instantiations ({}), so this call names none of \
+         them",
+        instantiated.join(", ")
+    )
+}
+
 fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
     loop {
         // A function about to be split by `suspend` provides two names: its
@@ -4707,15 +4746,7 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             // here, the sentence names the cause instead of asserting a
             // refusal the reader cannot find: an interface method with no
             // implementer says so, and everything else still reads as before.
-            let why = lowered
-                .program
-                .uncompiled
-                .iter()
-                .find(|(name, _)| *name == callee)
-                .map_or_else(
-                    || "which was refused above".to_owned(),
-                    |(_, reason)| format!("and {reason}"),
-                );
+            let why = why_a_callee_is_missing(&lowered.program, &callee);
             lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
                 "NTS1003",
                 format!("`{caller}` cannot be compiled because it calls `{callee}`, {why}"),
