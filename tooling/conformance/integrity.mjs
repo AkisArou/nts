@@ -95,6 +95,18 @@
 // refused legitimately has none: 1,387 runtime hits) and an unscoped member
 // match (above).
 //
+// # What no rule here can see
+//
+// A program that compiles *wrongly*. Every rule asks whether the program the
+// backend receives is consistent with itself and with its diagnostics; none
+// asks whether it computes what the source means. On 2026-09-27 an arm that
+// unerased a structurally-assignable `Slim` to a `Both` (an all-optional
+// interface extending it) read a slot that does not exist, and would have
+// passed every rule: it defined what it called, its tables resolved, nothing
+// was cut. Only an answer compared against node, or a fixture that varies what
+// the change decides, sees that. This is a consistency check, not a
+// correctness oracle -- written down so nobody reads a clean run as one.
+//
 // # Known violations are named, never counted
 //
 // `tooling/conformance/integrity.known`, one per line:
@@ -471,6 +483,15 @@ function selfTest() {
   const phantom = judge({ ...clean, refusals: "total\tsomething\n" }).violations ?? [];
   if (!phantom.some((v) => v.rule === "refusal-not-compiled" && /total/.test(v.detail))) return "a refusal naming a compiled function was not caught";
   if (judge({ ...clean, refusals: "Base#value\tno class implements it\n" }).violations?.length !== 0) return "a refused declaration shell was called a phantom";
+  // **Control arms for the rules the corpus never trips.** call-resolves,
+  // table-resolves and owner-has-layout are clean over 40,000 functions, and
+  // a rule that is always clean is indistinguishable from one that cannot
+  // fire. Each must fire here, on the shape it exists for.
+  const rules = (t) => (judge(t).violations ?? []).map((v) => v.rule);
+  if (!rules({ ...clean, prepared: clean.prepared.replace("  %2 = call total(%1) : f64", "  %2 = call nowhere(%1) : f64") }).includes("call-resolves")) return "a direct call to a function nothing defines was not caught";
+  if (!rules({ ...clean, prepared: clean.prepared.replace("func total(t: f64) -> f64 {", "func total(t: f64) -> f64 {\n}\nfunc total(t: f64) -> f64 {").replace(summary(5), summary(6)) }).includes("call-resolves")) return "a function defined twice was not caught";
+  if (!rules({ ...clean, layouts: clean.layouts.replace("  methods Other#value", "  methods Other#value Other#missing") }).includes("table-resolves")) return "a table naming a method nothing defines was not caught";
+  if (!rules({ ...clean, layouts: clean.layouts.replace("Other [11]", "Other [12]") }).includes("owner-has-layout")) return "a method whose `this` type has no layout was not caught";
   // A field named `methods` is not a table.
   if (readLayouts("C [1]\n  methods : Erased\n").byName.get("C").methods.length !== 0) return "a field named `methods` read as a table";
   // A listing that lost a function is not a clean program.

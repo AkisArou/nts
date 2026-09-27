@@ -18,8 +18,12 @@
 //
 // # The rule, the same one `example-refusals` keeps
 //
-// A count that went **up** is somebody's progress: a note, and a pass -- edit
-// the table. A count that went **down** fails, naming the module and the
+// A count that went **up** is a note and a pass -- but it is not proof of
+// progress. It is also what unsoundness looks like: on 2026-09-27 a change
+// that unerased a value to a structurally-assignable class it did not hold
+// read +146 definitions, code compiling that should have refused. So a rise
+// asks "which functions newly compile, and should each one", and the row is
+// raised after that answer, not because of the number. A count that went **down** fails, naming the module and the
 // delta. A gate that goes red when you fix something teaches people to stop;
 // one that stays green when code stops being emitted teaches nothing.
 //
@@ -140,7 +144,7 @@ for (const [module, now] of measured) {
   const was = table.get(module);
   if (was === undefined) failures.push(`${module}: ${now} definition(s), and no row in the table -- add one`);
   else if (now < was) failures.push(`${module}: ${was} -> ${now} definition(s), ${now - was} -- code stopped being emitted`);
-  else if (now > was) notes.push(`${module}: ${was} -> ${now}, +${now - was} -- raise its row in tooling/gate/definitions`);
+  else if (now > was) notes.push(`${module}: ${was} -> ${now}, +${now - was} -- newly compiled; raise the row once each is known to belong`);
 }
 for (const n of notes) console.log(`  up            ${n}`);
 for (const f of failures) console.log(`  DOWN          ${f}`);
