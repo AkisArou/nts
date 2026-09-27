@@ -8,14 +8,14 @@ export function push(heap: Task[], node: Task): void {
 }
 
 export function peek(heap: Task[]): Task | null {
-  return heap[0] ?? null;
+  return heap.length === 0 ? null : heap[0]!;
 }
 
 export function pop(heap: Task[]): Task | null {
-  const first = heap[0];
-  if (first === undefined) {
+  if (heap.length === 0) {
     return null;
   }
+  const first = heap[0]!;
   const last = heap.pop()!;
   if (last !== first) {
     heap[0] = last;
