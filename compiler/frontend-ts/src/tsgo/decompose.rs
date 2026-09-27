@@ -820,7 +820,14 @@ impl<'a> Decomposer<'a> {
             Err(TsgoError::Server { .. }) => return Ok(TypeKind::Unknown),
             Err(other) => return Err(other),
         };
-        let ids = self.intern_all(snapshot, &types, walk);
+        // A foreign class's or module's members are its whole framework's
+        // graph: see `members_unfollowed`. Their types are given ids and left
+        // for the program to reach.
+        let ids = if self.members_unfollowed(snapshot, ty) {
+            types.iter().map(|response| self.intern_shallow(snapshot, response)).collect()
+        } else {
+            self.intern_all(snapshot, &types, walk)
+        };
         let own = Self::own_member_names(snapshot, ty, &self.interned);
 
         Ok(TypeKind::Object {
@@ -1317,6 +1324,44 @@ impl<'a> Decomposer<'a> {
                         | "IteratorReturnResult"
                 ) || nts_semantic_schema::is_an_iteration_protocol(&declared.name)
             })
+    }
+
+    /// Whether `ty`'s members are recorded without following their types:
+    /// a class or protocol a foreign runtime declares -- `@ntsClass`,
+    /// `@ntsProtocol`, the tags lowering reads -- or the namespace object of a
+    /// module only declaration files declare, such as `objc:AppKit`.
+    ///
+    /// **Each is a framework's whole graph.** A platform package declares a
+    /// framework whole, so `NSWindow`'s members name `NSScreen`, `NSToolbar`
+    /// and their members in turn, and a module's namespace names every class
+    /// it exports. Following them decomposed 40,665 types for a program that
+    /// touches a few dozen, where a class list of the 13 it uses decomposed
+    /// 6,026. A member the program uses is reached anyway, from the node that
+    /// uses it or the signature a call resolves to; one it never touches stays
+    /// a placeholder, as the library boundary leaves the standard library's.
+    fn members_unfollowed(&self, snapshot: &SemanticSnapshot, ty: u32) -> bool {
+        let Some(declared) = self
+            .interned
+            .get(ty)
+            .and_then(|slot| snapshot.types.get(slot.0 as usize))
+            .and_then(|record| record.symbol)
+            .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+        else {
+            return false;
+        };
+        let foreign_class = declared.declarations.iter().any(|declaration| {
+            snapshot
+                .nodes
+                .get(declaration.0 as usize)
+                .and_then(|node| node.native.as_deref())
+                .is_some_and(|native| native.class.is_some() || native.protocol.is_some())
+        });
+        let declared_module = declared.flags.contains(nts_semantic_schema::SymbolFlags::MODULE)
+            && !declared.declarations.is_empty()
+            && declared.declarations.iter().all(|declaration| {
+                file_of(&self.file_bases, declaration.0).is_some_and(|(path, _)| nts_semantic_schema::reachability::is_declaration_file(path))
+            });
+        foreign_class || declared_module
     }
 
     fn is_ours(snapshot: &SemanticSnapshot, slot: TypeId) -> bool {

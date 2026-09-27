@@ -31,7 +31,7 @@
 //! the frontend bother resolving — has to be answered before there is an IR.
 //! The two are complementary; this one does not replace it.
 
-use crate::{NodeId, SemanticSnapshot, SymbolId, TypeId};
+use crate::{NodeId, NodeKind, SemanticSnapshot, SymbolId, TypeId, syntax};
 use rustc_hash::FxHashSet;
 
 /// What a walk from a set of roots reached.
@@ -89,20 +89,98 @@ pub fn from_exports(snapshot: &SemanticSnapshot) -> Reachability {
 /// Statements only. Seeding the module's *root* would reach every node in the
 /// file including the declarations already covered, which is the "seed with
 /// everything" this exists to replace.
+///
+/// **Modules with code only.** A declaration file evaluates nothing and
+/// exports nothing a product publishes: what it declares matters where code
+/// names it, and is reached from there. Rooting at one reached all of it --
+/// a platform package's `declare module "objc:AppKit"` is one statement
+/// holding the whole framework -- and seeded 40,665 types for a program that
+/// touches a few dozen.
 #[must_use]
 pub fn for_frontend(snapshot: &SemanticSnapshot) -> Reachability {
-    let exports = snapshot
-        .modules
-        .iter()
-        .flat_map(|module| module.exports.iter().map(|(_, symbol)| *symbol));
-    let statements = snapshot.modules.iter().flat_map(|module| {
+    let with_code = || {
+        snapshot.modules.iter().filter(|module| {
+            snapshot
+                .sources
+                .get(module.file.0 as usize)
+                .is_none_or(|source| !is_declaration_file(&source.uri))
+        })
+    };
+    let exports = with_code().flat_map(|module| module.exports.iter().map(|(_, symbol)| *symbol));
+    let statements = with_code().flat_map(|module| {
         snapshot
             .nodes
             .get(module.root.0 as usize)
             .into_iter()
             .flat_map(|root| root.children.iter().copied())
     });
-    from_roots(snapshot, exports, statements)
+    from_roots(snapshot, exports, statements.chain(foreign_functions(snapshot)))
+}
+
+/// Every function a declaration file declares: a foreign function, which
+/// lowering may call without the program naming it.
+///
+/// Lowering finds one **by name** -- a tag (`@ntsConstruct gtk_label_new`,
+/// a class's `_get_type`) or the runtime itself (`g_type_check_instance_is_a`)
+/// names a function no reference in the program reaches, and lowering takes
+/// any symbol of that name with a bodiless function declaration. So every
+/// such declaration is a root, which is that lookup's whole domain, rather
+/// than an edge per tag, which would miss the names only lowering knows. A
+/// function's signature is small; what it names is reached from it without
+/// the members of the classes it names.
+fn foreign_functions(snapshot: &SemanticSnapshot) -> impl Iterator<Item = NodeId> + '_ {
+    let declaration_files: FxHashSet<u32> = declaration_files(snapshot);
+    snapshot.nodes.iter().enumerate().filter_map(move |(index, node)| {
+        (matches!(node.kind, NodeKind::Syntax(syntax::FUNCTION_DECLARATION))
+            && declaration_files.contains(&node.origin.location.file.0))
+        .then(|| u32::try_from(index).ok().map(NodeId))
+        .flatten()
+    })
+}
+
+/// The class and interface declarations a heritage clause's types name: the
+/// symbols of each `Base<T>`'s expression, not of its type arguments.
+fn inherited(snapshot: &SemanticSnapshot, types: &[NodeId]) -> Vec<NodeId> {
+    let mut named = Vec::new();
+    let mut stack: Vec<NodeId> = types
+        .iter()
+        .filter_map(|ty| snapshot.nodes.get(ty.0 as usize)?.children.first().copied())
+        .collect();
+    while let Some(node) = stack.pop() {
+        let Some(record) = snapshot.nodes.get(node.0 as usize) else { continue };
+        stack.extend(record.children.iter().copied());
+        // Through an import to what it imports: `import { Application }`
+        // names the class by an alias, whose declaration is the specifier.
+        let Some(mut declared) = record.symbol.and_then(|symbol| snapshot.symbols.get(symbol.0 as usize)) else { continue };
+        while let Some(aliased) = declared.aliased.and_then(|symbol| snapshot.symbols.get(symbol.0 as usize)) {
+            declared = aliased;
+        }
+        named.extend(declared.declarations.iter().copied().filter(|declaration| {
+            snapshot
+                .nodes
+                .get(declaration.0 as usize)
+                .is_some_and(|node| matches!(node.kind, NodeKind::Syntax(syntax::CLASS_DECLARATION | syntax::INTERFACE_DECLARATION)))
+        }));
+    }
+    named
+}
+
+/// The sources that are declaration files, by id.
+fn declaration_files(snapshot: &SemanticSnapshot) -> FxHashSet<u32> {
+    snapshot
+        .sources
+        .iter()
+        .enumerate()
+        .filter(|(_, source)| is_declaration_file(&source.uri))
+        .filter_map(|(index, _)| u32::try_from(index).ok())
+        .collect()
+}
+
+/// Whether a source is a declaration file -- `.d.ts`, or its module-kind
+/// forms `.d.mts` and `.d.cts` -- which declares and holds no code.
+#[must_use]
+pub fn is_declaration_file(uri: &str) -> bool {
+    [".d.ts", ".d.mts", ".d.cts"].iter().any(|suffix| uri.ends_with(suffix))
 }
 
 /// Walk outward from a given set of root symbols.
@@ -126,6 +204,9 @@ pub fn from_roots(
 ) -> Reachability {
     let mut result = Reachability::default();
     let mut worklist: Vec<NodeId> = nodes.into_iter().collect();
+    let declaration_files = declaration_files(snapshot);
+    // Classes and interfaces of declaration files walked whole: see below.
+    let mut whole: FxHashSet<NodeId> = FxHashSet::default();
 
     for symbol in roots {
         if result.symbols.insert(symbol)
@@ -147,8 +228,37 @@ pub fn from_roots(
             result.types.insert(ty);
         }
 
-        // A node's subtree is part of its declaration.
-        worklist.extend(record.children.iter().copied());
+        // A node's subtree is part of its declaration -- except a class,
+        // interface, enum or module a declaration file declares, whose
+        // members are each reached by a reference to that member. Such a
+        // declaration is a list of what a library has, not code that runs,
+        // and walking all of it walked the library: a platform package's
+        // `NSWindow` names `NSScreen` and `NSToolbar`, whose members name
+        // more, and 117,459 nodes were reached from a program using a few
+        // dozen of them.
+        let declares_members = matches!(
+            record.kind,
+            NodeKind::Syntax(syntax::CLASS_DECLARATION | syntax::INTERFACE_DECLARATION | syntax::ENUM_DECLARATION | syntax::MODULE_DECLARATION)
+        );
+        if !(declares_members && declaration_files.contains(&record.origin.location.file.0)) || whole.contains(&node) {
+            worklist.extend(record.children.iter().copied());
+        }
+
+        // **Except a class or interface the program extends or implements.**
+        // Its members are matched by name, not reached by reference: an
+        // override is found against the base's declaration of that name, and
+        // a Windows Runtime override reads the base member's signature. So
+        // what a heritage clause names is walked whole, reached before or
+        // after.
+        if matches!(record.kind, NodeKind::Syntax(syntax::HERITAGE_CLAUSE)) {
+            for base in inherited(snapshot, &record.children) {
+                if whole.insert(base) && result.nodes.contains(&base) {
+                    worklist.extend(snapshot.nodes.get(base.0 as usize).into_iter().flat_map(|base| base.children.iter().copied()));
+                } else {
+                    worklist.push(base);
+                }
+            }
+        }
 
         // A reference names a symbol; following it to that symbol's declarations
         // is what makes this a graph walk rather than a subtree walk. Without this
@@ -322,5 +432,129 @@ mod tests {
         let mut snapshot = snapshot();
         snapshot.modules[0].exports.clear();
         assert!(from_exports(&snapshot).nodes.is_empty());
+    }
+
+    fn source(uri: &str) -> nts_diagnostics::SourceFile {
+        nts_diagnostics::SourceFile {
+            uri: uri.to_owned(),
+            digest: nts_diagnostics::Digest([0; 16]),
+            display_path: uri.into(),
+            rewritten_by: None,
+            rewritten_map: Vec::new(),
+        }
+    }
+
+    fn declared(kind: u16, file: u32, children: Vec<NodeId>, symbol: Option<SymbolId>) -> NodeRecord {
+        let mut record = node(children, symbol);
+        record.kind = NodeKind::Syntax(kind);
+        record.origin.location.file = SourceId(file);
+        record
+    }
+
+    /// A program (`main.ts`) using one member of a class a declaration file
+    /// (`lib.d.ts`) declares, which has another member naming a second class:
+    ///
+    /// ```text
+    /// 0 main.ts statement -> 1 reference to Window, 2 reference to Window#title
+    /// 3 class Window (lib.d.ts)   -> 4 title, 5 screen -> 6 reference to Screen
+    /// 7 class Screen (lib.d.ts)
+    /// 8 function gtk_label_new (lib.d.ts), named by nothing
+    /// 9 lib.d.ts's root           -> 3, 7, 8
+    /// ```
+    fn a_program_over_a_library() -> SemanticSnapshot {
+        SemanticSnapshot {
+            schema_version: crate::SCHEMA_VERSION,
+            sources: vec![source("nts-workspace:///main.ts"), source("nts-workspace:///lib.d.ts")],
+            nodes: vec![
+                declared(0, 0, vec![NodeId(1), NodeId(2)], None),
+                declared(0, 0, vec![], Some(SymbolId(0))),
+                declared(0, 0, vec![], Some(SymbolId(1))),
+                declared(syntax::CLASS_DECLARATION, 1, vec![NodeId(4), NodeId(5)], None),
+                declared(0, 1, vec![], None),
+                declared(0, 1, vec![NodeId(6)], None),
+                declared(0, 1, vec![], Some(SymbolId(2))),
+                declared(syntax::CLASS_DECLARATION, 1, vec![], None),
+                declared(syntax::FUNCTION_DECLARATION, 1, vec![], None),
+                declared(syntax::SOURCE_FILE, 1, vec![NodeId(3), NodeId(7), NodeId(8)], None),
+            ],
+            symbols: vec![
+                symbol("Window", vec![NodeId(3)]),
+                symbol("title", vec![NodeId(4)]),
+                symbol("Screen", vec![NodeId(7)]),
+                symbol("gtk_label_new", vec![NodeId(8)]),
+            ],
+            modules: vec![
+                ModuleRecord { file: SourceId(0), imports: Vec::new(), exports: Vec::new(), root: NodeId(0) },
+                ModuleRecord {
+                    file: SourceId(1),
+                    imports: Vec::new(),
+                    exports: vec![("Window".to_owned(), SymbolId(0)), ("Screen".to_owned(), SymbolId(2))],
+                    root: NodeId(9),
+                },
+            ],
+            ..SemanticSnapshot::default()
+        }
+    }
+
+    /// **A declaration file's class reaches only the members named.** Its
+    /// declaration is a list of what a library has; walking all of it walked
+    /// the library, every class a member names and theirs in turn.
+    #[test]
+    fn a_declared_class_reaches_only_the_members_the_program_names() {
+        let reached = for_frontend(&a_program_over_a_library());
+        assert!(reached.contains(NodeId(3)), "the class the program names");
+        assert!(reached.contains(NodeId(4)), "the member the program names");
+        assert!(!reached.contains(NodeId(5)), "a member nothing names");
+        assert!(!reached.contains(NodeId(7)), "a class only that member names");
+    }
+
+    /// The same class in a file with code is walked whole, as before: its
+    /// members are code that runs.
+    #[test]
+    fn a_class_with_code_is_walked_whole() {
+        let mut snapshot = a_program_over_a_library();
+        snapshot.sources[1].uri = "nts-workspace:///lib.ts".to_owned();
+        let reached = for_frontend(&snapshot);
+        assert!(reached.contains(NodeId(5)) && reached.contains(NodeId(7)));
+    }
+
+    /// **Every function a declaration file declares is reached**, named or
+    /// not: lowering calls one by name for a tag or for the runtime
+    /// (`@ntsConstruct gtk_label_new`), and no reference leads there.
+    #[test]
+    fn a_declared_function_is_reached_without_a_reference() {
+        let reached = for_frontend(&a_program_over_a_library());
+        assert!(reached.contains(NodeId(8)));
+    }
+
+    /// **A class the program extends is walked whole**, through the import
+    /// that names it: an override is matched against the base's members by
+    /// name, and no reference reaches a member only an override matches.
+    #[test]
+    fn a_class_the_program_extends_is_walked_whole() {
+        let mut snapshot = a_program_over_a_library();
+        // 10 class App extends Window (main.ts) -> 11 heritage clause
+        //   -> 12 `Window` with its arguments -> 13 `Window`, an import of it
+        snapshot.nodes.extend([
+            declared(syntax::CLASS_DECLARATION, 0, vec![NodeId(11)], None),
+            declared(syntax::HERITAGE_CLAUSE, 0, vec![NodeId(12)], None),
+            declared(syntax::EXPRESSION_WITH_TYPE_ARGUMENTS, 0, vec![NodeId(13)], None),
+            declared(0, 0, vec![], Some(SymbolId(4))),
+        ]);
+        let mut import = symbol("Window", vec![]);
+        import.aliased = Some(SymbolId(0));
+        snapshot.symbols.push(import);
+        snapshot.nodes[0].children.push(NodeId(10));
+        let reached = for_frontend(&snapshot);
+        assert!(reached.contains(NodeId(5)), "a member only an override would match");
+        assert!(reached.contains(NodeId(7)), "what that member names");
+    }
+
+    /// A declaration file's exports are not roots: `Screen` is exported and
+    /// nothing the program runs names it.
+    #[test]
+    fn a_declaration_files_exports_are_not_roots() {
+        let reached = for_frontend(&a_program_over_a_library());
+        assert!(!reached.symbols.contains(&SymbolId(2)));
     }
 }

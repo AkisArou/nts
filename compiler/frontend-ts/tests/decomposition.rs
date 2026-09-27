@@ -453,6 +453,76 @@ fn a_root_class_has_no_base_types() {
     );
 }
 
+/// A snapshot of `main` against a two-class `objc:` binding: `KitWindow`,
+/// whose `screen` is a `KitScreen`.
+fn over_a_foreign_binding(main: &str) -> Option<SemanticSnapshot> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+        .unwrap()
+        .join(format!("nts-decompose-foreign-{}-{}", std::process::id(), main.len()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("kit.d.ts"),
+        "declare module \"objc:Kit\" {\n  /** @ntsClass KitWindow */\n  export class KitWindow {\n    get title(): string;\n    get screen(): KitScreen;\n  }\n  /** @ntsClass KitScreen */\n  export class KitScreen {\n    get depth(): number;\n  }\n}\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("main.ts"), main).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "strict": true, "noEmit": true, "target": "es2022", "module": "esnext" }, "files": ["kit.d.ts", "main.ts"] }"#,
+    )
+    .unwrap();
+    let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
+    let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
+    Some(source.snapshot(&tsconfig).expect("snapshot should succeed"))
+}
+
+/// The kind of the type the class named `name` declares.
+fn class_kind<'a>(snapshot: &'a SemanticSnapshot, name: &str) -> &'a TypeKind {
+    snapshot
+        .types
+        .iter()
+        .filter(|record| record.symbol.is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name == name))
+        .map(|record| &record.kind)
+        .find(|kind| matches!(kind, TypeKind::Object { .. } | TypeKind::Structured { .. }))
+        .unwrap_or_else(|| panic!("no type declared by `{name}`"))
+}
+
+/// **A foreign class's members are recorded and their types are not
+/// followed.** A platform package declares a framework whole, and following
+/// every member's type decomposed the framework: 40,665 types for a program
+/// using a few dozen. `KitScreen` is only a member's type here, so it stays a
+/// placeholder; once the program reads it, it is decomposed.
+#[test]
+fn a_foreign_classs_member_types_are_decomposed_only_when_reached() {
+    let Some(snapshot) = over_a_foreign_binding(
+        "import { KitWindow } from \"objc:Kit\";\nexport function titled(window: KitWindow): string {\n  return window.title;\n}\n",
+    ) else {
+        return;
+    };
+    let TypeKind::Object { properties } = class_kind(&snapshot, "KitWindow") else {
+        panic!("`KitWindow` was not decomposed: {:?}", class_kind(&snapshot, "KitWindow"));
+    };
+    let names: Vec<&str> = properties.iter().map(|property| property.name.as_str()).collect();
+    assert_eq!(names, ["title", "screen"], "its members are all recorded");
+    assert!(
+        matches!(class_kind(&snapshot, "KitScreen"), TypeKind::Structured { .. }),
+        "a class only a member names was decomposed: {:?}",
+        class_kind(&snapshot, "KitScreen")
+    );
+
+    let Some(reached) = over_a_foreign_binding(
+        "import { KitWindow } from \"objc:Kit\";\nexport function depth(window: KitWindow): number {\n  return window.screen.depth;\n}\n",
+    ) else {
+        return;
+    };
+    assert!(
+        matches!(class_kind(&reached, "KitScreen"), TypeKind::Object { .. }),
+        "a class the program reads was left a placeholder: {:?}",
+        class_kind(&reached, "KitScreen")
+    );
+}
+
 /// **Only a type reference is asked for its arguments.** `getTypeArguments`
 /// reads a `TypeReference` and dereferences nil on anything else, and an
 /// instantiated mapped type -- `Partial<Box>` -- has a target without being
