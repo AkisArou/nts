@@ -16,6 +16,7 @@
   "files": [
     "action-bar/nts.config.ts",
     "banner/nts.config.ts",
+    "boxed-lists/nts.config.ts",
     "button-row/nts.config.ts",
     "button/nts.config.ts",
     "calendar/nts.config.ts",
@@ -28,15 +29,18 @@
     "label/nts.config.ts",
     "menu-button/nts.config.ts",
     "navigation-view/nts.config.ts",
+    "overlay-split-view/nts.config.ts",
     "overlay/nts.config.ts",
     "picture/nts.config.ts",
     "popovers/nts.config.ts",
     "radio-buttons/nts.config.ts",
+    "revealer/nts.config.ts",
     "scale/nts.config.ts",
     "separator/nts.config.ts",
     "spin-button/nts.config.ts",
     "spinner/nts.config.ts",
     "stack/nts.config.ts",
+    "styling-with-css/nts.config.ts",
     "switch/nts.config.ts",
     "toggle-button/nts.config.ts"
   ]

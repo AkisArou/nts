@@ -1,0 +1,3 @@
+select drop_down 2
+select drop_down 0
+select drop_down 1

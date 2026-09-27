@@ -17,6 +17,7 @@
 //   day <id> <y> <m> <d> select a calendar's day
 //   action <id> <name> <text> activate a widget's action with a string
 //   file <id>      print the name of a picture's or image's file
+//   sidebar-position <id> print a split view's `sidebar_position`
 //   activate-child <id> <n> activate a flow box's nth child
 //   active <id>    print `active`
 //   visible <id>   print `visible`
@@ -103,6 +104,7 @@ application.connect("activate", async () => {
     else if (kind === "action") object.activate_action(args[0], GLib.Variant.new_string(args[1]));
     else if (kind === "activate-child") object.get_child_at_index(Number(args[0])).activate();
     else if (kind === "file") console.log(`${id}.file ${object instanceof Gtk.Picture ? object.file?.get_basename() : GLib.path_get_basename(object.file ?? "")}`);
+    else if (kind === "sidebar-position") console.log(`${id}.sidebar_position ${object.sidebar_position}`);
     else if (kind === "classes") console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
     else throw new Error(`unknown action ${kind}`);
   }

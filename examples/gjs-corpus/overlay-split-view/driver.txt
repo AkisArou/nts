@@ -1,0 +1,5 @@
+sidebar-position split_view
+toggle end_toggle
+sidebar-position split_view
+toggle start_toggle
+sidebar-position split_view

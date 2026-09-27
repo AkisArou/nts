@@ -11,6 +11,7 @@ import {
   AdwBanner,
   AdwButtonRow,
   AdwComboRow,
+  AdwOverlaySplitView,
   AdwSwitchRow,
 } from "c:Adw-1";
 import {
@@ -157,6 +158,10 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
       if (object instanceof GtkPicture) console.log(`${id}.file ${object.file?.get_basename() ?? "undefined"}`);
       else if (object instanceof GtkImage) console.log(`${id}.file ${g_path_get_basename(object.file ?? "")}`);
       else return false;
+      return true;
+    case "sidebar-position":
+      if (!(object instanceof AdwOverlaySplitView)) return false;
+      console.log(`${id}.sidebar_position ${object.sidebar_position}`);
       return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;
