@@ -151,7 +151,7 @@ export class NotebookPageNode extends PlacedNode {
     if (!(notebook instanceof GtkNotebook)) {
       throw misplaced("Notebook.Page", "Notebook", owner);
     }
-    notebook.insert_page(widget, null, this.index(notebook, -1));
+    notebook.insert_page(widget, null, this.index(owner, notebook, -1));
     this.describe(notebook, widget);
     // As a Stack's visible child: the Notebook's `page` was applied before
     // its pages existed.
@@ -177,7 +177,7 @@ export class NotebookPageNode extends PlacedNode {
     const from = notebook.page_num(widget);
     // The page goes where the next one is (past the end, with none), counted
     // with this one taken out: a page after it moves up one.
-    const to = this.index(notebook, notebook.get_n_pages());
+    const to = this.index(owner, notebook, notebook.get_n_pages());
     notebook.reorder_child(widget, to > from ? to - 1 : to);
     return true;
   }
@@ -188,9 +188,9 @@ export class NotebookPageNode extends PlacedNode {
     }
   }
 
-  // The index of the page React places this one before, or `end` with none.
-  private index(notebook: GtkNotebook, end: number): number {
-    const next = this.before === null ? null : this.before.shownWidget();
+  // The index of the page React's order puts after this one, or `end` with none.
+  private index(owner: WidgetNode, notebook: GtkNotebook, end: number): number {
+    const next = owner.elementAfter(this);
     return next === null ? end : notebook.page_num(next);
   }
 
@@ -231,9 +231,10 @@ export class OverlayLayerNode extends PlacedNode {
       throw misplaced("Overlay.Layer", "Overlay", owner);
     }
     overlay.add_overlay(widget);
-    // `before` may be the main child, which stays under every layer.
-    const next = this.before === null ? null : this.before.shownWidget();
-    if (next !== null && next.get_parent() === overlay && next !== overlay.get_child()) {
+    // Under the next layer in React's order; the main child, not an
+    // element, stays under every layer.
+    const next = owner.elementAfter(this);
+    if (next !== null) {
       widget.insert_before(overlay, next);
     }
     this.describe(overlay, widget);

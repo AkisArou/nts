@@ -59,7 +59,8 @@
 //             keeps what the user chose
 //   notebook  Notebook.Page elements add pages with tab text, one inserted
 //             before another takes its place in the order; moved back and to
-//             the end, pages keep the current one; one removed goes
+//             the end, pages keep the current one; one removed goes; one
+//             whose child arrives after the pages behind it goes before them
 //   bar       a HeaderBar's Start and End groups pack their children left to
 //             right in React's order (the end packed from the edge in); one
 //             inserted before another takes its place, one removed goes
@@ -567,6 +568,16 @@ function main(): void {
     pageOrder += " current=" + String(pagesOf.get_nth_page(pagesOf.get_current_page()) === widget(pages[1]!));
     removeChild(notebook, tabs[0]!);
     pageOrder += " " + String(pagesOf.get_n_pages());
+    // A page whose child comes after the pages behind it were placed (a
+    // conditional child becoming true) goes where React's order puts it.
+    const latePage = createInstance("GtkNotebook.Page", { tab: "late" }, container, 0, {});
+    appendChild(notebook, latePage);
+    const lastPage = createInstance("GtkNotebook.Page", { tab: "last" }, container, 0, {});
+    appendChild(lastPage, createInstance("GtkLabel", { label: "last" }, container, 0, {}));
+    appendChild(notebook, lastPage);
+    const lateContent = createInstance("GtkLabel", { label: "late" }, container, 0, {});
+    appendChild(latePage, lateContent);
+    pageOrder += " late=" + String(pagesOf.page_num(widget(lateContent))) + "/" + String(pagesOf.get_n_pages());
   }
   react_gtk_log("notebook " + pageOrder);
 

@@ -211,6 +211,11 @@ export interface TabViewPageProps {
   tooltip?: string;
   /** Whether the tab shows that its page is loading. */
   loading?: boolean;
+  /**
+   * Whether the tab is pinned: shown as an icon, before every unpinned tab
+   * whatever React's order, and not closed by the user.
+   */
+  pinned?: boolean;
   needsAttention?: boolean;
   /** A word a TabOverview's search finds the tab by, besides its title. */
   keyword?: string;
@@ -272,8 +277,7 @@ export class TabViewPageNode extends PlacedNode {
     if (!(view instanceof AdwTabView)) {
       throw new Error(`<TabView.Page> goes directly inside a <TabView>, not a <${owner.name()}>.`);
     }
-    const next = this.nextIn(view);
-    const page = next === null ? view.append(widget) : view.insert(widget, view.get_page_position(next));
+    const page = this.pinned() ? view.insert_pinned(widget, this.target(owner, view, true)) : view.insert(widget, this.target(owner, view, false));
     this.describe(view, page);
     const state = this.state;
     this.closeHandler = view.connect("close-page", (self, asked) => {
@@ -321,24 +325,39 @@ export class TabViewPageNode extends PlacedNode {
     }
     const page = view.get_page(widget);
     const from = view.get_page_position(page);
-    // The tab goes where the next one is (past the end, with none), counted
-    // with this one taken out: a tab after it moves up one.
-    const next = this.nextIn(view);
-    const to = next === null ? view.get_n_pages() : view.get_page_position(next);
+    // Counted with this tab taken out: a tab after it moves up one.
+    const to = this.target(owner, view, page.get_pinned());
     view.reorder_page(page, to > from ? to - 1 : to);
     return true;
   }
   protected update(owner: WidgetNode, widget: GtkWidget): void {
     const view = owner.widget;
-    if (view instanceof AdwTabView) {
-      this.describe(view, view.get_page(widget));
+    if (!(view instanceof AdwTabView)) {
+      return;
     }
+    const page = view.get_page(widget);
+    // Pinned or unpinned, libadwaita puts the tab at the edge of its new
+    // region; it then goes where React's order puts it there.
+    const pinned = this.pinned();
+    if (page.get_pinned() !== pinned) {
+      view.set_page_pinned(page, pinned);
+      this.move(owner, widget);
+    }
+    this.describe(view, page);
   }
 
-  // The tab React places this one before, or null for the end.
-  private nextIn(view: AdwTabView): AdwTabPage | null {
-    const next = this.before === null ? null : this.before.shownWidget();
-    return next === null ? null : view.get_page(next);
+  private pinned(): boolean {
+    return this.props["pinned"] === true;
+  }
+
+  // The index of the tab React's order puts after this one (past the end of
+  // the region, with none), kept to the tab's region: libadwaita keeps pinned
+  // tabs before the others.
+  private target(owner: WidgetNode, view: AdwTabView, pinned: boolean): number {
+    const pinnedCount = view.get_n_pinned_pages();
+    const next = owner.elementAfter(this);
+    const at = next === null ? (pinned ? pinnedCount : view.get_n_pages()) : view.get_page_position(view.get_page(next));
+    return pinned ? Math.min(at, pinnedCount) : Math.max(at, pinnedCount);
   }
 
   private describe(view: AdwTabView, page: AdwTabPage): void {

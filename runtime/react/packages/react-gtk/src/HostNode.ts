@@ -281,6 +281,15 @@ export abstract class HostNode {
   /** The widget GTK shows for this element: its own, or a placed element's child's; null for an empty one. */
   abstract shownWidget(): GtkWidget | null;
 
+  /**
+   * The widget a child element (`<Notebook.Page>`, `<Overlay.Layer>`) puts in
+   * its container; null for anything else, a widget or a group, which a
+   * container with elements does not order its elements by.
+   */
+  elementWidget(): GtkWidget | null {
+    return null;
+  }
+
   /** Shows or hides what the element shows, as Suspense and Activity do. */
   abstract setVisible(visible: boolean): void;
 
@@ -535,6 +544,27 @@ export abstract class WidgetNode extends HostNode {
     return order;
   }
 
+  /**
+   * What the first child element after `child` in React's order puts in this
+   * widget: where an element whose container keeps an order (a Notebook's
+   * pages, an Overlay's layers) goes. Asked when needed, since elements React
+   * places later change it; null if none follows.
+   */
+  elementAfter(child: HostNode): GtkWidget | null {
+    const order = this.order;
+    const at = order === null ? -1 : order.indexOf(child);
+    if (order === null || at < 0) {
+      return null;
+    }
+    for (let i = at + 1; i < order.length; i++) {
+      const widget = order[i]!.elementWidget();
+      if (widget !== null) {
+        return widget;
+      }
+    }
+    return null;
+  }
+
   /** The first widget among this widget's children from `from` on, in React's order; null if none. */
   private widgetFrom(from: HostNode): WidgetNode | null {
     const order = this.order;
@@ -671,9 +701,6 @@ export abstract class WidgetNode extends HostNode {
 export abstract class PlacedNode extends HostNode {
   protected owner: WidgetNode | null = null;
   protected child: WidgetNode | null = null;
-  // The element after this one among its owner's children, or null: where a
-  // protocol with an order (a Notebook's pages) places it.
-  protected before: HostNode | null = null;
   protected props: Props = {};
   private attached = false;
 
@@ -686,7 +713,9 @@ export abstract class PlacedNode extends HostNode {
     const owner = this.owner;
     const child = this.child;
     if (previous !== null && this.attached && owner !== null && child !== null) {
+      reactWriting++;
       this.update(owner, child.widget);
+      reactWriting--;
     }
   }
 
@@ -711,19 +740,17 @@ export abstract class PlacedNode extends HostNode {
     }
   }
 
-  placeIn(parent: WidgetNode, before: HostNode | null): void {
+  // Where among its owner's elements it goes is asked of the owner
+  // (`elementAfter`), which knows React's order.
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
     // Placed again in its owner, it is moving: in place where the container
     // can move a child, else out first, then in at its new place.
     const child = this.child;
-    if (this.attached && this.owner === parent && child !== null) {
-      this.before = before;
-      if (this.move(parent, child.widget)) {
-        return;
-      }
+    if (this.attached && this.owner === parent && child !== null && this.move(parent, child.widget)) {
+      return;
     }
     this.take();
     this.owner = parent;
-    this.before = before;
     this.put();
   }
   takeOutOf(parent: WidgetNode): void {
@@ -775,6 +802,10 @@ export abstract class PlacedNode extends HostNode {
   shownWidget(): GtkWidget | null {
     const child = this.child;
     return child === null ? null : child.widget;
+  }
+
+  elementWidget(): GtkWidget | null {
+    return this.attached ? this.shownWidget() : null;
   }
 
   publicInstance(): GtkWidget {

@@ -319,7 +319,8 @@ a protocol of its own, once both are placed, and detaches it when either
 goes. A slot element fills a property; `<Grid.Child>` attaches at its cell
 and moves when its cell changes; `<Stack.Page>` adds a named, titled page
 and updates it in place; `<Notebook.Page>` inserts a page before the next
-one React knows of; `<Overlay.Layer>` draws over the Overlay's main child,
+page in React's order, asked of the Notebook's node when the page is placed
+(`elementAfter`), since pages placed after it change the answer; `<Overlay.Layer>` draws over the Overlay's main child,
 which the Overlay holds as its one ordinary child, and under the layers
 after it (a layer React moves is moved among the Overlay's children, which
 GTK draws in order); `<Fixed.Child>` puts its
@@ -414,7 +415,7 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   as GTK's Stack's are, and its `visibleChildName` is controlled and set only
   once the page it names exists.
 - A TabView's tabs are `<TabView.Page title tooltip loading needsAttention
-  keyword selected onSelect onClose>`, placed where React places them: inserted before the tab
+  keyword pinned selected onSelect onClose>`, placed where React places them: inserted before the tab
   after them, and moved with `reorder_page`, so a moved tab stays selected
   (a child element moves in place wherever its container can move it: a
   Notebook's pages too). Which tabs exist is React's. A close the user asks
@@ -424,8 +425,10 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   tab is heard as that tab's `onSelect`, and the selected tab is put back
   after the flush unless the app moved `selected`. Selections React makes (a
   tab's `selected`, a neighbour libadwaita selects when React closes the
-  selected tab) are not heard. Tabs the user drags into a new order keep it
-  until React moves them; pinned tabs are not done yet.
+  selected tab) are not heard. A pinned tab goes before every unpinned one
+  whatever React's order, as libadwaita keeps them, and in React's order
+  among the pinned; a tab React moves keeps to its region. Tabs the user
+  drags into a new order keep it until React moves them.
 - A dialog (`<AlertDialog>`, `<AboutDialog>`, `<PreferencesDialog>`) is
   presented, not placed: rendered in a widget, it is presented over that
   widget's window at commit (`present`), and closed when React takes it out

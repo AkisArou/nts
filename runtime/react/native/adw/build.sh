@@ -38,6 +38,7 @@ viewstack b B>Bee switched=b
 switcher true true
 split true true true
 tabs A,B,C>A,D,B,C>C,A,D,B selected=true asked=1 kept=4 attached=0121 true selected=A user=B>A heard=B app=B heard=B C,A,B
+pinned P*AB>APB>B*AP>B*PA>PA
 dialog true true true true responded=cancel
 application true true
 unknown true true

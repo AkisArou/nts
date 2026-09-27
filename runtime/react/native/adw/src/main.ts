@@ -36,6 +36,11 @@
 //             tab's `selected` selects it, the user selecting another is
 //             heard as that tab's onSelect and put back after the flush, and
 //             the app moving `selected` moves the selection
+//   pinned    a pinned tab goes before the unpinned ones whatever React's
+//             order; unpinned, it goes where React's order puts it; a tab
+//             pinned later goes last among the pinned; an unpinned tab moved
+//             before an unpinned one stays after the pinned; a pinned tab
+//             React takes out closes
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window, its onResponse hears
 //             the response id, and taken out it closes, which onResponse
@@ -339,6 +344,38 @@ function main(): void {
     tabbing += " " + titles();
   }
   react_gtk_log("tabs " + tabbing);
+
+  const pinView = createInstance("AdwTabView", {}, root, 0, {});
+  const pinTabs: HostNode[] = [];
+  for (const name of ["A", "P", "B"]) {
+    const tab = createInstance("AdwTabView.Page", { title: name, pinned: name === "P" }, root, 0, {});
+    appendInitialChild(tab, createInstance("GtkLabel", { label: name }, root, 0, {}));
+    pinTabs.push(tab);
+    appendInitialChild(pinView, tab);
+  }
+  const pinWidget = widget(pinView);
+  const pinning = pinWidget instanceof AdwTabView ? pinWidget : null;
+  let pinned = "not a tab view";
+  if (pinning !== null) {
+    const order = (): string => {
+      let all = "";
+      for (let i = 0; i < pinning.get_n_pages(); i++) {
+        const page = pinning.get_nth_page(i);
+        all += page.get_title() + (page.get_pinned() ? "*" : "");
+      }
+      return all;
+    };
+    pinned = order();
+    commitUpdate(pinTabs[1]!, "AdwTabView.Page", { title: "P", pinned: true }, { title: "P" }, {});
+    pinned += ">" + order();
+    commitUpdate(pinTabs[2]!, "AdwTabView.Page", { title: "B" }, { title: "B", pinned: true }, {});
+    pinned += ">" + order();
+    insertBefore(pinView, pinTabs[1]!, pinTabs[0]!);
+    pinned += ">" + order();
+    removeChild(pinView, pinTabs[2]!);
+    pinned += ">" + order();
+  }
+  react_gtk_log("pinned " + pinned);
 
   // A dialog is presented within a shown libadwaita window, as an app's is
   // (over a plain GtkWindow, libadwaita opens it as a window of its own).
