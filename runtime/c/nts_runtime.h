@@ -2158,7 +2158,15 @@ void *nts_array_handles(const NtsArray *array);
 /* The end of that loan, called after the call returns: nothing, as
  * `nts_view_unlend` is for a view, and for the same reason -- it is the
  * array's last use, so reference counting releases a temporary array after C
- * has read its block, not before. */
+ * has read its block, not before.
+ *
+ * **Defensive today, and measured so.** With it removed, AddressSanitizer
+ * stays clean over gtk-list's `--rc` build, because a temporary array is
+ * released at the end of its statement, after the call. It becomes necessary
+ * the moment a release moves earlier -- an `--rc` last-use release placed at
+ * the array's last read, the borrow before the call -- which is what made
+ * `nts_view_unlend` necessary for views. That condition, not today's
+ * placement, is why it stays. */
 void nts_array_unlend(const NtsArray *array);
 
 /* A boxed record the program holds (`NTS_KIND_BOXED`): `boxed` is the C

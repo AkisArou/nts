@@ -13355,7 +13355,9 @@ enum Lent {
     View { view: ValueId },
     /// A `CHandles` array whose element block C was lent: given back after
     /// the call (`nts_array_unlend`), which is its last use, so the array
-    /// outlives C's read of the block.
+    /// outlives C's read of the block. Defensive under today's placement,
+    /// which releases a temporary at the end of its statement; necessary once
+    /// a release moves to the last read (see the header).
     Array { array: ValueId },
     /// The compiler's own error slot, for an `@ntsThrows` parameter the caller
     /// left out: read after the call, and a failure reported there thrown.
