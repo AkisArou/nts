@@ -13,7 +13,9 @@
 // declares them as members of their container's component (`Grid.Child`) and
 // creates them. Each is a PlacedNode (HostNode.ts): it attaches its one child
 // once both are placed, and finds its container as the GTK class it needs.
-// A bar's start and end are groups, which hold any number (PackNode).
+// A bar's start and end are groups, which hold any number: a GroupNode, whose
+// placement is functions, so react-gtk/adw's groups (src/adw/children.ts) use
+// it without this module naming a libadwaita class.
 
 import { GtkActionBar, GtkFixed, GtkGrid, GtkHeaderBar, GtkNotebook, GtkOverlay, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";

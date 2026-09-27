@@ -239,14 +239,15 @@ export abstract class HostNode {
 
   /**
    * Places this node in the widget `parent`, before `before` (null: last):
-   * a widget among its children, a slot element in its slot. Each kind
-   * places itself, so a parent never asks which kind a child is.
+   * a widget among its children, a slot element in its slot, a child or group
+   * element by its container's protocol. Each kind places itself, so a parent
+   * never asks which kind a child is.
    */
   abstract placeIn(parent: WidgetNode, before: HostNode | null): void;
   /** Takes this node back out of `parent`. */
   abstract takeOutOf(parent: WidgetNode): void;
 
-  /** This node as a widget's, or null for a slot element. */
+  /** This node as a widget's, or null for a slot, child or group element. */
   abstract widgetNode(): WidgetNode | null;
 
   /** Whether the node has work for the commit phase once it is placed (`commitMount`). */
@@ -265,9 +266,18 @@ export abstract class HostNode {
   /** Shows or hides what the element shows, as Suspense and Activity do. */
   abstract setVisible(visible: boolean): void;
 
-  /** The JSX name: `Button` for `GtkButton`. */
+  /** The JSX name: `Button` for `GtkButton`, `HeaderBar` for `AdwHeaderBar`, without its namespace. */
   name(): string {
-    return this.type.startsWith("Gtk") ? this.type.slice(3) : this.type;
+    // The namespace is the leading capitalized word: the name starts at the
+    // next capital.
+    const type = this.type;
+    for (let i = 1; i < type.length; i++) {
+      const c = type.charAt(i);
+      if (c >= "A" && c <= "Z") {
+        return type.slice(i);
+      }
+    }
+    return type;
   }
 }
 
