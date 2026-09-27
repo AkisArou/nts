@@ -1830,7 +1830,7 @@ phantoms() {
   return $status
 }
 
-# Is what the backend receives the program the source says? Six rules over
+# Is what the backend receives the program the source says? Seven rules over
 # `hir --prepared`, `hir`, `layouts` and `refusals` of examples/ and every
 # conformance blocker, each one a defect that shipped silently on 2026-09-27:
 # a call or method-table entry that resolves to no definition or two; an
@@ -1838,7 +1838,8 @@ phantoms() {
 # method its class's table does not hold (two modules exporting `Thing`: no
 # table at all, a virtual call through null, 8482afb63); a cascade whose cause
 # has no refusal of its own; a refused call cut from the top level with no line
-# saying so. Known violations are named, with an owner, in
+# saying so; and every cut that *is* reported, so the list of them ratchets
+# down toward `nts build` refusing one. Known violations are named, with an owner, in
 # tooling/conformance/integrity.known -- any other fails, and one that stops
 # occurring prints "remove it". A listing that does not reconcile with its own
 # "N function(s)" is NOT MEASURED. See tooling/conformance/integrity.mjs. The
@@ -1850,7 +1851,7 @@ integrity() {
   return $status
 }
 
-# The same six rules over runtime/node/* and runtime/web-platform -- where the
+# The same seven rules over runtime/node/* and runtime/web-platform -- where the
 # recorder bug lived: a refused member filed as `Owner#m` while every caller
 # and dispatch table held `Owner<12971>#m`, so 1,732 cascades named a cause no
 # record held, and `http` shipped a descriptor with a null `destroy` slot that
