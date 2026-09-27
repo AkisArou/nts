@@ -1319,7 +1319,12 @@ export function mountReducer<S, I, A>(
   hook.memoizedState = hook.baseState = initialState;
   const queue = new UpdateQueue(reducer, initialState);
   hook.queue = queue;
-  const dispatch: Dispatch<A> = (dispatchReducerAction<A>).bind(null, currentlyRenderingFiber, queue);
+  // A dispatcher closes over the fiber that mounted it and its queue, as
+  // upstream's `bind` does; the arguments after the action only feed the
+  // warning that a dispatcher takes no callback.
+  const fiber = currentlyRenderingFiber;
+  const dispatch: Dispatch<A> = (action: A, ...extraArgs: unknown[]) =>
+    dispatchReducerAction<A>(fiber, queue, action, extraArgs);
   queue.dispatch = dispatch;
   return [hook.memoizedState as S, dispatch];
 }
@@ -1891,11 +1896,9 @@ function mountStateImpl<S>(initialStateArg: (() => S) | S): Hook {
 export function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
   const hook = mountStateImpl(initialState);
   const queue = hook.queue as UpdateQueue;
-  const dispatch: Dispatch<BasicStateAction<S>> = (dispatchSetState<BasicStateAction<S>>).bind(
-    null,
-    currentlyRenderingFiber,
-    queue,
-  );
+  const fiber = currentlyRenderingFiber;
+  const dispatch: Dispatch<BasicStateAction<S>> = (action: BasicStateAction<S>, ...extraArgs: unknown[]) =>
+    dispatchSetState<BasicStateAction<S>>(fiber, queue, action, extraArgs);
   queue.dispatch = dispatch;
   return [hook.memoizedState as S, dispatch];
 }
@@ -1914,7 +1917,8 @@ export function mountOptimistic<S, A>(passthrough: S, _reducer?: ((state: S, act
   const queue = new UpdateQueue(null, null);
   hook.queue = queue;
   // This is different than the normal setState function.
-  const dispatch: (action: A) => void = (dispatchOptimisticSetState<A>).bind(null, currentlyRenderingFiber, true, queue);
+  const fiber = currentlyRenderingFiber;
+  const dispatch: (action: A) => void = (action: A) => dispatchOptimisticSetState<A>(fiber, true, queue, action);
   queue.dispatch = dispatch;
   return [passthrough, dispatch];
 }
@@ -2310,18 +2314,17 @@ export function mountActionState<S, P>(
   stateHook.memoizedState = stateHook.baseState = initialState;
   const stateQueue = new UpdateQueue(actionStateReducer, initialState);
   stateHook.queue = stateQueue;
-  const setState: Dispatch<unknown> = dispatchSetState.bind(null, currentlyRenderingFiber, stateQueue);
+  const fiber = currentlyRenderingFiber;
+  const setState: Dispatch<unknown> = (action: unknown, ...extraArgs: unknown[]) =>
+    dispatchSetState<unknown>(fiber, stateQueue, action, extraArgs);
   stateQueue.dispatch = setState;
 
   // Pending state. This is used to store the pending state of the action.
   // Tracked optimistically, like a transition pending state.
   const pendingStateHook = mountStateImpl<Thenable<boolean> | boolean>(false);
-  const setPendingState: (pending: boolean) => void = dispatchOptimisticSetState.bind(
-    null,
-    currentlyRenderingFiber,
-    false,
-    pendingStateHook.queue as UpdateQueue,
-  );
+  const pendingQueue = pendingStateHook.queue as UpdateQueue;
+  const setPendingState: (pending: boolean) => void = (pending: boolean) =>
+    dispatchOptimisticSetState<boolean>(fiber, false, pendingQueue, pending);
 
   // Action queue hook. This is used to queue pending actions. The queue is
   // shared between all instances of the hook. Similar to a regular state queue,
@@ -2330,13 +2333,9 @@ export function mountActionState<S, P>(
   const actionQueueHook = mountWorkInProgressHook(ActionQueueHook);
   const actionQueue = new ActionStateQueue(initialState, action);
   actionQueueHook.queue = actionQueue;
-  const dispatch: Dispatch<P> = (dispatchActionState<S, P>).bind(
-    null,
-    currentlyRenderingFiber,
-    actionQueue,
-    setPendingState,
-    setState as Dispatch<ActionStateQueueNode>,
-  );
+  const setActionState = setState as Dispatch<ActionStateQueueNode>;
+  const dispatch: Dispatch<P> = (payload: P) =>
+    dispatchActionState<S, P>(fiber, actionQueue, setPendingState, setActionState, payload);
   actionQueue.dispatch = dispatch;
 
   // Stash the action function on the memoized state of the hook. We'll use this
@@ -3068,13 +3067,10 @@ export type StartTransitionFunction = (callback: () => unknown, options?: StartT
 export function mountTransition(): [boolean, StartTransitionFunction] {
   const stateHook = mountStateImpl<Thenable<boolean> | boolean>(false);
   // The `start` method never changes.
-  const start: StartTransitionFunction = (startTransition<boolean>).bind(
-    null,
-    currentlyRenderingFiber,
-    stateHook.queue as UpdateQueue,
-    true,
-    false,
-  );
+  const fiber = currentlyRenderingFiber;
+  const queue = stateHook.queue as UpdateQueue;
+  const start: StartTransitionFunction = (callback: () => unknown, options?: StartTransitionOptions) =>
+    startTransition<boolean>(fiber, queue, true, false, callback, options);
   const hook = mountWorkInProgressHook(TransitionHook);
   hook.memoizedState = start;
   return [false, start];
@@ -3229,7 +3225,7 @@ function warnIfDispatchReceivedCallback(extraArgs: readonly unknown[]): void {
   }
 }
 
-function dispatchReducerAction<A>(fiber: Fiber, queue: UpdateQueue, action: A, ...extraArgs: unknown[]): void {
+function dispatchReducerAction<A>(fiber: Fiber, queue: UpdateQueue, action: A, extraArgs: readonly unknown[]): void {
   warnIfDispatchReceivedCallback(extraArgs);
 
   const lane = requestUpdateLane(fiber);
@@ -3250,7 +3246,7 @@ function dispatchReducerAction<A>(fiber: Fiber, queue: UpdateQueue, action: A, .
   markUpdateInDevTools(fiber, lane, action);
 }
 
-function dispatchSetState<A>(fiber: Fiber, queue: UpdateQueue, action: A, ...extraArgs: unknown[]): void {
+function dispatchSetState<A>(fiber: Fiber, queue: UpdateQueue, action: A, extraArgs: readonly unknown[]): void {
   warnIfDispatchReceivedCallback(extraArgs);
 
   const lane = requestUpdateLane(fiber);
