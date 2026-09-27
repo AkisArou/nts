@@ -1,4 +1,4 @@
-// Is what the backend receives whole? Seven facts about a program, checked from
+// Is what the backend receives whole? Eight facts about a program, checked from
 // the compiler's own listings, each one a defect that shipped silently.
 //
 //   node tooling/conformance/integrity.mjs [project ...]   (default: examples/*, blockers/*)
@@ -57,6 +57,14 @@
 //                      whose value no global stored was cut in silence -- 29
 //                      of them across the runtime, `Process#constructor` among
 //                      them. A firing now is a third way to lose one.
+//   location-on-a-token
+//                      every diagnostic's location is on a token of its line,
+//                      not whitespace and not past the end. nts located at a
+//                      node's full start, its leading trivia: one column early
+//                      after a space, the line *before* after a newline -- on
+//                      a clean 1075648be about 2,200 of them, `map`'s at a
+//                      type alias among them. One cause, so known entries
+//                      name a project and a code, not each location.
 //   top-level-cut      every reported cut, named: a dropped statement, an
 //                      initializer not compiled, a refused `module#init`.
 //                      Honest, and still a program that does less than its
@@ -159,6 +167,29 @@ export function readLayouts(text) {
   return { byName, byId };
 }
 
+/**
+ * Every diagnostic's location: `/abs/file.ts:107:14 NTS1001 ...`, each once. A
+ * location in code a source transform generated carries `(in code ...
+ * generated from it)` after it and is not read: its column is the generated
+ * code's, and the file on disk is not that code.
+ */
+export function readLocations(text) {
+  const seen = new Map();
+  for (const [, file, line, col, code, body] of text.matchAll(/(\/\S+?\.[cm]?tsx?):(\d+):(\d+):? (NTS\d{4}) (.*)$/gm)) {
+    seen.set(`${file}:${line}:${col} ${code} ${body}`, { file, line: +line, col: +col, code, text: body });
+  }
+  return [...seen.values()];
+}
+
+const sourceLines = new Map();
+/** One line of a source file on disk, 1-based; undefined when it cannot be read. */
+function readSourceLine(file, n) {
+  if (!sourceLines.has(file)) {
+    try { sourceLines.set(file, readFileSync(file, "utf8").split("\n")); } catch { sourceLines.set(file, null); }
+  }
+  return sourceLines.get(file)?.[n - 1];
+}
+
 /** The first column of `nts refusals`. */
 export const readRefusals = (text) => new Set(text.split("\n").map((l) => l.split("\t")[0]).filter(Boolean));
 
@@ -202,7 +233,7 @@ const stable = (detail) => detail.replace(/Closure\d+/g, "ClosureN").replace(/<\
  * One project's violations from its four listings, or why it was not measured.
  * The scan and the self-test both go through this.
  */
-export function judge({ prepared, plain, layouts, refusals }) {
+export function judge({ prepared, plain, layouts, refusals }, sourceLine = readSourceLine) {
   const hir = readHir(prepared);
   if (hir.stated === null) return { unmeasured: 'hir --prepared printed no "N function(s)" line' };
   if (hir.lines !== hir.stated) return { unmeasured: `parsed ${hir.lines} definition(s) where the summary states ${hir.stated}` };
@@ -287,6 +318,23 @@ export function judge({ prepared, plain, layouts, refusals }) {
     }
   }
 
+  // Where a reader is sent. A location is the start of the construct's first
+  // token; one on whitespace, or past the end of its line, is the node's full
+  // start -- its leading trivia -- and when that trivia holds a newline the
+  // reader lands on the line *before*: `map` at a type alias's closing
+  // `) => unknown;`, a generator at the `let` above it. Reading the character
+  // at a position the compiler printed is not a second derivation of it.
+  for (const d of readLocations(prepared)) {
+    const line = sourceLine(d.file, d.line);
+    if (line === undefined) continue;
+    // The column counts UTF-8 bytes from the line's start, one-based
+    // (`where_it_is`), so the line is read as bytes, not as UTF-16 units.
+    const byte = Buffer.from(line, "utf8")[d.col - 1];
+    if (byte !== undefined && byte !== 0x20 && byte !== 0x09 && byte !== 0x0d) continue;
+    const where = byte === undefined ? "past the end of its line" : "on whitespace";
+    say("location-on-a-token", `${d.code} at ${d.file}:${d.line}:${d.col} is ${where}: ${d.text.slice(0, 80)}`, d.code);
+  }
+
   return { violations: out, functions: hir.stated };
 }
 
@@ -344,6 +392,15 @@ function selfTest() {
   if (reads(init + read).violations?.some((v) => v.rule === "cascade-has-root")) return "a read of an uncompiled global, with its initializer line, read as rootless";
   if (!reads(init + read).violations?.some((v) => v.rule === "top-level-cut")) return "an uncompiled initializer went unnamed";
   if (!reads(read).violations?.some((v) => v.rule === "cascade-has-root")) return "a read of a global with no initializer line was not caught";
+  // A diagnostic located in trivia: the node's full start, not its token.
+  const lines = { "/p/o.ts": ["export type MapFn = (", ") => unknown;", "", "export function map() {", "  const x = Object.getPrototypeOf(y);", "  const é = f(y);"] };
+  const located = (at) => judge({ ...clean, prepared: `${clean.prepared}\n  -- /p/o.ts:${at} NTS1001 a construct is not supported by this lowering yet\n` }, (f, n) => lines[f]?.[n - 1]).violations ?? [];
+  if (located("4:1").length !== 0) return "a location on a token was flagged";
+  if (located("5:13").length !== 0) return "a location on a token mid-line was flagged";
+  if (located("2:14")[0]?.rule !== "location-on-a-token" || !/past the end/.test(located("2:14")[0].detail)) return "a location past the end of its line (map's) was not caught";
+  if (!/on whitespace/.test(located("5:12")[0]?.detail ?? "")) return "a location on the space before a construct was not caught";
+  // Columns are bytes: `é` is two, so `f` is byte 14 where UTF-16 would say 13.
+  if (located("6:14").length !== 0 || located("6:13").length !== 1) return "a byte column after a multi-byte character was misread";
   // A field named `methods` is not a table.
   if (readLayouts("C [1]\n  methods : Erased\n").byName.get("C").methods.length !== 0) return "a field named `methods` read as a table";
   // A listing that lost a function is not a clean program.
