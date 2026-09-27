@@ -1,0 +1,5 @@
+revealed banner
+activate banner
+revealed banner
+click button_show_banner
+revealed banner

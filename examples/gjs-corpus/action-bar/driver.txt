@@ -1,0 +1,7 @@
+revealed action_bar
+toggle button
+revealed action_bar
+click start_widget
+click end_widget
+toggle button
+revealed action_bar

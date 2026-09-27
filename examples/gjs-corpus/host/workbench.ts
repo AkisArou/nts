@@ -5,8 +5,17 @@
 //
 // A port's demo is a function the host calls, where the original runs as the
 // module Workbench imports: nts compiles no dynamic `import()`.
-import { AdwApplication, AdwApplicationWindow, AdwSwitchRow } from "c:Adw-1";
 import {
+  AdwApplication,
+  AdwApplicationWindow,
+  AdwBanner,
+  AdwButtonRow,
+  AdwComboRow,
+  AdwSwitchRow,
+} from "c:Adw-1";
+import {
+  GtkActionBar,
+  GtkBox,
   GtkBuilder,
   GtkButton,
   GtkCheckButton,
@@ -85,6 +94,28 @@ function act(kind: string, id: string, arg: string, object: GObject | null): boo
       if (!(object instanceof GtkSpinButton)) return false;
       object.spin(SpinType.STEP_FORWARD, 1);
       return true;
+    case "activate":
+      if (object instanceof AdwButtonRow) object.emit("activated");
+      else if (object instanceof AdwBanner) object.emit("button-clicked");
+      else return false;
+      return true;
+    case "select":
+      if (!(object instanceof AdwComboRow)) return false;
+      object.selected = Number(arg);
+      return true;
+    case "revealed":
+      if (object instanceof GtkActionBar) console.log(`${id}.revealed ${object.revealed}`);
+      else if (object instanceof AdwBanner) console.log(`${id}.revealed ${object.revealed}`);
+      else return false;
+      return true;
+    case "children":
+      if (!(object instanceof GtkWidget)) return false;
+      console.log(`${id}.children ${children(object)}`);
+      return true;
+    case "orientation":
+      if (!(object instanceof GtkBox)) return false;
+      console.log(`${id}.orientation ${object.orientation}`);
+      return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;
       console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
@@ -92,6 +123,13 @@ function act(kind: string, id: string, arg: string, object: GObject | null): boo
     default:
       return false;
   }
+}
+
+/** How many children a widget has. */
+function children(widget: GtkWidget): number {
+  let count = 0;
+  for (let child = widget.get_first_child(); child !== null; child = child.get_next_sibling()) count++;
+  return count;
 }
 
 function drive(builder: GtkBuilder, path: string): void {

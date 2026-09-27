@@ -1,0 +1,3 @@
+activate button_row_suggested
+activate button_row_destructive
+activate button_row_suggested
