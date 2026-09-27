@@ -1,0 +1,4 @@
+click button
+close-dialog dialog
+click button
+close-dialog dialog

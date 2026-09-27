@@ -22,6 +22,7 @@
 //   attributes <id> print a label's Pango attributes as their string
 //   pages <id>     print a tab view's or carousel's `n_pages`
 //   buffer <id>    print how many characters a text view's buffer holds
+//   close-dialog <id> ask a dialog to close, as its close button does
 //   activate-child <id> <n> activate a flow box's nth child
 //   active <id>    print `active`
 //   visible <id>   print `visible`
@@ -113,6 +114,7 @@ application.connect("activate", async () => {
     else if (kind === "attributes") console.log(`${id}.attributes ${object.attributes?.to_string() ?? ""}`);
     else if (kind === "pages") console.log(`${id}.n_pages ${object.n_pages}`);
     else if (kind === "buffer") console.log(`${id}.buffer ${object.buffer.get_char_count()}`);
+    else if (kind === "close-dialog") object.close();
     else if (kind === "classes") console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
     else throw new Error(`unknown action ${kind}`);
   }

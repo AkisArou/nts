@@ -12,6 +12,7 @@ import {
   AdwButtonRow,
   AdwCarousel,
   AdwComboRow,
+  AdwDialog,
   AdwOverlaySplitView,
   AdwSwitchRow,
   AdwTabView,
@@ -185,6 +186,10 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
     case "buffer":
       if (!(object instanceof GtkTextView)) return false;
       console.log(`${id}.buffer ${object.buffer.get_char_count()}`);
+      return true;
+    case "close-dialog":
+      if (!(object instanceof AdwDialog)) return false;
+      object.close();
       return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;
