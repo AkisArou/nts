@@ -204,8 +204,9 @@ export interface OverlayChildren {
 
 /**
  * A layer over an Overlay's main child, which the Overlay holds as its one
- * ordinary child. Layers stack in the order they were added: GtkOverlay
- * cannot move one, so a layer React moves goes on top.
+ * ordinary child. Layers are drawn in the order of the Overlay's children, the
+ * main child first: a layer goes before the one React places it before, so
+ * the later of two elements is drawn over the other, as in the DOM.
  */
 export class OverlayLayerNode extends PlacedNode {
   protected attach(owner: WidgetNode, widget: GtkWidget): void {
@@ -214,6 +215,11 @@ export class OverlayLayerNode extends PlacedNode {
       throw misplaced("Overlay.Layer", "Overlay", owner);
     }
     overlay.add_overlay(widget);
+    // `before` may be the main child, which stays under every layer.
+    const next = this.before === null ? null : this.before.shownWidget();
+    if (next !== null && next.get_parent() === overlay && next !== overlay.get_child()) {
+      widget.insert_before(overlay, next);
+    }
     this.describe(overlay, widget);
   }
   protected detach(owner: WidgetNode, widget: GtkWidget): void {

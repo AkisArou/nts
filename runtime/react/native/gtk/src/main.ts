@@ -64,7 +64,8 @@
 //             inserted before another takes its place, one removed goes
 //   overlay   an Overlay holds its main child as its one child and an
 //             Overlay.Layer's child over it; the layer's `measure` updates in
-//             place; the layer removed leaves the Overlay
+//             place; a second layer is drawn over it, moved under it and
+//             back; the layer removed leaves the Overlay
 //   fixed     a Fixed.Child puts its child at its position and moves it
 //   window    a Window rendered inside the tree is a toplevel, not a child:
 //             placed in a Box it is not parented or shown; at commit it is
@@ -116,6 +117,7 @@ import {
 } from "c:react-gtk-shim";
 import {
   ApplicationRoot,
+  appendChild,
   appendChildToContainer,
   appendInitialChild,
   commitMount,
@@ -607,6 +609,23 @@ function main(): void {
       String(layered.get_measure_overlay(widget(over)));
     commitUpdate(layer, "GtkOverlay.Layer", { measure: true }, { measure: false }, {});
     layering += ">" + String(layered.get_measure_overlay(widget(over)));
+    const topLayer = createInstance("GtkOverlay.Layer", {}, container, 0, {});
+    const top = createInstance("GtkLabel", { label: "top" }, container, 0, {});
+    appendInitialChild(topLayer, top);
+    appendChild(overlay, topLayer);
+    const drawn = (): string => {
+      let names = "";
+      for (let child = widget(overlay).get_first_child(); child !== null; child = child.get_next_sibling()) {
+        names += child === widget(underneath) ? "m" : child === widget(over) ? "o" : child === widget(top) ? "t" : "?";
+      }
+      return names;
+    };
+    layering += " " + drawn();
+    insertBefore(overlay, topLayer, layer);
+    layering += ">" + drawn();
+    appendChild(overlay, topLayer);
+    layering += ">" + drawn();
+    removeChild(overlay, topLayer);
     removeChild(overlay, layer);
     layering += " " + String(widget(over).get_parent() === null);
   }

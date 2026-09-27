@@ -53,7 +53,7 @@ stack b B Bee
 switched b b
 notebook 0,1,2 two 2
 bar b1>b2 e1>e2 b0>b1 b1>-
-overlay true true true>false true
+overlay true true true>false mot>mto>mot true
 fixed 12,40>5,40
 window true true false>true over=true closed=true
 popover true true true

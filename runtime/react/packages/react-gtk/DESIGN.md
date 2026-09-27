@@ -317,7 +317,9 @@ goes. A slot element fills a property; `<Grid.Child>` attaches at its cell
 and moves when its cell changes; `<Stack.Page>` adds a named, titled page
 and updates it in place; `<Notebook.Page>` inserts a page before the next
 one React knows of; `<Overlay.Layer>` draws over the Overlay's main child,
-which the Overlay holds as its one ordinary child; `<Fixed.Child>` puts its
+which the Overlay holds as its one ordinary child, and under the layers
+after it (a layer React moves is moved among the Overlay's children, which
+GTK draws in order); `<Fixed.Child>` puts its
 child at a position and moves it there. GIR describes none of this, so these are written by
 hand (`src/children.ts`) and the generator only declares them as members
 and creates them. A widget placed in such a container directly is an error
