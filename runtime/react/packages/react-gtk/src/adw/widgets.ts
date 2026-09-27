@@ -4433,6 +4433,13 @@ export class AdwBottomSheetNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return bottomSheetSlot(this.gtk, slot, widget);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "open":
+        return this.gtk.get_open();
+    }
+    return undefined;
+  }
 }
 
 /** `<BreakpointBin>`: an AdwBreakpointBin. */
@@ -4649,6 +4656,13 @@ export class AdwComboRowNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return actionRowSlot(this.gtk, slot, widget);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "selected":
+        return this.gtk.get_selected();
+    }
+    return undefined;
+  }
   protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<ComboRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");
   }
@@ -4739,6 +4753,13 @@ export class AdwExpanderRowNode extends WidgetNode {
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
     return expanderRowSignal(this.gtk, key, slot);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "expanded":
+        return this.gtk.get_expanded();
+    }
+    return undefined;
   }
   // It only adds: a child inserted before another takes out what follows
   // and adds it again, so the order is React's.
@@ -4876,6 +4897,13 @@ export class AdwNavigationSplitViewNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return navigationSplitViewSlot(this.gtk, slot, widget);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "showContent":
+        return this.gtk.get_show_content();
+    }
+    return undefined;
+  }
 }
 
 /** `<NavigationView>`: an AdwNavigationView. */
@@ -4923,6 +4951,13 @@ export class AdwOverlaySplitViewNode extends WidgetNode {
   }
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return overlaySplitViewSlot(this.gtk, slot, widget);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "showSidebar":
+        return this.gtk.get_show_sidebar();
+    }
+    return undefined;
   }
 }
 
@@ -5248,6 +5283,8 @@ export class AdwSpinRowNode extends WidgetNode {
   }
   readControlled(key: string): unknown {
     switch (key) {
+      case "value":
+        return this.gtk.get_value();
       case "text":
         return this.gtk.get_text();
     }
@@ -5325,6 +5362,13 @@ export class AdwSwitchRowNode extends WidgetNode {
   }
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return actionRowSlot(this.gtk, slot, widget);
+  }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "active":
+        return this.gtk.get_active();
+    }
+    return undefined;
   }
   protected place(_child: WidgetNode, _moving: boolean): void {
     throw new Error("<SwitchRow> places a child through <ActionRow.Prefix> or <ActionRow.Suffix>.");

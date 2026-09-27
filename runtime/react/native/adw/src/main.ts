@@ -9,7 +9,10 @@
 //             and taken out empties it
 //   signal    an ActionRow's activated signal runs its handler
 //   controlled  an EntryRow's text, from GTK's Editable, is controlled: a
-//             user's edit goes back to the props' value when the app keeps it
+//             user's edit goes back to the props' value when the app keeps it;
+//             so do a SwitchRow's active, an ExpanderRow's expanded, a
+//             SpinRow's value, a ComboRow's selected, an OverlaySplitView's
+//             sidebar, a NavigationSplitView's content and a BottomSheet's open
 //   application  an AdwApplication's root: an ApplicationWindow rendered there
 //             joins the application at commit
 //   group     a PreferencesGroup adds its rows in React's order: a row
@@ -70,12 +73,18 @@ import {
   adw_init,
   AdwApplication,
   AdwApplicationWindow,
+  AdwBottomSheet,
   AdwCarousel,
+  AdwComboRow,
   AdwEntryRow,
+  AdwExpanderRow,
   AdwHeaderBar,
   AdwNavigationSplitView,
   AdwNavigationView,
+  AdwOverlaySplitView,
   AdwPreferencesGroup,
+  AdwSpinRow,
+  AdwSwitchRow,
   AdwTabView,
   type AdwTabPage,
   AdwToolbarView,
@@ -85,7 +94,7 @@ import {
 } from "c:Adw-1";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { g_main_context_iteration, g_main_loop_new, g_timeout_add_full } from "c:GLib-2.0";
-import { GtkWindow, type GtkWidget } from "c:Gtk-4.0";
+import { GtkAdjustment, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { react_gtk_emit, react_gtk_log } from "c:react-gtk-shim";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
 import { adw } from "../../../packages/react-gtk/src/adw/index.ts";
@@ -167,8 +176,50 @@ function main(): void {
   if (entryWidget instanceof AdwEntryRow) {
     entryWidget.set_text("typed");
   }
+  // libadwaita's other inputs, each changed as a user would: each goes back.
+  const switchRow = createInstance("AdwSwitchRow", { title: "Wi-Fi", active: false }, root, 0, {});
+  const expanderRow = createInstance("AdwExpanderRow", { title: "More", expanded: false }, root, 0, {});
+  const range = new GtkAdjustment();
+  range.set_upper(10);
+  range.set_step_increment(1);
+  const spinRow = createInstance("AdwSpinRow", { title: "Count", adjustment: range, value: 3 }, root, 0, {});
+  const choices = new GtkStringList();
+  choices.append("a");
+  choices.append("b");
+  const comboRow = createInstance("AdwComboRow", { title: "Choice", model: choices, selected: 0 }, root, 0, {});
+  const overlaySplit = createInstance("AdwOverlaySplitView", { showSidebar: true }, root, 0, {});
+  const navigationSplit = createInstance("AdwNavigationSplitView", { showContent: false }, root, 0, {});
+  const sheet = createInstance("AdwBottomSheet", { open: false }, root, 0, {});
+  const switchWidget = widget(switchRow);
+  const expanderWidget = widget(expanderRow);
+  const spinWidget = widget(spinRow);
+  const comboWidget = widget(comboRow);
+  const overlayWidget = widget(overlaySplit);
+  const navigationWidget = widget(navigationSplit);
+  const sheetWidget = widget(sheet);
+  if (switchWidget instanceof AdwSwitchRow) switchWidget.set_active(true);
+  if (expanderWidget instanceof AdwExpanderRow) expanderWidget.set_expanded(true);
+  if (spinWidget instanceof AdwSpinRow) spinWidget.set_value(5);
+  if (comboWidget instanceof AdwComboRow) comboWidget.set_selected(1);
+  if (overlayWidget instanceof AdwOverlaySplitView) overlayWidget.set_show_sidebar(false);
+  if (navigationWidget instanceof AdwNavigationSplitView) navigationWidget.set_show_content(true);
+  if (sheetWidget instanceof AdwBottomSheet) sheetWidget.set_open(true);
   idle();
-  react_gtk_log("controlled " + (entryWidget instanceof AdwEntryRow ? entryWidget.get_text() : "not an entry row"));
+  const inputs =
+    String(switchWidget instanceof AdwSwitchRow && switchWidget.get_active()) +
+    " " +
+    String(expanderWidget instanceof AdwExpanderRow && expanderWidget.get_expanded()) +
+    " " +
+    String(spinWidget instanceof AdwSpinRow ? spinWidget.get_value() : -1) +
+    " " +
+    String(comboWidget instanceof AdwComboRow ? comboWidget.get_selected() : -1) +
+    " " +
+    String(overlayWidget instanceof AdwOverlaySplitView && overlayWidget.get_show_sidebar()) +
+    " " +
+    String(navigationWidget instanceof AdwNavigationSplitView && navigationWidget.get_show_content()) +
+    " " +
+    String(sheetWidget instanceof AdwBottomSheet && sheetWidget.get_open());
+  react_gtk_log("controlled " + (entryWidget instanceof AdwEntryRow ? entryWidget.get_text() : "not an entry row") + " " + inputs);
 
   const group = createInstance("AdwPreferencesGroup", { title: "Group" }, root, 0, {});
   const rows: HostNode[] = [];

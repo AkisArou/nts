@@ -604,6 +604,13 @@ const controlledProps = new Map([
   ["Gtk.MenuButton", ["active"]],
   ["Gtk.SearchBar", ["search-mode-enabled"]],
   ["Adw.ViewStack", ["visible-child-name"]],
+  ["Adw.SwitchRow", ["active"]],
+  ["Adw.ExpanderRow", ["expanded"]],
+  ["Adw.SpinRow", ["value"]],
+  ["Adw.ComboRow", ["selected"]],
+  ["Adw.OverlaySplitView", ["show-sidebar"]],
+  ["Adw.NavigationSplitView", ["show-content"]],
+  ["Adw.BottomSheet", ["open"]],
 ]);
 
 // Widget-typed properties that name another widget rather than place one: an
