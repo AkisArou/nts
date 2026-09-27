@@ -297,6 +297,10 @@ pub struct TypeResponse {
     /// means absent rather than symbol zero.
     #[serde(default)]
     pub symbol: u32,
+    /// `checker.ObjectFlags`, for an object type. See
+    /// [`crate::tsgo::types::object_flags`].
+    #[serde(default, rename = "objectFlags")]
+    pub object_flags: u32,
 }
 
 /// Parameters for the type sub-property endpoints (`getTypesOfType` and friends).

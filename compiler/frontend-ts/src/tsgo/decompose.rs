@@ -150,7 +150,7 @@ pub struct Decomposer<'a> {
     project: ProjectHandle,
     /// tsgo type id → our arena index. Shared with the frontend's interning so a
     /// type discovered here and a type seen at a node are one record.
-    interned: FxHashMap<u32, TypeId>,
+    interned: types::Interned,
     /// tsgo type ids already decomposed, so a cyclic type graph terminates.
     done: FxHashSet<u32>,
     /// tsgo symbol id → arena index, for mapping a type's declaring symbol.
@@ -194,7 +194,7 @@ impl<'a> Decomposer<'a> {
         client: &'a mut Client,
         handle: SnapshotHandle,
         project: ProjectHandle,
-        interned: FxHashMap<u32, TypeId>,
+        interned: types::Interned,
         symbols: FxHashMap<u32, SymbolId>,
         file_bases: Vec<(String, u32)>,
         root: camino::Utf8PathBuf,
@@ -263,8 +263,8 @@ impl<'a> Decomposer<'a> {
             .filter_map(|ty| {
                 self.interned
                     .iter()
-                    .find(|(_, slot)| **slot == ty)
-                    .map(|(id, _)| *id)
+                    .find(|(_, slot)| *slot == ty)
+                    .map(|(id, _)| id)
             })
             .collect();
         if seeds.is_empty() {
@@ -371,7 +371,7 @@ impl<'a> Decomposer<'a> {
                 return Ok(());
             }
 
-            let Some(&slot) = self.interned.get(&ty) else {
+            let Some(slot) = self.interned.get(ty) else {
                 continue;
             };
             // Only placeholders are worth a round trip; a primitive is already
@@ -586,7 +586,7 @@ impl<'a> Decomposer<'a> {
             .map(|response| self.intern_one(snapshot, &response, walk));
         let name = self
             .interned
-            .get(&ty)
+            .get(ty)
             .and_then(|slot| snapshot.types.get(slot.0 as usize))
             .and_then(|record| record.symbol)
             .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
@@ -704,7 +704,7 @@ impl<'a> Decomposer<'a> {
         let bases = self.client.base_types(self.handle, &self.project, ty)?;
         if !bases.is_empty() {
             let base_ids = self.intern_all(snapshot, &bases, walk);
-            if let Some(&slot) = self.interned.get(&ty) {
+            if let Some(slot) = self.interned.get(ty) {
                 snapshot.base_types.insert(slot, base_ids);
             }
         }
@@ -714,32 +714,10 @@ impl<'a> Decomposer<'a> {
         // class's *properties* but not the bodies of its methods, whose AST nodes
         // every instantiation shares, so zipping the declaration's list against
         // an instantiation's is what supplies the missing substitution.
-        //
-        // Two guards, because one is not enough. The target query answers `null`
-        // for most types that are not references, which keeps the common case
-        // from reaching a handler that would crash on it. But `Target()` is also
-        // non-nil for an instantiated *anonymous* type -- a mapped type, an
-        // object literal's type -- which is not a `TypeReference` either, and
-        // `getTypeArguments` dereferences a nil for those.
-        //
-        // So the residual failure is swallowed, and that is sound rather than
-        // convenient: `getTypeArguments` crashes exactly when the type is not a
-        // reference, and a type that is not a reference has no type arguments.
-        // The answer this discards is the empty one.
-        let arguments = if self
-            .client
-            .target_of_type(self.handle, &self.project, ty)?
-            .is_some()
-        {
-            self.client
-                .type_arguments(self.handle, &self.project, ty)
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let arguments = self.arguments_of(ty, walk)?;
         if !arguments.is_empty() {
             let ids = self.intern_all(snapshot, &arguments, walk);
-            if let Some(&slot) = self.interned.get(&ty) {
+            if let Some(slot) = self.interned.get(ty) {
                 snapshot.type_arguments.insert(slot, ids.clone());
             }
             // A generic *form* rather than an instantiation, and the reason the
@@ -806,7 +784,7 @@ impl<'a> Decomposer<'a> {
                     readonly: info.is_readonly,
                 })
                 .collect();
-            if let Some(&slot) = self.interned.get(&ty) {
+            if let Some(slot) = self.interned.get(ty) {
                 snapshot.index_signatures.insert(slot, signatures);
             }
         }
@@ -958,7 +936,7 @@ impl<'a> Decomposer<'a> {
     /// Whether a type's declaring symbol is a class or interface declared in a
     /// file this snapshot decoded -- the program's own, as against a library's.
     fn declares_a_form_here(&self, snapshot: &SemanticSnapshot, ty: u32) -> bool {
-        let Some(&slot) = self.interned.get(&ty) else {
+        let Some(slot) = self.interned.get(ty) else {
             return false;
         };
         let Some(symbol) = snapshot.types.get(slot.0 as usize).and_then(|record| record.symbol)
@@ -1048,10 +1026,10 @@ impl<'a> Decomposer<'a> {
     fn own_member_names(
         snapshot: &SemanticSnapshot,
         ty: u32,
-        interned: &FxHashMap<u32, TypeId>,
+        interned: &types::Interned,
     ) -> FxHashSet<String> {
         let mut names = FxHashSet::default();
-        let Some(slot) = interned.get(&ty) else {
+        let Some(slot) = interned.get(ty) else {
             return names;
         };
         let Some(symbol) = snapshot
@@ -1182,17 +1160,7 @@ impl<'a> Decomposer<'a> {
         slot: TypeId,
         walk: &mut Walk<'_>,
     ) -> Result<(), TsgoError> {
-        if self
-            .client
-            .target_of_type(self.handle, &self.project, ty)?
-            .is_none()
-        {
-            return Ok(());
-        }
-        let arguments = self
-            .client
-            .type_arguments(self.handle, &self.project, ty)
-            .unwrap_or_default();
+        let arguments = self.arguments_of(ty, walk)?;
         if arguments.is_empty() {
             return Ok(());
         }
@@ -1611,13 +1579,36 @@ impl<'a> Decomposer<'a> {
         if !response.texts.is_empty() {
             self.texts.insert(response.id, response.texts.clone());
         }
-        *self.interned.entry(response.id).or_insert_with(|| {
-            let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
-            snapshot
-                .types
-                .push(types::classify(response, &self.symbols));
-            id
-        })
+        self.interned.intern(snapshot, response, &self.symbols)
+    }
+
+    /// A type reference's arguments; none for any other type.
+    ///
+    /// Only a reference is asked: `getTypeArguments` reads the type as a
+    /// `TypeReference` and dereferences nil on anything else. This used to
+    /// ask `Target()` first and swallow the crash, since `Target()` is also
+    /// non-nil for an instantiated *anonymous* type -- a mapped type, an
+    /// object literal's -- which is not a reference. The answer discarded was
+    /// the right one, the empty list, but each was a recovered panic with its
+    /// stack formatted: 13% of tsgo's time on a program naming the `AppKit`
+    /// platform package. The reference flag arrives on the type's response
+    /// and [`types::Interned`] keeps it, so knowing costs no request.
+    ///
+    /// A reference whose arguments tsgo cannot encode -- the tuple holding an
+    /// empty tuple `resolve_object` describes -- is counted unanswered and
+    /// read as having none, as it was before.
+    fn arguments_of(&mut self, ty: u32, walk: &mut Walk<'_>) -> Result<Vec<TypeResponse>, TsgoError> {
+        if !self.interned.is_reference(ty) {
+            return Ok(Vec::new());
+        }
+        match self.client.type_arguments(self.handle, &self.project, ty) {
+            Ok(arguments) => Ok(arguments),
+            Err(TsgoError::Server { .. }) => {
+                walk.stats.unanswered += 1;
+                Ok(Vec::new())
+            }
+            Err(other) => Err(other),
+        }
     }
 
     /// A type's constituent types, or `None` when the checker could not say.
@@ -1647,13 +1638,7 @@ impl<'a> Decomposer<'a> {
                 if !response.texts.is_empty() {
                     self.texts.insert(response.id, response.texts.clone());
                 }
-                let id = *self.interned.entry(response.id).or_insert_with(|| {
-                    let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
-                    snapshot
-                        .types
-                        .push(types::classify(response, &self.symbols));
-                    id
-                });
+                let id = self.interned.intern(snapshot, response, &self.symbols);
                 if !walk.seeded.contains(&response.id) && !self.done.contains(&response.id) {
                     walk.stats.discovered += 1;
                 }
@@ -1677,7 +1662,7 @@ impl<'a> Decomposer<'a> {
 
     /// The interning map, so a caller can keep using it after decomposition.
     #[must_use]
-    pub fn into_interned(self) -> FxHashMap<u32, TypeId> {
+    pub fn into_interned(self) -> types::Interned {
         self.interned
     }
 }

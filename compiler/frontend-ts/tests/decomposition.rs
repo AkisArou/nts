@@ -452,3 +452,37 @@ fn a_root_class_has_no_base_types() {
         "Shape extends nothing",
     );
 }
+
+/// **Only a type reference is asked for its arguments.** `getTypeArguments`
+/// reads a `TypeReference` and dereferences nil on anything else, and an
+/// instantiated mapped type -- `Partial<Box>` -- has a target without being
+/// one. Asking recovered a panic in tsgo for each such type, which was 13% of
+/// its time on a platform package's program. Asked of a reference only, the
+/// generic instance still has its arguments and nothing goes unanswered.
+#[test]
+fn type_arguments_are_asked_of_references_only() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-decompose-arguments-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("main.ts"),
+        "export class Box<T> {\n  constructor(public value: T) {}\n}\nexport interface Point {\n  x: number;\n  y: number;\n}\nexport const boxed: Box<number> = new Box(1);\nexport const partial: Partial<Point> = { x: 1 };\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "strict": true, "noEmit": true, "target": "es2022", "module": "esnext" }, "files": ["main.ts"] }"#,
+    )
+    .unwrap();
+    let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
+    let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
+    let snapshot = source.snapshot(&tsconfig).expect("snapshot should succeed");
+    assert_eq!(source.stats().types_unanswered, 0, "{:?}", snapshot.diagnostics);
+    // The instance, not the form `Box<T>` its declaration has: the one type
+    // declared by `Box` whose argument is `number`.
+    let instance = snapshot.type_arguments.iter().find(|(ty, arguments)| {
+        snapshot.types[ty.0 as usize].symbol.is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name == "Box")
+            && arguments.iter().map(|argument| &snapshot.types[argument.0 as usize].kind).eq([&TypeKind::Number])
+    });
+    assert!(instance.is_some(), "`Box<number>` lost its argument: {:?}", snapshot.type_arguments);
+}

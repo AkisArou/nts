@@ -17,8 +17,8 @@
 //!   `handleGetTypeAtLocations` returns on the first failure — so one list in a
 //!   batch loses every type in it. Lists are filtered out before the request.
 
-use nts_semantic_schema::{LiteralValue, SymbolId, TypeKind, TypeRecord};
-use rustc_hash::FxHashMap;
+use nts_semantic_schema::{LiteralValue, SemanticSnapshot, SymbolId, TypeId, TypeKind, TypeRecord};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::proto::TypeResponse;
 
@@ -51,6 +51,70 @@ pub mod flags {
     pub const CONDITIONAL: u32 = 1 << 26;
     pub const UNION: u32 = 1 << 27;
     pub const INTERSECTION: u32 = 1 << 28;
+}
+
+/// `checker.ObjectFlags`, from `internal/checker/types.go`: the bits read here.
+pub mod object_flags {
+    /// A generic type reference. Its data is a `TypeReference`, the only
+    /// kind `getTypeArguments` can read: on any other it dereferences nil.
+    pub const REFERENCE: u32 = 1 << 2;
+}
+
+/// The checker's types as the arena holds them: the slot each tsgo type id
+/// was given, and what a later question needs to know of a type that its
+/// record does not keep.
+///
+/// One owner for both, shared by the frontend's pass over nodes and by
+/// decomposition, so a type met in either is one record and its facts are
+/// kept wherever it was first seen.
+#[derive(Debug, Default)]
+pub struct Interned {
+    slots: FxHashMap<u32, TypeId>,
+    /// tsgo ids of type references: the types `getTypeArguments` answers for.
+    references: FxHashSet<u32>,
+}
+
+impl Interned {
+    /// The slot `response`'s type has, giving it one if it has none.
+    #[allow(clippy::implicit_hasher)]
+    pub fn intern(&mut self, snapshot: &mut SemanticSnapshot, response: &TypeResponse, symbols: &FxHashMap<u32, SymbolId>) -> TypeId {
+        if response.object_flags & object_flags::REFERENCE != 0 {
+            self.references.insert(response.id);
+        }
+        *self.slots.entry(response.id).or_insert_with(|| {
+            let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
+            snapshot.types.push(classify(response, symbols));
+            id
+        })
+    }
+
+    /// The slot tsgo's type `id` was given.
+    #[must_use]
+    pub fn get(&self, id: u32) -> Option<TypeId> {
+        self.slots.get(&id).copied()
+    }
+
+    /// Whether tsgo's type `id` is a type reference, and so has arguments to
+    /// ask for.
+    #[must_use]
+    pub fn is_reference(&self, id: u32) -> bool {
+        self.references.contains(&id)
+    }
+
+    /// Every tsgo type id and its slot.
+    pub fn iter(&self) -> impl Iterator<Item = (u32, TypeId)> + '_ {
+        self.slots.iter().map(|(id, slot)| (*id, *slot))
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.slots.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.slots.is_empty()
+    }
 }
 
 /// Classify one type response into a schema record.
@@ -311,6 +375,7 @@ mod tests {
             flags,
             value,
             symbol: 0,
+            object_flags: 0,
         }
     }
 

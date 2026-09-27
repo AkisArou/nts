@@ -1158,7 +1158,7 @@ impl TsgoApi {
         client: &mut Client,
         snapshot: &mut SemanticSnapshot,
         opened: &UpdateSnapshotResponse,
-        interned: FxHashMap<u32, TypeId>,
+        interned: types::Interned,
         symbol_ids: FxHashMap<u32, SymbolId>,
         file_bases: &[(String, u32)],
         natively_implemented: &FxHashSet<u32>,
@@ -1186,8 +1186,7 @@ impl TsgoApi {
         // worklist order -- so an unrelated edit reorders it. One module gave
         // 12, 21, 27 and 7 functions across four combinations of two files.
         let reached = nts_semantic_schema::reachability::for_frontend(snapshot);
-        let by_slot: FxHashMap<TypeId, u32> =
-            interned.iter().map(|(tsgo, slot)| (*slot, *tsgo)).collect();
+        let by_slot: FxHashMap<TypeId, u32> = interned.iter().map(|(tsgo, slot)| (slot, tsgo)).collect();
         let seeds: Vec<u32> = reached
             .seeds()
             .into_iter()
@@ -1354,7 +1353,7 @@ impl SemanticSource for TsgoApi {
         };
         // tsgo's ids are stable within a session, so one `string` type interns to
         // one record no matter how many nodes name it.
-        let mut interned: FxHashMap<u32, TypeId> = FxHashMap::default();
+        let mut interned = types::Interned::default();
         // Types this compiler implements itself; see `promise_surface`.
         let mut natively_implemented: FxHashSet<u32> = FxHashSet::default();
         let mut symbol_ids: FxHashMap<u32, SymbolId> = FxHashMap::default();
@@ -1562,7 +1561,7 @@ fn tally(
 fn resolve_types(
     client: &mut Client,
     snapshot: &mut SemanticSnapshot,
-    interned: &mut FxHashMap<u32, TypeId>,
+    interned: &mut types::Interned,
     symbols: &FxHashMap<u32, SymbolId>,
     natively_implemented: &mut FxHashSet<u32>,
     ctx: symbols::FileContext<'_>,
@@ -1610,11 +1609,7 @@ fn resolve_types(
         if promise_surface(snapshot, *node) {
             natively_implemented.insert(response.id);
         }
-        let type_id = *interned.entry(response.id).or_insert_with(|| {
-            let id = TypeId(u32::try_from(snapshot.types.len()).unwrap_or(u32::MAX));
-            snapshot.types.push(types::classify(response, symbols));
-            id
-        });
+        let type_id = interned.intern(snapshot, response, symbols);
         snapshot.node_types.insert(*node, type_id);
     }
 
