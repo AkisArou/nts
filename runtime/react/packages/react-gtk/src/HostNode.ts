@@ -277,6 +277,13 @@ export class WidgetSet {
 export abstract class HostNode {
   /** The host type React created it for: `GtkButton`, `GtkPaned.StartChild`. */
   readonly type: string;
+  /**
+   * Whether its parent widget's order holds it (WidgetNode's `order`), so
+   * that placing a new child costs no search of that order. A flag, not the
+   * parent: React never moves a host node to another parent (it makes a new
+   * one), and a reference back would be a cycle.
+   */
+  ordered = false;
 
   constructor(type: string) {
     this.type = type;
@@ -550,22 +557,29 @@ export abstract class WidgetNode extends HostNode {
 
   appendChild(child: HostNode): void {
     const order = this.orderOf();
-    remove(order, child);
+    if (child.ordered) {
+      remove(order, child);
+    }
     order.push(child);
+    child.ordered = true;
     child.placeIn(this, null);
   }
   insertBefore(child: HostNode, before: HostNode): void {
     const order = this.orderOf();
-    remove(order, child);
+    if (child.ordered) {
+      remove(order, child);
+    }
     const at = order.indexOf(before);
     insertAt(order, at < 0 ? order.length : at, child);
+    child.ordered = true;
     child.placeIn(this, before);
   }
   removeChild(child: HostNode): void {
     const order = this.order;
-    if (order !== null) {
+    if (order !== null && child.ordered) {
       remove(order, child);
     }
+    child.ordered = false;
     child.takeOutOf(this);
   }
 
@@ -601,14 +615,19 @@ export abstract class WidgetNode extends HostNode {
 
   /** The first widget among this widget's children from `from` on, in React's order; null if none. */
   private widgetFrom(from: HostNode): WidgetNode | null {
+    // A widget is its own answer; only a slot or child element is looked past.
+    const widget = from.widgetNode();
+    if (widget !== null) {
+      return widget;
+    }
     const order = this.order;
     if (order === null) {
       return null;
     }
     for (let i = Math.max(order.indexOf(from), 0); i < order.length; i++) {
-      const widget = order[i]!.widgetNode();
-      if (widget !== null) {
-        return widget;
+      const found = order[i]!.widgetNode();
+      if (found !== null) {
+        return found;
       }
     }
     return null;
