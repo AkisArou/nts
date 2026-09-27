@@ -171,10 +171,13 @@ pub const NOCHECK: &str = "// @ts-nocheck";
 
 /// Link each package into `project`'s `node_modules`, where an editor and
 /// plain `tsc` find it through `"types"`, replacing a link to an older one.
+/// Answers the packages linked where none was: what a build tells the person
+/// building, once, since their editor needs a line of config to see them.
 ///
 /// # Errors
 /// The filesystem's.
-pub fn link(installed: &Installed, project: &Utf8Path) -> Result<()> {
+pub fn link(installed: &Installed, project: &Utf8Path) -> Result<Vec<String>> {
+    let mut new = Vec::new();
     for (name, dir) in &installed.packages {
         let at = project.join("node_modules").join(name);
         if std::fs::read_link(&at).is_ok_and(|target| target == dir.as_std_path()) {
@@ -185,13 +188,15 @@ pub fn link(installed: &Installed, project: &Utf8Path) -> Result<()> {
         }
         if at.symlink_metadata().is_ok() {
             std::fs::remove_file(&at).or_else(|_| std::fs::remove_dir_all(&at)).with_context(|| format!("replacing {at}"))?;
+        } else {
+            new.push(name.clone());
         }
         #[cfg(unix)]
         std::os::unix::fs::symlink(dir, &at).with_context(|| format!("linking {at} to {dir}"))?;
         #[cfg(not(unix))]
         bail!("linking a platform package into {project} is not implemented on this host");
     }
-    Ok(())
+    Ok(new)
 }
 
 fn write_packages(directory: &Utf8Path, packages: &[Package]) -> Result<()> {
@@ -327,8 +332,8 @@ mod tests {
         assert_eq!(identities, 1, "a generator version made an identity of its own");
         assert!(third.files().iter().all(|file| file.is_file()), "{third:?}");
         let project = root.join("project");
-        link(&third, &project).unwrap();
-        link(&third, &project).unwrap();
+        assert_eq!(link(&third, &project).unwrap(), ["@nts/test-one"], "a first link is new");
+        assert!(link(&third, &project).unwrap().is_empty(), "a link already there is not new");
         assert!(project.join("node_modules/@nts/test-one/index.d.ts").is_file());
     }
 }

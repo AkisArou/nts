@@ -72,7 +72,13 @@ impl ObjcBindings {
                 continue;
             }
             let installed = store.ensure(&platform)?;
-            nts_surfaces::link(&installed, project)?;
+            let linked = nts_surfaces::link(&installed, project)?;
+            // Once, when the platform first arrives: the build sees it through
+            // the config it opens, and an editor only through `types`.
+            let package = platform.platform_package();
+            if linked.contains(&package) {
+                eprintln!("note: linked {package} into {project}/node_modules; for an editor to see it, add \"types\": [\"{package}\"] to tsconfig.json's compilerOptions");
+            }
             files.extend(installed.files());
             provided.extend(platform.modules().map(str::to_owned));
         }
