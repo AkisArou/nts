@@ -654,6 +654,7 @@ impl Emitted {
 /// counted 92 times, and it was the Node lane bracketing two pinned compilers
 /// that found it -- from their end it is a module that fails every test.
 fn drop_orphaned_bodies(
+    program: &Program,
     bodies: &mut Vec<(String, CodeWriter, &Func)>,
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
@@ -692,12 +693,37 @@ fn drop_orphaned_bodies(
             return;
         };
         let orphaned = bodies[at].2.name.clone();
+        // **Which of the three reasons it is**, because "refused above" is a
+        // claim about the output and it was false in two of them.
+        //
+        // The React lane spent a while on an abstract method no class
+        // implements: NTS2009 named `Maker#make`, nothing above named it, and
+        // every line of the cascade pointed at a refusal that did not exist. A
+        // cause with no line of its own is worse than a missing message -- it
+        // reads as evidence, and the reader goes looking for the refusal rather
+        // than for the absence.
+        //
+        // The three are genuinely different and only the first is this
+        // backend's: a name this pass dropped a moment ago, a name *lowering*
+        // declined (whose reason is recorded and can be quoted), and a name
+        // nothing in the program ever defined -- which is what an abstract
+        // member with no implementer is, and is not a refusal by anybody.
+        let why = if refused.contains(&missing) {
+            "which this backend refused above".to_owned()
+        } else if let Some((_, reason)) = program
+            .uncompiled
+            .iter()
+            .find(|(name, _)| *name == missing)
+        {
+            format!("which this lowering declined: {reason}")
+        } else {
+            "which nothing in this program defines -- a member declared and never \
+             implemented has no function to call"
+                .to_owned()
+        };
         diagnostics.push(Diagnostic::error(
             "NTS2009",
-            format!(
-                "`{orphaned}` cannot be emitted because it calls `{missing}`, which this \
-                 backend refused above"
-            ),
+            format!("`{orphaned}` cannot be emitted because it calls `{missing}`, {why}"),
             origin.location,
         ));
         refused.push(orphaned);
@@ -842,7 +868,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     }
 
     let mut bodies = emit_bodies(program, abi, &literals, &mut diagnostics, &mut refused);
-    drop_orphaned_bodies(&mut bodies, &mut diagnostics, &mut refused);
+    drop_orphaned_bodies(program, &mut bodies, &mut diagnostics, &mut refused);
     // The C names of the functions this translation unit will actually define,
     // after the backend's own refusals have taken their callers with them.
     // `program.funcs` is the wrong list: it still holds the bodies dropped just

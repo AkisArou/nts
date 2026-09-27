@@ -1,9 +1,9 @@
 {
   "run": "build",
   "category": "refused",
-  "nts": "NTS2009 `Holder#total` cannot be emitted because it calls `Maker#make`, which this backend refused above",
+  "nts": "NTS2009 `Holder#total` cannot be emitted because it calls `Maker#make`, which nothing in this program defines -- a member declared and never implemented has no function to call",
   "ran": "no artefact: emit-c exited 1",
   "node": "exit 1; nts: uncaught Observed: a call no receiver can reach=0;",
-  "measured_with": "3eb7ce6cc662fa19",
+  "measured_with": "9cc57202b60707a3",
   "source": "measured"
 }
