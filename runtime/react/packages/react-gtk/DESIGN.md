@@ -451,6 +451,11 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   enabled>` elements, in React's order, heard as the dialog's `onResponse`
   with their id. libadwaita only appends a response, so one React places
   before others is added and those after it are added again after it.
+- A ToggleGroup's segments are `<ToggleGroup.Toggle name label iconName>`
+  elements, in React's order, and its `activeName` is controlled: applied
+  once the toggle it names exists, and a user's pick goes back after the
+  flush unless the app takes it up. A toggle sets only what changed, since
+  a toggle given its own name again is, to its group, a duplicate.
 - Breakpoints are elements of the window, dialog or BreakpointBin they
   belong to: `<ApplicationWindow.Breakpoint condition="max-width: 500sp"
   onApply onUnapply>`. The app hears one apply and unapply and renders for

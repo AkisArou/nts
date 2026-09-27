@@ -151,7 +151,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type AlertDialogChildren, AlertResponseNode, type DialogBreakpoints, NavigationStack } from "./children.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type ToggleGroupChildren, ToggleNode, type AlertDialogChildren, AlertResponseNode, type DialogBreakpoints, NavigationStack } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1149,7 +1149,7 @@ export declare const TabView: HostComponent<"AdwTabView", TabViewProps> & TabVie
 export declare const ToastOverlay: HostComponent<"AdwToastOverlay", ToastOverlayProps>;
 
 /** `<ToggleGroup>`: an AdwToggleGroup. */
-export declare const ToggleGroup: HostComponent<"AdwToggleGroup", ToggleGroupProps & Gtk.NoChildren>;
+export declare const ToggleGroup: HostComponent<"AdwToggleGroup", ToggleGroupProps> & ToggleGroupChildren;
 
 /** `<ToolbarView>`: an AdwToolbarView. */
 export declare const ToolbarView: HostComponent<"AdwToolbarView", ToolbarViewProps> & ToolbarViewSlots & ToolbarViewChildren;
@@ -3646,7 +3646,7 @@ export function toggleGroupProp(gtk: AdwToggleGroup, key: string, value: unknown
       gtk.set_active(typeof value === "number" ? value : 4294967295);
       return true;
     case "activeName":
-      gtk.set_active_name(typeof value === "string" ? value : null);
+      if (typeof value === "string" && gtk.get_toggle_by_name(value) !== null) gtk.set_active_name(value);
       return true;
     case "canShrink":
       gtk.set_can_shrink(typeof value === "boolean" ? value : true);
@@ -5504,6 +5504,16 @@ export class AdwToggleGroupNode extends WidgetNode {
   connectSignal(key: string, slot: SignalSlot): boolean {
     return toggleGroupSignal(this.gtk, key, slot);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "activeName":
+        return this.gtk.get_active_name();
+    }
+    return undefined;
+  }
+  protected place(_child: WidgetNode, _moving: boolean): void {
+    throw new Error("<ToggleGroup> places a child through <ToggleGroup.Toggle name label>.");
+  }
 }
 
 /** `<ToolbarView>`: an AdwToolbarView. */
@@ -5854,6 +5864,8 @@ export function createNode(type: string): HostNode | null {
       return new BreakpointNode(type);
     case "AdwBreakpointBin.Breakpoint":
       return new BreakpointNode(type);
+    case "AdwToggleGroup.Toggle":
+      return new ToggleNode(type);
     case "AdwAlertDialog.Response":
       return new AlertResponseNode(type);
     case "AdwDialog.Breakpoint":

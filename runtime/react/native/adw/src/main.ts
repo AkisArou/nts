@@ -52,6 +52,10 @@
 //             one more is pushed, the last taken off is popped, a reorder
 //             replaces the stack; the user going back is heard as onPopped,
 //             and the page comes back unless the app takes it away
+//   toggles   a ToggleGroup's Toggle elements in React's order; its
+//             activeName, applied before its toggles existed, selects the one
+//             it names; a user's pick goes back when the app keeps its own; a
+//             label updates in place; one taken out goes
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window; its Response
 //             elements are its buttons in React's order, one inserted between
@@ -90,6 +94,7 @@ import {
   AdwSwitchRow,
   AdwTabOverview,
   AdwTabView,
+  AdwToggleGroup,
   type AdwTabPage,
   AdwToolbarView,
   AdwViewStack,
@@ -592,6 +597,40 @@ function main(): void {
     navigation += " app>" + stack() + " heard=" + String(poppedHeard);
   }
   react_gtk_log("navigation " + navigation);
+
+  const toggles = createInstance("AdwToggleGroup", { activeName: "b" }, root, 0, {});
+  const toggleA = createInstance("AdwToggleGroup.Toggle", { name: "a", label: "A" }, root, 0, {});
+  const toggleBProps: Props = { name: "b", label: "B" };
+  const toggleB = createInstance("AdwToggleGroup.Toggle", toggleBProps, root, 0, {});
+  const toggleC = createInstance("AdwToggleGroup.Toggle", { name: "c", label: "C" }, root, 0, {});
+  appendInitialChild(toggles, toggleA);
+  appendInitialChild(toggles, toggleB);
+  const togglesWidget = widget(toggles);
+  const toggleGroup = togglesWidget instanceof AdwToggleGroup ? togglesWidget : null;
+  let toggling = "not a toggle group";
+  if (toggleGroup !== null) {
+    const names = (): string => {
+      let all = "";
+      for (let i = 0; i < toggleGroup.get_n_toggles(); i++) {
+        const toggle = toggleGroup.get_toggle(i);
+        all += toggle === null ? "?" : String(toggle.get_name());
+      }
+      return all;
+    };
+    toggling = names() + " active=" + String(toggleGroup.get_active_name());
+    insertBefore(toggles, toggleC, toggleB);
+    toggling += " " + names();
+    // The user picks another: the app keeps "b", so it goes back.
+    toggleGroup.set_active_name("a");
+    idle();
+    toggling += " kept=" + String(toggleGroup.get_active_name());
+    commitUpdate(toggleB, "AdwToggleGroup.Toggle", toggleBProps, { name: "b", label: "Bee" }, {});
+    const b = toggleGroup.get_toggle_by_name("b");
+    toggling += " " + (b === null ? "none" : String(b.get_label()));
+    removeChild(toggles, toggleC);
+    toggling += " " + names();
+  }
+  react_gtk_log("toggles " + toggling);
 
   // A dialog is presented within a shown libadwaita window, as an app's is
   // (over a plain GtkWindow, libadwaita opens it as a window of its own).

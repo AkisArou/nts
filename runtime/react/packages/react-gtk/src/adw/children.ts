@@ -28,6 +28,8 @@ import {
   AdwNavigationPage,
   AdwNavigationView,
   AdwTabView,
+  AdwToggle,
+  AdwToggleGroup,
   AdwToolbarView,
   AdwViewStack,
   AdwWindow,
@@ -856,5 +858,125 @@ export class AlertResponseNode extends HostNode {
     throw new Error(`<${this.name()}> is a response, not a widget: put the ref on the <AlertDialog>.`);
   }
   // A response shows as the dialog's button; hiding it is disabling it, which is a prop.
+  setVisible(_visible: boolean): void {}
+}
+
+// ---- ToggleGroup ---------------------------------------------------------------------
+
+export interface ToggleProps {
+  /** What the group's `activeName` selects it by. */
+  name?: string;
+  label?: string;
+  iconName?: string;
+  tooltip?: string;
+  /** Whether the user can pick it: true, if not given. */
+  enabled?: boolean;
+}
+
+export interface ToggleGroupChildren {
+  /** `<ToggleGroup.Toggle name label iconName>`: a toggle of the group, in React's order. */
+  readonly Toggle: HostComponent<"AdwToggleGroup.Toggle", ToggleProps>;
+}
+
+/**
+ * A toggle of a ToggleGroup, the group's segments: the user picking one is
+ * the group's `activeName` changing, which is controlled. The group only
+ * appends a toggle, so one React places before others is added, and those
+ * after it in React's order are added again after it. The group's
+ * `activeName`, applied before its toggles existed, selects the toggle it
+ * names when that toggle is added.
+ */
+export class ToggleNode extends HostNode {
+  private readonly toggle: AdwToggle = new AdwToggle();
+  private owner: WidgetNode | null = null;
+  private props: Props = {};
+
+  // Only what changed is set: a toggle given its own name again is, to its
+  // group, a second toggle of that name.
+  applyProps(previous: Props | null, next: Props): void {
+    if (next["children"] !== undefined) {
+      throw new Error(`<${this.name()}> holds no children: its text is its \`label\`.`);
+    }
+    this.props = next;
+    const changed = (key: string): boolean => previous === null || previous[key] !== next[key];
+    const text = (key: string): string | null => {
+      const value = next[key];
+      return typeof value === "string" ? value : null;
+    };
+    const toggle = this.toggle;
+    if (changed("name")) {
+      toggle.set_name(text("name"));
+    }
+    if (changed("label")) {
+      toggle.set_label(text("label"));
+    }
+    if (changed("iconName")) {
+      toggle.set_icon_name(text("iconName"));
+    }
+    if (changed("tooltip")) {
+      toggle.set_tooltip(text("tooltip") ?? "");
+    }
+    if (changed("enabled")) {
+      toggle.set_enabled(next["enabled"] !== false);
+    }
+  }
+
+  appendChild(child: HostNode): void {
+    throw new Error(`<${this.name()}> holds no children, not a <${child.name()}>.`);
+  }
+  insertBefore(child: HostNode, _before: HostNode): void {
+    this.appendChild(child);
+  }
+  removeChild(_child: HostNode): void {}
+
+  placeIn(parent: WidgetNode, before: HostNode | null): void {
+    const group = parent.widget instanceof AdwToggleGroup ? parent.widget : null;
+    if (group === null) {
+      throw new Error(`<${this.name()}> goes directly inside a <ToggleGroup>, not a <${parent.name()}>.`);
+    }
+    // Placed again, it is moving: out, then last.
+    if (this.owner === parent) {
+      group.remove(this.toggle);
+    }
+    this.owner = parent;
+    group.add(this.toggle);
+    // Placed before another toggle, it went last: those after it follow it
+    // again. Appending one again passes no `before`, so this does not recur.
+    if (before !== null) {
+      const after = parent.childrenAfter(this);
+      for (let i = 0; i < after.length; i++) {
+        const follower = after[i]!;
+        if (follower.type === this.type) {
+          follower.placeIn(parent, null);
+        }
+      }
+    }
+    const name = this.props["name"];
+    if (typeof name === "string" && parent.prop("activeName") === name) {
+      const active: string = name;
+      writeAsReact(() => group.set_active_name(active));
+    }
+  }
+  takeOutOf(parent: WidgetNode): void {
+    if (this.owner !== parent) {
+      return;
+    }
+    const group = parent.widget instanceof AdwToggleGroup ? parent.widget : null;
+    if (group !== null) {
+      writeAsReact(() => group.remove(this.toggle));
+    }
+    this.owner = null;
+  }
+
+  widgetNode(): WidgetNode | null {
+    return null;
+  }
+  shownWidget(): GtkWidget | null {
+    return null;
+  }
+  publicInstance(): GtkWidget {
+    throw new Error(`<${this.name()}> is a toggle, not a widget: put the ref on the <ToggleGroup>.`);
+  }
+  // A toggle shows as a segment of its group; turning it off is `enabled`.
   setVisible(_visible: boolean): void {}
 }

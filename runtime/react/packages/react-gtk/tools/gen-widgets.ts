@@ -612,6 +612,7 @@ const controlledProps = new Map([
   ["Adw.NavigationSplitView", ["show-content"]],
   ["Adw.BottomSheet", ["open"]],
   ["Adw.TabOverview", ["open"]],
+  ["Adw.ToggleGroup", ["active-name"]],
 ]);
 
 // Widget-typed properties that name another widget rather than place one: an
@@ -642,6 +643,7 @@ const childProps = new Set(["child"]);
 const childNamingProps = new Map([
   ["Gtk.Stack", new Map([["visible-child-name", "get_child_by_name"]])],
   ["Adw.ViewStack", new Map([["visible-child-name", "get_child_by_name"]])],
+  ["Adw.ToggleGroup", new Map([["active-name", "get_toggle_by_name"]])],
 ]);
 
 // Containers that place a child with parameters of its own, or in groups,
@@ -669,6 +671,7 @@ const childElements = new Map([
   ["Adw.Window", { members: "WindowBreakpoints", elements: [["AdwWindow.Breakpoint", "BreakpointNode"]] }],
   ["Adw.ApplicationWindow", { members: "ApplicationWindowBreakpoints", elements: [["AdwApplicationWindow.Breakpoint", "BreakpointNode"]] }],
   ["Adw.BreakpointBin", { members: "BreakpointBinBreakpoints", elements: [["AdwBreakpointBin.Breakpoint", "BreakpointNode"]] }],
+  ["Adw.ToggleGroup", { members: "ToggleGroupChildren", elements: [["AdwToggleGroup.Toggle", "ToggleNode"]], use: "<ToggleGroup.Toggle name label>" }],
   ["Adw.AlertDialog", { members: "AlertDialogChildren", elements: [["AdwAlertDialog.Response", "AlertResponseNode"]] }],
   ["Adw.Dialog", { members: "DialogBreakpoints", elements: [["AdwDialog.Breakpoint", "BreakpointNode"]] }],
 ]);
