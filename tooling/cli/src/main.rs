@@ -1518,16 +1518,19 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
     if !snapshot.diagnostics.is_empty() {
         println!();
         for diagnostic in &snapshot.diagnostics {
-            let source = snapshot
-                .sources
-                .get(diagnostic.primary.file.0 as usize)
-                .map_or("<unknown>", |s| s.uri.as_str());
+            // `where_it_is`, like every other location this tool prints. This
+            // printed the source's URI and `span.start` verbatim -- a raw
+            // UTF-16 code-unit offset -- so a checker diagnostic was the one
+            // location in the tool a reader could not click and could not
+            // compare against `tsc`, and the conformance lane's transport probe
+            // had to convert 876 of them by hand. It also missed the rewritten
+            // source case, which `where_it_is` answers by mapping back through
+            // the transform's own map.
             println!(
-                "  {:?} {} {}:{} {}",
+                "  {:?} {} {} {}",
                 diagnostic.severity,
                 diagnostic.code,
-                source,
-                diagnostic.primary.span.start,
+                where_it_is(&snapshot, &diagnostic.primary),
                 diagnostic.message,
             );
             for label in &diagnostic.labels {
