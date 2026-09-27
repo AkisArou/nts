@@ -936,7 +936,7 @@ export function resetHooksOnUnwind(workInProgress: Fiber): void {
     // not have a clone, that means it wasn't processed, and the updates were
     // scheduled before we entered the render phase.
     // Upstream clears `pending` on whatever queue a hook has. The queues
-    // that have one are a state or reducer hook's and an action queue; a
+    // that have one are a state or reducer hook's and an action queue's; a
     // store's instance has none (upstream's write only adds a property
     // nothing reads).
     let hook = workInProgress.memoizedState as Hook | null;
@@ -944,8 +944,8 @@ export function resetHooksOnUnwind(workInProgress: Fiber): void {
       const queue = hook.queue;
       if (queue instanceof UpdateQueue) {
         queue.pending = null;
-      } else if (hook.kind === ActionQueueHook) {
-        (queue as ActionStateQueue<unknown, unknown>).pending = null;
+      } else if (queue instanceof ActionStateQueue) {
+        queue.pending = null;
       }
       hook = hook.next;
     }
@@ -1970,50 +1970,72 @@ export function rerenderOptimistic<S, A>(passthrough: S, reducer?: ((state: S, a
 }
 
 // useActionState actions run sequentially, because each action receives the
-// previous state as an argument. We store pending actions on a queue.
-interface ActionStateQueue<S, P> {
-  // This is the most recent state returned from an action. It's updated as
-  // soon as the action finishes running.
-  state: Awaited<S>;
-  // A stable dispatch method, passed to the user.
-  dispatch: Dispatch<P>;
-  // This is the most recent action function that was rendered. It's updated
-  // during the commit phase.
-  // If it's null, it means the action queue errored and subsequent actions
-  // should not run.
-  action: ((state: Awaited<S>, payload: P) => S) | null;
+// previous state as an argument. We store pending actions on a queue. Like
+// UpdateQueue, the queue and its nodes are one class for every `S` and `P`
+// (runtime/react/spikes/hook-storage): the state, the payload and the action
+// are held erased, and the specialised functions below read them back as
+// their own `S` and `P`.
+class ActionStateQueue {
+  // This is the most recent state returned from an action (an `Awaited<S>`).
+  // It's updated as soon as the action finishes running.
+  state: unknown;
+  // A stable dispatch method, passed to the user (a `(payload: P) => void`).
+  dispatch: unknown = null;
+  // This is the most recent action function that was rendered (an
+  // `(state: Awaited<S>, payload: P) => S`). It's updated during the commit
+  // phase. If it's null, it means the action queue errored and subsequent
+  // actions should not run.
+  action: unknown;
   // This is a circular linked list of pending action payloads. It incudes the
   // action that is currently running.
-  pending: ActionStateQueueNode<S, P> | null;
+  pending: ActionStateQueueNode | null = null;
+
+  constructor(state: unknown, action: unknown) {
+    this.state = state;
+    this.action = action;
+  }
 }
 
-interface ActionStateQueueNode<S, P> {
-  payload: P;
+class ActionStateQueueNode {
+  // A `P`.
+  payload: unknown;
   // This is the action implementation at the time it was dispatched.
-  action: (state: Awaited<S>, payload: P) => S;
+  action: unknown;
   // This is never null because it's part of a circular linked list.
-  next: ActionStateQueueNode<S, P>;
+  next: ActionStateQueueNode = this;
 
   // Whether or not the action was dispatched as part of a transition. We use
   // this to restore the transition context when the queued action is run. Once
   // we're able to track parallel async actions, this should be updated to
   // represent the specific transition instance the action is associated with.
-  isTransition: boolean;
+  isTransition = true;
 
   // Implements the Thenable interface. We use it to suspend until the action
   // finishes.
-  then: (listener: () => void) => void;
-  status: "pending" | "rejected" | "fulfilled";
-  value: unknown;
-  reason: unknown;
-  listeners: (() => void)[];
+  status: "pending" | "rejected" | "fulfilled" = "pending";
+  value: unknown = null;
+  reason: unknown = null;
+  listeners: (() => void)[] = [];
+
+  constructor(payload: unknown, action: unknown) {
+    this.payload = payload;
+    this.action = action;
+  }
+
+  then(listener: () => void): void {
+    // We know the only thing that subscribes to these promises is `use` so
+    // this implementation is simpler than a generic thenable. E.g. we don't
+    // bother to check if the thenable is still pending because `use` already
+    // does that.
+    this.listeners.push(listener);
+  }
 }
 
 function dispatchActionState<S, P>(
   fiber: Fiber,
-  actionQueue: ActionStateQueue<S, P>,
+  actionQueue: ActionStateQueue,
   setPendingState: (pending: boolean) => void,
-  setState: Dispatch<ActionStateQueueNode<S, P>>,
+  setState: Dispatch<ActionStateQueueNode>,
   payload: P,
 ): void {
   if (isRenderPhaseUpdate(fiber)) {
@@ -2026,24 +2048,7 @@ function dispatchActionState<S, P>(
     return;
   }
 
-  const actionNode = {
-    payload,
-    action: currentAction,
-    next: null, // circular
-    isTransition: true,
-
-    status: "pending",
-    value: null,
-    reason: null,
-    listeners: [],
-    then(listener: () => void): void {
-      // We know the only thing that subscribes to these promises is `use` so
-      // this implementation is simpler than a generic thenable. E.g. we don't
-      // bother to check if the thenable is still pending because `use` already
-      // does that.
-      actionNode.listeners.push(listener);
-    },
-  } as unknown as ActionStateQueueNode<S, P>;
+  const actionNode = new ActionStateQueueNode(payload, currentAction);
 
   // Check if we're inside a transition. If so, we'll need to restore the
   // transition context when the action is run.
@@ -2066,7 +2071,7 @@ function dispatchActionState<S, P>(
     // There are no pending actions; this is the first one. We can run
     // it immediately.
     actionNode.next = actionQueue.pending = actionNode;
-    runActionStateAction(actionQueue, actionNode);
+    runActionStateAction<S, P>(actionQueue, actionNode);
   } else {
     // There's already an action running. Add to the queue.
     const first = last.next;
@@ -2131,16 +2136,16 @@ function finishTransition(prevTransition: Transition | null, currentTransition: 
   }
 }
 
-function runActionStateAction<S, P>(actionQueue: ActionStateQueue<S, P>, node: ActionStateQueueNode<S, P>): void {
+function runActionStateAction<S, P>(actionQueue: ActionStateQueue, node: ActionStateQueueNode): void {
   // `node.action` represents the action function at the time it was dispatched.
   // If this action was queued, it might be stale, i.e. it's not necessarily the
   // most current implementation of the action, stored on `actionQueue`. This is
   // intentional. The conceptual model for queued actions is that they are
   // queued in a remote worker; the dispatch happens immediately, only the
   // execution is delayed.
-  const action = node.action;
-  const payload = node.payload;
-  const prevState = actionQueue.state;
+  const action = node.action as (state: Awaited<S>, payload: P) => S;
+  const payload = node.payload as P;
+  const prevState = actionQueue.state as Awaited<S>;
 
   if (node.isTransition) {
     // The original dispatch was part of a transition. We restore its
@@ -2156,7 +2161,7 @@ function runActionStateAction<S, P>(actionQueue: ActionStateQueue<S, P>, node: A
       if (onStartTransitionFinish !== null) {
         onStartTransitionFinish(currentTransition, returnValue);
       }
-      handleActionReturnValue(actionQueue, node, returnValue);
+      handleActionReturnValue<S, P>(actionQueue, node, returnValue);
     } catch (error) {
       onActionError(actionQueue, node, error);
     } finally {
@@ -2166,7 +2171,7 @@ function runActionStateAction<S, P>(actionQueue: ActionStateQueue<S, P>, node: A
     // The original dispatch was not part of a transition.
     try {
       const returnValue = action(prevState, payload);
-      handleActionReturnValue(actionQueue, node, returnValue);
+      handleActionReturnValue<S, P>(actionQueue, node, returnValue);
     } catch (error) {
       onActionError(actionQueue, node, error);
     }
@@ -2174,8 +2179,8 @@ function runActionStateAction<S, P>(actionQueue: ActionStateQueue<S, P>, node: A
 }
 
 function handleActionReturnValue<S, P>(
-  actionQueue: ActionStateQueue<S, P>,
-  node: ActionStateQueueNode<S, P>,
+  actionQueue: ActionStateQueue,
+  node: ActionStateQueueNode,
   returnValue: unknown,
 ): void {
   if (
@@ -2193,7 +2198,7 @@ function handleActionReturnValue<S, P>(
     // this resolves, we can run the next action in the sequence.
     thenable.then(
       (nextState: Awaited<S>) => {
-        onActionSuccess(actionQueue, node, nextState);
+        onActionSuccess<S, P>(actionQueue, node, nextState);
       },
       (error: unknown) => onActionError(actionQueue, node, error),
     );
@@ -2210,13 +2215,13 @@ function handleActionReturnValue<S, P>(
     }
   } else {
     const nextState = returnValue as Awaited<S>;
-    onActionSuccess(actionQueue, node, nextState);
+    onActionSuccess<S, P>(actionQueue, node, nextState);
   }
 }
 
 function onActionSuccess<S, P>(
-  actionQueue: ActionStateQueue<S, P>,
-  actionNode: ActionStateQueueNode<S, P>,
+  actionQueue: ActionStateQueue,
+  actionNode: ActionStateQueueNode,
   nextState: Awaited<S>,
 ): void {
   // The action finished running.
@@ -2240,16 +2245,12 @@ function onActionSuccess<S, P>(
       last.next = next;
 
       // Run the next action.
-      runActionStateAction(actionQueue, next);
+      runActionStateAction<S, P>(actionQueue, next);
     }
   }
 }
 
-function onActionError<S, P>(
-  actionQueue: ActionStateQueue<S, P>,
-  actionNodeArg: ActionStateQueueNode<S, P>,
-  error: unknown,
-): void {
+function onActionError(actionQueue: ActionStateQueue, actionNodeArg: ActionStateQueueNode, error: unknown): void {
   let actionNode = actionNodeArg;
   // Mark all the following actions as rejected.
   const last = actionQueue.pending;
@@ -2268,7 +2269,7 @@ function onActionError<S, P>(
   actionQueue.action = null;
 }
 
-function notifyActionListeners<S, P>(actionNode: ActionStateQueueNode<S, P>): void {
+function notifyActionListeners(actionNode: ActionStateQueueNode): void {
   // Notify React that the action has finished.
   const listeners = actionNode.listeners;
   for (let i = 0; i < listeners.length; i++) {
@@ -2327,19 +2328,14 @@ export function mountActionState<S, P>(
   // but different because the actions are run sequentially, and they run in
   // an event instead of during render.
   const actionQueueHook = mountWorkInProgressHook(ActionQueueHook);
-  const actionQueue = {
-    state: initialState,
-    dispatch: null, // circular
-    action,
-    pending: null,
-  } as unknown as ActionStateQueue<S, P>;
+  const actionQueue = new ActionStateQueue(initialState, action);
   actionQueueHook.queue = actionQueue;
   const dispatch: Dispatch<P> = (dispatchActionState<S, P>).bind(
     null,
     currentlyRenderingFiber,
     actionQueue,
     setPendingState,
-    setState as Dispatch<ActionStateQueueNode<S, P>>,
+    setState as Dispatch<ActionStateQueueNode>,
   );
   actionQueue.dispatch = dispatch;
 
@@ -2395,8 +2391,8 @@ function updateActionStateImpl<S, P>(
   }
 
   const actionQueueHook = updateWorkInProgressHook(ActionQueueHook);
-  const actionQueue = actionQueueHook.queue as ActionStateQueue<S, P>;
-  const dispatch = actionQueue.dispatch;
+  const actionQueue = actionQueueHook.queue as ActionStateQueue;
+  const dispatch = actionQueue.dispatch as (payload: P) => void;
 
   // Check if a new action was passed. If so, update it in an effect.
   const prevAction = actionQueueHook.memoizedState;
@@ -2413,10 +2409,7 @@ function updateActionStateImpl<S, P>(
   return [state, dispatch, isPending];
 }
 
-function actionStateActionEffect<S, P>(
-  actionQueue: ActionStateQueue<S, P>,
-  action: (state: Awaited<S>, payload: P) => S,
-): void {
+function actionStateActionEffect(actionQueue: ActionStateQueue, action: unknown): void {
   actionQueue.action = action;
 }
 
@@ -2446,8 +2439,8 @@ export function rerenderActionState<S, P>(
   const state = stateHook.memoizedState as Awaited<S>;
 
   const actionQueueHook = updateWorkInProgressHook(ActionQueueHook);
-  const actionQueue = actionQueueHook.queue as ActionStateQueue<S, P>;
-  const dispatch = actionQueue.dispatch;
+  const actionQueue = actionQueueHook.queue as ActionStateQueue;
+  const dispatch = actionQueue.dispatch as (payload: P) => void;
 
   // This may have changed during the rerender.
   actionQueueHook.memoizedState = action;
