@@ -1,0 +1,10 @@
+# Violations of tooling/conformance/integrity.mjs that are known and owned.
+# One per line: project<TAB>rule<TAB>detail<TAB>why. The detail is the tool's
+# own text, so an entry matches exactly one violation. One that no longer
+# occurs is reported for removal; any violation not listed here fails.
+examples/generator-unsupported	cascade-has-root	`abandonedWalk` blames `guarded`, which has no refusal of its own	a generator's refusal is filed under a name its cascade does not use (compiler lane, 2026-09-27)
+tooling/conformance/blockers/a-finally-that-spans-a-yield	cascade-has-root	`asyncLeftByBreak` blames `guardedAsync`, which has no refusal of its own	a generator's refusal is filed under a name its cascade does not use (compiler lane, 2026-09-27)
+tooling/conformance/blockers/a-finally-that-spans-a-yield	cascade-has-root	`asyncToExhaustion` blames `guardedAsync`, which has no refusal of its own	a generator's refusal is filed under a name its cascade does not use (compiler lane, 2026-09-27)
+tooling/conformance/blockers/a-finally-that-spans-a-yield	cascade-has-root	`leftByBreak` blames `guarded`, which has no refusal of its own	a generator's refusal is filed under a name its cascade does not use (compiler lane, 2026-09-27)
+tooling/conformance/blockers/a-finally-that-spans-a-yield	cascade-has-root	`toExhaustion` blames `guarded`, which has no refusal of its own	a generator's refusal is filed under a name its cascade does not use (compiler lane, 2026-09-27)
+tooling/conformance/blockers/a-provided-class-called-without-new	cascade-has-root	`viaBinding` blames `ClosureN#call`, which has no refusal of its own	a synthetic closure for a provided class called through a binding has no refusal line of its own; the root printed is another function's (compiler lane, 2026-09-27)
