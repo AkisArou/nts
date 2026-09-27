@@ -418,6 +418,13 @@ export function makeCommon(pipePath, nodeCommonDirectory = "", spawn) {
     allowGlobals() {},
     hasFipsCrypto: false,
     platformTimeout: (ms) => ms,
+    // Verbatim from node `test/common/index.js:944`: a blocking sleep, so a
+    // test can make a synchronous call measurably slow.
+    sleepSync(ms) {
+      const sab = new SharedArrayBuffer(4);
+      const i32 = new Int32Array(sab);
+      Atomics.wait(i32, 0, 0, ms);
+    },
     printSkipMessage(reason) {
       console.log(`1..0 # Skipped: ${reason}`);
     },

@@ -1970,3 +1970,64 @@ export class ERR_INVALID_ADDRESS_FAMILY extends NodeRangeError {
     this.port = port;
   }
 }
+
+/**
+ * `-1 is not a valid timestamp`: a negative mark time, or a negative number
+ * named where `performance.measure` wants a mark.
+ */
+export class ERR_PERFORMANCE_INVALID_TIMESTAMP extends NodeTypeError {
+  override readonly code = "ERR_PERFORMANCE_INVALID_TIMESTAMP";
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+
+  constructor(timestamp: number) {
+    super(`${timestamp} is not a valid timestamp`);
+  }
+}
+
+/** A `performance.measure` options bag whose fields contradict each other. */
+export class ERR_PERFORMANCE_MEASURE_INVALID_OPTIONS extends NodeTypeError {
+  override readonly code = "ERR_PERFORMANCE_MEASURE_INVALID_OPTIONS";
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/**
+ * `ERR_OUT_OF_RANGE` as a binding throws it: the code, and a bare message with
+ * none of the template's `The value of ... It must be ... Received`. The
+ * `RangeError` twin of `ERR_INVALID_ARG_TYPE_BINDING`, for the same reason.
+ * A histogram's `record(0n)` is `value is out of range`, because node's
+ * C++ checks the bigint after the JavaScript let it through.
+ */
+export class ERR_OUT_OF_RANGE_BINDING extends NodeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_OUT_OF_RANGE";
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/**
+ * Node's `internal/assert` failing: a condition node's own code relies on did
+ * not hold. The message asks for a bug report, because by construction a
+ * caller should not be able to reach it.
+ */
+export class ERR_INTERNAL_ASSERTION extends NodeError {
+  override readonly code = "ERR_INTERNAL_ASSERTION";
+
+  constructor(message?: string) {
+    const suffix =
+      "This is caused by either a bug in Node.js or incorrect usage of Node.js internals.\n" +
+      "Please open an issue with this stack trace at https://github.com/nodejs/node/issues\n";
+    super(message === undefined ? suffix : `${message}\n${suffix}`);
+  }
+}

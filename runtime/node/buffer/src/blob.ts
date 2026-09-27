@@ -11,6 +11,7 @@ import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
 } from "../../internal/errors.ts";
+import { domException } from "../../internal/dom-exception.ts";
 import { systemError } from "../../internal/uv.ts";
 import { byteLengthIn, decodeIn, writeIn } from "./encodings.ts";
 
@@ -160,11 +161,6 @@ interface BlobTextDecoderStreamConstructor {
 declare global {
   var ReadableStream: BlobReadableStreamConstructor;
   var TextDecoderStream: BlobTextDecoderStreamConstructor;
-  var DOMException: BlobDOMExceptionConstructor;
-}
-
-interface BlobDOMExceptionConstructor {
-  new(message?: string, name?: string): Error;
 }
 
 /** A fresh, position-bounded reader over an immutable external byte source. */
@@ -222,10 +218,7 @@ function storedPartLength(part: StoredBlobPart): number {
 }
 
 function notReadableError(): Error {
-  return new globalThis.DOMException(
-    "The blob could not be read",
-    "NotReadableError",
-  );
+  return domException("The blob could not be read", "NotReadableError");
 }
 
 async function closeExternalReader(reader: BlobExternalReader): Promise<void> {
