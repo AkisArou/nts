@@ -518,7 +518,7 @@ Labels with three props:
 - A long list is still better as a ListView than as a Box of widgets: GTK
   makes only the rows on screen (see the next section).
 
-## Lists: a row per item, rendered by React (designed, not built)
+## Lists: a row per item, rendered by React (host half built)
 
 A ListView, GridView or ColumnView shows its model's items through a
 factory. It makes a widget for each *visible* row and rebinds rows to other
@@ -543,8 +543,12 @@ items as the list scrolls. An app should write the row as React:
 **A portal's container is where a row goes.** The host config's
 `Container` is a `HostRoot` (`src/HostRoot.ts`), so a list item is a third
 kind of root beside a window and an application, holding one child through
-its own `set_child`. `appendChildToContainer` and its siblings already call
-the root, so a portal into a row takes the root's code path.
+its own `set_child`: `ListItemRoot`. `appendChildToContainer` and its
+siblings already call the root, so a portal into a row takes the root's code
+path. The driver's `row` line checks it on a real ListView, with the
+factory standing in for the component. Unbinding a row takes its child out
+at once, and that is observed before GTK tears the row down, since the
+teardown would empty it anyway.
 
 **Why not the alternatives.**
 - A root per row would not share context (a row could not read the app's

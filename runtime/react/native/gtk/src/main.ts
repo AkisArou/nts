@@ -94,6 +94,11 @@
 //             element removed from the Paned. A Frame's label widget comes
 //             from a slot element after its child, which React inserts before
 //             the slot element
+//   row       a ListView's rows are roots (ListItemRoot), as the list
+//             component will render a portal into each: a bound row holds
+//             the child rendered for its item, and a row unbound when the
+//             model shrinks is empty as soon as its child is taken out (GTK
+//             then tears the row down, which would empty it anyway)
 //
 // What the host refuses -- text outside a widget with a label, an unknown
 // prop or widget, a second child for a single-child widget -- is an Error
@@ -112,8 +117,14 @@ import {
   GtkApplication,
   GtkEventControllerKey,
   GtkGestureClick,
+  GtkLabel,
+  GtkListItem,
+  GtkListView,
+  GtkNoSelection,
+  GtkSignalListItemFactory,
   GtkSingleSelection,
   GtkStringList,
+  GtkStringObject,
   GtkWindow,
   type GtkWidget,
 } from "c:Gtk-4.0";
@@ -142,6 +153,7 @@ import {
   WindowRoot,
   hideInstance,
   insertBefore,
+  ListItemRoot,
   removeChild,
   removeChildFromContainer,
   shouldSetTextContent,
@@ -811,6 +823,72 @@ function main(): void {
   const labelled =
     titled instanceof FrameNode && titled.gtk.get_child() === widget(body) && titled.gtk.get_label_widget() === widget(title);
   react_gtk_log("slot " + slots + " titled=" + String(labelled));
+
+  // A list's rows: the host half of ListView's renderItem (DESIGN.md, Lists).
+  // The factory stands in for the list component, rendering a Label into
+  // each bound row's root and taking it out when the row is unbound.
+  const rowStrings = new GtkStringList();
+  rowStrings.append("alpha");
+  rowStrings.append("beta");
+  const rowRoots: ListItemRoot[] = [];
+  const rowNodes: (HostNode | null)[] = [];
+  const rowOf = (item: GObject): number => {
+    for (let i = 0; i < rowRoots.length; i++) {
+      if (rowRoots[i]!.item === item) {
+        return i;
+      }
+    }
+    return -1;
+  };
+  const factory = new GtkSignalListItemFactory();
+  factory.connect("bind", (_self, object) => {
+    const item = object instanceof GtkListItem ? object : null;
+    const shown = item === null ? null : item.get_item();
+    if (item === null || !(shown instanceof GtkStringObject)) {
+      return;
+    }
+    let at = rowOf(item);
+    if (at < 0) {
+      at = rowRoots.length;
+      rowRoots.push(new ListItemRoot(item, []));
+      rowNodes.push(null);
+    }
+    const rowRoot = rowRoots[at]!;
+    const node = createInstance("GtkLabel", { label: shown.get_string() }, rowRoot, 0, {});
+    appendChildToContainer(rowRoot, node);
+    rowNodes[at] = node;
+  });
+  const rowText = (rowRoot: ListItemRoot): string => {
+    const child = rowRoot.item.get_child();
+    return child instanceof GtkLabel ? String(child.get_label()) : "-";
+  };
+  let unbound = "";
+  factory.connect("unbind", (_self, object) => {
+    const at = rowOf(object);
+    const node = at < 0 ? null : rowNodes[at]!;
+    if (node !== null) {
+      const rowRoot = rowRoots[at]!;
+      unbound += rowText(rowRoot) + ">";
+      removeChildFromContainer(rowRoot, node);
+      unbound += rowText(rowRoot);
+      rowNodes[at] = null;
+    }
+  });
+  const rowTexts = (): string => {
+    let texts = "";
+    for (let i = 0; i < rowRoots.length; i++) {
+      texts += (i > 0 ? "," : "") + rowText(rowRoots[i]!);
+    }
+    return texts;
+  };
+  const listWindow = new WindowRoot(new GtkWindow(), []);
+  listWindow.window.set_child(new GtkListView({ model: new GtkNoSelection({ model: rowStrings }), factory }));
+  listWindow.window.present();
+  idle();
+  const bound = rowTexts();
+  rowStrings.remove(1);
+  idle();
+  react_gtk_log("row " + bound + " unbound " + unbound);
 
   const loop = g_main_loop_new(null, false);
   let ran = "";

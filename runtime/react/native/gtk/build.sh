@@ -63,6 +63,7 @@ window true true false>true over=true closed=true
 popover true true true
 application true true true
 slot side,main side,none none,none titled=true
+row alpha,beta unbound beta>-
 work timer"
 
 mkdir -p "$out"

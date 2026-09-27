@@ -24,7 +24,7 @@ import type { HostRoot } from "./HostRoot.ts";
 import { cancelTimer, startTimer } from "./SchedulerHost.ts";
 
 export { getCurrentUpdatePriority, HostNode, setCurrentUpdatePriority, SlotNode, type Props, WidgetNode } from "./HostNode.ts";
-export { ApplicationRoot, HostRoot, WindowRoot } from "./HostRoot.ts";
+export { ApplicationRoot, HostRoot, ListItemRoot, WindowRoot } from "./HostRoot.ts";
 
 export type Type = string;
 

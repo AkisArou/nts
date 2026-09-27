@@ -4,11 +4,13 @@
 //   ApplicationRoot  an application, whose children are its windows:
 //                    `createApplicationRoot(app)`, rendering
 //                    `<ApplicationWindow>`s, each opened as the app's
+//   ListItemRoot     a list's row, which holds one child: where a ListView
+//                    renders each bound row, as a portal (DESIGN.md, Lists)
 //
 // A window rendered in either is a toplevel (HostNode.ts, WidgetNode): placing
 // it records what opened it, and it is presented at commit.
 
-import type { GtkApplication, GtkWindow } from "c:Gtk-4.0";
+import type { GtkApplication, GtkListItem, GtkWindow } from "c:Gtk-4.0";
 
 import type { HostNode, WidgetNode, WidgetSet } from "./HostNode.ts";
 import { createNode } from "./widgets.ts";
@@ -136,4 +138,51 @@ export class ApplicationRoot extends HostRoot {
   // An application's windows are each React's to close, as their nodes are
   // taken out; nothing is held here to empty.
   clear(): void {}
+}
+
+/**
+ * A list row's root: the list item GTK bound to one of the model's items.
+ * It holds one child, as a window does, and a window cannot go in it. GTK
+ * recycles list items, so the root is the item's for as long as the item
+ * lives, and what is rendered into it changes as the item is rebound.
+ */
+export class ListItemRoot extends HostRoot {
+  readonly item: GtkListItem;
+  private child: WidgetNode | null = null;
+
+  constructor(item: GtkListItem, widgets: readonly WidgetSet[]) {
+    super(widgets);
+    this.item = item;
+  }
+
+  appendChild(child: HostNode): void {
+    const widget = widgetOf(child, "a list row");
+    if (widget.isToplevel()) {
+      throw new Error(`A list row holds a widget, not a window: <${widget.name()}> cannot go in it.`);
+    }
+    if (this.child !== null && this.child !== widget) {
+      throw new Error("A list row holds one child: wrap its children in a <Box>.");
+    }
+    this.child = widget;
+    this.item.set_child(widget.widget);
+  }
+
+  insertBefore(child: HostNode, _before: HostNode): void {
+    // Something is already in the row, or there would be nothing to insert
+    // before: a second child.
+    const widget = widgetOf(child, "a list row");
+    throw new Error(`A list row holds one child: wrap its children in a <Box> (<${widget.name()}> was a second).`);
+  }
+
+  removeChild(child: HostNode): void {
+    if (this.child === child) {
+      this.child = null;
+      this.item.set_child(null);
+    }
+  }
+
+  clear(): void {
+    this.child = null;
+    this.item.set_child(null);
+  }
 }
