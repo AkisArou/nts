@@ -13238,6 +13238,19 @@ struct FuncBuilder<'a> {
     /// Only the managed-class path records here. The four representation paths
     /// convert already.
     tested_by_instanceof: rustc_hash::FxHashMap<NodeId, (u32, TypeId)>,
+    /// Rebinds an `if` left behind for the statements after it, to be undone at
+    /// the end of the list those statements are in.
+    ///
+    /// [`FuncBuilder::narrow_after_the_if`] re-types a binding for everything
+    /// following an `if` whose surviving arm proved it, and that has to **end with
+    /// the enclosing list**. A first version left it standing and produced invalid
+    /// HIR: a guard with `continue` inside a loop narrowed a value declared outside
+    /// it, and the read after the loop was `NotDominated { value, used_in }` by the
+    /// unerase, which sits in the loop body. So the scope is the list, restored in
+    /// reverse so two guards over one name undo in the order they were made, and
+    /// only where the binding is still the value the narrowing put there -- an
+    /// assignment since then is the assignment's to keep.
+    narrowed_past_an_if: Vec<(u32, ValueId, ValueId)>,
     /// A label just read, waiting for the loop or `switch` it is written on.
     ///
     /// Read by the next construct that pushes a [`Breakable`], which is the
@@ -13642,6 +13655,7 @@ impl<'a> FuncBuilder<'a> {
             current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
             tested_by_instanceof: rustc_hash::FxHashMap::default(),
+            narrowed_past_an_if: Vec::new(),
             settlers: rustc_hash::FxHashMap::default(),
             pending_label: None,
             exits: Vec::new(),
@@ -22764,15 +22778,31 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_block(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        // A narrowing an `if` in this list left for the statements after it ends
+        // with the list. See [`Self::narrowed_past_an_if`] for the invalid HIR that
+        // says so: the unerase lives where the `if` was, and a read outside the
+        // list need not be dominated by it.
+        let outer = std::mem::take(&mut self.narrowed_past_an_if);
+        let mut lowered = Ok(());
         for statement in self.children(id) {
             // Everything after a `return` in the same block is dead. Lowering it
             // would put operations in a block that has already ended.
             if self.is_terminated() {
                 break;
             }
-            self.lower_statement(statement)?;
+            if let Err(error) = self.lower_statement(statement) {
+                lowered = Err(error);
+                break;
+            }
         }
-        Ok(())
+        for (symbol, held, narrow) in
+            std::mem::replace(&mut self.narrowed_past_an_if, outer).into_iter().rev()
+        {
+            if self.bindings.get(&symbol) == Some(&narrow) {
+                self.bindings.insert(symbol, held);
+            }
+        }
+        lowered
     }
 
     /// Symbols assigned anywhere inside a subtree.
@@ -34378,8 +34408,84 @@ impl<'a> FuncBuilder<'a> {
     /// many words.
     ///
     /// The caller is already in the arm's block, because both ops belong to it.
-    fn narrow_for_the_arm(&mut self, condition: NodeId) -> Option<(u32, ValueId, ValueId)> {
-        let (symbol, class) = self.tested_by_instanceof.get(&condition).copied()?;
+    /// The binding an `instanceof` in this condition proved, and **which arm** it
+    /// proved it for.
+    ///
+    /// `x instanceof T` proves it for the arm the test guards. `!(x instanceof T)`
+    /// proves it for the *other* one, which is the guard-clause idiom --
+    /// `if (!(h instanceof Timer)) return;` and then read `h` -- and the shape
+    /// `runtime/node/timers`' `listOnTimeout` is written in. The node-port lane
+    /// reduced it, and their arms say the gap is the **sense** rather than
+    /// anything about interfaces: narrowing from `unknown` and from a union of
+    /// classes both work, and so does the positive `if`.
+    ///
+    /// The sense is **counted** rather than special-cased, so `!!(x instanceof T)`
+    /// and a parenthesised test need no arms of their own. Bounded, because a walk
+    /// that cannot end is worse than one that gives up.
+    fn instanceof_proved_by(&self, condition: NodeId) -> Option<(u32, TypeId, bool)> {
+        let mut node = condition;
+        let mut when = true;
+        for _ in 0..16 {
+            if let Some((symbol, class)) = self.tested_by_instanceof.get(&node).copied() {
+                return Some((symbol, class, when));
+            }
+            match self.kind_of(node) {
+                Some(syntax::PARENTHESIZED_EXPRESSION) => {}
+                Some(syntax::PREFIX_UNARY_EXPRESSION) => {
+                    let NodeData::Children { small, .. } = self.node(node).data else {
+                        return None;
+                    };
+                    if small & syntax::prefix_operator::MASK
+                        != syntax::prefix_operator::EXCLAMATION
+                    {
+                        return None;
+                    }
+                    when = !when;
+                }
+                _ => return None,
+            }
+            node = *self.children(node).first()?;
+        }
+        None
+    }
+
+    /// Re-type a binding to the class an `instanceof` proved, here.
+    ///
+    /// Split out because **three** places need it and each decides *whether*
+    /// differently: the arm a positive test guards, the `else` a negated one
+    /// guards, and -- where one arm left and the other did not -- everything after
+    /// the `if`. One rebind, three reasons to want it, so the cell guard and the
+    /// already-narrowed check cannot come apart between them.
+    fn narrow_binding(
+        &mut self,
+        symbol: u32,
+        class: TypeId,
+        at: NodeId,
+    ) -> Option<(u32, ValueId, ValueId)> {
+        if self.cell_of(symbol).is_some() {
+            return None;
+        }
+        let held = self.bindings.get(&symbol).copied()?;
+        let want = HirType::Managed(ManagedType::Object(class));
+        if self.values[held.0 as usize].ty == want {
+            return None;
+        }
+        let origin = self.origin(at);
+        let erased = self.erased(held, &origin);
+        let narrow = self.push(OpKind::Unerase { value: erased }, want, origin);
+        self.bindings.insert(symbol, narrow);
+        Some((symbol, held, narrow))
+    }
+
+    fn narrow_for_the_arm(
+        &mut self,
+        condition: NodeId,
+        when: bool,
+    ) -> Option<(u32, ValueId, ValueId)> {
+        let (symbol, class, proved) = self.instanceof_proved_by(condition)?;
+        if proved != when {
+            return None;
+        }
         // **Not a name bound to a cell.** A `let` a closure captures *and writes*
         // is bound to the cell holding it, and [`Self::lower_identifier`] reads
         // the value *out* of that cell through [`Self::read_cell`] -- so what
@@ -34393,19 +34499,7 @@ impl<'a> FuncBuilder<'a> {
         // entry holding a value where a cell belongs would make every later write
         // in the arm miss the cell. A captured-and-written name keeps the per-use
         // narrowing it has now.
-        if self.cell_of(symbol).is_some() {
-            return None;
-        }
-        let held = self.bindings.get(&symbol).copied()?;
-        let want = HirType::Managed(ManagedType::Object(class));
-        if self.values[held.0 as usize].ty == want {
-            return None;
-        }
-        let origin = self.origin(condition);
-        let erased = self.erased(held, &origin);
-        let narrow = self.push(OpKind::Unerase { value: erased }, want, origin);
-        self.bindings.insert(symbol, narrow);
-        Some((symbol, held, narrow))
+        self.narrow_binding(symbol, class, condition)
     }
 
     /// Lower the arm a test guards, with the binding that test narrowed re-typed
@@ -34423,8 +34517,13 @@ impl<'a> FuncBuilder<'a> {
     /// One function rather than a narrow and a restore the caller pairs, because
     /// a scope is what this is: saving and restoring around a single construct is
     /// the shape the argument-default shadowing uses, for the same reason.
-    fn lower_narrowed_arm(&mut self, condition: NodeId, arm: NodeId) -> Result<(), Diagnostic> {
-        let narrowed = self.narrow_for_the_arm(condition);
+    fn lower_narrowed_arm(
+        &mut self,
+        condition: NodeId,
+        arm: NodeId,
+        when: bool,
+    ) -> Result<(), Diagnostic> {
+        let narrowed = self.narrow_for_the_arm(condition, when);
         let lowered = self.lower_statement(arm);
         if let Some((symbol, held, narrow)) = narrowed
             && self.bindings.get(&symbol) == Some(&narrow)
@@ -34480,7 +34579,7 @@ impl<'a> FuncBuilder<'a> {
         let entry = self.bindings.clone();
 
         self.switch_to(then_block);
-        self.lower_narrowed_arm(condition, then_branch)?;
+        self.lower_narrowed_arm(condition, then_branch, true)?;
         // The block the arm *ended* in, which nested control flow moves away from
         // the block it started in. Terminating `then_block` instead would leave
         // the real tail without a terminator.
@@ -34491,7 +34590,7 @@ impl<'a> FuncBuilder<'a> {
         let (else_tail, else_open, else_bindings) = match else_branch {
             Some(else_branch) => {
                 self.switch_to(else_block);
-                self.lower_statement(else_branch)?;
+                self.lower_narrowed_arm(condition, else_branch, false)?;
                 let tail = self.current;
                 let open = !self.is_terminated();
                 let bindings = std::mem::replace(&mut self.bindings, entry.clone());
@@ -34570,7 +34669,49 @@ impl<'a> FuncBuilder<'a> {
                 live
             }
         };
+        self.narrow_after_the_if(condition, then_open, else_open);
         Ok(())
+    }
+
+    /// Carry the surviving arm's narrowing past the `if`.
+    ///
+    /// **Where one arm left and the other did not, what the test proved on the
+    /// surviving edge holds for everything after the `if`.**
+    /// `if (!(h instanceof Timer)) return;` is the guard clause every JavaScript
+    /// program writes and the shape `runtime/node/timers`' `listOnTimeout` uses:
+    /// the then arm is closed, so the merge is reached only by the false edge, and
+    /// on that edge `h` **is** a `Timer`. The mirror holds too --
+    /// `if (h instanceof Timer) { ... } else return;` reaches the merge only
+    /// through the then arm -- so one condition covers both, and it is
+    /// `proved == then_open`: the surviving arm is the then arm exactly when it is
+    /// the open one, and it carries the narrowing exactly when the test proved it
+    /// for the true side.
+    ///
+    /// Sound because the merge has that single predecessor precisely when the arms
+    /// disagree about leaving, which is what `then_open != else_open` says. With
+    /// **both** open the merge joins a narrowed path and an unnarrowed one, and
+    /// [`Self::merged_type`] already reimposes the declaration's type on the
+    /// parameter -- so the narrowing widens back on the way out and there is
+    /// nothing to do here.
+    ///
+    /// **And it does need unwinding, which a first version claimed it did not.**
+    /// The claim was that a rebind reaches the enclosing `if`'s merge as one side
+    /// of a disagreement and widens there -- true of an `if`, and false of a
+    /// **loop**: `for (...) { if (!(s instanceof Square)) continue; ... }` narrows
+    /// a value declared outside the loop, the unerase sits in the loop body, and a
+    /// read after the loop is not dominated by it. `verify` said so as
+    /// `NotDominated { value, used_in }`, on an arm written because the rule looked
+    /// like it needed one rather than because reading suggested it. So the rebind
+    /// is recorded on [`Self::narrowed_past_an_if`] and undone at the end of the
+    /// statement list, which is the scope the language gives it anyway.
+    fn narrow_after_the_if(&mut self, condition: NodeId, then_open: bool, else_open: bool) {
+        if then_open != else_open
+            && let Some((symbol, class, proved)) = self.instanceof_proved_by(condition)
+            && proved == then_open
+            && let Some(rebind) = self.narrow_binding(symbol, class, condition)
+        {
+            self.narrowed_past_an_if.push(rebind);
+        }
     }
 
     fn lower_statement(&mut self, id: NodeId) -> Result<(), Diagnostic> {
