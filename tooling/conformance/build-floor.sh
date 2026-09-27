@@ -234,6 +234,61 @@ unpinned_of() {
            <(printf '%s\n' $KNOWN_UNRESOLVED | sort)
 }
 
+# **The modules whose *shaped* surface is empty, so no test can reach them.**
+#
+# Building, loading and resolving symbols are three things this file already
+# checks, and none of them is "the module has an API". `assert` lost its entire
+# surface on 2026-09-19 and nothing noticed for a fortnight: `Assert#constructor`
+# became refused, the module-scope `new Assert(...)` was dropped with it, every
+# `export const fail = looseAssertions.fail` then read an object that was never
+# built, and an addon exporting `{}` loads perfectly. The conformance lane found
+# it in the first compiled-axis run in two weeks.
+#
+# **Shaped, not raw, and the difference is not small.** `Object.keys(addon)` is the
+# addon's own table; `shape.mjs` is what node's tests reach, and the two disagree in
+# both directions:
+#
+#     fs       raw   4  ->  shaped 104     the shim assembles the surface
+#     zlib     raw   2  ->  shaped  22
+#     console  raw   1  ->  shaped   0     `formatTime`; `log` and `Console` gone
+#     cluster  raw   5  ->  shaped   0     constants and booleans, no API
+#
+# So a raw count would have passed `console` on a residue while its whole API was
+# missing. `loads.sh` reports the raw number, which is the right one for a *load*
+# check and the wrong one for this.
+#
+# Checked in both directions like the lists above: a module **joining** this list
+# fails the day it happens, and one that starts publishing says so and does not fail,
+# because the right response is to remove the name rather than to go red until
+# somebody does.
+#
+# `cluster` is absent because it is in `BLOCKED` and never reaches this check.
+PUBLISHES_NOTHING="assert child_process console events timers"
+
+# What `shape.mjs` publishes for an addon: the names a test can reach.
+#
+# **Written rather than logged**, because `console.log` of a *number* goes through
+# `util.inspect` and this repository's interactive shell exports `FORCE_COLOR=3` -- so
+# it printed `\033[33m0\033[39m`, the numeric test on it failed silently, and every
+# known-empty module was reported as newly publishing -- a guard inverted into good
+# news, which is the worst direction available to one.
+#
+# **The rule, for the next helper added here:** `console.log` is an *inspector*, not a
+# printer. Anything handed to it that is not already a string may come back decorated
+# -- a number coloured, a string quoted inside a structure, a `Map` as `Map(2) {...}`.
+# For a value a script will parse, `process.stdout.write(String(x))`. `env -u
+# FORCE_COLOR` at the call site is the wrong fix: it leaves the helper wrong and
+# working by luck.
+shaped_names() {
+  node --input-type=module -e "
+    import { createRequire } from 'node:module';
+    const require = createRequire(process.cwd() + '/');
+    const raw = require(process.argv[1]);
+    const { shape } = await import(process.argv[2]);
+    process.stdout.write(String(Object.keys(shape(raw)).length));
+  " "$1" "$2" 2>/dev/null
+}
+
 # **Every module on disk is in one of the two lists, or this is not a floor.**
 #
 # The lists are written out above rather than derived, deliberately -- a derived
@@ -324,12 +379,35 @@ for module in $FLOOR; do
         echo "loads with UNPINNED undefined symbol(s) -- would abort on first call"
         printf '%s\n' "$novel" | sed 's/^/                         /'
         failures=$((failures + 1))
-      elif [ "${count:-0}" -gt 0 ]; then
-        echo "builds and loads  [$count undefined, all pinned]"
-        built=$((built + 1))
       else
-        echo "builds and loads"
-        built=$((built + 1))
+        shape_file="runtime/node/$module/shape.mjs"
+        if [ ! -f "$shape_file" ]; then
+          echo "INSTRUMENT FAILURE: no $shape_file to read its surface through"
+          failures=$((failures + 1))
+          continue
+        fi
+        names=$(shaped_names "$out_dir/$module.node" "$PWD/$shape_file")
+        pinned=""
+        [ "${count:-0}" -gt 0 ] && pinned="  [$count undefined, all pinned]"
+        case " $PUBLISHES_NOTHING " in
+          *" $module "*) known=yes ;;
+          *) known=no ;;
+        esac
+        if [ "${names:-0}" -eq 0 ] 2>/dev/null; then
+          if [ "$known" = yes ]; then
+            echo "builds and loads, publishes nothing [known]$pinned"
+            built=$((built + 1))
+          else
+            echo "PUBLISHES NOTHING -- its shaped surface is empty, so no test reaches it"
+            failures=$((failures + 1))
+          fi
+        elif [ "$known" = yes ]; then
+          printf 'builds and loads, %s name(s) -- NOW PUBLISHES, remove it from PUBLISHES_NOTHING%s\n' "$names" "$pinned"
+          built=$((built + 1))
+        else
+          echo "builds and loads, $names name(s)$pinned"
+          built=$((built + 1))
+        fi
       fi
     else
       echo "BUILDS BUT DOES NOT LOAD"
