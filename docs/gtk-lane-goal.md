@@ -1719,6 +1719,28 @@ one in two ways, both core gaps:
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
 
+### What the corpus found beyond its blockers
+
+Ports that pass still surfaced binding and harness gaps, each fixed or
+named:
+- Fixed in the binding: a property whose setter GIR names only by an
+  `org.gtk.Property.set` annotation (`GtkImage:file`, `:resource`); a
+  member named by a reserved word (`buffer.delete`); a signal handler's
+  `self`, now the receiver (`this`) as GJS hands it over, not the class
+  declaring the signal.
+- Fixed in the harness: GJS's multi-line `console.log` read whole, and
+  `workbench.resolve` relative to the demo's own directory.
+- Designed, waiting on the compiler lane: a record's fields
+  (`new Gdk.Rectangle({ x, y })`, branch `gtk-record-fields`) and GIR's
+  constants (`GLib.PRIORITY_DEFAULT`, branch `gtk-constants`; floating ones
+  left out, since GIR writes them to six digits).
+- Open: a fundamental `GType` (`GObject.TYPE_STRING`) needs a typed
+  constant, since a GType is a branded `bigint`; `gettext`, which GJS
+  provides as a module of its own, has its functions bound
+  (`g_dgettext(null, msgid)` is GJS's `gettext(msgid)`) and no module yet;
+  and the host does not place the demo's UI in its window, so `app.` and
+  `win.` actions do not resolve from it (Notification, Toasts).
+
 ## Completeness: the binding census
 
 The second gauge is what the GIR binder refuses and a GJS program could
