@@ -285,4 +285,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 119 for `nts_array_from_handles`, C's array of objects made an array of
 /// the program's for a callback: native calls again.
-const REFUSED_FLOOR: usize = 119;
+///
+/// 120 for `nts_com_unlend`, the end of a Windows Runtime iterable's loan to
+/// the iterator a `for...of` walks: Windows again.
+const REFUSED_FLOOR: usize = 120;

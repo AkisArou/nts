@@ -115,6 +115,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_com_compose_named", &[None], None),
     ("nts_com_delegate", &[None, None, None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_com_query", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    ("nts_com_unlend", &[None], None),
     ("nts_console_write", &[None, Some(HirType::Bool)], None),
     ("nts_cstring_release", &[None, None], None),
     ("nts_cstrings_release", &[None], None),
@@ -505,7 +506,7 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // its anchor.
         // And `nts_gobject_made`, which sinks a floating GObject for a
         // never-free program and does nothing under counting: read, not held.
-        "nts_com_take" | "nts_com_query" | "nts_winrt_listen" | "nts_winrt_unlisten" | "nts_winrt_box" | "nts_winrt_is" | "nts_gobject_made" => Some(&[]),
+        "nts_com_take" | "nts_com_query" | "nts_com_unlend" | "nts_winrt_listen" | "nts_winrt_unlisten" | "nts_winrt_box" | "nts_winrt_is" | "nts_gobject_made" => Some(&[]),
         _ => None,
     }
 }

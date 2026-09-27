@@ -167,6 +167,8 @@ static void nts_unknown_release(void *object) {
 
 /* The program's releases, which the counting provider emits: counted, so a
  * test can see the provider give back what it took. */
+void nts_com_unlend(const void *object) { (void)object; }
+
 void nts_com_release(void *object) {
   if (object != 0) {
     releases++;

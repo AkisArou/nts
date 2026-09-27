@@ -511,11 +511,20 @@ impl Writer<'_> {
             }
         }
         // A vector -- `IVector<T>`, `IVectorView<T>` -- is walked by count, as
-        // an array is: `for (const child of panel.children)`.
+        // an array is: `for (const child of panel.children)`; any other
+        // iterable by its iterator.
         if let (Some(_), Some((_, at))) = (slot_of("get_Size"), slot_of("GetAt"))
             && let Ok(element) = self.spell(&at.signature(&self.signature_arguments()).return_type, false)
         {
             let _ = writeln!(out, "    /**\n     * @ntsIterate get_Size GetAt\n     */\n    [Symbol.iterator](): Iterator<{element}>;");
+        } else if let Some((_, first)) = slot_of("First")
+            // Any other iterable -- `IIterable<T>` -- by the iterator its
+            // `First` makes: `get_Current`, then `MoveNext`, as C# walks one.
+            && let Type::ClassName(iterator) = first.signature(&self.signature_arguments()).return_type
+            && let Some(element) = iterator.generics.first()
+            && let Ok(element) = self.spell(element, false)
+        {
+            let _ = writeln!(out, "    /**\n     * @ntsIterate First\n     */\n    [Symbol.iterator](): Iterator<{element}>;");
         }
         out
     }

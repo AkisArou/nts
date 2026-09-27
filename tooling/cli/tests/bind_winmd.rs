@@ -213,6 +213,12 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         collections.contains("     * @ntsIterate get_Size GetAt\n     */\n    [Symbol.iterator](): Iterator<T>;"),
         "a vector is not iterable"
     );
+    // Any other iterable by the iterator its `First` makes -- `IIterable<T>`
+    // itself, which a `JsonObject`'s pairs are.
+    assert!(
+        collections.contains("     * @ntsIterate First\n     */\n    [Symbol.iterator](): Iterator<T>;"),
+        "an iterable is not iterable"
+    );
     assert!(refused.is_empty(), "Windows.Data.Json refused something:\n{refused}");
 }
 

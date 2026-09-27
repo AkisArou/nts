@@ -422,7 +422,11 @@ Application.Start(() => { new App(); });
      projection named them. Nothing but the compiler defines a Windows
      Runtime struct, so the C names are its own; Win32 structs keep their
      C header's names, which the witness checks.
-   - Not yet: `for…of` over an `IIterable<T>` that is not a vector. Also
+   - `for…of` over any other `IIterable<T>` -- a `JsonObject`'s pairs --
+     by the iterator its `First` makes: `get_Current`, then `MoveNext`, two
+     calls a step as CsWinRT's adapter makes, with no iterator object of the
+     program's; the iterable is kept for the loop (`nts_com_unlend`), as C++'s
+     range-for and C#'s `foreach` keep it. Also
      started: a record a call takes by value may be
    written as its fields, `Measure({ Width: 1000, Height: 1000 })`
    (`ByValue<Size> | Fields<Size>`, Apple's `Fields<T>`); an override's

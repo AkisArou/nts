@@ -5,8 +5,12 @@
 // - `number` and `text`: `JsonValue.Parse` is a static, called on the
 //   class's cached activation factory with an HSTRING argument; `GetNumber` writes a double
 //   through its result slot, `Stringify` an HSTRING copied into a `string`.
-// - `activations=1` after three parses: the factory cache hit. A cache that
-//   never hit would answer the same values and count 3.
+// - `activations`: one per factory the program asks for, however often it
+//   calls through it -- three parses through `JsonValue`'s are one, so a
+//   cache that never hit would answer the same values and count more. 5, the
+//   fifth being `JsonObject`'s statics, which the `pairs` walk parses with.
+// - `pairs`: an `IIterable<T>` that is not a vector, walked by the iterator
+//   its `First` makes -- `get_Current`, then `MoveNext` -- as C# walks one.
 // - `bools`: a `boolean` both ways -- passed to `CreateBooleanValue` (which
 //   `Stringify` then shows) and read back from `GetBoolean`, one byte each.
 // - `languages`: a generic interface, `IVectorView<HString>` from
@@ -38,8 +42,10 @@
 //   owes whatever the provider: the `IPropertyValue` of the ints and the one
 //   of the doubles, each released once unboxed into its typed array, and the
 //   box made for the doubles, given back after the call it was handed to --
-//   and 46 under `--rc` (`expected-rc.txt`), those five and one for each
-//   object handed over, among them: the one the
+//   and 55 under `--rc` (`expected-rc.txt`), those five and one for each
+//   object handed over, among them: the nine of the `pairs` walk -- the
+//   parsed object, its `IIterable`, the iterator, and each pair and the value
+//   read from it (46 before the walk) -- the one the
 //   `erased` arm's `get` is narrowed back through -- a COM value read out of
 //   an erased slot is asked for the interface it is read as, a reference of
 //   its own (42 before that) -- the five
@@ -280,7 +286,18 @@ function run(): string {
   for (const value of JsonArray.Parse("[1, 2.5, 4]").as_IVector()) {
     total += value.GetNumber();
   }
-  const items = String(vector.size) + ":" + String(vector.getAt(1).GetNumber()) + ":" + String(total);
+  // Any other iterable walked by the iterator its `First` makes --
+  // `get_Current`, then `MoveNext` -- as C# walks one: an object's pairs.
+  // Sorted, since a map's order is its own.
+  const keys: string[] = [];
+  let sum = 0;
+  for (const pair of JsonObject.Parse('{"b": 2, "a": 1, "c": 4}').as_IIterable()) {
+    keys.push(pair.get_Key());
+    sum += pair.get_Value().GetNumber();
+  }
+  keys.sort();
+  const items = String(vector.size) + ":" + String(vector.getAt(1).GetNumber()) + ":" + String(total) +
+    ",pairs=" + keys.join("") + ":" + String(sum);
   const built = JsonObject.create();
   built.SetNamedValue("x", JsonValue.CreateNumberValue(3));
   const shown = built.as_IJsonValue().Stringify();

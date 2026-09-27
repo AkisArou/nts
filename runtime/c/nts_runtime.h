@@ -1984,6 +1984,16 @@ void *nts_com_take(void *slot);
 void *nts_com_query(void *object, uint64_t iid_low, uint64_t iid_high);
 void *nts_com_addref(void *object);
 void nts_com_release(void *object);
+/* The end of a COM object's loan to something that depends on it without a
+ * reference the program can see, called where that dependency ends. It does
+ * nothing, and that is the point, as for `nts_view_unlend`: it is the object's
+ * last use, so reference counting releases it here and not earlier. A
+ * `for...of` over a Windows Runtime iterable calls it after the loop: the
+ * iterator `First` made is walked, and nothing reads the iterable again --
+ * but `JsonObject`'s iterator does not keep its object whole, and releasing
+ * it at `First` answered E_CHANGED_STATE at the first `MoveNext`. C++'s
+ * range-for and C#'s `foreach` both hold the range for the loop. */
+void nts_com_unlend(const void *object);
 uint32_t nts_com_releases(void);
 void *nts_winrt_factory(const NtsString *class_name, uint64_t iid_low,
                         uint64_t iid_high);

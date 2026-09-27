@@ -23263,7 +23263,7 @@ impl<'a> FuncBuilder<'a> {
                 } => {
                     let origin = self.breakables[record.depth].origin.clone();
                     let at = self.bindings[&cursor];
-                    let next = self.advance(&walk, sequence, at, &origin);
+                    let next = self.advance(&walk, sequence, at, &origin)?;
                     self.bindings.insert(cursor, next);
                 }
                 Step::Count { name, by } => {
@@ -23470,7 +23470,7 @@ impl<'a> FuncBuilder<'a> {
         let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
         let origin = self.origin(id);
 
-        let index = self.walk_cursor(&walk, sequence_value, &origin);
+        let (sequence_value, index, lent) = self.walk_start(&walk, sequence_value, &origin)?;
         let carried: Vec<u32> = index.into_iter().collect();
         // `steps: true` where there is a cursor, so the advance happens in a
         // latch of the loop's own rather than at the end of the body. The two
@@ -23509,6 +23509,7 @@ impl<'a> FuncBuilder<'a> {
             },
         };
         self.end_loop(&record, step)?;
+        self.unlend_walked(lent, &origin);
         Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
     }
 
@@ -23916,7 +23917,7 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
 
-        let index = self.walk_cursor(&walk, sequence_value, &origin);
+        let (sequence_value, index, lent) = self.walk_start(&walk, sequence_value, &origin)?;
         // Where the *next element goes*, which is not the cursor: a table's
         // cursor is an entry index and its holes are not elements, so a walk
         // that wrote at the cursor would leave gaps and run off the end.
@@ -23985,6 +23986,7 @@ impl<'a> FuncBuilder<'a> {
             },
         };
         self.end_loop(&record, step)?;
+        self.unlend_walked(lent, &origin);
         Ok(out)
     }
 
@@ -24693,9 +24695,9 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let origin = self.origin(id);
-        let cursor = self
-            .walk_cursor(&walk, receiver, &origin)
-            .ok_or_else(|| self.unsupported(id, "a table walk with no cursor"))?;
+        // A table is walked by its own entries and lends nothing.
+        let (receiver, cursor, _) = self.walk_start(&walk, receiver, &origin)?;
+        let cursor = cursor.ok_or_else(|| self.unsupported(id, "a table walk with no cursor"))?;
         let synthetic = vec![cursor];
         let carried = self.carried_across(body, &synthetic, &parameters);
         let record = self.begin_loop(id, &carried, true, &origin)?;
@@ -26439,11 +26441,18 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Bool,
                 origin.clone(),
             ),
-            Walk::Native(native) => {
-                let count = self.call_native_walk(native.site, &native.size, sequence, Vec::new())?;
-                let count = self.coerce(count, &HirType::NUMBER, native.site)?;
-                self.push(OpKind::Binary { op: BinOp::Lt, lhs: at, rhs: count }, HirType::Bool, origin.clone())
-            }
+            Walk::Native(native) => match &native.by {
+                NativeBy::Vector(methods) => {
+                    let count = self.call_native_walk(native.site, &methods.size, sequence, Vec::new())?;
+                    let count = self.coerce(count, &HirType::NUMBER, native.site)?;
+                    self.push(OpKind::Binary { op: BinOp::Lt, lhs: at, rhs: count }, HirType::Bool, origin.clone())
+                }
+                // The cursor is whether there is a current element.
+                NativeBy::Iterator(_) => {
+                    let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                    self.push(OpKind::Binary { op: BinOp::Ne, lhs: at, rhs: zero }, HirType::Bool, origin.clone())
+                }
+            },
             Walk::Counted { .. } | Walk::Text => {
                 let length = self.push(OpKind::Length(sequence), HirType::NUMBER, origin.clone());
                 self.push(
@@ -26481,11 +26490,32 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// The protocol has none at all: the iterator holds its own place and
     /// `next()` is what moves it.
-    fn walk_cursor(&mut self, walk: &Walk, sequence: ValueId, origin: &Origin) -> Option<u32> {
+    /// What a walk walks, and its cursor, if it has one: the sequence itself,
+    /// except that an iterable is walked by the iterator its `First` makes,
+    /// whose cursor starts at whether it has a current element.
+    ///
+    /// And what the walk keeps on loan until the loop ends, which the caller
+    /// gives back after it (`Self::unlend_walked`): the iterable an iterator
+    /// was made from. See `nts_com_unlend`.
+    fn walk_start(
+        &mut self,
+        walk: &Walk,
+        sequence: ValueId,
+        origin: &Origin,
+    ) -> Result<(ValueId, Option<u32>, Option<ValueId>), Diagnostic> {
         if matches!(walk, Walk::Protocol { .. } | Walk::Generator { .. }) {
-            return None;
+            return Ok((sequence, None, None));
         }
         let index = self.synthetic_symbol();
+        if let Walk::Native(native) = walk
+            && let NativeBy::Iterator(methods) = &native.by
+        {
+            let iterator = self.call_native_walk(native.site, &methods.first, sequence, Vec::new())?;
+            let present = self.call_native_walk(native.site, &methods.has, iterator, Vec::new())?;
+            let start = self.cursor_of_presence(present, native.site, origin)?;
+            self.bindings.insert(index, start);
+            return Ok((iterator, Some(index), Some(sequence)));
+        }
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let start = match walk {
             Walk::Table { .. } | Walk::Entries { .. } => self.call_runtime(
@@ -26497,7 +26527,21 @@ impl<'a> FuncBuilder<'a> {
             _ => zero,
         };
         self.bindings.insert(index, start);
-        Some(index)
+        Ok((sequence, Some(index), None))
+    }
+
+    /// The end of what a walk kept on loan, once its loop is over.
+    fn unlend_walked(&mut self, lent: Option<ValueId>, origin: &Origin) {
+        if let Some(iterable) = lent {
+            self.runtime_call("nts_com_unlend", vec![iterable], HirType::Void, origin.clone());
+        }
+    }
+
+    /// An iterator's `HasCurrent` or `MoveNext`, as the number a cursor is:
+    /// 1 while there is a current element, 0 once there is not.
+    fn cursor_of_presence(&mut self, present: ValueId, site: NodeId, origin: &Origin) -> Result<ValueId, Diagnostic> {
+        let present = self.coerce(present, &HirType::Bool, site)?;
+        Ok(self.push(OpKind::Convert(present), HirType::NUMBER, origin.clone()))
     }
 
     /// One turn of the iteration protocol: the call that advances the iterator,
@@ -27497,18 +27541,17 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// What a Windows Runtime vector's `[Symbol.iterator]` says it is walked
-    /// by: the declarations of its two methods, `@ntsIterate get_Size GetAt`,
-    /// found on the sequence's type.
-    fn native_iteration(&self, sequence: NodeId) -> Option<(String, String)> {
+    /// What a Windows Runtime sequence's `[Symbol.iterator]` says it is walked
+    /// by: a vector's two methods, `@ntsIterate get_Size GetAt`, or an
+    /// iterable's one, `@ntsIterate First`, found on the sequence's type.
+    fn native_iteration(&self, sequence: NodeId) -> Option<Vec<String>> {
         let ty = self.snapshot.node_types.get(&sequence).copied()?;
         let tag = self.members_of(ty, |name| name.starts_with("__@iterator@")).into_iter().find_map(|property| {
             let native = self.node(property.declaration?).native.as_deref()?;
             native.iterate.clone()
         })?;
-        let mut words = tag.split_whitespace();
-        let (size, at) = (words.next()?.to_owned(), words.next()?.to_owned());
-        words.next().is_none().then_some((size, at))
+        let words: Vec<String> = tag.split_whitespace().map(str::to_owned).collect();
+        matches!(words.len(), 1 | 2).then_some(words)
     }
 
     /// Every property of `ty` a predicate accepts by name, through each part
@@ -27526,15 +27569,18 @@ impl<'a> FuncBuilder<'a> {
         found
     }
 
-    /// [`Walk::Native`] for a vector [`Self::native_iteration`] answered for:
-    /// each method's declaration and the signature the instantiation gives
-    /// it, and the element `GetAt` answers.
+    /// [`Walk::Native`] for a sequence [`Self::native_iteration`] answered
+    /// for: each method's declaration and the signature the instantiation
+    /// gives it -- an iterable's iterator methods read from what `First`
+    /// answers -- and the element the walk reads.
     fn native_walk(&mut self, sequence: NodeId) -> Result<Walk, Diagnostic> {
-        let refuse = |this: &Self| this.unsupported(sequence, "a `for...of` over a Windows Runtime vector whose `@ntsIterate` names no method it declares");
-        let (size, at) = self.native_iteration(sequence).ok_or_else(|| refuse(self))?;
+        let refuse = |this: &Self| {
+            this.unsupported(sequence, "a `for...of` over a Windows Runtime sequence whose `@ntsIterate` names no method it declares")
+        };
+        let words = self.native_iteration(sequence).ok_or_else(|| refuse(self))?;
         let ty = self.snapshot.node_types.get(&sequence).copied().ok_or_else(|| refuse(self))?;
-        let method = |this: &Self, name: &str| -> Option<NativeMethod> {
-            let property = this.members_of(ty, |member| member == name).into_iter().next()?;
+        let method = |this: &Self, on: TypeId, name: &str| -> Option<NativeMethod> {
+            let property = this.members_of(on, |member| member == name).into_iter().next()?;
             let declaration = property.declaration?;
             let TypeKind::Function(signature) = this.snapshot.types.get(property.ty.0 as usize)?.kind else { return None };
             let mut signature = this.snapshot.signatures.get(signature.0 as usize)?.clone();
@@ -27542,14 +27588,33 @@ impl<'a> FuncBuilder<'a> {
             signature.parameters.insert(0, nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this_type, optional: false, rest: false });
             Some((name.to_owned(), declaration, signature))
         };
-        let size = method(self, &size).ok_or_else(|| refuse(self))?;
-        let at = method(self, &at).ok_or_else(|| refuse(self))?;
-        let element = self.represent(at.2.return_type).ok_or_else(|| self.unsupported(sequence, "a Windows Runtime vector whose element has no representation"))?;
-        Ok(Walk::Native(Box::new(NativeWalk { size, at, element, site: sequence })))
+        let (by, read) = match words.as_slice() {
+            [size, at] => {
+                let size = method(self, ty, size).ok_or_else(|| refuse(self))?;
+                let at = method(self, ty, at).ok_or_else(|| refuse(self))?;
+                let read = at.2.return_type;
+                (NativeBy::Vector(Box::new(VectorMethods { size, at })), read)
+            }
+            [first] => {
+                let first = method(self, ty, first).ok_or_else(|| refuse(self))?;
+                let iterator = first.2.return_type;
+                let on = |this: &Self, name: &str| method(this, iterator, name).ok_or_else(|| refuse(this));
+                let has = on(self, "get_HasCurrent")?;
+                let current = on(self, "get_Current")?;
+                let advance = on(self, "MoveNext")?;
+                let read = current.2.return_type;
+                (NativeBy::Iterator(Box::new(IteratorMethods { first, has, current, advance })), read)
+            }
+            _ => return Err(refuse(self)),
+        };
+        let element = self
+            .represent(read)
+            .ok_or_else(|| self.unsupported(sequence, "a Windows Runtime sequence whose element has no representation"))?;
+        Ok(Walk::Native(Box::new(NativeWalk { by, element, site: sequence })))
     }
 
-    /// A call of one of a [`Walk::Native`]'s methods on the vector, its
-    /// HRESULT checked.
+    /// A call of one of a [`Walk::Native`]'s methods on the vector or the
+    /// iterator, its HRESULT checked.
     fn call_native_walk(
         &mut self,
         site: NodeId,
@@ -27579,8 +27644,16 @@ impl<'a> FuncBuilder<'a> {
     /// The cursor of a `for...of`, moved on by one element.
     ///
     /// Built in the loop's latch, which is where `continue` lands.
-    fn advance(&mut self, walk: &Walk, sequence: ValueId, at: ValueId, origin: &Origin) -> ValueId {
-        match walk {
+    fn advance(&mut self, walk: &Walk, sequence: ValueId, at: ValueId, origin: &Origin) -> Result<ValueId, Diagnostic> {
+        // An iterator steps by `MoveNext`, whose answer -- whether there is a
+        // current element now -- is the next cursor.
+        if let Walk::Native(native) = walk
+            && let NativeBy::Iterator(methods) = &native.by
+        {
+            let moved = self.call_native_walk(native.site, &methods.advance, sequence, Vec::new())?;
+            return self.cursor_of_presence(moved, native.site, origin);
+        }
+        Ok(match walk {
             // The protocol advances itself: `next()` moves the iterator, and
             // there is no cursor for a latch to step. `lower_for_of` gives it
             // `Step::None` for exactly this reason, so nothing reaches here.
@@ -27637,7 +27710,7 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 )
             }
-        }
+        })
     }
 
     /// The element a cursor is currently on.
@@ -27689,7 +27762,11 @@ impl<'a> FuncBuilder<'a> {
             });
         }
         if let Walk::Native(native) = walk {
-            return Ok(vec![self.call_native_walk(native.site, &native.at, sequence, vec![at])?]);
+            let element = match &native.by {
+                NativeBy::Vector(methods) => self.call_native_walk(native.site, &methods.at, sequence, vec![at])?,
+                NativeBy::Iterator(methods) => self.call_native_walk(native.site, &methods.current, sequence, Vec::new())?,
+            };
+            return Ok(vec![element]);
         }
         if let Walk::Entries {
             key,
@@ -28183,7 +28260,7 @@ impl<'a> FuncBuilder<'a> {
         // For an array and for text it is a position and starts at zero. For a
         // table it is an entry index, and the entries are not contiguous, so
         // the first live one is asked for rather than assumed.
-        let index = self.walk_cursor(&walk, sequence_value, &origin);
+        let (sequence_value, index, lent) = self.walk_start(&walk, sequence_value, &origin)?;
 
         let mut carried: Vec<u32> = index.into_iter().collect();
         self.assigned_symbols(body, &mut carried);
@@ -28242,7 +28319,9 @@ impl<'a> FuncBuilder<'a> {
                 sequence: sequence_value,
             },
         };
-        self.end_loop(&record, step)
+        self.end_loop(&record, step)?;
+        self.unlend_walked(lent, &origin);
+        Ok(())
     }
 
     /// Note that this `await`'s rejection belongs to the enclosing `catch`.
@@ -57738,12 +57817,47 @@ type NativeMethod = (String, NodeId, nts_semantic_schema::SignatureRecord);
 /// What a [`Walk::Native`] walks by.
 #[derive(Clone)]
 struct NativeWalk {
-    /// `get_Size` and `GetAt`, with the vector as `this`.
-    size: NativeMethod,
-    at: NativeMethod,
+    by: NativeBy,
     element: HirType,
     /// The sequence, for what a call through a slot reports against.
     site: NodeId,
+}
+
+/// The two ways a Windows Runtime sequence is walked, as its
+/// `[Symbol.iterator]`'s `@ntsIterate` names them.
+#[derive(Clone)]
+enum NativeBy {
+    /// A vector (`IVector<T>`, `IVectorView<T>`): `GetAt(i)` while
+    /// `i < get_Size()`, with the vector as `this` -- as an array is walked.
+    Vector(Box<VectorMethods>),
+    /// Any other `IIterable<T>`: `First()` once, for the iterator walked;
+    /// then its `get_Current` each turn, and `MoveNext` in the latch.
+    ///
+    /// The cursor is whether there is a current element: `get_HasCurrent`
+    /// once to start, and then what `MoveNext` answers, which is the same
+    /// question asked after moving. So a step is two calls, as `CsWinRT`'s
+    /// adapter makes it (`MoveNext`, `Current`), and no iterator object of the
+    /// program's is made -- where the iteration protocol would allocate a
+    /// result per element.
+    Iterator(Box<IteratorMethods>),
+}
+
+/// The two methods a [`NativeBy::Vector`] walks by. Boxed, as the
+/// iterator's four are, so the choice between them is a pointer.
+#[derive(Clone)]
+struct VectorMethods {
+    size: NativeMethod,
+    at: NativeMethod,
+}
+
+/// The four methods a [`NativeBy::Iterator`] walks by: the iterable's
+/// `First`, and its iterator's `get_HasCurrent`, `get_Current`, `MoveNext`.
+#[derive(Clone)]
+struct IteratorMethods {
+    first: NativeMethod,
+    has: NativeMethod,
+    current: NativeMethod,
+    advance: NativeMethod,
 }
 
 #[derive(Clone)]
