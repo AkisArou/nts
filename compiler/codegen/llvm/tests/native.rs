@@ -2190,7 +2190,7 @@ export function run(): number { return walked(["a"]); }
 "#;
     let Some((_, prepared)) = prepare("strings-kept", kept) else { return; };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("a `CStrings` or `CBytes` parameter without `@ntsNoEscape`")),
+        prepared.diagnostics.iter().any(|d| d.message.contains("a `CStrings`, `CBytes` or `CHandles` parameter without `@ntsNoEscape`")),
         "a `CStrings` parameter C may keep was lowered: {:?}",
         prepared.diagnostics
     );

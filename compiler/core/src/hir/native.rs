@@ -401,6 +401,12 @@ pub enum Role {
     /// (`CElements<A, Q>`): `nts_view_bytes`, no copy. The view is the
     /// caller's argument, alive across the call, and its storage never moves.
     Bytes,
+    /// An array of handles as C's array of pointers (`CHandles<H, Q>`): the
+    /// array's own element block, lent in place for the call
+    /// (`nts_array_handles`), which already holds the pointers C reads. The
+    /// array is the caller's argument, given back after the call
+    /// (`nts_array_unlend`) so that its last use follows C's read.
+    Handles,
     /// The element count of the array in C parameter `array`, which C takes
     /// as a parameter of its own (`Counted<A, L>`). Hidden from TypeScript:
     /// the compiler passes it. `nullable` when the array may be `null`, whose
@@ -625,6 +631,7 @@ impl Function {
                 | Role::Box
                 | Role::Strings
                 | Role::Bytes
+                | Role::Handles
                 | Role::ErrorSlot { .. } => {
                     ts += 1;
                     Some(ts - 1)
@@ -2394,10 +2401,11 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
     Some((function?, kind))
 }
 
-/// `CStrings<Q>` or `CBytes<Q>`, possibly `Counted<…>`, possibly `| null`,
-/// as declared.
+/// `CStrings<Q>`, `CBytes<Q>` or `CHandles<H, Q>`, possibly `Counted<…>`,
+/// possibly `| null`, as declared.
 struct NativeArray {
-    /// `Role::Strings` or `Role::Bytes`: what the call makes of it.
+    /// `Role::Strings`, `Role::Bytes` or `Role::Handles`: what the call makes
+    /// of it.
     role: Role,
     /// The argument as the program holds it: `string[]`, or the
     /// `Uint8Array`'s view.
@@ -2409,14 +2417,21 @@ struct NativeArray {
     count: Option<(TypeId, bool)>,
 }
 
-/// The argument's representation where a parameter is `CStrings` or
-/// `CBytes`: the value the markers are intersected with, which has one where
+/// The argument's representation where a parameter is `CStrings`, `CBytes`
+/// or `CHandles`: the value the markers are intersected with, which has one where
 /// the markers have none.
 pub(crate) fn native_array_argument(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType> {
     native_array(snapshot, ty).map(|array| array.managed)
 }
 
-/// Read a `CStrings` or `CBytes` parameter type, or `None` for any other.
+/// Whether a parameter is `CHandles`: an array of handles C is lent as its
+/// element block.
+pub(crate) fn lends_handles(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    native_array(snapshot, ty).is_some_and(|array| array.role == Role::Handles)
+}
+
+/// Read a `CStrings`, `CBytes` or `CHandles` parameter type, or `None` for
+/// any other.
 ///
 /// The markers sit on object types intersected with the value -- a
 /// `readonly string[]`, a `Uint8Array` -- the way `Closure`'s sit on the
@@ -2455,6 +2470,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     let mut strings = None;
     let mut bytes = None;
     let mut elements = None;
+    let mut handles = None;
     let mut value = None;
     let mut count = None;
     let mut after = true;
@@ -2477,6 +2493,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
                 "___c_strings" => strings = Some(text(property.ty)?),
                 "___c_bytes" => bytes = Some(text(property.ty)?),
                 "___c_elements" => elements = Some(text(property.ty)?),
+                "___c_handles" => handles = Some(text(property.ty)?),
                 "___c_count" => count = Some(defined(property.ty)?),
                 "___c_count_at" => after = text(property.ty)? == "after",
                 _ => return None,
@@ -2485,12 +2502,12 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     }
     let value = value?;
     let char = Pointee::Scalar(Scalar::Char);
-    let (role, managed, c) = match (strings, bytes, elements) {
+    let (role, managed, c) = match (strings, bytes, elements, handles) {
         // A typed array's elements, spelled as C spells them: the spelling
         // names the element, and must name the array's own. Borrowed as bytes
         // are -- `nts_view_bytes` is the elements' address whatever they are.
-        (None, None, Some(spelling)) => borrowed_elements(snapshot, value, &spelling)?,
-        (Some(spelling), None, None) => {
+        (None, None, Some(spelling), None) => borrowed_elements(snapshot, value, &spelling)?,
+        (Some(spelling), None, None, None) => {
             let TypeKind::Array(element) = kind_of(value)? else { return None };
             if !matches!(kind_of(*element)?, TypeKind::String) {
                 return None;
@@ -2506,7 +2523,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
             let managed = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
             (Role::Strings, managed, c)
         }
-        (None, Some(spelling), None) => {
+        (None, Some(spelling), None, None) => {
             // A view of bytes, whatever TypeScript calls its class: what the
             // program passes is its storage.
             let managed = super::lower::representation(snapshot, value)?;
@@ -2524,6 +2541,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
             };
             (Role::Bytes, managed, Type::Pointer(pointee))
         }
+        (None, None, None, Some(spelling)) => handles_array(snapshot, value, &spelling)?,
         _ => return None,
     };
     Some(NativeArray { role, managed, c, nullable, count: count.map(|ty| (ty, after)) })
@@ -2556,7 +2574,21 @@ fn borrowed_elements(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str)
     Some((Role::Bytes, managed, Type::Pointer(pointee)))
 }
 
-/// The C slots a `CStrings` or `CBytes` parameter occupies, `at` being the
+/// A `CHandles<H, Q>` array's parts: its block is C's array of pointers to
+/// the handles, typed as the handle's own struct, or `void` where `Q` says.
+fn handles_array(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str) -> Option<(Role, HirType, Type)> {
+    let managed = super::lower::representation(snapshot, value)?;
+    let HirType::Managed(ManagedType::Array(element)) = &managed else { return None };
+    let HirType::NativePointer(pointee @ Pointee::Opaque(_)) = &**element else { return None };
+    let pointee = match spelling {
+        "element" => pointee.clone(),
+        "void" => Pointee::Void,
+        _ => return None,
+    };
+    Some((Role::Handles, managed, Type::Pointer(Pointee::Pointer(Box::new(pointee)))))
+}
+
+/// The C slots a `CStrings`, `CBytes` or `CHandles` parameter occupies, `at` being the
 /// first one's index: the array, and its length before or after it.
 fn array_slots(
     snapshot: &SemanticSnapshot,

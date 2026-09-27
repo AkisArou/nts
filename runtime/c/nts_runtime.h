@@ -2144,6 +2144,22 @@ NtsArray *nts_strings_from_cstrings(const char *const *c, bool required);
  * and C does not allow that of a `void` function, which the LLVM table
  * mirrors. */
 void nts_view_unlend(const NtsView *view);
+/* An array of handles as C's array of pointers to them, for a parameter
+ * declared `CHandles`: the array's own element block, which already holds the
+ * pointers -- lent in place, with no copy. NULL is NULL, for `CHandles |
+ * null`. An element that is not there -- a `null` the type system was talked
+ * out of, since the runtime makes no holes in an array of handles -- ends the
+ * process naming its index, since C reads a NULL as an object. `void *`
+ * because the runtime cannot name the element: C converts it to the
+ * parameter's own `GFile **` or `gpointer *` without a cast. Not
+ * `NTS_READS_ONLY`: it can end the process, which a call `pure` lets the
+ * compiler drop may not do. */
+void *nts_array_handles(const NtsArray *array);
+/* The end of that loan, called after the call returns: nothing, as
+ * `nts_view_unlend` is for a view, and for the same reason -- it is the
+ * array's last use, so reference counting releases a temporary array after C
+ * has read its block, not before. */
+void nts_array_unlend(const NtsArray *array);
 
 /* A boxed record the program holds (`NTS_KIND_BOXED`): `boxed` is the C
  * struct, and `free(boxed, data)` gives it back when the box dies.

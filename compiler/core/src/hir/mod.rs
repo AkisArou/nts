@@ -5436,6 +5436,10 @@ mod tests {
             "nts_array_extend",
             "nts_array_extend_ref",
             "nts_array_extend_foreign",
+            // A loan of the element block to C for one call (`CHandles`), and
+            // its end: C reads the block, and nothing resizes the array.
+            "nts_array_handles",
+            "nts_array_unlend",
         ];
         let mut unclassified = Vec::new();
         for name in crate::hir::runtime::declared_names() {

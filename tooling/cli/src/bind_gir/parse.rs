@@ -267,6 +267,7 @@ fn signature(node: Node<'_, '_>) -> Signature {
             ty: TypeRef::Missing,
             direction: Direction::Out,
             transfer: Transfer::None,
+            transfer_stated: false,
             nullable: false,
             optional: false,
             caller_allocates: false,
@@ -330,6 +331,7 @@ fn param(node: Node<'_, '_>, result: bool) -> Param {
             Some("container") => Transfer::Container,
             _ => Transfer::None,
         },
+        transfer_stated: attribute(node, "transfer-ownership").is_some(),
         nullable: attribute(node, "nullable") == Some("1")
             || attribute(node, "allow-none") == Some("1"),
         // `allow-none` is the older spelling, and meant both.

@@ -839,7 +839,7 @@ static void nts_each_holder(NtsHeader *object, void (*visit)(NtsHeader *)) {
       return;
     }
     const NtsArray *array = (const NtsArray *)object;
-    void *const *items = NTS_ITEMS(array, void *);
+    void **items = NTS_ITEMS(array, void *);
     for (uint32_t at = 0; at < array->header.length; at++) {
       NtsHeader *node = items[at] ? holders->node(items[at]) : NULL;
       if (node != NULL) {
@@ -5043,6 +5043,25 @@ char **nts_strings_to_cstrings(const NtsArray *array) {
 void nts_cstrings_release(char **c) { free((void *)c); }
 
 void nts_view_unlend(const NtsView *view) { (void)view; }
+
+void *nts_array_handles(const NtsArray *array) {
+  if (array == NULL) {
+    return NULL;
+  }
+  void **items = NTS_ITEMS(array, void *);
+  for (uint32_t at = 0; at < array->header.length; at++) {
+    if (items[at] == NULL) {
+      fprintf(stderr,
+              "nts: an array of objects with nothing at index %u cannot cross "
+              "to C, which would read the NULL as an object\n",
+              (unsigned)at);
+      abort();
+    }
+  }
+  return items;
+}
+
+void nts_array_unlend(const NtsArray *array) { (void)array; }
 
 void nts_boxed_unlend(const void *box) { (void)box; }
 

@@ -13353,6 +13353,10 @@ enum Lent {
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
     /// view must outlive the call.
     View { view: ValueId },
+    /// A `CHandles` array whose element block C was lent: given back after
+    /// the call (`nts_array_unlend`), which is its last use, so the array
+    /// outlives C's read of the block.
+    Array { array: ValueId },
     /// The compiler's own error slot, for an `@ntsThrows` parameter the caller
     /// left out: read after the call, and a failure reported there thrown.
     Error { slot: ValueId, converter: String },
@@ -18485,7 +18489,25 @@ impl<'a> FuncBuilder<'a> {
         let Some(want) = self.parameter_representation(call, at) else {
             return Ok(value);
         };
+        // An array of handles lent to C (`CHandles`) crosses as its element
+        // block, which C reads as pointers to objects whatever class the
+        // program's array is of: a `GtkLabel[]` where `readonly GObject[]` is
+        // declared is the same block, and converting it would be a copy.
+        // `readonly` is what makes that sound -- nothing writes a `GObject`
+        // into the label array through it -- and `Role::Handles` refuses an
+        // array whose elements are not handles.
+        if let HirType::Managed(ManagedType::Array(element)) = &self.values[value.0 as usize].ty
+            && matches!(**element, HirType::NativePointer(super::native::Pointee::Opaque(_)))
+            && self.lends_handles(call, at)
+        {
+            return Ok(value);
+        }
         self.coerce(value, &want, argument)
+    }
+
+    /// Whether the call's `at`th parameter is `CHandles`.
+    fn lends_handles(&self, call: NodeId, at: usize) -> bool {
+        self.parameter_type_id(call, at).is_some_and(|ty| super::native::lends_handles(self.snapshot, ty))
     }
 
     /// How a call's `at`th parameter is represented, from the resolved
@@ -18535,9 +18557,10 @@ impl<'a> FuncBuilder<'a> {
         if in_c && super::native::is_object_pointer(self.snapshot, ty) {
             return Some(HirType::NativePointer(super::native::Pointee::Void));
         }
-        // `CStrings` / `CBytes`: the argument is the `string[]` or the
-        // `Uint8Array` the markers are intersected with, which the call
-        // converts or borrows; the markers have no representation of their own.
+        // `CStrings` / `CBytes` / `CHandles`: the argument is the `string[]`,
+        // the `Uint8Array` or the `readonly H[]` the markers are intersected
+        // with, which the call converts or borrows; the markers have no
+        // representation of their own.
         if in_c && let Some(argument) = super::native::native_array_argument(self.snapshot, ty) {
             return Some(argument);
         }
@@ -20811,8 +20834,12 @@ impl<'a> FuncBuilder<'a> {
             // The same channel `null` already uses -- `lower_expecting` was
             // written so a bare `null` in an argument takes the slot's type --
             // asked one question wider.
+            // Except an array of handles lent to C (`CHandles`), which crosses
+            // as whatever array of handles the program holds: see
+            // `coerce_to_parameter`. `Role::Handles` checks what it is.
             let want = match (tail, tail_from) {
                 (Some(element), Some(from)) if args.len() >= from => Some((*element).clone()),
+                _ if self.lends_handles(call, args.len()) => None,
                 _ => self.parameter_representation(call, args.len()),
             };
             let value = match &want {
@@ -48005,6 +48032,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
+                Lent::Array { array } => {
+                    self.runtime_call("nts_array_unlend", vec![array], HirType::Void, origin.clone());
+                }
                 Lent::Boxed { boxed } => {
                     self.runtime_call("nts_boxed_unlend", vec![boxed], HirType::Void, origin.clone());
                 }
@@ -48226,6 +48256,41 @@ impl<'a> FuncBuilder<'a> {
             let storage = this.runtime_call("nts_view_bytes", vec![view], bytes.clone(), origin.clone());
             if want == bytes { storage } else { this.push(OpKind::Convert(storage), want, origin.clone()) }
         })
+    }
+
+    /// A `string[]` as C's NULL-terminated `char **`, converted for the call
+    /// and freed after it (`Lent::Strings`).
+    fn lend_strings(&mut self, array: ValueId, want: HirType, lent: &mut Vec<Lent>, origin: &Origin) -> ValueId {
+        let pointer = self.runtime_call("nts_strings_to_cstrings", vec![array], want, origin.clone());
+        lent.push(Lent::Strings { pointer });
+        pointer
+    }
+
+    /// An array of handles' element block, C's array of pointers to them,
+    /// or NULL for a `null` array; the array given back after the call
+    /// (`Lent::Array`). Only an array whose elements are native pointers has
+    /// such a block, so any other is refused, whatever its type said: C would
+    /// read its elements as objects.
+    fn lend_handles(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        want: HirType,
+        lent: &mut Vec<Lent>,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        let HirType::Managed(ManagedType::Array(element)) = &self.values[array.0 as usize].ty else {
+            return Err(self.unsupported(id, "a `CHandles` argument that is not an array"));
+        };
+        if !matches!(**element, HirType::NativePointer(super::native::Pointee::Opaque(_))) {
+            return Err(self.unsupported(id, "a `CHandles` argument whose elements are not handles"));
+        }
+        let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+        let block = self.unless_null(array, absent, origin, |this| {
+            this.runtime_call("nts_array_handles", vec![array], want, origin.clone())
+        });
+        lent.push(Lent::Array { array });
+        Ok(block)
     }
 
     /// What C means by a length beside an array: its elements -- a
@@ -48493,31 +48558,25 @@ impl<'a> FuncBuilder<'a> {
                     let ty = target.parameters[at].representation();
                     c_args.push(self.error_slot(argument.filter(|_| written), ty, converter, &mut lent, &origin));
                 }
-                Role::Strings => {
-                    let Some(array) = argument else { continue };
-                    let pointer = self.runtime_call(
-                        "nts_strings_to_cstrings",
-                        vec![array],
-                        target.parameters[at].representation(),
-                        origin.clone(),
-                    );
-                    lent.push(Lent::Strings { pointer });
-                    c_args.push(pointer);
-                }
-                // The array's element count, into the slot C reads it from --
-                // before the array's own slot as often as after, so it is read
-                // from the arguments rather than from what was pushed.
+                // A `string[]` converted for the call, and freed after it.
+                Role::Strings => c_args.extend(argument.map(|array| self.lend_strings(array, target.parameters[at].representation(), &mut lent, &origin))),
                 // A `Uint8Array` in place: its bytes, for the call, and the
                 // view given back after it. The give-back does nothing at run
                 // time; it is the view's last use, without which reference
                 // counting released a temporary view -- and with it the only
                 // reference to the buffer -- before C read the bytes.
-                Role::Bytes => {
-                    let Some(view) = argument else { continue };
-                    let want = target.parameters[at].representation();
-                    c_args.push(self.borrow_bytes(view, want, &origin));
+                Role::Bytes => c_args.extend(argument.map(|view| {
                     lent.push(Lent::View { view });
-                }
+                    self.borrow_bytes(view, target.parameters[at].representation(), &origin)
+                })),
+                // An array of handles in place: its element block, for the
+                // call, and the array given back after it.
+                Role::Handles => c_args.extend(
+                    argument.map(|array| self.lend_handles(id, array, target.parameters[at].representation(), &mut lent, &origin)).transpose()?,
+                ),
+                // The array's element count, into the slot C reads it from --
+                // before the array's own slot as often as after, so it is read
+                // from the arguments rather than from what was pushed.
                 Role::Length { array, nullable } => {
                     let fed = target.slots().find(|(slot, _, _)| *slot == array).and_then(|(_, _, fed)| fed);
                     let Some(array) = fed.and_then(|ts| args.get(ts).copied()) else { continue };
@@ -48880,10 +48939,10 @@ impl<'a> FuncBuilder<'a> {
         // either profile reaches. The binding says it does not, or the call
         // is refused: that is the direction this check fails safe in.
         if native.slots().any(|(slot, role, _)| {
-            matches!(role, super::native::Role::Strings | super::native::Role::Bytes)
+            matches!(role, super::native::Role::Strings | super::native::Role::Bytes | super::native::Role::Handles)
                 && native.retention[slot] != super::native::Retention::NotRetained
         }) {
-            return Err(self.unsupported(call, "a `CStrings` or `CBytes` parameter without `@ntsNoEscape`, which is what says C does not keep the array it is lent"));
+            return Err(self.unsupported(call, "a `CStrings`, `CBytes` or `CHandles` parameter without `@ntsNoEscape`, which is what says C does not keep the array it is lent"));
         }
         Ok(Callee::Native(std::sync::Arc::new(native)))
     }

@@ -1422,7 +1422,7 @@ impl<'a> Mapper<'a> {
                     _ => return Err(Reason::Array),
                 };
                 self.binding.brands.insert("CStrings");
-                (format!("CStrings<\"{qualifier}\">"), c, "readonly string[]")
+                (format!("CStrings<\"{qualifier}\">"), c, "readonly string[]".to_owned())
             }
             // Bytes have no terminator to find their end by, so only with a
             // length. `guchar` is `uint8_t` on every target GLib runs on; the
@@ -1437,8 +1437,9 @@ impl<'a> Mapper<'a> {
                     _ => return Err(Reason::Array),
                 };
                 self.binding.brands.insert("CBytes");
-                (format!("CBytes<\"{qualifier}\">"), Type::Pointer(pointee), "Uint8Array")
+                (format!("CBytes<\"{qualifier}\">"), Type::Pointer(pointee), "Uint8Array".to_owned())
             }
+            _ if length.is_some() => self.handles_parameter(param, element, &spelling)?,
             _ => return Err(Reason::Array),
         };
         let mut ts = ts;
@@ -1447,12 +1448,49 @@ impl<'a> Mapper<'a> {
             ts = format!("Counted<{ts}, {}, \"{side}\">", count.ts);
         }
         // `null` is NULL, with a count of 0 beside it where there is one.
-        let mut program = program.to_owned();
+        let mut program = program;
         if param.nullable {
             ts.push_str(" | null");
             program.push_str(" | null");
         }
         Ok(Mapped { shape: Shape::Lent { program }, ts, c })
+    }
+
+    /// An array of objects C borrows for the call -- `GFile **files`, or
+    /// `gpointer *additions` with GIR's element type -- as `CHandles<H, Q>`
+    /// over the program's `readonly H[]`, whose element block already holds
+    /// the pointers C reads: the compiler lends it in place. `Q` is `"void"`
+    /// where C spells the array `gpointer *`. Only with a length, and only
+    /// where GIR states the transfer as none: a borrow read into an array
+    /// C keeps, or one whose elements it takes, would be wrong in the
+    /// direction nothing reports.
+    fn handles_parameter(&mut self, param: &Param, element: &str, spelling: &str) -> Result<(String, Type, String), Reason> {
+        if !param.transfer_stated {
+            return Err(Reason::Array);
+        }
+        let Some(Resolved::Class(_, class)) = self.resolve(&self.qualify(element)) else { return Err(Reason::Array) };
+        let c_type = class.c_type.clone().ok_or(Reason::Array)?;
+        let void = match spelling {
+            "gpointer*" | "void**" => true,
+            _ if spelling == format!("{c_type}**") => false,
+            _ => return Err(Reason::Array),
+        };
+        let value = Param {
+            ty: TypeRef::Named { name: element.to_owned(), c_type: Some(format!("{c_type}*")) },
+            direction: Direction::In,
+            nullable: false,
+            ..param.clone()
+        };
+        let mapped = self.typed(&value)?;
+        let (Shape::Handle { .. }, Type::Pointer(pointee)) = (&mapped.shape, mapped.c) else { return Err(Reason::Array) };
+        let pointee = if void { Pointee::Void } else { pointee };
+        self.binding.brands.insert("CHandles");
+        let qualifier = if void { "void" } else { "element" };
+        Ok((
+            format!("CHandles<{}, \"{qualifier}\">", mapped.ts),
+            Type::Pointer(Pointee::Pointer(Box::new(pointee))),
+            format!("readonly {}[]", mapped.ts),
+        ))
     }
 
     /// `error: Ptr<GError | null> | null` -- C's `GError **error`, which the

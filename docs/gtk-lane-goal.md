@@ -345,6 +345,59 @@ the buffer at its last use frees the storage the iterator reads. Foreign
 handles are to be released at block end instead, against the fixture
 `examples/interop/gtk-iter-lifetime`.
 
+### Arrays of objects, lent in place
+
+`store.splice(0, 0, entries)` is how GJS fills a store: one change
+announced, where 5000 `append`s re-run every sort and filter model above
+the store 5000 times (12.8% of the journal's cycles). `splice` takes
+`gpointer *additions` and a count, and was refused "as an array", as were
+`adw_navigation_view_replace`, `g_application_open` and five others.
+
+- **The binder** maps an in array whose element is a class or an
+  interface to `Counted<CHandles<H, Q>, …>` over the program's `readonly
+  H[]`. `Q` is `"void"` where C spells it `gpointer *`, and `"element"`
+  for `H **`. It is marked `@ntsNoEscape`, as `CStrings` is. The array
+  needs a length and a transfer GIR *states* as none. A missing
+  `transfer-ownership` reads as none everywhere else, and a borrow read
+  into an array C keeps would be wrong in the direction nothing reports.
+  The three transfer-full ones (`gdk_content_provider_new_union`, two
+  expression constructors) stay refused.
+- **No copy.** An array of handles is `managed<[native<_T>]>`, whose
+  element block already is C's array of pointers. The loan is that block
+  (`nts_array_handles`, NULL for `null`), and the array is given back after
+  the call (`nts_array_unlend`, empty), as a view is for `CBytes`.
+- **Any array of handles crosses unconverted.** A `GtkLabel[]` passed
+  where `readonly GObject[]` is declared is the same block, and the array
+  coercion would otherwise refuse it as another element width. `readonly`
+  makes that sound, since nothing writes a `GObject` into the label array
+  through it. The exception is that parameter only, and `Role::Handles`
+  refuses an array whose elements are not native handles.
+- **A missing element ends the process, naming its index.** The runtime
+  makes no holes in an array of handles; it refuses to grow one by its
+  length. So only a `null` the type system was talked out of (`null!`)
+  can reach C, and C would read it as an object.
+- **Cleared:** 8 of the 345 array refusals across the journal's closure.
+  An override of a virtual function taking one (`GApplicationClass.open`)
+  is refused ("entry point and compiled function disagree about arity"),
+  not miscompiled: that direction converts a C array into a program one,
+  which nothing does yet.
+
+Witness: gtk-list's `spliced 3 2 b listed`. Three labels are spliced in a
+temporary array, then an empty array removes the first; the task store is
+filled by one `splice` of its `Task[]`. `listed` is a `GdkFileList` made
+from two files, an array C spells `GFile **` rather than `gpointer *`: the
+loan is returned as `void *`, which C converts to either, and a `void *const
+*` did not compile there. It runs on C and LLVM, plain and
+`--rc`. Each arm also runs with a `null!` at index 1 and must end with
+"nothing at index 1". The `--rc` C build under AddressSanitizer is clean
+on both paths, and `tooling/memory` and gtk-cycles are green.
+
+**The give-back is not load-bearing today.** With `nts_array_unlend`
+removed, ASan still reports nothing, because a temporary array is released
+at the end of its statement, after the call. It guards against a release
+moved to the last use, which is what made `nts_view_unlend` necessary for
+views.
+
 ## M3, the idiomatic layer: where it stands
 
 **Methods on handles.** Every GIR method is also a method of its class:

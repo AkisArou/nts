@@ -107,6 +107,13 @@ declare module "c:types" {
       | "const int32_t" | "int32_t" | "const uint32_t" | "uint32_t" | "const float" | "float"
       | "const double" | "double",
   > = A & { readonly __c_elements?: Q };
+  // An array of handles as C's array of pointers to them -- `GFile **files`,
+  // or `gpointer *` where `Q` is "void" -- lent in place for the call: the
+  // array's element block already holds the pointers, so there is no copy.
+  // Like `CStrings`, only for C that does not keep the array past the call;
+  // an element that is not there ends the process, since C reads a NULL as
+  // an object.
+  export type CHandles<H, Q extends "element" | "void" = "element"> = readonly H[] & { readonly __c_handles?: Q };
   // An array whose length C takes in a parameter of its own -- `argc` beside
   // `argv`, `gsize len` after `const guint8 *data`. The caller does not pass
   // it: the compiler does, from the array, into a slot of brand `L` placed

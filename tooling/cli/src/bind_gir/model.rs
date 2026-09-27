@@ -200,12 +200,21 @@ pub(crate) enum Scope {
     Forever,
 }
 
+/// A parameter or a result as GIR describes it. Its flags are GIR's own
+/// independent attributes -- `nullable`, `optional`, `caller-allocates`, and
+/// whether `transfer-ownership` was written -- so flags, not an enum of their
+/// combinations.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct Param {
     pub(crate) name: String,
     pub(crate) ty: TypeRef,
     pub(crate) direction: Direction,
     pub(crate) transfer: Transfer,
+    /// Whether GIR wrote `transfer-ownership`: `transfer` is `None` when it
+    /// did not, which a mapping that is only sound for a borrow must not
+    /// read as one.
+    pub(crate) transfer_stated: bool,
     pub(crate) nullable: bool,
     /// An out parameter the caller may pass `NULL` for, to say it does not
     /// want the value.
