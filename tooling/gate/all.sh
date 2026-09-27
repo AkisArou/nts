@@ -930,6 +930,13 @@ backend_examples() {
   # Deterministic across runs, checked twice on two backends before it was
   # written here.
   ceiling=${4:-}
+  # **Under `exact`, the examples allowed not to agree, each by name.** An
+  # anonymous slack is what a ratcheting floor is, and it absorbs the next wrong
+  # answer as a printed name in a green run: the llvm floor of 327 took a hypot
+  # sabotage that way on 2026-09-27, with every example agreeing. A named
+  # allowance absorbs only itself. When it agrees again the step says to remove
+  # it rather than failing, since going red on a fix is the wrong direction.
+  allowed=${5:-}
 
   # **A count from this glob is a fact about the working tree, not about a
   # commit.** `ls examples/*/tsconfig.json` sees another session's *untracked*
@@ -1053,12 +1060,27 @@ backend_examples() {
     echo "  ^ fell from $floor to $passed"
     return 1
   fi
-  if [ -n "$exact" ] && [ "$passed" -ne "$total" ]; then
-    echo "  ^ $passed of $total, and this floor is meant to equal the corpus --" >&2
-    echo "    an example that stops agreeing fails on the day it lands, which is" >&2
-    echo "    what the floor being the corpus size is for. Raising it to $total" >&2
-    echo "    would hide the disagreement rather than record it." >&2
-    return 1
+  if [ -n "$exact" ]; then
+    unexpected=""
+    for n in $behind; do
+      case " $allowed " in
+        *" $n "*) ;;
+        *) unexpected="$unexpected $n" ;;
+      esac
+    done
+    for a in $allowed; do
+      case " $behind " in
+        *" $a "*) printf '  allowed not to agree, and named here: %s\n' "$a" ;;
+        *) printf '  ^ %s agrees now (or is gone): remove its allowance in tooling/gate/all.sh\n' "$a" ;;
+      esac
+    done
+    if [ -n "$unexpected" ]; then
+      echo "  ^ not agreeing, and not allowed by name:$unexpected --" >&2
+      echo "    this step is exact, so an example that stops agreeing fails on the" >&2
+      echo "    day it lands. Allowing it here records the disagreement; raising a" >&2
+      echo "    floor instead would hide it." >&2
+      return 1
+    fi
   fi
   # **Raise it from a run, and never above what the tree can produce on its
   # own.** The companion to "never lower it to make a run pass", and the one
@@ -1149,7 +1171,13 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # example landed while this was measured; both agree under counting.
   #
   # 321 -> 322 on 2026-09-25 for `a-tuple-element-that-holds-a-function`.
-  backend_examples 326 "through the LLVM backend, counting" "" 10 ); }
+  #
+  # **Exact on 2026-09-27, with one allowance by name.** Every example agrees
+  # here but `this-in-a-field-initializer`, the leak under counting noted above,
+  # so the ratchet's remaining slack could only absorb the next wrong answer.
+  # Exact at 346 alone would go red the day the leak is fixed, so the leak is
+  # named instead, and nothing else is allowed.
+  backend_examples 346 "through the LLVM backend, counting" exact 10 "this-in-a-field-initializer" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1195,7 +1223,13 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # 320 -> 322 on 2026-09-25, the same two examples.
   #
   # 322 -> 323, the same example.
-  backend_examples 327 "through the LLVM backend" "" 10 ); }
+  #
+  # **327 -> 347 and exact, 2026-09-27.** Every example agrees here, and the
+  # twenty of slack absorbed a hypot sabotage into `not agreeing: math` in a
+  # green run. "Left ratcheting" above was right while this lane was climbing;
+  # it has arrived, and a new example that disagrees now fails the day it
+  # lands, as it does on the JVM.
+  backend_examples 347 "through the LLVM backend" exact 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
