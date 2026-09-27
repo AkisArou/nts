@@ -6088,6 +6088,38 @@ fn qualified_name(
 /// compiled" documented a function that computes a name, and this one had none.
 /// Worth a line because the two are read together and a misfiled doc sends the
 /// reader to the wrong half.
+/// Record a refused class or object-literal member under the name it would have
+/// been **emitted** as.
+///
+/// The name is what decides whether the entry is ever found again: a caller and a
+/// dispatch table both hold `Owner<12971>#member`, and passing `None` to
+/// `note_uncompiled` recorded `qualified_name`'s `Owner#member` instead -- the
+/// class's instantiation suffix is `class_name_for`'s to supply and
+/// `qualified_name` has no way to know it. So the entry was written and never
+/// found: a cascade through such a member says "refused above" about something
+/// `nts refusals` cannot show, and a dispatch slot goes null with no diagnostic.
+/// `runtime/node/http`'s `OutgoingMessage<12971>#destroy` is in the prepared HIR,
+/// in no emitted C, and named by neither refusal record.
+///
+/// A free function taking the builder so each of the five sites stays one line.
+/// The snapshot comes from the builder rather than beside it, because two ways to
+/// reach one snapshot is how a caller ends up passing a different one.
+fn note_member(
+    builder: &mut FuncBuilder<'_>,
+    program: &mut super::Program,
+    owner: NodeId,
+    member: NodeId,
+    instance: Option<TypeId>,
+    diagnostic: &Diagnostic,
+) {
+    let snapshot = builder.snapshot;
+    let emitted = builder
+        .emitted_member_name(owner, member, instance)
+        .ok()
+        .map(|(_, emitted)| emitted);
+    note_uncompiled(snapshot, program, member, emitted.as_deref(), diagnostic);
+}
+
 fn note_uncompiled(
     snapshot: &SemanticSnapshot,
     program: &mut super::Program,
@@ -6511,12 +6543,12 @@ fn lower_object_literal_members(
                         func.name,
                     ),
                 );
-                note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                note_member(&mut builder, &mut lowered.program, literal, member, Some(instance), &diagnostic);
                 lowered.diagnostics.push(diagnostic);
             }
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
-                note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                note_member(&mut builder, &mut lowered.program, literal, member, Some(instance), &diagnostic);
                 lowered.diagnostics.push(diagnostic);
             },
         }
@@ -6710,7 +6742,7 @@ fn lower_class(
                 match builder.lower_objc_constructor(class, member, instance) {
                     Ok(func) => lowered.program.funcs.push(func),
                     Err(diagnostic) => {
-                        note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                        note_member(&mut builder, &mut lowered.program, class, member, instance, &diagnostic);
                         lowered.diagnostics.push(diagnostic);
                     }
                 }
@@ -6728,7 +6760,7 @@ fn lower_class(
                         objc_methods.extend(method);
                     }
                     Err(diagnostic) => {
-                        note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                        note_member(&mut builder, &mut lowered.program, class, member, instance, &diagnostic);
                         lowered.diagnostics.push(diagnostic);
                     }
                 }
@@ -6756,7 +6788,7 @@ fn lower_class(
                 // declare a constructor, and `Readable` is the single
                 // most-named export in that module's failing tests.
                 Err(diagnostic) => {
-                    note_uncompiled(snapshot, &mut lowered.program, member, None, &diagnostic);
+                    note_member(&mut builder, &mut lowered.program, class, member, instance, &diagnostic);
                     lowered.diagnostics.push(diagnostic);
                 }
             }
@@ -16649,6 +16681,63 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// The class's name and the name a member is **emitted** under -- the one
+    /// every call site writes and every dispatch table holds.
+    ///
+    /// Its own function because the *recorder* needs the same answer.
+    /// `note_uncompiled` is handed `None` from every member site, so a refused
+    /// member is recorded under `qualified_name`'s `Owner#member` while the table
+    /// and the callers hold `Owner<12971>#member` -- the class's instantiation
+    /// suffix, which `class_name_for` supplies and `qualified_name` cannot. The
+    /// entry is written and never found: every cascade through it says "refused
+    /// above" about something `nts refusals` cannot show, and a dispatch slot
+    /// goes null with no diagnostic at all. `runtime/node/http` ships exactly
+    /// that today -- `OutgoingMessage<12971>#destroy` is in the prepared HIR, is
+    /// in no emitted C, and is named by neither refusal record.
+    ///
+    /// Both names, because `lower_method_of` reads the class's for a diagnostic
+    /// of its own and a second `class_name_for` there would be one more place
+    /// deciding what a class is called. Tonight that was the whole bug, one
+    /// table over.
+    fn emitted_member_name(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+    ) -> Result<(String, String), Diagnostic> {
+        let is_static = is_static_member(self.snapshot, member);
+        let class_name = self.class_name_for(class, instance, is_static)?;
+        // An accessor shares its *name* with the property it presents, so the
+        // emitted name has to say which it is: a class may declare `get x` and
+        // `set x` together, and both are functions taking the receiver. The
+        // space is punctuation no TypeScript identifier may contain, like the
+        // `#` beside it.
+        let accessor = match self.kind_of(member) {
+            Some(syntax::GET_ACCESSOR) => "get ",
+            Some(syntax::SET_ACCESSOR) => "set ",
+            _ => "",
+        };
+        let member_name = if self.kind_of(member) == Some(syntax::CONSTRUCTOR) {
+            CONSTRUCTOR_KEY.to_owned()
+        } else {
+            self.member_name(member)
+                .or_else(|| self.symbol_member_name(class, member, instance))
+                .ok_or_else(|| {
+                    self.unsupported(member, "a member whose name the program computes")
+                })?
+        };
+        // Neither `#` nor `.` can appear in a TypeScript identifier, so a
+        // qualified name cannot collide with a plain function's -- and the two
+        // spellings keep `static foo()` and `foo()` apart, which one class is
+        // allowed to declare together.
+        let emitted = if is_static {
+            format!("{class_name}.{accessor}{member_name}")
+        } else {
+            format!("{class_name}#{accessor}{member_name}")
+        };
+        Ok((class_name, emitted))
+    }
+
     fn lower_method_of(
         &mut self,
         class: NodeId,
@@ -16689,30 +16778,7 @@ impl<'a> FuncBuilder<'a> {
         // `set x` together, and both are functions taking the receiver. The
         // space is punctuation no TypeScript identifier may contain, like the
         // `#` beside it.
-        let accessor = match self.kind_of(member) {
-            Some(syntax::GET_ACCESSOR) => "get ",
-            Some(syntax::SET_ACCESSOR) => "set ",
-            _ => "",
-        };
-        let member_name = if is_constructor {
-            CONSTRUCTOR_KEY.to_owned()
-        } else {
-            self.member_name(member)
-                .or_else(|| self.symbol_member_name(class, member, instance))
-                .ok_or_else(|| {
-                    self.unsupported(member, "a member whose name the program computes")
-                })?
-        };
-
-        // Neither `#` nor `.` can appear in a TypeScript identifier, so a
-        // qualified name cannot collide with a plain function's -- and the two
-        // spellings keep `static foo()` and `foo()` apart, which one class is
-        // allowed to declare together.
-        let name = if is_static {
-            format!("{class_name}.{accessor}{member_name}")
-        } else {
-            format!("{class_name}#{accessor}{member_name}")
-        };
+        let name = self.emitted_member_name(class, member, instance)?.1;
 
         let origin = self.origin(member);
         let mut params = Vec::new();
