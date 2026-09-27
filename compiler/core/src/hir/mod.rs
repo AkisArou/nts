@@ -4382,6 +4382,85 @@ fn doomed_values(
 /// What survives is exactly what `drop_readers_of_unwritten_globals` needs: a
 /// global whose `global.set` went with the statement is not written by the
 /// initializer that remains, so its readers are dropped and no others are.
+/// What an excision from the module initializer takes away, named before it goes.
+///
+/// Two lists because they answer two questions and only one of them has a name
+/// to give: a **global** that loses its assignment can say which binding goes
+/// unwritten, and a bare **call** can only say that a statement was dropped. The
+/// second list is what was missing -- the report used to be per global, so a
+/// statement whose value nothing stores was cut in silence.
+struct Cuts {
+    /// A global that loses its assignment: which one, the callee that was
+    /// refused, and where the assignment was written.
+    globals: Vec<(u32, String, nts_semantic_schema::Origin)>,
+    /// A statement whose value nothing stores: the callee, and where.
+    statements: Vec<(String, nts_semantic_schema::Origin)>,
+}
+
+fn cuts_to_report(func: &Func, doomed: &rustc_hash::FxHashMap<ValueId, String>) -> Cuts {
+// The globals that lose their assignment, named before the ops go.
+let mut lost: Vec<(u32, String, nts_semantic_schema::Origin)> = Vec::new();
+let mut lost_values: Vec<ValueId> = Vec::new();
+for block in &func.blocks {
+    for value in &block.ops {
+        let Some(cause) = doomed.get(value) else {
+            continue;
+        };
+        if let OpKind::GlobalSet { global, .. } = func.values[value.0 as usize].kind {
+            lost.push((
+                global,
+                cause.clone(),
+                func.values[value.0 as usize].origin.clone(),
+            ));
+            lost_values.push(*value);
+        }
+    }
+}
+
+// **And the statements that were *only* effects, which said nothing at all.**
+//
+// The report above is per **global**, so a statement whose value nothing
+// stores was cut in silence. `console.log("before"); main(); console.log(
+// "after")` with `main` refused built an artefact that printed `before` and
+// `after` and exited 0, where node prints the middle line too -- a program
+// that does less than its source says, with no diagnostic anywhere and a
+// zero exit code. The Assistant lane reduced it; the React lane had met the
+// same thing twice through a refused entry point, where the only sign was a
+// function missing from the emitted C.
+//
+// Excising a call is a *behaviour* change either way -- a dropped
+// initializer loses its effects too -- so the honest rule is that every cut
+// call is named, and the per-global message is the special case that can say
+// which binding went unwritten. A call whose result a lost global stores is
+// already covered by that line, transitively: `doomed` propagates forward
+// from the missing callee, so the `GlobalSet` is doomed *because* it reads
+// the call, and reporting both would be two lines about one statement.
+let mut covered: rustc_hash::FxHashSet<ValueId> = lost_values.iter().copied().collect();
+let mut frontier = lost_values;
+while let Some(value) = frontier.pop() {
+    for operand in verify::operands(&func.values[value.0 as usize].kind) {
+        if doomed.contains_key(&operand) && covered.insert(operand) {
+            frontier.push(operand);
+        }
+    }
+}
+let mut dropped: Vec<(String, nts_semantic_schema::Origin)> = Vec::new();
+for block in &func.blocks {
+    for value in &block.ops {
+        let Some(cause) = doomed.get(value) else {
+            continue;
+        };
+        if covered.contains(value) {
+            continue;
+        }
+        if matches!(func.values[value.0 as usize].kind, OpKind::Call { .. }) {
+            dropped.push((cause.clone(), func.values[value.0 as usize].origin.clone()));
+        }
+    }
+}
+    Cuts { globals: lost, statements: dropped }
+}
+
 fn excise_from_initializer(
     lowered: &mut lower::Lowered,
     present: &rustc_hash::FxHashSet<String>,
@@ -4470,27 +4549,12 @@ fn excise_from_initializer(
         }
     }
 
-    // The globals that lose their assignment, named before the ops go.
-    let mut lost: Vec<(u32, String, nts_semantic_schema::Origin)> = Vec::new();
-    for block in &func.blocks {
-        for value in &block.ops {
-            let Some(cause) = doomed.get(value) else {
-                continue;
-            };
-            if let OpKind::GlobalSet { global, .. } = func.values[value.0 as usize].kind {
-                lost.push((
-                    global,
-                    cause.clone(),
-                    func.values[value.0 as usize].origin.clone(),
-                ));
-            }
-        }
-    }
+    let cuts = cuts_to_report(func, &doomed);
     for block in &mut func.blocks {
         block.ops.retain(|value| !doomed.contains_key(value));
     }
 
-    for (global, callee, origin) in lost {
+    for (global, callee, origin) in cuts.globals {
         let name = lowered
             .program
             .globals
@@ -4501,6 +4565,18 @@ fn excise_from_initializer(
             format!(
                 "the initializer of `{name}` was not compiled because it calls `{callee}`, \
                  which was refused above; the rest of the module's evaluation still runs"
+            ),
+            origin.location,
+        ));
+    }
+
+    for (callee, origin) in cuts.statements {
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            "NTS1003",
+            format!(
+                "this module-scope statement was dropped because it calls `{callee}`, which \
+                 was refused above; the rest of the module's evaluation still runs, so the \
+                 program this builds does less than its source says"
             ),
             origin.location,
         ));
