@@ -60,22 +60,34 @@ build:
 
 In the `react` suite, upstream's own build fails the same 2 tests.
 
-**Native build.** native/probe compiles the runtime whole with nts. With
-the compiler's open invalid-HIR defects worked around locally, it emits
-with 211 root refusals, and a GTK program importing React now links. The
-C backend no longer declines its top level: the dispatcher slot is
-erased (ed11876f). Nothing renders natively yet. What stops the render
-path is the compiler's, reported in order with reductions:
-- two verifier failures (an object literal whose keys are out of the
-  interface's order; a method with fewer parameters than its interface);
-- a throw carried through a call to a function value, which
-  `flushMutationEffects`' `try … finally` needs, so it gates every render,
-  with hooks or without;
-- `useState`: its action type `S | ((prev: S) => S)` cannot instantiate a
-  generic; plus an instantiation expression and a generic function passed
-  as a value in the hooks;
-- `jsx` chosen by `isDevelopment ? … : …`, whose test has the literal type
-  `false` natively and could be folded.
+**Native build.** The runtime compiles whole with nts, and nothing renders
+natively yet. What stands between a native program and running is read from
+its build log with `node tools/census.ts <log>`: the entry's chain of refused
+calls, the construct that ends it, and every root refusal by kind. On the
+GTK counter (a `main` that renders a Box, a Label and a Button, with no
+hooks) at caad4fc6d there are 458 refused functions and 189 root constructs;
+53 of those are exported generics nothing instantiates, on no path a program
+runs. Walking `main`'s chain, with each blocker neutralised in a scratch copy
+to reach the next, found 19 blockers in order. The lane's own were fixed;
+the compiler's were reported with reductions, and these stand:
+- raising: a `try` whose callee throws through a function value, a method,
+  or a callee that cannot carry the throw itself (`flushMutationEffects`,
+  the render loops, `safelyCallDestroy`, `reconcileChildFibers`);
+- a `this`-typed function expression (`throwException`'s error-boundary
+  callback);
+- props read through typed interfaces: a record where a laid-out type is
+  wanted, at about 55 sites, awaiting a representation decision;
+- generics: an erased `resolveLazy`, a `renderWithHooks` instantiation no
+  call names, and `useState`'s union action type;
+- smaller ones: a spread in call arguments, closures returning `null`,
+  `String(unknown)`, a field named `__…`, an interface method no class
+  implements, and a generic context's layout.
+
+**react-gtk** (packages/react-gtk, DESIGN.md) generates 72 GTK and 54
+libadwaita widgets from GIR, with typed props, signals, slots, child and
+object elements, and controlled inputs. Its host config is driven on real
+widgets under reference counting with GTK warnings fatal, through the C and
+the LLVM backends (native/gtk, native/adw).
 
 Class components are designed for the native build and verified through
 the JavaScript run (CLASS-COMPONENTS.md). Contexts are classes held by a
@@ -93,6 +105,7 @@ they are listed in PORTING.md and in the native config's comments.
 | `native/probe/` | a native program: the runtime, a typed test host and a deterministic scheduler host |
 | `native/compiled/` | the probe's scenarios in TSX, which `tools/probe-agree.ts` runs plain, as written, and as the React stage rewrote them |
 | `native/gtk/` | react-gtk's host config and GLib scheduler host driven on real GTK widgets, as the reconciler will drive them (`build.sh`) |
+| `native/adw/` | the same for react-gtk/adw, libadwaita's widgets (`build.sh`) |
 | `conformance/` | the harness that runs upstream's tests, and the per-test ledgers |
 | `compiler/` | the upstream Rust React Compiler as our memoizer: the audit (`AUDIT.md`), and how its output stays typed TypeScript (`TYPED-OUTPUT.md`, with its fixtures and study) |
 | `spikes/` | representation experiments the design rests on |
