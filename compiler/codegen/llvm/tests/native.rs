@@ -2311,6 +2311,55 @@ export function run(): string {
     }
 }
 
+/// Typed arrays of wider elements, for `CElements`: a sum over `int32`s and a
+/// fill of `double`s, each told its element count.
+const ELEMENTS_LIBRARY: &str = r"
+#include <stdint.h>
+int i32_sum(const int32_t *xs, uint32_t n) { int s = 0; for (uint32_t i = 0; i < n; i++) s += xs[i]; return s; }
+void f64_fill(double *out, uint32_t n) { for (uint32_t i = 0; i < n; i++) out[i] = (double)i * 1.5; }
+";
+
+/// Any typed array crosses to C as a pointer to its own elements, borrowed in
+/// place, with its count beside it (`CElements<A, Q>`), as a `Uint8Array`'s
+/// bytes do.
+///
+/// **The count is of elements, not bytes**, and every arm is sized to show
+/// it: three `int32`s are twelve bytes, and a count of twelve has C read nine
+/// elements past the end -- which the Windows Runtime did, answering
+/// `-7:65536:2147483647:0:0:0:532007992:...` for a three-element array, until
+/// the count was taken from the view's length rather than its byte length. A
+/// `subarray` starts part-way into its buffer, so a pointer to the buffer
+/// rather than the view sums the wrong elements; and C filling `double`s is
+/// read back from the array afterwards, which a copy in would lose.
+#[test]
+fn a_typed_array_s_elements_are_borrowed_in_place_with_their_count_on_both_backends() {
+    let source = r#"
+import type { CElements, Counted, c_int, c_uint32 } from "c:types";
+/** @ntsNoEscape xs */
+declare function i32_sum(xs: Counted<CElements<Int32Array, "const int32_t">, c_uint32>): c_int;
+/** @ntsNoEscape out */
+declare function f64_fill(out: Counted<CElements<Float64Array, "double">, c_uint32>): void;
+export function run(): string {
+    const xs = new Int32Array([-7, 65536, 1000]);
+    const out = new Float64Array(3);
+    f64_fill(out);
+    return String(i32_sum(xs)) + " " + String(i32_sum(xs.subarray(1))) + " " + out.join(":");
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(
+            "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
+            "nts_release((NtsHeader *)run());",
+        );
+        let Some((text, outputs)) = run_on_both_backends("elements", source, provider, ELEMENTS_LIBRARY, &caller) else { return; };
+        assert!(text.contains("int i32_sum(const int32_t *, uint32_t)"), "`CElements` is not `const int32_t *` with its count after");
+        assert!(text.contains("void f64_fill(double *, uint32_t)"), "`CElements<A, \"double\">` is not writable");
+        for output in outputs {
+            assert_eq!(output, expect("66529 66536 0:1.5:3", provider), "{provider:?}");
+        }
+    }
+}
+
 /// An asynchronous C API in miniature: a start function that keeps the
 /// callback and its data, and a loop turn that fires every pending one once.
 const ASYNC_LIBRARY: &str = r"

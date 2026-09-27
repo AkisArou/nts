@@ -93,6 +93,20 @@ declare module "c:types" {
   // only for C that does not keep the pointer past the call.
   export type CBytes<Q extends "const uint8_t" | "uint8_t" | "const char" | "const void" | "void" = "const uint8_t"> =
     Uint8Array & { readonly __c_bytes?: Q };
+  // A typed array as C's pointer to its elements -- a Windows Runtime
+  // `INT32 *` beside its count -- borrowed in place for the call, as `CBytes`
+  // borrows a `Uint8Array`: no copy in or out, so elements C writes are the
+  // ones the array holds when the call returns. `Q` is C's element spelling,
+  // which must name the array's own element type -- `Int32Array` is
+  // `int32_t` -- and the compiler holds the two to it. Only for C that does
+  // not keep the pointer past the call.
+  export type CElements<
+    A extends Int8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array | Float64Array,
+    Q extends
+      | "const int8_t" | "int8_t" | "const int16_t" | "int16_t" | "const uint16_t" | "uint16_t"
+      | "const int32_t" | "int32_t" | "const uint32_t" | "uint32_t" | "const float" | "float"
+      | "const double" | "double",
+  > = A & { readonly __c_elements?: Q };
   // An array whose length C takes in a parameter of its own -- `argc` beside
   // `argv`, `gsize len` after `const guint8 *data`. The caller does not pass
   // it: the compiler does, from the array, into a slot of brand `L` placed

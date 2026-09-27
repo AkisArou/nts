@@ -202,7 +202,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 }
 
 /// The brands `c:types` declares, beside its `c_` scalars.
-const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "ConstPtr"];
+const C_BRANDS: &[&str] = &["CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "ConstPtr"];
 /// The brands `winrt:types` declares.
 const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
@@ -1250,6 +1250,22 @@ impl Writer<'_> {
                 lent.push(name);
                 continue;
             }
+            // Numbers: a typed array's elements, borrowed in place as bytes
+            // are, and read or filled as bytes are.
+            if let Type::Array(element) = ty
+                && let Some((array, spelled)) = elements_of(element)
+            {
+                if !outs.is_empty() {
+                    return Err("an `in` parameter after an `out` one".to_owned());
+                }
+                for brand in ["Counted", "CElements", "CNumber"] {
+                    self.brands.insert(brand);
+                }
+                let spelled = if out(at) { spelled.to_owned() } else { format!("const {spelled}") };
+                parameters.push(format!("{name}: Counted<CElements<{array}, \"{spelled}\">, CNumber<\"uint32\">, \"before\">"));
+                lent.push(name);
+                continue;
+            }
             if out(at) {
                 let written = match ty {
                     Type::RefMut(written) => written,
@@ -1915,6 +1931,20 @@ fn received(element: &Type) -> Result<String, String> {
         other => return Err(format!("an array of {}, which no typed array holds", element_name(other))),
     }
     .to_owned())
+}
+
+/// A numeric array element other than a byte, as the typed array that holds
+/// it and C's spelling of the element (`CElements`). Bytes are `CBytes`.
+fn elements_of(element: &Type) -> Option<(&'static str, &'static str)> {
+    Some(match element {
+        Type::I16 => ("Int16Array", "int16_t"),
+        Type::U16 => ("Uint16Array", "uint16_t"),
+        Type::I32 => ("Int32Array", "int32_t"),
+        Type::U32 => ("Uint32Array", "uint32_t"),
+        Type::F32 => ("Float32Array", "float"),
+        Type::F64 => ("Float64Array", "double"),
+        _ => return None,
+    })
 }
 
 /// An element type as a refusal names it: a type by its full name, and the

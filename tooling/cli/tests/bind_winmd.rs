@@ -469,6 +469,14 @@ fn a_received_array_is_a_typed_array() {
     assert!(crypto.contains("function CopyToByteArray(buffer: IBuffer | null): { value: Uint8Array };"), "{crypto}");
     let foundation = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
     assert!(foundation.contains("GetInt32Array(this: IPropertyValue): { value: Int32Array };"), "{foundation}");
+    // The way in: a numeric array other than bytes is a typed array whose
+    // elements are borrowed in place, spelled as C spells its element.
+    assert!(
+        foundation.contains(
+            "CreateInt32Array(this: IPropertyValueStatics, value: Counted<CElements<Int32Array, \"const int32_t\">, CNumber<\"uint32\">, \"before\">): Inspectable;"
+        ),
+        "{foundation}"
+    );
     let refused = std::fs::read_to_string(out.join("Windows.Foundation.refused.txt")).unwrap();
     assert!(refused.contains("IPropertyValue.GetStringArray\tan array of strings, which no typed array holds"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);

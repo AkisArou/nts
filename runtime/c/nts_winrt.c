@@ -409,6 +409,46 @@ static void *nts_property_value_statics(void) {
   return statics;
 }
 
+/* The numeric arrays an `IPropertyValue` holds, one row each: its
+ * `PropertyType`, the slot of `IPropertyValue`'s getter for it -- which is
+ * also the slot of `IPropertyValueStatics`' `Create` for it -- and the typed
+ * array's element kind. `Int64Array` and `UInt64Array` have no typed array
+ * (they are `bigint`), and the rest are not numbers. */
+typedef struct {
+  int32_t type;
+  unsigned slot;
+  uint8_t kind;
+} NtsPropertyArray;
+
+static const NtsPropertyArray nts_property_arrays[] = {
+    {1025, 26, NTS_ELEMENT_U8},  {1026, 27, NTS_ELEMENT_I16},
+    {1027, 28, NTS_ELEMENT_U16}, {1028, 29, NTS_ELEMENT_I32},
+    {1029, 30, NTS_ELEMENT_U32}, {1032, 33, NTS_ELEMENT_F32},
+    {1033, 34, NTS_ELEMENT_F64},
+};
+
+/* The row for an `IPropertyValue` of `type`, which unboxing reads. */
+static const NtsPropertyArray *nts_property_array_of_type(int32_t type) {
+  for (size_t at = 0;
+       at < sizeof nts_property_arrays / sizeof *nts_property_arrays; at++) {
+    if (nts_property_arrays[at].type == type) {
+      return &nts_property_arrays[at];
+    }
+  }
+  return 0;
+}
+
+/* The row for a typed array of element `kind`, which boxing reads. */
+static const NtsPropertyArray *nts_property_array_of_kind(uint8_t kind) {
+  for (size_t at = 0;
+       at < sizeof nts_property_arrays / sizeof *nts_property_arrays; at++) {
+    if (nts_property_arrays[at].kind == kind) {
+      return &nts_property_arrays[at];
+    }
+  }
+  return 0;
+}
+
 void *nts_winrt_box(NtsValue value) {
   void *boxed = 0;
   HRESULT hr = S_OK;
@@ -438,6 +478,27 @@ void *nts_winrt_box(NtsValue value) {
     hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, uint8_t, void **))(
         *(void ***)statics)[17])(statics, (uint8_t)nts_value_boolean(value),
                                  &boxed);
+    break;
+  }
+  /* A typed array, as the JavaScript projection boxed one: an
+   * `IPropertyValue` of the array, whose elements Windows copies. */
+  case NTS_TAG_OBJECT: {
+    const NtsView *view = nts_value_is_view(value)
+                              ? (const NtsView *)nts_value_reference(value)
+                              : 0;
+    const NtsPropertyArray *row =
+        view ? nts_property_array_of_kind(view->kind) : 0;
+    if (row == 0) {
+      fprintf(stderr, "nts: an object where the Windows Runtime takes one, "
+                      "which is not a Windows Runtime object or a typed array "
+                      "of a kind it holds\n");
+      abort();
+    }
+    void *statics = nts_property_value_statics();
+    hr = ((
+        HRESULT(STDMETHODCALLTYPE *)(void *, uint32_t, const void *, void **))(
+        *(void ***)statics)[row->slot])(
+        statics, (uint32_t)nts_view_length(view), nts_view_bytes(view), &boxed);
     break;
   }
   default:
@@ -552,13 +613,26 @@ NtsValue nts_winrt_unbox(void *object) {
     value = nts_value_of_boolean(flag != 0);
   } else if (read && nts_property_number(boxed, type, &number)) {
     value = nts_value_of_number(number);
+  } else if (read && nts_property_array_of_type(type)) {
+    /* A numeric array, unboxed as the JavaScript projection unboxed one:
+     * a typed array of the program's, copied, the block freed. */
+    const NtsPropertyArray *row = nts_property_array_of_type(type);
+    uint32_t count = 0;
+    void *elements = 0;
+    read =
+        SUCCEEDED(((HRESULT(STDMETHODCALLTYPE *)(void *, uint32_t *, void **))(
+            *(void ***)boxed)[row->slot])(boxed, &count, &elements));
+    if (read) {
+      NtsView *view = nts_winrt_received(elements, count, (double)row->kind);
+      value = nts_value_of_reference((NtsHeader *)view, NTS_TAG_OBJECT);
+    }
   } else {
     read = 0;
   }
   nts_unknown_release(boxed);
   if (!read) {
     /* A boxed value of a type the program has no primitive for -- a
-     * `DateTime`, an array -- is the object. */
+     * `DateTime`, an array of strings -- is the object. */
     return nts_value_of_handle(object, NTS_TAG_HANDLE_COM);
   }
   nts_com_release(object);

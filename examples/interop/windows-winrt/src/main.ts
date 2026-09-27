@@ -27,14 +27,19 @@
 // - `closed`: an event, a TypeScript function as a delegate (see `events`).
 // - `structs`: records by value, both sizes Win64 passes (see `structs`).
 // - `outs`: `[out]` parameters, as fields of the result (see `outs`).
-// - `bytes`: byte arrays both ways (see `bytes`).
+// - `bytes`: byte arrays both ways, and one handed back; `elements`, arrays
+//   of numbers both ways, boxed and unboxed (see `bytes` and `elements`).
 // - `map`: a class whose default interface is an instantiation (see `map`).
 // - `guids`: `Guid` by value and by reference (see `guids`).
 // - `global`: a handle held at module scope, read from a function (`held`).
-// - `released`, reported after `run` returns: 2 without a counting provider --
+// - `released`, reported after `run` returns: 5 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
-//   call that was handed it -- and 43 under `--rc` (`expected-rc.txt`),
-//   those two and one for each object handed over, among them: the one the
+//   call that was handed it (2 before `elements`), and the three `elements`
+//   owes whatever the provider: the `IPropertyValue` of the ints and the one
+//   of the doubles, each released once unboxed into its typed array, and the
+//   box made for the doubles, given back after the call it was handed to --
+//   and 46 under `--rc` (`expected-rc.txt`), those five and one for each
+//   object handed over, among them: the one the
 //   `erased` arm's `get` is narrowed back through -- a COM value read out of
 //   an erased slot is asked for the interface it is read as, a reference of
 //   its own (42 before that) -- the five
@@ -74,7 +79,7 @@ import {
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import { local } from "c:memory";
 import type { c_int64, c_uint, c_uint32 } from "c:types";
-import { GuidHelper, MemoryBuffer } from "winrt:Windows.Foundation";
+import { GuidHelper, MemoryBuffer, PropertyValue } from "winrt:Windows.Foundation";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
 import { ThreadPool } from "winrt:Windows.System.Threading";
 import { StorageFolder } from "winrt:Windows.Storage";
@@ -145,7 +150,21 @@ function bytes(): string {
   DataReader.FromBuffer(buffer).ReadBytes(back);
   const received = CryptographicBuffer.CopyToByteArray(buffer).value;
   return CryptographicBuffer.EncodeToHexString(buffer) + ",read=" + String(back[0]) + ":" + String(back[1]) + ":" + String(back[2]) +
-    ",received=" + received.join(":") + "/" + String(received.length);
+    ",received=" + received.join(":") + "/" + String(received.length) + ",elements=" + elements();
+}
+
+// Arrays of numbers other than bytes, both ways, as the Windows Runtime's
+// JavaScript projection crossed them: an `Int32Array` passed in (its elements
+// borrowed in place, `CElements`) and answered as the `IPropertyValue` Windows
+// made of it, which unboxes into an `Int32Array` of the program's (a
+// `ReceiveArray`, copied, the block freed) -- the element's extremes, so a
+// width taken as a byte would show; and a `Float64Array` where an object is
+// taken, boxed into an `IPropertyValue` of the array and unboxed the same way.
+function elements(): string {
+  const ints = PropertyValue.CreateInt32Array(new Int32Array([-7, 65536, 2147483647]));
+  const doubles = PropertyValue.CreateInspectable(new Float64Array([0.5, -1e300]));
+  return (ints instanceof Int32Array ? ints.join(":") : "not an Int32Array") + "/" +
+    (doubles instanceof Float64Array ? doubles.join(":") : "not a Float64Array");
 }
 
 // A runtime class whose default interface is an instantiation: `StringMap`

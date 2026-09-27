@@ -396,9 +396,10 @@ pub enum Role {
     /// `c:types`), lent for the call and released after it
     /// (`nts_strings_to_cstrings` / `nts_cstrings_release`).
     Strings,
-    /// A `Uint8Array`'s bytes, borrowed in place for the call (`CBytes<Q>`):
-    /// `nts_view_bytes`, no copy. The view is the caller's argument, alive
-    /// across the call, and its storage never moves.
+    /// A typed array's storage, borrowed in place for the call -- a
+    /// `Uint8Array`'s bytes (`CBytes<Q>`) or any typed array's elements
+    /// (`CElements<A, Q>`): `nts_view_bytes`, no copy. The view is the
+    /// caller's argument, alive across the call, and its storage never moves.
     Bytes,
     /// The element count of the array in C parameter `array`, which C takes
     /// as a parameter of its own (`Counted<A, L>`). Hidden from TypeScript:
@@ -2453,6 +2454,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     let TypeKind::Intersection(parts) = kind_of(ty)? else { return None };
     let mut strings = None;
     let mut bytes = None;
+    let mut elements = None;
     let mut value = None;
     let mut count = None;
     let mut after = true;
@@ -2474,6 +2476,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
             match property.name.as_str() {
                 "___c_strings" => strings = Some(text(property.ty)?),
                 "___c_bytes" => bytes = Some(text(property.ty)?),
+                "___c_elements" => elements = Some(text(property.ty)?),
                 "___c_count" => count = Some(defined(property.ty)?),
                 "___c_count_at" => after = text(property.ty)? == "after",
                 _ => return None,
@@ -2482,8 +2485,12 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     }
     let value = value?;
     let char = Pointee::Scalar(Scalar::Char);
-    let (role, managed, c) = match (strings, bytes) {
-        (Some(spelling), None) => {
+    let (role, managed, c) = match (strings, bytes, elements) {
+        // A typed array's elements, spelled as C spells them: the spelling
+        // names the element, and must name the array's own. Borrowed as bytes
+        // are -- `nts_view_bytes` is the elements' address whatever they are.
+        (None, None, Some(spelling)) => borrowed_elements(snapshot, value, &spelling)?,
+        (Some(spelling), None, None) => {
             let TypeKind::Array(element) = kind_of(value)? else { return None };
             if !matches!(kind_of(*element)?, TypeKind::String) {
                 return None;
@@ -2499,7 +2506,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
             let managed = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
             (Role::Strings, managed, c)
         }
-        (None, Some(spelling)) => {
+        (None, Some(spelling), None) => {
             // A view of bytes, whatever TypeScript calls its class: what the
             // program passes is its storage.
             let managed = super::lower::representation(snapshot, value)?;
@@ -2520,6 +2527,33 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         _ => return None,
     };
     Some(NativeArray { role, managed, c, nullable, count: count.map(|ty| (ty, after)) })
+}
+
+/// A typed array's elements (`CElements<A, Q>`), spelled as C spells them:
+/// the spelling names the element, and must name the array's own. Borrowed as
+/// bytes are -- `nts_view_bytes` is the elements' address whatever they are.
+fn borrowed_elements(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str) -> Option<(Role, HirType, Type)> {
+    let managed = super::lower::representation(snapshot, value)?;
+    let HirType::Managed(ManagedType::View(element)) = &managed else { return None };
+    let (constant, scalar) = match spelling.strip_prefix("const ") {
+        Some(bare) => (true, bare),
+        None => (false, spelling),
+    };
+    let (scalar, wants) = match scalar {
+        "int8_t" => (Scalar::Int8, HirType::Int { bits: 8, signed: true }),
+        "int16_t" => (Scalar::Int16, HirType::Int { bits: 16, signed: true }),
+        "uint16_t" => (Scalar::UInt16, HirType::Int { bits: 16, signed: false }),
+        "int32_t" => (Scalar::Int32, HirType::Int { bits: 32, signed: true }),
+        "uint32_t" => (Scalar::UInt32, HirType::Int { bits: 32, signed: false }),
+        "float" => (Scalar::Float, HirType::Float { bits: 32 }),
+        "double" => (Scalar::Double, HirType::Float { bits: 64 }),
+        _ => return None,
+    };
+    if **element != wants {
+        return None;
+    }
+    let pointee = if constant { Pointee::Const(Box::new(Pointee::Scalar(scalar))) } else { Pointee::Scalar(scalar) };
+    Some((Role::Bytes, managed, Type::Pointer(pointee)))
 }
 
 /// The C slots a `CStrings` or `CBytes` parameter occupies, `at` being the
@@ -3133,6 +3167,10 @@ fn boxable(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
         match kind(*member)? {
             TypeKind::String | TypeKind::Number | TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => primitive = true,
             TypeKind::Null | TypeKind::Undefined => {}
+            // A numeric typed array, which the runtime boxes as an
+            // `IPropertyValue` of the array (`nts_winrt_box`) and unboxes back
+            // into one -- except an `Int8Array`, which no `PropertyType` holds.
+            _ if received_array(snapshot, *member).is_some_and(|(scalar, _)| scalar != Scalar::Int8) => {}
             _ => match abi_type(snapshot, *member)? {
                 Type::Pointer(Pointee::Opaque(handle)) if handle.family == Family::Com && object.is_none() => {
                     object = Some(Type::Pointer(Pointee::Void));

@@ -48149,22 +48149,31 @@ impl<'a> FuncBuilder<'a> {
         Ok(object)
     }
 
-    /// A `Uint8Array`'s bytes where C takes a pointer to them, NULL for
-    /// `null`: `nts_view_bytes`, in place.
+    /// A typed array's storage where C takes a pointer to its elements, NULL
+    /// for `null`: `nts_view_bytes`, in place -- read as the bytes it is and
+    /// cast to the element pointer C takes, which is a `const int32_t *` for
+    /// an `Int32Array` and only coincides with the bytes for a `Uint8Array`.
     fn borrow_bytes(&mut self, view: ValueId, want: HirType, origin: &Origin) -> ValueId {
         let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
         self.unless_null(view, absent, origin, |this| {
-            this.runtime_call("nts_view_bytes", vec![view], want, origin.clone())
+            let bytes = HirType::NativePointer(super::native::Pointee::Scalar(super::native::Scalar::UInt8));
+            let storage = this.runtime_call("nts_view_bytes", vec![view], bytes.clone(), origin.clone());
+            if want == bytes { storage } else { this.push(OpKind::Convert(storage), want, origin.clone()) }
         })
     }
 
-    /// What C means by a length beside an array: the elements of a
-    /// `string[]`, the bytes of a view -- and 0 for a `null` one.
+    /// What C means by a length beside an array: its elements -- a
+    /// `string[]`'s, a view's -- and 0 for a `null` one.
+    ///
+    /// **Elements, not bytes.** A `Uint8Array`'s two are one number, which is
+    /// how this read the byte length for as long as a byte array was the only
+    /// view C took. An `Int32Array` of three is twelve bytes, and a count of
+    /// twelve beside it is a callee reading nine elements past the end.
     fn array_count(&mut self, array: ValueId, nullable: bool, origin: &Origin) -> ValueId {
         let view = matches!(self.values[array.0 as usize].ty, HirType::Managed(ManagedType::View(_)));
         let length = |this: &mut Self| {
             if view {
-                this.runtime_call("nts_view_byte_length", vec![array], HirType::NUMBER, origin.clone())
+                this.runtime_call("nts_view_length", vec![array], HirType::NUMBER, origin.clone())
             } else {
                 this.push(OpKind::Length(array), HirType::NUMBER, origin.clone())
             }
