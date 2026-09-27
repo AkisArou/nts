@@ -13218,6 +13218,19 @@ struct FuncBuilder<'a> {
     /// This is what makes two identifiers with one symbol become one value
     /// rather than two loads.
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
+    /// What an `instanceof` tested, keyed by the expression's own node.
+    ///
+    /// `lower_instanceof` answers a `Bool` and, until this, threw away *which
+    /// binding* the question was about -- so nothing after the test could act on
+    /// it, and every use inside the arm re-derived the narrowing from the
+    /// checker's per-node type instead. Keyed by node rather than by symbol
+    /// because a function may test the same binding twice, and because
+    /// [`Self::lower_if`] has the condition's node and wants the answer for that
+    /// condition alone; `chain_present` keys a scoped override the same way.
+    ///
+    /// Only the managed-class path records here. The four representation paths
+    /// convert already.
+    tested_by_instanceof: rustc_hash::FxHashMap<NodeId, (u32, TypeId)>,
     /// A label just read, waiting for the loop or `switch` it is written on.
     ///
     /// Read by the next construct that pushes a [`Breakable`], which is the
@@ -13604,6 +13617,7 @@ impl<'a> FuncBuilder<'a> {
             }],
             current: BlockId(0),
             bindings: rustc_hash::FxHashMap::default(),
+            tested_by_instanceof: rustc_hash::FxHashMap::default(),
             settlers: rustc_hash::FxHashMap::default(),
             pending_label: None,
             exits: Vec::new(),
@@ -30006,6 +30020,17 @@ impl<'a> FuncBuilder<'a> {
             .filter_map(|(at, _)| u32::try_from(at).ok().map(TypeId))
             .collect();
         named.sort_unstable_by_key(|ty| ty.0);
+        // **Whether the class has one instance type or several**, which decides
+        // whether a narrowing has a single answer. A generic class has one record
+        // per instantiation, all sharing the symbol, so `named.first()` below is an
+        // arbitrary one of them -- correct for the *test*, because
+        // `classes_under` expands to every descriptor the chain must compare, and
+        // wrong as a *type* to re-type a binding to. Recording it anyway typed a
+        // narrowed value as one instantiation where the use wanted another: +46
+        // refusals over the two corpora, at two sites in web-platform's streams,
+        // reading `a ReadableStreamDefaultReader where a ReadableStreamDefaultReader
+        // is wanted`, which is the same name printed for two type ids.
+        let one_instance_type = named.len() == 1;
         // A provided error class is found by *name*. `lib.d.ts` declares
         // `TypeError` as a variable of type `TypeErrorConstructor`, so the
         // symbol the right operand resolves to is the constructor's and never
@@ -30053,6 +30078,21 @@ impl<'a> FuncBuilder<'a> {
         // -- which is what a tag is. An erase of something already known to be
         // an object is one inline word.
         let value = self.erased(value, &origin);
+        // **Which binding was asked about, for the arm that runs when the answer
+        // is yes.** The test is the licence a narrowing needs, and it was being
+        // discarded here: `lower_if` saw only a `Bool`, so each use inside the
+        // branch re-derived the narrowing from `node_types` -- which works for a
+        // member read and has no path for an assignment, so `const alias = b`
+        // inside `if (b instanceof Leaf)` was refused and its statement cut.
+        //
+        // Read straight off the operand's node, the way the identifier path reads
+        // a binding (`self.node(id).symbol` then `bindings.get(&symbol.0)`), so
+        // the key is the one the map is keyed by.
+        if let Some(symbol) = self.node(lhs).symbol
+            && one_instance_type
+        {
+            self.tested_by_instanceof.insert(id, (symbol.0, class));
+        }
         Ok(self.push(OpKind::InstanceOf { value, classes }, HirType::Bool, origin))
     }
 
@@ -33982,6 +34022,91 @@ impl<'a> FuncBuilder<'a> {
         Ok(true)
     }
 
+    /// Re-type a binding the condition's `instanceof` proved, for the arm that
+    /// runs when the answer was yes -- and what to put back afterwards.
+    ///
+    /// Every use of `b` inside `if (b instanceof Leaf)` has static type `Leaf`
+    /// while the binding holds a `Base`, and that disagreement used to be
+    /// resolved per *use*, from the checker's type for that node, by
+    /// [`Self::narrowed`]. That path has an arm for a member read and none for an
+    /// assignment, so `const alias = b` reached [`Self::coerce`] as a `Base`
+    /// arriving where a `Leaf` is wanted, was refused, and its statement was cut
+    /// -- the program then ran on with whatever the target held, which is a
+    /// different answer from node's.
+    ///
+    /// Rebinding once fixes every use in the arm together, and needs no run-time
+    /// check: **the licence is the test immediately above, not a relation between
+    /// the two types.** An earlier attempt licensed the read on
+    /// `descends_from(wanted, held)` instead and was unsound, because structural
+    /// typing satisfies that with no test having run anywhere -- a `Slim` unerased
+    /// to a `Both` reads a slot it does not have, which
+    /// `compiler/core/tests/programs/copy-phantom` is the witness for. Such a site
+    /// is undominated and keeps refusing.
+    ///
+    /// Spelled erase-then-unerase for the reason [`Self::narrowed`]'s
+    /// `ArrayBufferView` arm gives: those two already mean "put it in the
+    /// representation everything shares" and "read it back as this one". The
+    /// precedent for a refinement licensed by this lowering's own control flow
+    /// rather than by `node_types` is [`Self::present_of`], which says so in as
+    /// many words.
+    ///
+    /// The caller is already in the arm's block, because both ops belong to it.
+    fn narrow_for_the_arm(&mut self, condition: NodeId) -> Option<(u32, ValueId, ValueId)> {
+        let (symbol, class) = self.tested_by_instanceof.get(&condition).copied()?;
+        // **Not a name bound to a cell.** A `let` a closure captures *and writes*
+        // is bound to the cell holding it, and [`Self::lower_identifier`] reads
+        // the value *out* of that cell through [`Self::read_cell`] -- so what
+        // `bindings` holds is the cell object and not the value the test was
+        // about. Rebinding the symbol to an unerase of it would read the class's
+        // field out of the cell's own memory: signal 11 on seventeen cases of a
+        // probe whose only difference from the fixture is a closure assigning to
+        // the narrowed `let`, where the binding is honestly refused today.
+        //
+        // Skipped rather than narrowed through the load, because a `bindings`
+        // entry holding a value where a cell belongs would make every later write
+        // in the arm miss the cell. A captured-and-written name keeps the per-use
+        // narrowing it has now.
+        if self.cell_of(symbol).is_some() {
+            return None;
+        }
+        let held = self.bindings.get(&symbol).copied()?;
+        let want = HirType::Managed(ManagedType::Object(class));
+        if self.values[held.0 as usize].ty == want {
+            return None;
+        }
+        let origin = self.origin(condition);
+        let erased = self.erased(held, &origin);
+        let narrow = self.push(OpKind::Unerase { value: erased }, want, origin);
+        self.bindings.insert(symbol, narrow);
+        Some((symbol, held, narrow))
+    }
+
+    /// Lower the arm a test guards, with the binding that test narrowed re-typed
+    /// for the arm and no longer.
+    ///
+    /// The narrowing is put back where the arm did not reassign it, so the merge
+    /// sees the value it saw on entry. Without that, every `if (x instanceof T)`
+    /// would gain a merge parameter for a narrowing whose life ends with the
+    /// branch -- which [`Self::merged_type`] then widens straight back to the
+    /// declaration's type, so the parameter carries nothing and costs a phi. An
+    /// assignment the arm made stands: the binding is then not the value
+    /// [`Self::narrow_for_the_arm`] inserted, and the merge is the one place that
+    /// can reconcile it.
+    ///
+    /// One function rather than a narrow and a restore the caller pairs, because
+    /// a scope is what this is: saving and restoring around a single construct is
+    /// the shape the argument-default shadowing uses, for the same reason.
+    fn lower_narrowed_arm(&mut self, condition: NodeId, arm: NodeId) -> Result<(), Diagnostic> {
+        let narrowed = self.narrow_for_the_arm(condition);
+        let lowered = self.lower_statement(arm);
+        if let Some((symbol, held, narrow)) = narrowed
+            && self.bindings.get(&symbol) == Some(&narrow)
+        {
+            self.bindings.insert(symbol, held);
+        }
+        lowered
+    }
+
     fn lower_if(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let (condition, then_branch, else_branch) = match children.as_slice() {
@@ -34028,7 +34153,7 @@ impl<'a> FuncBuilder<'a> {
         let entry = self.bindings.clone();
 
         self.switch_to(then_block);
-        self.lower_statement(then_branch)?;
+        self.lower_narrowed_arm(condition, then_branch)?;
         // The block the arm *ended* in, which nested control flow moves away from
         // the block it started in. Terminating `then_block` instead would leave
         // the real tail without a terminator.
