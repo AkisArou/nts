@@ -245,9 +245,46 @@ fn cache_dir() -> Option<Utf8PathBuf> {
     if let Ok(named) = std::env::var("NTS_SNAPSHOT_CACHE") {
         return Some(Utf8PathBuf::from(named));
     }
-    Utf8PathBuf::from_path_buf(std::env::temp_dir())
+    // **A cache belongs in the cache directory, not in the temporary one**, and
+    // this one is the reason that distinction is not academic here:
+    // `/tmp/nts-snapshots` reached **8.4 GiB in 16,891 entries**, two thirds of a
+    // per-user quota, on a `/tmp` that is tmpfs.
+    //
+    // Three things make that worse than an ordinary full directory. The quota is
+    // a *block* quota keyed on UID, so every session and every agent shares one
+    // budget; its soft and hard limits are equal, so there is **no grace period**
+    // and a write fails with `EDQUOT` the instant it is reached; and `df` cannot
+    // predict it, because the free space it reports lies outside the quota. On
+    // top of that, tmpfs pages are RAM that can only be *relocated to swap* and
+    // never dropped, so the cache was holding some 40% of memory unreclaimably
+    // on a machine that was OOM-killing.
+    //
+    // `tooling/conformance/snapshot-cache.mjs` -- the step that checks this very
+    // cache -- has said so beside its own scratch directory all along: "Under
+    // `~/.cache`, never `/tmp`: a tmpfs that fills."
+    //
+    // Resolved the way `tooling/differential/src/objects.rs`'s `cache_dir` does,
+    // which is the same function under the same name for the object cache, so the
+    // two answer XDG identically rather than each having a theory about it. The
+    // `temp_dir` fallback stays for the one environment with neither
+    // `XDG_CACHE_HOME` nor `HOME`, where there is no cache directory to prefer
+    // and `/tmp` is the only answer -- silently switching the cache *off* there
+    // would be a performance cliff with no diagnostic.
+    //
+    // This move is mandatory rather than a tidy-up: `std::env::temp_dir()`
+    // consults `TMPDIR`-or-`/tmp` and knows nothing of systemd's disk-backed
+    // `temporary-large` tier, so no environment change reaches this line. Only
+    // this does.
+    let base = std::env::var("XDG_CACHE_HOME")
         .ok()
-        .map(|dir| dir.join("nts-snapshots"))
+        .filter(|dir| !dir.is_empty())
+        .map(Utf8PathBuf::from)
+        .or_else(|| std::env::var("HOME").ok().map(|home| Utf8PathBuf::from(home).join(".cache")));
+    base.map(|dir| dir.join("nts/snapshots")).or_else(|| {
+        Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .ok()
+            .map(|dir| dir.join("nts-snapshots"))
+    })
 }
 
 /// The path a cache entry is named by, resolved once.
