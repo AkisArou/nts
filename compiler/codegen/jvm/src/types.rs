@@ -514,6 +514,27 @@ pub const BIGINT: &str = "nts/rt/NtsBigInt";
 pub const ARRAYS: &str = "nts/rt/NtsForeign";
 pub const BIGINT_DESCRIPTOR: &str = "Lnts/rt/NtsBigInt;";
 
+/// The descriptor a method **returning** `ty` is declared with: `V` for `never`.
+///
+/// [`descriptor`] serves fields as well as returns, and it answers `None` for
+/// `never` deliberately -- a field of that type has no spelling, and a test below
+/// asserts it. A *return* position does have one: a method that never completes
+/// normally returns nothing, which is `V`. The C backend declares such a function
+/// `void` and the LLVM backend spells it in its own `return_ty_of`, each with the
+/// same sentence beside it -- the function never returns, and nothing reads a value
+/// it does not produce.
+///
+/// Written because this was the one backend of the three with nowhere to put that
+/// fact, so `if (bad) fail(msg)` -- an ordinary guard clause -- was refused here as
+/// "a return type with no representation" while C emitted it.
+#[must_use]
+pub fn return_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
+    if matches!(ty, HirType::Never) {
+        return Some("V".to_owned());
+    }
+    descriptor(shape, ty)
+}
+
 /// The descriptor for a parameter, result or field.
 ///
 /// `None` is a type this backend cannot represent yet, which is a refusal by

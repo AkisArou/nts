@@ -3694,7 +3694,21 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
     let out = out.to_owned();
     Ok(match &op.kind {
         OpKind::Call { callee, args, .. } => {
-            let returns = ty_of(&op.ty, func)?;
+            // **`return_ty_of` rather than `ty_of`, because a call to a function
+            // that never returns produces no value.** `never` is `void` in a
+            // *return* position and has no value spelling at all, so asking
+            // `ty_of` refused the call outright -- "a value of type Never, which
+            // this backend does not render yet" -- even where nothing reads it.
+            // The C backend declares the same call `void` for the same reason and
+            // emits it happily, so one backend rendered `if (bad) fail(msg);` and
+            // the other declined it.
+            //
+            // Nothing else changes: the void case below already emits the call
+            // without binding a name, which is exactly what a call producing no
+            // value needs. The React lane found it on fourteen functions --
+            // `throwOnInvalidObjectType` and the hydration claimers -- where it
+            // was the only thing between their native build and an LLVM one.
+            let returns = return_ty_of(&op.ty, func)?;
             // A dispatch through the receiver's method table: one load for the
             // descriptor, one for the table, one for the slot, and an indirect
             // call. That is what dispatch costs when the compiler knows the

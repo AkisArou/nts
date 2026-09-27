@@ -77,7 +77,7 @@ fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), 
             ));
         }
     }
-    if types::descriptor(types::Shape::packaged(program, package), &func.return_type).is_none() {
+    if types::return_descriptor(types::Shape::packaged(program, package), &func.return_type).is_none() {
         return Err(refuse(
             func,
             &format!(
@@ -422,7 +422,13 @@ impl<'a> Emitter<'a> {
                 continue;
             }
             let ty = &func.values[at].ty;
-            if matches!(ty, HirType::Void) {
+            // **`Never` beside `Void`, because neither is a value to store.** The
+            // result of a call to a function that never returns is read by nothing
+            // -- there is no path on which it exists -- so it needs no slot and no
+            // verification type. Without this the slot allocator refused the whole
+            // function as "a value of unrepresentable type", which is true of a
+            // `never` *field* and not of this.
+            if matches!(ty, HirType::Void | HirType::Never) {
                 continue;
             }
             // A constant is pushed where it is read, so it needs no storage --
@@ -775,6 +781,6 @@ pub fn signature(package: &str, program: &Program, func: &Func) -> Option<String
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
         &borrowed,
-        &types::descriptor(types::Shape::packaged(program, package), &func.return_type)?,
+        &types::return_descriptor(types::Shape::packaged(program, package), &func.return_type)?,
     ))
 }

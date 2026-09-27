@@ -1601,7 +1601,7 @@ fn generic_signature(package: &str, program: &Program, func: &nts_core::hir::Fun
             interesting = true;
             rendered.push_str(&generic);
         }
-        None => rendered.push_str(types::descriptor(shape, &func.return_type).as_deref().unwrap_or("V")),
+        None => rendered.push_str(types::return_descriptor(shape, &func.return_type).as_deref().unwrap_or("V")),
     }
     // The erasure has to be the descriptor. If it is not, this lane has built a
     // signature for a shape it does not really emit, and an attribute nobody can
@@ -2089,7 +2089,7 @@ pub(crate) fn instance_descriptor(
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
         &borrowed,
-        &types::descriptor(types::Shape::packaged(program, package), &func.return_type)?,
+        &types::return_descriptor(types::Shape::packaged(program, package), &func.return_type)?,
     ))
 }
 
