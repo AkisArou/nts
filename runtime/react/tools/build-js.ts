@@ -9,7 +9,7 @@
 // bundles. So state shared across entries or packages (React's internals, the
 // scheduler a test has mocked) lives in exactly one module.
 
-import {build, type Plugin} from 'esbuild';
+import {build, transform, type Plugin} from 'esbuild';
 import {existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -153,9 +153,11 @@ for (const pkg of published) {
     if (subpath.includes('*')) continue;
     const entry = subpath === '.' ? 'index' : subpath.slice(2);
     for (const mode of modes) {
-      await build({
+      const outfile = join(out, mode, pkg.name, `${entry}.js`);
+      const bundled = await build({
         entryPoints: [join(packagesDir, pkg.dir, sourceFor(target, mode))],
-        outfile: join(out, mode, pkg.name, `${entry}.js`),
+        outfile,
+        write: false,
         bundle: true,
         format: 'cjs',
         platform: 'node',
@@ -167,6 +169,21 @@ for (const pkg of published) {
         minifySyntax: true,
         logLevel: 'warning',
       });
+      // esbuild minifies each module before it links, and it substitutes an
+      // imported constant (`isDevelopment`, every feature flag) only when it
+      // links. So `if (isDevelopment) {...}` is minified while the name is still
+      // unknown, and survives as a dead `if (!1)` or a comma expression ending
+      // in `!1`: every development-only block shipped in production, 17% of
+      // the noop renderer, and it counts against what V8 will inline. A second
+      // pass over the linked bundle sees the literals and drops them.
+      const linked = await transform(bundled.outputFiles[0]!.text, {
+        minifySyntax: true,
+        format: 'cjs',
+        target: 'es2022',
+        loader: 'js',
+      });
+      mkdirSync(dirname(outfile), {recursive: true});
+      writeFileSync(outfile, linked.code);
     }
     const shim = join(out, pkg.name, `${entry}.js`);
     mkdirSync(dirname(shim), {recursive: true});
