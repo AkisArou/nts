@@ -40077,6 +40077,12 @@ impl<'a> FuncBuilder<'a> {
         {
             return self.lower_chain(id);
         }
+        // A member named by a **string** is a forward lookup, and the checker has
+        // already folded it -- so it is asked before the reverse mapping, whose
+        // index is a value rather than a name.
+        if let Some(folded) = self.folded_enum_member(id) {
+            return Ok(folded);
+        }
         if let Some(name) = self.enum_reverse_member(id)? {
             return Ok(name);
         }
@@ -40113,6 +40119,44 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// `None` rather than a refusal where this is not an enum at all, because
     /// every other element access reaches here too.
+    /// The constant an enum member folds to, where this access names one.
+    ///
+    /// `None` where it does not -- including `E[n]` for a computed `n`, which the
+    /// checker types `string` rather than a literal, and which is
+    /// [`Self::enum_reverse_member`]'s question rather than this one.
+    ///
+    /// **One function because both spellings ask it.** `E.Forward` reached this
+    /// fold and `E["Forward"]` did not: the element-access path asks
+    /// `enum_reverse_member` first, whose index is a member's *value* rather than
+    /// its name, and a string where it wanted a number refused as "an enum's
+    /// reverse mapping at a computed index". The dot form compiled all along,
+    /// which is what made it read as a gap in enums rather than in one spelling
+    /// of them -- the same shape as `cde420c16`, where three readers each
+    /// required a property access for something an element access says
+    /// identically. The GTK lane found it on `SpinType["STEP_FORWARD"]`, with
+    /// `E.B` compiling and `E["B"]` refusing as its two arms.
+    ///
+    /// A string member is a constant too, and a *managed* one: it wants the
+    /// interned static a string literal gets rather than an immediate. That turns
+    /// out to be the same emission, because the checker gives `Label.Short` the
+    /// identical `Literal(String("s"))` type it gives the literal `"s"` -- so
+    /// this is `lower_string` reading its text from the same place, and the two
+    /// share an interned constant rather than each getting one.
+    fn folded_enum_member(&mut self, id: NodeId) -> Option<ValueId> {
+        let member = self.enum_member(id)?;
+        let origin = self.origin(id);
+        Some(match member {
+            EnumMember::Number(value) => {
+                self.push(OpKind::ConstFloat(value), HirType::NUMBER, origin)
+            }
+            EnumMember::Text(text) => self.push(
+                OpKind::ConstString(text),
+                HirType::Managed(ManagedType::String),
+                origin,
+            ),
+        })
+    }
+
     fn enum_reverse_member(&mut self, id: NodeId) -> Result<Option<ValueId>, Diagnostic> {
         let [object, index] = self.children(id)[..] else {
             return Ok(None);
@@ -40984,28 +41028,8 @@ impl<'a> FuncBuilder<'a> {
         // of one is exactly this substitution, and a plain `enum` differs only
         // in also emitting a reverse-mapping object, which nothing in a
         // compiled program can reach without `Colour[n]`.
-        match self.enum_member(id) {
-            Some(EnumMember::Number(value)) => {
-                let origin = self.origin(id);
-                return Ok(self.push(OpKind::ConstFloat(value), HirType::NUMBER, origin));
-            }
-            // A string member is a constant too, and a *managed* one: it wants
-            // the interned static a string literal gets rather than an
-            // immediate. That turns out to be the same emission, because the
-            // checker gives `Label.Short` the identical
-            // `Literal(String("s"))` type it gives the literal `"s"` -- so
-            // this is `lower_string` reading its text from the same place,
-            // and the two share an interned constant rather than each getting
-            // one.
-            Some(EnumMember::Text(text)) => {
-                let origin = self.origin(id);
-                return Ok(self.push(
-                    OpKind::ConstString(text),
-                    HirType::Managed(ManagedType::String),
-                    origin,
-                ));
-            }
-            None => {}
+        if let Some(folded) = self.folded_enum_member(id) {
+            return Ok(folded);
         }
         let children = self.children(id);
         // `a?.b`, which is three children because the `?.` is a token of its
