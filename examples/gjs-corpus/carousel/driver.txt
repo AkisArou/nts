@@ -1,0 +1,10 @@
+active sw_switch
+toggle sw_switch
+active ls_switch
+children root_box
+orientation root_box
+select indicator_row 1
+children root_box
+select orientation_row 1
+orientation root_box
+pages carousel

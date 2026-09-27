@@ -1,0 +1,4 @@
+file with_frame
+file without_frame
+buffer textview_with_frame
+buffer textview_without_frame

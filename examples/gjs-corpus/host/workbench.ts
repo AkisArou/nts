@@ -10,9 +10,11 @@ import {
   AdwApplicationWindow,
   AdwBanner,
   AdwButtonRow,
+  AdwCarousel,
   AdwComboRow,
   AdwOverlaySplitView,
   AdwSwitchRow,
+  AdwTabView,
 } from "c:Adw-1";
 import {
   GtkActionBar,
@@ -33,6 +35,7 @@ import {
   GtkRange,
   GtkSpinButton,
   GtkSwitch,
+  GtkTextView,
   GtkToggleButton,
   GtkWidget,
   SpinType,
@@ -173,6 +176,15 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
     case "attributes":
       if (!(object instanceof GtkLabel)) return false;
       console.log(`${id}.attributes ${object.attributes?.to_string() ?? ""}`);
+      return true;
+    case "pages":
+      if (object instanceof AdwTabView) console.log(`${id}.n_pages ${object.n_pages}`);
+      else if (object instanceof AdwCarousel) console.log(`${id}.n_pages ${object.n_pages}`);
+      else return false;
+      return true;
+    case "buffer":
+      if (!(object instanceof GtkTextView)) return false;
+      console.log(`${id}.buffer ${object.buffer.get_char_count()}`);
       return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;

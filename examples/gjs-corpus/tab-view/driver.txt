@@ -1,0 +1,4 @@
+pages tab_view
+click button_new_tab
+click button_new_tab
+pages tab_view
