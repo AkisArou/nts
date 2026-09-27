@@ -122,7 +122,22 @@ console.log(`  of the roots, ${noise.length} are exported generics nothing insta
 // The chain from the entry.
 console.log();
 const start = refusedBy.get(entry);
-if (start === undefined) {
+// The entry refused by a construct of its own has no cascade line: the only
+// sign is the module-scope call to it being dropped. The constructs are the
+// root refusals in the file that call is in.
+const droppedCall = diagnostics.find((d) =>
+  new RegExp(`dropped because it calls \`${entry}\`, which was refused`).test(d.message),
+);
+if (start === undefined && droppedCall !== undefined) {
+  const own = roots.filter((d) => d.path === droppedCall.path && !NOISE.test(d.message));
+  console.log(`\`${entry}\` is refused (${where(droppedCall)}) by constructs of its own file:`);
+  for (const root of own.slice(0, 5)) {
+    console.log(`  ${where(root)}  ${normalise(root.message).slice(0, 120)}`);
+  }
+  if (own.length > 5) {
+    console.log(`  and ${own.length - 5} more`);
+  }
+} else if (start === undefined) {
   console.log(`\`${entry}\` is not refused: nothing stands between it and running.`);
 } else {
   console.log(`\`${entry}\` is refused (${where(start.at)}); it calls, in order:`);
