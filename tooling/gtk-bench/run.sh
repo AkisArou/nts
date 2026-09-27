@@ -12,6 +12,12 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../.." && pwd)
 nts=${NTS_BIN:-"$root/target/release/nts"}
 out=${1:-"$root/target/gtk-bench"}
+# A snapshot cache of this run's own. The default one is shared by every
+# session on the machine, so a build could load what another lane's
+# `nts frontend` stored under the same key -- a narrower snapshot, and a
+# smaller program -- and the timings would depend on what others happened to
+# build.
+export NTS_SNAPSHOT_CACHE="${NTS_SNAPSHOT_CACHE:-$out/snapshot-cache}"
 for tool in gjs xvfb-run hyperfine /usr/bin/time; do
   command -v "$tool" >/dev/null 2>&1 || { echo "SKIP gtk-bench: no $tool"; exit 0; }
 done
