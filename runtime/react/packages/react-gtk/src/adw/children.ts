@@ -445,6 +445,47 @@ export class TabViewPageNode extends PlacedNode {
   }
 }
 
+// ---- elements that stand for objects -------------------------------------------------
+
+/**
+ * An element that stands for an object of its container, not a widget: a
+ * breakpoint, an AlertDialog's response, a ToggleGroup's toggle. It holds no
+ * children, and shows nothing a ref or Suspense could reach.
+ */
+abstract class ObjectElementNode extends HostNode {
+  appendChild(child: HostNode): void {
+    throw new Error(`<${this.name()}> holds no children, not a <${child.name()}>.`);
+  }
+  insertBefore(child: HostNode, _before: HostNode): void {
+    this.appendChild(child);
+  }
+  removeChild(_child: HostNode): void {}
+
+  widgetNode(): WidgetNode | null {
+    return null;
+  }
+  shownWidget(): GtkWidget | null {
+    return null;
+  }
+  publicInstance(): GtkWidget {
+    throw new Error(`<${this.name()}> is not a widget: put the ref on the widget it belongs to.`);
+  }
+  setVisible(_visible: boolean): void {}
+
+  // Its container only appends: placed before another of its kind, it went
+  // last, and those after it are placed again after it. Placing one again
+  // passes no `before`, so this does not recur.
+  protected appendFollowers(parent: WidgetNode): void {
+    const after = parent.childrenAfter(this);
+    for (let i = 0; i < after.length; i++) {
+      const follower = after[i]!;
+      if (follower.type === this.type) {
+        follower.placeIn(parent, null);
+      }
+    }
+  }
+}
+
 // ---- breakpoints ---------------------------------------------------------------------
 
 export interface BreakpointProps {
@@ -498,7 +539,7 @@ class BreakpointState {
  * cannot remove one, so it is disarmed: its condition is cleared, which never
  * holds, and placed again it is armed again.
  */
-export class BreakpointNode extends HostNode {
+export class BreakpointNode extends ObjectElementNode {
   private readonly breakpoint: AdwBreakpoint = new AdwBreakpoint();
   private readonly state: BreakpointState = new BreakpointState();
   private condition: string | null = null;
@@ -543,14 +584,6 @@ export class BreakpointNode extends HostNode {
       this.arm();
     }
   }
-
-  appendChild(child: HostNode): void {
-    throw new Error(`<${this.name()}> holds no children, not a <${child.name()}>.`);
-  }
-  insertBefore(child: HostNode, _before: HostNode): void {
-    this.appendChild(child);
-  }
-  removeChild(_child: HostNode): void {}
 
   placeIn(parent: WidgetNode, _before: HostNode | null): void {
     const container = parent.widget;
@@ -606,17 +639,6 @@ export class BreakpointNode extends HostNode {
     this.state.onApply.handler = null;
     this.state.onUnapply.handler = null;
   }
-  widgetNode(): WidgetNode | null {
-    return null;
-  }
-  shownWidget(): GtkWidget | null {
-    return null;
-  }
-  publicInstance(): GtkWidget {
-    throw new Error(`<${this.name()}> is a breakpoint, not a widget: put the ref on a widget.`);
-  }
-  // A breakpoint shows nothing, so Suspense has nothing of it to hide.
-  setVisible(_visible: boolean): void {}
 }
 
 // ---- NavigationView ------------------------------------------------------------------
@@ -752,7 +774,7 @@ export interface AlertDialogChildren {
  * places before others is added, and those after it in React's order are
  * added again after it.
  */
-export class AlertResponseNode extends HostNode {
+export class AlertResponseNode extends ObjectElementNode {
   private owner: WidgetNode | null = null;
   // The id it was added under, to remove it by.
   private added: string | null = null;
@@ -777,14 +799,6 @@ export class AlertResponseNode extends HostNode {
     }
   }
 
-  appendChild(child: HostNode): void {
-    throw new Error(`<${this.name()}> holds no children, not a <${child.name()}>.`);
-  }
-  insertBefore(child: HostNode, _before: HostNode): void {
-    this.appendChild(child);
-  }
-  removeChild(_child: HostNode): void {}
-
   placeIn(parent: WidgetNode, before: HostNode | null): void {
     const dialog = parent.widget instanceof AdwAlertDialog ? parent.widget : null;
     if (dialog === null) {
@@ -792,8 +806,6 @@ export class AlertResponseNode extends HostNode {
     }
     this.owner = parent;
     this.add(dialog);
-    // Placed before another response, it went last: those after it follow it
-    // again. Appending one again passes no `before`, so this does not recur.
     if (before !== null) {
       this.appendFollowers(parent);
     }
@@ -838,27 +850,6 @@ export class AlertResponseNode extends HostNode {
     dialog.set_response_enabled(id, this.props["enabled"] !== false);
   }
 
-  private appendFollowers(parent: WidgetNode): void {
-    const after = parent.childrenAfter(this);
-    for (let i = 0; i < after.length; i++) {
-      const follower = after[i]!;
-      if (follower.type === this.type) {
-        follower.placeIn(parent, null);
-      }
-    }
-  }
-
-  widgetNode(): WidgetNode | null {
-    return null;
-  }
-  shownWidget(): GtkWidget | null {
-    return null;
-  }
-  publicInstance(): GtkWidget {
-    throw new Error(`<${this.name()}> is a response, not a widget: put the ref on the <AlertDialog>.`);
-  }
-  // A response shows as the dialog's button; hiding it is disabling it, which is a prop.
-  setVisible(_visible: boolean): void {}
 }
 
 // ---- ToggleGroup ---------------------------------------------------------------------
@@ -886,7 +877,7 @@ export interface ToggleGroupChildren {
  * `activeName`, applied before its toggles existed, selects the toggle it
  * names when that toggle is added.
  */
-export class ToggleNode extends HostNode {
+export class ToggleNode extends ObjectElementNode {
   private readonly toggle: AdwToggle = new AdwToggle();
   private owner: WidgetNode | null = null;
   private props: Props = {};
@@ -921,14 +912,6 @@ export class ToggleNode extends HostNode {
     }
   }
 
-  appendChild(child: HostNode): void {
-    throw new Error(`<${this.name()}> holds no children, not a <${child.name()}>.`);
-  }
-  insertBefore(child: HostNode, _before: HostNode): void {
-    this.appendChild(child);
-  }
-  removeChild(_child: HostNode): void {}
-
   placeIn(parent: WidgetNode, before: HostNode | null): void {
     const group = parent.widget instanceof AdwToggleGroup ? parent.widget : null;
     if (group === null) {
@@ -940,16 +923,8 @@ export class ToggleNode extends HostNode {
     }
     this.owner = parent;
     group.add(this.toggle);
-    // Placed before another toggle, it went last: those after it follow it
-    // again. Appending one again passes no `before`, so this does not recur.
     if (before !== null) {
-      const after = parent.childrenAfter(this);
-      for (let i = 0; i < after.length; i++) {
-        const follower = after[i]!;
-        if (follower.type === this.type) {
-          follower.placeIn(parent, null);
-        }
-      }
+      this.appendFollowers(parent);
     }
     const name = this.props["name"];
     if (typeof name === "string" && parent.prop("activeName") === name) {
@@ -967,16 +942,4 @@ export class ToggleNode extends HostNode {
     }
     this.owner = null;
   }
-
-  widgetNode(): WidgetNode | null {
-    return null;
-  }
-  shownWidget(): GtkWidget | null {
-    return null;
-  }
-  publicInstance(): GtkWidget {
-    throw new Error(`<${this.name()}> is a toggle, not a widget: put the ref on the <ToggleGroup>.`);
-  }
-  // A toggle shows as a segment of its group; turning it off is `enabled`.
-  setVisible(_visible: boolean): void {}
 }
