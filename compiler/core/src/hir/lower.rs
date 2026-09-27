@@ -8276,12 +8276,31 @@ fn lower_module_initializer(
                     // asks whether a refusal covers one. Fifty-one object
                     // literal methods in the node profile were reported as
                     // functions outside every walk for exactly that reason.
-                    lost.push((probe.origin(*statement).location, diagnostic));
+                    // **And which names it leaves unwritten.** A reader of one
+                    // is told "whose initializer was not compiled -- see the
+                    // refusal above that says which", and nothing above named
+                    // it: the line below says "this statement" and the reader
+                    // has a *global* in hand. `console`'s `stdout` and six
+                    // `stderr` reads are that, pointing at one of thirty-seven
+                    // statement lines in the module with no way to tell which.
+                    //
+                    // Syntax answers it here and nothing else has to: a
+                    // variable statement's declarations are its children, and
+                    // the global a later pass finds unwritten is one of them.
+                    let names: Vec<String> = probe
+                        .children(*statement)
+                        .into_iter()
+                        .flat_map(|child| probe.children(child))
+                        .filter(|at| probe.kind_of(*at) == Some(syntax::VARIABLE_DECLARATION))
+                        .filter_map(|at| probe.declared_name(at))
+                        .map(|name| format!("`{name}`"))
+                        .collect();
+                    lost.push((probe.origin(*statement).location, diagnostic, names));
                     false
                 }
             }
         });
-        for (statement, diagnostic) in lost {
+        for (statement, diagnostic, names) in lost {
             lowered.diagnostics.push(diagnostic);
             // A *consequence*, and coded as one. The cause is the diagnostic
             // pushed just above; this says what losing the statement costs.
@@ -8289,12 +8308,18 @@ fn lower_module_initializer(
             // corpus histogram -- 37 of 184 files -- which read as a feature
             // thirty-seven programs were waiting on and was a tally of how
             // often anything at all went wrong at module scope.
+            let leaving = if names.is_empty() {
+                String::new()
+            } else {
+                format!(", leaving {} unwritten", names.join(", "))
+            };
             lowered.diagnostics.push(Diagnostic::error(
                 "NTS1005",
-                "this statement, which module evaluation therefore skips; the rest of the \
-                 module's evaluation still runs, and every value this line would have \
-                 computed keeps whatever it held before it"
-                    .to_owned(),
+                format!(
+                    "this statement, which module evaluation therefore skips{leaving}; the \
+                     rest of the module's evaluation still runs, and every value this line \
+                     would have computed keeps whatever it held before it"
+                ),
                 statement,
             ));
         }
