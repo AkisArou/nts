@@ -1,0 +1,154 @@
+// Does what `emit-jvm` emits for the runtime pass the JVM's verifier?
+//
+//   node tooling/conformance/jvm-verifies.mjs [project ...]   (default: runtime/node/*, runtime/web-platform)
+//   NTS_BIN=<a pin> node tooling/conformance/jvm-verifies.mjs
+//
+// # Why
+//
+// The JVM is the backend that sees type confusions C and LLVM agree on by
+// construction -- C spells every reference `T *` and LLVM `ptr`, and the
+// verifier types them. The gate's `jvm` step runs the *examples*, so the
+// runtime's class files were emitted by nobody and checked by none: the
+// position `emit-llvm` was in when `assembles` found 24 of 27 modules invalid
+// on its first run.
+//
+// # What it asks
+//
+// Per project, `nts emit-jvm --out <dir>`, then JvmVerify.java under
+// `java -Xverify:all` loads every class without initialising it -- no static
+// initialiser runs, so nothing the program does happens -- and links it, which
+// is when HotSpot verifies. Every class is tried, so a module reports each
+// failing class, not only the first. Two kinds, kept apart:
+//
+//   INVALID   VerifyError, ClassFormatError: bytecode the JVM rejects
+//   MISSING   a reference that does not resolve (a class or member absent)
+//
+// Declines are not failures: `emit-jvm` names what it cannot call (a native C
+// function) and writes the rest, and the rest must verify. A module whose
+// `emit-jvm` writes no class is NOT MEASURED.
+//
+// # Known modules
+//
+// `tooling/conformance/jvm-verifies.known`: `project<TAB>why`, one per line.
+// Its failures print and pass; any other fails; one that verifies again
+// prints "remove it".
+//
+// Exit 0: every module verifies or is known not to. Exit 1: a new failure, or
+// a module not measured. Exit 2: the tool could not start.
+
+import { spawn } from "node:child_process";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, provenanceOf } from "./pin.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, "../..");
+const KNOWN = join(HERE, "jvm-verifies.known");
+const DRIVER = join(HERE, "JvmVerify.java");
+const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
+const JAVA = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin/java") : "java";
+const WORKERS = Number(process.env.NTS_JVM_VERIFIES_JOBS ?? 4);
+
+if (!existsSync(SOURCE)) {
+  console.log(`  NOT MEASURED: no compiler at ${SOURCE}; set NTS_BIN`);
+  process.exit(2);
+}
+const base = join(homedir(), ".cache/nts-jvm-verifies");
+mkdirSync(base, { recursive: true });
+const scratch = mkdtempSync(join(base, "run-"));
+process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+const NTS = join(scratch, "nts");
+copyFileSync(SOURCE, NTS);
+chmodSync(NTS, 0o755);
+const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"), NTS_SNAPSHOT_CACHE: join(scratch, "snapshots") };
+delete env.NTS_NO_SNAPSHOT_CACHE;
+
+const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const projects = (named.length > 0
+  ? named
+  : [
+    ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
+      .map((e) => `runtime/node/${e.name}`),
+    "runtime/web-platform",
+  ]).sort();
+
+const known = new Map(
+  (existsSync(KNOWN) ? readFileSync(KNOWN, "utf8") : "")
+    .split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"))
+    .map((l) => l.split("\t")).map(([p, why]) => [p, why ?? ""]),
+);
+
+const run = (cmd, args) =>
+  new Promise((done) => {
+    const child = spawn(cmd, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (out += d));
+    const timer = setTimeout(() => child.kill("SIGKILL"), 900_000);
+    child.on("error", (error) => { clearTimeout(timer); done({ error, out }); });
+    child.on("close", (status, signal) => { clearTimeout(timer); done({ status, signal, out }); });
+  });
+
+/** JvmVerify's output as `{ invalid, missing, verified, total }`, or null when it printed no summary. */
+export function readVerify(text) {
+  const summary = /^VERIFIED (\d+) OF (\d+)$/m.exec(text);
+  if (!summary) return null;
+  const lines = (kind) => text.split("\n").filter((l) => l.startsWith(`${kind} `)).map((l) => l.slice(kind.length + 1));
+  return { invalid: lines("INVALID"), missing: lines("MISSING"), verified: Number(summary[1]), total: Number(summary[2]) };
+}
+
+const failed = [];
+const unmeasured = [];
+let classes = 0;
+let verified = 0;
+
+async function check(project, slot) {
+  const out = join(scratch, `out-${slot}`);
+  rmSync(out, { recursive: true, force: true });
+  const emit = await run(NTS, ["emit-jvm", project, "--out", out]);
+  const jar = join(out, "nts-runtime.jar");
+  if (emit.error || emit.signal || !existsSync(jar)) {
+    unmeasured.push(`${project}: emit-jvm ${emit.signal ?? emit.error?.message ?? `exit ${emit.status}`}, no class written -- ${emit.out.trim().split("\n").pop()?.slice(0, 100)}`);
+    return;
+  }
+  const v = await run(JAVA, ["-Xverify:all", "-cp", `${out}:${jar}`, DRIVER, out]);
+  const read = readVerify(v.out);
+  if (v.error || !read) {
+    unmeasured.push(`${project}: the verifier printed no summary -- ${(v.error?.message ?? v.out.trim().split("\n").pop() ?? "").slice(0, 120)}`);
+    return;
+  }
+  if (read.total === 0) {
+    unmeasured.push(`${project}: emit-jvm wrote no class`);
+    return;
+  }
+  classes += read.total;
+  verified += read.verified;
+  if (read.invalid.length + read.missing.length > 0) failed.push({ project, ...read });
+}
+
+const started = Date.now();
+let next = 0;
+await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, async (_, slot) => {
+  while (next < projects.length) await check(projects[next++], slot);
+}));
+
+const fresh = failed.filter((f) => !known.has(f.project));
+const held = failed.filter((f) => known.has(f.project));
+const expired = [...known.keys()].filter((p) => projects.includes(p) && !failed.some((f) => f.project === p) && !unmeasured.some((u) => u.startsWith(`${p}:`)));
+console.log(`  compiler ${SOURCE} -- ${describe(provenanceOf(SOURCE))}`);
+console.log(`  ${verified} of ${classes} class(es) verify across ${projects.length - unmeasured.length} of ${projects.length} project(s), in ${Math.round((Date.now() - started) / 1000)} s`);
+for (const f of fresh) {
+  console.log(`  DOES NOT VERIFY  ${f.project}: ${f.invalid.length} invalid, ${f.missing.length} missing`);
+  for (const l of [...f.invalid, ...f.missing].slice(0, 6)) console.log(`                   ${l.slice(0, 220)}`);
+  if (f.invalid.length + f.missing.length > 6) console.log(`                   ... ${f.invalid.length + f.missing.length - 6} more`);
+}
+for (const f of held) console.log(`  known            ${f.project}: ${f.invalid.length} invalid, ${f.missing.length} missing -- ${known.get(f.project)}`);
+for (const p of expired) console.log(`  ^ ${p} verifies now: remove it from tooling/conformance/jvm-verifies.known`);
+for (const u of unmeasured.sort()) console.log(`  NOT MEASURED     ${u}`);
+const ok = fresh.length === 0 && unmeasured.length === 0 && classes > 0;
+console.log(ok ? `  every module verifies, or is known not to (${held.length})` : `  ${fresh.length} new failure(s), ${unmeasured.length} not measured`);
+process.exit(ok ? 0 : 1);

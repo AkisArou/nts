@@ -1,0 +1,20 @@
+# Runtime modules whose emit-jvm output the JVM verifier rejects, known and owned:
+# project<TAB>why. Classified by the verifier reason on 55698b009 (conformance lane, 2026-09-28);
+# (A)-(E) are the causes jvm-verifies.mjs names. A module that verifies again prints "remove it".
+runtime/node/assert	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark -- 1 invalid, 0 missing (classified, 2026-09-28)
+runtime/node/console	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark -- 1 invalid, 0 missing (classified, 2026-09-28)
+runtime/node/dns	(E) a reference to a class never written -- 0 invalid, 1 missing (classified, 2026-09-28)
+runtime/node/child_process	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 1 missing (classified, 2026-09-28)
+runtime/node/cluster	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 1 missing (classified, 2026-09-28)
+runtime/node/events	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark -- 1 invalid, 0 missing (classified, 2026-09-28)
+runtime/node/dgram	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call -- 1 invalid, 0 missing (classified, 2026-09-28)
+runtime/node/net	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call -- 1 invalid, 0 missing (classified, 2026-09-28)
+runtime/node/fs	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 4 missing (classified, 2026-09-28)
+runtime/node/http	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 11 missing (classified, 2026-09-28)
+runtime/node/url	 -- 1 invalid, 0 missing (classified, 2026-09-28)
+runtime/node/readline	(C) a closure class that does not implement the signature it is called at, Readline$commit -- 1 invalid, 0 missing (classified, 2026-09-28)
+runtime/node/stream	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 4 missing (classified, 2026-09-28)
+runtime/node/util	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark -- 1 invalid, 0 missing (classified, 2026-09-28)
+runtime/node/process	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 4 missing (classified, 2026-09-28)
+runtime/node/zlib	(B) an erased Object where a signature class is wanted, no checkcast, in ClosureN$call; (E) a reference to a class never written -- 1 invalid, 27 missing (classified, 2026-09-28)
+runtime/web-platform	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark -- 1 invalid, 0 missing (classified, 2026-09-28)

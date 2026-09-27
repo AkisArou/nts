@@ -151,7 +151,10 @@ export const RULES = [
     name: "the JVM backend",
     when: (p) => /^compiler\/codegen\/jvm\//.test(p),
     steps: ["jvm", "dex"],
-    arms: [{ kind: "answers", asks: "which code is emitted, on the JVM", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" }],
+    arms: [
+      { kind: "answers", asks: "which code is emitted, on the JVM", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" },
+      { kind: "valid", asks: "does the runtime's JVM output pass the verifier -- the jvm step runs examples only", run: "NTS_BIN=<after> node tooling/conformance/jvm-verifies.mjs" },
+    ],
   },
   {
     name: "the frontend or the snapshot schema",
