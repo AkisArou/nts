@@ -60,7 +60,14 @@
 //
 //   wrong-answer    ran to the end and answered differently from node
 //   invalid-hir     the verifier refused to emit; `emit-c` writes nothing, so
-//                   anything reading output files scores it as "no refusals"
+//                   anything reading output files scores it as "no refusals".
+//                   Decided by the verifier's own line, never by the missing
+//                   file: "wrote nothing" is also what a run that never
+//                   happened looks like. One operator can move a program
+//                   between this and `refused` -- a generic copy's `typeof v
+//                   === "number"` arm was invalid HIR until c4f08a907, while
+//                   `!== "string"` then `.length` refuses by name -- so a
+//                   refusing variant is not evidence the family is handled
 //   uncompilable-c  `emit-c` exited 0 and `cc` rejected what it wrote
 //   aborted         the program died without an uncaught throw -- a signal, a
 //                   runtime refusal (`nts: refused: index 1 is outside [0, 1)`)
