@@ -694,7 +694,15 @@ export abstract class PlacedNode extends HostNode {
   }
 
   placeIn(parent: WidgetNode, before: HostNode | null): void {
-    // Placed again, it is moving: out first, then in at its new place.
+    // Placed again in its owner, it is moving: in place where the container
+    // can move a child, else out first, then in at its new place.
+    const child = this.child;
+    if (this.attached && this.owner === parent && child !== null) {
+      this.before = before;
+      if (this.move(parent, child.widget)) {
+        return;
+      }
+    }
     this.take();
     this.owner = parent;
     this.before = before;
@@ -728,6 +736,14 @@ export abstract class PlacedNode extends HostNode {
   protected abstract attach(owner: WidgetNode, widget: GtkWidget): void;
   /** Takes `widget` back out of `owner`. */
   protected abstract detach(owner: WidgetNode, widget: GtkWidget): void;
+  /**
+   * Moves `widget`, already in `owner`, to its new place (`before`), keeping
+   * whatever `owner` holds for it (a selected page stays selected); false
+   * where the container cannot, and the element is taken out and put back.
+   */
+  protected move(_owner: WidgetNode, _widget: GtkWidget): boolean {
+    return false;
+  }
   /** The element's props changed while its child is in `owner`. */
   protected update(owner: WidgetNode, widget: GtkWidget): void {
     this.detach(owner, widget);

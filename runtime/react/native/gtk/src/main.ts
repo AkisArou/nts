@@ -58,7 +58,8 @@
 //             name when the app keeps its state; a Stack without the prop
 //             keeps what the user chose
 //   notebook  Notebook.Page elements add pages with tab text, one inserted
-//             before another takes its place in the order, one removed goes
+//             before another takes its place in the order; moved back and to
+//             the end, pages keep the current one; one removed goes
 //   bar       a HeaderBar's Start and End groups pack their children left to
 //             right in React's order (the end packed from the edge in); one
 //             inserted before another takes its place, one removed goes
@@ -556,6 +557,14 @@ function main(): void {
   if (pagesOf !== null) {
     pageOrder = pages.map((p) => String(pagesOf.page_num(widget(p)))).join(",");
     pageOrder += " " + String(pagesOf.get_tab_label_text(widget(pages[1]!)));
+    // Moved, a page keeps the Notebook's current page: "two" stays shown.
+    pagesOf.set_current_page(1);
+    const positions = (): string => pages.map((p) => String(pagesOf.page_num(widget(p)))).join(",");
+    insertBefore(notebook, tabs[0]!, tabs[2]!);
+    pageOrder += " moved=" + positions();
+    appendChild(notebook, tabs[1]!);
+    pageOrder += ">" + positions();
+    pageOrder += " current=" + String(pagesOf.get_nth_page(pagesOf.get_current_page()) === widget(pages[1]!));
     removeChild(notebook, tabs[0]!);
     pageOrder += " " + String(pagesOf.get_n_pages());
   }

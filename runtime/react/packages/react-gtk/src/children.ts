@@ -151,9 +151,7 @@ export class NotebookPageNode extends PlacedNode {
     if (!(notebook instanceof GtkNotebook)) {
       throw misplaced("Notebook.Page", "Notebook", owner);
     }
-    // React places a page before the next one it knows of; -1 is the end.
-    const next = this.before === null ? null : this.before.shownWidget();
-    notebook.insert_page(widget, null, next === null ? -1 : notebook.page_num(next));
+    notebook.insert_page(widget, null, this.index(notebook, -1));
     this.describe(notebook, widget);
     // As a Stack's visible child: the Notebook's `page` was applied before
     // its pages existed.
@@ -171,11 +169,29 @@ export class NotebookPageNode extends PlacedNode {
       }
     }
   }
+  protected move(owner: WidgetNode, widget: GtkWidget): boolean {
+    const notebook = owner.widget;
+    if (!(notebook instanceof GtkNotebook)) {
+      return false;
+    }
+    const from = notebook.page_num(widget);
+    // The page goes where the next one is (past the end, with none), counted
+    // with this one taken out: a page after it moves up one.
+    const to = this.index(notebook, notebook.get_n_pages());
+    notebook.reorder_child(widget, to > from ? to - 1 : to);
+    return true;
+  }
   protected update(owner: WidgetNode, widget: GtkWidget): void {
     const notebook = owner.widget;
     if (notebook instanceof GtkNotebook) {
       this.describe(notebook, widget);
     }
+  }
+
+  // The index of the page React places this one before, or `end` with none.
+  private index(notebook: GtkNotebook, end: number): number {
+    const next = this.before === null ? null : this.before.shownWidget();
+    return next === null ? end : notebook.page_num(next);
   }
 
   private describe(notebook: GtkNotebook, widget: GtkWidget): void {
