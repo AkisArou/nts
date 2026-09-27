@@ -47107,8 +47107,10 @@ impl<'a> FuncBuilder<'a> {
                 n.symbol.is_some() || n.selector.is_some() || n.vtable.is_some() || n.query.is_some() || n.vfunc.is_some() || n.listener.is_some()
             });
         // Or a method of an Objective-C class a binding declares, whose
-        // receiver is the object it is called on, or the class when `static`.
-        let objc_member = (self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
+        // receiver is the object it is called on, or the class when `static`:
+        // declared in the class, or in an interface merging into it (a Swift
+        // extension from another framework's package).
+        let objc_member = (matches!(self.kind_of(declaration), Some(syntax::METHOD_DECLARATION | syntax::METHOD_SIGNATURE))
             && self.objc_class_member(declaration).is_some())
             || self.objc_protocol_member(declaration);
         (tagged && (self.is_native_instance_method(declaration, signature) || objc_member)).then_some((declaration, target.signature))
@@ -49757,12 +49759,29 @@ impl<'a> FuncBuilder<'a> {
         while self.kind_of(class).is_none() {
             class = self.node(class).parent?;
         }
-        if self.kind_of(class) != Some(syntax::CLASS_DECLARATION) {
-            return None;
-        }
-        let name = self.node(class).native.as_ref()?.class.clone()?;
+        let name = match self.kind_of(class) {
+            Some(syntax::CLASS_DECLARATION) => self.node(class).native.as_ref()?.class.clone()?,
+            // An interface merging into one -- a Swift extension, as AppKit
+            // adds `boolValue` to Foundation's `NSString` in a second `declare
+            // module "objc:Foundation"` block -- declares members of that
+            // class.
+            Some(syntax::INTERFACE_DECLARATION) if self.in_objc_module(class) => self.merged_objc_class(class)?,
+            _ => return None,
+        };
         let is_static = self.node(declaration).modifiers.contains(nts_semantic_schema::DeclarationModifiers::STATIC);
         Some(ObjcClassMember { class: name, is_static })
+    }
+
+    /// The Objective-C class an interface merges into: the `@ntsClass` of a
+    /// class declaration of the same symbol.
+    fn merged_objc_class(&self, interface: NodeId) -> Option<String> {
+        let name = self.children(interface).into_iter().find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))?;
+        let record = self.snapshot.symbols.get(self.node(name).symbol?.0 as usize)?;
+        record
+            .declarations
+            .iter()
+            .find(|declaration| self.kind_of(**declaration) == Some(syntax::CLASS_DECLARATION))
+            .and_then(|class| self.node(*class).native.as_ref()?.class.clone())
     }
 
     /// `new C(...)` for an Objective-C class: `+alloc` sent to the class, then

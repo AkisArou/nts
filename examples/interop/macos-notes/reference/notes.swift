@@ -112,6 +112,7 @@ func main() {
   report("loaded \(initially)")
   content.layoutSubtreeIfNeeded()
   report("layout \(printed(field.frame.size.width)) \(printed(button.frame.origin.x)) \(printed(scroll.frame.size.height))")
+  report("measured \(NSString(string: "Notes").size(withAttributes: nil).width > 0)")
   let notes = Notes(notes: loaded, field: field, table: table)
   table.dataSource = notes
   button.target = notes

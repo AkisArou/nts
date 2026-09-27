@@ -11,6 +11,8 @@
 //              throws on the first run, when there is no file
 //   layout W X H  the field's width, the button's x and the list's height,
 //              as Auto Layout placed them from the anchors' constraints
+//   measured B whether a title has a width: `size(withAttributes:)`, which
+//              AppKit adds to Foundation's `NSString` as a Swift extension
 //   launched   the application delegate's `applicationDidFinishLaunching`,
 //              which AppKit sends once `run` has started
 //   added T    each note typed into the field and added by the button's
@@ -152,6 +154,9 @@ function main(): void {
   console.log(`loaded ${initially}`);
   content.layoutSubtreeIfNeeded();
   console.log(`layout ${field.frame.size.width} ${button.frame.origin.x} ${scroll.frame.size.height}`);
+  // A member one framework declares for another's class: AppKit's extension
+  // of `NSString`, in the AppKit package's second `objc:Foundation` block.
+  console.log(`measured ${new NSString({ string: "Notes" }).size({ withAttributes: null }).width > 0}`);
   const notes = new Notes(loaded, field, table);
   table.dataSource = notes;
   button.target = notes;

@@ -49,6 +49,9 @@ fi
 
 mkdir -p "$out"
 log="$out/build.log"
+# What this build writes is newer than this, so a binding an earlier build
+# generated under .nts is not taken for one of its own.
+touch "$out/.started"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
 if grep -qE "refused|NTS[0-9]{4}" "$log"; then
@@ -56,9 +59,16 @@ if grep -qE "refused|NTS[0-9]{4}" "$log"; then
   echo "macos-notes: nts build refused part of the program and exited 0" >&2
   exit 1
 fi
-ls "$source"/.nts/objc/*/AppKit.d.ts >/dev/null 2>&1 ||
-  { echo "macos-notes: nts build did not generate the AppKit binding in .nts/objc" >&2; exit 1; }
-echo "binding: generated from the program's imports"
+# AppKit from the platform packages (`docs/nts-config.md` 3a), not from a
+# binding generated for the program's imports, which is only the fallback
+# for a framework no package provides.
+[ -f "$source/node_modules/@nts/platform-macos/index.d.ts" ] ||
+  { echo "macos-notes: nts build did not link @nts/platform-macos into node_modules" >&2; exit 1; }
+if [ -n "$(find "$source/.nts/objc" -name AppKit.d.ts -newer "$out/.started" 2>/dev/null)" ]; then
+  echo "macos-notes: nts build generated an AppKit binding for the imports, though the platform package provides AppKit" >&2
+  exit 1
+fi
+echo "binding: the macOS platform packages"
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out/rc" --rc >"$out/rc.log" 2>&1 ||
   { cat "$out/rc.log" >&2; exit 1; }
 if grep -qE "refused|NTS[0-9]{4}" "$out/rc.log"; then
@@ -90,7 +100,7 @@ run() {
     cat "$out/$product-$1.err" >&2
     exit 1
   fi
-  printf '%s\n' "loaded $2" "layout 240 270 224" "launched" "added note 1 of $(($2 + 1))" "added note 2 of $(($2 + 2))" "added note 3 of $(($2 + 3))" \
+  printf '%s\n' "loaded $2" "layout 240 270 224" "measured true" "launched" "added note 1 of $(($2 + 1))" "added note 2 of $(($2 + 2))" "added note 3 of $(($2 + 3))" \
     "rows $(($2 + 3))" "saved $(($2 + 3))" | diff -u - "$out/$product-$1.txt" ||
     { echo "macos-notes: the $1 run of $product did not say what it should" >&2; exit 1; }
 }
