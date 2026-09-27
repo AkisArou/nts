@@ -15481,9 +15481,54 @@ impl<'a> FuncBuilder<'a> {
     /// need not be the one with the body -- an overload signature has none,
     /// and the implementation beside it does. `lower_call` chooses the callee
     /// by it and `parameter_representation` types an `object` parameter by
-    /// it, so the two cannot disagree about an overloaded function.
+    /// it, so the two cannot disagree about an overloaded function. So does
+    /// [`Self::emitted_callee_name`], the reader this sentence listed two of
+    /// and which was asking the resolved declaration directly.
     fn defines(&self, declaration: NodeId) -> bool {
         self.has_a_body(self.implementation_of(declaration))
+    }
+
+    /// The name a direct call is emitted under, which is the name on the
+    /// **implementation**.
+    ///
+    /// Not the name at the call site: `import { scale as by }` puts `by` here
+    /// and `scale` on the function, and a call has to name the function.
+    ///
+    /// Through [`Self::implementation_of`], for the reason [`Self::defines`]
+    /// gives, and this was the reader that did not. `qualified_names` skips a
+    /// bodiless function declaration deliberately -- a signature is not a thing
+    /// to emit -- so where the checker resolves a call to a *signature*, asking
+    /// `qualified` about that node answers nothing and the fallback spells the
+    /// **bare** name. For an ambiguous name that is the one name which by
+    /// construction cannot exist: two modules declaring `writeFile` means the
+    /// program emits `writeFile@async` and `writeFile@promises` and nothing
+    /// else.
+    ///
+    /// The result was `` it calls `writeFile`, which nothing in this program
+    /// defines `` -- seven of those over `runtime/node`'s `fs` alone
+    /// (`writeFile`, `readFile`, `opendir`, `lstat`, `rm`, `rmdir`, `statfs`),
+    /// each a cascade blaming a name no refusal can be recorded against,
+    /// because there is no such function to refuse.
+    ///
+    /// So all three halves of one call site now agree about which declaration
+    /// the call is against: the **arity** through `parameter_representation`,
+    /// the **externality** through `defines`, and the **name** here. The name
+    /// was the half that decided what got emitted.
+    fn emitted_callee_name(
+        &self,
+        declaration: Option<NodeId>,
+        callee_node: NodeId,
+    ) -> Result<String, Diagnostic> {
+        declaration
+            .map(|declaration| self.implementation_of(declaration))
+            .and_then(|declaration| {
+                self.qualified
+                    .get(&declaration)
+                    .cloned()
+                    .or_else(|| self.declared_name(declaration))
+            })
+            .or_else(|| self.node(callee_node).text.clone())
+            .ok_or_else(|| self.unsupported(callee_node, "a computed callee"))
     }
 
     /// `what` is interpolated into a sentence, so it has to end in a noun.
@@ -46973,18 +47018,7 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_closure_call(id, callee_node, &arguments);
         }
 
-        // The name the function is *emitted* under, which is the one on its
-        // declaration. `import { scale as by }` puts `by` at the call site and
-        // `scale` on the function, and a call has to name the function.
-        let name = declaration
-            .and_then(|declaration| {
-                self.qualified
-                    .get(&declaration)
-                    .cloned()
-                    .or_else(|| self.declared_name(declaration))
-            })
-            .or_else(|| self.node(callee_node).text.clone())
-            .ok_or_else(|| self.unsupported(callee_node, "a computed callee"))?;
+        let name = self.emitted_callee_name(declaration, callee_node)?;
         // And the copy made for *this* call's instantiation, where the callee
         // is generic. There is one copy per distinct substitution and the
         // suffix is what tells them apart.
