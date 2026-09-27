@@ -35,6 +35,7 @@ import {
 } from "../../internal/validators.ts";
 import { isIP } from "../../net/src/address.ts";
 import { idnaToASCII } from "../../url/src/idna.ts";
+import { hasObserver, startPerf, stopPerf } from "../../perf_hooks/src/observe.ts";
 
 /**
  * A c-ares channel with node's options: `timeout` in milliseconds (-1 for
@@ -611,12 +612,16 @@ function query(
   settle: (error: DNSException | null, result: ResolveResult | null) => void,
 ): void {
   const name = kind === kQueryReverse ? hostname : queryName(hostname);
+  // Node's `startPerf` for a query: named for its binding, timed from the send.
+  const perf = hasObserver("dns") ? startPerf("dns", bindingName, { host: hostname, ttl }) : undefined;
   const errno = nts_dns_channel_query(resolver._handle.id, kind, name, (code, texts, numbers) => {
     if (code !== "") {
       settle(new DNSException(code, bindingName, hostname), null);
       return;
     }
-    settle(null, recordsOf(kind, texts, numbers, ttl));
+    const result = recordsOf(kind, texts, numbers, ttl);
+    settle(null, result);
+    if (perf !== undefined && hasObserver("dns")) stopPerf(perf, { result });
   });
   if (errno !== 0) throw new DNSException(nts_dns_errname(errno), bindingName, hostname, errno);
 }

@@ -26,7 +26,8 @@ import { emitProcessWarning } from "../../internal/process-warning.ts";
 import { setImmediate } from "../../timers/src/main.ts";
 import { customInspectSymbol, inspect, type InspectOptions } from "../../util/src/inspect.ts";
 import { coerceToDOMString } from "../../../web-platform/src/core/webidl.ts";
-import { PerformanceEntry, atDepthLimit } from "./entry.ts";
+import { now } from "./clock.ts";
+import { PerformanceEntry, atDepthLimit, createPerformanceNodeEntry } from "./entry.ts";
 import { domException } from "../../internal/dom-exception.ts";
 
 /**
@@ -67,6 +68,7 @@ const warnedEntryTypes = new Set<string>();
  */
 const kMaybeBuffer: unique symbol = Symbol("kMaybeBuffer");
 const kDispatch: unique symbol = Symbol("kDispatch");
+const kObserves: unique symbol = Symbol("kObserves");
 
 const observers = new Set<PerformanceObserver>();
 const pending = new Set<PerformanceObserver>();
@@ -244,6 +246,11 @@ export class PerformanceObserver {
 
   static get supportedEntryTypes(): readonly string[] {
     return kSupportedEntryTypes;
+  }
+
+  /** Whether this observer watches entries of `entryType`. */
+  [kObserves](entryType: string): boolean {
+    return this.#entryTypes.has(entryType);
   }
 
   /** Queue `entry` if it is a type this observer watches. */
@@ -439,4 +446,46 @@ export function filterBufferMapByNameAndType(
     bufferList = bufferList.slice();
   }
   return bufferList.sort(byStartTime);
+}
+
+/**
+ * Whether any observer watches `type`: node's `hasObserver`, which the
+ * subsystems that time themselves -- `dns`, `net`, `http` -- ask before they
+ * start a clock, so an unobserved call costs nothing.
+ */
+export function hasObserver(type: string): boolean {
+  for (const observer of observers) {
+    if (observer[kObserves](type)) return true;
+  }
+  return false;
+}
+
+/** A timing started by `startPerf` and not yet reported. */
+export interface PerfContext {
+  readonly type: string;
+  readonly name: string;
+  readonly startTime: number;
+  readonly detail: Record<string, unknown>;
+}
+
+/** Start timing one operation: node's `startPerf`. */
+export function startPerf(type: string, name: string, detail: Record<string, unknown>): PerfContext {
+  return { type, name, detail, startTime: now() };
+}
+
+/**
+ * Report a timed operation as an entry of its type: node's `stopPerf`. The
+ * detail is the start's with the result's laid over it.
+ */
+export function stopPerf(context: PerfContext | undefined, detail: Record<string, unknown>): void {
+  if (context === undefined) return;
+  enqueue(
+    createPerformanceNodeEntry(
+      context.name,
+      context.type,
+      context.startTime,
+      now() - context.startTime,
+      { ...context.detail, ...detail },
+    ),
+  );
 }

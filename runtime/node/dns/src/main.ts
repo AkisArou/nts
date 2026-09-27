@@ -31,6 +31,12 @@ import {
 } from "../../internal/errors.ts";
 import { isIP } from "../../net/src/address.ts";
 import { resolverPromises } from "./resolver.ts";
+import {
+  hasObserver,
+  startPerf,
+  stopPerf,
+  type PerfContext,
+} from "../../perf_hooks/src/observe.ts";
 
 export {
   Resolver,
@@ -219,6 +225,45 @@ function validateHints(hints: number): void {
   }
 }
 
+/**
+ * A `dns` performance entry for this lookup, started if anything observes
+ * the type: node's `startPerf` in `lookup`. Node reports only a lookup that
+ * went to the resolver -- not an empty name, not a literal address -- and
+ * only once it succeeds.
+ */
+function lookupPerf(
+  hostname: string,
+  family: number,
+  hints: number,
+  order: number,
+  dnsOrder: string,
+): PerfContext | undefined {
+  if (!hasObserver("dns")) return undefined;
+  return startPerf("dns", "lookup", {
+    hostname,
+    family,
+    hints,
+    verbatim: order === ORDER_VERBATIM,
+    order: dnsOrder,
+  });
+}
+
+/** The same for `lookupService`. */
+function lookupServicePerf(host: string, port: number): PerfContext | undefined {
+  if (!hasObserver("dns")) return undefined;
+  return startPerf("dns", "lookupService", { host, port });
+}
+
+/**
+ * Report a timed operation that succeeded, if it was timed and is still
+ * watched. `addresses` of a single-address lookup is that one address; node's
+ * lists every address the resolver returned, which the binding here does not
+ * hand back when only the first is wanted.
+ */
+function finishPerf(context: PerfContext | undefined, detail: Record<string, unknown>): void {
+  if (context !== undefined && hasObserver("dns")) stopPerf(context, detail);
+}
+
 function orderOf(dnsOrder: string): number {
   if (dnsOrder === "ipv4first") return ORDER_IPV4_FIRST;
   if (dnsOrder === "ipv6first") return ORDER_IPV6_FIRST;
@@ -321,6 +366,7 @@ export function lookup(
   }
 
   const order = orderOf(dnsOrder);
+  const perf = lookupPerf(hostname, family, hints, order, dnsOrder);
   if (all) {
     nts_dns_getaddrinfo_all(hostname, family, hints, order, (errno, addresses, families) => {
       if (errno !== 0) {
@@ -339,6 +385,7 @@ export function lookup(
         out.push({ address, family });
       }
       answer(null, out);
+      finishPerf(perf, { addresses: out });
     });
     return;
   }
@@ -349,6 +396,7 @@ export function lookup(
       return;
     }
     answer(null, address, resolved);
+    finishPerf(perf, { addresses: [address] });
   });
 }
 
@@ -374,18 +422,19 @@ export function lookupService(
   validateFunction(callback, "callback");
   const resolvedPort = +port + 0;
 
+  const perf = lookupServicePerf(address, resolvedPort);
   nts_dns_getnameinfo(address, resolvedPort, (errno, hostname, service) => {
     if (errno !== 0) {
       callback(dnsException(errno, "getnameinfo", address), null, null);
       return;
     }
     callback(null, hostname, service);
+    finishPerf(perf, { hostname, service });
   });
 }
 
-// The c-ares error codes, which node publishes on the module object. They are
-// data rather than behaviour, and a pinned test asserts each is present, so they
-// are here even though nothing in this profile can raise one yet.
+// The c-ares error codes, which node publishes on the module object and the
+// resolver in `resolver.ts` reports failures with.
 export const NODATA = "ENODATA";
 export const FORMERR = "EFORMERR";
 export const SERVFAIL = "ESERVFAIL";
@@ -513,6 +562,7 @@ function promiseLookup(
     }
 
     const order = orderOf(dnsOrder);
+    const perf = lookupPerf(hostname, family, hints, order, dnsOrder);
     if (all) {
       nts_dns_getaddrinfo_all(hostname, family, hints, order, (errno, addresses, families) => {
         if (errno !== 0) {
@@ -527,6 +577,7 @@ function promiseLookup(
           out.push({ address, family: each });
         }
         resolve(out);
+        finishPerf(perf, { addresses: out });
       });
     } else {
       nts_dns_getaddrinfo(hostname, family, hints, order, (errno, address, resolvedFamily) => {
@@ -535,6 +586,7 @@ function promiseLookup(
           return;
         }
         resolve({ address, family: resolvedFamily });
+        finishPerf(perf, { addresses: [address] });
       });
     }
   });
@@ -553,12 +605,14 @@ function promiseLookupService(...args: [address?: unknown, port?: unknown]): Pro
   }
   const port = validatePort(args[1]);
   return new Promise<LookupServiceResult>((resolve, reject) => {
+    const perf = lookupServicePerf(address, port);
     nts_dns_getnameinfo(address, port, (errno, hostname, service) => {
       if (errno !== 0) {
         reject(dnsException(errno, "getnameinfo", address));
         return;
       }
       resolve({ hostname, service });
+      finishPerf(perf, { hostname, service });
     });
   });
 }

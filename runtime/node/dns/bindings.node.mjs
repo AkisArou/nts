@@ -19,6 +19,9 @@
 // The shared stand-ins first, as every module's are: `lookup` of an empty name
 // answers on the next tick, and the tick queue's async context is one of them.
 import "../internal/bindings.node.mjs";
+// `dns` reports `dns` performance entries through perf_hooks' observers, which
+// deliver on a timer check and read perf_hooks' clock.
+import "../perf_hooks/bindings.node.mjs";
 import { lookup, lookupService, Resolver } from "node:dns";
 import { getSystemErrorName } from "node:util";
 

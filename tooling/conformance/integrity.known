@@ -104,6 +104,7 @@ runtime/node/dgram	top-level-cut	the initializer of netClientSocketChannel	a per
 runtime/node/dgram	top-level-cut	the initializer of netServerListen	a per-global cut: the module runs with this global unwritten, and its readers refused (compiler lane)
 runtime/node/dgram	top-level-cut	the initializer of netServerSocketChannel	a per-global cut: the module runs with this global unwritten, and its readers refused (compiler lane)
 runtime/node/dgram	top-level-cut	the initializer of udpSocketChannel	a per-global cut: the module runs with this global unwritten, and its readers refused (compiler lane)
+runtime/node/dns	top-level-cut	a statement calling ClosureN#call	one of 47cba8c15's 29 dropped statements: the module runs without it until its callee compiles (compiler lane) -- timers' host install, reached through perf_hooks' observers since dns reports `dns` entries
 runtime/node/events	top-level-cut	the initializer of HEADERS_ITERATOR_PROTOTYPE	a per-global cut: the module runs with this global unwritten, and its readers refused (compiler lane)
 runtime/node/events	top-level-cut	the initializer of SEARCH_PARAMS_ITERATOR_PROTOTYPE	a per-global cut: the module runs with this global unwritten, and its readers refused (compiler lane)
 runtime/node/fs	top-level-cut	a statement calling ClosureN#call	one of 47cba8c15's 29 dropped statements: the module runs without it until its callee compiles (compiler lane)
