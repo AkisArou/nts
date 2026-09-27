@@ -368,7 +368,7 @@ fn decode_nodes(
             kind,
             origin: Origin::source(Location {
                 file,
-                span: Span::new(raw.pos, raw.end),
+                span: Span::new(token_start(strings.data, &strings.utf16, raw.pos), raw.end),
             }),
             // Shift down by one; encoded 0 means "no parent".
             parent: (raw.parent != 0).then(|| NodeId(raw.parent - 1)),
@@ -707,6 +707,75 @@ struct StringTable<'a> {
 /// the data maps. A character outside the basic plane occupies two units and
 /// both map to its first byte; positions only ever land on token boundaries, so
 /// no caller can tell.
+/// The first token of a node, skipping the leading trivia its `pos` includes.
+///
+/// **A TypeScript node's `pos` is its *full start*: the position after the
+/// previous token, before any whitespace or comment belonging to this one.** So a
+/// declaration with a blank line or a doc comment above it reports at the end of
+/// whatever came before -- on the previous *line*, when the trivia contains a
+/// newline. Measured over four prepared listings by reading the character at each
+/// location: of NTS1001, 231 land on a token, **398 on whitespace and 305 past the
+/// end of their line**; of NTS1003, 131 against 753 and 766. About 2,200
+/// diagnostics in all, from this one line.
+///
+/// Three findings chased separately turned out to be this: `stream`'s `map`
+/// refused as "a `finally` that spans a `yield`" and pointing at the closing line
+/// of a **type alias** two declarations earlier; `examples/generator-unsupported`'s
+/// root pointing at a `let` before `function* guarded`; and all twenty "a
+/// declaration outside every walk" lines in `web-platform`, each on the brace or
+/// closing line before the member it names. The Assistant lane found the common
+/// cause by reading the character at every location rather than by reading code,
+/// which is the only way it could have been seen.
+///
+/// **Conservative in one direction only.** Trivia it does not recognise -- a
+/// non-ASCII space, a shebang -- stops the skip, which leaves that position
+/// exactly as it is today. So this can move a location onto its token or leave it
+/// alone, and never onto something else.
+fn token_start(data: &[u8], utf16: &[u32], pos: u32) -> u32 {
+    // A node's `pos` counts UTF-16 code units and `data` is UTF-8, so the walk
+    // happens in bytes and the answer is converted back. For ASCII -- nearly
+    // every file -- the two are equal and `utf16` is empty by construction.
+    let byte_of = |unit: u32| -> usize {
+        if utf16.is_empty() {
+            unit as usize
+        } else {
+            utf16.get(unit as usize).copied().unwrap_or(u32::MAX) as usize
+        }
+    };
+    let unit_of = |byte: usize| -> u32 {
+        if utf16.is_empty() {
+            u32::try_from(byte).unwrap_or(u32::MAX)
+        } else {
+            let byte = u32::try_from(byte).unwrap_or(u32::MAX);
+            u32::try_from(utf16.partition_point(|at| *at < byte)).unwrap_or(u32::MAX)
+        }
+    };
+    let mut at = byte_of(pos);
+    loop {
+        match data.get(at) {
+            Some(b' ' | b'\t' | b'\r' | b'\n' | 0x0b | 0x0c) => at += 1,
+            Some(b'/') => match data.get(at + 1) {
+                Some(b'/') => {
+                    while data.get(at).is_some_and(|byte| *byte != b'\n') {
+                        at += 1;
+                    }
+                }
+                Some(b'*') => {
+                    at += 2;
+                    while at < data.len()
+                        && !(data[at] == b'*' && data.get(at + 1) == Some(&b'/'))
+                    {
+                        at += 1;
+                    }
+                    at = at.saturating_add(2).min(data.len());
+                }
+                _ => return unit_of(at),
+            },
+            _ => return unit_of(at),
+        }
+    }
+}
+
 fn utf16_offsets(data: &[u8]) -> Vec<u32> {
     if data.is_ascii() {
         return Vec::new();
@@ -885,6 +954,53 @@ mod tests {
     /// `[kind, pos, end, next, parent, data, flags]`
     const fn node(kind: u32, pos: u32, end: u32, parent: u32, data: u32) -> [u32; 7] {
         [kind, pos, end, 0, parent, data, 0]
+    }
+
+    #[test]
+    fn a_nodes_position_moves_past_its_leading_trivia() {
+        // A node's `pos` is its *full start*, so each of these begins in the
+        // trivia and must come out on the `x`.
+        let cases: &[(&str, u32)] = &[
+            ("x", 0),
+            ("   x", 3),
+            ("\n\nx", 2),
+            ("// a comment\nx", 13),
+            ("/* a block */x", 13),
+            ("/** doc */\n  x", 13),
+            ("  // one\n  /* two */ x", 21),
+        ];
+        for (text, want) in cases {
+            assert_eq!(
+                token_start(text.as_bytes(), &[], 0),
+                *want,
+                "token start of {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn trivia_it_cannot_read_leaves_the_position_alone() {
+        // **Conservative in one direction.** A non-ASCII space and a shebang are
+        // trivia TypeScript skips and this does not, so the position stays where
+        // it was rather than moving somewhere wrong. The assertion is that it does
+        // not move, which is what makes the claim testable rather than a hope.
+        assert_eq!(token_start("\u{a0}x".as_bytes(), &[], 0), 0);
+        assert_eq!(token_start("#!/usr/bin/env node\nx".as_bytes(), &[], 0), 0);
+        // And a lone `/` is not a comment.
+        assert_eq!(token_start("/x".as_bytes(), &[], 0), 0);
+    }
+
+    #[test]
+    fn a_position_past_non_ascii_text_is_counted_in_code_units() {
+        // `pos` counts UTF-16 code units and the payload is UTF-8, so a file with
+        // an em dash in a comment has two numberings. The skip walks bytes and
+        // answers in units, and this is the arm that says the conversion is not
+        // the identity: the comment is three bytes and one unit wide.
+        let text = "/*\u{2014}*/x";
+        let utf16 = utf16_offsets(text.as_bytes());
+        assert!(!utf16.is_empty(), "the fixture must not be ASCII");
+        // `x` is the fifth code unit: `/`, `*`, the dash, `*`, `/`.
+        assert_eq!(token_start(text.as_bytes(), &utf16, 0), 5);
     }
 
     #[test]

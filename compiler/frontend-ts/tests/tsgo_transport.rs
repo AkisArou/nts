@@ -175,9 +175,21 @@ fn spans_point_at_the_text_they_name() {
     // `add` is declared at column 16 of `export function add(...)`. If the span
     // and the resolved string ever disagree, every diagnostic and every debug-map
     // entry built on top is silently off.
+    //
+    // **Exactly the identifier, and this assertion is the point of the test.** It
+    // used to read `4` with the message "span covers `add` plus its leading
+    // trivia" -- the leading space -- because a node's `pos` is its *full start*,
+    // the position after the previous token. Every diagnostic inherited that: a
+    // declaration with a comment or a blank line above it reported at the end of
+    // whatever came before, on the *previous line* when the trivia held a newline.
+    // 1,585 of `runtime/node/stream`'s locations landed on whitespace or past the
+    // end of a line; 61 do now.
+    //
+    // So the number changed because the thing it measures was wrong, and the test's
+    // own name -- spans point at the text they name -- is what it now asserts.
     let add = find_by_text(&snapshot, "add").expect("`add` is declared");
     let span = add.origin.location.span;
-    assert_eq!(span.len(), 4, "span covers `add` plus its leading trivia");
+    assert_eq!(span.len(), 3, "the span is `add` and not the space before it");
     assert!(span.start < span.end);
 }
 
