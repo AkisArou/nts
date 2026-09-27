@@ -536,6 +536,12 @@ Caveats of the check:
   verified here). A converter we write can emit whatever unit we then use for
   lookup, but `source_offsets.rs` slices `env.code` assuming UTF-16, so the
   converter should keep UTF-16 in `index`.
+  **Answered (2026-09-27):** the positions tsgo's API hands the stage count
+  UTF-16 units, as the compiler's do (`nts-react/src/convert/text.rs`), and
+  the guess above was wrong. `text_outside_ascii_keeps_every_span`
+  (`tests/transform.rs`, fixture `host-components/unicode.tsx`) pins it:
+  Greek and an astral emoji before and inside a component come through the
+  compiler's output intact, and every tag still lowers to its host type.
 - Are spans unique enough as keys? In the samples each temporary's span was
   distinct from its neighbours'. But erased wrappers (`x!`, `f<T>`, `(x)`)
   share spans with their operands by design. Keying on (span, AST kind), or

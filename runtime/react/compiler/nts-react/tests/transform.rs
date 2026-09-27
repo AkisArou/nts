@@ -178,6 +178,32 @@ fn a_member_tag_lowers_to_its_own_host_type() {
 }
 
 #[test]
+fn text_outside_ascii_keeps_every_span() {
+    if tsgo().is_none() {
+        return;
+    }
+    // tsgo and the compiler both count UTF-16 units (src/convert/text.rs).
+    // Greek and an astral emoji before the component shift every later span
+    // by a different amount in UTF-8 bytes than in UTF-16 units, so a span
+    // counted in the wrong unit would cut the printed text or miss a tag.
+    let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/host-components/tsconfig.json").canonicalize_utf8().expect("checked in");
+    let mut session = Session::open(&project).unwrap();
+    let path = session.own_sources().unwrap().into_iter().find(|p| p.file_name() == Some("unicode.tsx")).unwrap();
+    let tree = session.file(&path).unwrap();
+    let code = std::fs::read_to_string(&path).unwrap();
+    let input = TransformInput { path: &path, text: &code, tree: &tree };
+
+    let (mut transform, _) = ReactTransform::new(stage::default_options());
+    let lowered = transform.transform(&input, &mut SessionTypes { session: &mut session, path: &path, tree: &tree }).expect("unicode.tsx is rewritten");
+    for text in ["\"Καλημέρα κόσμε 🌍\"", "`Μετρητής 🌍 ${count}`", "\"Πρόσθεσε\"", "\"Γειά σου 🌍 κόσμε\""] {
+        assert!(lowered.contains(text), "{text} in {lowered}");
+    }
+    for host in ["_jsxs(\"GtkBox\"", "_jsx(\"GtkLabel\"", "_jsx(\"GtkButton\""] {
+        assert!(lowered.contains(host), "{host} in {lowered}");
+    }
+}
+
+#[test]
 fn a_host_component_tag_lowers_to_its_host_type() {
     if tsgo().is_none() {
         return;
