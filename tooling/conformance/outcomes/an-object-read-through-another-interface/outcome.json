@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: through another interface=not an element;through its own interface=element box;",
+  "node": "exit 1; nts: uncaught Observed: through another interface=element box;through its own interface=element box;",
+  "measured_with": "4c71bbd8e1497221",
+  "source": "measured"
+}
