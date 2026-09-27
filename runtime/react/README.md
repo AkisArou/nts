@@ -60,28 +60,34 @@ build:
 
 In the `react` suite, upstream's own build fails the same 2 tests.
 
-**Native build.** The runtime compiles whole with nts, and nothing renders
-natively yet. What stands between a native program and running is read from
-its build log with `node tools/census.ts <log>`: the entry's chain of refused
-calls, the construct that ends it, and every root refusal by kind. On the
-GTK counter (a `main` that renders a Box, a Label and a Button, with no
-hooks) at caad4fc6d there are 458 refused functions and 189 root constructs;
-53 of those are exported generics nothing instantiates, on no path a program
-runs. Walking `main`'s chain, with each blocker neutralised in a scratch copy
-to reach the next, found 19 blockers in order. The lane's own were fixed;
-the compiler's were reported with reductions, and these stand:
+**Native build.** The runtime compiles whole with nts. The GTK counter (a
+`main` that renders a Box holding a Label and a Button, with no hooks) runs
+natively on C under reference counting. It mounts, updates its label, and
+a click reaches the app's handler, as the JavaScript scenario does. It needs
+scratch stand-ins for the compiler items still open, so it is not yet a
+checked-in program. What stands between a native program and running is
+read from its build log with `node tools/census.ts <log>`: the entry's chain
+of refused calls, the construct that ends it, and every root refusal by
+kind. Walking that chain and then running the program, with each blocker
+neutralised in a scratch copy to reach the next, found about 30. The lane's
+own were fixed, and so was one compiler item (`Array.isArray` after a
+`typeof` narrowing). The rest were reported with reductions, and these
+stand:
 - raising: a `try` whose callee throws through a function value, a method,
-  or a callee that cannot carry the throw itself (`flushMutationEffects`,
-  the render loops, `safelyCallDestroy`, `reconcileChildFibers`);
-- a `this`-typed function expression (`throwException`'s error-boundary
-  callback);
-- props read through typed interfaces: a record where a laid-out type is
-  wanted, at about 55 sites, awaiting a representation decision;
-- generics: an erased `resolveLazy`, a `renderWithHooks` instantiation no
-  call names, and `useState`'s union action type;
-- smaller ones: a spread in call arguments, closures returning `null`,
+  or a callee that cannot carry the throw itself;
+- a value read through a view of another layout: a props record read
+  through an interface, an element read through `{ $$typeof }`, a typed
+  array read as `unknown[]`, and a function called through another
+  signature, whose result is misread (every function component);
+- generics: a union type argument built from a type parameter, and a
+  generic function passed as a value (`useState`'s chain, which stops the
+  `useState` counter);
+- arrays of references written at their length;
+- the LLVM backend's call to a `never`-returning function;
+- smaller ones: spread in call arguments, closures returning `null`,
   `String(unknown)`, a field named `__…`, an interface method no class
-  implements, and a generic context's layout.
+  implements, a literal written in another order than its interface, and
+  `Object.keys` over `object`.
 
 **react-gtk** (packages/react-gtk, DESIGN.md) generates 72 GTK and 54
 libadwaita widgets from GIR, with typed props, signals, slots, child and
