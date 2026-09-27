@@ -851,11 +851,39 @@ fn foreign_slots(out: &mut String, layout: &nts_core::hir::Layout, offsets: &[u3
 }
 
 /// A global's symbol, which is its source name.
+/// A module global's symbol, with the collision rule the C backend already applies.
+///
+/// **In LLVM IR a global and a function share one symbol namespace**, so
+/// `@environment` cannot be both `internal global ptr null` and a `define` -- and
+/// `runtime/node/process` asks for exactly that: `env.ts:22`'s module-scope
+/// `const environment: Record<string, string | undefined> = {}` beside
+/// `internal/color-depth.ts:25`'s `function environment(name)`. The module did not
+/// assemble: "redefinition of function '@environment'". C has no such clash, since
+/// a global there is a file-scope variable rather than a symbol in the same table
+/// as a function -- but the C backend **still** renames it, through
+/// `symbols::c_global`, because a C translation unit has one namespace too.
+///
+/// So the rule existed in the shared crate and this backend was not reading it.
+/// That is the third instance of the shape today, after `Length` not using
+/// `SharedFieldGet`'s erased-pointer sequence and three places building a class
+/// member's name while one of them held the disambiguating map.
+///
+/// `symbol` applies `c_identifier` again on the way out, which is idempotent here:
+/// `c_global` has already returned a C identifier, and the `_` it may append is a
+/// valid character in one.
+///
+/// Found by the conformance lane's `assembles` step, once `87cf3bea7` stopped
+/// `validateArray` masking every other first error in the module.
 fn global_symbol(program: &Program, at: usize) -> String {
-    program
-        .globals
-        .get(at)
-        .map_or_else(|| format!("nts_global_{at}"), |global| global.name.clone())
+    program.globals.get(at).map_or_else(
+        || format!("nts_global_{at}"),
+        |global| {
+            nts_codegen_common::symbols::c_global(
+                &global.name,
+                program.funcs.iter().map(|func| func.name.as_str()),
+            )
+        },
+    )
 }
 
 /// The address of an array's element block, and the index into it.
