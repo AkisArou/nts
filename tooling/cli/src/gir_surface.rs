@@ -177,23 +177,14 @@ impl Generated for GirBindings {
     /// old GIR -- and never ask this generator at all, so the store never
     /// saw the change. A `stat` of each file costs a millisecond or two.
     fn identity(&self) -> String {
-        let mut files: Vec<(Utf8PathBuf, u64, Option<std::time::SystemTime>)> = Vec::new();
-        for dir in bind_gir::search_path() {
-            for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-                let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else { continue };
-                if path.extension() != Some("gir") {
-                    continue;
-                }
-                let meta = entry.metadata().ok();
-                files.push((path, meta.as_ref().map_or(0, std::fs::Metadata::len), meta.and_then(|m| m.modified().ok())));
-            }
-        }
+        let mut files: Vec<Utf8PathBuf> = bind_gir::search_path()
+            .into_iter()
+            .flat_map(|dir| std::fs::read_dir(dir).into_iter().flatten().flatten())
+            .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.path()).ok())
+            .filter(|path| path.extension() == Some("gir"))
+            .collect();
         files.sort();
-        let mut text = String::new();
-        for (path, len, modified) in &files {
-            let _ = write!(text, "|{path}|{len}|{modified:?}");
-        }
-        format!("gir-bindings/2 {GENERATOR:016x} {:016x}", fnv(&[text.as_bytes()]))
+        format!("gir-bindings/3 {GENERATOR:016x} {}", nts_surfaces::fingerprint(&files))
     }
 
     fn config(&mut self, tsconfig: &Utf8Path, _roots: &[String], complaints: &[Complaint]) -> Result<Option<Utf8PathBuf>, String> {

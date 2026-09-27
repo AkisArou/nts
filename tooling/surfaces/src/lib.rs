@@ -268,16 +268,29 @@ fn read_manifest(manifest: &Utf8Path, directory: &Utf8Path) -> Result<Installed>
     Ok(Installed { packages, values })
 }
 
-/// A binder's key: its identity, its version, and each input's path, size and time, which
-/// change whenever the input does, without reading it.
+/// A binder's key: its identity, its version, and the fingerprint of its inputs.
 fn key(binder: &dyn Binder) -> String {
-    let mut text = format!("{}|{}", binder.identity(), binder.version());
-    for input in binder.inputs() {
-        let meta = std::fs::metadata(&input).ok();
-        let _ = write!(text, "|{input}|{:?}|{:?}", meta.as_ref().map(std::fs::Metadata::len), meta.and_then(|m| m.modified().ok()));
+    let text = format!("{}|{}|{}", binder.identity(), binder.version(), fingerprint(&binder.inputs()));
+    format!("{:016x}", fnv(text.as_bytes()))
+}
+
+/// A hash of files' paths, sizes and modification times, which changes whenever one of them
+/// does, without reading any; a missing file hashes as missing. The store keys an entry on its
+/// binder's inputs this way, and a `Generated` hook in front of the store keys the snapshot
+/// cache on it too: an identity that leaves the inputs out lets a cached snapshot answer, and
+/// the store is never asked, after an input changed.
+pub fn fingerprint(files: &[Utf8PathBuf]) -> String {
+    let mut text = String::new();
+    for file in files {
+        let meta = std::fs::metadata(file).ok();
+        let _ = write!(text, "|{file}|{:?}|{:?}", meta.as_ref().map(std::fs::Metadata::len), meta.and_then(|m| m.modified().ok()));
     }
-    let hash = text.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
-    format!("{hash:016x}")
+    format!("{:016x}", fnv(text.as_bytes()))
+}
+
+/// FNV-1a.
+fn fnv(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
 }
 
 /// An identity as a directory name.
@@ -319,6 +332,25 @@ mod tests {
                 values: Some(("one.values.ts".to_owned(), "export const one = 1;\n".to_owned())),
             }])
         }
+    }
+
+    /// A fingerprint is stable while its files are, and changes when one is
+    /// written, created or removed: a missing file is not an empty one.
+    #[test]
+    fn a_fingerprint_follows_its_files() {
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-fingerprint-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let files = [root.join("a.gir"), root.join("b.gir")];
+        std::fs::write(&files[0], "a").unwrap();
+        let missing = fingerprint(&files);
+        std::fs::write(&files[1], "").unwrap();
+        let empty = fingerprint(&files);
+        assert_ne!(missing, empty, "a missing file and an empty one fingerprint alike");
+        assert_eq!(empty, fingerprint(&files), "an unchanged set fingerprinted differently");
+        std::fs::write(&files[0], "ab").unwrap();
+        assert_ne!(empty, fingerprint(&files), "a written file did not change the fingerprint");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// A store generates once per key, again when an input changes, and a
