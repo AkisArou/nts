@@ -2853,10 +2853,12 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
 /// Where a diagnostic is, as `path:line:column`.
 ///
 /// A refusal without a location is a scavenger hunt: the message says what is
-/// not supported and the program says nothing about where. Byte offsets are
-/// what the snapshot carries, because that is what tsgo's encoded AST carries;
-/// turning one into a line and a column means reading the file, which is a fine
-/// price to pay once per diagnostic.
+/// not supported and the program says nothing about where. Offsets are what the
+/// snapshot carries, in UTF-16 code units, because that is what tsgo's encoded
+/// AST carries; turning one into a line and a column means reading the file,
+/// which is a fine price to pay once per diagnostic. The conversion out of code
+/// units is `byte_of_unit` below, and this comment claimed bytes until the day
+/// that function had to be written.
 /// The byte offset of a UTF-16 code-unit offset in `text`.
 ///
 /// Walks the characters once, which is what `where_it_is` does for the line count

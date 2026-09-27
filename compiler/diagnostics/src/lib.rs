@@ -64,11 +64,27 @@ pub struct RewrittenSegment {
     pub generated: bool,
 }
 
-/// A half-open byte range within a source file.
+/// A half-open range within a source file, counted in **UTF-16 code units**.
 ///
-/// Byte offsets rather than line/column: tsgo's encoded AST carries `pos`/`end`
-/// as byte offsets, and converting once at the diagnostic boundary is cheaper
-/// and less lossy than converting at every node.
+/// Offsets rather than line/column, because an offset is what tsgo's encoded AST
+/// carries and turning one into a line and a column means reading the file --
+/// a fine price once per diagnostic and an absurd one per node.
+///
+/// **Code units, not bytes.** This said bytes until 2026-09-27 and it was the
+/// precondition two location fixes had to refute: tsgo numbers a position the
+/// way a JavaScript string index does (`api/proto.go` converts every diagnostic
+/// with `UTF8ToUTF16` before answering, and the AST encoder wraps every `pos` in
+/// the same call), and the React pipeline mixes these spans with the React
+/// compiler's, which count the same way -- `nts-react`'s
+/// `text_outside_ascii_keeps_every_span` is the arm that fails on anything else.
+///
+/// So **a reader that wants bytes converts**, and the two that do say so where
+/// they do it: `tooling/cli`'s `where_it_is`, which slices the file's bytes to
+/// count lines, and the frontend's `token_start`, which walks trivia. Treating a
+/// unit offset as a byte offset lands early by the extra bytes of every
+/// non-ASCII character above it -- eight, for the four em dashes above
+/// `blockers/a-for-in-over-an-array`'s refused `for...in`, which printed the
+/// wrong line until it converted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Span {
     pub start: u32,

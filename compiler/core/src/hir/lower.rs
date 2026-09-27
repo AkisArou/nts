@@ -30173,12 +30173,23 @@ impl<'a> FuncBuilder<'a> {
     /// than one and they are all in the same file; a list would be longer and
     /// no more actionable.
     ///
-    /// The file and the byte the declaration starts at, not a line and column:
-    /// a `Span` is byte offsets because tsgo's encoded AST carries them that
-    /// way, and converting is the diagnostic boundary's job rather than the
-    /// lowering's. The file alone was tried first and is not enough — one file
-    /// can declare several anonymous types with an optional field, and which
-    /// one is the whole question.
+    /// The file and the offset the declaration starts at, not a line and
+    /// column: converting is the diagnostic boundary's job rather than the
+    /// lowering's, which is why the raw number is printed here. The file alone
+    /// was tried first and is not enough — one file can declare several
+    /// anonymous types with an optional field, and which one is the whole
+    /// question.
+    ///
+    /// **The offset counts UTF-16 code units**, as every `Span` does; this
+    /// said "the byte" until 2026-09-27, when a location bug of exactly that
+    /// confusion was fixed two files away. The `+N` is honest as written, since
+    /// it names no unit, and it is still the worse half of this: a reader gets a
+    /// number to count rather than a place. What it owes is a
+    /// `Diagnostic::with_label` at that location, so the
+    /// printer converts it like every other location instead of this deriving
+    /// "where is it" a second time. That changes the text of a large family
+    /// — the erasure rows are 152 sites and 3,061 occurrences — so it
+    /// wants its own measured commit.
     ///
     /// `an anonymous type` remains the answer where there is genuinely nothing
     /// to point at: a symbol declared outside the decoded file set has an empty
