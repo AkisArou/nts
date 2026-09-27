@@ -2,6 +2,7 @@
 // queue, push contexts) and reconcile its children, or bail out when nothing
 // it depends on changed.
 
+import { hasOwn } from "shared/hasOwn.ts";
 import { Render } from "shared/ReactClassComponentType.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { replaceErrorStack } from "shared/replaceErrorStack.ts";
@@ -281,7 +282,7 @@ function shallowEqual(objA: AnyProps, objB: AnyProps): boolean {
   // Test for A's keys different from B.
   for (let i = 0; i < keysA.length; i++) {
     const currentKey = keysA[i]!;
-    if (!Object.hasOwn(objB, currentKey) || !Object.is(objA[currentKey], objB[currentKey])) {
+    if (!hasOwn(objB, currentKey) || !Object.is(objA[currentKey], objB[currentKey])) {
       return false;
     }
   }

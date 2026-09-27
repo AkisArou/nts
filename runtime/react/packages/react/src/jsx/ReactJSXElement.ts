@@ -5,6 +5,7 @@
 // `props`. In development it also carries its owner and debug stack, `ref`
 // becomes a warning getter, and the element and its props are frozen.
 
+import { hasOwn } from "shared/hasOwn.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { checkKeyStringCoercion } from "shared/CheckStringCoercion.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
@@ -98,14 +99,14 @@ function isWarningGetter(config: object, name: string): boolean {
 }
 
 function hasValidRef(config: Props): boolean {
-  if (isDevelopment && Object.hasOwn(config, "ref") && isWarningGetter(config, "ref")) {
+  if (isDevelopment && hasOwn(config, "ref") && isWarningGetter(config, "ref")) {
     return false;
   }
   return config["ref"] !== undefined;
 }
 
 function hasValidKey(config: Props): boolean {
-  if (isDevelopment && Object.hasOwn(config, "key") && isWarningGetter(config, "key")) {
+  if (isDevelopment && hasOwn(config, "key") && isWarningGetter(config, "key")) {
     return false;
   }
   return config["key"] !== undefined;
@@ -341,7 +342,7 @@ function jsxDEVImpl(
 
   // A `key` in a spread props object is a mistake: React keys must be passed
   // directly.
-  if (Object.hasOwn(config, "key")) {
+  if (hasOwn(config, "key")) {
     const componentName = getComponentNameFromType(type);
     const keys = Object.keys(config).filter((k) => k !== "key");
     const beforeExample = keys.length > 0 ? "{key: someKey, " + keys.join(": ..., ") + ": ...}" : "{key: someKey}";
@@ -402,7 +403,7 @@ export function createElement(type: unknown, config?: Props | null, ...children:
     }
     for (const propName in config) {
       if (
-        Object.hasOwn(config, propName) &&
+        hasOwn(config, propName) &&
         propName !== "key" &&
         // The old JSX transform's source annotations are not props.
         propName !== "__self" &&
@@ -498,7 +499,7 @@ export function cloneElement(element: ReactElement | null | undefined, config?: 
     }
     for (const propName in config) {
       if (
-        Object.hasOwn(config, propName) &&
+        hasOwn(config, propName) &&
         propName !== "key" &&
         propName !== "__self" &&
         propName !== "__source" &&

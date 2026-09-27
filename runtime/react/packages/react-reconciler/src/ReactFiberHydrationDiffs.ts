@@ -1,6 +1,7 @@
 // Development-only formatting of a hydration mismatch as a diff between the
 // client's tree and the server's, for the error message.
 
+import { hasOwn } from "shared/hasOwn.ts";
 import type { ForwardRefComponent } from "shared/ReactTypes.ts";
 import { getComponentNameFromType } from "shared/getComponentNameFromType.ts";
 import { enableSrcObject } from "shared/ReactFeatureFlags.ts";
@@ -36,10 +37,6 @@ export interface HydrationDiffNode {
 
 const maxRowLength = 120;
 const idealDepth = 15;
-
-function hasOwn(object: object, propName: string): boolean {
-  return Object.hasOwn(object, propName);
-}
 
 function findNotableNode(node: HydrationDiffNode, indent: number): HydrationDiffNode {
   if (

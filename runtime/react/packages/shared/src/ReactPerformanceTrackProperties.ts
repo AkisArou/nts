@@ -2,6 +2,7 @@
 // timeline's property tooltips, and diffs two props objects so a render can
 // say which props changed.
 
+import { hasOwn } from "shared/hasOwn.ts";
 import { objectTag } from "shared/objectTag.ts";
 import { OMITTED_PROP_ERROR } from "./ReactFlightPropertyAccess.ts";
 import { REACT_ELEMENT_TYPE } from "./ReactSymbols.ts";
@@ -66,7 +67,7 @@ export function addObjectToProperties(
   const record = object as AnyObject;
   let addedProperties = 0;
   for (const key in record) {
-    if (Object.hasOwn(record, key) && key[0] !== "_") {
+    if (hasOwn(record, key) && key[0] !== "_") {
       addedProperties++;
       addValueToProperties(key, record[key], properties, indent, prefix);
       if (addedProperties >= OBJECT_WIDTH_LIMIT) {
@@ -86,7 +87,7 @@ export function addObjectToProperties(
 
 function readReactElementTypeof(value: object): unknown {
   // Prevents dotting into $$typeof in opaque origin windows.
-  return "$$typeof" in value && Object.hasOwn(value, "$$typeof")
+  return "$$typeof" in value && hasOwn(value, "$$typeof")
     ? (value as { $$typeof?: unknown }).$$typeof
     : undefined;
 }
@@ -146,7 +147,7 @@ export function addValueToProperties(
             if (children != null && (!Array.isArray(children) || children.length > 0)) {
               hasChildren = true;
             }
-          } else if (Object.hasOwn(props, propKey) && propKey[0] !== "_") {
+          } else if (hasOwn(props, propKey) && propKey[0] !== "_") {
             addValueToProperties(propKey, props[propKey], properties, indent + 1, prefix);
           }
           if (addedProperties >= OBJECT_WIDTH_LIMIT) {

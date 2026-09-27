@@ -35,6 +35,9 @@
       "shared/objectTag.ts": [
         "./packages/shared/src/objectTag.native.ts"
       ],
+      "shared/hasOwn.ts": [
+        "./packages/shared/src/hasOwn.native.ts"
+      ],
       "react/ReactHooks.ts": [
         "./packages/react/src/ReactHooks.native.ts"
       ],

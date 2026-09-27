@@ -1,6 +1,9 @@
 // Equal when both values are the same, or are objects with the same own
 // keys whose values are the same (`Object.is`). React's props and state
 // comparison for `memo` and `PureComponent`.
+
+import { hasOwn } from "shared/hasOwn.ts";
+
 export function shallowEqual(objA: unknown, objB: unknown): boolean {
   if (Object.is(objA, objB)) {
     return true;
@@ -18,7 +21,7 @@ export function shallowEqual(objA: unknown, objB: unknown): boolean {
   // Test for A's keys different from B.
   for (let i = 0; i < keysA.length; i++) {
     const currentKey = keysA[i]!;
-    if (!Object.hasOwn(recordB, currentKey) || !Object.is(recordA[currentKey], recordB[currentKey])) {
+    if (!hasOwn(recordB, currentKey) || !Object.is(recordA[currentKey], recordB[currentKey])) {
       return false;
     }
   }
