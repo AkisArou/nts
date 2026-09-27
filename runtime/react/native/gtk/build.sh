@@ -43,6 +43,7 @@ notify none>typed
 controlled a typed flashed=false
 object true 42
 reference true
+boxed rgb(255,0,0)>rgb(0,0,255) true>false
 decision 1 0 asked=1
 input 1 0 65307 97 click2 keys=1 after=0
 classes true true>false true>false

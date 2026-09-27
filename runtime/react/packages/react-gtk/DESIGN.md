@@ -267,7 +267,11 @@ prop is typed as that union, so an app's own implementation is refused where
 it is written rather than dropped where it is read. Each class is checked in
 turn and passed on narrowed to itself; one conditional over them all would
 have a union of handle types, which a native build has no representation
-for. An interface only private classes implement (`GFile`) stays out. A widget-typed prop that
+for. An interface only private classes implement (`GFile`) stays out. A boxed
+record the app makes (a ColorDialogButton's `rgba`, a Popover's `pointingTo`)
+is read back the same way, since a boxed value records its GType too; a record
+whose binding has no constructor (Pango's attribute lists and tab arrays,
+made by `from_string`) is not something `instanceof` takes, and stays out. A widget-typed prop that
 names another widget (`mnemonicWidget`, `defaultWidget`, `focusWidget`,
 `keyCaptureWidget`, and a Stack's `visibleChild`, one of its own children)
 takes a ref's `current`: a host element's public instance is its widget.

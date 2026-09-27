@@ -229,6 +229,13 @@ interface Bindings {
   /** The module each type from another namespace comes from: `PangoWrapMode` → `c:Pango-1.0`. */
   modules: Map<string, string>;
   /**
+   * Boxed records with a constructor, in any namespace (`GdkRGBA`): a boxed
+   * value's GType is recorded, so `instanceof` checks one as it does a class.
+   * A record whose value holds only functions (`PangoAttrList.from_string`)
+   * is not a right-hand side `instanceof` takes.
+   */
+  boxed: Set<string>;
+  /**
    * For each GObject interface, the classes with a constructor that implement
    * it, topmost only (a subclass is an `instanceof` its parent): what a value
    * of that interface can be checked against. Empty for one only private
@@ -359,6 +366,8 @@ function readBindings(dir: string): Bindings {
     }
   }
   const classes = new Set(constructible);
+  const boxedTypes = new Set<string>();
+  const newable = new Set<string>();
   // Each GObject class's parent and the interfaces it implements, inherited
   // ones included: `GObjectClass<"_GtkSingleSelection", GObject, "_GListModel" | ...>`.
   const gobjectClasses = new Map<string, { parent: string; implements: string[] }>();
@@ -375,6 +384,14 @@ function readBindings(dir: string): Bindings {
       if (gobjectClass !== null) {
         const implemented = (gobjectClass[3] ?? "").split("|").map((tag) => tag.trim().replace(/^"_|"$/g, "")).filter((tag) => tag !== "");
         gobjectClasses.set(gobjectClass[1]!, { parent: gobjectClass[2]!, implements: implemented });
+      }
+      const boxedType = /^ {2}export type (\w+) = Boxed</.exec(line);
+      if (boxedType !== null) {
+        boxedTypes.add(boxedType[1]!);
+      }
+      const boxedConstructor = /^ {4}new \([^)]*\): (\w+);$/.exec(line);
+      if (boxedConstructor !== null) {
+        newable.add(boxedConstructor[1]!);
       }
       const gobjectInterface = /^ {2}export type (\w+) = GObjectInterface</.exec(line);
       if (gobjectInterface !== null) {
@@ -401,7 +418,8 @@ function readBindings(dir: string): Bindings {
     // Topmost: a class whose parent also implements it is covered by the parent's check.
     implementers.set(name, all.filter((c) => !implementing(gobjectClasses.get(c)!.parent)).sort());
   }
-  return { setters, childMethods, accessors, getters, signals, constructible, classes, modules, implementers };
+  const boxed = new Set([...boxedTypes].filter((name) => newable.has(name)));
+  return { setters, childMethods, accessors, getters, signals, constructible, classes, modules, implementers, boxed };
 }
 
 // ---- the model ---------------------------------------------------------------
@@ -639,6 +657,13 @@ function valueKind(type: string, bindings: Bindings, reference = false): ValueKi
   // Not a widget, which React makes and an app would need a ref to; not a
   // boxed Pango type, a handle of another kind.
   const object = /^((?:Gtk|Gdk|G)[A-Z]\w+)( \| null)?$/.exec(type);
+  // A boxed record the app makes and hands over: a colour, a font, a
+  // rectangle. Its setter may take it as `Const<…>`; the app passes the record.
+  const boxed = /^(?:Const<(\w+)>|(\w+))( \| null)?$/.exec(type);
+  const boxedName = boxed === null ? undefined : (boxed[1] ?? boxed[2]);
+  if (boxedName !== undefined && bindings.boxed.has(boxedName)) {
+    return { kind: "object", type: boxedName, classes: [boxedName], nullable: boxed![3] !== undefined };
+  }
   if (object === null || (object[1] === "GtkWidget" && !reference)) {
     return null;
   }

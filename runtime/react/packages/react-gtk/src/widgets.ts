@@ -4,6 +4,8 @@
 import {
   GdkCursor,
   GdkDisplay,
+  GdkRGBA,
+  GdkRectangle,
   GdkTexture,
 } from "c:Gdk-4.0";
 import {
@@ -440,6 +442,7 @@ export interface CheckButtonProps extends WidgetProps {
 /** `<ColorDialogButton>`'s props: GtkColorDialogButton's own properties and signals. */
 export interface ColorDialogButtonProps extends WidgetProps {
   dialog?: GtkColorDialog;
+  rgba?: GdkRGBA;
   onNotifyDialog?: (value: GtkColorDialog | null) => void;
   onActivate?: () => void;
 }
@@ -536,6 +539,7 @@ export interface PopoverProps extends WidgetProps {
   defaultWidget?: GtkWidget | null;
   hasArrow?: boolean;
   mnemonicsVisible?: boolean;
+  pointingTo?: GdkRectangle | null;
   position?: GtkPositionType;
   onNotifyAutohide?: (value: boolean) => void;
   onNotifyCascadePopdown?: (value: boolean) => void;
@@ -2747,6 +2751,9 @@ export function colorDialogButtonProp(gtk: GtkColorDialogButton, key: string, va
     case "dialog":
       if (value instanceof GtkColorDialog) gtk.set_dialog(value);
       return true;
+    case "rgba":
+      if (value instanceof GdkRGBA) gtk.set_rgba(value);
+      return true;
   }
   return widgetProp(gtk, key, value);
 }
@@ -3120,6 +3127,9 @@ export function popoverProp(gtk: GtkPopover, key: string, value: unknown): boole
       return true;
     case "mnemonicsVisible":
       gtk.set_mnemonics_visible(typeof value === "boolean" ? value : false);
+      return true;
+    case "pointingTo":
+      gtk.set_pointing_to(value instanceof GdkRectangle ? value : null);
       return true;
     case "position":
       gtk.set_position(typeof value === "number" ? value as GtkPositionType : 3 as GtkPositionType);

@@ -91,6 +91,7 @@
 //   work      a slice of scheduler work posted to GLib ran
 //   timer     a timer fired, and a cancelled one did not
 
+import { GdkRectangle, GdkRGBA } from "c:Gdk-4.0";
 import { ApplicationFlags } from "c:Gio-2.0";
 import {
   gtk_init,
@@ -136,6 +137,7 @@ import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
 import {
   BoxNode,
   ButtonNode,
+  ColorDialogButtonNode,
   DropDownNode,
   EntryNode,
   FixedNode,
@@ -147,6 +149,7 @@ import {
   NotebookNode,
   OverlayNode,
   PanedNode,
+  PopoverNode,
   ScaleNode,
   StackNode,
   WindowNode,
@@ -382,6 +385,28 @@ function main(): void {
   const target = createInstance("GtkEntry", {}, container, 0, {});
   const naming = createInstance("GtkLabel", { label: "_Name", useUnderline: true, mnemonicWidget: widget(target) }, container, 0, {});
   react_gtk_log("reference " + String(naming instanceof LabelNode && naming.gtk.get_mnemonic_widget() === widget(target)));
+
+  // A boxed record as a prop: the app's colour reaches the widget, a new one
+  // replaces it, and a nullable one is cleared when its prop goes away. The
+  // popover is attached, as an app's is: with no rectangle, GTK reads where it
+  // points from its parent.
+  const red = new GdkRGBA();
+  red.parse("#ff0000");
+  const blue = new GdkRGBA();
+  blue.parse("#0000ff");
+  const colour = createInstance("GtkColorDialogButton", { rgba: red }, container, 0, {});
+  const shade = (): string => (colour instanceof ColorDialogButtonNode ? colour.gtk.get_rgba().to_string() : "none");
+  const first = shade();
+  commitUpdate(colour, "GtkColorDialogButton", { rgba: red }, { rgba: blue }, {});
+  const pointed = createInstance("GtkPopover", { pointingTo: new GdkRectangle() }, container, 0, {});
+  const pointedFrom = createInstance("GtkButton", {}, container, 0, {});
+  appendInitialChild(pointedFrom, pointed);
+  const pointing = (): boolean => pointed instanceof PopoverNode && pointed.gtk.get_pointing_to()[0];
+  const wasPointing = pointing();
+  commitUpdate(pointed, "GtkPopover", { pointingTo: new GdkRectangle() }, {}, {});
+  const stillPointing = pointing();
+  removeChild(pointedFrom, pointed);
+  react_gtk_log("boxed " + first + ">" + shade() + " " + String(wasPointing) + ">" + String(stillPointing));
 
   let asked = 0;
   const closeProps: Props = {

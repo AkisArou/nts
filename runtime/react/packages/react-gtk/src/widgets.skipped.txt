@@ -23,7 +23,7 @@ GtkColorChooser.rgba	deprecated
 GtkColorChooser.use-alpha	deprecated
 GtkColorChooser::color-activated	deprecated
 GtkColorDialogButton.dialog	removing it leaves its value: GIR gives no default
-GtkColorDialogButton.rgba	a Const<GdkRGBA>, which a JSX attribute does not carry yet
+GtkColorDialogButton.rgba	removing it leaves its value: GIR gives no default
 GtkComboBox.active-id	no setter in the bindings
 GtkComboBox.has-entry	construct-only: a change would need a new widget
 GtkComboBox::format-entry-text	no connect overload in the bindings
@@ -75,7 +75,6 @@ GtkNotebook::create-window	its handler returns a GtkNotebook | null: not generat
 GtkOverlay::get-child-position	a handler argument JSX cannot type yet: GtkWidget, GdkRectangle
 GtkPicture.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkPicture.keep-aspect-ratio	deprecated
-GtkPopover.pointing-to	a Const<GdkRectangle> | null, which a JSX attribute does not carry yet
 GtkPopoverMenu.flags	no setter in the bindings
 GtkPrintUnixDialog.current-page	no setter in the bindings
 GtkPrintUnixDialog.embed-page-setup	no setter in the bindings
