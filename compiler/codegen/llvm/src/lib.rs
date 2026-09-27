@@ -3218,10 +3218,33 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
                 return Ok(lines.join("\n  "));
             }
             let offset = nts_core::hir::layout::LENGTH_OFFSET;
-            let mut lines = vec![
-                format!("{at} = getelementptr i8, ptr {}, i64 {offset}", name(*of)),
-                format!("{raw} = load i32, ptr {at}{}", tbaa("i32")),
-            ];
+            // **An erased operand is legitimate here, and only this backend
+            // could not take one.** `if (Array.isArray(v)) { v.length }` leaves
+            // `v` erased in the HIR -- the narrowing is the checker's and the
+            // value is still the tagged pair -- so `Length` arrives with an
+            // `Erased` operand. C has an arm for exactly it in
+            // `length_expression` (`nts_value_reference(v)->length`, "an erased
+            // value the lowering proved is an array") and the JVM refuses it by
+            // name; this emitted `getelementptr i8, ptr %v0` against a
+            // `{ i32, i64 }`, which is not IR. The module stopped assembling --
+            // "'%v0' defined with type '{ i32, i64 }' but expected 'ptr'" -- so
+            // it was loud and stopped the build rather than miscompiling.
+            // React's `stringsOf` is the reduction, and a scan for every erased
+            // value used as a pointer finds this one site and no other.
+            //
+            // Unchecked, as C's is: what licenses the read is the narrowing in
+            // front of it, and a tag check in one backend alone would be a
+            // different contract rather than a safer one.
+            let mut lines = Vec::new();
+            let receiver = if func.values[of.0 as usize].ty == HirType::Erased {
+                let (prelude, pointer) = erased_reference(&out, &name(*of));
+                lines.push(prelude);
+                pointer
+            } else {
+                name(*of)
+            };
+            lines.push(format!("{at} = getelementptr i8, ptr {receiver}, i64 {offset}"));
+            lines.push(format!("{raw} = load i32, ptr {at}{}", tbaa("i32")));
             // A length is a `uint32_t`, so widening it is `zext` and turning
             // it into a float is `uitofp` -- and the difference is not
             // cosmetic: `uitofp i32 ... to i64` is not an instruction. This
@@ -3432,6 +3455,32 @@ fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result
 /// `args[0]` is the receiver and its descriptor is where the table lives, so
 /// this is the descriptor, then the table, then the slot. The table stores
 /// untyped pointers, which is why the call spells its own signature.
+/// An erased value as a pointer: the reference out of the tagged pair.
+///
+/// **Two ops need it and only one spelled it.** `SharedFieldGet`'s receiver is
+/// erased by definition, and `Length` is handed an erased array by a narrowing --
+/// `if (Array.isArray(v)) { v.length }` leaves `v` erased in the HIR, because the
+/// narrowing is the checker's and the value is still the pair. The second read
+/// `name(of)` straight into a `getelementptr`, so the module stopped assembling:
+/// "'%v0' defined with type '{ i32, i64 }' but expected 'ptr'".
+///
+/// One function, so the two cannot drift about **which field of the pair the
+/// reference is** -- a disagreement that would not fail to assemble, because
+/// field 0 is an `i32` tag and reading it as a pointer is well-typed IR and the
+/// wrong address.
+///
+/// Returns the instructions and the name they define, rather than taking a
+/// buffer, because one caller builds a single `format!` and the other a `Vec`.
+fn erased_reference(out: &str, value: &str) -> (String, String) {
+    (
+        format!(
+            "{out}.p = extractvalue {ERASED_TYPE} {value}, 1\n  \
+             {out}.ref = inttoptr i64 {out}.p to ptr"
+        ),
+        format!("{out}.ref"),
+    )
+}
+
 /// A call's receiver, `args[0]`.
 fn receiver_name(args: &[ValueId]) -> String {
     args.first().map_or_else(|| "null".to_owned(), |value| name(*value))
@@ -3891,12 +3940,11 @@ fn memory_operation(
                 .get(*field as usize)
                 .ok_or_else(|| refuse(func, "a shared field index outside its layout"))?;
             let ty = ty_of(&op.ty, func)?;
+            let (prelude, receiver) = erased_reference(&out, &name(*value));
             format!(
-                "{out}.p = extractvalue {ERASED_TYPE} {0}, 1\n  \
-                 {out}.ref = inttoptr i64 {out}.p to ptr\n  \
-                 {out}.at = getelementptr i8, ptr {out}.ref, i64 {offset}\n  \
-                 {out} = load {ty}, ptr {out}.at{1}",
-                name(*value),
+                "{prelude}\n  \
+                 {out}.at = getelementptr i8, ptr {receiver}, i64 {offset}\n  \
+                 {out} = load {ty}, ptr {out}.at{0}",
                 tbaa(ty)
             )
         }
