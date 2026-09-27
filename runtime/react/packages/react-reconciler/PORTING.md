@@ -112,3 +112,22 @@ was confirmed on a reduced case. Ported code must follow them.
   its condition's type, so `export const enableX = false` folds and
   `export const enableX: boolean = false` compiles the whole branch into the
   native build. That includes every feature flag.
+- **One view never serves two layouts.** A cast reads the value by the
+  *view's* field positions, not by name. `stateNode as { containerInfo }`
+  over a FiberRoot (a class) read its `tag`; `memoizedState as { cache }` does
+  the same to RootState and CacheComponentState. Where the tag says what the
+  value is, cast to that declared type, through an accessor that dispatches
+  on the tag (`containerOf`, `cacheOf` in ReactFiberStateNode.ts and
+  ReactFiberCacheComponent.ts). A probe of a value of any shape
+  (`(x as { then?: unknown }).then`) waits on the compiler reading by name.
+- **Reflection has a fork point.** `Object.prototype.toString.call(x)` is
+  `objectTag(x)` from `shared/objectTag.ts`, and
+  `Object.prototype.hasOwnProperty.call(o, k)` is `Object.hasOwn(o, k)`.
+- **An array read past its end aborts.** Where upstream reads `heap[0]` on a
+  possibly empty array, ask its length first, as upstream's own MinHeap
+  does.
+- **Functions are called, not bound or passed by name.** Write
+  `f.bind(null, a, b)` as an arrow calling `f`, and take any module state it
+  bound (`currentlyRenderingFiber`) as a `const` first. Write
+  `xs.map(f)` as `xs.map((x) => f(x))`. A generic function passed as a
+  value (`updateReducer(basicStateReducer, ...)`) is not lowered yet.
