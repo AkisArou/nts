@@ -5539,6 +5539,62 @@ fn note_a_refused_function(
     let asking = shared.builder(snapshot, foreign, Copy::default());
     let emitted = asking.emitted_function_name(id);
     note_uncompiled(snapshot, &mut lowered.program, id, emitted.as_deref(), &diagnostic);
+    // **A nested function of a refused function is lowered nowhere, and nothing
+    // said so.** `runtime/node/events`'s `on` is refused as an exported generic
+    // this program never instantiates; the object literal inside it still becomes
+    // `EventAsyncIterator#return`, which calls the *nested* `closeHandler` --
+    // never lowered, because the body it is declared in never was. So the cascade
+    // read
+    //
+    //     EventAsyncIterator#return  it calls `closeHandler`, which nothing in
+    //                                this program defines
+    //
+    // which is true and unactionable: nothing in it leads to `on`. Forty-six of
+    // the conformance lane's 104 remaining `cascade-has-root` violations are this
+    // one shape -- `closeHandler`, `errorHandler`, `filterFn`, `forEachFn` -- and
+    // each names a function whose *enclosing* declaration has a recorded reason
+    // sitting right there.
+    //
+    // So the reason is attributed down. `note_uncompiled`'s `funcs` guard is what
+    // makes doing it unconditionally safe: a nested function that *was* lowered
+    // is already in `funcs`, and the entry is dropped rather than becoming a
+    // phantom -- a claim about the output that the output contradicts, which
+    // `emit-c`'s `published_symbols` and every cascade would then read as a fact.
+    // `tooling/conformance/phantoms.mjs` is the arm for that, and it must stay at
+    // zero.
+    let outer = emitted.unwrap_or_else(|| "an enclosing function".to_owned());
+    let mut nested = Vec::new();
+    walk(snapshot, id, &mut |child| {
+        if child != id && kind_at(snapshot, child) == Some(syntax::FUNCTION_DECLARATION) {
+            nested.push(child);
+        }
+    });
+    for child in nested {
+        let Some(name) = asking.emitted_function_name(child) else {
+            continue;
+        };
+        // Only the message is read out of this, but the location is the nested
+        // declaration's own rather than the enclosing one's, so that an entry
+        // which does grow a reader later points at the right line.
+        let at = snapshot
+            .nodes
+            .get(child.0 as usize)
+            .map_or(diagnostic.primary, |node| node.origin.location);
+        let attributed = Diagnostic::error(
+            "NTS1003",
+            // **Names the enclosing function rather than quoting its reason.**
+            // A refusal message is built as a terminal sentence -- "... is not
+            // supported by this lowering yet" -- so embedding one mid-sentence
+            // reads as "...for the export to name is not supported by this
+            // lowering yet", and it repeats the whole reason once per nested
+            // function. The enclosing function's own row is always present,
+            // because this runs from the site that records it, so one grep
+            // finishes the trail and both sentences stay grammatical.
+            format!("it is declared inside `{outer}`, which was not compiled"),
+            at,
+        );
+        note_uncompiled(snapshot, &mut lowered.program, child, Some(&name), &attributed);
+    }
     lowered.diagnostics.push(diagnostic);
 }
 
