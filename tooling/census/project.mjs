@@ -39,6 +39,12 @@ export function harnessFor(body) {
   return harness;
 }
 
+/** A test262 file's front matter, which the body a case compiles leaves out. */
+export const FRONTMATTER = /\/\*---([\s\S]*?)---\*\//;
+
+/** The body of a test262 file: its source without the front matter. */
+export const bodyOf = (source) => source.replace(FRONTMATTER, "");
+
 /**
  * A scratch project, with its compiler options **inlined**.
  *

@@ -94,7 +94,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.mjs";
-import { HARNESS, HARNESS_DONOTEVALUATE, HARNESS_THROWS, pinCompiler } from "./project.mjs";
+import { bodyOf, FRONTMATTER, HARNESS, HARNESS_DONOTEVALUATE, HARNESS_THROWS, pinCompiler } from "./project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -331,7 +331,6 @@ for (const entry of exclusions) {
 // tests -- arrived as TypeScript errors ("Property 'X' does not exist on type
 // 'X'") and would have topped the refusal ranking as the compiler's fault.
 
-const FRONTMATTER = /\/\*---([\s\S]*?)---\*\//;
 
 function harnessGap(record, source) {
   if (record.schedule !== "planned") return `scope:${record.reason ?? record.schedule}`;
@@ -342,7 +341,7 @@ function harnessGap(record, source) {
   const meta = FRONTMATTER.exec(source)?.[1] ?? "";
   const flags = /^\s*flags:\s*\[([^\]]*)\]/m.exec(meta)?.[1] ?? "";
   if (/\basync\b/.test(flags)) return "harness:async ($DONE)";
-  const body = source.replace(FRONTMATTER, "");
+  const body = bodyOf(source);
   if (/\$262\b/.test(body)) return "harness:$262";
   return null;
 }
