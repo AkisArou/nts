@@ -213,7 +213,12 @@ export function readCascades(text) {
   const reads = [...text.matchAll(/NTS1003 `([^`]+)` cannot be compiled because it reads `([^`]+)`/g)].map(([, who, global]) => ({ who, global }));
   const initializers = [...text.matchAll(/NTS1003 the initializer of `([^`]+)` was not compiled because it calls `([^`]+)`/g)].map(([, global, cause]) => ({ global, cause }));
   const statements = [...text.matchAll(/NTS1003 this module-scope statement was dropped because it calls `([^`]+)`/g)].map(([, cause]) => ({ cause }));
-  return { calls, reads, initializers, statements };
+  // A skipped module-scope statement that leaves a global unwritten says so
+  // (1c12d40c9): `NTS1005 this statement, which module evaluation therefore
+  // skips, leaving `stdout` unwritten`. That is the global's record as much as
+  // an initializer line is.
+  const unwritten = [...text.matchAll(/NTS1005 this statement, which module evaluation therefore skips, leaving `([^`]+)` unwritten/g)].map(([, global]) => global);
+  return { calls, reads, initializers, statements, unwritten };
 }
 
 const member = (name) => name.slice(name.indexOf("#") + 1);
@@ -284,7 +289,7 @@ export function judge({ prepared, plain, layouts, refusals }, sourceLine = readS
   for (const { who, cause } of cascades.calls) {
     if (!isRefused(cause)) say("cascade-has-root", `\`${who}\` blames \`${cause}\`, which has no refusal of its own`, cause);
   }
-  const uncompiled = new Set(cascades.initializers.map((i) => i.global));
+  const uncompiled = new Set([...cascades.initializers.map((i) => i.global), ...cascades.unwritten]);
   for (const { who, global } of cascades.reads) {
     if (!uncompiled.has(global)) say("cascade-has-root", `\`${who}\` blames the initializer of \`${global}\`, and no line says it was not compiled`, `the initializer of ${global}`);
   }
@@ -392,6 +397,8 @@ function selfTest() {
   if (reads(init + read).violations?.some((v) => v.rule === "cascade-has-root")) return "a read of an uncompiled global, with its initializer line, read as rootless";
   if (!reads(init + read).violations?.some((v) => v.rule === "top-level-cut")) return "an uncompiled initializer went unnamed";
   if (!reads(read).violations?.some((v) => v.rule === "cascade-has-root")) return "a read of a global with no initializer line was not caught";
+  const skipped = "  -- main.ts:134:2 NTS1005 this statement, which module evaluation therefore skips, leaving `pattern` unwritten; the rest of the module's evaluation still runs\n";
+  if (reads(skipped + read).violations?.some((v) => v.rule === "cascade-has-root")) return "a read of a global a skipped statement left unwritten read as rootless";
   // A diagnostic located in trivia: the node's full start, not its token.
   const lines = { "/p/o.ts": ["export type MapFn = (", ") => unknown;", "", "export function map() {", "  const x = Object.getPrototypeOf(y);", "  const é = f(y);"] };
   const located = (at) => judge({ ...clean, prepared: `${clean.prepared}\n  -- /p/o.ts:${at} NTS1001 a construct is not supported by this lowering yet\n` }, (f, n) => lines[f]?.[n - 1]).violations ?? [];
