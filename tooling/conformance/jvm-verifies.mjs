@@ -23,6 +23,13 @@
 //   INVALID   VerifyError, ClassFormatError: bytecode the JVM rejects
 //   MISSING   a reference that does not resolve (a class or member absent)
 //
+// A verifier reason is read before it is named: url's "Bad local variable
+// type ... locals[238] is top" looked like a read no path initialises, and is
+// a stack-map frame at a branch join that drops a local both arms leave
+// assigned -- the JVM backend's frame, not the program. Two of the first
+// run's five causes (an array given for a `{ length }` record, and that one)
+// are the JVM's alone; C was measured answering right.
+//
 // Declines are not failures: `emit-jvm` names what it cannot call (a native C
 // function) and writes the rest, and the rest must verify. A module whose
 // `emit-jvm` writes no class is NOT MEASURED.
