@@ -57,7 +57,11 @@ build() {
   fi
 }
 touch "$out/.started"
+# The binding check reads the config the frontend opened, so the frontend
+# must run: a snapshot the cache answers opens nothing.
+export NTS_NO_SNAPSHOT_CACHE=1
 build "$out" --rc
+unset NTS_NO_SNAPSHOT_CACHE
 sh "$root/examples/interop/apple-binding.sh" macos-draw "$source" "$out" macos CoreGraphics platform
 for arch in x86_64 aarch64; do
   file -b "$out/draw/macos-13-$arch/draw" | grep -q "Mach-O" ||

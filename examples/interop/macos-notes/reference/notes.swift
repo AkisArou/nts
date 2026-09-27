@@ -113,6 +113,13 @@ func main() {
   content.layoutSubtreeIfNeeded()
   report("layout \(printed(field.frame.size.width)) \(printed(button.frame.origin.x)) \(printed(scroll.frame.size.height))")
   report("measured \(NSString(string: "Notes").size(withAttributes: nil).width > 0)")
+  let layer = CALayer()
+  layer.cornerRadius = 6
+  content.wantsLayer = true
+  content.layer = layer
+  layer.bounds = content.bounds
+  report("corner \(printed(layer.cornerRadius))")
+  report("layered \(content.layer != nil)")
   let notes = Notes(notes: loaded, field: field, table: table)
   table.dataSource = notes
   button.target = notes

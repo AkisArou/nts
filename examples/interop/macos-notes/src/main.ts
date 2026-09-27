@@ -13,6 +13,10 @@
 //              as Auto Layout placed them from the anchors' constraints
 //   measured B whether a title has a width: `size(withAttributes:)`, which
 //              AppKit adds to Foundation's `NSString` as a Swift extension
+//   corner R   the content view's Core Animation layer, from QuartzCore --
+//              a framework no platform package provides, so bound from this
+//              program's imports -- and its corner radius
+//   layered B  whether the view holds that layer
 //   launched   the application delegate's `applicationDidFinishLaunching`,
 //              which AppKit sends once `run` has started
 //   added T    each note typed into the field and added by the button's
@@ -39,6 +43,7 @@ import {
   type NSNotification,
   type NSTableViewDataSource,
 } from "objc:AppKit";
+import { CALayer } from "objc:QuartzCore";
 import { selector } from "objc:runtime";
 import type { Int } from "objc:types";
 
@@ -157,6 +162,16 @@ function main(): void {
   // A member one framework declares for another's class: AppKit's extension
   // of `NSString`, in the AppKit package's second `objc:Foundation` block.
   console.log(`measured ${new NSString({ string: "Notes" }).size({ withAttributes: null }).width > 0}`);
+  // QuartzCore's layer on AppKit's view: a binding generated from the imports
+  // beside the platform packages, whose `NSObject` and `CGRect` it imports
+  // rather than declaring a second of each.
+  const layer = new CALayer();
+  layer.cornerRadius = 6;
+  content.wantsLayer = true;
+  content.layer = layer;
+  layer.bounds = content.bounds;
+  console.log(`corner ${layer.cornerRadius}`);
+  console.log(`layered ${content.layer !== null}`);
   const notes = new Notes(loaded, field, table);
   table.dataSource = notes;
   button.target = notes;

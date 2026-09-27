@@ -49,7 +49,9 @@ fi
 mkdir -p "$out"
 
 touch "$out/.started"
-NTS_IOS_SIMULATOR_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" --rc >"$out/build.log" 2>&1 ||
+# The binding check reads the config the frontend opened, so the frontend
+# must run: a snapshot the cache answers opens nothing.
+NTS_NO_SNAPSHOT_CACHE=1 NTS_IOS_SIMULATOR_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" --rc >"$out/build.log" 2>&1 ||
   { cat "$out/build.log" >&2; exit 1; }
 if grep -qE "refused|NTS[0-9]{4}" "$out/build.log"; then
   cat "$out/build.log" >&2

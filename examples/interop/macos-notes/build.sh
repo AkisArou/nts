@@ -7,8 +7,10 @@
 # - **Binding:** none is committed. AppKit comes from `@nts/platform-macos`,
 #   including what AppKit adds to Foundation's classes: the program prints
 #   `measured true` through `NSString.size(withAttributes:)`, a member of
-#   Foundation's class in AppKit's package. `apple-binding.sh` asserts the
-#   package was read and nothing was generated for the imports.
+#   Foundation's class in AppKit's package. QuartzCore is in no package, so
+#   its binding is generated from the program's imports, importing
+#   Foundation's `NSObject` and Core Graphics' `CGRect` from the packages
+#   rather than declaring its own. `apple-binding.sh` asserts both.
 # - **First run:** no file, so the throwing read gives an empty list. The
 #   application delegate hears the launch. Three notes are typed and added
 #   by the button's action, the third through the main menu's item, the
@@ -45,8 +47,8 @@ if [ ! -d "$sdk/System/Library/Frameworks/AppKit.framework" ]; then
   exit 0
 fi
 version=$(sed -n 's/.*"Version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$sdk/SDKSettings.json" | head -1)
-if [ ! -f "$apple/symbolgraph/$version/AppKit.symbols.json" ]; then
-  echo "SKIP macos-notes: no Swift symbol graphs for SDK $version (tooling/apple/symbolgraph.sh AppKit Foundation ObjectiveC)"
+if [ ! -f "$apple/symbolgraph/$version/AppKit.symbols.json" ] || [ ! -f "$apple/symbolgraph/$version/QuartzCore.symbols.json" ]; then
+  echo "SKIP macos-notes: no Swift symbol graphs for SDK $version (tooling/apple/symbolgraph.sh AppKit Foundation ObjectiveC QuartzCore)"
   exit 0
 fi
 [ -f "$apple/x86_64/lib/libuv.a" ] && [ -f "$apple/aarch64/lib/libuv.a" ] ||
@@ -56,7 +58,9 @@ mkdir -p "$out"
 log="$out/build.log"
 # For apple-binding.sh: what this build generates is newer.
 touch "$out/.started"
-NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
+# The binding check reads the config the frontend opened, so the frontend
+# must run: a snapshot the cache answers opens nothing.
+NTS_NO_SNAPSHOT_CACHE=1 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
 if grep -qE "refused|NTS[0-9]{4}" "$log"; then
   cat "$log" >&2
@@ -64,6 +68,7 @@ if grep -qE "refused|NTS[0-9]{4}" "$log"; then
   exit 1
 fi
 sh "$root/examples/interop/apple-binding.sh" macos-notes "$source" "$out" macos AppKit platform
+sh "$root/examples/interop/apple-binding.sh" macos-notes "$source" "$out" macos QuartzCore imports
 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out/rc" --rc >"$out/rc.log" 2>&1 ||
   { cat "$out/rc.log" >&2; exit 1; }
 if grep -qE "refused|NTS[0-9]{4}" "$out/rc.log"; then
@@ -95,7 +100,7 @@ run() {
     cat "$out/$product-$1.err" >&2
     exit 1
   fi
-  printf '%s\n' "loaded $2" "layout 240 270 224" "measured true" "launched" "added note 1 of $(($2 + 1))" "added note 2 of $(($2 + 2))" "added note 3 of $(($2 + 3))" \
+  printf '%s\n' "loaded $2" "layout 240 270 224" "measured true" "corner 6" "layered true" "launched" "added note 1 of $(($2 + 1))" "added note 2 of $(($2 + 2))" "added note 3 of $(($2 + 3))" \
     "rows $(($2 + 3))" "saved $(($2 + 3))" | diff -u - "$out/$product-$1.txt" ||
     { echo "macos-notes: the $1 run of $product did not say what it should" >&2; exit 1; }
 }
