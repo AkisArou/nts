@@ -118,6 +118,33 @@ function forkPlugin(entry: string): Plugin {
   };
 }
 
+// esbuild inlines a constant into the modules that import it only when the
+// constant's own module imports nothing, and ReactFeatureFlags.ts imports
+// `isProfiling` from shared/Build.ts: a native build binds that module to a
+// twin whose literal types nts folds on, so the import stays in the source.
+// Left alone, none of the flags would inline, and every branch they gate
+// (the profiler timer's alone is 145 sites) would ship in production. The
+// value is fixed per mode (Build.ts: `isProfiling` is `isDevelopment`), so
+// this build writes it into the flags module as a literal.
+const featureFlags = join(packagesDir, 'shared/src/ReactFeatureFlags.ts');
+const profilingImport = 'import { isProfiling } from "shared/Build.ts";';
+
+function buildConstantsPlugin(mode: string): Plugin {
+  return {
+    name: 'build-constants',
+    setup(pluginBuild) {
+      pluginBuild.onLoad({filter: /ReactFeatureFlags\.ts$/}, args => {
+        if (args.path !== featureFlags) return undefined;
+        const source = readFileSync(args.path, 'utf8');
+        if (!source.includes(profilingImport)) {
+          throw new Error(`${args.path} no longer has \`${profilingImport}\`: update buildConstantsPlugin to match`);
+        }
+        return {contents: source.replace(profilingImport, `const isProfiling = ${mode === 'development'};`), loader: 'ts'};
+      });
+    },
+  };
+}
+
 rmSync(out, {recursive: true, force: true});
 for (const pkg of published) {
   for (const [subpath, target] of Object.entries(pkg.exports)) {
@@ -134,7 +161,7 @@ for (const pkg of published) {
         platform: 'node',
         target: 'es2022',
         external,
-        plugins: [forkPlugin(`${pkg.name}/${entry}`)],
+        plugins: [forkPlugin(`${pkg.name}/${entry}`), buildConstantsPlugin(mode)],
         // Fold `isDevelopment` to a literal and drop the dead branches.
         define: {'process.env.NODE_ENV': JSON.stringify(mode)},
         minifySyntax: true,
