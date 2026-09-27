@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: FellThrough { func: \"pick\", block: BlockId(2) }",
+  "node": "exit 1; nts: uncaught Observed: taken=42;fell off=undefined;",
+  "measured_with": "163593a747457c16",
+  "source": "measured"
+}

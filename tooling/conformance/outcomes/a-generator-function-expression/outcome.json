@@ -2,7 +2,7 @@
   "run": "build",
   "category": "invalid-hir",
   "nts": "invalid HIR: FellThrough { func: \"Closure0#call\", block: BlockId(0) }",
-  "node": "exit 1; nts: uncaught Observed: callCount=1;",
-  "measured_with": "7fe3bce3c6193951",
+  "node": "exit 1; nts: uncaught Observed: done=true;",
+  "measured_with": "163593a747457c16",
   "source": "measured"
 }
