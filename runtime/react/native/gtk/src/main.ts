@@ -262,7 +262,12 @@ function main(): void {
   react_gtk_log("inserted " + order(root, nodes, names));
 
   insertBefore(root, button, label);
-  react_gtk_log("moved " + order(root, nodes, names));
+  let moves = order(root, nodes, names);
+  // A keyed child moved to the end is appended again, which React does with
+  // appendChild on a child already there.
+  appendChild(root, button);
+  moves += ">" + order(root, nodes, names);
+  react_gtk_log("moved " + moves);
 
   removeChild(root, label);
   react_gtk_log("removed " + order(root, nodes, names));
@@ -323,7 +328,10 @@ function main(): void {
   insertBefore(list, c, a);
   const moved = rows(list, items, labels);
   removeChild(list, b);
-  react_gtk_log("list " + appended + " " + inserted + " " + moved + " " + rows(list, items, labels));
+  const removed = rows(list, items, labels);
+  // Moved to the end, as React appends a keyed row again.
+  appendChild(list, c);
+  react_gtk_log("list " + appended + " " + inserted + " " + moved + " " + removed + " " + rows(list, items, labels));
 
   let typed = "none";
   const entry = createInstance(

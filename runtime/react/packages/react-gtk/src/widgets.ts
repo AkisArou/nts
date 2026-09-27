@@ -194,6 +194,19 @@ export interface HostProps {
   children?: unknown;
 }
 
+/** A widget's children when it takes none. */
+export interface NoChildren {
+  children?: never;
+}
+
+/** Text as JSX gives it: `false`, `null` and `undefined` render as nothing. */
+export type TextChild = string | number | boolean | null | undefined;
+
+/** A widget's children when they can only be text, which is its label: `Clicked {count} times`. */
+export interface TextChildren {
+  children?: TextChild | readonly TextChild[];
+}
+
 /** `<Widget>`'s props: GtkWidget's own properties and signals. */
 export interface WidgetProps extends HostProps, ControllerProps {
   canFocus?: boolean;
@@ -1640,7 +1653,7 @@ export declare const Box: HostComponent<"GtkBox", BoxProps>;
 export declare const Button: HostComponent<"GtkButton", ButtonProps>;
 
 /** `<Calendar>`: a GtkCalendar. */
-export declare const Calendar: HostComponent<"GtkCalendar", CalendarProps>;
+export declare const Calendar: HostComponent<"GtkCalendar", CalendarProps & NoChildren>;
 
 /** `<CenterBox>`: a GtkCenterBox. */
 export declare const CenterBox: HostComponent<"GtkCenterBox", CenterBoxProps> & CenterBoxSlots;
@@ -1649,28 +1662,28 @@ export declare const CenterBox: HostComponent<"GtkCenterBox", CenterBoxProps> & 
 export declare const CheckButton: HostComponent<"GtkCheckButton", CheckButtonProps>;
 
 /** `<ColorDialogButton>`: a GtkColorDialogButton. */
-export declare const ColorDialogButton: HostComponent<"GtkColorDialogButton", ColorDialogButtonProps>;
+export declare const ColorDialogButton: HostComponent<"GtkColorDialogButton", ColorDialogButtonProps & NoChildren>;
 
 /** `<ColumnView>`: a GtkColumnView. */
-export declare const ColumnView: HostComponent<"GtkColumnView", ColumnViewProps>;
+export declare const ColumnView: HostComponent<"GtkColumnView", ColumnViewProps & NoChildren>;
 
 /** `<DragIcon>`: a GtkDragIcon. */
 export declare const DragIcon: HostComponent<"GtkDragIcon", DragIconProps>;
 
 /** `<DrawingArea>`: a GtkDrawingArea. */
-export declare const DrawingArea: HostComponent<"GtkDrawingArea", DrawingAreaProps>;
+export declare const DrawingArea: HostComponent<"GtkDrawingArea", DrawingAreaProps & NoChildren>;
 
 /** `<DropDown>`: a GtkDropDown. */
-export declare const DropDown: HostComponent<"GtkDropDown", DropDownProps>;
+export declare const DropDown: HostComponent<"GtkDropDown", DropDownProps & NoChildren>;
 
 /** `<EditableLabel>`: a GtkEditableLabel. */
-export declare const EditableLabel: HostComponent<"GtkEditableLabel", EditableLabelProps>;
+export declare const EditableLabel: HostComponent<"GtkEditableLabel", EditableLabelProps & NoChildren>;
 
 /** `<EmojiChooser>`: a GtkEmojiChooser. */
 export declare const EmojiChooser: HostComponent<"GtkEmojiChooser", EmojiChooserProps>;
 
 /** `<Entry>`: a GtkEntry. */
-export declare const Entry: HostComponent<"GtkEntry", EntryProps>;
+export declare const Entry: HostComponent<"GtkEntry", EntryProps & NoChildren>;
 
 /** `<Expander>`: a GtkExpander. */
 export declare const Expander: HostComponent<"GtkExpander", ExpanderProps> & ExpanderSlots;
@@ -1685,13 +1698,13 @@ export declare const FlowBox: HostComponent<"GtkFlowBox", FlowBoxProps>;
 export declare const FlowBoxChild: HostComponent<"GtkFlowBoxChild", FlowBoxChildProps>;
 
 /** `<FontDialogButton>`: a GtkFontDialogButton. */
-export declare const FontDialogButton: HostComponent<"GtkFontDialogButton", FontDialogButtonProps>;
+export declare const FontDialogButton: HostComponent<"GtkFontDialogButton", FontDialogButtonProps & NoChildren>;
 
 /** `<Frame>`: a GtkFrame. */
 export declare const Frame: HostComponent<"GtkFrame", FrameProps> & FrameSlots;
 
 /** `<GLArea>`: a GtkGLArea. */
-export declare const GLArea: HostComponent<"GtkGLArea", GLAreaProps>;
+export declare const GLArea: HostComponent<"GtkGLArea", GLAreaProps & NoChildren>;
 
 /** `<GraphicsOffload>`: a GtkGraphicsOffload. */
 export declare const GraphicsOffload: HostComponent<"GtkGraphicsOffload", GraphicsOffloadProps>;
@@ -1700,22 +1713,22 @@ export declare const GraphicsOffload: HostComponent<"GtkGraphicsOffload", Graphi
 export declare const Grid: HostComponent<"GtkGrid", GridProps> & GridChildren;
 
 /** `<GridView>`: a GtkGridView. */
-export declare const GridView: HostComponent<"GtkGridView", GridViewProps>;
+export declare const GridView: HostComponent<"GtkGridView", GridViewProps & NoChildren>;
 
 /** `<HeaderBar>`: a GtkHeaderBar. */
 export declare const HeaderBar: HostComponent<"GtkHeaderBar", HeaderBarProps> & HeaderBarSlots & HeaderBarChildren;
 
 /** `<Image>`: a GtkImage. */
-export declare const Image: HostComponent<"GtkImage", ImageProps>;
+export declare const Image: HostComponent<"GtkImage", ImageProps & NoChildren>;
 
 /** `<Inscription>`: a GtkInscription. */
-export declare const Inscription: HostComponent<"GtkInscription", InscriptionProps>;
+export declare const Inscription: HostComponent<"GtkInscription", InscriptionProps & NoChildren>;
 
 /** `<Label>`: a GtkLabel. */
-export declare const Label: HostComponent<"GtkLabel", LabelProps>;
+export declare const Label: HostComponent<"GtkLabel", LabelProps & TextChildren>;
 
 /** `<LevelBar>`: a GtkLevelBar. */
-export declare const LevelBar: HostComponent<"GtkLevelBar", LevelBarProps>;
+export declare const LevelBar: HostComponent<"GtkLevelBar", LevelBarProps & NoChildren>;
 
 /** `<LinkButton>`: a GtkLinkButton. */
 export declare const LinkButton: HostComponent<"GtkLinkButton", LinkButtonProps>;
@@ -1727,10 +1740,10 @@ export declare const ListBox: HostComponent<"GtkListBox", ListBoxProps>;
 export declare const ListBoxRow: HostComponent<"GtkListBoxRow", ListBoxRowProps>;
 
 /** `<ListView>`: a GtkListView. */
-export declare const ListView: HostComponent<"GtkListView", ListViewProps>;
+export declare const ListView: HostComponent<"GtkListView", ListViewProps & NoChildren>;
 
 /** `<MediaControls>`: a GtkMediaControls. */
-export declare const MediaControls: HostComponent<"GtkMediaControls", MediaControlsProps>;
+export declare const MediaControls: HostComponent<"GtkMediaControls", MediaControlsProps & NoChildren>;
 
 /** `<MenuButton>`: a GtkMenuButton. */
 export declare const MenuButton: HostComponent<"GtkMenuButton", MenuButtonProps> & MenuButtonSlots;
@@ -1745,10 +1758,10 @@ export declare const Overlay: HostComponent<"GtkOverlay", OverlayProps> & Overla
 export declare const Paned: HostComponent<"GtkPaned", PanedProps> & PanedSlots;
 
 /** `<PasswordEntry>`: a GtkPasswordEntry. */
-export declare const PasswordEntry: HostComponent<"GtkPasswordEntry", PasswordEntryProps>;
+export declare const PasswordEntry: HostComponent<"GtkPasswordEntry", PasswordEntryProps & NoChildren>;
 
 /** `<Picture>`: a GtkPicture. */
-export declare const Picture: HostComponent<"GtkPicture", PictureProps>;
+export declare const Picture: HostComponent<"GtkPicture", PictureProps & NoChildren>;
 
 /** `<Popover>`: a GtkPopover. */
 export declare const Popover: HostComponent<"GtkPopover", PopoverProps>;
@@ -1760,25 +1773,25 @@ export declare const PopoverBin: HostComponent<"GtkPopoverBin", PopoverBinProps>
 export declare const PopoverMenu: HostComponent<"GtkPopoverMenu", PopoverMenuProps>;
 
 /** `<PopoverMenuBar>`: a GtkPopoverMenuBar. */
-export declare const PopoverMenuBar: HostComponent<"GtkPopoverMenuBar", PopoverMenuBarProps>;
+export declare const PopoverMenuBar: HostComponent<"GtkPopoverMenuBar", PopoverMenuBarProps & NoChildren>;
 
 /** `<ProgressBar>`: a GtkProgressBar. */
-export declare const ProgressBar: HostComponent<"GtkProgressBar", ProgressBarProps>;
+export declare const ProgressBar: HostComponent<"GtkProgressBar", ProgressBarProps & NoChildren>;
 
 /** `<Range>`: a GtkRange. */
-export declare const Range: HostComponent<"GtkRange", RangeProps>;
+export declare const Range: HostComponent<"GtkRange", RangeProps & NoChildren>;
 
 /** `<Revealer>`: a GtkRevealer. */
 export declare const Revealer: HostComponent<"GtkRevealer", RevealerProps>;
 
 /** `<Scale>`: a GtkScale. */
-export declare const Scale: HostComponent<"GtkScale", ScaleProps>;
+export declare const Scale: HostComponent<"GtkScale", ScaleProps & NoChildren>;
 
 /** `<ScaleButton>`: a GtkScaleButton. */
-export declare const ScaleButton: HostComponent<"GtkScaleButton", ScaleButtonProps>;
+export declare const ScaleButton: HostComponent<"GtkScaleButton", ScaleButtonProps & NoChildren>;
 
 /** `<Scrollbar>`: a GtkScrollbar. */
-export declare const Scrollbar: HostComponent<"GtkScrollbar", ScrollbarProps>;
+export declare const Scrollbar: HostComponent<"GtkScrollbar", ScrollbarProps & NoChildren>;
 
 /** `<ScrolledWindow>`: a GtkScrolledWindow. */
 export declare const ScrolledWindow: HostComponent<"GtkScrolledWindow", ScrolledWindowProps>;
@@ -1787,34 +1800,34 @@ export declare const ScrolledWindow: HostComponent<"GtkScrolledWindow", Scrolled
 export declare const SearchBar: HostComponent<"GtkSearchBar", SearchBarProps>;
 
 /** `<SearchEntry>`: a GtkSearchEntry. */
-export declare const SearchEntry: HostComponent<"GtkSearchEntry", SearchEntryProps>;
+export declare const SearchEntry: HostComponent<"GtkSearchEntry", SearchEntryProps & NoChildren>;
 
 /** `<Separator>`: a GtkSeparator. */
-export declare const Separator: HostComponent<"GtkSeparator", SeparatorProps>;
+export declare const Separator: HostComponent<"GtkSeparator", SeparatorProps & NoChildren>;
 
 /** `<SpinButton>`: a GtkSpinButton. */
-export declare const SpinButton: HostComponent<"GtkSpinButton", SpinButtonProps>;
+export declare const SpinButton: HostComponent<"GtkSpinButton", SpinButtonProps & NoChildren>;
 
 /** `<Spinner>`: a GtkSpinner. */
-export declare const Spinner: HostComponent<"GtkSpinner", SpinnerProps>;
+export declare const Spinner: HostComponent<"GtkSpinner", SpinnerProps & NoChildren>;
 
 /** `<Stack>`: a GtkStack. */
 export declare const Stack: HostComponent<"GtkStack", StackProps> & StackChildren;
 
 /** `<StackSidebar>`: a GtkStackSidebar. */
-export declare const StackSidebar: HostComponent<"GtkStackSidebar", StackSidebarProps>;
+export declare const StackSidebar: HostComponent<"GtkStackSidebar", StackSidebarProps & NoChildren>;
 
 /** `<StackSwitcher>`: a GtkStackSwitcher. */
-export declare const StackSwitcher: HostComponent<"GtkStackSwitcher", StackSwitcherProps>;
+export declare const StackSwitcher: HostComponent<"GtkStackSwitcher", StackSwitcherProps & NoChildren>;
 
 /** `<Switch>`: a GtkSwitch. */
-export declare const Switch: HostComponent<"GtkSwitch", SwitchProps>;
+export declare const Switch: HostComponent<"GtkSwitch", SwitchProps & NoChildren>;
 
 /** `<Text>`: a GtkText. */
-export declare const Text: HostComponent<"GtkText", TextProps>;
+export declare const Text: HostComponent<"GtkText", TextProps & NoChildren>;
 
 /** `<TextView>`: a GtkTextView. */
-export declare const TextView: HostComponent<"GtkTextView", TextViewProps>;
+export declare const TextView: HostComponent<"GtkTextView", TextViewProps & NoChildren>;
 
 /** `<ToggleButton>`: a GtkToggleButton. */
 export declare const ToggleButton: HostComponent<"GtkToggleButton", ToggleButtonProps>;
@@ -1823,7 +1836,7 @@ export declare const ToggleButton: HostComponent<"GtkToggleButton", ToggleButton
 export declare const TreeExpander: HostComponent<"GtkTreeExpander", TreeExpanderProps>;
 
 /** `<Video>`: a GtkVideo. */
-export declare const Video: HostComponent<"GtkVideo", VideoProps>;
+export declare const Video: HostComponent<"GtkVideo", VideoProps & NoChildren>;
 
 /** `<Viewport>`: a GtkViewport. */
 export declare const Viewport: HostComponent<"GtkViewport", ViewportProps>;
@@ -1832,7 +1845,7 @@ export declare const Viewport: HostComponent<"GtkViewport", ViewportProps>;
 export declare const Window: HostComponent<"GtkWindow", WindowProps> & WindowSlots;
 
 /** `<WindowControls>`: a GtkWindowControls. */
-export declare const WindowControls: HostComponent<"GtkWindowControls", WindowControlsProps>;
+export declare const WindowControls: HostComponent<"GtkWindowControls", WindowControlsProps & NoChildren>;
 
 /** `<WindowHandle>`: a GtkWindowHandle. */
 export declare const WindowHandle: HostComponent<"GtkWindowHandle", WindowHandleProps>;
@@ -7229,7 +7242,15 @@ export class BoxNode extends WidgetNode {
     return boxSignal(this.gtk, key, slot);
   }
   protected place(child: WidgetNode): void {
-    this.gtk.append(child.widget);
+    // A child already here is a move to the end: React appends it again.
+    if (child.widget.get_parent() !== this.gtk) {
+      this.gtk.append(child.widget);
+      return;
+    }
+    const last = this.gtk.get_last_child();
+    if (last !== child.widget) {
+      this.gtk.reorder_child_after(child.widget, last);
+    }
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode): void {
     // GTK places a child after a sibling; React places it before one. A
@@ -7594,23 +7615,29 @@ export class FlowBoxNode extends WidgetNode {
     const parent = child.widget.get_parent();
     return parent !== null && parent !== this.gtk ? parent : child.widget;
   }
+  // A child placed again is a move: taken back out, and placed anew. A row
+  // the list made is its own and goes when removed, so the child is taken
+  // out of it first.
+  private takeBack(child: WidgetNode): void {
+    const at = this.items.indexOf(child);
+    if (at < 0) {
+      return;
+    }
+    if (this.placed[at] !== child.widget) {
+      this.gtk.get_child_at_index(at)!.set_child(null);
+    }
+    this.gtk.remove(this.placed[at]!);
+    this.items.splice(at, 1);
+    this.placed.splice(at, 1);
+  }
   protected place(child: WidgetNode): void {
+    this.takeBack(child);
     this.gtk.append(child.widget);
     this.items.push(child);
     this.placed.push(this.held(child));
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    const at = this.items.indexOf(child);
-    if (at >= 0) {
-      // A move. A row the list made is its own: it goes when removed, so the
-      // child is taken back out of it first, and placed anew.
-      if (this.placed[at] !== child.widget) {
-        this.gtk.get_child_at_index(at)!.set_child(null);
-      }
-      this.gtk.remove(this.placed[at]!);
-      this.items.splice(at, 1);
-      this.placed.splice(at, 1);
-    }
+    this.takeBack(child);
     const index = this.items.indexOf(before);
     this.gtk.insert(child.widget, index);
     insertAt(this.items, index, child);
@@ -7915,23 +7942,29 @@ export class ListBoxNode extends WidgetNode {
     const parent = child.widget.get_parent();
     return parent !== null && parent !== this.gtk ? parent : child.widget;
   }
+  // A child placed again is a move: taken back out, and placed anew. A row
+  // the list made is its own and goes when removed, so the child is taken
+  // out of it first.
+  private takeBack(child: WidgetNode): void {
+    const at = this.items.indexOf(child);
+    if (at < 0) {
+      return;
+    }
+    if (this.placed[at] !== child.widget) {
+      this.gtk.get_row_at_index(at)!.set_child(null);
+    }
+    this.gtk.remove(this.placed[at]!);
+    this.items.splice(at, 1);
+    this.placed.splice(at, 1);
+  }
   protected place(child: WidgetNode): void {
+    this.takeBack(child);
     this.gtk.append(child.widget);
     this.items.push(child);
     this.placed.push(this.held(child));
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode): void {
-    const at = this.items.indexOf(child);
-    if (at >= 0) {
-      // A move. A row the list made is its own: it goes when removed, so the
-      // child is taken back out of it first, and placed anew.
-      if (this.placed[at] !== child.widget) {
-        this.gtk.get_row_at_index(at)!.set_child(null);
-      }
-      this.gtk.remove(this.placed[at]!);
-      this.items.splice(at, 1);
-      this.placed.splice(at, 1);
-    }
+    this.takeBack(child);
     const index = this.items.indexOf(before);
     this.gtk.insert(child.widget, index);
     insertAt(this.items, index, child);

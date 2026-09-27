@@ -1024,10 +1024,10 @@ export declare const AlertDialog: HostComponent<"AdwAlertDialog", AlertDialogPro
 export declare const ApplicationWindow: HostComponent<"AdwApplicationWindow", ApplicationWindowProps> & ApplicationWindowSlots & ApplicationWindowBreakpoints;
 
 /** `<Avatar>`: an AdwAvatar. */
-export declare const Avatar: HostComponent<"AdwAvatar", AvatarProps>;
+export declare const Avatar: HostComponent<"AdwAvatar", AvatarProps & Gtk.NoChildren>;
 
 /** `<Banner>`: an AdwBanner. */
-export declare const Banner: HostComponent<"AdwBanner", BannerProps>;
+export declare const Banner: HostComponent<"AdwBanner", BannerProps & Gtk.NoChildren>;
 
 /** `<Bin>`: an AdwBin. */
 export declare const Bin: HostComponent<"AdwBin", BinProps>;
@@ -1039,19 +1039,19 @@ export declare const BottomSheet: HostComponent<"AdwBottomSheet", BottomSheetPro
 export declare const BreakpointBin: HostComponent<"AdwBreakpointBin", BreakpointBinProps> & BreakpointBinBreakpoints;
 
 /** `<ButtonContent>`: an AdwButtonContent. */
-export declare const ButtonContent: HostComponent<"AdwButtonContent", ButtonContentProps>;
+export declare const ButtonContent: HostComponent<"AdwButtonContent", ButtonContentProps & Gtk.TextChildren>;
 
 /** `<ButtonRow>`: an AdwButtonRow. */
-export declare const ButtonRow: HostComponent<"AdwButtonRow", ButtonRowProps>;
+export declare const ButtonRow: HostComponent<"AdwButtonRow", ButtonRowProps & Gtk.NoChildren>;
 
 /** `<Carousel>`: an AdwCarousel. */
-export declare const Carousel: HostComponent<"AdwCarousel", CarouselProps>;
+export declare const Carousel: HostComponent<"AdwCarousel", CarouselProps & Gtk.NoChildren>;
 
 /** `<CarouselIndicatorDots>`: an AdwCarouselIndicatorDots. */
-export declare const CarouselIndicatorDots: HostComponent<"AdwCarouselIndicatorDots", CarouselIndicatorDotsProps>;
+export declare const CarouselIndicatorDots: HostComponent<"AdwCarouselIndicatorDots", CarouselIndicatorDotsProps & Gtk.NoChildren>;
 
 /** `<CarouselIndicatorLines>`: an AdwCarouselIndicatorLines. */
-export declare const CarouselIndicatorLines: HostComponent<"AdwCarouselIndicatorLines", CarouselIndicatorLinesProps>;
+export declare const CarouselIndicatorLines: HostComponent<"AdwCarouselIndicatorLines", CarouselIndicatorLinesProps & Gtk.NoChildren>;
 
 /** `<Clamp>`: an AdwClamp. */
 export declare const Clamp: HostComponent<"AdwClamp", ClampProps>;
@@ -1066,7 +1066,7 @@ export declare const ComboRow: HostComponent<"AdwComboRow", ComboRowProps> & Act
 export declare const Dialog: HostComponent<"AdwDialog", DialogProps> & DialogBreakpoints;
 
 /** `<EntryRow>`: an AdwEntryRow. */
-export declare const EntryRow: HostComponent<"AdwEntryRow", EntryRowProps>;
+export declare const EntryRow: HostComponent<"AdwEntryRow", EntryRowProps & Gtk.NoChildren>;
 
 /** `<ExpanderRow>`: an AdwExpanderRow. */
 export declare const ExpanderRow: HostComponent<"AdwExpanderRow", ExpanderRowProps> & ExpanderRowChildren;
@@ -1075,10 +1075,10 @@ export declare const ExpanderRow: HostComponent<"AdwExpanderRow", ExpanderRowPro
 export declare const HeaderBar: HostComponent<"AdwHeaderBar", HeaderBarProps> & HeaderBarSlots & HeaderBarChildren;
 
 /** `<InlineViewSwitcher>`: an AdwInlineViewSwitcher. */
-export declare const InlineViewSwitcher: HostComponent<"AdwInlineViewSwitcher", InlineViewSwitcherProps>;
+export declare const InlineViewSwitcher: HostComponent<"AdwInlineViewSwitcher", InlineViewSwitcherProps & Gtk.NoChildren>;
 
 /** `<MultiLayoutView>`: an AdwMultiLayoutView. */
-export declare const MultiLayoutView: HostComponent<"AdwMultiLayoutView", MultiLayoutViewProps>;
+export declare const MultiLayoutView: HostComponent<"AdwMultiLayoutView", MultiLayoutViewProps & Gtk.NoChildren>;
 
 /** `<NavigationPage>`: an AdwNavigationPage. */
 export declare const NavigationPage: HostComponent<"AdwNavigationPage", NavigationPageProps>;
@@ -1093,7 +1093,7 @@ export declare const NavigationView: HostComponent<"AdwNavigationView", Navigati
 export declare const OverlaySplitView: HostComponent<"AdwOverlaySplitView", OverlaySplitViewProps> & OverlaySplitViewSlots;
 
 /** `<PasswordEntryRow>`: an AdwPasswordEntryRow. */
-export declare const PasswordEntryRow: HostComponent<"AdwPasswordEntryRow", PasswordEntryRowProps>;
+export declare const PasswordEntryRow: HostComponent<"AdwPasswordEntryRow", PasswordEntryRowProps & Gtk.NoChildren>;
 
 /** `<PreferencesDialog>`: an AdwPreferencesDialog. */
 export declare const PreferencesDialog: HostComponent<"AdwPreferencesDialog", PreferencesDialogProps> & DialogBreakpoints;
@@ -1105,10 +1105,10 @@ export declare const PreferencesGroup: HostComponent<"AdwPreferencesGroup", Pref
 export declare const PreferencesPage: HostComponent<"AdwPreferencesPage", PreferencesPageProps> & PreferencesPageSlots;
 
 /** `<PreferencesRow>`: an AdwPreferencesRow. */
-export declare const PreferencesRow: HostComponent<"AdwPreferencesRow", PreferencesRowProps>;
+export declare const PreferencesRow: HostComponent<"AdwPreferencesRow", PreferencesRowProps & Gtk.NoChildren>;
 
 /** `<ShortcutLabel>`: an AdwShortcutLabel. */
-export declare const ShortcutLabel: HostComponent<"AdwShortcutLabel", ShortcutLabelProps>;
+export declare const ShortcutLabel: HostComponent<"AdwShortcutLabel", ShortcutLabelProps & Gtk.NoChildren>;
 
 /** `<ShortcutsDialog>`: an AdwShortcutsDialog. */
 export declare const ShortcutsDialog: HostComponent<"AdwShortcutsDialog", ShortcutsDialogProps> & DialogBreakpoints;
@@ -1117,7 +1117,7 @@ export declare const ShortcutsDialog: HostComponent<"AdwShortcutsDialog", Shortc
 export declare const Sidebar: HostComponent<"AdwSidebar", SidebarProps> & SidebarSlots;
 
 /** `<Spinner>`: an AdwSpinner. */
-export declare const Spinner: HostComponent<"AdwSpinner", SpinnerProps>;
+export declare const Spinner: HostComponent<"AdwSpinner", SpinnerProps & Gtk.NoChildren>;
 
 /** `<SpinRow>`: an AdwSpinRow. */
 export declare const SpinRow: HostComponent<"AdwSpinRow", SpinRowProps> & ActionRowSlots & ActionRowChildren;
@@ -1135,7 +1135,7 @@ export declare const SwitchRow: HostComponent<"AdwSwitchRow", SwitchRowProps> & 
 export declare const TabBar: HostComponent<"AdwTabBar", TabBarProps> & TabBarSlots;
 
 /** `<TabButton>`: an AdwTabButton. */
-export declare const TabButton: HostComponent<"AdwTabButton", TabButtonProps>;
+export declare const TabButton: HostComponent<"AdwTabButton", TabButtonProps & Gtk.NoChildren>;
 
 /** `<TabOverview>`: an AdwTabOverview. */
 export declare const TabOverview: HostComponent<"AdwTabOverview", TabOverviewProps>;
@@ -1147,7 +1147,7 @@ export declare const TabView: HostComponent<"AdwTabView", TabViewProps> & TabVie
 export declare const ToastOverlay: HostComponent<"AdwToastOverlay", ToastOverlayProps>;
 
 /** `<ToggleGroup>`: an AdwToggleGroup. */
-export declare const ToggleGroup: HostComponent<"AdwToggleGroup", ToggleGroupProps>;
+export declare const ToggleGroup: HostComponent<"AdwToggleGroup", ToggleGroupProps & Gtk.NoChildren>;
 
 /** `<ToolbarView>`: an AdwToolbarView. */
 export declare const ToolbarView: HostComponent<"AdwToolbarView", ToolbarViewProps> & ToolbarViewSlots & ToolbarViewChildren;
@@ -1156,10 +1156,10 @@ export declare const ToolbarView: HostComponent<"AdwToolbarView", ToolbarViewPro
 export declare const ViewStack: HostComponent<"AdwViewStack", ViewStackProps> & ViewStackChildren;
 
 /** `<ViewSwitcher>`: an AdwViewSwitcher. */
-export declare const ViewSwitcher: HostComponent<"AdwViewSwitcher", ViewSwitcherProps>;
+export declare const ViewSwitcher: HostComponent<"AdwViewSwitcher", ViewSwitcherProps & Gtk.NoChildren>;
 
 /** `<ViewSwitcherBar>`: an AdwViewSwitcherBar. */
-export declare const ViewSwitcherBar: HostComponent<"AdwViewSwitcherBar", ViewSwitcherBarProps>;
+export declare const ViewSwitcherBar: HostComponent<"AdwViewSwitcherBar", ViewSwitcherBarProps & Gtk.NoChildren>;
 
 /** `<ViewSwitcherSidebar>`: an AdwViewSwitcherSidebar. */
 export declare const ViewSwitcherSidebar: HostComponent<"AdwViewSwitcherSidebar", ViewSwitcherSidebarProps> & ViewSwitcherSidebarSlots;
@@ -1168,7 +1168,7 @@ export declare const ViewSwitcherSidebar: HostComponent<"AdwViewSwitcherSidebar"
 export declare const Window: HostComponent<"AdwWindow", WindowProps> & WindowSlots & WindowBreakpoints;
 
 /** `<WindowTitle>`: an AdwWindowTitle. */
-export declare const WindowTitle: HostComponent<"AdwWindowTitle", WindowTitleProps>;
+export declare const WindowTitle: HostComponent<"AdwWindowTitle", WindowTitleProps & Gtk.NoChildren>;
 
 /** `<WrapBox>`: an AdwWrapBox. */
 export declare const WrapBox: HostComponent<"AdwWrapBox", WrapBoxProps>;
@@ -4718,7 +4718,9 @@ export class AdwExpanderRowNode extends WidgetNode {
     this.gtk.remove(child.widget);
     this.items.splice(at, 1);
   }
+  // A child placed again is a move to the end: out, then added last.
   protected place(child: WidgetNode): void {
+    this.takes(child);
     this.adds(child);
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode): void {
@@ -4873,7 +4875,9 @@ export class AdwNavigationViewNode extends WidgetNode {
     this.gtk.remove(widget);
     this.items.splice(at, 1);
   }
+  // A child placed again is a move to the end: out, then added last.
   protected place(child: WidgetNode): void {
+    this.takes(child);
     this.adds(child);
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode): void {
@@ -5009,7 +5013,9 @@ export class AdwPreferencesGroupNode extends WidgetNode {
     this.gtk.remove(child.widget);
     this.items.splice(at, 1);
   }
+  // A child placed again is a move to the end: out, then added last.
   protected place(child: WidgetNode): void {
+    this.takes(child);
     this.adds(child);
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode): void {
@@ -5065,7 +5071,9 @@ export class AdwPreferencesPageNode extends WidgetNode {
     this.gtk.remove(widget);
     this.items.splice(at, 1);
   }
+  // A child placed again is a move to the end: out, then added last.
   protected place(child: WidgetNode): void {
+    this.takes(child);
     this.adds(child);
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode): void {
@@ -5579,7 +5587,15 @@ export class AdwWrapBoxNode extends WidgetNode {
     return wrapBoxSignal(this.gtk, key, slot);
   }
   protected place(child: WidgetNode): void {
-    this.gtk.append(child.widget);
+    // A child already here is a move to the end: React appends it again.
+    if (child.widget.get_parent() !== this.gtk) {
+      this.gtk.append(child.widget);
+      return;
+    }
+    const last = this.gtk.get_last_child();
+    if (last !== child.widget) {
+      this.gtk.reorder_child_after(child.widget, last);
+    }
   }
   protected placeBefore(child: WidgetNode, before: WidgetNode): void {
     // GTK places a child after a sibling; React places it before one. A

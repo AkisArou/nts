@@ -532,6 +532,24 @@ function slotOwner(t: WidgetType): WidgetType | null {
   return owner;
 }
 
+/**
+ * What JSX checks `w`'s children against, on its element's declaration (a
+ * subclass's props cannot narrow what its base's allow): nothing, where it
+ * has no child protocol, slot or child element; text, where it also has a
+ * `label`, which text children set; null where the node checks them.
+ */
+function childrenOf(w: WidgetType): "NoChildren" | "TextChildren" | null {
+  if (w.children !== "none" || slotOwner(w) !== null || childElementsOf(w) !== null) {
+    return null;
+  }
+  for (let t: WidgetType | null = w; t !== null; t = t.parent) {
+    if (t.props.some((p) => p.jsx === "label")) {
+      return "TextChildren";
+    }
+  }
+  return "NoChildren";
+}
+
 /** "a" or "an", as `name` is said: "a GtkButton", "an AdwHeaderBar". */
 const article = (name: string): string => (/^[AEIOU]/.test(name) ? "an" : "a");
 
@@ -1022,6 +1040,19 @@ function emit(m: Model, target: Target): string {
     line("export interface HostProps {");
     line("  children?: unknown;");
     line("}");
+    line();
+    line("/** A widget's children when it takes none. */");
+    line("export interface NoChildren {");
+    line("  children?: never;");
+    line("}");
+    line();
+    line("/** Text as JSX gives it: `false`, `null` and `undefined` render as nothing. */");
+    line("export type TextChild = string | number | boolean | null | undefined;");
+    line();
+    line("/** A widget's children when they can only be text, which is its label: `Clicked {count} times`. */");
+    line("export interface TextChildren {");
+    line("  children?: TextChild | readonly TextChild[];");
+    line("}");
   }
   for (const t of m.types.filter(local)) {
     line();
@@ -1072,7 +1103,9 @@ function emit(m: Model, target: Target): string {
     line();
     line(`/** \`<${w.jsx}>\`: ${article(w.ts)} ${w.ts}. */`);
     const members = [owner === null ? null : ref(owner, `${owner.jsx}Slots`), childElementsOf(w)?.members ?? null].filter((m) => m !== null);
-    line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${w.jsx}Props>${members.map((m) => ` & ${m}`).join("")};`);
+    const children = childrenOf(w);
+    const props = children === null ? `${w.jsx}Props` : `${w.jsx}Props & ${gtk ? children : `Gtk.${children}`}`;
+    line(`export declare const ${w.jsx}: HostComponent<"${w.ts}", ${props}>${members.map((m) => ` & ${m}`).join("")};`);
   }
 
   line();
@@ -1186,7 +1219,9 @@ function emit(m: Model, target: Target): string {
     narrowed("remove", adds.removeType).forEach((l) => line(l));
     line("    this.items.splice(at, 1);");
     line("  }");
+    line("  // A child placed again is a move to the end: out, then added last.");
     line("  protected place(child: WidgetNode): void {");
+    line("    this.takes(child);");
     line("    this.adds(child);");
     line("  }");
     line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
@@ -1298,23 +1333,29 @@ function emit(m: Model, target: Target): string {
       line("    const parent = child.widget.get_parent();");
       line("    return parent !== null && parent !== this.gtk ? parent : child.widget;");
       line("  }");
+      line("  // A child placed again is a move: taken back out, and placed anew. A row");
+      line("  // the list made is its own and goes when removed, so the child is taken");
+      line("  // out of it first.");
+      line("  private takeBack(child: WidgetNode): void {");
+      line("    const at = this.items.indexOf(child);");
+      line("    if (at < 0) {");
+      line("      return;");
+      line("    }");
+      line("    if (this.placed[at] !== child.widget) {");
+      line(`      this.gtk.${rowAccessors.get(qualified(w.gir))}(at)!.set_child(null);`);
+      line("    }");
+      line("    this.gtk.remove(this.placed[at]!);");
+      line("    this.items.splice(at, 1);");
+      line("    this.placed.splice(at, 1);");
+      line("  }");
       line("  protected place(child: WidgetNode): void {");
+      line("    this.takeBack(child);");
       line("    this.gtk.append(child.widget);");
       line("    this.items.push(child);");
       line("    this.placed.push(this.held(child));");
       line("  }");
       line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
-      line("    const at = this.items.indexOf(child);");
-      line("    if (at >= 0) {");
-      line("      // A move. A row the list made is its own: it goes when removed, so the");
-      line("      // child is taken back out of it first, and placed anew.");
-      line("      if (this.placed[at] !== child.widget) {");
-      line(`        this.gtk.${rowAccessors.get(qualified(w.gir))}(at)!.set_child(null);`);
-      line("      }");
-      line("      this.gtk.remove(this.placed[at]!);");
-      line("      this.items.splice(at, 1);");
-      line("      this.placed.splice(at, 1);");
-      line("    }");
+      line("    this.takeBack(child);");
       line("    const index = this.items.indexOf(before);");
       line("    this.gtk.insert(child.widget, index);");
       line("    insertAt(this.items, index, child);");
@@ -1332,7 +1373,15 @@ function emit(m: Model, target: Target): string {
       emitAdds(w, w.adds);
     } else if (w.children === "box") {
       line("  protected place(child: WidgetNode): void {");
-      line("    this.gtk.append(child.widget);");
+      line("    // A child already here is a move to the end: React appends it again.");
+      line("    if (child.widget.get_parent() !== this.gtk) {");
+      line("      this.gtk.append(child.widget);");
+      line("      return;");
+      line("    }");
+      line("    const last = this.gtk.get_last_child();");
+      line("    if (last !== child.widget) {");
+      line("      this.gtk.reorder_child_after(child.widget, last);");
+      line("    }");
       line("  }");
       line("  protected placeBefore(child: WidgetNode, before: WidgetNode): void {");
       line("    // GTK places a child after a sibling; React places it before one. A");

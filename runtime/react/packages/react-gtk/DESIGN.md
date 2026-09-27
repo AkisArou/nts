@@ -35,7 +35,11 @@ window.present();
 - Host components are GTK widgets, named without the `Gtk` prefix.
 - **Props are the widget's GIR properties** in camel case (`has-frame` → `hasFrame`), typed as bind-gir types their setters (`label: string`, `spacing: number`, enums as their GIR enum).
 - **Signals are `on` + the signal name in camel case**: `clicked` → `onClicked`, `notify::text` → `onNotifyText`. They are typed with the signal's own handler signature.
-- Text children are the widget's `label`: `<Button>Add</Button>`.
+- Text children are the widget's `label`: `<Button>Add</Button>`, and
+  `<Label>Clicked {count} times</Label>`, which JSX splits into pieces, is one
+  text. JSX checks children against the widget: a widget that takes none
+  (`<Image>`, `<Switch>`, `<Entry>`) accepts none, and a Label accepts text
+  only.
 - There is no cross-platform `<View>`. Hooks and logic are what apps share with the web.
 
 A fuller app, each piece described in the sections below:

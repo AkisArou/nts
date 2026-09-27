@@ -198,6 +198,9 @@ function main(): void {
   grouping += " " + rowOrder();
   removeChild(group, rows[0]!);
   grouping += " " + rowOrder();
+  // Moved to the end, as React appends a keyed row again.
+  appendInitialChild(group, rows[1]!);
+  grouping += " " + rowOrder();
   const suffixed = groupWidget instanceof AdwPreferencesGroup && groupWidget.get_header_suffix() === widget(suffix);
   react_gtk_log("group " + grouping + " suffix=" + String(suffixed));
 

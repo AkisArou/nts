@@ -31,14 +31,14 @@ clicked first@2 after@0
 rebound second
 label world
 inserted label,second,button
-moved button,label,second
-removed button,second
+moved button,label,second>label,second,button
+removed second,button
 hidden false true
 reset true>false>true clicks=none label=Text
 enum 1
 single true
 argument 2.5@2
-list a,b,c a,d,b,c c,a,d,b c,a,d
+list a,b,c a,d,b,c c,a,d,b c,a,d a,d,c
 notify none>typed
 controlled a typed flashed=false
 object true 42
