@@ -28,8 +28,10 @@
 //
 //   compiled -> refused   STOPPED COMPILING, with a named reason: a loss
 //   compiled -> absent    DROPPED SILENTLY: a loss nothing reports -- the worst
-//   refused  -> absent    ROOT LOST: a refusal disappeared and the function
-//                         did not come back
+//   refused  -> absent    ROOT LOST when its root cause is still in the
+//                         module: something stopped explaining it. Dropped,
+//                         cause gone (a note) when the cause left the module:
+//                         dead code, unreachable once its cascade cleared
 //   absent   -> refused   NEWLY NAMED: a silent absence gained a root
 //   * -> compiled         NEWLY COMPILES: reach, which is also what an unsound
 //                         change looks like -- read each one
@@ -80,19 +82,45 @@ const WORKERS = Number(process.env.NTS_REFUSAL_DIFF_JOBS ?? 4);
 /** A name with the compiler's numbering taken out. */
 export const stable = (name) => name.replace(/<\d+>/g, "<N>").replace(/Closure\d+/g, "ClosureN").replace(/obj\d+/g, "objN");
 
-/** name -> "compiled" | "refused" | "phantom", from one compiler's two listings. */
+/**
+ * A refusal's root cause: a cascade reads "it calls X, and it calls Y, and
+ * <root>", so the root is the last clause that is not a link.
+ */
+export const rootCause = (reason) =>
+  (reason ?? "").split(", and ").filter((c) => !/^it (?:calls|reads) `/.test(c.trim())).pop()?.trim() ?? "";
+
+/**
+ * `{ states, reasons, causes }` from one compiler's two listings: each name's
+ * state ("compiled" | "refused" | "phantom"), each refused name's reason, and
+ * the set of root causes the project's refusals name.
+ */
 export function states(prepared, refusals) {
   const compiled = new Set();
   for (const m of prepared.matchAll(/^(?:export )?func (.+?)\(/gm)) compiled.add(stable(m[1]));
-  const refused = new Set(refusals.split("\n").map((l) => l.split("\t")[0]).filter(Boolean).map(stable));
+  const reasons = new Map();
+  for (const line of refusals.split("\n")) {
+    const [name, reason] = line.split("\t");
+    if (name) reasons.set(stable(name), reason ?? "");
+  }
   const out = new Map();
-  for (const n of compiled) out.set(n, refused.has(n) ? "phantom" : "compiled");
-  for (const n of refused) if (!compiled.has(n)) out.set(n, "refused");
-  return out;
+  for (const n of compiled) out.set(n, reasons.has(n) ? "phantom" : "compiled");
+  for (const n of reasons.keys()) if (!compiled.has(n)) out.set(n, "refused");
+  return { states: out, reasons, causes: new Set([...reasons.values()].map(rootCause)) };
 }
 
-/** Every name whose state moved, each under the kind of move it is. */
-export function moves(before, after) {
+/**
+ * Every name whose state moved, each under the kind of move it is.
+ *
+ * refused -> absent has two causes. If the function's root cause is still
+ * among the after arm's refusals, something stopped explaining a function
+ * that is still wanted: ROOT LOST, a loss. If the cause left the module, the
+ * function became unreachable and was dropped as dead code, by design: a
+ * `patternMatches` whose only caller stayed refused while its own cascade
+ * cleared read as seven losses until this distinction.
+ */
+export function moves(beforeArm, afterArm) {
+  const before = beforeArm.states;
+  const after = afterArm.states;
   const kinds = new Map();
   const add = (kind, name, from, to) => kinds.set(kind, [...(kinds.get(kind) ?? []), { name, from, to }]);
   for (const name of new Set([...before.keys(), ...after.keys()])) {
@@ -102,7 +130,10 @@ export function moves(before, after) {
     if (to === "phantom" || from === "phantom") add(to === "phantom" ? "PHANTOM APPEARED" : "phantom cleared", name, from, to);
     else if (from === "compiled" && to === "refused") add("STOPPED COMPILING", name, from, to);
     else if (from === "compiled" && to === "absent") add("DROPPED SILENTLY", name, from, to);
-    else if (from === "refused" && to === "absent") add("ROOT LOST", name, from, to);
+    else if (from === "refused" && to === "absent") {
+      const cause = rootCause(beforeArm.reasons.get(name));
+      add(cause && afterArm.causes.has(cause) ? "ROOT LOST" : "dropped, cause gone", name, from, to);
+    }
     else if (from === "absent" && to === "refused") add("newly named", name, from, to);
     else if (to === "compiled") add("newly compiles", name, from, to);
   }
@@ -121,6 +152,12 @@ function selfTest() {
     "stringChunkAt\tsomething\nstarts\tnow a reason\nnewRoot\tfinally named\nlying\tx\n",
   );
   const m = moves(before, after);
+  // A cascade whose cause left the module is dead code dropped, not a loss.
+  const deadBefore = states("func other(x: f64) -> f64 {\n", "dead\tit calls `helper`, and a regular expression literal\nhelper\ta regular expression literal\n");
+  const deadAfter = states("func other(x: f64) -> f64 {\nfunc helper(x: f64) -> f64 {\n", "");
+  const dead = moves(deadBefore, deadAfter);
+  if (dead.has("ROOT LOST") || !(dead.get("dropped, cause gone") ?? []).some((x) => x.name === "dead")) return "a function whose cause left the module read as a lost root";
+  if (rootCause("it calls `a`, and it calls `b`, and a property of unrepresentable type (RegExp)") !== "a property of unrepresentable type (RegExp)") return "a cascade's root cause was misread";
   const names = (k) => (m.get(k) ?? []).map((x) => x.name).sort().join(",");
   if (names("STOPPED COMPILING") !== "starts") return `stopped compiling: ${names("STOPPED COMPILING")}`;
   if (names("DROPPED SILENTLY") !== "goesQuiet") return `dropped silently: ${names("DROPPED SILENTLY")}`;
@@ -129,6 +166,10 @@ function selfTest() {
   if (names("newly compiles") !== "starts2") return `newly compiles: ${names("newly compiles")}`;
   if (m.has("phantom cleared") || m.has("PHANTOM APPEARED")) return "a phantom present in both arms read as a move";
   if ([...m.values()].flat().some((x) => x.name.startsWith("R<"))) return "a renumbered generic instance read as a move";
+  // And the loss side must still fire: the same drop with its cause still present.
+  const stillBefore = states("", "gone\ta regular expression literal\n");
+  const stillAfter = states("", "another\ta regular expression literal\n");
+  if (!moves(stillBefore, stillAfter).has("ROOT LOST")) return "a refusal lost while its cause stays in the module was not a loss";
   return null;
 }
 const broken = selfTest();
@@ -177,9 +218,9 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, asy
         arms.push(null);
         continue;
       }
-      arms.push({ states: states(hir.stdout, ref.stdout), refusals: ref.stdout.split("\n").filter(Boolean).length });
+      arms.push({ arm: states(hir.stdout, ref.stdout), refusals: ref.stdout.split("\n").filter(Boolean).length });
     }
-    if (arms.every(Boolean)) results.push({ project, moved: moves(arms[0].states, arms[1].states), refusals: [arms[0].refusals, arms[1].refusals] });
+    if (arms.every(Boolean)) results.push({ project, moved: moves(arms[0].arm, arms[1].arm), refusals: [arms[0].refusals, arms[1].refusals] });
   }
 }));
 
