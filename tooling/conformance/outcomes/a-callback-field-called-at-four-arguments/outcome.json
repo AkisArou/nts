@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: init at arity 4 (control): id+type=1:Witness;init at arity 1: id=1;init at arity 0: called=true;",
+  "node": "exit 1; nts: uncaught Observed: init at arity 4 (control): id+type=1:Witness;init at arity 1: id=1;init at arity 0: called=true;",
+  "measured_with": "82c65520cbe233b6",
+  "source": "measured"
+}
