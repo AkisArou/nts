@@ -527,19 +527,29 @@ const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
  * the one definition of it, and reported under its own path.
  */
 const pathOf = new Map();
-function outcomes() {
-  const base = join(homedir(), ".cache/nts-integrity");
-  mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "run-"));
-  process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-  return outcomeFixtures().map((name) => {
+let scratchDir = null;
+function scratch() {
+  if (!scratchDir) {
+    const base = join(homedir(), ".cache/nts-integrity");
+    mkdirSync(base, { recursive: true });
+    scratchDir = mkdtempSync(join(base, "run-"));
+    process.on("exit", () => rmSync(scratchDir, { recursive: true, force: true }));
+  }
+  return scratchDir;
+}
+/** Every fixture (or the named ones), materialised, as their labels. */
+function outcomes(names = outcomeFixtures()) {
+  return names.map((name) => {
     const label = `tooling/conformance/outcomes/${name}`;
-    pathOf.set(label, materialise(scratch, name, join(OUTCOMES, name, "src"), runMode(name)));
+    pathOf.set(label, materialise(scratch(), name, join(OUTCOMES, name, "src"), runMode(name)));
     return label;
   });
 }
+// A fixture named on the command line is read through its project too, not
+// its bare directory -- which does not typecheck without the harness.
+const fixturePrefix = "tooling/conformance/outcomes/";
 const projects = (named.length > 0
-  ? named
+  ? named.flatMap((p) => (p.replace(/\/$/, "").startsWith(fixturePrefix) ? outcomes([p.replace(/\/$/, "").slice(fixturePrefix.length)]) : [p]))
   : process.argv.includes("--runtime")
     ? [...under("runtime/node"), "runtime/web-platform"]
     : [...under("examples"), ...under("tooling/conformance/blockers"), ...outcomes()]

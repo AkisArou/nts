@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 `__snapshot`, which `Twice` does not declare",
+  "ran": "exit 1; nts: uncaught Observed: _snapshot written and read=kept;snapshot written and read=kept;",
+  "node": "exit 1; nts: uncaught Observed: __snapshot written and read=kept;_snapshot written and read=kept;snapshot written and read=kept;",
+  "measured_with": "9f2572f7db962864",
+  "source": "measured"
+}
