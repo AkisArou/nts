@@ -140,6 +140,13 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 // test programs all honour `TMPDIR`, and `/tmp` here is a tmpfs shared with
 // every lane that runs out of inodes before bytes. Set on this process so the
 // workers and everything they spawn inherit it, and removed with the scratch.
+//
+// It also makes the snapshot cache private to the run: its default lives under
+// `TMPDIR`, so every run starts empty and nothing another command stored can be
+// served to a case. Before 90aa37954, a bare `nts frontend` and a build shared
+// a cache key, and a build could load a narrower snapshot and compile less. This
+// is why no recorded census can have been measured on one. A global
+// `NTS_SNAPSHOT_CACHE` would override it, so do not set one for a census run.
 process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
 // Per-case address-space cap; `attempt262.mjs`'s `capped` carries why it exists
