@@ -40,7 +40,7 @@ import type { PendingBoundaries, PendingTransitionCallbacks, TransitionAbort } f
 import type { OffscreenInstance } from "./ReactFiberOffscreenComponent.ts";
 import type { RunningViewTransition, SuspendedState, ViewTransitionInstance } from "react-reconciler/ReactFiberConfig.ts";
 import type { RootState } from "./ReactFiberRoot.ts";
-import { getViewTransitionName, type ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
+import { getViewTransitionName, type ViewTransitionState, viewTransitionPropsOf } from "./ReactFiberViewTransitionComponent.ts";
 import { ReactSharedInternals } from "./ReactSharedInternals.ts";
 import {
   IdlePriority as IdleSchedulerPriority,
@@ -775,7 +775,7 @@ export function scheduleViewTransitionEvent(
       let instance = state.ref;
       if (instance === null) {
         instance = state.ref = createViewTransitionInstance(
-          getViewTransitionName(fiber.memoizedProps as Props, state),
+          getViewTransitionName(viewTransitionPropsOf(fiber.memoizedProps), state),
         );
       }
       if (pendingViewTransitionEvents === null) {

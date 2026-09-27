@@ -7,16 +7,16 @@
 // Port of upstream's ReactFiberDuplicateViewTransitions.js.
 
 import type { Fiber } from "./ReactInternalTypes.ts";
-import type { ViewTransitionProps } from "./ReactFiberViewTransitionComponent.ts";
 import { isDevelopment } from "shared/Build.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
+import { viewTransitionPropsOf } from "./ReactFiberViewTransitionComponent.ts";
 
 const mountedNamedViewTransitions: Map<string, Fiber> = new Map<string, Fiber>();
 const didWarnAboutName: { [name: string]: boolean } = {};
 
 export function trackNamedViewTransition(fiber: Fiber): void {
   if (isDevelopment) {
-    const name = (fiber.memoizedProps as ViewTransitionProps).name;
+    const name = (viewTransitionPropsOf(fiber.memoizedProps)).name;
     if (name != null && name !== "auto") {
       const existing = mountedNamedViewTransitions.get(name);
       if (existing !== undefined) {
@@ -47,7 +47,7 @@ export function trackNamedViewTransition(fiber: Fiber): void {
 
 export function untrackNamedViewTransition(fiber: Fiber): void {
   if (isDevelopment) {
-    const name = (fiber.memoizedProps as ViewTransitionProps).name;
+    const name = (viewTransitionPropsOf(fiber.memoizedProps)).name;
     if (name != null && name !== "auto") {
       const existing = mountedNamedViewTransitions.get(name);
       if (existing !== undefined && (existing === fiber || existing === fiber.alternate)) {

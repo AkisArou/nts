@@ -13,6 +13,7 @@ import { ContextProvider, DehydratedFragment, SuspenseComponent } from "./ReactW
 import { NoLanes, isSubsetOfLanes, mergeLanes } from "./ReactFiberLane.ts";
 import { NoFlags, DidPropagateContext, NeedsPropagation } from "./ReactFiberFlags.ts";
 import { getHostTransitionProvider } from "./ReactFiberHostContext.ts";
+import { propOf } from "./ReactFiberProps.ts";
 
 const valueCursor: StackCursor<unknown> = createCursor<unknown>(null);
 
@@ -348,13 +349,12 @@ function propagateParentContextChanges(
         throw new Error("Should have a current fiber. This is a bug in React.");
       }
 
-      const oldProps = currentParent.memoizedProps as { value: unknown } | null;
+      const oldProps = currentParent.memoizedProps;
       if (oldProps !== null) {
         const context = parent.type as ReactContextBase;
-        const newProps = parent.pendingProps as { value: unknown };
-        const newValue = newProps.value;
+        const newValue = propOf(parent.pendingProps, "value");
 
-        const oldValue = oldProps.value;
+        const oldValue = propOf(oldProps, "value");
 
         if (!Object.is(newValue, oldValue)) {
           if (contexts !== null) {

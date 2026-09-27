@@ -6,10 +6,23 @@ import { enableSuspenseAvoidThisFallback } from "shared/ReactFeatureFlags.ts";
 import { createCursor, push, pop } from "./ReactFiberStack.ts";
 import { isCurrentTreeHidden } from "./ReactFiberHiddenContext.ts";
 import { OffscreenComponent } from "./ReactWorkTags.ts";
+import { propOf } from "./ReactFiberProps.ts";
 
 // The props of a Suspense boundary that this module reads.
 interface SuspenseProps {
   unstable_avoidThisFallback?: boolean;
+}
+
+// A SuspenseProps field of the record, its key checked against the interface.
+function suspenseField(props: unknown, key: keyof SuspenseProps): unknown {
+  return propOf(props, key);
+}
+
+/** The SuspenseProps a fiber holds as a record, read into its declared shape (ReactFiberProps.ts). */
+function suspensePropsOf(props: unknown): SuspenseProps {
+  return {
+    unstable_avoidThisFallback: suspenseField(props, "unstable_avoidThisFallback") as SuspenseProps["unstable_avoidThisFallback"],
+  };
 }
 
 // The Suspense handler is the boundary that should capture if something
@@ -37,7 +50,7 @@ export function getShellBoundary(): Fiber | null {
 export function pushPrimaryTreeSuspenseHandler(handler: Fiber): void {
   // TODO: Pass as argument
   const current = handler.alternate;
-  const props = handler.pendingProps as SuspenseProps;
+  const props = suspensePropsOf(handler.pendingProps);
 
   // Shallow Suspense context fields, like ForceSuspenseFallback, should only be
   // propagated a single level. For example, when ForceSuspenseFallback is set,

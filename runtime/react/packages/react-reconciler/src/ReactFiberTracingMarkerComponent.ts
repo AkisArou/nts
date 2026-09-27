@@ -7,6 +7,7 @@ import type { Transition } from "shared/ReactTypes.ts";
 import { enableTransitionTracing } from "shared/ReactFeatureFlags.ts";
 import type { OffscreenInstance } from "./ReactFiberOffscreenComponent.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
+import { propOf } from "./ReactFiberProps.ts";
 
 export interface SuspenseInfo {
   name: string | null;
@@ -44,6 +45,19 @@ export type PendingBoundaries = Map<OffscreenInstance, SuspenseInfo>;
 export interface TracingMarkerProps {
   name: string;
   children?: unknown;
+}
+
+// A TracingMarkerProps field of the record, its key checked against the interface.
+function tracingMarkerField(props: unknown, key: keyof TracingMarkerProps): unknown {
+  return propOf(props, key);
+}
+
+/** The TracingMarkerProps a fiber holds as a record, read into its declared shape (ReactFiberProps.ts). */
+export function tracingMarkerPropsOf(props: unknown): TracingMarkerProps {
+  return {
+    name: tracingMarkerField(props, "name") as TracingMarkerProps["name"],
+    children: tracingMarkerField(props, "children") as TracingMarkerProps["children"],
+  };
 }
 
 // enableTransitionTracing is off: there are no callbacks to call.

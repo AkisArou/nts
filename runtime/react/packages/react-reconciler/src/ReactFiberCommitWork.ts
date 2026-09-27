@@ -41,7 +41,7 @@ import type { Transition, Wakeable } from "shared/ReactTypes.ts";
 import type { OffscreenInstance, OffscreenQueue, OffscreenState } from "./ReactFiberOffscreenComponent.ts";
 import type { Cache } from "./ReactFiberCacheComponent.ts";
 import type { RootState } from "./ReactFiberRoot.ts";
-import type { ViewTransitionProps, ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
+import type { ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 import type { Flags } from "./ReactFiberFlags.ts";
 
 import { isDevelopment } from "shared/Build.ts";
@@ -267,6 +267,7 @@ import {
 } from "./ReactFiberMutationTracking.ts";
 import { trackNamedViewTransition, untrackNamedViewTransition } from "./ReactFiberDuplicateViewTransitions.ts";
 import { markIndicatorHandled } from "./ReactFiberRootScheduler.ts";
+import { viewTransitionPropsOf } from "./ReactFiberViewTransitionComponent.ts";
 
 // enableTransitionTracing, enableScopeAPI, enableSuspenseCallback,
 // enableCreateEventHandleAPI and enableLegacyHidden are off in the stable
@@ -1923,7 +1924,7 @@ function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot, lane
         const prevMutationContext = pushMutationContext();
         const prevUpdate = inUpdateViewTransition;
         const isViewTransitionEligible = enableViewTransition && includesOnlyViewTransitionEligibleLanes(lanes);
-        const props = finishedWork.memoizedProps as ViewTransitionProps;
+        const props = viewTransitionPropsOf(finishedWork.memoizedProps);
         inUpdateViewTransition =
           isViewTransitionEligible && getViewTransitionClassName(props.default, props.update) !== "none";
         recursivelyTraverseMutationEffects(root, finishedWork, lanes);
@@ -2368,7 +2369,7 @@ function commitAfterMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot,
         // then we should probably issue an event since this instance is part
         // of it.
       } else {
-        const props = finishedWork.memoizedProps as ViewTransitionProps;
+        const props = viewTransitionPropsOf(finishedWork.memoizedProps);
         scheduleViewTransitionEvent(finishedWork, props.onUpdate);
 
         // If this boundary did update, we cannot cancel its children so those
@@ -3834,7 +3835,7 @@ function accumulateSuspenseyCommitOnFiber(fiber: Fiber, committedLanes: Lanes, s
     case ViewTransitionComponent: {
       if (enableViewTransition) {
         if ((fiber.flags & suspenseyCommitFlag) !== NoFlags) {
-          const props = fiber.memoizedProps as ViewTransitionProps;
+          const props = viewTransitionPropsOf(fiber.memoizedProps);
           const name: string | null | undefined = props.name;
           if (name != null && name !== "auto") {
             // This is a named ViewTransition being mounted or reappearing.

@@ -607,7 +607,7 @@ function replaceHookState(fiber: Fiber, hook: EditableHook, newState: unknown): 
   // (There's no appropriate action type for DevTools overrides.)
   // As a result though, React will see the scheduled update as a noop and bailout.
   // Shallow cloning props works as a workaround for now to bypass the bailout check.
-  fiber.memoizedProps = { ...(fiber.memoizedProps as object) };
+  fiber.memoizedProps = { ...(fiber.memoizedProps as { readonly [key: string]: unknown }) };
 
   scheduleSyncUpdate(fiber);
 }

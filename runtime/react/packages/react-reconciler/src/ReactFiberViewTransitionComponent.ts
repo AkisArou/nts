@@ -1,6 +1,7 @@
 import type { Instance, ViewTransitionInstance } from "react-reconciler/ReactFiberConfig.ts";
 import { getCommittingRoot, getPendingTransitionTypes } from "./ReactFiberWorkLoop.ts";
 import type { FiberRoot } from "./ReactInternalTypes.ts";
+import { propOf } from "./ReactFiberProps.ts";
 
 export type ViewTransitionClassPerType = { [transitionType: string]: "none" | "auto" | string };
 
@@ -26,6 +27,33 @@ export interface ViewTransitionProps {
   onUpdate?: ViewTransitionEventHandler;
   // Renamed to `default`: read only to warn about it.
   className?: unknown;
+}
+
+// A ViewTransitionProps field of the record, its key checked against the interface.
+function viewTransitionField(props: unknown, key: keyof ViewTransitionProps): unknown {
+  return propOf(props, key);
+}
+
+/** The ViewTransitionProps a fiber holds as a record, read into its declared shape (ReactFiberProps.ts). */
+export function viewTransitionPropsOf(props: unknown): ViewTransitionProps {
+  return {
+    name: viewTransitionField(props, "name") as ViewTransitionProps["name"],
+    children: viewTransitionField(props, "children") as ViewTransitionProps["children"],
+    default: viewTransitionField(props, "default") as ViewTransitionProps["default"],
+    enter: viewTransitionField(props, "enter") as ViewTransitionProps["enter"],
+    exit: viewTransitionField(props, "exit") as ViewTransitionProps["exit"],
+    share: viewTransitionField(props, "share") as ViewTransitionProps["share"],
+    update: viewTransitionField(props, "update") as ViewTransitionProps["update"],
+    parentEnter: viewTransitionField(props, "parentEnter") as ViewTransitionProps["parentEnter"],
+    parentExit: viewTransitionField(props, "parentExit") as ViewTransitionProps["parentExit"],
+    onEnter: viewTransitionField(props, "onEnter") as ViewTransitionProps["onEnter"],
+    onExit: viewTransitionField(props, "onExit") as ViewTransitionProps["onExit"],
+    onParentEnter: viewTransitionField(props, "onParentEnter") as ViewTransitionProps["onParentEnter"],
+    onParentExit: viewTransitionField(props, "onParentExit") as ViewTransitionProps["onParentExit"],
+    onShare: viewTransitionField(props, "onShare") as ViewTransitionProps["onShare"],
+    onUpdate: viewTransitionField(props, "onUpdate") as ViewTransitionProps["onUpdate"],
+    className: viewTransitionField(props, "className") as ViewTransitionProps["className"],
+  };
 }
 
 export interface ViewTransitionState {

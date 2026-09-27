@@ -160,7 +160,6 @@ import {
   scheduleContextWorkOnParentPath,
 } from "./ReactFiberNewContext.ts";
 import type {
-  LegacyHiddenProps,
   OffscreenInstance,
   OffscreenProps,
   OffscreenQueue,
@@ -193,7 +192,7 @@ import {
 } from "./ReactFiberSuspenseContext.ts";
 import { resolveLazy } from "./ReactFiberThenable.ts";
 import { createClassErrorUpdate, initializeClassErrorUpdate } from "./ReactFiberThrow.ts";
-import type { TracingMarkerInstance, TracingMarkerProps } from "./ReactFiberTracingMarkerComponent.ts";
+import type { TracingMarkerInstance } from "./ReactFiberTracingMarkerComponent.ts";
 import {
   getMarkerInstances,
   pushMarkerInstance,
@@ -209,7 +208,7 @@ import {
   requestCacheFromPool,
 } from "./ReactFiberTransition.ts";
 import { getForksAtLevel, isForkedChild, pushMaterializedTreeId, pushTreeId } from "./ReactFiberTreeContext.ts";
-import type { ViewTransitionProps, ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
+import type { ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 import {
   getWorkInProgressRoot,
   markRenderDerivedCause,
@@ -254,6 +253,11 @@ import {
   TracingMarkerComponent,
   ViewTransitionComponent,
 } from "./ReactWorkTags.ts";
+import { propOf } from "./ReactFiberProps.ts";
+import { activityPropsOf } from "./ReactFiberActivityComponent.ts";
+import { legacyHiddenPropsOf, offscreenPropsOf } from "./ReactFiberOffscreenComponent.ts";
+import { tracingMarkerPropsOf } from "./ReactFiberTracingMarkerComponent.ts";
+import { viewTransitionPropsOf } from "./ReactFiberViewTransitionComponent.ts";
 
 // Empty digests are otherwise treated as if no digest was provided. This lets
 // React distinguish an intentional client render without reserving a
@@ -298,10 +302,41 @@ interface SuspenseProps {
   name?: string;
 }
 
+// A SuspenseProps field of the record, its key checked against the interface.
+function suspenseField(props: unknown, key: keyof SuspenseProps): unknown {
+  return propOf(props, key);
+}
+
+/** The SuspenseProps a fiber holds as a record, read into its declared shape (ReactFiberProps.ts). */
+function suspensePropsOf(props: unknown): SuspenseProps {
+  return {
+    children: suspenseField(props, "children") as SuspenseProps["children"],
+    fallback: suspenseField(props, "fallback") as SuspenseProps["fallback"],
+    suspenseCallback: suspenseField(props, "suspenseCallback") as SuspenseProps["suspenseCallback"],
+    unstable_avoidThisFallback: suspenseField(props, "unstable_avoidThisFallback") as SuspenseProps["unstable_avoidThisFallback"],
+    defer: suspenseField(props, "defer") as SuspenseProps["defer"],
+    name: suspenseField(props, "name") as SuspenseProps["name"],
+  };
+}
+
 interface SuspenseListProps {
   children?: unknown;
   revealOrder?: SuspenseListRevealOrder;
   tail?: SuspenseListTailMode;
+}
+
+// A SuspenseListProps field of the record, its key checked against the interface.
+function suspenseListField(props: unknown, key: keyof SuspenseListProps): unknown {
+  return propOf(props, key);
+}
+
+/** The SuspenseListProps a fiber holds as a record, read into its declared shape (ReactFiberProps.ts). */
+function suspenseListPropsOf(props: unknown): SuspenseListProps {
+  return {
+    children: suspenseListField(props, "children") as SuspenseListProps["children"],
+    revealOrder: suspenseListField(props, "revealOrder") as SuspenseListProps["revealOrder"],
+    tail: suspenseListField(props, "tail") as SuspenseListProps["tail"],
+  };
 }
 
 // A special exception that's used to unwind the stack when an update flows
@@ -795,7 +830,7 @@ function deferHiddenOffscreenComponent(
 }
 
 function updateLegacyHiddenComponent(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  const nextProps = workInProgress.pendingProps as LegacyHiddenProps;
+  const nextProps = legacyHiddenPropsOf(workInProgress.pendingProps);
   // Note: These happen to have identical begin phases, for now. We shouldn't hold
   // ourselves to this constraint, though. If the behavior diverges, we should
   // fork the function.
@@ -805,7 +840,8 @@ function updateLegacyHiddenComponent(current: Fiber | null, workInProgress: Fibe
 
 function mountActivityChildren(workInProgress: Fiber, nextProps: ActivityProps, renderLanes: Lanes): Fiber {
   if (isDevelopment) {
-    const hiddenProp = (nextProps as { hidden?: unknown }).hidden;
+    // Not an Activity prop, so read from the record rather than its shape.
+    const hiddenProp = propOf(workInProgress.pendingProps, "hidden");
     if (hiddenProp !== undefined) {
       console.error(
         "<Activity> doesn't accept a hidden prop. Use mode=\"hidden\" instead.\n" + "- <Activity %s>\n" + "+ <Activity %s>",
@@ -837,7 +873,7 @@ function retryActivityComponentWithoutHydrating(current: Fiber, workInProgress: 
   reconcileChildFibers(workInProgress, current.child, null, renderLanes);
 
   // We're now not suspended nor dehydrated.
-  const nextProps = workInProgress.pendingProps as ActivityProps;
+  const nextProps = activityPropsOf(workInProgress.pendingProps);
   const primaryChildFragment = mountActivityChildren(workInProgress, nextProps, renderLanes);
   // Needs a placement effect because the parent (the Activity boundary) already
   // mounted but this is a new fiber.
@@ -994,7 +1030,7 @@ function updateDehydratedActivityComponent(
 }
 
 function updateActivityComponent(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  const nextProps = workInProgress.pendingProps as ActivityProps;
+  const nextProps = activityPropsOf(workInProgress.pendingProps);
 
   // Check if the first pass suspended.
   const didSuspend = (workInProgress.flags & DidCapture) !== NoFlags;
@@ -1127,9 +1163,7 @@ function updateCacheComponent(current: Fiber | null, workInProgress: Fiber, rend
     }
   }
 
-  const nextProps = workInProgress.pendingProps as { children?: unknown };
-
-  const nextChildren = nextProps.children;
+  const nextChildren = propOf(workInProgress.pendingProps, "children");
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
 }
@@ -1140,7 +1174,7 @@ function updateTracingMarkerComponent(current: Fiber | null, workInProgress: Fib
     return null;
   }
 
-  const nextProps = workInProgress.pendingProps as TracingMarkerProps;
+  const nextProps = tracingMarkerPropsOf(workInProgress.pendingProps);
 
   // TODO: (luna) Only update the tracing marker if it's newly rendered or it's name changed.
   // A tracing marker is only associated with the transitions that rendered
@@ -1165,7 +1199,7 @@ function updateTracingMarkerComponent(current: Fiber | null, workInProgress: Fib
     }
   } else {
     if (isDevelopment) {
-      if ((current.memoizedProps as TracingMarkerProps).name !== nextProps.name) {
+      if ((tracingMarkerPropsOf(current.memoizedProps)).name !== nextProps.name) {
         console.error(
           "Changing the name of a tracing marker after mount is not supported. " +
             "To remount the tracing marker, pass it a new key.",
@@ -1193,7 +1227,7 @@ function updateFragment(current: Fiber | null, workInProgress: Fiber, renderLane
 }
 
 function updateMode(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  const nextChildren = (workInProgress.pendingProps as { children?: unknown }).children;
+  const nextChildren = propOf(workInProgress.pendingProps, "children");
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
 }
@@ -1220,8 +1254,7 @@ function updateProfiler(current: Fiber | null, workInProgress: Fiber, renderLane
       stateNode.passiveEffectDuration = -0;
     }
   }
-  const nextProps = workInProgress.pendingProps as { children?: unknown };
-  const nextChildren = nextProps.children;
+  const nextChildren = propOf(workInProgress.pendingProps, "children");
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
 }
@@ -1792,7 +1825,7 @@ function updateHostSingleton(current: Fiber | null, workInProgress: Fiber, rende
     claimHydratableSingleton(workInProgress);
   }
 
-  const nextChildren = (workInProgress.pendingProps as { children?: unknown }).children;
+  const nextChildren = propOf(workInProgress.pendingProps, "children");
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   markRef(current, workInProgress);
   if (current === null) {
@@ -2049,7 +2082,7 @@ function attachPendingTransitions(primaryChildFragment: Fiber, current: Fiber | 
 }
 
 function updateSuspenseComponent(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  const nextProps = workInProgress.pendingProps as SuspenseProps;
+  const nextProps = suspensePropsOf(workInProgress.pendingProps);
 
   // This is used by DevTools to force a boundary to suspend.
   if (isDevelopment) {
@@ -2397,7 +2430,7 @@ function retrySuspenseComponentWithoutHydrating(current: Fiber, workInProgress: 
   reconcileChildFibers(workInProgress, current.child, null, renderLanes);
 
   // We're now not suspended nor dehydrated.
-  const nextProps = workInProgress.pendingProps as SuspenseProps;
+  const nextProps = suspensePropsOf(workInProgress.pendingProps);
   const primaryChildren = nextProps.children;
   const primaryChildFragment = mountSuspensePrimaryChildren(workInProgress, primaryChildren, renderLanes);
   // Needs a placement effect because the parent (the Suspense boundary) already
@@ -2874,7 +2907,7 @@ function reverseChildren(fiber: Fiber): void {
 // in fallback state. Then we render each row in the tail one-by-one.
 // That happens in the completeWork phase without going back to beginWork.
 function updateSuspenseListComponent(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  const nextProps = workInProgress.pendingProps as SuspenseListProps;
+  const nextProps = suspenseListPropsOf(workInProgress.pendingProps);
   const revealOrder = nextProps.revealOrder;
   const tailMode = nextProps.tail;
   const newChildren = nextProps.children;
@@ -3054,7 +3087,7 @@ function updateViewTransition(current: Fiber | null, workInProgress: Fiber, rend
     workInProgress.stateNode = instance;
   }
 
-  const pendingProps = workInProgress.pendingProps as ViewTransitionProps;
+  const pendingProps = viewTransitionPropsOf(workInProgress.pendingProps);
   if (pendingProps.name != null && pendingProps.name !== "auto") {
     // Explicitly named boundary. We track it so that we can pair it up with another explicit
     // boundary if we get deleted.
@@ -3082,7 +3115,7 @@ function updateViewTransition(current: Fiber | null, workInProgress: Fiber, rend
       }
     }
   }
-  if (current !== null && (current.memoizedProps as ViewTransitionProps).name !== pendingProps.name) {
+  if (current !== null && (viewTransitionPropsOf(current.memoizedProps)).name !== pendingProps.name) {
     // If the name changes, we schedule a ref effect to create a new ref instance.
     workInProgress.flags |= Ref | RefStatic;
   } else {
@@ -3173,8 +3206,7 @@ function updateContextConsumer(current: Fiber | null, workInProgress: Fiber, ren
 }
 
 function updateScopeComponent(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
-  const nextProps = workInProgress.pendingProps as { children?: unknown };
-  const nextChildren = nextProps.children;
+  const nextChildren = propOf(workInProgress.pendingProps, "children");
   markRef(current, workInProgress);
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
@@ -3504,7 +3536,7 @@ function attemptEarlyBailoutIfNoScheduledUpdate(current: Fiber, workInProgress: 
       // path from the normal path. I'm tempted to do a labeled break here
       // but I won't :)
       workInProgress.lanes = NoLanes;
-      return updateOffscreenComponent(current, workInProgress, renderLanes, workInProgress.pendingProps as OffscreenProps);
+      return updateOffscreenComponent(current, workInProgress, renderLanes, offscreenPropsOf(workInProgress.pendingProps));
     }
     case CacheComponent: {
       const cache = (current.memoizedState as CacheComponentState).cache;
@@ -3730,7 +3762,7 @@ function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: La
       return updateActivityComponent(current, workInProgress, renderLanes);
     }
     case OffscreenComponent: {
-      return updateOffscreenComponent(current, workInProgress, renderLanes, workInProgress.pendingProps as OffscreenProps);
+      return updateOffscreenComponent(current, workInProgress, renderLanes, offscreenPropsOf(workInProgress.pendingProps));
     }
     case LegacyHiddenComponent: {
       if (enableLegacyHidden) {

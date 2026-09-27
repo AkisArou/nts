@@ -7,6 +7,7 @@ import type { Lane } from "./ReactFiberLane.ts";
 import type { TreeContext } from "./ReactFiberTreeContext.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
 import { SuspenseComponent, SuspenseListComponent } from "./ReactWorkTags.ts";
+import { propOf } from "./ReactFiberProps.ts";
 
 export type SuspenseListRevealOrder =
   | "forwards"
@@ -72,7 +73,7 @@ export function findFirstSuspended(row: Fiber): Fiber | null {
       node.tag === SuspenseListComponent &&
       // Independent revealOrder can't be trusted because it doesn't
       // keep track of whether it suspended or not.
-      (node.memoizedProps as { revealOrder?: unknown }).revealOrder !== "independent"
+      propOf(node.memoizedProps, "revealOrder") !== "independent"
     ) {
       const didSuspend = (node.flags & DidCapture) !== NoFlags;
       if (didSuspend) {

@@ -2,6 +2,7 @@ import type { CapturedValue } from "react-reconciler/ReactCapturedValue.ts";
 import type { ActivityInstance } from "react-reconciler/ReactFiberConfig.ts";
 import type { Lane } from "./ReactFiberLane.ts";
 import type { TreeContext } from "./ReactFiberTreeContext.ts";
+import { propOf } from "./ReactFiberProps.ts";
 
 // A non-null ActivityState represents a dehydrated Activity boundary.
 export interface ActivityState {
@@ -19,4 +20,18 @@ export interface ActivityProps {
   mode?: "hidden" | "visible" | null | undefined;
   children?: unknown;
   name?: string;
+}
+
+// A ActivityProps field of the record, its key checked against the interface.
+function activityField(props: unknown, key: keyof ActivityProps): unknown {
+  return propOf(props, key);
+}
+
+/** The ActivityProps a fiber holds as a record, read into its declared shape (ReactFiberProps.ts). */
+export function activityPropsOf(props: unknown): ActivityProps {
+  return {
+    mode: activityField(props, "mode") as ActivityProps["mode"],
+    children: activityField(props, "children") as ActivityProps["children"],
+    name: activityField(props, "name") as ActivityProps["name"],
+  };
 }

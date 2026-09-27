@@ -14,7 +14,7 @@ import type { UpdateQueue } from "./ReactFiberClassUpdateQueue.ts";
 import type { FunctionComponentUpdateQueue } from "./ReactFiberHooks.ts";
 import type { HookFlags } from "./ReactHookEffectTags.ts";
 import type { FragmentInstanceType } from "react-reconciler/ReactFiberConfig.ts";
-import type { ViewTransitionProps, ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
+import type { ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 import type { ClassInstance } from "./ReactFiberCallUserSpace.ts";
 
 import { isDevelopment } from "shared/Build.ts";
@@ -61,6 +61,8 @@ import {
   callDestroyInDEV,
 } from "./ReactFiberCallUserSpace.ts";
 import { runWithFiberInDEV } from "./ReactCurrentFiber.ts";
+import { propOf } from "./ReactFiberProps.ts";
+import { viewTransitionPropsOf } from "./ReactFiberViewTransitionComponent.ts";
 
 // A class component instance as the commit phase uses it: its lifecycles,
 // the props and state it rendered with, and the snapshot
@@ -82,6 +84,21 @@ interface ProfilerProps {
   ) => void;
   onCommit?: (id: string | undefined, phase: ProfilerPhase, effectDuration: number, commitTime: number) => void;
   onPostCommit?: (id: string | undefined, phase: ProfilerPhase, passiveEffectDuration: number, commitTime: number) => void;
+}
+
+// A ProfilerProps field of the record, its key checked against the interface.
+function profilerField(props: unknown, key: keyof ProfilerProps): unknown {
+  return propOf(props, key);
+}
+
+/** The ProfilerProps a fiber holds as a record, read into its declared shape (ReactFiberProps.ts). */
+function profilerPropsOf(props: unknown): ProfilerProps {
+  return {
+    id: profilerField(props, "id") as ProfilerProps["id"],
+    onRender: profilerField(props, "onRender") as ProfilerProps["onRender"],
+    onCommit: profilerField(props, "onCommit") as ProfilerProps["onCommit"],
+    onPostCommit: profilerField(props, "onPostCommit") as ProfilerProps["onPostCommit"],
+  };
 }
 
 function shouldProfile(current: Fiber): boolean {
@@ -307,7 +324,7 @@ export function commitHookPassiveUnmountEffects(
 function warnIfInstancePropsOrStateChanged(finishedWork: Fiber, instance: CommitClassInstance, beforeWhat: string): void {
   if (
     !(finishedWork.type as { defaultProps?: unknown }).defaultProps &&
-    !("ref" in (finishedWork.memoizedProps as object)) &&
+    !("ref" in (finishedWork.memoizedProps as { readonly [key: string]: unknown })) &&
     !didWarnAboutReassigningProps
   ) {
     if (instance.props !== finishedWork.memoizedProps) {
@@ -575,7 +592,7 @@ function commitAttachRef(finishedWork: Fiber): void {
       case ViewTransitionComponent: {
         if (enableViewTransition) {
           const instance = finishedWork.stateNode as ViewTransitionState;
-          const props = finishedWork.memoizedProps as ViewTransitionProps;
+          const props = viewTransitionPropsOf(finishedWork.memoizedProps);
           const name = getViewTransitionName(props, instance);
           if (instance.ref === null || instance.ref.name !== name) {
             instance.ref = createViewTransitionInstance(name);
@@ -723,7 +740,7 @@ function safelyCallDestroy(current: Fiber, nearestMountedAncestor: Fiber | null,
 }
 
 function commitProfiler(finishedWork: Fiber, current: Fiber | null, commitStartTime: number, effectDuration: number): void {
-  const { id, onCommit, onRender } = finishedWork.memoizedProps as ProfilerProps;
+  const { id, onCommit, onRender } = profilerPropsOf(finishedWork.memoizedProps);
 
   let phase: ProfilerPhase = current === null ? "mount" : "update";
   if (enableProfilerNestedUpdatePhase) {
@@ -775,7 +792,7 @@ function commitProfilerPostCommitImpl(
   commitStartTime: number,
   passiveEffectDuration: number,
 ): void {
-  const { id, onPostCommit } = finishedWork.memoizedProps as ProfilerProps;
+  const { id, onPostCommit } = profilerPropsOf(finishedWork.memoizedProps);
 
   let phase: ProfilerPhase = current === null ? "mount" : "update";
   if (enableProfilerNestedUpdatePhase) {

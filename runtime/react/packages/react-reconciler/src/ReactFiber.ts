@@ -39,7 +39,7 @@ import type { WorkTag } from "./ReactWorkTags.ts";
 import type { TypeOfMode } from "./ReactTypeOfMode.ts";
 import type { Lanes } from "./ReactFiberLane.ts";
 import type { ActivityInstance, SuspenseInstance } from "react-reconciler/ReactFiberConfig.ts";
-import type { LegacyHiddenProps, OffscreenProps } from "./ReactFiberOffscreenComponent.ts";
+import type { OffscreenProps } from "./ReactFiberOffscreenComponent.ts";
 import type { ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 import type { TracingMarkerInstance } from "./ReactFiberTracingMarkerComponent.ts";
 import { isHostHoistableType, isHostSingletonType, supportsResources, supportsSingletons } from "react-reconciler/ReactFiberConfig.ts";
@@ -553,7 +553,7 @@ type SpecialFiberFactory = (pendingProps: unknown, mode: TypeOfMode, lanes: Lane
 function specialFiberFor(type: unknown): SpecialFiberFactory | null {
   if (type === REACT_LEGACY_HIDDEN_TYPE && enableLegacyHidden) {
     return (pendingProps, mode, lanes, key) =>
-      createFiberFromLegacyHidden(pendingProps as LegacyHiddenProps, mode, lanes, key);
+      createFiberFromLegacyHidden(pendingProps, mode, lanes, key);
   }
   if ((type === REACT_LEGACY_HIDDEN_TYPE || type === REACT_VIEW_TRANSITION_TYPE) && enableViewTransition) {
     return createFiberFromViewTransition;
@@ -677,8 +677,10 @@ export function createFiberFromViewTransition(
   return fiber;
 }
 
+// `pendingProps` is the element's props record, which the fiber holds as it
+// is (ReactFiberProps.ts).
 export function createFiberFromLegacyHidden(
-  pendingProps: LegacyHiddenProps,
+  pendingProps: unknown,
   mode: TypeOfMode,
   lanes: Lanes,
   key: ReactKey,

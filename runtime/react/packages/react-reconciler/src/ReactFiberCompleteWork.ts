@@ -117,7 +117,7 @@ import type { TracingMarkerInstance } from "./ReactFiberTracingMarkerComponent.t
 import { popMarkerInstance, popRootMarkerInstance } from "./ReactFiberTracingMarkerComponent.ts";
 import { popRootTransition, popTransition } from "./ReactFiberTransition.ts";
 import { popTreeContext, pushTreeFork } from "./ReactFiberTreeContext.ts";
-import type { ViewTransitionProps } from "./ReactFiberViewTransitionComponent.ts";
+import { viewTransitionPropsOf } from "./ReactFiberViewTransitionComponent.ts";
 import {
   getRenderTargetTime,
   getWorkInProgressTransitions,
@@ -160,6 +160,7 @@ import {
   ViewTransitionComponent,
 } from "./ReactWorkTags.ts";
 import { now } from "./Scheduler.ts";
+import { propOf } from "./ReactFiberProps.ts";
 
 // The host state of a HostRoot or HostPortal fiber.
 interface PortalOrRoot {
@@ -1589,7 +1590,7 @@ function completeWork(current: Fiber | null, workInProgress: Fiber, renderLanes:
       if (
         enableSuspenseCallback &&
         workInProgress.updateQueue !== null &&
-        (workInProgress.memoizedProps as { suspenseCallback?: unknown }).suspenseCallback != null
+        propOf(workInProgress.memoizedProps, "suspenseCallback") != null
       ) {
         // Always notify the callback
         // TODO: Move to passive phase
@@ -1750,17 +1751,14 @@ function completeWork(current: Fiber | null, workInProgress: Fiber, renderLanes:
         // might need an exit View Transition upon unmount.
         workInProgress.flags |= ViewTransitionStatic;
         if (enableViewTransitionParentEnterExit) {
-          const props = workInProgress.pendingProps as ViewTransitionProps & {
-            onGestureParentEnter?: unknown;
-            onGestureParentExit?: unknown;
-          };
+          const props = viewTransitionPropsOf(workInProgress.pendingProps);
           if (
             props.parentEnter !== undefined ||
             props.parentExit !== undefined ||
             props.onParentEnter != null ||
             props.onParentExit != null ||
-            props.onGestureParentEnter != null ||
-            props.onGestureParentExit != null
+            propOf(workInProgress.pendingProps, "onGestureParentEnter") != null ||
+            propOf(workInProgress.pendingProps, "onGestureParentExit") != null
           ) {
             workInProgress.flags |= ViewTransitionStaticParent;
           } else {

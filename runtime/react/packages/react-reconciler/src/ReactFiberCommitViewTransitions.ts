@@ -10,7 +10,7 @@
 
 import type { Instance, InstanceMeasurement, Props } from "react-reconciler/ReactFiberConfig.ts";
 import type { Fiber } from "./ReactInternalTypes.ts";
-import type { ViewTransitionProps, ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
+import type { ViewTransitionState } from "./ReactFiberViewTransitionComponent.ts";
 
 import { HostComponent, OffscreenComponent, ViewTransitionComponent } from "./ReactWorkTags.ts";
 import {
@@ -40,6 +40,7 @@ import {
   enableViewTransitionForPersistenceMode,
   enableViewTransitionParentEnterExit,
 } from "shared/ReactFeatureFlags.ts";
+import { viewTransitionPropsOf } from "./ReactFiberViewTransitionComponent.ts";
 
 // A view-transition class name: a name, or none when it is null or
 // undefined (getViewTransitionClassName returns both).
@@ -236,7 +237,7 @@ function commitAppearingPairViewTransitions(placement: Fiber): void {
       if (child.tag === ViewTransitionComponent && (child.flags & ViewTransitionNamedStatic) !== NoFlags) {
         const instance = child.stateNode as ViewTransitionState;
         if (instance.paired) {
-          const props = child.memoizedProps as ViewTransitionProps;
+          const props = viewTransitionPropsOf(child.memoizedProps);
           if (props.name == null || props.name === "auto") {
             throw new Error("Found a pair with an auto name. This is a bug in React.");
           }
@@ -272,7 +273,7 @@ export function commitParentEnterViewTransitions(parent: Fiber, gesture: boolean
     if (child.tag === OffscreenComponent && child.memoizedState !== null) {
       // Skip hidden subtrees.
     } else if (child.tag === ViewTransitionComponent) {
-      const props = child.memoizedProps as ViewTransitionProps;
+      const props = viewTransitionPropsOf(child.memoizedProps);
       const hasParentClass = props.parentEnter !== undefined;
       // enableGestureTransition: gesture handlers are not ported.
       const hasParentHandler = gesture ? false : props.onParentEnter != null;
@@ -310,7 +311,7 @@ export function commitParentExitViewTransitions(parent: Fiber, gesture: boolean)
     if (child.tag === OffscreenComponent && child.memoizedState !== null) {
       // Skip hidden subtrees.
     } else if (child.tag === ViewTransitionComponent) {
-      const props = child.memoizedProps as ViewTransitionProps;
+      const props = viewTransitionPropsOf(child.memoizedProps);
       const hasParentClass = props.parentExit !== undefined;
       // enableGestureTransition: gesture handlers are not ported.
       const hasParentHandler = gesture ? false : props.onParentExit != null;
@@ -348,7 +349,7 @@ function restoreParentEnterOrExitViewTransitions(parent: Fiber): void {
     if (child.tag === OffscreenComponent && child.memoizedState !== null) {
       // Skip hidden subtrees.
     } else if (child.tag === ViewTransitionComponent) {
-      const props = child.memoizedProps as ViewTransitionProps;
+      const props = viewTransitionPropsOf(child.memoizedProps);
       const hasParentClass = props.parentEnter !== undefined || props.parentExit !== undefined;
       // enableGestureTransition: gesture handlers are not ported.
       const hasParentHandler = props.onParentEnter != null || props.onParentExit != null;
@@ -368,7 +369,7 @@ function restoreParentEnterOrExitViewTransitions(parent: Fiber): void {
 export function commitEnterViewTransitions(placement: Fiber, gesture: boolean): void {
   if (placement.tag === ViewTransitionComponent) {
     const state = placement.stateNode as ViewTransitionState;
-    const props = placement.memoizedProps as ViewTransitionProps;
+    const props = viewTransitionPropsOf(placement.memoizedProps);
     const name = getViewTransitionName(props, state);
     const className = getViewTransitionClassName(props.default, state.paired ? props.share : props.enter);
     if (className !== "none") {
@@ -423,7 +424,7 @@ function commitDeletedPairViewTransitions(deletion: Fiber): void {
       // This tree was already hidden so we skip it.
     } else {
       if (child.tag === ViewTransitionComponent && (child.flags & ViewTransitionNamedStatic) !== NoFlags) {
-        const props = child.memoizedProps as ViewTransitionProps;
+        const props = viewTransitionPropsOf(child.memoizedProps);
         const name = props.name;
         if (name != null && name !== "auto") {
           const pair = pairs.get(name);
@@ -468,7 +469,7 @@ function commitDeletedPairViewTransitions(deletion: Fiber): void {
 
 export function commitExitViewTransitions(deletion: Fiber): void {
   if (deletion.tag === ViewTransitionComponent) {
-    const props = deletion.memoizedProps as ViewTransitionProps;
+    const props = viewTransitionPropsOf(deletion.memoizedProps);
     const name = getViewTransitionName(props, deletion.stateNode as ViewTransitionState);
     const pair = appearingViewTransitions !== null ? appearingViewTransitions.get(name) : undefined;
     const className = getViewTransitionClassName(props.default, pair !== undefined ? props.share : props.exit);
@@ -538,9 +539,9 @@ export function commitBeforeUpdateViewTransition(current: Fiber, finishedWork: F
   // the semantics that the ViewTransition is its own layer that cross-fades
   // its content when it updates. If you want to reorder then each child needs
   // its own ViewTransition.
-  const oldProps = current.memoizedProps as ViewTransitionProps;
+  const oldProps = viewTransitionPropsOf(current.memoizedProps);
   const oldName = getViewTransitionName(oldProps, current.stateNode as ViewTransitionState);
-  const newProps = finishedWork.memoizedProps as ViewTransitionProps;
+  const newProps = viewTransitionPropsOf(finishedWork.memoizedProps);
   // This className applies only if there are fewer child DOM nodes than
   // before or if this update should've been cancelled but we ended up with a
   // parent animating so we need to animate the child too. For example, if
@@ -566,7 +567,7 @@ export function commitNestedViewTransitions(changedParent: Fiber): void {
     if (child.tag === ViewTransitionComponent) {
       // In this case the outer ViewTransition component wins but if there was
       // an update through this component then the inner one wins.
-      const props = child.memoizedProps as ViewTransitionProps;
+      const props = viewTransitionPropsOf(child.memoizedProps);
       const name = getViewTransitionName(props, child.stateNode as ViewTransitionState);
       const className = getViewTransitionClassName(props.default, props.update);
       // "Nested" view transitions are in subtrees that didn't update so this
@@ -819,10 +820,10 @@ export function measureUpdateViewTransition(current: Fiber, finishedWork: Fiber,
   // that contains the flags for this commmit.
   const oldFiber = gesture ? finishedWork : current;
   const newFiber = gesture ? current : finishedWork;
-  const props = newFiber.memoizedProps as ViewTransitionProps;
+  const props = viewTransitionPropsOf(newFiber.memoizedProps);
   const state = newFiber.stateNode as ViewTransitionState;
   const newName = getViewTransitionName(props, state);
-  const oldName = getViewTransitionName(oldFiber.memoizedProps as ViewTransitionProps, state);
+  const oldName = getViewTransitionName(viewTransitionPropsOf(oldFiber.memoizedProps), state);
   // Whether it ends up having been updated or relayout we apply the update
   // class name.
   const className = getViewTransitionClassName(props.default, props.update);
@@ -868,7 +869,7 @@ export function measureNestedViewTransitions(changedParent: Fiber, gesture: bool
   let child = changedParent.child;
   while (child !== null) {
     if (child.tag === ViewTransitionComponent) {
-      const props = child.memoizedProps as ViewTransitionProps;
+      const props = viewTransitionPropsOf(child.memoizedProps);
       const state = child.stateNode as ViewTransitionState;
       const name = getViewTransitionName(props, state);
       const className = getViewTransitionClassName(props.default, props.update);
