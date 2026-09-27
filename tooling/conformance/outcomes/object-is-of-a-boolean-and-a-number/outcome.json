@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: MixedOperands { func: \"module#init\", op: \"==\", left: Bool, right: Float { bits: 64 } }",
+  "node": "exit 1; nts: uncaught Observed: true vs 1=false;",
+  "measured_with": "163593a747457c16",
+  "source": "measured"
+}

@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: ReturnType { func: \"maybe\", block: BlockId(0), expected: Erased, found: None }",
+  "node": "exit 1; nts: uncaught Observed: maybe=undefined;",
+  "measured_with": "163593a747457c16",
+  "source": "measured"
+}
