@@ -2779,8 +2779,9 @@ fn hresult_result(
                 return Err(format!("foreign function `{name}` is `@ntsHresult out` with a `void` field `{field}`"));
             };
             // The slot is the record's storage, which cannot also be a field
-            // of an object of the program's.
-            if matches!(written, Written::Record | Written::Copied) {
+            // of an object of the program's: a struct field is copied out
+            // (`Copied<T>`).
+            if written == Written::Record {
                 return Err(format!(
                     "foreign function `{name}` is `@ntsHresult out` with a struct field `{field}`, which is refused"
                 ));

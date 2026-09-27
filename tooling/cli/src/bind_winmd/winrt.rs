@@ -1310,13 +1310,12 @@ impl Writer<'_> {
                     Type::Array(_) => return Err("an array".to_owned()),
                     _ => return Err("an `out` parameter not written through a pointer".to_owned()),
                 };
-                if let Type::ValueName(value) = &**written
-                    && (is_guid(value) || self.index.get(&value.namespace, &value.name).next().is_some_and(|def| def.category() == TypeCategory::Struct))
-                {
-                    return Err("a struct `out` parameter".to_owned());
-                }
                 if name == "returnValue" {
                     return Err("an `out` parameter named `returnValue`".to_owned());
+                }
+                if let Some(copied) = self.copied_out(written)? {
+                    outs.push(format!("{name}: {copied}"));
+                    continue;
                 }
                 // An object may be null where the method wrote none: a failed
                 // `TryParse`'s `result`. An array written through the pointer
@@ -1620,21 +1619,25 @@ impl Writer<'_> {
         Ok(format!("Delegate<({}) => void, \"{iid}\">", parameters.join(", ")))
     }
 
-    /// A type argument of an instantiation, `T` in `IVector<T>`: as a value,
-    /// except that a class is its default interface -- what the ABI passes
-    /// either way, and a `T` a method takes as well as answers. So
-    /// `IVector<ResourceDictionary>.Append` takes an `IResourceDictionary`,
-    /// which a derived class asked as that interface is.
-    fn type_argument(&mut self, ty: &Type) -> Result<String, String> {
-        if let Type::ClassName(named) = ty
-            && named.generics.is_empty()
-            && let Ok(def) = self.find(&named.namespace, &named.name)
-            && def.category() == TypeCategory::Class
-            && let Some(Type::ClassName(interface)) = def
-                .interface_impls()
-                .find(|implemented| implemented.has_attribute("DefaultAttribute"))
-                .map(|implemented| implemented.interface(&[]))
-            && interface.generics.is_empty()
+    /// A struct an `[out]` parameter writes, which is a field of the call's
+    /// value and so no storage: copied out into an object of its own
+    /// (`Copied<T>`), as `TryGetVector2`'s `value` is. Not a `Guid`, which
+    /// nobody reads as its four fields. `None` for anything else.
+    fn copied_out(&mut self, written: &Type) -> Result<Option<String>, String> {
+        let Type::ValueName(value) = written else { return Ok(None) };
+        if is_guid(value) {
+            return Err("a `Guid` `out` parameter".to_owned());
+        }
+        let Some(def) = self.index.get(&value.namespace, &value.name).next().filter(|def| def.category() == TypeCategory::Struct) else {
+            return Ok(None);
+        };
+        if let Some(why) = self.struct_refusal(def, 0) {
+            return Err(format!("`{}`, {why}", value.name));
+        }
+        self.brands.insert("Copied");
+        Ok(Some(format!("Copied<{}>", self.named(&value.namespace, &value.name))))
+    }
+
     /// `DragCompletedEventHandler`: the delegate as a parameter taking one
     /// spells it, under its own name, so a program can name a handler's
     /// type as C# does. A generic one's IID is its instantiation's, so it
@@ -1650,6 +1653,21 @@ impl Writer<'_> {
         }
     }
 
+    /// A type argument of an instantiation, `T` in `IVector<T>`: as a value,
+    /// except that a class is its default interface -- what the ABI passes
+    /// either way, and a `T` a method takes as well as answers. So
+    /// `IVector<ResourceDictionary>.Append` takes an `IResourceDictionary`,
+    /// which a derived class asked as that interface is.
+    fn type_argument(&mut self, ty: &Type) -> Result<String, String> {
+        if let Type::ClassName(named) = ty
+            && named.generics.is_empty()
+            && let Ok(def) = self.find(&named.namespace, &named.name)
+            && def.category() == TypeCategory::Class
+            && let Some(Type::ClassName(interface)) = def
+                .interface_impls()
+                .find(|implemented| implemented.has_attribute("DefaultAttribute"))
+                .map(|implemented| implemented.interface(&[]))
+            && interface.generics.is_empty()
         {
             return Ok(self.named(&interface.namespace, &interface.name));
         }

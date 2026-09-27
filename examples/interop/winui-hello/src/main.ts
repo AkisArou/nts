@@ -53,6 +53,7 @@ import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winr
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
 import { Button, Frame, Page, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { ElementCompositionPreview } from "winrt:Microsoft.UI.Xaml.Hosting";
 import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
 
 // The overridable interface, as XAML reaches an override: bindings keep it
@@ -203,10 +204,16 @@ class App extends Application {
     const page = frame.sourcePageType;
     const current = frame.currentSourcePageType;
     const onPage = frame.content instanceof Page;
+    // A struct an `[out]` parameter writes, copied out into the field of
+    // the call's value: the `Vector2` a property set was given, read back.
+    const properties = ElementCompositionPreview.getElementVisual(button).compositor.createPropertySet();
+    properties.insertVector2("v", { x: 1.5, y: -2 });
+    const got = properties.tryGetVector2("v");
+    const vector = String(got.returnValue) + ":" + String(got.value.x) + "," + String(got.value.y);
     console.log(
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " rebuilt=" + String(this.rebuilt()),
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " rebuilt=" + String(this.rebuilt()),
     );
     this.exit();
   }

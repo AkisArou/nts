@@ -343,6 +343,51 @@ fn a_struct_holding_a_string_is_copied_at_the_call() {
     windows_syntax(&dir, &emitted);
 }
 
+/// A struct `[out]` parameter -- `TryGetVector2(name, out value)` -- is a
+/// field of the call's value, which no storage can be: its slot is copied
+/// out into an object of the field's own type, once the HRESULT says it was
+/// written, beside the other fields.
+#[test]
+fn a_struct_out_parameter_is_copied_into_its_field() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { c_float, Struct } from "c:types";
+  import type { ComClass, Copied, HString } from "winrt:types";
+  export type Vector2 = Struct<{ x: c_float; y: c_float }, "Windows_Foundation_Numerics_Vector2">;
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 10 TryGetVector2
+     * @ntsHresult out
+     */
+    TryGetVector2(this: IJsonValue, name: HString): { value: Copied<Vector2>; returnValue: boolean };
+  }
+  export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
+}
+"#;
+    let source = r#"import type { IJsonValue } from "winrt:Windows.Data.Json";
+export function run(set: IJsonValue): string {
+  const got = set.TryGetVector2("v");
+  return String(got.returnValue) + String(got.value.x + got.value.y);
+}
+"#;
+    let Some((dir, prepared)) = prepare("out-struct", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    // The receiver, the name, and the two slots: the struct's and the flag's.
+    let call = text.find("[10])(").unwrap_or_else(|| panic!("no call through slot 10:\n{text}")) + "[10])(".len();
+    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(arguments, 4, "TryGetVector2 is not called with its receiver, name and two slots:\n{text}");
+    for field in ["->x = ", "->y = ", "->value = ", "->returnValue = "] {
+        assert!(text.contains(field), "no store to `{field}`:\n{text}");
+    }
+
+    windows_syntax(&dir, &emitted);
+}
+
 /// A struct holding a string is only ever `Copied<T>`: as storage the
 /// program holds, no one would own its HSTRING, so it is no native type at
 /// all and the declaration taking it is refused.

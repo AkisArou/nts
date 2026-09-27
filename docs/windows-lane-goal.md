@@ -134,14 +134,34 @@ the same vtable calls on the VM measured the behaviour first.
     `IVector<IUIElement>`;
   - byte arrays, `[in]` and caller-allocated `[out]`, as a `Uint8Array`
     lent in place with its length before it (`WriteBytes`, `ReadBytes`).
-- **What is left refused**, across 23 common namespaces (`Windows.Storage`,
-  `Windows.Web.Http`, WinUI's `Microsoft.UI.Xaml.*` and 20 more), measured:
-  397 items, 203 of them a factory interface's composable `CreateInstance`,
-  which is its class's constructor and bound as that. Of the other 194: 44
-  arrays that are not bytes or that the callee allocates, 29 structs with a
-  string field (`TypeName`, which XAML navigation takes), 22 struct `[out]`
-  parameters, 21 structs holding an `IReference`, 17 delegates that return
-  a value or are answered.
+  - **a struct holding a string as a plain object**, `Copied<T>` in
+    `winrt:types`, as the JavaScript projection held one:
+    `frame.Navigate({ name: "Microsoft.UI.Xaml.Controls.Page", kind:
+    TypeKind.Metadata }, null)` and `frame.sourcePageType.name`. A literal
+    argument is written straight into the struct in the frame, each string
+    an HSTRING lent for the call; a held object is copied field by field; a
+    result is copied out into a new object, each HSTRING into a `string` and
+    deleted, which escape analysis frames when it does not escape. A string
+    field (`struct HSTRING__ *`) exists only in a record read for
+    `Copied<T>`: `Ptr<T>`, `ByValue<T>` and `local<T>()` never resolve such a
+    struct, so no storage the program holds can own an HSTRING.
+  - **an interface's own IID**, which its type declares (`/** @ntsQuery … */
+    export type IPage = ComClass<…>`), so `frame.content instanceof Page`
+    works for any class, not only one whose interface some other class lists.
+  - **a delegate by its own name** (`DragCompletedEventHandler`), declared as
+    a parameter taking one spells it; a generic one has no one IID, so no one
+    type.
+- **What is left refused**, measured over winui-hello's bindings (the 83
+  namespaces its imports reach), 2026-09-27: 441 items, 312 of them a
+  factory interface's composable `CreateInstance`, which is its class's
+  constructor and bound as that. Of the other 129: 64 arrays -- `GetMany`'s
+  and `ReplaceAll`'s, and arrays of objects, strings, structs, booleans or
+  64-bit integers; 25 delegates that return a value, are answered or are
+  generic; 10 structs holding an `IReference`; 6 holding a `boolean`; 7
+  generic members with no signature; 7 idiomatic names two surfaces give.
+  Before `Copied<T>`, struct `[out]` parameters and named delegates, the
+  same bindings refused 497, among them every `TypeName` member, 22 struct
+  `[out]`s and 60 delegates.
 - **Delegates and events:**
   - A TypeScript function is a COM delegate object whose `Invoke` is a
     per-signature adapter. The closure is lent until the object's count
@@ -165,7 +185,8 @@ the same vtable calls on the VM measured the behaviour first.
   `{ result: JsonValue | null; returnValue: boolean }` (`@ntsHresult out`).
   There is no `returnValue` without an `[out, retval]`, and an object written
   there may be null. A failed call throws with nothing allocated: the object
-  is made on the success edge. A struct `[out]` is refused.
+  is made on the success edge. A struct `[out]` is copied out into its
+  field (`Copied<T>`): `properties.tryGetVector2("v").value.x`.
 - **Async operations:** an `IAsyncAction` or `IAsyncOperation<T>`
   completes into a Promise on Windows (`await
   StorageFolder.GetFolderFromPathAsync(...)` answers the folder). An

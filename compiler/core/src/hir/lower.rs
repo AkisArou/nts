@@ -47272,7 +47272,12 @@ impl<'a> FuncBuilder<'a> {
         let mut value = None;
         let mut fields = Vec::new();
         for (slot, written, field, count) in written {
-            let read = self.read_written(id, (slot, count), written, typed.as_ref(), &origin)?;
+            // What the slot is read as: the call's value, or its field.
+            let want = match &field {
+                Some(field) => self.out_field_type(id, typed.as_ref(), field)?,
+                None => typed.clone(),
+            };
+            let read = self.read_written(id, (slot, count), written, want.as_ref(), &origin)?;
             match field {
                 Some(field) => fields.push((field, read)),
                 None => value = Some(read),
@@ -47313,6 +47318,16 @@ impl<'a> FuncBuilder<'a> {
             self.field_set(object, index, read, &origin);
         }
         Ok(object)
+    }
+
+    /// The type of `field` of an `@ntsHresult out` call's value, which a
+    /// slot written for that field is read as.
+    fn out_field_type(&mut self, id: NodeId, typed: Option<&HirType>, field: &str) -> Result<Option<HirType>, Diagnostic> {
+        let Some(HirType::Managed(ManagedType::Object(type_id))) = typed.cloned().or_else(|| self.type_of(id)) else {
+            return Ok(None);
+        };
+        let layout = self.layout_of(id, type_id)?;
+        Ok(layout.index_of(field).map(|index| layout.fields[index as usize].ty.clone()))
     }
 
     /// What an `@ntsHresult` call wrote to its result slot, as the program
