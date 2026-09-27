@@ -80,6 +80,24 @@
 //                      is phantoms.mjs's question, asked here so the runtime is
 //                      covered: the gate's phantoms step never ran over it, and
 //                      runtime/node/punycode had four.
+//   unerase-is-built   in a whole program, every `unerase` to an object type
+//                      targets a layout some `object.new` builds, or one a
+//                      built class descends from -- or is guarded by an
+//                      `instanceof` of the same value. Otherwise nothing that
+//                      could be there has that layout: a conditional of two
+//                      classes returned at an interface unerased to the
+//                      interface's own layout, whose table nothing fills (a
+//                      null jump), and `pendingProps as SuspenseProps` read a
+//                      record at another record's offsets (a wrong answer).
+//                      Both unchecked on C and LLVM, so nothing else refuses.
+//                      Signature layouts (`Fn…`) are not judged: the call slot
+//                      is program-global, and census/erased-calls.mjs asks
+//                      their question. Not over the runtime, whose values
+//                      arrive across an addon's boundary built by glue no
+//                      listing shows (erased-calls' "outside") -- nor, for
+//                      the same reason, a value unerased from an exported
+//                      function's parameter, or from a parameter every direct
+//                      caller fills from one.
 //   top-level-cut      every reported cut, named: a dropped statement, an
 //                      initializer not compiled, a refused `module#init`.
 //                      Honest, and still a program that does less than its
@@ -137,6 +155,8 @@ import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-proj
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const KNOWN = join(HERE, "integrity.known");
+/** The projects built as addons: their exported surface is called from outside. */
+const ADDON = /^runtime\/(node|web-platform)(\/|$)/;
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo") };
 // Four listings per project; `http` alone lowers for about 95 s. Memory, not
@@ -186,7 +206,7 @@ export function readLayouts(text) {
   for (const line of text.split("\n")) {
     const head = /^(\S.*?) \[([\d ]+)\]$/.exec(line);
     if (head) {
-      current = { name: head[1], base: null, methods: [] };
+      current = { name: head[1], base: null, methods: [], ids: head[2].split(" ") };
       byName.set(head[1], current);
       for (const id of head[2].split(" ")) byId.set(id, current);
       continue;
@@ -361,13 +381,70 @@ export function resemblance(cause, hir, refused) {
   return { shape, kind: "nothing", evidence: [] };
 }
 
+/**
+ * `unerase` sites whose object layout nothing in the program builds, and no
+ * built class descends from, and no `instanceof` of the same value guards:
+ * `{ fn, target }` each. See `unerase-is-built`.
+ */
+export function unbuiltUnerases(prepared, { byName, byId }) {
+  const madeIds = new Set([...prepared.matchAll(/object\.new \S+ : managed<obj#(\d+)>/g)].map((m) => m[1]));
+  const covered = new Set();
+  for (const id of madeIds) {
+    for (let at = byId.get(id), seen = 0; at && seen < 64; at = byName.get(at.base), seen++) covered.add(at.name);
+  }
+  const fns = new Map();
+  for (const chunk of prepared.split(/\n(?=(?:export )?(?:declare )?func )/)) {
+    const name = /^(?:export )?(?:declare )?func (.+?)\(/.exec(chunk)?.[1];
+    if (!name) continue;
+    const params = new Map([...chunk.matchAll(/^ {2}(%\d+) = param (\d+) /gm)].map((m) => [m[1], Number(m[2])]));
+    fns.set(name, { name, chunk, exported: chunk.startsWith("export "), params });
+  }
+  const callers = new Map();
+  for (const f of fns.values()) {
+    for (const m of f.chunk.matchAll(/^ {2}(?:%\d+ = )?call ([^\s(]+)\(([^)]*)\)/gm)) {
+      callers.set(m[1], [...(callers.get(m[1]) ?? []), { f, args: m[2].split(",").map((a) => a.trim()) }]);
+    }
+  }
+  // An export's parameters are filled by whoever calls it -- another module,
+  // the `nts check` harness -- and so is a parameter every direct caller
+  // fills from one of those. Such a value arrives from outside, as a runtime
+  // module's do, and is not judged. Depth-bounded; a cycle is not boundary.
+  const boundary = (f, value, left = 6, seen = new Set()) => {
+    const index = f.params.get(value);
+    if (index === undefined) return false;
+    if (f.exported) return true;
+    const sites = callers.get(f.name) ?? [];
+    if (left === 0 || sites.length === 0 || seen.has(f.name)) return false;
+    return sites.every((c) => boundary(c.f, c.args[index], left - 1, new Set([...seen, f.name])));
+  };
+  const out = [];
+  for (const f of fns.values()) {
+    // `%c = instanceof %v ...` then `br %c, bT, ...`: in bT, %v is known.
+    const tests = new Map([...f.chunk.matchAll(/^ {2}(%\d+) = instanceof (%\d+) /gm)].map((m) => [m[1], m[2]]));
+    const guarded = new Set();
+    for (const m of f.chunk.matchAll(/^ {2}br (%\d+), (b\d+)/gm)) if (tests.has(m[1])) guarded.add(`${m[2]} ${tests.get(m[1])}`);
+    let block = "b0";
+    for (const line of f.chunk.split("\n")) {
+      const head = /^(b\d+)(?:\(.*\))?:$/.exec(line);
+      if (head) { block = head[1]; continue; }
+      const u = /^ {2}%\d+ = unerase (%\d+) : managed<obj#(\d+)>$/.exec(line);
+      if (!u || guarded.has(`${block} ${u[1]}`) || boundary(f, u[1])) continue;
+      const layout = byId.get(u[2]);
+      if (layout && /^Fn[\d_]*__\d+$/.test(layout.name)) continue;
+      if (layout ? covered.has(layout.name) : madeIds.has(u[2])) continue;
+      out.push({ fn: f.name, target: layout ? layout.name : `a record no layout lists (obj#${u[2]})` });
+    }
+  }
+  return out;
+}
+
 // --- the rules ----------------------------------------------------------------
 
 /**
  * One project's violations from its four listings, or why it was not measured.
  * The scan and the self-test both go through this.
  */
-export function judge({ prepared, plain, layouts, refusals }, sourceLine = readSourceLine) {
+export function judge({ prepared, plain, layouts, refusals, whole = true }, sourceLine = readSourceLine) {
   const hir = readHir(prepared);
   if (hir.stated === null) return { unmeasured: 'hir --prepared printed no "N function(s)" line' };
   if (hir.lines !== hir.stated) return { unmeasured: `parsed ${hir.lines} definition(s) where the summary states ${hir.stated}` };
@@ -485,6 +562,10 @@ export function judge({ prepared, plain, layouts, refusals }, sourceLine = readS
     say("location-on-a-token", `${d.code} at ${d.file}:${d.line}:${d.col} is ${where}: ${d.text.slice(0, 80)}`, d.code);
   }
 
+  if (whole) for (const v of unbuiltUnerases(prepared, { byName: classes, byId })) {
+    say("unerase-is-built", `\`${v.fn}\` unerases a value to \`${v.target}\`, which nothing in this program builds or descends from`, v.target);
+  }
+
   return { violations: out, functions: hir.stated };
 }
 
@@ -594,6 +675,22 @@ function selfTest() {
   const chain = readReasons("a\tit calls `b`, and x\nb\tit calls `c<7>`, and y\nc\ty\nloop\tit calls `loop`\n");
   if (rootOf("a", chain)?.name !== "c" || rootOf("a", chain)?.reason !== "y") return `a cut's root read as ${JSON.stringify(rootOf("a", chain))}`;
   if (rootOf("loop", chain)?.reason !== "a cycle through `loop`" || rootOf("nowhere", chain) !== null) return "a cyclic or unknown root";
+  // An unerase to a layout nothing builds fires; guarded, built, a signature
+  // layout, or a runtime program does not.
+  const shapes = "Shape [10]\n  methods Shape#area\nSquare [13]\n  implements Shape\n  methods Square#area\nFn2__7 [6]\n  methods Fn2__7#call\n";
+  const lay = readLayouts(shapes);
+  const unerase = (target, guard = false) => [
+    "func f(x: erased) -> void {", "b0:", "  %0 = param 0 : erased", "  %1 = object.new heap : managed<obj#13>",
+    ...(guard ? ["  %2 = instanceof %0 against 1 class(es) : bool", "  br %2, b1, b2", "b1:"] : []),
+    `  %3 = unerase %0 : managed<obj#${target}>`, "}",
+  ].join("\n");
+  if (unbuiltUnerases(unerase(10), lay).length !== 1) return "an unerase to an interface nothing builds was not caught";
+  if (unbuiltUnerases(unerase(10, true), lay).length !== 0) return "an instanceof-guarded unerase was caught";
+  if (unbuiltUnerases(unerase(13), lay).length !== 0 || unbuiltUnerases(unerase(6), lay).length !== 0) return "an unerase to a built class or a signature layout was caught";
+  if (unbuiltUnerases(`export ${unerase(10)}`, lay).length !== 0) return "an unerase of an exported function's own parameter was judged";
+  const through = `${unerase(10)}\nexport func g(y: erased) -> void {\nb0:\n  %0 = param 0 : erased\n  call f(%0)\n}`;
+  if (unbuiltUnerases(through, lay).length !== 0) return "a parameter filled only by an export's parameter was judged";
+  if (unbuiltUnerases(`${through.replace("export func g", "func g")}`, lay).length !== 1) return "a parameter filled by an unexported caller's parameter was not judged";
   const rules = (t) => (judge(t).violations ?? []).map((v) => v.rule);
   if (!rules({ ...clean, prepared: clean.prepared.replace("  %2 = call total(%1) : f64", "  %2 = call nowhere(%1) : f64") }).includes("call-resolves")) return "a direct call to a function nothing defines was not caught";
   if (!rules({ ...clean, prepared: clean.prepared.replace("func total(t: f64) -> f64 {", "func total(t: f64) -> f64 {\n}\nfunc total(t: f64) -> f64 {").replace(summary(5), summary(6)) }).includes("call-resolves")) return "a function defined twice was not caught";
@@ -712,7 +809,10 @@ async function scan(project) {
     else unmeasured.push(`${project}: listed as not typechecking, and now it does -- the reason has expired`);
     return;
   }
-  const verdict = judge(listings);
+  // A runtime module is an addon, whose values arrive across its boundary;
+  // everything else -- examples, fixtures, an app like runtime/react's -- is
+  // a whole program.
+  const verdict = judge({ ...listings, whole: !ADDON.test(project) });
   if (verdict.unmeasured) {
     unmeasured.push(`${project}: ${verdict.unmeasured}`);
     return;
