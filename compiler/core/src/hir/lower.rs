@@ -13313,6 +13313,9 @@ enum Lent {
     /// The slot an `@ntsHresult` call writes its result to, read after it:
     /// the call's value, or the field of it an `@ntsHresult out` names.
     Result { slot: ValueId, written: super::native::Written, field: Option<std::sync::Arc<str>> },
+    /// Where an `@ntsHresult` call writes a received array's element count,
+    /// read with the `Result` after it (`Role::ReceivedCount`).
+    Count { slot: ValueId },
     /// A `char **` made from a `string[]`.
     Strings { pointer: ValueId },
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
@@ -46609,17 +46612,23 @@ impl<'a> FuncBuilder<'a> {
         // the empty string, and the failing path drops it unread. Read after
         // the branch, the slot was used in two blocks, and every Windows
         // Runtime call in a loop was refused.
+        // A count slot is the one its received array's slot follows.
+        let mut count = None;
         let written: Vec<_> = lent
             .iter()
             .filter_map(|lent| match lent {
-                Lent::Result { slot, written, field } => Some((*slot, *written, field.clone())),
+                Lent::Count { slot } => {
+                    count = Some(*slot);
+                    None
+                }
+                Lent::Result { slot, written, field } => Some((*slot, *written, field.clone(), count.take())),
                 _ => None,
             })
             .collect();
         let mut value = None;
         let mut fields = Vec::new();
-        for (slot, written, field) in written {
-            let read = self.read_written(id, slot, written, &origin)?;
+        for (slot, written, field, count) in written {
+            let read = self.read_written(id, (slot, count), written, &origin)?;
             match field {
                 Some(field) => fields.push((field, read)),
                 None => value = Some(read),
@@ -46664,9 +46673,42 @@ impl<'a> FuncBuilder<'a> {
 
     /// What an `@ntsHresult` call wrote to its result slot, as the program
     /// holds it. See `finish_hresult_call` for where this is read.
-    fn read_written(&mut self, id: NodeId, slot: ValueId, written: super::native::Written, origin: &Origin) -> Result<ValueId, Diagnostic> {
+    fn read_written(
+        &mut self,
+        id: NodeId,
+        (slot, count): (ValueId, Option<ValueId>),
+        written: super::native::Written,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
         let first = |this: &mut Self| this.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         Ok(match written {
+            // The elements and their count, copied into a typed array of
+            // their kind, and the callee's block freed: the ABI makes it the
+            // caller's. A failed call left both zeroed, which reads as empty.
+            super::native::Written::Received { kind } => {
+                let Some(count) = count else {
+                    return Err(self.unsupported(id, "a received array with no count slot before it"));
+                };
+                let element = match self.values[slot.0 as usize].ty.clone() {
+                    HirType::NativePointer(super::native::Pointee::Pointer(element)) => *element,
+                    _ => return Err(self.unsupported(id, "a received array whose slot is not a pointer to its elements")),
+                };
+                let index = first(self);
+                let elements = self.push(
+                    OpKind::NativeLoad { pointer: slot, index },
+                    HirType::NativePointer(element.clone()),
+                    origin.clone(),
+                );
+                let index = first(self);
+                let length_type = HirType::Int { bits: 32, signed: false };
+                let length = self.push(OpKind::NativeLoad { pointer: count, index }, length_type, origin.clone());
+                let kind = self.push(OpKind::ConstFloat(f64::from(kind)), HirType::NUMBER, origin.clone());
+                let super::native::Pointee::Scalar(scalar) = element else {
+                    return Err(self.unsupported(id, "a received array of something other than numbers"));
+                };
+                let view = HirType::Managed(ManagedType::View(Box::new(super::native::Type::Scalar(scalar).representation())));
+                self.runtime_call("nts_winrt_received", vec![elements, length, kind], view, origin.clone())
+            }
             super::native::Written::HString => {
                 let index = first(self);
                 let hstring = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(super::native::Pointee::Void), origin.clone());
@@ -47911,7 +47953,7 @@ impl<'a> FuncBuilder<'a> {
                 }
                 // Checked, or read, by `finish_call` after everything else is
                 // given back; each is a local of the caller's own.
-                Lent::Error { .. } | Lent::Result { .. } => {}
+                Lent::Error { .. } | Lent::Result { .. } | Lent::Count { .. } => {}
             }
         }
     }
@@ -48029,6 +48071,12 @@ impl<'a> FuncBuilder<'a> {
             super::native::Role::Result { written, field } => {
                 let slot = self.push(OpKind::NativeLocal { count: 1 }, want, origin.clone());
                 lent.push(Lent::Result { slot, written: *written, field: field.clone() });
+                slot
+            }
+            // Where C writes a received array's count: read with the array.
+            super::native::Role::ReceivedCount => {
+                let slot = self.push(OpKind::NativeLocal { count: 1 }, want, origin.clone());
+                lent.push(Lent::Count { slot });
                 slot
             }
             // No outer object: the class is made as itself.
@@ -48407,7 +48455,7 @@ impl<'a> FuncBuilder<'a> {
                     let Some(collection) = argument else { continue };
                     c_args.push(self.foundation_collection(id, collection, &role, &origin)?);
                 }
-                Role::Result { .. } | Role::Outer | Role::Inner => {
+                Role::Result { .. } | Role::ReceivedCount | Role::Outer | Role::Inner => {
                     c_args.push(self.hresult_slot(&role, target.parameters[at].representation(), &mut lent, &origin));
                 }
                 Role::String(encoding) => {

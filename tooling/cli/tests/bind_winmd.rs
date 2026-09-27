@@ -348,7 +348,9 @@ fn winrt_byte_arrays_are_lent_in_place() {
         "{streams}"
     );
     assert!(crypto.contains("function CreateFromByteArray(value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): IBuffer;"), "{crypto}");
-    assert!(refused.contains("CryptographicBuffer.CopyToByteArray\tan array"), "{refused}");
+    // `CopyToByteArray`'s array is the callee's, which this refused until it
+    // was bound as a `Uint8Array`: `a_received_array_is_a_typed_array`.
+    assert!(!refused.contains("CryptographicBuffer.CopyToByteArray"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -441,6 +443,34 @@ fn an_async_operation_is_awaitable_as_itself() {
     let foundation_values = std::fs::read_to_string(out.join("Windows.Foundation.values.ts")).unwrap();
     assert!(foundation_values.contains("export function nts_then_IAsyncAction("), "{foundation_values}");
     assert!(foundation_values.contains("onFulfilled(undefined);"), "{foundation_values}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// An array the callee allocates and hands back (`ReceiveArray`) is a typed
+/// array of the program's: `CopyToByteArray`'s `[out] byte[]&` answers a
+/// `Uint8Array`, and `IPropertyValue.GetInt32Array` an `Int32Array`. An
+/// element no typed array holds is refused, and named.
+#[test]
+fn a_received_array_is_a_typed_array() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-received-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Security.Cryptography", "Windows.Foundation", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let crypto = std::fs::read_to_string(out.join("Windows.Security.Cryptography.d.ts")).unwrap();
+    assert!(crypto.contains("function CopyToByteArray(buffer: IBuffer | null): { value: Uint8Array };"), "{crypto}");
+    let foundation = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
+    assert!(foundation.contains("GetInt32Array(this: IPropertyValue): { value: Int32Array };"), "{foundation}");
+    let refused = std::fs::read_to_string(out.join("Windows.Foundation.refused.txt")).unwrap();
+    assert!(refused.contains("IPropertyValue.GetStringArray\tan array of strings, which no typed array holds"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
 

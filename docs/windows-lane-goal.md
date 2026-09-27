@@ -229,8 +229,13 @@ the same vtable calls on the VM measured the behaviour first.
     (`IAsyncOperation<LoadMoreItemsResult>`): the struct is read into a native
     local, which a callback cannot be handed, so the binder declares none and
     `refused.txt` says so.
-  - Arrays of anything but bytes, and arrays the callee allocates
-    (`CopyToByteArray`, the `Get*Array` methods).
+  - Arrays passed in or filled (`PassArray`, `FillArray`) of anything but
+    bytes, and arrays handed back of anything a typed array does not hold
+    -- strings, objects, structs, booleans, 64-bit integers. An array the
+    callee allocates of numbers is a typed array of the program's
+    (`CopyToByteArray(buffer).value` is a `Uint8Array`, `GetInt32Array()` an
+    `Int32Array`): its elements copied and the block freed
+    (`nts_winrt_received`).
   - Generic delegates whose IID depends on the interface's own parameters
     (`IObservableMap<K, V>.MapChanged`).
 

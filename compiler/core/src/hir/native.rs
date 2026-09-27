@@ -465,6 +465,10 @@ pub enum Role {
     /// after the call, as nothing of the program holds it. Hidden from
     /// TypeScript.
     Inner,
+    /// Where a Windows Runtime call writes the element count of the array it
+    /// hands back (`ReceiveArray`), just before the slot for the array itself
+    /// (`Written::Received`), which is read with it. Hidden from TypeScript.
+    ReceivedCount,
 }
 
 /// What C writes to an `@ntsHresult` call's result slot, which decides how the
@@ -491,6 +495,12 @@ pub enum Written {
     /// and inside a loop, since the slot is used past its own block -- which
     /// every other result avoids by being read there (`confined`).
     Record,
+    /// An array the callee allocated (`ReceiveArray`): the slot holds its
+    /// `CoTaskMemAlloc`'d elements and the `Role::ReceivedCount` slot before
+    /// it their count. Read as a typed array of element kind `kind`
+    /// (`NTS_ELEMENT_*`, `builtin::element_kind`), a copy the program owns,
+    /// and the block freed (`nts_winrt_received`).
+    Received { kind: u32 },
 }
 
 /// What an array crossing an Objective-C message holds, as Swift bridges
@@ -598,6 +608,7 @@ impl Function {
                 | Role::ClosureNotify
                 | Role::Length { .. }
                 | Role::Result { .. }
+                | Role::ReceivedCount
                 | Role::Receiver
                 | Role::Outer
                 | Role::Inner => None,
@@ -2059,7 +2070,7 @@ fn retention_of(roles: &[Role]) -> Vec<Retention> {
                 Role::ClosureData if *scoped => Retention::NotRetained,
                 // C writes the result there during the call, and the slot is
                 // the caller's local, read once it returns.
-                Role::Result { .. } | Role::Inner => {
+                Role::Result { .. } | Role::ReceivedCount | Role::Inner => {
                     *scoped = false;
                     Retention::NotRetained
                 }
@@ -2639,6 +2650,7 @@ fn hresult_result(
                     "foreign function `{name}` is `@ntsHresult out` with a struct field `{field}`, which is refused"
                 ));
             }
+            received_count(written, (parameters, roles));
             parameters.push(pointer);
             roles.push(Role::Result { written, field: Some(field.as_str().into()) });
         }
@@ -2652,15 +2664,30 @@ fn hresult_result(
         roles.push(Role::Inner);
     }
     if let Some((pointer, written)) = written_slot(snapshot, name, ty, abi)? {
+        received_count(written, (&mut *parameters, &mut *roles));
         parameters.push(pointer);
         roles.push(Role::Result { written, field: None });
     }
     Ok(status)
 }
 
+/// The count slot a received array's comes after: the Windows Runtime's
+/// `ReceiveArray` is `UINT32 *count, T **elements`, in that order.
+fn received_count(written: Written, (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>)) {
+    if matches!(written, Written::Received { .. }) {
+        parameters.push(Type::Pointer(Pointee::Scalar(Scalar::UInt32)));
+        roles.push(Role::ReceivedCount);
+    }
+}
+
 /// The pointer C writes a value of TypeScript type `ty` through, and how the
 /// slot is read after: `None` for `void`, which is written nowhere.
 fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&str>) -> Result<Option<(Type, Written)>, String> {
+    // A typed array can only be written as the Windows Runtime writes an
+    // array it hands back: a pointer to its elements, beside their count.
+    if let Some((scalar, kind)) = received_array(snapshot, ty) {
+        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(scalar)))), Written::Received { kind })));
+    }
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
     } else if boxable(snapshot, ty).is_some() {
@@ -2699,6 +2726,25 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
         }
     };
     Ok(Some((Type::Pointer(pointee), kind)))
+}
+
+/// The C element and the runtime's element kind of a typed array type, or
+/// `None` for any other type: what a received array is copied as.
+fn received_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Scalar, u32)> {
+    let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
+    let element = super::builtin::typed_array_element(&snapshot.symbols.get(symbol.0 as usize)?.name)?;
+    let scalar = match element {
+        HirType::Int { bits: 8, signed: true } => Scalar::Int8,
+        HirType::Int { bits: 8, signed: false } => Scalar::UInt8,
+        HirType::Int { bits: 16, signed: true } => Scalar::Int16,
+        HirType::Int { bits: 16, signed: false } => Scalar::UInt16,
+        HirType::Int { bits: 32, signed: true } => Scalar::Int32,
+        HirType::Int { bits: 32, signed: false } => Scalar::UInt32,
+        HirType::Float { bits: 32 } => Scalar::Float,
+        HirType::Float { bits: 64 } => Scalar::Double,
+        _ => return None,
+    };
+    Some((scalar, super::builtin::element_kind(&element)?))
 }
 
 /// What a foreign function hands back, read from its declared return type.

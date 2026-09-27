@@ -134,14 +134,18 @@ function outs(): string {
 
 // Byte arrays, a `Uint8Array` borrowed in place with its length before it: a
 // buffer made from three bytes (an `[in]` array, which Windows copies) shown
-// as hex, which needs the count and the pointer in that order; and the bytes
-// read back out of it into a `Uint8Array` of the program's (an `[out]` array
-// the caller allocates, which Windows fills where it is).
+// as hex, which needs the count and the pointer in that order; the bytes read
+// back out of it into a `Uint8Array` of the program's (an `[out]` array the
+// caller allocates, which Windows fills where it is); and the same bytes
+// handed back (a `ReceiveArray`, which Windows allocates: copied into a
+// `Uint8Array` of the program's and the block freed).
 function bytes(): string {
   const buffer = CryptographicBuffer.CreateFromByteArray(new Uint8Array([1, 2, 255]));
   const back = new Uint8Array(3);
   DataReader.FromBuffer(buffer).ReadBytes(back);
-  return CryptographicBuffer.EncodeToHexString(buffer) + ",read=" + String(back[0]) + ":" + String(back[1]) + ":" + String(back[2]);
+  const received = CryptographicBuffer.CopyToByteArray(buffer).value;
+  return CryptographicBuffer.EncodeToHexString(buffer) + ",read=" + String(back[0]) + ":" + String(back[1]) + ":" + String(back[2]) +
+    ",received=" + received.join(":") + "/" + String(received.length);
 }
 
 // A runtime class whose default interface is an instantiation: `StringMap`

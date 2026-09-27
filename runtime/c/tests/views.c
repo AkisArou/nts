@@ -225,7 +225,44 @@ static void a_tracking_length_follows_its_buffer(void) {
   nts_release((NtsHeader *)buffer);
 }
 
+/* Elements handed back by C -- a Windows Runtime `ReceiveArray` -- copied
+ * into a typed array of their kind. The width is the kind's, so a count of
+ * elements is not a count of bytes: three `int32` are twelve, and three
+ * `double` twenty-four. A width taken as one would copy a quarter and read
+ * garbage after it. */
+static void elements_are_copied_at_their_kind_s_width(void) {
+  const int32_t ints[] = {-7, 65536, 2147483647};
+  NtsView *copied = nts_view_from_elements(ints, 3, NTS_ELEMENT_I32);
+  check(nts_view_length(copied) == 3,
+        "three int32 elements are three elements");
+  check(nts_view_byte_length(copied) == 12, "of four bytes each");
+  check(nts_view_get(copied, 0) == -7 && nts_view_get(copied, 1) == 65536 &&
+            nts_view_get(copied, 2) == 2147483647,
+        "each read back as the value it was");
+
+  const double doubles[] = {0.5, -1e300, 3};
+  NtsView *wide = nts_view_from_elements(doubles, 3, NTS_ELEMENT_F64);
+  check(nts_view_byte_length(wide) == 24 && nts_view_get(wide, 1) == -1e300,
+        "eight bytes each for a double, the last one read whole");
+
+  int32_t source[] = {1, 2};
+  NtsView *own = nts_view_from_elements(source, 2, NTS_ELEMENT_I32);
+  source[0] = 99;
+  check(nts_view_get(own, 0) == 1,
+        "a copy, which the source no longer reaches");
+
+  NtsView *empty = nts_view_from_elements(NULL, 0, NTS_ELEMENT_U16);
+  check(empty != NULL && nts_view_length(empty) == 0,
+        "no elements at NULL is an empty array");
+
+  nts_release((NtsHeader *)empty);
+  nts_release((NtsHeader *)own);
+  nts_release((NtsHeader *)wide);
+  nts_release((NtsHeader *)copied);
+}
+
 int main(void) {
+  elements_are_copied_at_their_kind_s_width();
   every_kind_narrows_the_way_node_does();
   copy_within_reads_what_it_has_written();
   set_between_kinds_converts_values();

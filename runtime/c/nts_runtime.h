@@ -1392,6 +1392,12 @@ NTS_ALLOCATES_OR_NULL NtsView *nts_view_slice(const NtsView *view, double from,
  * an absence. */
 NTS_ALLOCATES_OR_NULL NtsView *nts_view_from_bytes(const void *bytes,
                                                    double length);
+/* The same for elements of any kind: `count` elements of `kind`
+ * (`NTS_ELEMENT_*`) at `elements`, copied into a new buffer and a typed array
+ * of that kind onto it. The pointer is neither kept nor freed, and NULL with a
+ * count of 0 is an empty array. */
+NTS_ALLOCATES_OR_NULL NtsView *
+nts_view_from_elements(const void *elements, double count, double kind);
 
 /* `set` and `copyWithin`, the two operations whose entire difficulty is that
  * source and destination can be the same storage.
@@ -2000,6 +2006,13 @@ void *nts_winrt_box(NtsValue value);
  * the program reads -- the string, number or boolean an `IPropertyValue`
  * holds, and any other object as itself; NULL as `null`. */
 NtsValue nts_winrt_unbox(void *object);
+/* An array a Windows Runtime call handed back -- a `ReceiveArray`: the
+ * callee's `CoTaskMemAlloc`'d block and its element count, written through
+ * two out-parameters -- as a typed array of `kind` the program owns. The
+ * elements are copied and the block freed, which the ABI makes the caller's
+ * to do; the block is NULL where the count is 0. */
+NTS_ALLOCATES_OR_NULL NtsView *nts_winrt_received(void *elements,
+                                                  uint32_t count, double kind);
 /* `value instanceof C` for a Windows Runtime class: whether the value is a
  * COM object that answers the interface `iid` names, C's default. */
 bool nts_winrt_is(NtsValue value, uint64_t iid_low, uint64_t iid_high);

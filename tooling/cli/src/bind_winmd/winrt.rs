@@ -1267,8 +1267,12 @@ impl Writer<'_> {
                     return Err("an `out` parameter named `returnValue`".to_owned());
                 }
                 // An object may be null where the method wrote none: a failed
-                // `TryParse`'s `result`.
-                let spelled = self.spell(written, false)?;
+                // `TryParse`'s `result`. An array written through the pointer
+                // is one the callee allocated (`ReceiveArray`).
+                let spelled = match &**written {
+                    Type::Array(element) => received(element)?,
+                    _ => self.spell(written, false)?,
+                };
                 outs.push(if matches!(**written, Type::Object | Type::ClassName(_)) {
                     format!("{name}: {spelled} | null")
                 } else {
@@ -1516,6 +1520,9 @@ impl Writer<'_> {
         if matches!(ty, Type::Object) {
             self.brands.insert("Inspectable");
             return Ok("Inspectable".to_owned());
+        }
+        if let Type::Array(element) = ty {
+            return received(element);
         }
         self.spell(ty, false)
     }
@@ -1888,6 +1895,39 @@ impl Writer<'_> {
         let _ = writeln!(text, "import type {{ {} }} from \"winrt:{}\";", own.join(", "), self.namespace);
         text.push_str(&functions);
         Some(text)
+    }
+}
+
+/// An array the callee allocates and hands back (`ReceiveArray`), as the
+/// typed array the program receives it as: a copy of its elements, the block
+/// freed. Numbers only; the element kinds a typed array has no class for --
+/// 64-bit integers, which are `bigint`, `boolean`, characters, strings,
+/// objects and structs -- are refused by name.
+fn received(element: &Type) -> Result<String, String> {
+    Ok(match element {
+        Type::U8 => "Uint8Array",
+        Type::I16 => "Int16Array",
+        Type::U16 => "Uint16Array",
+        Type::I32 => "Int32Array",
+        Type::U32 => "Uint32Array",
+        Type::F32 => "Float32Array",
+        Type::F64 => "Float64Array",
+        other => return Err(format!("an array of {}, which no typed array holds", element_name(other))),
+    }
+    .to_owned())
+}
+
+/// An element type as a refusal names it: a type by its full name, and the
+/// rest as the metadata's primitives are called.
+fn element_name(ty: &Type) -> String {
+    match ty {
+        Type::ClassName(named) | Type::ValueName(named) => format!("`{}.{}`", named.namespace, named.name),
+        Type::String => "strings".to_owned(),
+        Type::Object => "objects".to_owned(),
+        Type::Bool => "booleans".to_owned(),
+        Type::Char => "characters".to_owned(),
+        Type::I64 | Type::U64 => "64-bit integers, which are `bigint`".to_owned(),
+        other => format!("{other:?}"),
     }
 }
 

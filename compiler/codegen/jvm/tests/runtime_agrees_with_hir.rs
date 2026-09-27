@@ -276,4 +276,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 115 for `nts_gobject_is_boxed`, `x instanceof GdkRGBA` of a boxed record:
 /// GTK, and native calls again.
-const REFUSED_FLOOR: usize = 115;
+///
+/// 116 for `nts_winrt_received`, an array a Windows Runtime call hands back,
+/// copied into a typed array and its block freed: Windows again.
+const REFUSED_FLOOR: usize = 116;

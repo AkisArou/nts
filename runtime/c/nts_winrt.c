@@ -1314,6 +1314,12 @@ void *nts_com_compose_named(const NtsString *name) {
   abort();
 }
 
+NtsView *nts_winrt_received(void *elements, uint32_t count, double kind) {
+  NtsView *view = nts_view_from_elements(elements, (double)count, kind);
+  CoTaskMemFree(elements);
+  return view;
+}
+
 /* The message an `Error` thrown for a failed HRESULT carries: the code, and
  * the system's text for it where it has one. `malloc`'d; the caller frees. */
 char *nts_hresult_message(int32_t hr) {

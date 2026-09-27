@@ -7423,6 +7423,31 @@ NtsView *nts_view_from_bytes(const void *bytes, double length) {
   return out;
 }
 
+NtsView *nts_view_from_elements(const void *elements, double count,
+                                double kind) {
+  size_t length = (size_t)nts_buffer_index(count);
+  uint8_t element = (uint8_t)nts_buffer_index(kind);
+  size_t bytes = length * nts_element_width(element);
+  if (elements == NULL && length != 0) {
+    fprintf(stderr,
+            "nts: %zu elements were handed back at NULL; a count with no "
+            "elements behind it is not an empty array\n",
+            length);
+    abort();
+  }
+  NtsBuffer *copy = nts_buffer_new((double)bytes);
+  if (!copy) {
+    return 0;
+  }
+  if (bytes) {
+    memcpy(copy->bytes, elements, bytes);
+  }
+  NtsView *out = nts_view_new(copy, 0.0, (double)length, kind, false);
+  /* `nts_view_new` retained it, and this function is the only other owner. */
+  nts_release((NtsHeader *)copy);
+  return out;
+}
+
 void nts_view_copy_within(NtsView *view, double target, double from,
                           double to) {
   unsigned char *bytes = nts_view_bytes(view);
