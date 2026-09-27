@@ -101,7 +101,9 @@ class Journal {
 function drive(journal: Journal): void {
   const { app, sidebar } = journal;
   let started = now();
-  for (const one of load(path)) sidebar.store.append(entryOf(one));
+  // One `splice`, as GJS fills a store: the sort and filter models above it
+  // hear one change, where an `append` each would re-run them 5000 times.
+  sidebar.store.splice(0, 0, load(path).map((one) => entryOf(one)));
   console.log("loaded " + String(sidebar.store.get_n_items()));
   console.log("ms load " + String(Math.round(now() - started)));
 

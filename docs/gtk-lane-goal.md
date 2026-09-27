@@ -1531,13 +1531,16 @@ Writing it found, in the order the compiler reported them:
   drops a throwing function's `gboolean`;
 - `JSON` and `TextEncoder` are unsupported in core (reported), so the file is
   tab-separated lines read with `read_line_utf8`;
-- `g_list_store_splice` is refused as an array, so loading appends one entry
-  at a time.
+- `g_list_store_splice` was refused as an array, so loading appended one
+  entry at a time. It is now bound (`CHandles`, above), and the journal and
+  its twin load with one `splice`: 17-34 ms against GJS's 168-232, from
+  about 300 against 700 with 5000 `append`s, at a load average of 55;
+- `xs.map(entryOf)` is refused where `xs.map((one) => entryOf(one))`
+  lowers: a `map` callback must be an arrow written at the call (core).
 
 **Where its time goes** (`perf record -e cycles:u`, the `--rc` C build):
-- `g_list_store_append` is 12.8% inclusive: each append re-runs the sort
-  and filter models. An idiomatic load is one `splice`, which is the next
-  binding to build.
+- `g_list_store_append` was 12.8% inclusive: each append re-runs the sort
+  and filter models. Loading is now one `splice`.
 - GTK's EGL probe at startup (`dlopen` of the GL driver) is 11%, and GJS
   pays it too.
 - The chart's `monthly` is 7.2% inclusive.
