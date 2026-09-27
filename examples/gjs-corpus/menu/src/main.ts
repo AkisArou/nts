@@ -21,16 +21,14 @@ function demo(workbench: Workbench): void {
   const text_state: TextState = { italic: false, bold: false, foreground: "green" };
 
   // GJS unpacks an action's state with `unpack()`; the binding reads the
-  // variant as the type it is. And a `notify` handler's first parameter is
-  // typed as the class that declares `notify`, GObject, so each handler
-  // reads the action it was connected to.
+  // variant as the type it is.
   const italic_action = new GSimpleAction({
     name: "italic",
     state: g_variant_new_boolean(false),
   });
 
-  italic_action.connect("notify::state", () => {
-    if (italic_action.state!.get_boolean()) text_state["italic"] = true;
+  italic_action.connect("notify::state", (action) => {
+    if (action.state!.get_boolean()) text_state["italic"] = true;
     else text_state["italic"] = false;
     label.attributes = stateToAttr(text_state);
   });
@@ -41,8 +39,8 @@ function demo(workbench: Workbench): void {
     state: g_variant_new_boolean(false),
   });
 
-  bold_action.connect("notify::state", () => {
-    if (bold_action.state!.get_boolean()) text_state["bold"] = true;
+  bold_action.connect("notify::state", (action) => {
+    if (action.state!.get_boolean()) text_state["bold"] = true;
     else text_state["bold"] = false;
     label.attributes = stateToAttr(text_state);
   });
@@ -54,8 +52,8 @@ function demo(workbench: Workbench): void {
     parameter_type: g_variant_type_new("s"),
   });
 
-  color_action.connect("notify::state", () => {
-    text_state["foreground"] = color_action.state!.get_string()[0];
+  color_action.connect("notify::state", (action) => {
+    text_state["foreground"] = action.state!.get_string()[0];
     label.attributes = stateToAttr(text_state);
   });
 

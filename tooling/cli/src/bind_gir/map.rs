@@ -1813,8 +1813,14 @@ impl<'a> Mapper<'a> {
 
     /// A signal's handler parameters as TypeScript declares them -- `self`
     /// first -- and as the `emit` form takes them (`SignalParameters`).
-    fn signal_parameters(&mut self, signal: &super::model::Signal, local: &str) -> Result<SignalParameters, Reason> {
-        let mut ts_parameters = vec![format!("self: {local}")];
+    ///
+    /// `self` is `this`, the receiver the program connected on, as GJS hands
+    /// it over: `action.connect("notify::state", (action) => action.state)`
+    /// reads a `GSimpleAction`, where the class declaring `notify` is
+    /// `GObject`. A signal's view is only ever a method (`method_only`), so
+    /// `this` always has a receiver to name.
+    fn signal_parameters(&mut self, signal: &super::model::Signal) -> Result<SignalParameters, Reason> {
+        let mut ts_parameters = vec!["self: this".to_owned()];
         let mut emitted = Vec::new();
         // GIR gives a signal's parameters no C type; each spelled from its
         // name, for an array's length to be read at.
@@ -1916,7 +1922,7 @@ impl<'a> Mapper<'a> {
         let prefix = class.symbol_prefix.as_deref().ok_or(Reason::NoSymbol)?;
         let local = c_type.clone();
         self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "CNumber"]);
-        let (ts_parameters, emitted) = self.signal_parameters(signal, &local)?;
+        let (ts_parameters, emitted) = self.signal_parameters(signal)?;
         let result = match &signal.signature.result.ty {
             TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
             TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => return Err(Reason::StringInCallback),

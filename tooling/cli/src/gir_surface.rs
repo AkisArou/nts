@@ -276,6 +276,15 @@ mod tests {
             gtk.declarations.contains("     * @ntsSet set_from_file\n     */\n    file: string | null;"),
             "GtkImage:file is not written through gtk_image_set_from_file"
         );
+        // A signal handler's first parameter is the receiver the program
+        // connected on, `this`, as GJS hands it over -- not the class that
+        // declares the signal: a `GSimpleAction`'s `notify::state` handler
+        // reads the action's `state`.
+        let gobject = packages.iter().find(|p| p.name == "@nts/gir-gobject-2.0").unwrap();
+        assert!(
+            gobject.declarations.contains("handler: ErasedClosure<(self: this, pspec: GParamSpec) => void"),
+            "a signal handler's self is not the receiver"
+        );
         // A member is named as GIR names it, a word TypeScript reserves
         // included: GJS writes `buffer.delete(start, end)`.
         assert!(
