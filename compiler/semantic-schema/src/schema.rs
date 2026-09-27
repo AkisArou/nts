@@ -944,12 +944,82 @@ impl SemanticSnapshot {
     ///
     /// Includes [`SCHEMA_VERSION`], so a schema change invalidates every cached
     /// artifact derived from a snapshot without any separate bookkeeping.
+    ///
+    /// **Canonical, which serialising the struct directly is not.** Postcard
+    /// writes a map in its *iteration* order, and an `FxHashMap` rebuilt by
+    /// deserialisation places colliding keys differently from one built in
+    /// discovery order -- so one snapshot hashed before and after a trip through
+    /// the cache answered two different digests, which is not what "content
+    /// digest" means and not usable as the cache key this is for. Measured on
+    /// `runtime/node/stream`: `dac75654...` when built, `486b38a3...` when
+    /// loaded, and stable from the second load on. So the maps are hashed **by
+    /// sorted key** and the digest is a function of the content alone.
+    ///
+    /// **Only the digest was affected**, which is worth recording beside the
+    /// fix: `emit-c` over the same project is byte-identical across that
+    /// boundary -- 3,846,091 bytes in 14 files, built and loaded -- so no pass
+    /// reads those maps in an order that reaches the output.
+    ///
+    /// The fields are concatenated rather than serialised as one value, which is
+    /// unambiguous because every variable-length part carries postcard's own
+    /// length prefix and the order here is fixed.
+    ///
+    /// **The destructuring is exhaustive on purpose.** A field left out of a
+    /// digest makes two unequal snapshots answer alike, and for a cache key that
+    /// is a stale hit -- the one failure `frontend-ts`'s freshness bookkeeping
+    /// exists to prevent. Adding a field to the snapshot is therefore a compile
+    /// error here rather than a silent gap.
     pub fn digest(&self) -> Result<[u8; 16], SnapshotError> {
-        let bytes =
-            postcard::to_allocvec(self).map_err(|e| SnapshotError::Decode(e.to_string()))?;
-        let hash = xxhash_rust::xxh3::xxh3_128(&bytes);
-        Ok(hash.to_le_bytes())
+        let Self {
+            schema_version,
+            sources,
+            modules,
+            symbols,
+            types,
+            signatures,
+            nodes,
+            index_signatures,
+            base_types,
+            type_arguments,
+            constants,
+            call_targets,
+            diagnostics,
+            node_types,
+        } = self;
+        let mut bytes = Vec::new();
+        encode(&mut bytes, schema_version)?;
+        encode(&mut bytes, sources)?;
+        encode(&mut bytes, modules)?;
+        encode(&mut bytes, symbols)?;
+        encode(&mut bytes, types)?;
+        encode(&mut bytes, signatures)?;
+        encode(&mut bytes, nodes)?;
+        encode(&mut bytes, diagnostics)?;
+        encode(&mut bytes, &by_key(index_signatures))?;
+        encode(&mut bytes, &by_key(base_types))?;
+        encode(&mut bytes, &by_key(type_arguments))?;
+        encode(&mut bytes, &by_key(constants))?;
+        encode(&mut bytes, &by_key(call_targets))?;
+        encode(&mut bytes, &by_key(node_types))?;
+        Ok(xxhash_rust::xxh3::xxh3_128(&bytes).to_le_bytes())
     }
+}
+
+/// Append one field's encoding to a digest's input.
+fn encode<T: Serialize>(bytes: &mut Vec<u8>, part: &T) -> Result<(), SnapshotError> {
+    let encoded = postcard::to_allocvec(part).map_err(|e| SnapshotError::Decode(e.to_string()))?;
+    bytes.extend_from_slice(&encoded);
+    Ok(())
+}
+
+/// A map's entries in key order, for a digest that must not depend on layout.
+///
+/// Borrowed rather than cloned: `node_types` alone holds about 190,000 entries
+/// for a runtime module, and a digest is not worth copying it.
+fn by_key<K: Ord, V>(map: &FxHashMap<K, V>) -> Vec<(&K, &V)> {
+    let mut entries: Vec<(&K, &V)> = map.iter().collect();
+    entries.sort_unstable_by(|a, b| a.0.cmp(b.0));
+    entries
 }
 
 /// Bounds-check an arena index.
@@ -1051,5 +1121,33 @@ mod tests {
     fn digest_is_stable_across_calls() {
         let snap = snapshot(vec![node(None, vec![])]);
         assert_eq!(snap.digest().unwrap(), snap.digest().unwrap());
+    }
+
+    /// A snapshot loaded from the cache digests as the one that was stored.
+    ///
+    /// **Sparse keys, and twenty thousand of them, both of which matter.** Dense
+    /// keys `0..n` round-trip stably at every size up to 200,000, because
+    /// insertion order only decides a slot when two keys collide -- so a probe
+    /// written that way reports the invariant holding when it does not. That is
+    /// how the real defect survived being looked for, and it is why this test
+    /// looks like an arena rather than like a minimal case.
+    #[test]
+    fn a_digest_is_the_same_before_and_after_the_cache() {
+        let mut snap = SemanticSnapshot::default();
+        let mut x: u32 = 12_345;
+        for _ in 0..20_000 {
+            x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            snap.node_types.insert(NodeId(x >> 3), TypeId(x % 977));
+            snap.constants
+                .insert(NodeId(x >> 5), ConstantValue::Number(f64::from(x % 1_000)));
+        }
+        let before = snap.digest().unwrap();
+        let bytes = postcard::to_allocvec(&snap).unwrap();
+        let loaded: SemanticSnapshot = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(
+            before,
+            loaded.digest().unwrap(),
+            "the digest changed across a serialisation round trip"
+        );
     }
 }
