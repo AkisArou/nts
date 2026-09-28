@@ -24,6 +24,10 @@ use super::{Dependencies, NativeModule, Resolution};
 
 /// Each pod `lockfile` pins, as a module compiled from `Pods/`.
 pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
+    // Absolute, so every path this hands on is: a header an umbrella under
+    // `.nts/` imports, or a module map names, is read from another directory
+    // than the one `nts build examples/app` was run in.
+    let dir = &super::absolute(dir)?;
     let Some(named) = &claim.lockfile else {
         bail!("`dependencies.{id}` resolves with CocoaPods and names no `lockfile`. `Podfile.lock` is CocoaPods' resolved output and is the claim")
     };

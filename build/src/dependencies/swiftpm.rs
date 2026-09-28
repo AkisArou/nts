@@ -30,6 +30,10 @@ use super::{Dependencies, NativeModule, Resolution};
 /// Every library target of every package the root manifest beside
 /// `Package.resolved` depends on, transitively, as a module.
 pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
+    // Absolute, so every path this hands on is: a header an umbrella under
+    // `.nts/` imports, or a module map names, is read from another directory
+    // than the one `nts build examples/app` was run in.
+    let dir = &super::absolute(dir)?;
     let Some(named) = &claim.lockfile else {
         bail!("`dependencies.{id}` resolves with SwiftPM and names no `lockfile`: `Package.resolved`, beside the `Package.swift` whose dependencies it pins")
     };

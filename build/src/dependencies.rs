@@ -239,6 +239,13 @@ pub fn resolve(
     Ok(total)
 }
 
+/// `dir` made absolute against the working directory, without resolving its
+/// links: what a resolver whose paths are read from elsewhere starts from.
+fn absolute(dir: &Utf8Path) -> Result<Utf8PathBuf> {
+    let absolute = std::path::absolute(dir).with_context(|| format!("making {dir} absolute"))?;
+    Utf8PathBuf::from_path_buf(absolute).map_err(|path| anyhow::anyhow!("{} is not UTF-8", path.display()))
+}
+
 fn one(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
     match claim.from {
         Resolver::PkgConfig => pkg_config(id, claim),

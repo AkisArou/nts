@@ -82,6 +82,12 @@ if grep -qE "refused|NTS[0-9]{4}" "$out.log"; then
   echo "macos-pods: nts build refused part of the program and exited 0" >&2
   exit 1
 fi
+# Built again, over the first, named as someone at the checkout's root names
+# it: a relative path, whose headers an umbrella under `.nts/` still finds.
+# Every arm above passes an absolute one, which hid that it did not.
+(cd "$root" && NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" NTS_SWIFT_TOOLCHAIN="$swift" \
+  "$nts" build examples/interop/macos-pods --out "$out" --rc >"$out-again.log" 2>&1) ||
+  { cat "$out-again.log" >&2; echo "macos-pods: a rebuild by a relative path failed" >&2; exit 1; }
 for arch in x86_64 aarch64; do
   file -b "$out/chirp/macos-13-$arch/chirp" | grep -q "Mach-O" ||
     { echo "macos-pods: no $arch Mach-O executable" >&2; exit 1; }
