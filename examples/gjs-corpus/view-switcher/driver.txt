@@ -1,0 +1,5 @@
+badge page3
+children notification_list
+click-in notification_list 0
+badge page3
+children notification_list

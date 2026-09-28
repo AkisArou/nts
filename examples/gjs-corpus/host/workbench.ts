@@ -19,6 +19,7 @@ import {
   AdwOverlaySplitView,
   AdwSwitchRow,
   AdwTabView,
+  AdwViewStackPage,
 } from "c:Adw-1";
 import {
   GtkActionBar,
@@ -37,6 +38,7 @@ import {
   GtkLabel,
   GtkLevelBar,
   GtkLinkButton,
+  GtkListBox,
   GtkMenuButton,
   GtkPasswordEntry,
   GtkPicture,
@@ -234,6 +236,17 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       if (!(object instanceof GtkSearchEntry)) return false;
       object.emit("search-changed");
       return true;
+    case "badge":
+      if (!(object instanceof AdwViewStackPage)) return false;
+      console.log(`${id}.badge_number ${object.badge_number}`);
+      return true;
+    case "click-in": {
+      const row = object instanceof GtkListBox ? object.get_row_at_index(Number(args[0])) : null;
+      const button = row === null ? null : firstButton(row);
+      if (button === null) return false;
+      button.emit("clicked");
+      return true;
+    }
     case "level":
       if (!(object instanceof GtkLevelBar)) return false;
       console.log(`${id}.value ${object.value}`);
@@ -362,6 +375,16 @@ function draw(window: GtkWindow, widget: GtkWidget): void {
     while (clock.get_frame_counter() < start + 2) g_main_context_iteration(null, true);
   }
   g_source_remove(tick);
+}
+
+/** The first button below a widget, depth first. */
+function firstButton(widget: GtkWidget): GtkButton | null {
+  for (let child = widget.get_first_child(); child !== null; child = child.get_next_sibling()) {
+    if (child instanceof GtkButton) return child;
+    const below = firstButton(child);
+    if (below !== null) return below;
+  }
+  return null;
 }
 
 /** The labels below a widget, depth first, onto `out`. */

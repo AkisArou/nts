@@ -68,6 +68,7 @@
     "text-colors/nts.config.ts",
     "text-view/nts.config.ts",
     "toasts/nts.config.ts",
-    "toggle-button/nts.config.ts"
+    "toggle-button/nts.config.ts",
+    "view-switcher/nts.config.ts"
   ]
 }

@@ -33,6 +33,8 @@
 //   made press false  `new GtkButton({ label: "press", has_frame: false })`:
 //                 `gtk_button_new`, then each setter the literal writes -- a
 //                 frame is on by default, so `false` is the setter's doing
+//   compound 6    `label.width_chars += 3` and `++`: a property read through
+//                 its getter and written through its setter, one receiver
 //   themed 6 document-open-recent  `new GThemedIcon({ name, use_default_fallbacks })`:
 //                 construct-only properties, given to `g_object_new` since no
 //                 setter writes them -- the name, and its five fallbacks
@@ -325,6 +327,12 @@ function main(): void {
     const icon = new GThemedIcon({ name: "document-open-recent", use_default_fallbacks: true });
     const names = icon.get_names();
     console.log("themed " + String(names.length) + " " + names[0]);
+    // A property read before it is written, GJS's `page.badge_number -= 1`:
+    // the getter, then the setter, on one receiver.
+    const counted = new GtkLabel({ width_chars: 2 });
+    counted.width_chars += 3;
+    counted.width_chars++;
+    console.log("compound " + String(counted.width_chars));
     // A `gpointer` result the caller owns that is a GObject
     // (`Owned<Erased<GObject>>`): adopted rather than referenced again, and
     // released once -- `fatal-criticals` under `--rc` would abort on a count

@@ -717,6 +717,17 @@ names. Witness: gtk-gir's `themed 6 document-open-recent`, the name and its
 five fallbacks on all four arms, as GJS makes it. The corpus's Notification
 passes; the store test pins the tag and the three functions.
 
+**A property read before it is written.** `page.badge_number -= 1`, `++`,
+`??=`: a binding's property is its `@ntsGet` and `@ntsSet` methods, so such
+an assignment is a place of its own (`Place::NativeAccessor`): the receiver
+lowered once, read through the getter, written through the setter, each
+converting as a plain read and a plain `=` do. It was the struct-field path
+before, refused as "a field address without a native struct layout". A
+Windows Runtime property, reached through a slot, is refused by name, and a
+property with no getter is refused as a read of what cannot be read.
+Witness: gtk-gir's `compound 6`, a label's `width_chars` through `+= 3` and
+`++`, and the corpus's View Switcher.
+
 **Constructors return their class.** `gtk_box_new(…)` is a `GtkBox`: GIR
 declares a constructor inside its class and gives it C's return type, and the
 binding writes `Declared<GtkBox, GtkWidget>` (244 constructors) -- the program
@@ -1853,6 +1864,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-28 | 56 | **44**: View Switcher, once a binding's property can be read before it is written (`page.badge_number -= 1`) |
 | 2026-09-28 | 55 | **43**: Message Dialogs, its `await dialog.choose(…)` through the binding's promise form, stopped at `.catch(console.error)`: a promise's `then`/`catch` are not lowered, and 22 of Workbench's 104 demos write one (reported) |
 | 2026-09-28 | 54 | **43**: Grid View and Actions (GJS's `Variant.unpack()` as the typed getter). Network Monitor stops at a compiler defect with no root diagnostic: a capturing nested function called from a closure is never defined (reported, 12-line repro) |
 | 2026-09-28 | 51 | **41**: Search, ported and stopped at `new RegExp(...)` (a regex, not lowered yet) |

@@ -44,6 +44,8 @@
 //   visible-child <id> print the builder id of a stack's visible child
 //   search-changed <id> emit a search entry's `search-changed`, which it
 //                  otherwise emits after a delay
+//   badge <id>     print a view stack page's `badge_number`
+//   click-in <id> <n> emit `clicked` on the first button in a list box's nth row
 //   level <id>     print a level bar's `value`
 //   visit <id>     mark a link button visited
 //   breakpoint <id> <apply|unapply> emit a breakpoint's signal
@@ -93,6 +95,15 @@ function draw(window, widget) {
     while (clock.get_frame_counter() < start + 2) context.iteration(true);
   }
   GLib.source_remove(tick);
+}
+
+function firstButton(widget) {
+  for (let child = widget.get_first_child(); child !== null; child = child.get_next_sibling()) {
+    if (child instanceof Gtk.Button) return child;
+    const below = firstButton(child);
+    if (below !== null) return below;
+  }
+  return null;
 }
 
 function labels(widget, out = []) {
@@ -165,6 +176,8 @@ application.connect("activate", async () => {
     else if (kind === "action") object.activate_action(args[0], args.length > 1 ? GLib.Variant.new_string(args[1]) : null);
     else if (kind === "visible-child") console.log(`${id}.visible_child ${object.visible_child === null ? "none" : (object.visible_child.get_buildable_id() ?? "?")}`);
     else if (kind === "search-changed") object.emit("search-changed");
+    else if (kind === "badge") console.log(`${id}.badge_number ${object.badge_number}`);
+    else if (kind === "click-in") firstButton(object.get_row_at_index(Number(args[0]))).emit("clicked");
     else if (kind === "level") console.log(`${id}.value ${object.value}`);
     else if (kind === "visit") object.visited = true;
     else if (kind === "breakpoint") object.emit(args[0]);

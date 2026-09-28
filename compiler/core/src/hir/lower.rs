@@ -33503,6 +33503,9 @@ impl<'a> FuncBuilder<'a> {
             if let Some(place) = self.super_setter_place(*object_node, *member) {
                 return Ok(place);
             }
+            if self.is_accessor_property(*member) {
+                return self.native_accessor_place(target, *object_node, *member);
+            }
             let object = self.lower_expression(*object_node)?;
             if let Some(place) = self.array_length_place(object, *member) {
                 return Ok(place);
@@ -33732,6 +33735,52 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// A native handle's property as a place (`Place::NativeAccessor`):
+    /// its methods, and the receiver, lowered once. A Windows Runtime
+    /// property, reached through a slot rather than a method, is refused by
+    /// name.
+    fn native_accessor_place(&mut self, target: NodeId, object: NodeId, member: NodeId) -> Result<Place, Diagnostic> {
+        let setter = self
+            .accessor(member, true)
+            .ok_or_else(|| self.unsupported(target, "an assignment to a native property no @ntsSet names a method for"))?;
+        let getter = self.accessor(member, false);
+        if setter.contains(char::is_whitespace) || getter.as_deref().is_some_and(|getter| getter.contains(char::is_whitespace)) {
+            return Err(self.unsupported(target, "reading a Windows Runtime property as part of assigning to it"));
+        }
+        let ty = self
+            .snapshot
+            .node_types
+            .get(&object)
+            .copied()
+            .ok_or_else(|| self.unsupported(target, &format!("a native property whose accessor `{setter}` has no receiver type")))?;
+        let receiver = self.lower_expression(object)?;
+        Ok(Place::NativeAccessor { receiver, ty, getter, setter })
+    }
+
+    /// A native property's value through its `@ntsGet` method, for a place
+    /// read before it is written; refused by name for one only written.
+    fn read_native_accessor(&mut self, id: NodeId, receiver: ValueId, ty: TypeId, getter: Option<&str>) -> Result<ValueId, Diagnostic> {
+        let getter = getter.ok_or_else(|| {
+            self.unsupported(id, "reading a native property no @ntsGet names a method for, as part of assigning to it")
+        })?;
+        self.lower_accessor_on(id, receiver, ty, getter, None)
+    }
+
+    /// `xs.length = n`: the runtime's helper for the array's elements, which
+    /// knows whether a counted element dropped off the end is released.
+    fn set_array_length(&mut self, id: NodeId, array: ValueId, value: ValueId, origin: Origin) -> Result<(), Diagnostic> {
+        let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "an array length on something else"));
+        };
+        let helper = match *element {
+            ref counted if holds_counted(counted) => counted_helper(counted, Counts::SetLength),
+            HirType::Erased => "nts_array_set_length_value",
+            _ => "nts_array_set_length",
+        };
+        self.runtime_call(helper, vec![array, value], HirType::Void, origin);
+        Ok(())
+    }
+
     /// What a place currently holds.
     ///
     /// Asked by the three forms that read a place before writing it: a compound
@@ -33839,6 +33888,7 @@ impl<'a> FuncBuilder<'a> {
             Place::Setter { .. } => {
                 return Err(self.unsupported(id, "a compound assignment through a set-only accessor"));
             }
+            Place::NativeAccessor { receiver, ty, ref getter, .. } => self.read_native_accessor(id, receiver, ty, getter.as_deref())?,
             Place::Element { array, index } => {
                 let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
                     self.values[array.0 as usize].ty.clone()
@@ -34656,6 +34706,9 @@ impl<'a> FuncBuilder<'a> {
             // later `typeof held` then had no tag to read.
             Place::Binding { ref ty, .. } => ty.clone(),
             Place::Setter { ref wants, .. } => wants.clone(),
+            // The setter's own parameter converts what it is given, as a
+            // plain `=` does.
+            Place::NativeAccessor { .. } => None,
         })
     }
 
@@ -34874,19 +34927,7 @@ impl<'a> FuncBuilder<'a> {
             // every other array helper's does -- and it is the whole point
             // here rather than a detail: the reference and tagged forms have to
             // give up what they drop, and a scalar array has nothing to give up.
-            Place::ArrayLength(array) => {
-                let HirType::Managed(ManagedType::Array(element)) =
-                    self.values[array.0 as usize].ty.clone()
-                else {
-                    return Err(self.unsupported(id, "an array length on something else"));
-                };
-                let helper = match *element {
-                    ref counted if holds_counted(counted) => counted_helper(counted, Counts::SetLength),
-                    HirType::Erased => "nts_array_set_length_value",
-                    _ => "nts_array_set_length",
-                };
-                self.runtime_call(helper, vec![array, value], HirType::Void, origin);
-            }
+            Place::ArrayLength(array) => self.set_array_length(id, array, value, origin)?,
             Place::Setter {
                 object,
                 ref callee,
@@ -34901,6 +34942,9 @@ impl<'a> FuncBuilder<'a> {
                     HirType::Void,
                     origin,
                 );
+            }
+            Place::NativeAccessor { receiver, ty, ref setter, .. } => {
+                self.lower_accessor_on(id, receiver, ty, setter, Some(value))?;
             }
             Place::Element { array, index } => {
                 self.push(
@@ -59591,6 +59635,17 @@ enum Place {
         /// verifier said so as `CallArgumentType { expected: Erased, found:
         /// Float }` rather than the program being wrong at run time.
         wants: Option<HirType>,
+    },
+    /// A native handle's property read before it is written -- GJS's
+    /// `page.badge_number -= 1` -- through the methods its `@ntsGet` and
+    /// `@ntsSet` name (`lower_accessor_on`), on a receiver evaluated once. A
+    /// plain `=` calls the setter itself and never comes here. `getter` is
+    /// `None` for a property only written.
+    NativeAccessor {
+        receiver: ValueId,
+        ty: TypeId,
+        getter: Option<String>,
+        setter: String,
     },
     Element {
         array: ValueId,
