@@ -4,6 +4,7 @@
 import {
   GdkCursor,
   GdkDisplay,
+  type GdkGLAPI,
   type GdkGLContext,
   type GdkPaintable,
   GdkRGBA,
@@ -76,6 +77,7 @@ import {
   GtkIconPaintable,
   type GtkIconSize,
   GtkImage,
+  type GtkInputHints,
   type GtkInputPurpose,
   GtkInscription,
   type GtkInscriptionOverflow,
@@ -116,6 +118,7 @@ import {
   GtkPopoverBin,
   GtkPopoverMenu,
   GtkPopoverMenuBar,
+  type GtkPopoverMenuFlags,
   type GtkPositionType,
   GtkProgressBar,
   GtkRange,
@@ -588,6 +591,7 @@ export interface EntryProps extends WidgetProps {
   extraMenu?: GMenuModel | null;
   hasFrame?: boolean;
   imModule?: string;
+  inputHints?: GtkInputHints;
   inputPurpose?: GtkInputPurpose;
   invisibleChar?: number;
   invisibleCharSet?: boolean;
@@ -629,6 +633,7 @@ export interface EntryProps extends WidgetProps {
   onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyHasFrame?: (value: boolean) => void;
   onNotifyImModule?: (value: string | null) => void;
+  onNotifyInputHints?: (value: GtkInputHints) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
   onNotifyInvisibleCharSet?: (value: boolean) => void;
@@ -749,9 +754,11 @@ export interface FrameProps extends WidgetProps {
 
 /** `<GLArea>`'s props: GtkGLArea's own properties and signals. */
 export interface GLAreaProps extends WidgetProps {
+  allowedApis?: GdkGLAPI;
   autoRender?: boolean;
   hasDepthBuffer?: boolean;
   hasStencilBuffer?: boolean;
+  onNotifyAllowedApis?: (value: GdkGLAPI) => void;
   onNotifyAutoRender?: (value: boolean) => void;
   onNotifyHasDepthBuffer?: (value: boolean) => void;
   onNotifyHasStencilBuffer?: (value: boolean) => void;
@@ -1133,8 +1140,10 @@ export interface PopoverBinProps extends WidgetProps {
 
 /** `<PopoverMenu>`'s props: GtkPopoverMenu's own properties and signals. */
 export interface PopoverMenuProps extends PopoverProps {
+  flags?: GtkPopoverMenuFlags;
   menuModel?: GMenuModel | null;
   visibleSubmenu?: string;
+  onNotifyFlags?: (value: GtkPopoverMenuFlags) => void;
   onNotifyMenuModel?: (value: GMenuModel | null) => void;
   onNotifyVisibleSubmenu?: (value: string | null) => void;
 }
@@ -1280,6 +1289,7 @@ export interface SearchBarProps extends WidgetProps {
 /** `<SearchEntry>`'s props: GtkSearchEntry's own properties and signals. */
 export interface SearchEntryProps extends WidgetProps {
   activatesDefault?: boolean;
+  inputHints?: GtkInputHints;
   inputPurpose?: GtkInputPurpose;
   keyCaptureWidget?: GtkWidget | null;
   placeholderText?: string | null;
@@ -1291,6 +1301,7 @@ export interface SearchEntryProps extends WidgetProps {
   widthChars?: number;
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
+  onNotifyInputHints?: (value: GtkInputHints) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyKeyCaptureWidget?: (value: GtkWidget | null) => void;
   onNotifyPlaceholderText?: (value: string | null) => void;
@@ -1420,6 +1431,7 @@ export interface TextProps extends WidgetProps {
   enableEmojiCompletion?: boolean;
   extraMenu?: GMenuModel | null;
   imModule?: string;
+  inputHints?: GtkInputHints;
   inputPurpose?: GtkInputPurpose;
   invisibleChar?: number;
   invisibleCharSet?: boolean;
@@ -1442,6 +1454,7 @@ export interface TextProps extends WidgetProps {
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
   onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyImModule?: (value: string | null) => void;
+  onNotifyInputHints?: (value: GtkInputHints) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyInvisibleChar?: (value: number) => void;
   onNotifyInvisibleCharSet?: (value: boolean) => void;
@@ -1483,6 +1496,7 @@ export interface TextViewProps extends WidgetProps {
   extraMenu?: GMenuModel | null;
   imModule?: string;
   indent?: number;
+  inputHints?: GtkInputHints;
   inputPurpose?: GtkInputPurpose;
   justification?: GtkJustification;
   leftMargin?: number;
@@ -1507,6 +1521,7 @@ export interface TextViewProps extends WidgetProps {
   onNotifyExtraMenu?: (value: GMenuModel | null) => void;
   onNotifyImModule?: (value: string | null) => void;
   onNotifyIndent?: (value: number) => void;
+  onNotifyInputHints?: (value: GtkInputHints) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyJustification?: (value: GtkJustification) => void;
   onNotifyLeftMargin?: (value: number) => void;
@@ -3273,6 +3288,9 @@ export function entryProp(gtk: GtkEntry, key: string, value: unknown): boolean {
     case "imModule":
       gtk.set_im_module(typeof value === "string" ? value : "");
       return true;
+    case "inputHints":
+      gtk.set_input_hints(typeof value === "number" ? value as GtkInputHints : 0 as GtkInputHints);
+      return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
@@ -3434,6 +3452,11 @@ export function entrySignal(gtk: GtkEntry, key: string, slot: SignalSlot): boole
     case "onNotifyImModule":
       gtk.connect("notify::im-module", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_im_module()));
+      });
+      return true;
+    case "onNotifyInputHints":
+      gtk.connect("notify::input-hints", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputHints) => void)(gtk.get_input_hints()));
       });
       return true;
     case "onNotifyInputPurpose":
@@ -3896,6 +3919,9 @@ export function frameSignal(gtk: GtkFrame, key: string, slot: SignalSlot): boole
 
 export function gLAreaProp(gtk: GtkGLArea, key: string, value: unknown): boolean {
   switch (key) {
+    case "allowedApis":
+      gtk.set_allowed_apis(typeof value === "number" ? value as GdkGLAPI : 3 as GdkGLAPI);
+      return true;
     case "autoRender":
       gtk.set_auto_render(typeof value === "boolean" ? value : true);
       return true;
@@ -3911,6 +3937,11 @@ export function gLAreaProp(gtk: GtkGLArea, key: string, value: unknown): boolean
 
 export function gLAreaSignal(gtk: GtkGLArea, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyAllowedApis":
+      gtk.connect("notify::allowed-apis", () => {
+        slot.dispatch(() => (slot.handler as (value: GdkGLAPI) => void)(gtk.get_allowed_apis()));
+      });
+      return true;
     case "onNotifyAutoRender":
       gtk.connect("notify::auto-render", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_auto_render()));
@@ -5350,6 +5381,9 @@ export function popoverBinSignal(gtk: GtkPopoverBin, key: string, slot: SignalSl
 
 export function popoverMenuProp(gtk: GtkPopoverMenu, key: string, value: unknown): boolean {
   switch (key) {
+    case "flags":
+      gtk.set_flags(typeof value === "number" ? value as GtkPopoverMenuFlags : 0 as GtkPopoverMenuFlags);
+      return true;
     case "menuModel":
       gtk.set_menu_model(value instanceof GMenuModel ? value : null);
       return true;
@@ -5362,6 +5396,11 @@ export function popoverMenuProp(gtk: GtkPopoverMenu, key: string, value: unknown
 
 export function popoverMenuSignal(gtk: GtkPopoverMenu, key: string, slot: SignalSlot): boolean {
   switch (key) {
+    case "onNotifyFlags":
+      gtk.connect("notify::flags", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkPopoverMenuFlags) => void)(gtk.get_flags()));
+      });
+      return true;
     case "onNotifyMenuModel":
       gtk.connect("notify::menu-model", () => {
         slot.dispatch(() => (slot.handler as (value: GMenuModel | null) => void)(gtk.get_menu_model()));
@@ -5897,6 +5936,9 @@ export function searchEntryProp(gtk: GtkSearchEntry, key: string, value: unknown
     case "activatesDefault":
       gtk.set_activates_default(typeof value === "boolean" ? value : false);
       return true;
+    case "inputHints":
+      gtk.set_input_hints(typeof value === "number" ? value as GtkInputHints : 0 as GtkInputHints);
+      return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
@@ -5936,6 +5978,11 @@ export function searchEntrySignal(gtk: GtkSearchEntry, key: string, slot: Signal
     case "onNotifyActivatesDefault":
       gtk.connect("notify::activates-default", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_activates_default()));
+      });
+      return true;
+    case "onNotifyInputHints":
+      gtk.connect("notify::input-hints", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputHints) => void)(gtk.get_input_hints()));
       });
       return true;
     case "onNotifyInputPurpose":
@@ -6407,6 +6454,9 @@ export function textProp(gtk: GtkText, key: string, value: unknown): boolean {
     case "imModule":
       gtk.set_im_module(typeof value === "string" ? value : "");
       return true;
+    case "inputHints":
+      gtk.set_input_hints(typeof value === "number" ? value as GtkInputHints : 0 as GtkInputHints);
+      return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
@@ -6489,6 +6539,11 @@ export function textSignal(gtk: GtkText, key: string, slot: SignalSlot): boolean
     case "onNotifyImModule":
       gtk.connect("notify::im-module", () => {
         slot.dispatch(() => (slot.handler as (value: string | null) => void)(gtk.get_im_module()));
+      });
+      return true;
+    case "onNotifyInputHints":
+      gtk.connect("notify::input-hints", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputHints) => void)(gtk.get_input_hints()));
       });
       return true;
     case "onNotifyInputPurpose":
@@ -6650,6 +6705,9 @@ export function textViewProp(gtk: GtkTextView, key: string, value: unknown): boo
     case "indent":
       gtk.set_indent(typeof value === "number" ? value : 0);
       return true;
+    case "inputHints":
+      gtk.set_input_hints(typeof value === "number" ? value as GtkInputHints : 0 as GtkInputHints);
+      return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
@@ -6742,6 +6800,11 @@ export function textViewSignal(gtk: GtkTextView, key: string, slot: SignalSlot):
     case "onNotifyIndent":
       gtk.connect("notify::indent", () => {
         slot.dispatch(() => (slot.handler as (value: number) => void)(gtk.get_indent()));
+      });
+      return true;
+    case "onNotifyInputHints":
+      gtk.connect("notify::input-hints", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputHints) => void)(gtk.get_input_hints()));
       });
       return true;
     case "onNotifyInputPurpose":

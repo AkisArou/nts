@@ -24,7 +24,6 @@ AdwAboutWindow::activate-link	deprecated
 AdwActionRow.icon-name	deprecated
 AdwCarousel.scroll-params	removing it leaves its value: GIR gives no default
 AdwComboRow.expression	a GtkExpression | null, which a JSX attribute does not carry yet
-AdwEntryRow.input-hints	no setter in the bindings
 AdwExpanderRow.icon-name	deprecated
 AdwFlap.content	deprecated
 AdwFlap.flap	deprecated
@@ -82,7 +81,6 @@ AdwTabOverview::create-tab	its handler returns a AdwTabPage: not generated yet
 AdwTabOverview::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwTabView.default-icon	removing it leaves its value: GIR gives no default
 AdwTabView.selected-page	removing it leaves its value: GIR gives no default
-AdwTabView.shortcuts	no setter in the bindings
 AdwTabView::create-window	its handler returns a AdwTabView | null: not generated yet
 AdwViewStack.visible-child	removing it leaves its value: GIR gives no default
 AdwViewSwitcherTitle.stack	deprecated

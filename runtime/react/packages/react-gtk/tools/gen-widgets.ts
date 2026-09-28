@@ -372,7 +372,7 @@ function readBindings(files: string[]): Bindings {
       entry(childMethods, childMethod[2]!, () => new Map()).set(childMethod[1]!, childMethod[3]!);
       continue;
     }
-    const setter = /^ {4}(set_\w+|\$ntsPropSet_\w+)\(this: (\w+), \w+: (.+)\): void;$/.exec(line);
+    const setter = /^ {4}(set_\w+|\$ntsPropSet_\w+)\(this: (\w+), \w+\??: (.+)\): void;$/.exec(line);
     if (setter !== null) {
       entry(setters, setter[2]!, () => new Map()).set(setter[1]!, setter[3]!);
       continue;

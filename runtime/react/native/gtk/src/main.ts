@@ -17,7 +17,9 @@
 //   reset     removing a prop restores GTK's default, not the last value; a
 //             removed handler stops firing; text children become a Button's
 //             label in the same update that removes its `label` prop
-//   enum      an enum prop reaches its setter
+//   enum      an enum prop reaches its setter; so does a flags prop whose
+//             setter's argument is optional (an Entry's inputHints), and
+//             removed it goes back to GTK's default
 //   single    a single-child widget holds its child
 //   argument  a signal's argument reaches the handler its prop holds, typed,
 //             at the discrete event priority
@@ -119,6 +121,7 @@ import {
   gtk_init,
   GtkAdjustment,
   GtkApplication,
+  GtkEntry,
   GtkEventControllerKey,
   GtkGestureClick,
   GtkLabel,
@@ -322,7 +325,16 @@ function main(): void {
   react_gtk_log("reset " + framed + ">" + unframed + ">" + frame(button) + " clicks=" + (clicks === "" ? "none" : clicks) + " label=" + text);
 
   const column = createInstance("GtkBox", { orientation: 1 }, container, 0, {});
-  react_gtk_log("enum " + (column instanceof BoxNode ? String(column.gtk.get_orientation()) : "not a box"));
+  // Flags whose setter takes its argument as optional: set, then removed.
+  const hinted = createInstance("GtkEntry", { inputHints: 5 }, container, 0, {});
+  const hints = (): string => {
+    const entry = widget(hinted);
+    return entry instanceof GtkEntry ? String(entry.get_input_hints()) : "not an entry";
+  };
+  let hinting = hints();
+  commitUpdate(hinted, "GtkEntry", { inputHints: 5 }, {}, {});
+  hinting += ">" + hints();
+  react_gtk_log("enum " + (column instanceof BoxNode ? String(column.gtk.get_orientation()) : "not a box") + " flags=" + hinting);
 
   const framing = createInstance("GtkFrame", { label: "f" }, container, 0, {});
   const inner = createInstance("GtkLabel", { label: "inner" }, container, 0, {});

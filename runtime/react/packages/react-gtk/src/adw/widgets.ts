@@ -61,6 +61,7 @@ import {
   AdwTabOverview,
   AdwTabPage,
   AdwTabView,
+  type AdwTabViewShortcuts,
   AdwToastOverlay,
   AdwToggleGroup,
   type AdwToolbarStyle,
@@ -111,6 +112,7 @@ import {
   GtkFilterListModel,
   GtkFlattenListModel,
   GtkIconPaintable,
+  type GtkInputHints,
   type GtkInputPurpose,
   type GtkLicense,
   GtkListItemFactory,
@@ -448,6 +450,7 @@ export interface EntryRowProps extends PreferencesRowProps {
   activatesDefault?: boolean;
   attributes?: PangoAttrList | null;
   enableEmojiCompletion?: boolean;
+  inputHints?: GtkInputHints;
   inputPurpose?: GtkInputPurpose;
   maxLength?: number;
   showApplyButton?: boolean;
@@ -459,6 +462,7 @@ export interface EntryRowProps extends PreferencesRowProps {
   xalign?: number;
   onNotifyActivatesDefault?: (value: boolean) => void;
   onNotifyEnableEmojiCompletion?: (value: boolean) => void;
+  onNotifyInputHints?: (value: GtkInputHints) => void;
   onNotifyInputPurpose?: (value: GtkInputPurpose) => void;
   onNotifyMaxLength?: (value: number) => void;
   onNotifyShowApplyButton?: (value: boolean) => void;
@@ -803,9 +807,11 @@ export interface TabViewProps extends Gtk.WidgetProps {
   defaultIcon?: GBytesIcon | GEmblem | GEmblemedIcon | GFileIcon | GThemedIcon | GdkPixbuf | GdkTexture;
   menuModel?: GMenuModel | null;
   selectedPage?: AdwTabPage;
+  shortcuts?: AdwTabViewShortcuts;
   onNotifyDefaultIcon?: (value: GIcon) => void;
   onNotifyMenuModel?: (value: GMenuModel | null) => void;
   onNotifySelectedPage?: (value: AdwTabPage | null) => void;
+  onNotifyShortcuts?: (value: AdwTabViewShortcuts) => void;
   onClosePage?: (page: AdwTabPage) => boolean;
   onIndicatorActivated?: (page: AdwTabPage) => void;
   onPageAttached?: (page: AdwTabPage, position: number) => void;
@@ -2270,6 +2276,9 @@ export function entryRowProp(gtk: AdwEntryRow, key: string, value: unknown): boo
     case "enableEmojiCompletion":
       gtk.set_enable_emoji_completion(typeof value === "boolean" ? value : false);
       return true;
+    case "inputHints":
+      gtk.set_input_hints(typeof value === "number" ? value as GtkInputHints : 0 as GtkInputHints);
+      return true;
     case "inputPurpose":
       gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
@@ -2311,6 +2320,11 @@ export function entryRowSignal(gtk: AdwEntryRow, key: string, slot: SignalSlot):
     case "onNotifyEnableEmojiCompletion":
       gtk.connect("notify::enable-emoji-completion", () => {
         slot.dispatch(() => (slot.handler as (value: boolean) => void)(gtk.get_enable_emoji_completion()));
+      });
+      return true;
+    case "onNotifyInputHints":
+      gtk.connect("notify::input-hints", () => {
+        slot.dispatch(() => (slot.handler as (value: GtkInputHints) => void)(gtk.get_input_hints()));
       });
       return true;
     case "onNotifyInputPurpose":
@@ -3576,6 +3590,9 @@ export function tabViewProp(gtk: AdwTabView, key: string, value: unknown): boole
     case "selectedPage":
       if (value instanceof AdwTabPage) gtk.set_selected_page(value);
       return true;
+    case "shortcuts":
+      gtk.set_shortcuts(typeof value === "number" ? value as AdwTabViewShortcuts : 4095 as AdwTabViewShortcuts);
+      return true;
   }
   return Gtk.widgetProp(gtk, key, value);
 }
@@ -3595,6 +3612,11 @@ export function tabViewSignal(gtk: AdwTabView, key: string, slot: SignalSlot): b
     case "onNotifySelectedPage":
       gtk.connect("notify::selected-page", () => {
         slot.dispatch(() => (slot.handler as (value: AdwTabPage | null) => void)(gtk.get_selected_page()));
+      });
+      return true;
+    case "onNotifyShortcuts":
+      gtk.connect("notify::shortcuts", () => {
+        slot.dispatch(() => (slot.handler as (value: AdwTabViewShortcuts) => void)(gtk.get_shortcuts()));
       });
       return true;
     case "onClosePage":

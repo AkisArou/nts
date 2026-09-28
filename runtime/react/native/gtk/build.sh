@@ -37,7 +37,7 @@ moved button,label,second>label,second,button
 removed second,button
 hidden false true false false true heard=0
 reset true>false>true clicks=none label=Text
-enum 1
+enum 1 flags=5>0
 single true
 argument 2.5@2
 list a,b,c a,d,b,c c,a,d,b c,a,d a,d,c

@@ -32,7 +32,6 @@ GtkEditable::insert-text	no connect overload in the bindings
 GtkEntry.attributes	removing it leaves its value: GIR gives no default
 GtkEntry.buffer	removing it leaves its value: GIR gives no default
 GtkEntry.completion	deprecated
-GtkEntry.input-hints	no setter in the bindings
 GtkEntry.primary-icon-gicon	removing it leaves its value: GIR gives no default
 GtkEntry.primary-icon-paintable	removing it leaves its value: GIR gives no default
 GtkEntry.secondary-icon-gicon	removing it leaves its value: GIR gives no default
@@ -50,7 +49,6 @@ GtkFontChooser.show-preview-entry	deprecated
 GtkFontChooser::font-activated	deprecated
 GtkFontDialogButton.dialog	removing it leaves its value: GIR gives no default
 GtkFontDialogButton.font-desc	removing it leaves its value: GIR gives no default
-GtkGLArea.allowed-apis	no setter in the bindings
 GtkGLArea.use-es	deprecated
 GtkGLArea::create-context	its handler returns a GdkGLContext: not generated yet
 GtkIconView.cell-area	construct-only: a change would need a new widget
@@ -66,7 +64,6 @@ GtkNotebook::create-window	its handler returns a GtkNotebook | null: not generat
 GtkOverlay::get-child-position	no connect overload in the bindings
 GtkPicture.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkPicture.keep-aspect-ratio	deprecated
-GtkPopoverMenu.flags	no setter in the bindings
 GtkPrintUnixDialog.current-page	no setter in the bindings
 GtkPrintUnixDialog.embed-page-setup	no setter in the bindings
 GtkPrintUnixDialog.has-selection	no setter in the bindings
@@ -76,7 +73,6 @@ GtkPrintUnixDialog.print-settings	no setter in the bindings
 GtkPrintUnixDialog.support-selection	no setter in the bindings
 GtkRange.adjustment	removing it leaves its value: GIR gives no default
 GtkScaleButton.adjustment	removing it leaves its value: GIR gives no default
-GtkSearchEntry.input-hints	no setter in the bindings
 GtkShortcutLabel.accelerator	deprecated
 GtkShortcutLabel.disabled-text	deprecated
 GtkShortcutsGroup.accel-size-group	deprecated
@@ -110,8 +106,6 @@ GtkStackSidebar.stack	removing it leaves its value: GIR gives no default
 GtkStatusbar::text-popped	deprecated
 GtkStatusbar::text-pushed	deprecated
 GtkText.buffer	removing it leaves its value: GIR gives no default
-GtkText.input-hints	no setter in the bindings
-GtkTextView.input-hints	no setter in the bindings
 GtkTextView.tabs	removing it leaves its value: GIR gives no default
 GtkVideo.file	a GFile | null: an interface only classes the bindings do not declare implement
 GtkVolumeButton.use-symbolic	deprecated
