@@ -1,0 +1,7 @@
+children list_box
+children flow_box
+click add
+click add
+children list_box
+children flow_box
+sensitive remove
