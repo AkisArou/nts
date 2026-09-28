@@ -197,6 +197,17 @@ NtsView *nts_crypto_ecdh_convert_key(NtsView *key, NtsString *curve, double form
 NtsView *nts_crypto_dh_stateless(double private_key, double public_key);
 void nts_crypto_dh_stateless_job(double private_key, double public_key, NtsHeader *done);
 
+/* Primes (`prime.c`): the option checks node makes before a generation, a
+ * prime generated or a candidate checked, inline or on the thread pool. */
+double nts_crypto_prime_options(double bits, NtsView *add, bool has_add, NtsView *rem, bool has_rem);
+NtsView *nts_crypto_prime_generate(double bits, bool safe, NtsView *add, bool has_add, NtsView *rem,
+                                   bool has_rem);
+void nts_crypto_prime_generate_job(double bits, bool safe, NtsView *add, bool has_add, NtsView *rem,
+                                   bool has_rem, NtsHeader *done);
+bool nts_crypto_prime_candidate_ok(NtsView *candidate);
+double nts_crypto_prime_check(NtsView *candidate, double checks);
+void nts_crypto_prime_check_job(NtsView *candidate, double checks, NtsHeader *done);
+
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */
 bool nts_crypto_fips_enabled(void);

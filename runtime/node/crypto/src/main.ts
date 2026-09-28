@@ -13,7 +13,9 @@
 //
 // Key agreement: `DiffieHellman`, `ECDH` and `diffieHellman`.
 //
-// Not yet: primes,
+// Primes: `generatePrime` and `checkPrime`.
+//
+// Not yet:
 // X.509, and Web Crypto's `subtle`. Each is its own part of OpenSSL, and
 // `tooling/conformance/missing-exports` lists the names.
 
@@ -55,6 +57,10 @@ export {
 export { generateKey, generateKeyPair, generateKeyPairSync, generateKeySync } from "./keygen.ts";
 export { hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
 export {
+  checkPrime,
+  checkPrimeSync,
+  generatePrime,
+  generatePrimeSync,
   getRandomValues,
   randomBytes,
   randomFill,

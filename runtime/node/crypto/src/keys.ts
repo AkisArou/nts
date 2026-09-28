@@ -31,7 +31,7 @@ import {
 import { registerKeyObjectBrand } from "../../internal/brands.ts";
 import { validateObject, validateOneOf, validateString } from "../../internal/validators.ts";
 import { isAnyArrayBuffer, isArrayBufferView } from "../../util/src/types.ts";
-import { bytesOf, cipherId, getArrayBufferOrView, peekedCryptoError } from "./util.ts";
+import { bytesOf, cipherId, getArrayBufferOrView, peekedCryptoError, unsignedBigInt } from "./util.ts";
 import type { ByteSource } from "./util.ts";
 
 export type KeyObjectType = "secret" | "public" | "private";
@@ -222,12 +222,6 @@ export interface AsymmetricKeyDetails {
   namedCurve?: string;
 }
 
-/** Big-endian bytes as an unsigned bigint: node's `bigIntArrayToUnsignedBigInt`. */
-function unsignedBigInt(bytes: Uint8Array): bigint {
-  let value = 0n;
-  for (let i = 0; i < bytes.length; i++) value = (value << 8n) | BigInt(bytes[i]!);
-  return value;
-}
 
 /**
  * Node's `GetAsymmetricKeyDetail` and `normalizeKeyDetails`: RSA's modulus

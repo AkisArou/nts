@@ -1170,3 +1170,66 @@ globalThis.nts_crypto_dh_stateless_job = (privateKey, publicKey, done) => {
     }
   });
 };
+
+// -- primes -------------------------------------------------------------------
+
+const toBigInt = (bytes) => (bytes.length === 0 ? 0n : BigInt(`0x${Buffer.from(bytes).toString("hex")}`));
+
+globalThis.nts_crypto_prime_options = (bits, add, hasAdd, rem, hasRem) => {
+  if (!hasAdd) return 0;
+  const a = toBigInt(add);
+  if (a.toString(2).length > bits && a !== 0n) return -1;
+  if (hasRem && a <= toBigInt(rem)) return -2;
+  return 0;
+};
+
+function primeOptions(safe, add, hasAdd, rem, hasRem) {
+  const options = { safe };
+  if (hasAdd) options.add = Buffer.from(add);
+  if (hasRem) options.rem = Buffer.from(rem);
+  return options;
+}
+
+globalThis.nts_crypto_prime_generate = (bits, safe, add, hasAdd, rem, hasRem) =>
+  sync(() => crypto.generatePrimeSync(bits, primeOptions(safe, add, hasAdd, rem, hasRem)));
+
+globalThis.nts_crypto_prime_generate_job = (bits, safe, add, hasAdd, rem, hasRem, done) =>
+  job((callback) => crypto.generatePrime(bits, primeOptions(safe, add, hasAdd, rem, hasRem), callback), done);
+
+/**
+ * OpenSSL's own bound, `bn_expand`'s `INT_MAX / (4 * BN_BITS2)` words of eight
+ * bytes. A candidate past it is handed to node, whose job refuses it while
+ * configuring, before any test runs, and so says why in OpenSSL's words.
+ */
+const MAX_BIGNUM_BYTES = Math.floor(2147483647 / (4 * 64)) * 8;
+
+globalThis.nts_crypto_prime_candidate_ok = (candidate) => {
+  if (candidate.length <= MAX_BIGNUM_BYTES) return true;
+  try {
+    crypto.checkPrimeSync(candidate);
+    return true;
+  } catch (error) {
+    failed(error);
+    return false;
+  }
+};
+
+globalThis.nts_crypto_prime_check = (candidate, checks) => {
+  try {
+    return crypto.checkPrimeSync(candidate, { checks }) ? 1 : 0;
+  } catch (error) {
+    failed(error);
+    return -1;
+  }
+};
+
+globalThis.nts_crypto_prime_check_job = (candidate, checks, done) => {
+  crypto.checkPrime(candidate, { checks }, (error, result) => {
+    if (error) {
+      failed(error);
+      done(false, noBytes);
+    } else {
+      done(true, Uint8Array.of(result ? 1 : 0));
+    }
+  });
+};

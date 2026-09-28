@@ -365,3 +365,42 @@ declare function nts_crypto_dh_stateless_job(
   publicKey: number,
   done: (ok: boolean, secret: Uint8Array) => void,
 ): void;
+
+/** Primes: `add` and `rem` are given when their flags say so. */
+/** @ntsAbi managed */
+declare function nts_crypto_prime_options(
+  bits: number,
+  add: Uint8Array,
+  hasAdd: boolean,
+  rem: Uint8Array,
+  hasRem: boolean,
+): number;
+/** @ntsAbi managed */
+declare function nts_crypto_prime_generate(
+  bits: number,
+  safe: boolean,
+  add: Uint8Array,
+  hasAdd: boolean,
+  rem: Uint8Array,
+  hasRem: boolean,
+): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_prime_generate_job(
+  bits: number,
+  safe: boolean,
+  add: Uint8Array,
+  hasAdd: boolean,
+  rem: Uint8Array,
+  hasRem: boolean,
+  done: (ok: boolean, prime: Uint8Array) => void,
+): void;
+/** @ntsAbi managed */
+declare function nts_crypto_prime_candidate_ok(candidate: Uint8Array): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_prime_check(candidate: Uint8Array, checks: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_prime_check_job(
+  candidate: Uint8Array,
+  checks: number,
+  done: (ok: boolean, answer: Uint8Array) => void,
+): void;

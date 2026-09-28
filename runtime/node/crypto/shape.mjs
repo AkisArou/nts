@@ -85,6 +85,8 @@ function applyDescriptors(exports) {
 
 /** Node's order, for the names this module publishes. */
 const ORDER = [
+  "checkPrime",
+  "checkPrimeSync",
   "createCipheriv",
   "createDecipheriv",
   "createDiffieHellman",
@@ -98,6 +100,8 @@ const ORDER = [
   "createSign",
   "createVerify",
   "diffieHellman",
+  "generatePrime",
+  "generatePrimeSync",
   "getCiphers",
   "getCipherInfo",
   "getCurves",

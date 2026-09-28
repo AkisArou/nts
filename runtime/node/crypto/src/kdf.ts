@@ -29,7 +29,7 @@ import {
 } from "../../internal/validators.ts";
 import { isAnyArrayBuffer, isArrayBufferView } from "../../util/src/types.ts";
 import { isKeyObject, prepareSecretKey } from "./keys.ts";
-import { asBuffer, bytesOf, digestId, getArrayBufferOrView, jobError, toBuf, validateByteSource } from "./util.ts";
+import { asArrayBuffer, asBuffer, bytesOf, digestId, getArrayBufferOrView, jobError, toBuf, validateByteSource } from "./util.ts";
 import type { ByteSource } from "./util.ts";
 
 /** What node's `DeriveBitsJob` says when OpenSSL queued nothing to say instead. */
@@ -205,13 +205,6 @@ function hkdfDigest(parameters: HkdfParameters): number {
   return id;
 }
 
-/** The derived bits as node gives them: an `ArrayBuffer`, not a `Buffer`. */
-function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const buffer = bytes.buffer as ArrayBuffer;
-  return bytes.byteOffset === 0 && bytes.byteLength === buffer.byteLength
-    ? buffer
-    : buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-}
 
 export function hkdf(
   digest: unknown,

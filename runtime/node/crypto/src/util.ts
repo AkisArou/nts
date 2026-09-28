@@ -33,6 +33,21 @@ export function asBuffer(bytes: Uint8Array): Buffer {
   return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
 }
 
+/** Bytes as an `ArrayBuffer` of their own, copied only when they are a part of a larger one. */
+export function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = bytes.buffer as ArrayBuffer;
+  return bytes.byteOffset === 0 && bytes.byteLength === buffer.byteLength
+    ? buffer
+    : buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+/** Big-endian bytes as an unsigned bigint: node's `bigIntArrayToUnsignedBigInt`. */
+export function unsignedBigInt(bytes: Uint8Array): bigint {
+  let value = 0n;
+  for (let i = 0; i < bytes.length; i++) value = (value << 8n) | BigInt(bytes[i]!);
+  return value;
+}
+
 /** Node's `toBuf`: text through `Buffer.from`, where `buffer` means UTF-8. */
 export function toBuf(value: unknown, encoding?: string): unknown {
   if (typeof value === "string") {

@@ -1,17 +1,20 @@
-// Random bytes, integers and UUIDs, from node v24.20.0
-// `lib/internal/crypto/random.js`, over OpenSSL's CSPRNG
-// (`src/crypto/crypto_random.cc`).
-//
-// Primes -- `generatePrime`, `checkPrime` -- are the same file in node and are
-// OpenSSL's `BN_*`; they are not part of this module yet.
+// Random bytes, integers, UUIDs and primes, from node v24.20.0
+// `lib/internal/crypto/random.js`, over OpenSSL's CSPRNG and its `BN_*`
+// primes (`src/crypto/crypto_random.cc`; here `crypto.c` and `prime.c`).
 
 import { Buffer, kMaxLength } from "../../buffer/src/main.ts";
 import { getDefaultTriggerAsyncId } from "../../internal/async-hooks.ts";
 import { AsyncRequest } from "../../internal/async-request.ts";
 import { domException } from "../../internal/dom-exception.ts";
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
+import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_OUT_OF_RANGE_BINDING } from "../../internal/errors.ts";
 import { nextTick } from "../../internal/tick.ts";
-import { validateBoolean, validateFunction, validateNumber, validateObject } from "../../internal/validators.ts";
+import {
+  validateBoolean,
+  validateFunction,
+  validateInt32,
+  validateNumber,
+  validateObject,
+} from "../../internal/validators.ts";
 import {
   isAnyArrayBuffer,
   isArrayBufferView,
@@ -20,7 +23,7 @@ import {
   isFloat64Array,
   isTypedArray,
 } from "../../util/src/types.ts";
-import { bytesOf, jobError } from "./util.ts";
+import { asArrayBuffer, bytesOf, cryptoError, jobError, unsignedBigInt } from "./util.ts";
 import type { ByteSource } from "./util.ts";
 
 const kMaxInt32 = 2 ** 31 - 1;
@@ -402,4 +405,175 @@ function getUnbufferedUUIDv7(): string {
 
 export function randomUUIDv7(options?: UUIDOptions): string {
   return entropyCacheDisabled(options) ? getUnbufferedUUIDv7() : getBufferedUUIDv7();
+}
+
+// -- primes -------------------------------------------------------------------
+
+/** `prime.c`'s refusals of a generation's options. */
+const PrimeOptions = { InvalidAdd: -1, InvalidRem: -2 } as const;
+
+/** What node's `DeriveBitsJob` says when OpenSSL queued nothing to say instead. */
+const DERIVE_FAILED = "Deriving bits failed";
+
+const PRIME_SOURCES = ["ArrayBuffer", "TypedArray", "Buffer", "DataView", "bigint"];
+
+const noBytes = new Uint8Array(0);
+
+/** Node's `unsignedBigIntToBuffer`: big-endian, as few bytes as the value needs. */
+function unsignedBigIntToBuffer(value: bigint, name: string): Buffer {
+  if (value < 0n) throw new ERR_OUT_OF_RANGE(name, ">= 0", value);
+  const hex = value.toString(16);
+  return Buffer.from(hex.padStart(hex.length + (hex.length % 2), "0"), "hex");
+}
+
+/** A candidate, `add` or `rem`: a bigint, or bytes. */
+function primeBytes(value: unknown, name: string): Uint8Array {
+  if (typeof value === "bigint") return unsignedBigIntToBuffer(value, name);
+  if (!isAnyArrayBuffer(value) && !isArrayBufferView(value)) {
+    throw new ERR_INVALID_ARG_TYPE(name, PRIME_SOURCES, value);
+  }
+  return bytesOf(value);
+}
+
+export interface GeneratePrimeOptions {
+  safe?: unknown;
+  bigint?: unknown;
+  add?: unknown;
+  rem?: unknown;
+}
+
+/** A generation as node's `createRandomPrimeJob` and the job's C++ configuration check it. */
+interface PrimeJob {
+  bits: number;
+  safe: boolean;
+  bigint: boolean;
+  add: Uint8Array | undefined;
+  rem: Uint8Array | undefined;
+}
+
+function createRandomPrimeJob(size: number, options: unknown): PrimeJob {
+  validateObject(options, "options");
+  const given = options as GeneratePrimeOptions;
+  const safe = given.safe === undefined ? false : given.safe;
+  const bigint = given.bigint === undefined ? false : given.bigint;
+  validateBoolean(safe, "options.safe");
+  validateBoolean(bigint, "options.bigint");
+  const add = given.add === undefined ? undefined : primeBytes(given.add, "options.add");
+  const rem = given.rem === undefined ? undefined : primeBytes(given.rem, "options.rem");
+  const status = nts_crypto_prime_options(size, add ?? noBytes, add !== undefined, rem ?? noBytes, rem !== undefined);
+  if (status === PrimeOptions.InvalidAdd) throw new ERR_OUT_OF_RANGE_BINDING("invalid options.add");
+  if (status === PrimeOptions.InvalidRem) throw new ERR_OUT_OF_RANGE_BINDING("invalid options.rem");
+  return { bits: size, safe, bigint, add, rem };
+}
+
+/** The prime as the program asked for it: an `ArrayBuffer`, or a bigint. */
+function primeResult(job: PrimeJob, prime: Uint8Array): ArrayBuffer | bigint {
+  return job.bigint ? unsignedBigInt(prime) : asArrayBuffer(prime);
+}
+
+type PrimeCallback = (error: Error | undefined, prime?: ArrayBuffer | bigint) => void;
+
+/** `crypto.generatePrimeSync(size[, options])`. */
+export function generatePrimeSync(size: unknown, options: unknown = {}): ArrayBuffer | bigint {
+  validateInt32(size, "size", 1);
+  const job = createRandomPrimeJob(size, options);
+  const prime = nts_crypto_prime_generate(
+    job.bits,
+    job.safe,
+    job.add ?? noBytes,
+    job.add !== undefined,
+    job.rem ?? noBytes,
+    job.rem !== undefined,
+  );
+  if (prime === null) throw jobError(DERIVE_FAILED);
+  return primeResult(job, prime);
+}
+
+/** `crypto.generatePrime(size[, options], callback)`. */
+export function generatePrime(size: unknown, options: unknown, callback?: unknown): void {
+  validateInt32(size, "size", 1);
+  if (typeof options === "function") {
+    callback = options;
+    options = {};
+  }
+  validateFunction(callback, "callback");
+  queuePrime(createRandomPrimeJob(size, options), callback as PrimeCallback);
+}
+
+function queuePrime(job: PrimeJob, done: PrimeCallback): void {
+  const request = new AsyncRequest("RANDOMPRIMEREQUEST", getDefaultTriggerAsyncId());
+  nts_crypto_prime_generate_job(
+    job.bits,
+    job.safe,
+    job.add ?? noBytes,
+    job.add !== undefined,
+    job.rem ?? noBytes,
+    job.rem !== undefined,
+    (ok, prime) => {
+      const failure = ok ? undefined : jobError(DERIVE_FAILED);
+      request.complete(() => {
+        if (failure !== undefined) done(failure);
+        else done(undefined, primeResult(job, prime));
+      });
+    },
+  );
+}
+
+export interface CheckPrimeOptions {
+  checks?: unknown;
+}
+
+type CheckPrimeCallback = (error: Error | undefined, result?: boolean) => void;
+
+/** The rounds asked for, checked as node checks them. */
+function checksOf(options: unknown): number {
+  validateObject(options, "options");
+  const given = (options as CheckPrimeOptions).checks;
+  const checks = given === undefined ? 0 : given;
+  // "The checks option is unsigned but must fit into a signed C int for OpenSSL."
+  validateInt32(checks, "options.checks", 0);
+  return checks + 0;
+}
+
+/**
+ * `CheckPrimeTraits::AdditionalConfig`: a candidate too long for OpenSSL is
+ * refused with its reason before any job runs, the asynchronous form
+ * included.
+ */
+function checkCandidate(bytes: Uint8Array): void {
+  if (!nts_crypto_prime_candidate_ok(bytes)) throw cryptoError("BignumPointer");
+}
+
+/** `crypto.checkPrimeSync(candidate[, options])`. */
+export function checkPrimeSync(candidate: unknown, options: unknown = {}): boolean {
+  const bytes = primeBytes(candidate, "candidate");
+  const checks = checksOf(options);
+  checkCandidate(bytes);
+  const answer = nts_crypto_prime_check(bytes, checks);
+  if (answer < 0) throw jobError(DERIVE_FAILED);
+  return answer === 1;
+}
+
+/** `crypto.checkPrime(candidate[, options], callback)`. */
+export function checkPrime(candidate: unknown, options: unknown = {}, callback?: unknown): void {
+  const bytes = primeBytes(candidate, "candidate");
+  if (typeof options === "function") {
+    callback = options;
+    options = {};
+  }
+  validateFunction(callback, "callback");
+  const checks = checksOf(options);
+  checkCandidate(bytes);
+  queueCheck(bytes, checks, callback as CheckPrimeCallback);
+}
+
+function queueCheck(bytes: Uint8Array, checks: number, done: CheckPrimeCallback): void {
+  const request = new AsyncRequest("CHECKPRIMEREQUEST", getDefaultTriggerAsyncId());
+  nts_crypto_prime_check_job(bytes, checks, (ok, answer) => {
+    const failure = ok ? undefined : jobError(DERIVE_FAILED);
+    request.complete(() => {
+      if (failure !== undefined) done(failure);
+      else done(undefined, answer[0] === 1);
+    });
+  });
 }

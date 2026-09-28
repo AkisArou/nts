@@ -1,4 +1,4 @@
-/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c` and `dh.c`, called directly.
+/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c` and `prime.c`, called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
@@ -686,6 +686,46 @@ static void key_agreement(void) {
                     strcmp(job_hex, "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742") == 0);
 }
 
+/* --------------------------------------------------------------- primes */
+
+static void primes(void) {
+    NtsView *none = bytes("", 0);
+    NtsView *prime = nts_crypto_prime_generate(64, false, none, false, none, false);
+    expect_true("a 64-bit prime is 8 bytes with its top bit set",
+                prime != NULL && nts_view_byte_length(prime) == 8 && (nts_view_bytes(prime)[0] & 0x80) != 0);
+    expect_true("  and checks as prime", nts_crypto_prime_check(prime, 0) == 1);
+    unsigned char four = 4;
+    unsigned char mersenne[] = {0x7f, 0xff, 0xff, 0xff};
+    expect_true("4 is not", nts_crypto_prime_check(bytes(&four, 1), 0) == 0);
+    expect_true("2^31 - 1 is, with twenty rounds asked", nts_crypto_prime_check(bytes(mersenne, 4), 20) == 1);
+
+    unsigned char add = 12;
+    unsigned char rem = 11;
+    NtsView *congruent = nts_crypto_prime_generate(32, false, bytes(&add, 1), true, bytes(&rem, 1), true);
+    const unsigned char *c = congruent == NULL ? NULL : nts_view_bytes(congruent);
+    unsigned long value = c == NULL ? 0 : ((unsigned long)c[0] << 24) | (c[1] << 16) | (c[2] << 8) | c[3];
+    expect_true("a prime with add 12 and rem 11 is 11 mod 12", congruent != NULL && value % 12 == 11);
+    unsigned char big_add[] = {0x01, 0x00, 0x00, 0x00, 0x00};
+    expect_true("an add wider than the prime is refused before generating",
+                nts_crypto_prime_options(32, bytes(big_add, 5), true, none, false) == -1);
+    expect_true("  and a rem not below add", nts_crypto_prime_options(32, bytes(&rem, 1), true, bytes(&add, 1), true) == -2);
+
+    size_t huge_length = 67108864;
+    unsigned char *huge = calloc(huge_length, 1);
+    huge[0] = 1;
+    expect_true("a 64 MiB candidate is no number OpenSSL will hold", !nts_crypto_prime_candidate_ok(bytes(huge, huge_length)));
+    expect_true("  and OpenSSL says so", errors_mention("bignum too long"));
+    free(huge);
+
+    int before = jobs_done;
+    nts_crypto_prime_check_job(bytes(mersenne, 4), 0, &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("a check job answers one true byte", jobs_done == before + 1 && job_ok && strcmp(job_hex, "01") == 0);
+    nts_crypto_prime_generate_job(16, true, none, false, none, false, &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("a generation job answers a 16-bit safe prime", jobs_done == before + 2 && job_ok && strlen(job_hex) == 4);
+}
+
 int main(void) {
     digests();
     derivations();
@@ -695,6 +735,7 @@ int main(void) {
     rsa_encryption();
     key_generation();
     key_agreement();
+    primes();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

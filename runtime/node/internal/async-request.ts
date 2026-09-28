@@ -33,7 +33,9 @@ export type RequestProvider =
   | "SCRYPTREQUEST"
   | "SIGNREQUEST"
   | "KEYPAIRGENREQUEST"
-  | "KEYGENREQUEST";
+  | "KEYGENREQUEST"
+  | "RANDOMPRIMEREQUEST"
+  | "CHECKPRIMEREQUEST";
 
 export class AsyncRequest {
   #asyncId: number;
