@@ -76,7 +76,7 @@
 // blocker at a time, so "how often is X the cause" has three honest answers:
 //
 //   first  X is the first root reported             -- where reduction starts
-//   sole   X is the only root reported             -- what fixing X would clear
+//   sole   X is the only root reported             -- the most fixing X could clear
 //   any    X is among the roots                     -- reach
 //
 // `sole` is the work signal; `first` is what earlier censuses ranked. Roots
@@ -84,6 +84,14 @@
 // "this statement is skipped"), which are consequences, not causes. A sole
 // cause is sole *among what was reported*: a lowering refusal can stand in
 // front of another the compiler has not reached yet.
+//
+// **A checker root is sole over nothing.** A program that does not typecheck
+// is never lowered, so a `TS` sole root has every lowering refusal behind it
+// unreported, not absent. Measured 2026-09-28: `TS2554 Expected 1 arguments,
+// but got 0` (the stand-in's `Test262Error` arity) was the sole root of 483
+// files; with it fixed, 7 of them passed, 1 answered wrongly, and 475 stopped
+// at a lowering or backend refusal the checker had kept out of sight.
+// `sole` is an upper bound for every root, and for a checker root a loose one.
 
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -870,7 +878,7 @@ const table = (title, ranking) => {
   for (const [cause, n] of ranking.slice(0, sites)) say(`    ${String(n).padStart(6)}  ${cause}`);
   if (ranking.length > sites) say(`    ... ${ranking.length - sites} more`);
 };
-table("refused, ranked by SOLE root -- what fixing that cause alone would clear:", rankSole);
+table("refused, ranked by SOLE root -- the most fixing that cause alone could clear (a TS root: lowering has not run):", rankSole);
 table("refused, ranked by FIRST root -- where reduction starts:", rankFirst);
 table("refused, ranked by ANY root -- reach:", rankAny);
 table("names quoted by NTS roots (builtins, members), by cases:", rankNamed);

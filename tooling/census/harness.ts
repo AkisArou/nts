@@ -59,8 +59,19 @@
 // those is not in the census's leading slice, and the census says so rather
 // than substituting a weaker stand-in.
 
+/**
+ * `message` is optional, as `harness/sta.js` has it (`this.message = message
+ * || ""`). It was required until 2026-09-28, and every test writing
+ * `throw new Test262Error()` -- 1,092 files in `test/language`, 682 in
+ * `test/built-ins`, the sole root of 483 -- was refused with `TS2554 Expected
+ * 1 arguments, but got 0` at its own line: the stand-in's narrowness, ranked
+ * as the test's.
+ */
 class Test262Error {
-  constructor(public readonly message: string) {}
+  readonly message: string;
+  constructor(message?: string) {
+    this.message = message || "";
+  }
 }
 
 /**
