@@ -435,6 +435,33 @@ function judge(was, now) {
   return { word: "CHANGED", ok: false, why: `${was.category} (${was.nts}) -> ${now.category} (${now.nts})` };
 }
 
+// **A recorded fixture is an input to `integrity`**, which reads every outcomes
+// program, and one that pins a defect shows that defect's structural
+// violations. Two fixtures landed without their integrity.known entries and
+// turned `integrity` red on main for every lane (an-init-hook-of-one-
+// parameter, a-teed-stream-read-back). So a record is not finished until
+// integrity passes over it: run here, on the same pinned compiler, and any
+// violation it does not already know is printed as owed.
+if (recording && chosen.length > 0) {
+  const recorded = chosen.map((name) => join("tooling/conformance/outcomes", name));
+  const check = spawnSync("node", [join(HERE, "integrity.mjs"), ...recorded], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: { ...process.env, NTS_BIN: NTS },
+    maxBuffer: 1 << 26,
+  });
+  const said = `${check.stdout ?? ""}${check.stderr ?? ""}`;
+  if (check.status === 0) {
+    console.log(`  integrity: clean over the recorded fixture(s)`);
+  } else {
+    const owed = said.split("\n").filter((l) => /^ {2}[a-z-]+ {2,}tooling\/conformance\/outcomes\//.test(l));
+    console.log(`  integrity: the recorded fixture(s) owe ${owed.length} integrity.known entr${owed.length === 1 ? "y" : "ies"} -- add them in this commit`);
+    for (const line of owed.slice(0, 20)) console.log(`  ${line.trim()}`);
+    if (owed.length === 0) console.log(`  ${said.trim().split("\n").slice(-2).join(" / ")}`);
+    unexpected += 1;
+  }
+}
+
 console.log();
 console.log(
   `  ${chosen.length} fixture(s)` +
