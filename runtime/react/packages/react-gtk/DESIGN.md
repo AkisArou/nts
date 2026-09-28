@@ -465,7 +465,7 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   across sections and is controlled: applied again whenever React changes
   the items (so a `selected` applied before its item existed selects it),
   and a user's pick goes back after the flush unless the app takes it up.
-  An item's `suffix` widget is not an element yet.
+  An item's one child, a widget, is its suffix.
 - A ToastOverlay shows `<ToastOverlay.Toast title timeout onDismissed>`
   while it is rendered: placed, it is added, and taken out, dismissed. The
   user dismissing it, or its time running out, is heard as `onDismissed`,

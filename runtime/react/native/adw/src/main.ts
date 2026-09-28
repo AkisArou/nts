@@ -65,9 +65,9 @@
 //             within its section and a section moved to the end go where React
 //             puts them; its `selected`, applied before its items existed,
 //             selects the item it names, and again after each change of items;
-//             a title updates in place; a user's pick goes back when the app
-//             keeps its own and is heard once; an item and a section taken out
-//             go
+//             a title updates in place; an item's child is its suffix; a
+//             user's pick goes back when the app keeps its own and is heard
+//             once; an item and a section taken out go
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window; its Response
 //             elements are its buttons in React's order, one inserted between
@@ -754,6 +754,15 @@ function main(): void {
     appendChild(sideNode, sectionZero);
     siding += ">" + items();
     commitUpdate(itemA, "AdwSidebar.Item", { title: "a" }, { title: "A" }, {});
+    // An item's child is its suffix, until React takes it out.
+    const suffix = createInstance("GtkLabel", { label: "3" }, root, 0, {});
+    appendChild(itemB, suffix);
+    const first = sidebarWidget.get_item(0);
+    if (first !== null) {
+      siding += " suffix=" + String(first.get_suffix() === widget(suffix));
+      removeChild(itemB, suffix);
+      siding += ">" + String(first.get_suffix() === null);
+    }
     // The user picks another: the app keeps its own, so it goes back.
     sidebarWidget.set_selected(0);
     idle();

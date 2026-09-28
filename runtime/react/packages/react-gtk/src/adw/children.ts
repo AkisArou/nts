@@ -982,6 +982,8 @@ export interface SidebarItemProps {
   /** Whether it shows: true, if not given. */
   visible?: boolean;
   useUnderline?: boolean;
+  /** Its one child: a widget shown at its end, its `suffix`. */
+  children?: unknown;
 }
 
 export interface SidebarChildren {
@@ -1102,14 +1104,37 @@ export class SidebarSectionNode extends ObjectElementNode {
   }
 }
 
-/** An item of a Sidebar's section: its section places it (SidebarSectionNode). */
+/**
+ * An item of a Sidebar's section: its section places it (SidebarSectionNode).
+ * Its one child, a widget, is its suffix.
+ */
 export class SidebarItemNode extends ObjectElementNode {
   readonly item: AdwSidebarItem = new AdwSidebarItem();
+  private suffix: WidgetNode | null = null;
+
+  appendChild(child: HostNode): void {
+    const widget = child.widgetNode();
+    if (widget === null) {
+      throw new Error(`<${child.name()}> goes directly inside its widget, not in <${this.name()}>.`);
+    }
+    if (this.suffix !== null && this.suffix !== widget) {
+      throw new Error(`<${this.name()}> holds one child at most: its suffix.`);
+    }
+    this.suffix = widget;
+    this.item.set_suffix(widget.widget);
+  }
+  removeChild(child: HostNode): void {
+    if (this.suffix === child) {
+      this.item.set_suffix(null);
+      this.suffix = null;
+    }
+  }
 
   // Only what changed is set.
   applyProps(previous: Props | null, next: Props): void {
-    if (next["children"] !== undefined) {
-      throw new Error(`<${this.name()}> holds no children: its text is its \`title\`.`);
+    const children = next["children"];
+    if (typeof children === "string" || typeof children === "number") {
+      throw new Error(`<${this.name()}> holds a widget, its suffix: its text is its \`title\`.`);
     }
     const changed = (key: string): boolean => previous === null || previous[key] !== next[key];
     const text = (key: string): string | null => {
