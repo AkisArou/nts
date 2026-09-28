@@ -103,26 +103,38 @@ static void call_1n(NtsHeader *callback, double a) {
          callback->descriptor->methods[nts_closure_call_slot])(callback, a);
 }
 
+/* The three below **consume** their reference arguments. Every caller hands
+ * over a value made for the call, and a compiled closure only borrows its
+ * arguments -- it retains what it keeps -- so the reference the caller made is
+ * released here, after the call, or on the way out when there is no one to
+ * call. */
 static void call_bytes(NtsHeader *callback, NtsView *bytes) {
-    if (callback == NULL) return;
-    ((void (*)(NtsHeader *, NtsView *))
-         callback->descriptor->methods[nts_closure_call_slot])(callback, bytes);
+    if (callback != NULL) {
+        ((void (*)(NtsHeader *, NtsView *))
+             callback->descriptor->methods[nts_closure_call_slot])(callback, bytes);
+    }
+    nts_release((NtsHeader *)bytes);
 }
 
 static void call_lookup(NtsHeader *callback, double status, NtsString *address,
                         double family) {
-    if (callback == NULL) return;
-    ((void (*)(NtsHeader *, double, NtsString *, double))
-         callback->descriptor->methods[nts_closure_call_slot])(
-        callback, status, address, family);
+    if (callback != NULL) {
+        ((void (*)(NtsHeader *, double, NtsString *, double))
+             callback->descriptor->methods[nts_closure_call_slot])(
+            callback, status, address, family);
+    }
+    nts_release((NtsHeader *)address);
 }
 
 static void call_lookup_all(NtsHeader *callback, double status,
                             NtsArray *addresses, NtsArray *families) {
-    if (callback == NULL) return;
-    ((void (*)(NtsHeader *, double, NtsArray *, NtsArray *))
-         callback->descriptor->methods[nts_closure_call_slot])(
-        callback, status, addresses, families);
+    if (callback != NULL) {
+        ((void (*)(NtsHeader *, double, NtsArray *, NtsArray *))
+             callback->descriptor->methods[nts_closure_call_slot])(
+            callback, status, addresses, families);
+    }
+    nts_release((NtsHeader *)addresses);
+    nts_release((NtsHeader *)families);
 }
 
 static void hold(NtsHeader **slot, NtsHeader *value) {

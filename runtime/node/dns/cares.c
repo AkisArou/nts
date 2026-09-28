@@ -807,9 +807,15 @@ static void deliver(Query *query) {
     if (callback != NULL) {
         NtsString *code = status == ARES_SUCCESS ? latin1z("") : latin1z(code_of(status));
         if (status != ARES_SUCCESS) answer_discard(&answer);
+        NtsArray *texts = texts_array(&answer);
+        NtsArray *numbers = numbers_array(&answer);
         ((void (*)(NtsHeader *, NtsString *, NtsArray *, NtsArray *))
-             callback->descriptor->methods[nts_closure_call_slot])(
-            callback, code, texts_array(&answer), numbers_array(&answer));
+             callback->descriptor->methods[nts_closure_call_slot])(callback, code, texts, numbers);
+        /* A closure borrows its arguments -- it retains what it keeps -- so
+         * the three made for this call are released here. */
+        nts_release((NtsHeader *)code);
+        nts_release((NtsHeader *)texts);
+        nts_release((NtsHeader *)numbers);
         nts_release(callback);
     }
     answer_free(&answer);
