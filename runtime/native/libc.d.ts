@@ -205,14 +205,16 @@ declare module "c:types" {
   // A GObject interface: a handle of its prerequisite class (`GtkWidget` for
   // `GtkEditable`) that C spells by its own tag, `GtkEditable *`. Anything
   // implementing `Tag` converts to one -- its `__c_implements` says so -- and
-  // nothing else does. The marker is optional so that an implementing class,
-  // which has none, is assignable; its value tells two interfaces apart. An
-  // interface whose prerequisite is another interface names the first class
-  // above it and `Implements` the interfaces between: `GDtlsConnection` is a
-  // `GObject` implementing `GDatagramBased`, so there is one marker per type.
+  // nothing else does. An interface whose prerequisite is another interface
+  // names the first class above it and `Implements` the interfaces between:
+  // `GtkSelectionModel` is a `GObject` implementing `GListModel`, so it is
+  // one wherever a `GListModel` is taken. The interface's own tag rides in a
+  // marker's key, `__c_interface_GtkSelectionModel`, and not in its value: a
+  // key the other interface does not name is no conflict, where two values
+  // of one key are, and optional so that an implementing class, which has
+  // none, is assignable too.
   export type GObjectInterface<Tag extends string, Prerequisite extends ClassChain, Implements extends string = never> =
-    Prerequisite & {
-      readonly __c_interface?: Tag;
+    Prerequisite & { readonly [K in `__c_interface${Tag}`]?: true } & {
       readonly __c_implements: { readonly [K in Tag | Implements]: true };
     };
   type ImplementsOf<P> = P extends { readonly __c_implements: infer I } ? I : {};

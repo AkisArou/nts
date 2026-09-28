@@ -17,6 +17,19 @@ fn marker(snapshot: &SemanticSnapshot, ty: TypeId, name: &str) -> Option<TypeId>
     (p.readonly && !p.optional && p.kind == MemberKind::Field).then_some(p.ty)
 }
 
+/// `GObjectInterface`'s own tag, from its marker's key: the optional
+/// `__c_interface{Tag}` (escaped `___c_interface{Tag}` in the snapshot).
+fn interface_tag(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
+    match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Object { properties } => properties.iter().find_map(|p| {
+            let tag = p.name.strip_prefix("___c_interface")?;
+            (!tag.is_empty() && p.readonly && p.optional && p.kind == MemberKind::Field).then(|| tag.to_owned())
+        }),
+        TypeKind::Intersection(parts) => parts.iter().find_map(|part| interface_tag(snapshot, *part)),
+        _ => None,
+    }
+}
+
 /// An optional property's literal, through the `undefined` optionality adds.
 fn optional_text(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
@@ -74,11 +87,10 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         elements.iter().map_while(|element| text(snapshot, *element).map(str::to_owned)).collect();
     // `GObjectInterface<Tag, Prerequisite>`: the chain is the prerequisite's,
     // whole, and the handle is the interface's own tag, which is how C
-    // declares a parameter of one (`GtkEditable *`).
-    let interface = property(snapshot, ty, "___c_interface")
-        .filter(|p| p.readonly && p.optional && p.kind == MemberKind::Field)
-        .and_then(|p| optional_text(snapshot, p.ty))
-        .map(str::to_owned);
+    // declares a parameter of one (`GtkEditable *`). The tag is the marker's
+    // key, `__c_interface_GtkEditable`, so that a sub-interface converts to
+    // the interface it requires.
+    let interface = interface_tag(snapshot, ty);
     let tag = match &interface {
         Some(tag) => tag.clone(),
         None => tags.pop()?,
