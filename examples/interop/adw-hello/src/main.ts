@@ -9,6 +9,10 @@
 //   wifi true name Ada view grid  a preferences group's rows, each written
 //                 as a property: an `AdwSwitchRow`'s `active`, an
 //                 `AdwEntryRow`'s `text`, an `AdwToggleGroup`'s `active_name`
+//   moved map 3   an `AdwToggle` the program keeps, taken out of its group
+//                 and put back: the group takes a reference of its own
+//                 (`Consumed<AdwToggle>`), under no provider as under counting,
+//                 so the one it gives back on removal is not the program's
 //   activated 1   an `AdwActionRow`'s `activated` signal, from `activate()`
 //   dismissed 1   an `AdwToast` added to an `AdwToastOverlay` by a button's
 //                 handler, and dismissed when its one-second timeout ends
@@ -62,6 +66,11 @@ function main(): void {
     const toggles = new AdwToggleGroup({});
     toggles.add(new AdwToggle({ name: "list", label: "List" }));
     toggles.add(new AdwToggle({ name: "grid", label: "Grid" }));
+    const kept = new AdwToggle({ name: "map", label: "Map" });
+    toggles.add(kept);
+    toggles.remove(kept);
+    toggles.add(kept);
+    console.log("moved " + (kept.name ?? "") + " " + String(toggles.n_toggles));
     const overlay = new AdwToastOverlay({});
     const column = new GtkBox({ orientation: Orientation.VERTICAL, spacing: 12 });
     column.append(toggles);
