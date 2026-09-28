@@ -2377,7 +2377,6 @@ fn symbol(raw: &str) -> String {
 }
 
 fn function(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
-    indirect::unexportable(func, platform).map_or(Ok(()), |why| Err(refuse(func, why)))?;
     let mut out = String::new();
     let returns = return_ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
@@ -2414,6 +2413,7 @@ fn function(program: &Program, func: &Func, platform: Platform) -> Result<String
     prologue.extend(native_memory::stack_storage(func, platform));
     prologue.extend(indirect::scratch(platform));
     let public = nts_codegen_common::symbols::is_public(program, func);
+    indirect::unexportable(func, platform, public).map_or(Ok(()), |why| Err(refuse(func, why)))?;
     let (linkage, defined, entry) = indirect::definition(func, platform, (symbol(&func.name), public));
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
@@ -2506,26 +2506,37 @@ fn function(program: &Program, func: &Func, platform: Platform) -> Result<String
         let _ = writeln!(out, "  {}", terminator(func, &block.terminator)?);
     }
     let _ = writeln!(out, "}}");
-    Ok(if entry { out + &c_entry(func, returns)? } else { out })
+    Ok(if entry { out + &c_entry(func, returns, platform)? } else { out })
 }
 
-/// The entry C calls an exported function through under Win64, where the
-/// function takes or returns a sixteen-byte value (`indirect::behind_entry`):
-/// each such argument a pointer to C's copy, loaded and split as the body
-/// takes it; an erased result written through the hidden pointer C passes
-/// first, and an `i128` returned in XMM0 as `<2 x i64>` -- as clang defines
-/// the same C function. Everything else passes through as it is.
-fn c_entry(func: &Func, returns: &str) -> Result<String, Diagnostic> {
+/// The entry C calls an exported function through where C passes one of its
+/// values otherwise than the body takes it (`indirect::behind_entry`), as
+/// clang defines the same C function. Under Win64 each sixteen-byte argument
+/// is a pointer to C's copy, loaded and split as the body takes it; an
+/// erased result is written through the hidden pointer C passes first, and
+/// an `i128` returned in XMM0 as `<2 x i64>`. On arm64 an erased value is
+/// `[2 x i64]` both ways, the tag in the low half of the first word.
+/// Everything else passes through as it is.
+fn c_entry(func: &Func, returns: &str, platform: Platform) -> Result<String, Diagnostic> {
+    let win64 = indirect::applies(platform);
     let exported = symbol(&func.name);
     let body = indirect::body_symbol(&exported);
     let mut params = Vec::new();
     let mut lines = Vec::new();
     let mut arguments = Vec::new();
-    if func.return_type == HirType::Erased {
+    if win64 && func.return_type == HirType::Erased {
         params.push(format!("ptr sret({ERASED_TYPE}) align 8 %result"));
     }
     for (at, param) in func.params.iter().enumerate() {
         match &param.ty {
+            HirType::Erased if !win64 => {
+                params.push(format!("[2 x i64] %a{at}"));
+                lines.push(format!("%a{at}.lo = extractvalue [2 x i64] %a{at}, 0"));
+                lines.push(format!("%a{at}.tag = trunc i64 %a{at}.lo to i32"));
+                lines.push(format!("%a{at}.bits = extractvalue [2 x i64] %a{at}, 1"));
+                arguments.push(format!("i32 %a{at}.tag"));
+                arguments.push(format!("i64 %a{at}.bits"));
+            }
             HirType::Erased => {
                 params.push(format!("ptr %a{at}"));
                 lines.push(format!("%a{at}.v = load {ERASED_TYPE}, ptr %a{at}, align 8"));
@@ -2534,7 +2545,7 @@ fn c_entry(func: &Func, returns: &str) -> Result<String, Diagnostic> {
                 arguments.push(format!("i32 %a{at}.tag"));
                 arguments.push(format!("i64 %a{at}.bits"));
             }
-            HirType::BigInt => {
+            HirType::BigInt if win64 => {
                 params.push(format!("ptr %a{at}"));
                 lines.push(format!("%a{at}.v = load i128, ptr %a{at}, align 16"));
                 arguments.push(format!("i128 %a{at}.v"));
@@ -2548,11 +2559,23 @@ fn c_entry(func: &Func, returns: &str) -> Result<String, Diagnostic> {
     }
     let call = format!("{body}({})", arguments.join(", "));
     let (result, finish) = match &func.return_type {
+        HirType::Erased if !win64 => (
+            "[2 x i64]".to_owned(),
+            vec![
+                format!("%r = call {ERASED_TYPE} {call}"),
+                format!("%r.tag = extractvalue {ERASED_TYPE} %r, 0"),
+                format!("%r.bits = extractvalue {ERASED_TYPE} %r, 1"),
+                "%r.lo = zext i32 %r.tag to i64".to_owned(),
+                "%r.1 = insertvalue [2 x i64] undef, i64 %r.lo, 0".to_owned(),
+                "%r.2 = insertvalue [2 x i64] %r.1, i64 %r.bits, 1".to_owned(),
+                "ret [2 x i64] %r.2".to_owned(),
+            ],
+        ),
         HirType::Erased => (
             "void".to_owned(),
             vec![format!("%r = call {ERASED_TYPE} {call}"), format!("store {ERASED_TYPE} %r, ptr %result, align 8"), "ret void".to_owned()],
         ),
-        HirType::BigInt => (
+        HirType::BigInt if win64 => (
             "<2 x i64>".to_owned(),
             vec![format!("%r = call i128 {call}"), "%r.v = bitcast i128 %r to <2 x i64>".to_owned(), "ret <2 x i64> %r.v".to_owned()],
         ),

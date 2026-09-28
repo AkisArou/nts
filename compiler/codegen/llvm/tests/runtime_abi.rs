@@ -131,8 +131,8 @@ fn every_runtime_call_agrees_with_its_declaration() {
 /// arm64: an erased value crosses into the runtime as AAPCS64's `[2 x i64]`
 /// and comes back the same way, so the program that reaches each hand-spelled
 /// path emits whole and every call agrees with `signatures_arm64.rs`, under
-/// both providers. Only an exported function crossing one is refused, as on
-/// Win64.
+/// both providers. An exported function crossing one is defined behind an
+/// entry of C's shape (`arm64_exports_an_erased_value_through_a_c_entry`).
 #[test]
 fn arm64_passes_an_erased_value_as_two_words() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
@@ -214,6 +214,53 @@ fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
         assert!(emitted.text.contains(shape), "no `{shape}`:\n{}", emitted.text);
     }
     let Some(found) = lint(&emitted.text, "win64-entry") else {
+        eprintln!("skipped the lint: no opt");
+        return;
+    };
+    assert!(found.is_empty(), "calls that disagree with their declarations:\n{}", found.join("\n"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// arm64: an exported function taking or returning an erased value is
+/// defined internal, and exported through an entry of AAPCS64's shape -- the
+/// value as `[2 x i64]` both ways, the tag in the low half of the first word.
+/// Under qemu, a C caller of this program's `described` and `kept`, built
+/// for aarch64 Linux, reads `42` and `7`.
+#[test]
+fn arm64_exports_an_erased_value_through_a_c_entry() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("nts-runtime-abi-arm64-entry-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src/main.ts"),
+        "export function described(v: unknown): unknown { return typeof v === \"number\" ? v + 1 : \"other\"; }\n\
+         export function kept(v: unknown, n: number): unknown { return n > 0 ? v : null; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "target": "ESNext", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
+    )
+    .unwrap();
+    let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let emitted = nts_codegen_llvm::emit(&prepared.program, arm64);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    for shape in [
+        "define internal { i32, i64 } @described.body(i32 %v0.tag, i64 %v0.bits)",
+        "define [2 x i64] @described([2 x i64] %a0)",
+        "define [2 x i64] @kept([2 x i64] %a0, double %a1)",
+    ] {
+        assert!(emitted.text.contains(shape), "no `{shape}`:\n{}", emitted.text);
+    }
+    let Some(found) = lint(&emitted.text, "arm64-entry") else {
         eprintln!("skipped the lint: no opt");
         return;
     };

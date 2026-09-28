@@ -487,8 +487,10 @@ Application.Start(() => { new App(); });
    (`indirect::behind_entry`, `c_entry`): each such argument a pointer to
    C's copy, an erased result through the hidden pointer, an `i128` as
    `<2 x i64>`. A C caller on Windows reads `2^71` and `42` back. The same
-   gap on arm64, where C passes an erased value as `[2 x i64]`, is still
-   refused.
+   on arm64 Linux and macOS, where C passes and returns an erased value as
+   `[2 x i64]`: a C caller under qemu reads `42` and `7`. Only arm64
+   Windows, which passes sixteen bytes in two registers and not the pointer
+   x86-64 Windows passes, is still refused.
 2. **W2's rest** as listed above. **W3** is complete for the fixture's
    needs; next is **W4**.
 3. **W4:** the idiomatic layer, packaging, and a benchmark against

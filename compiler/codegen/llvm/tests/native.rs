@@ -392,25 +392,25 @@ fn aggregate_arguments_respect_register_exhaustion() {
 /// A refused function is declared so the module still parses and the link
 /// names it. Its `boolean` parameter was declared `zeroext i1`, a result's
 /// order, which is not IR: the module failed to parse, the failure the
-/// declaration exists to prevent. An export taking an erased value is one
-/// this backend refuses on arm64.
+/// declaration exists to prevent. An export taking a `bigint` is one this
+/// backend refuses on arm64 Windows.
 #[test]
 fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
     let Some((dir, prepared)) = prepare("refused-boolean", r"
-        export function pick(flag: boolean, v: unknown): unknown {
-            return flag ? v : 0;
+        export function pick(flag: boolean, n: bigint): bigint {
+            return flag ? n : 0n;
         }
-        export function first(): unknown {
-            return pick(true, 1);
+        export function first(): bigint {
+            return pick(true, 1n);
         }
     ") else { return };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
-    let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
+    let arm64_windows = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::Win64, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let llvm = nts_codegen_llvm::emit(&prepared.program, arm64_windows);
     let declared = llvm.text.lines().find(|line| line.starts_with("declare") && line.contains("@pick(")).unwrap_or_else(|| panic!("`pick` was not refused and declared: {:?}", llvm.diagnostics));
     assert!(declared.contains("(i1 zeroext, "), "{declared}");
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    clang(&dir, &["--target=aarch64-linux-gnu", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"]);
+    clang(&dir, &["--target=aarch64-w64-windows-gnu", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"]);
 }
 
 #[test]
