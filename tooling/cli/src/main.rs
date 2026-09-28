@@ -2291,7 +2291,8 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // Raw lowering stays the default because it is what maps onto the source.
     let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
     let (program, diagnostics) = if want_passes {
-        let entry = selected_roots(Shape::from_flags());
+        let emission = Emission::from_flags();
+        let entry = selected_roots(emission.shape);
         // **The foreign table, which this did not pass and every emitter does.**
         // `prepare_unverified` copies `options.foreign` into `program.foreign`,
         // so without it a GIR, Objective-C or COM program printed here is not
@@ -2316,11 +2317,15 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         // the roots half means resolving the config's product here the way
         // `nts build` does, and deriving the shape from it. Until then
         // `hir --prepared --main` gives an app's real roots.
+        let (entry_files, configured) = match configured_surface(tsconfig, &snapshot, emission)? {
+            Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
+            None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
+        };
         let foreign = foreign_tables(&snapshot);
         let options = hir::Options {
             provider: selected_provider(),
             foreign: &foreign,
-            entry_files: &nts_frontend_ts::entry_uris(tsconfig, &snapshot),
+            entry_files: &entry_files,
             // Through `selected_roots`, so this prints the program a backend
             // receives rather than a neighbouring one. It did not: the old
             // parser here never appended module initialization, so
@@ -2330,7 +2335,10 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
             // avoid, and `named_entry`'s own comment is about what a missing
             // `module#init` costs -- five module-level `const`s left null and a
             // benchmark answering 32768 against node's 10240.
-            roots: entry.as_deref().map_or(hir::reachable::Roots::EveryExport, hir::reachable::Roots::Entry),
+            roots: entry.as_deref().map_or_else(
+                || configured.unwrap_or(hir::reachable::Roots::EveryExport),
+                hir::reachable::Roots::Entry,
+            ),
             ..hir::Options::default()
         };
         // An invalid program is exactly the one worth reading, so the
