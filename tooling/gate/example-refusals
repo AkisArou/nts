@@ -110,3 +110,4 @@ a-dead-branch-does-not-refuse-a-try 1 the control arm: a live call to a generic 
 an-await-of-a-thenable 2 a `then` that can throw, and a thenable held as a base whose `then` delivers what the base cannot hold
 a-narrowed-value-assigned-to-a-const 1 the boundary arm: a narrowed `let` a closure writes to is bound to its cell, so the branch does not rebind it
 an-enum-member-read-by-its-name 1 the boundary arm: a reverse mapping at a computed index, which is `undefined` for a value no member has
+a-nested-function-used-before-its-declaration 1 the boundary arm: a hoisted closure whose capture is declared inside the block, where node throws on the dead zone and a closure built at the top would answer NaN

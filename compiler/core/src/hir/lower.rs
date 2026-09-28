@@ -3249,6 +3249,17 @@ fn collect_function_values(
             if node.parent == Some(*declaration) {
                 continue;
             }
+            // **A nested declaration that captures is already a closure, and
+            // that closure IS its value.** A wrapper for one forwards to the
+            // declared name, and there is no function of that name -- so the
+            // wrapper compiled and `Closure1#call` called `inner`, "which
+            // nothing in this program defines". Read after its declaration the
+            // binding holds the closure and the wrapper was never reached; read
+            // before it, the wrapper was reached and was wrong. Now neither
+            // exists, and a read before the declaration refuses by name.
+            if taken_as_a_closure(closures, *declaration) {
+                continue;
+            }
             if !wrapped.contains(declaration) {
                 wrapped.push(*declaration);
             }
@@ -3286,6 +3297,7 @@ fn collect_function_values(
             }
             for declaration in &record.declarations {
                 if probe.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)
+                    && !taken_as_a_closure(closures, *declaration)
                     && !wrapped.contains(declaration)
                 {
                     wrapped.push(*declaration);
@@ -23466,7 +23478,37 @@ impl<'a> FuncBuilder<'a> {
         // says so: the unerase lives where the `if` was, and a read outside the
         // list need not be dominated by it.
         let outer = std::mem::take(&mut self.narrowed_past_an_if);
+        // **A function declaration is hoisted, so its closure is built before the
+        // first statement rather than where it stands.** `run(inner); function
+        // inner() { ... n ... }` is ordinary JavaScript and the reverse order
+        // compiles today, so lowering the binding at the declaration's position
+        // made the order load-bearing where the language does not: `inner`'s read
+        // found no binding, fell through to the function-value wrapper, and that
+        // wrapper forwarded to the declared name -- which for a capturing nested
+        // function is not a function of this program. `Closure1#call` calling
+        // `inner`, "which nothing in this program defines", with no root
+        // diagnostic; the GTK lane found it porting Workbench's Box, one arm past
+        // the shape `3cf606cea` closed.
+        //
+        // `bind_nested_function` stays on the statement arm and skips a symbol
+        // already bound, so a declaration somewhere this does not reach -- a
+        // `case` clause's statement list, a module's own top level -- keeps
+        // today's behaviour rather than losing it to a hoist that only covers
+        // blocks.
         let mut lowered = Ok(());
+        for statement in self.children(id) {
+            if self.kind_of(statement) == Some(syntax::FUNCTION_DECLARATION)
+                && self.hoistable(id, statement)
+                && let Err(error) = self.bind_nested_function(statement)
+            {
+                lowered = Err(error);
+                break;
+            }
+        }
+        if lowered.is_err() {
+            self.narrowed_past_an_if = outer;
+            return lowered;
+        }
         for statement in self.children(id) {
             // Everything after a `return` in the same block is dead. Lowering it
             // would put operations in a block that has already ended.
@@ -39099,6 +39141,58 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// Whether this nested function's closure can be built at the top of its
+    /// block rather than where it stands.
+    ///
+    /// **Only when everything it captures is declared outside the block**, and the
+    /// arm that forced this is a wrong answer rather than a refusal:
+    ///
+    /// ```ts
+    /// const got = run(inner);
+    /// let later = n + 1;
+    /// function inner(): number { return later * 3; }
+    /// ```
+    ///
+    /// node throws `ReferenceError: Cannot access 'later' before initialization`
+    /// -- `inner` is hoisted and `later` is in its temporal dead zone -- and a
+    /// closure built at the top of the block reads the cell before anything wrote
+    /// it and answers `NaN`. Before the hoist this shape *refused*, at the use,
+    /// which is the honest answer and the one it keeps: a refusal turning into a
+    /// wrong answer is the one direction a change must not go.
+    ///
+    /// `Capture::forward` is the wrong test and was the first one written: it says
+    /// "declared below *this declaration*", and hoisting moves the closure above
+    /// the whole list, so a capture declared **anywhere in the block** is one the
+    /// top of the block cannot see. In the arm above `later` is declared before
+    /// `inner` and `forward` is correctly false, so that guard did not fire and
+    /// the answer stayed `NaN`. Measured, not reasoned -- the fixture had the arm
+    /// and the guard did not stop it.
+    ///
+    /// By span rather than by walking the block's subtree: this runs once per
+    /// declaration per block, and a containment test on two offsets answers the
+    /// same question as a walk without being quadratic in a long body. A
+    /// parameter and an outer local both start before the block's brace, which is
+    /// what makes the comparison the right one.
+    ///
+    /// Answering the dead zone properly is a feature -- a check at the read
+    /// against a cell that records whether anything has written it -- and this
+    /// names it rather than guessing at it.
+    fn hoistable(&self, block: NodeId, id: NodeId) -> bool {
+        let extent = self.node(block).origin.location.span;
+        let inside = |at: NodeId| {
+            let span = self.node(at).origin.location.span;
+            span.start >= extent.start && span.start < extent.end
+        };
+        self.closures.iter().filter(|closure| closure.node == id).all(|closure| {
+            closure.captures.iter().all(|capture| {
+                self.snapshot
+                    .symbols
+                    .get(capture.symbol as usize)
+                    .is_none_or(|record| !record.declarations.iter().copied().any(inside))
+            })
+        })
+    }
+
     fn bind_nested_function(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         if !taken_as_a_closure(&self.closures, id) {
             return Ok(());
@@ -39113,6 +39207,13 @@ impl<'a> FuncBuilder<'a> {
         let Some(symbol) = self.children(id).first().and_then(|name| self.node(*name).symbol) else {
             return Ok(());
         };
+        // Already hoisted by [`Self::lower_block`], which binds every function
+        // declaration in a statement list before lowering any of them. Called
+        // twice for the same declaration on purpose: this arm is what covers a
+        // list that hoist does not walk.
+        if self.bindings.contains_key(&symbol.0) {
+            return Ok(());
+        }
         let value = self.lower_arrow(id)?;
         self.bindings.insert(symbol.0, value);
         Ok(())
