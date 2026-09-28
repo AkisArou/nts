@@ -178,17 +178,19 @@ the same vtable calls on the VM measured the behaviour first.
     between `get_Children` and `get_Size` -- XAML cleared the destroyed
     panel's children and the size read 0.
 - **What is left refused**, measured over winui-hello's bindings (the 83
-  namespaces its imports reach), 2026-09-28: 402 items, 312 of them a
-  factory interface's composable `CreateInstance`, which is its class's
-  constructor and bound as that. Of the other 90: 25 arrays -- a buffer the
-  callee fills (`GetMany`, `CameraIntrinsics`' conversions), and arrays of
-  booleans, characters, `Guid`s, 64-bit integers or enums, `PropertyValue`'s
-  boxing statics most of them; 25 delegates that return a value, are answered or are
-  generic; 10 structs holding an `IReference`; 6 holding a `boolean`; 7
-  generic members with no signature; 7 idiomatic names two surfaces give.
-  Before `Copied<T>`, struct `[out]` parameters and named delegates, the
-  same bindings refused 497, among them every `TypeName` member, 22 struct
-  `[out]`s and 60 delegates.
+  namespaces its imports reach), 2026-09-28, after arrays the callee fills:
+  380 items, 312 of them a factory interface's composable `CreateInstance`,
+  which is its class's constructor and bound as that. Of the other 68: 25
+  delegates that return a value, are answered or are generic; 20 arrays --
+  of booleans, characters, `Guid`s or 64-bit integers, `PropertyValue`'s
+  boxing statics most of them, and the generic interfaces' own `GetMany`
+  and `ReplaceAll`, which their instantiations declare; 7 WebView2 members,
+  whose types are in a `.winmd` not fetched; 7 generic members with no
+  signature; 7 idiomatic names two surfaces give; 2 `in` parameters after
+  an `out` one. Before `Copied<T>`, struct `[out]` parameters and named
+  delegates, the same bindings refused 497, among them every `TypeName`
+  member, 22 struct `[out]`s and 60 delegates; before struct fields that
+  are booleans or objects, 402.
 - **Delegates and events:**
   - A TypeScript function is a COM delegate object whose `Invoke` is a
     per-signature adapter. The closure is lent until the object's count
@@ -267,25 +269,34 @@ the same vtable calls on the VM measured the behaviour first.
   `GetResults`, `Error` rejects with the operation's own error, and
   `Canceled` rejects with an `Error` named "Canceled", as the JavaScript
   projection does -- `GetResults` would answer E_ILLEGAL_METHOD_CALL there,
-  measured. The compiler resolves a promise with one through it as it
+  measured. An operation whose result is a struct
+  (`IAsyncOperation<LoadMoreItemsResult>`) fulfils with it as a plain object
+  (`Copied<T>`), which the generated function copies out of the storage
+  `GetResults` answers. The compiler resolves a promise with one through it as it
   resolves any thenable (docs/async.md 5d), chosen from the checker's type:
   two specialisations are one handle type, so no run-time test could choose.
   A second `await` of one operation rejects with the operation's own refusal
   of a second `Completed` (0x80000018).
 - **Not yet:**
-  - `then` on an operation whose result is a struct
-    (`IAsyncOperation<LoadMoreItemsResult>`): the struct is read into a native
-    local, which a callback cannot be handed, so the binder declares none and
-    `refused.txt` says so.
-  - Arrays of anything a typed array does not hold -- strings, objects,
-    structs, booleans, 64-bit integers -- in any direction. Arrays of numbers
-    cross every way the ABI has: passed in or filled in place as a typed
-    array's elements (`CElements<Int32Array, "const int32_t">`, as `CBytes`
-    for bytes), handed back as a typed array of the program's
-    (`CopyToByteArray(buffer).value` is a `Uint8Array`; copied, the block
-    freed, `nts_winrt_received`), and as an object: an `IPropertyValue` of one
-    unboxes into the typed array and a typed array where an object is taken
-    is boxed, as the JavaScript projection did.
+  - Arrays of booleans, characters, `Guid`s and 64-bit integers (`bigint`
+    is not lowered), in any direction. Every other array crosses every way
+    the ABI has -- passed in, filled by the callee, handed back:
+    - Numbers, and enums as their 32-bit integer, as a typed array's
+      elements, borrowed in place (`CElements<Int32Array, "const int32_t">`,
+      `CBytes` for bytes); handed back as a typed array of the program's
+      (`CopyToByteArray(buffer).value`), copied, the block freed; and as an
+      object, boxed and unboxed as `IPropertyValue`, as the JavaScript
+      projection did.
+    - Objects (`CHandles`, `FilledHandles`), strings (`HStrings`,
+      `FilledStrings`) and structs as plain objects (`CopiedArray`,
+      `FilledArray`). An array the callee fills (`GetMany`,
+      `DistortPoints`' `results`) is the program's, passed in, its length
+      what the callee may write: objects into the array's own block, lent
+      in place once emptied, strings and structs into a zeroed block of the
+      call's, copied in after it.
+  - `getMany` on the idiomatic surface (`IVectorMembers<T>`): one generic
+    member cannot name the marker its element needs, so each instantiation
+    declares `GetMany` on itself (`IVectorOfIJsonValue`).
   - Generic delegates whose IID depends on the interface's own parameters
     (`IObservableMap<K, V>.MapChanged`).
 
