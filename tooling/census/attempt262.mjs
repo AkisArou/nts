@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
-import { environment, materialise, placeOf, workspace } from "./project.mjs";
+import { environment, flagsOf, materialise, placeOf, workspace } from "./project.mjs";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
@@ -253,6 +253,19 @@ export function capped(tools, command, args) {
   return ["-c", `ulimit -v ${Number(cap)}; exec "$0" "$@"`, command, ...args];
 }
 
+/**
+ * An `async` test's verdict, from what it printed -- INTERPRETING.md's `async`
+ * flag: complete only on `Test262:AsyncTestComplete`, failed on a
+ * `Test262:AsyncTestFailure:` line, and failed when neither comes, because a
+ * test that never calls `$DONE` has not completed. Exiting 0 is not a pass.
+ */
+export function asyncVerdict(printed, objects) {
+  const failure = /^Test262:AsyncTestFailure:(?:([A-Za-z_$][\w$]*): )?(.*)$/m.exec(printed);
+  if (failure) return { bucket: "threw", thrown: failure[1] ?? "Test262Error", message: failure[0].slice(0, 240) };
+  if (/^Test262:AsyncTestComplete$/m.test(printed)) return { bucket: "strict-pass", objects };
+  return { bucket: "threw", thrown: "$DONE", message: "an async test that exited without calling $DONE" };
+}
+
 /** Compile, link and run one program body. Never reads an exit status alone. */
 export function attempt(dir, body, tools) {
   const { nts, cc } = tools;
@@ -429,13 +442,13 @@ export function attempt(dir, body, tools) {
   }
 
   try {
-    execFileSync("sh", capped(tools, join(out, "program"), []), {
+    const printed = execFileSync("sh", capped(tools, join(out, "program"), []), {
       encoding: "utf8",
       timeout: 30_000,
       maxBuffer: 16 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    return { bucket: "strict-pass", objects };
+    return flagsOf(body).includes("async") ? asyncVerdict(printed, objects) : { bucket: "strict-pass", objects };
   } catch (error) {
     if (error.signal === "SIGTERM") return { bucket: "timeout" };
     const thrown = UNCAUGHT.exec(String(error.stderr ?? ""));
@@ -497,28 +510,37 @@ export function selfChecks(scratch, tools, cannotMeasure) {
   // the sabotage arm hit once with an unused `any`: the arm tested the compiler
   // on a program the compiler had deleted.
   //
-  // Required to be exactly `unsupported`, not merely "not a pass". A crash or a
-  // throw would satisfy the weaker test while still meaning the refusal went
-  // unread.
-  const refused = attempt(
-    dir,
-    'function classify(text: string): boolean {\n' +
-      '  return /^[a-z]+$/.test(text);\n' +
-      '}\n' +
-      'classify("abc");\n' +
-      'assert.sameValue(1 + 1, 2, "refusal arm");\n',
-    tools,
-  );
-  if (refused.bucket !== "unsupported") {
+  // Required to be exactly `unsupported` from *lowering*, not merely "not a
+  // pass". A crash or a throw would satisfy the weaker test while still
+  // meaning the refusal went unread -- and so would the checker: this arm was
+  // written in TypeScript (`text: string`), and when the test became
+  // `main.js` it went on passing as a *syntax error*, testing nothing.
+  const refused = attempt(dir, 'var matched = /^[a-z]+$/.test("abc");\nassert.sameValue(matched, true, "refusal arm");\n', tools);
+  if (refused.bucket !== "unsupported" || refused.why !== "lowering") {
     cannotMeasure(
       `a program containing a refused construct reported ${refused.bucket}` +
         `${refused.why ? ` (${refused.why})` : ""}, not unsupported. ` +
         "A compiler refusal is being counted as a verdict about the language.",
     );
   }
+  // **The async protocol's three answers**, through the same path: an `async`
+  // test passes on `$DONE()`, fails on `$DONE(error)`, and fails when it never
+  // calls it -- exiting 0 is not a pass. `async`/`await` rather than `.then`,
+  // which this compiler refuses on a promise.
+  const ASYNC = "/*---\nflags: [async]\n---*/\n";
+  const done = attempt(dir, `${ASYNC}async function f() { await 0; $DONE(); }\nf();\n`, tools);
+  const failed = attempt(dir, `${ASYNC}async function f() { await 0; $DONE(new Test262Error("async arm")); }\nf();\n`, tools);
+  const silent = attempt(dir, `${ASYNC}async function f() { await 0; }\nf();\n`, tools);
+  if (done.bucket !== "strict-pass" || failed.thrown !== "Test262Error" || silent.thrown !== "$DONE") {
+    cannotMeasure(
+      `the async arms read ${done.bucket}, ${failed.bucket} ${failed.thrown ?? ""}, ${silent.bucket} ${silent.thrown ?? ""}` +
+        " -- not a pass, a Test262Error and a missing $DONE. An async verdict would not depend on what the test printed.",
+    );
+  }
   return {
     control: control.bucket,
     sabotage: `${sabotage.bucket} ${sabotage.thrown}`,
     refused: `${refused.bucket}/${refused.why}`,
+    async: `${done.bucket}, ${failed.bucket} ${failed.thrown}, ${silent.bucket} ${silent.thrown}`,
   };
 }

@@ -101,7 +101,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.mjs";
-import { bodyOf, FRONTMATTER, HARNESS_HASH, PROVIDED_INCLUDES, pinCompiler } from "./project.mjs";
+import { bodyOf, HARNESS_HASH, PROVIDED_INCLUDES, pinCompiler } from "./project.mjs";
 import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -356,9 +356,8 @@ function harnessGap(record, source) {
   if (record.negative?.phase === "resolution") return "negative:resolution (module loading is not in this lane)";
   const missing = record.includes.filter((include) => !PROVIDED_INCLUDES.has(include));
   if (missing.length > 0) return `include:${missing.sort().join("+")}`;
-  const meta = FRONTMATTER.exec(source)?.[1] ?? "";
-  const flags = /^\s*flags:\s*\[([^\]]*)\]/m.exec(meta)?.[1] ?? "";
-  if (/\basync\b/.test(flags)) return "harness:async ($DONE)";
+  // An `async` test is attempted: the stand-in has `$DONE`, and `attempt`
+  // judges the case by the line it prints (harness-done.ts).
   const body = bodyOf(source);
   if (/\$262\b/.test(body)) return "harness:$262";
   return null;
@@ -842,7 +841,7 @@ if (pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.avail
   say("  with its rows case for case: node tooling/census/rows.mjs --diff <first> <second> -- 0 moved");
 }
 say(`  runtime objects: ${objectTally.hit} cached, ${objectTally.miss} compiled (${OBJECT_CACHE})`);
-say(`  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, refused ${checks.refused}`);
+say(`  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, refused ${checks.refused}, async ${checks.async}`);
 say(
   `  ${under}: ${records.length} case(s) in the selection` +
     (sample > 0 ? `, a deterministic sample of ${population.length}` : "") +

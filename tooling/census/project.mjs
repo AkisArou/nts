@@ -16,8 +16,15 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** The lowerable stand-in for the harness entries every non-raw test receives. */
 export const HARNESS = readFileSync(join(HERE, "harness.ts"), "utf8");
 
-/** `$DONOTEVALUATE`, spliced in only for a test that names it; the file says why. */
-export const HARNESS_DONOTEVALUATE = readFileSync(join(HERE, "harness-donotevaluate.ts"), "utf8");
+/**
+ * Top-level entries appended only for a test that names them, as test262
+ * includes `doneprintHandle.js` only for an `async` test: `$DONOTEVALUATE`
+ * (`sta.js`) and `$DONE` (`doneprintHandle.js`). Each file says why.
+ */
+const GLOBALS = [
+  { names: /\$DONOTEVALUATE\b/, source: readFileSync(join(HERE, "harness-donotevaluate.ts"), "utf8") },
+  { names: /\$DONE\b/, source: readFileSync(join(HERE, "harness-done.ts"), "utf8") },
+];
 
 /**
  * Members of `namespace assert` spliced in only for a test that calls them,
@@ -54,7 +61,7 @@ const TEST_PRELUDE = '"use strict";\n';
  * here, beside the list, so a member added is a member hashed.
  */
 const LAYOUT = `${HARNESS_FILE} + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}`;
-export const HARNESS_HASH = [LAYOUT, HARNESS, HARNESS_DONOTEVALUATE, ...MEMBERS.map((m) => m.source)]
+export const HARNESS_HASH = [LAYOUT, HARNESS, ...GLOBALS.map((g) => g.source), ...MEMBERS.map((m) => m.source)]
   .reduce((hash, source) => hash.update(source), createHash("sha256"))
   .digest("hex")
   .slice(0, 16);
@@ -64,12 +71,24 @@ export function harnessFor(body) {
   const opening = "namespace assert {\n";
   if (!HARNESS.includes(opening)) throw new Error("harness.ts has no `namespace assert {` line to splice members into");
   const members = MEMBERS.filter((m) => m.calls.test(body)).map((m) => m.source).join("");
-  const harness = HARNESS.replace(opening, opening + members);
-  return /\$DONOTEVALUATE\b/.test(body) ? harness + HARNESS_DONOTEVALUATE : harness;
+  const globals = GLOBALS.filter((g) => g.names.test(body)).map((g) => g.source).join("");
+  return HARNESS.replace(opening, opening + members) + globals;
 }
 
 /** A test262 file's front matter, which the body a case compiles leaves out. */
 export const FRONTMATTER = /\/\*---([\s\S]*?)---\*\//;
+
+/**
+ * A test262 file's `flags:`, flow-style (`flags: [async]`) or a block list
+ * (`flags:\n  - async`), as the metadata parser reads both.
+ */
+export function flagsOf(source) {
+  const meta = FRONTMATTER.exec(source)?.[1] ?? "";
+  const flow = /^\s*flags:\s*\[([^\]]*)\]/m.exec(meta);
+  if (flow) return flow[1].split(",").map((f) => f.trim()).filter(Boolean);
+  const block = /^\s*flags:\s*\n((?:\s*-\s*\S+\s*\n?)+)/m.exec(meta);
+  return block ? [...block[1].matchAll(/-\s*(\S+)/g)].map((m) => m[1]) : [];
+}
 
 /** The body of a test262 file: its source without the front matter. */
 export const bodyOf = (source) => source.replace(FRONTMATTER, "");
