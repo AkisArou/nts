@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "uncompilable-c",
+  "nts": "error: 'NtsObj_Iterable_N_' has no member named 'length'",
+  "node": "exit 1; nts: uncaught Observed: length=2;",
+  "measured_with": "f62e7f597128ddde",
+  "source": "measured"
+}

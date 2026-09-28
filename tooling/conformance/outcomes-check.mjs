@@ -251,10 +251,20 @@ export function rootOfTheProgram(said, roots, main) {
   return roots[0];
 }
 
-/** `program.c:147:5: error: 'v1' undeclared` -> `error: 'vN' undeclared`: stable across unrelated codegen. */
+/**
+ * `program.c:147:5: error: 'v1' undeclared` -> `error: 'vN' undeclared`, and
+ * `'NtsObj_Iterable_15_'` -> `'NtsObj_Iterable_N_'`: a local's number and a
+ * generated layout's are both where codegen reached, which any unrelated type
+ * or statement moves.
+ */
 function firstCError(text) {
   const line = text.split("\n").find((l) => /\berror\b/.test(l)) ?? text.trim().split("\n")[0] ?? "";
-  return line.replace(/^\S*?:\d+:\d+:\s*/, "").replace(/\bv\d+\b/g, "vN").replace(/[‘’]/g, "'").trim();
+  return line
+    .replace(/^\S*?:\d+:\d+:\s*/, "")
+    .replace(/\bv\d+\b/g, "vN")
+    .replace(/\b(NtsObj_[A-Za-z]\w*?)\d+(_?)(?![\w])/g, "$1N$2")
+    .replace(/[‘’]/g, "'")
+    .trim();
 }
 
 /** node on the same text: its exit and its uncaught line, in nts's shape. */
