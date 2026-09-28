@@ -23,10 +23,9 @@ import { GetModuleHandleW } from "c:Windows.Win32.System.LibraryLoader";
 import {
   CWP_FLAGS, ChildWindowFromPointEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
   KillTimer, PostQuitMessage, RegisterClassExW, SetTimer, TranslateMessage,
-  WINDOW_EX_STYLE, WINDOW_STYLE,
+  WINDOW_EX_STYLE, WINDOW_STYLE, WM_CREATE, WM_DESTROY, WM_TIMER,
 } from "c:Windows.Win32.UI.WindowsAndMessaging";
 import type { MSG, WNDCLASSEXW } from "c:Windows.Win32.UI.WindowsAndMessaging";
-import { WM_CREATE, WM_DESTROY, WM_TIMER } from "../types/winmd/Windows.Win32.UI.WindowsAndMessaging.values.ts";
 
 let created = 0;
 let destroyed = 0;

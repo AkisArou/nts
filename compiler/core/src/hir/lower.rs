@@ -4314,6 +4314,51 @@ fn declared_literal(probe: &FuncBuilder, name: NodeId) -> Option<f64> {
 ///
 /// This doc comment sat on an unrelated `impl` block 765 lines above the
 /// function it describes until 2026-09-17.
+/// A module-scope declaration whose value is not the program's to compute,
+/// settled into `scope`; `true` when it was, and it needs no global.
+///
+/// - **A binding's constant is the value its tag gives** (`/** @ntsConstant
+///   1 */ export const WM_CREATE: c_uint;`, as Win32's are declared): folded
+///   wherever it is read, like a folded `const` of the program's, and never a
+///   global -- it is the platform's, not an export of this program's. A tag
+///   that is not a number is refused.
+/// - A `valueless` scalar `const` with no binding tag at all is refused
+///   ([`VALUELESS_DECLARED_CONST`]).
+fn settle_by_binding(
+    probe: &FuncBuilder,
+    scope: &mut ModuleScope,
+    (id, symbol): (NodeId, nts_semantic_schema::SymbolId),
+    (kind, valueless, ty): (nts_semantic_schema::VariableKind, bool, &HirType),
+) -> bool {
+    let native = probe.node(probe.tagged_statement(id)).native.as_deref();
+    if let Some(text) = native.and_then(|native| native.constant.as_deref()) {
+        match text.trim().parse::<f64>().ok().filter(|value| value.is_finite()) {
+            Some(value) => drop(scope.constants.insert(symbol.0, value)),
+            None => drop(scope.unsupported.insert(symbol.0, format!("`@ntsConstant {text}`, which is not a number"))),
+        }
+        return true;
+    }
+    if kind == nts_semantic_schema::VariableKind::Const && valueless && native.is_none() && is_scalar(ty) {
+        scope.unsupported.insert(symbol.0, VALUELESS_DECLARED_CONST.to_owned());
+        return true;
+    }
+    false
+}
+
+/// **A declared number or boolean nothing gives a value** -- a `const` with
+/// no initializer, which only an ambient declaration may be, no literal type
+/// and no binding tag -- read as the `0` its slot held, with no diagnostic.
+/// Refused where it is read, saying what would give it one. Not an object's
+/// or a string's: `declare const TextEncoder: ...` is a builtin the program
+/// is given, and one a binding names otherwise (`@ntsSymbol`) has a tag.
+const VALUELESS_DECLARED_CONST: &str = "a declared `const` no one gives a value -- no initializer, no literal type, no `@ntsConstant` -- which the compiler cannot know; declare it with its value (`const x = 1`, or `const x: 1`)";
+
+/// Whether a value of `ty` is a number or a boolean, which a slot nothing
+/// writes holds as `0`.
+fn is_scalar(ty: &HirType) -> bool {
+    matches!(ty, HirType::Float { .. } | HirType::Int { .. } | HirType::Bool)
+}
+
 fn collect_module_scope(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -4533,6 +4578,9 @@ fn collect_module_scope(
             .map_or(nts_semantic_schema::VariableKind::Var, |list| {
                 nts_semantic_schema::VariableKind::from_flags(probe.node(list).flags)
             });
+        if settle_by_binding(&probe, &mut scope, (id, symbol), (kind, initializer.is_none() && declared.is_none(), &ty)) {
+            continue;
+        }
         // **Refused, because accepting it was worse.** Nothing in this compiler
         // had heard of `using`, so the declaration lowered as an ordinary
         // binding and `[Symbol.dispose]` was **never called** -- the program
@@ -4546,10 +4594,7 @@ fn collect_module_scope(
         // `typescript.md` listed `using` among shapes "probed and passing",
         // which it is only if the probe stops at whether the program builds.
         if kind.disposes() {
-            scope.unsupported.insert(
-                symbol.0,
-                "a `using` declaration, whose scope-exit disposal".to_owned(),
-            );
+            scope.unsupported.insert(symbol.0, "a `using` declaration, whose scope-exit disposal".to_owned());
             continue;
         }
         // A `const` whose initializer folds is a value rather than storage: the

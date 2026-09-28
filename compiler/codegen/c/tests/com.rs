@@ -871,6 +871,61 @@ export function run(flag: boolean | null): void {
     windows_syntax(&dir, &emitted);
 }
 
+/// A declared number nothing gives a value -- no initializer, no literal
+/// type, no `@ntsConstant` -- is refused where it is read, saying how to give
+/// it one. It read as the `0` its slot held, with no diagnostic.
+#[test]
+fn a_declared_number_with_no_value_is_refused() {
+    let binding = "declare module \"c:Probe\" {\n  import type { c_uint } from \"c:types\";\n  export const UNTAGGED: c_uint;\n}\n";
+    let source = "import { UNTAGGED } from \"c:Probe\";\nexport function run(message: number): boolean {\n  return message === UNTAGGED;\n}\n";
+    let Some((_dir, prepared)) = prepare("valueless-constant", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    let said: Vec<&str> = prepared.diagnostics.iter().map(|diagnostic| diagnostic.message.as_str()).collect();
+    assert!(said.iter().any(|message| message.contains("a declared `const` no one gives a value") && message.contains("declare it with its value")), "{said:?}");
+}
+
+/// A binding's constant (`@ntsConstant`), as Win32's are declared: imported
+/// from its module by name, and read as the number itself -- nothing
+/// declared in C for it, nothing linked. A value that is not a number is
+/// refused.
+#[test]
+fn a_bound_constant_is_its_number_where_it_is_read() {
+    let binding = r#"declare module "c:Windows.Win32.UI.WindowsAndMessaging" {
+  import type { c_uint } from "c:types";
+  /** @ntsConstant 15 */
+  export const WM_PAINT: c_uint;
+  /** @ntsConstant 0x0F */
+  export const WM_HEX: c_uint;
+}
+"#;
+    let source = r#"import { WM_PAINT } from "c:Windows.Win32.UI.WindowsAndMessaging";
+export function run(message: number): boolean {
+  return message === WM_PAINT;
+}
+"#;
+    let Some((_dir, prepared)) = prepare("bound-constant", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert!(!text.contains("WM_PAINT"), "the constant is declared or linked rather than folded:\n{text}");
+    assert!(text.contains("15"), "the constant's value is not what the read is:\n{text}");
+
+    let refused = r#"import { WM_HEX } from "c:Windows.Win32.UI.WindowsAndMessaging";
+export function run(message: number): boolean {
+  return message === WM_HEX;
+}
+"#;
+    let Some((_dir, prepared)) = prepare("bound-constant-refused", binding, refused) else { return };
+    let said: Vec<&str> = prepared.diagnostics.iter().map(|diagnostic| diagnostic.message.as_str()).collect();
+    assert!(said.iter().any(|message| message.contains("`@ntsConstant 0x0F`, which is not a number")), "{said:?}");
+}
+
 /// A sealed runtime class (`@ntsRuntimeClass`), declared as a TypeScript
 /// class of its constructors: `new Uri()` activates it (`@ntsActivate`), and
 /// `new Uri(text)` calls the activation factory's method the checker chose,

@@ -485,6 +485,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let runtime_class = leading_tag(source, "@ntsRuntimeClass");
     let overridable = leading_tag(source, "@ntsOverride");
     let reference = leading_tag(source, "@ntsReference");
+    let constant = leading_tag(source, "@ntsConstant");
     let attributes = nts_semantic_schema::NativeAttributes {
         abi,
         no_escape,
@@ -517,6 +518,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         runtime_class,
         overridable,
         reference,
+        constant,
     };
     // No tag at all is no attributes, rather than an empty set of them.
     (attributes != nts_semantic_schema::NativeAttributes::default()).then(|| Box::new(attributes))

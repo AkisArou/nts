@@ -43,7 +43,8 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     let read = |name: &str| std::fs::read_to_string(out.join(name)).unwrap();
     let messaging = read("Windows.Win32.UI.WindowsAndMessaging.d.ts");
     let foundation = read("Windows.Win32.Foundation.d.ts");
-    let values = read("Windows.Win32.UI.WindowsAndMessaging.values.ts");
+    // Constants are declarations of the module, with no values file beside.
+    assert!(!out.join("Windows.Win32.UI.WindowsAndMessaging.values.ts").exists(), "a values file was written");
     let refused = read("Windows.Win32.UI.WindowsAndMessaging.refused.txt");
 
     // Meaning from the metadata: optional is `| null`, a read-only `PWSTR`
@@ -91,7 +92,7 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     let create = messaging.find("export function CreateWindowExW(").unwrap();
     let doc = &messaging[messaging[..create].rfind("/**").unwrap()..create];
     assert!(doc.contains("@ntsLibrary user32"), "CreateWindowExW does not name user32: {doc}");
-    assert!(values.contains("export const WM_TIMER = 275 as c_uint;"), "no WM_TIMER");
+    assert!(messaging.contains("  /** @ntsConstant 275 */\n  export const WM_TIMER: c_uint;\n"), "no WM_TIMER");
     // `PWSTR` that is not read-only is a buffer the caller owns, not a lent
     // string: `LoadStringW` writes into it.
     assert!(
@@ -101,7 +102,7 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     // The check is real: `SM_CMETRICS` counts the system metrics, and the
     // metadata (a newer SDK) and mingw's header disagree about how many. It is
     // refused rather than written with either number.
-    assert!(!values.contains("export const SM_CMETRICS ="), "SM_CMETRICS was written despite disagreeing with the header");
+    assert!(!messaging.contains("export const SM_CMETRICS:"), "SM_CMETRICS was written despite disagreeing with the header");
     assert!(
         refused.lines().any(|line| line == "SM_CMETRICS\tits value disagrees with the header"),
         "SM_CMETRICS's refusal is not reported"

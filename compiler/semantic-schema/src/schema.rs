@@ -49,7 +49,7 @@ use crate::origin::Origin;
 /// where a rewritten file's text came from. 36: a type alias carries its
 /// `native` tags, a Windows Runtime interface's `@ntsQuery` IID. 37:
 /// `runtime_class`, a sealed Windows Runtime class a binding declares.
-pub const SCHEMA_VERSION: u32 = 38;
+pub const SCHEMA_VERSION: u32 = 39;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -864,6 +864,11 @@ pub struct NativeAttributes {
     /// parameter is `value`.
     #[serde(default)]
     pub reference: Option<String>,
+    /// `@ntsConstant <value>`, on an ambient `const` a binding declares --
+    /// Win32's `WM_CREATE: c_uint` -- whose value the metadata gives: a read
+    /// of it is that number, folded where it is read, and nothing is linked.
+    #[serde(default)]
+    pub constant: Option<String>,
 }
 
 /// Why a snapshot was rejected.
