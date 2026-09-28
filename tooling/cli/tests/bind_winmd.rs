@@ -363,7 +363,7 @@ fn winrt_structs_cross_by_value() {
     // A class whose default interface is an instantiation is bound as it,
     // and named where a method answers it.
     assert!(
-        imaging.contains("export interface BitmapPropertySet extends IMap<HString, IBitmapTypedValue>, BitmapPropertySetInterfaces, BitmapPropertySetMembers {}"),
+        imaging.contains("export interface BitmapPropertySet extends IMap<HString, BitmapTypedValue>, BitmapPropertySetInterfaces, BitmapPropertySetMembers {}"),
         "{imaging}"
     );
     assert!(imaging.contains("): IAsyncOperationOfBitmapPropertySet;"), "{imaging}");
@@ -520,7 +520,7 @@ fn an_instantiation_declares_the_members_its_arguments_decide() {
     let storage = std::fs::read_to_string(out.join("Windows.Storage.d.ts")).unwrap();
     assert!(storage.contains("GetFolderFromPathAsync(this: IStorageFolderStatics, path: HString): IAsyncOperationOfStorageFolder;"), "{storage}");
     assert!(
-        storage.contains("export type IAsyncOperationOfStorageFolder = IAsyncOperation<IStorageFolder> & IAsyncOperationOfStorageFolderMethods;"),
+        storage.contains("export type IAsyncOperationOfStorageFolder = IAsyncOperation<StorageFolder> & IAsyncOperationOfStorageFolderMethods;"),
         "{storage}"
     );
     assert!(
@@ -556,7 +556,7 @@ fn an_async_operation_is_awaitable_as_itself() {
     assert!(storage.contains("@ntsCall nts_then_IAsyncOperationOfStorageFolder"), "{storage}");
     assert!(
         storage.contains(
-            "then(this: IAsyncOperationOfStorageFolder, onFulfilled: (value: IStorageFolder) => unknown, onRejected: (reason: unknown) => unknown): void;"
+            "then(this: IAsyncOperationOfStorageFolder, onFulfilled: (value: StorageFolder) => unknown, onRejected: (reason: unknown) => unknown): void;"
         ),
         "{storage}"
     );
@@ -745,6 +745,17 @@ fn a_received_array_is_a_typed_array() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+/// A class as a type argument is the class, as a getter answers one, so
+/// what a collection yields has the class's members: a grid's column
+/// definitions are `ColumnDefinition`s, not their `IColumnDefinition`.
+fn class_arguments_are_classes(module: &str) {
+    assert!(
+        module.contains("export type IVectorOfColumnDefinition = IVector<ColumnDefinition> & IVectorOfColumnDefinitionMethods;"),
+        "a class type argument is not the class:\n{}",
+        module.lines().filter(|line| line.contains("type IVectorOfColumnDefinition")).collect::<Vec<_>>().join("\n")
+    );
+}
+
 /// A name two interfaces give as methods is overloaded, as C# overloads it:
 /// `IFrame.Navigate` and `IFrame2.Navigate`, one argument apart -- and
 /// across a class and its base.
@@ -805,14 +816,15 @@ fn composable_classes_are_constructed_as_themselves() {
     // to call with an outer object and answer an inner one: refused, saying
     // so, rather than as the `[out]` parameter its inner object is.
     // A class whose default interface is an instantiation is that
-    // instantiation: a panel's children are an `IVector<IUIElement>`, the
+    // instantiation: a panel's children are an `IVector<UIElement>`, the
     // specialisation that declares the members its argument decides
-    // (`ReplaceAll` takes the `IUIElement`s' handles).
+    // (`ReplaceAll` takes the `UIElement`s' handles).
     assert!(
         module.contains("export interface UIElementCollection extends IVectorOfUIElement, UIElementCollectionInterfaces, UIElementCollectionMembers {}"),
-        "UIElementCollection is not its IVector<IUIElement>:\n{}",
+        "UIElementCollection is not its IVector<UIElement>:\n{}",
         module.lines().filter(|line| line.contains("UIElementCollection")).collect::<Vec<_>>().join("\n")
     );
+    class_arguments_are_classes(&module);
     let refused = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
     assert!(
         refused.contains("IButtonFactory.CreateInstance\ta composable factory method, called as its class's constructor"),

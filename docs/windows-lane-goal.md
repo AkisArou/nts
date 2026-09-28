@@ -463,6 +463,27 @@ Application.Start(() => { new App(); });
   overrides that one method of `IAutomationPeerOverrides`' ~40 and forwards
   the rest; XAML asks the button's peer its class name (`peer=PressPeer`). The
   control without the override answers `AutomationPeer`'s own, empty.
+- **Custom layout**, as a C# panel is written: winui-hello's window content
+  is a `Column extends Panel` whose `measureOverride` measures each of
+  `this.children` against the width it is offered and answers the sum, and
+  whose `arrangeOverride` puts each below the one before. XAML lays the
+  window out through both (`column=true`), and the text sits at the
+  button's height (`stacked=true`); the control, every child arranged at
+  `y = 0`, prints `stacked=false`. Three things made it writable:
+  - a class as a type argument is the class, as a getter answers one, so
+    `panel.children` yields `UIElement`s with their members -- it had been
+    the default interface, `IVector<IUIElement>`, with none of them. A
+    derived class passed where a `T` is taken is asked for the interface,
+    so `Append(button)` passes `nts_com_query(button, IUIElement)`;
+  - a record a call writes or takes, inside a loop -- `child.desiredSize`,
+    `child.measure({ ... })` -- is that iteration's, even read after the
+    call's `HRESULT` test in another block. A loop refuses only a local an
+    address of which is carried to the next iteration
+    (`native_storage::carried`), as `escape.rs` refuses a frame allocation;
+  - a record an override answers is built as Apple's are: `const size =
+    local<Size>(); size.width = w; ...; return size;`. An override's
+    declaration is also what `super` answers, so it stays `ByValue<T>`
+    rather than a union with `Fields<T>` a program could not read.
 - **`super.OnLaunched(args)`** calls the base's own implementation through
   its slot (`nts_com_base`), as C#'s `base.OnLaunched(args)` does. The
   control (the runtime answering the program's own face instead) recurses
@@ -472,7 +493,7 @@ Application.Start(() => { new App(); });
     `out` fields;
   - a field initialiser that calls, reads a member or reads `this`, since
     it runs as the instance is made;
-  - a `new` with arguments; and an override returning a value.
+  - a `new` with arguments of a class that declares no constructor.
 - **The SDK** is fetched by `tooling/windows/fetch-winappsdk.sh`, pinned in
   `winrt.rs`. The bootstrapper is built beside the program and loaded on its
   first `Microsoft.*` activation.

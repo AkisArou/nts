@@ -1631,11 +1631,15 @@ impl Writer<'_> {
                 }
                 let base = self.named(&name.namespace, generic_base(&name.name));
                 // An instantiation, `IVectorView<HString>`: each argument as
-                // it is inside the type, which is never `null`.
+                // it is inside the type, which is never `null`. A class is the
+                // class, as a getter answers one, so `panel.children` yields
+                // `UIElement`s with their members; its handle is its default
+                // interface's, and a derived class passed where a `T` is taken
+                // is asked for that interface, as `window.content = button` is.
                 let spelled = if name.generics.is_empty() {
                     base
                 } else {
-                    let arguments = name.generics.iter().map(|argument| self.type_argument(argument)).collect::<Result<Vec<_>, _>>()?;
+                    let arguments = name.generics.iter().map(|argument| self.spell(argument, false)).collect::<Result<Vec<_>, _>>()?;
                     let instantiation = format!("{base}<{}>", arguments.join(", "));
                     if def.category() == TypeCategory::Interface {
                         self.specialize(def, name, &instantiation).unwrap_or(instantiation)
@@ -2019,15 +2023,15 @@ impl Writer<'_> {
         Ok(Some(self.named(&value.namespace, &value.name)))
     }
 
-    /// The interface an array of objects passes each element as: a class's
-    /// default interface, an interface itself, or `IInspectable` for any
-    /// object. `None` for anything else.
+    /// What an array of objects holds: a class (whose elements pass as its
+    /// default interface, the class's handle), an interface itself, or
+    /// `IInspectable` for any object. `None` for anything else.
     fn handle_element(&mut self, element: &Type) -> Result<Option<String>, String> {
         Ok(match element {
             Type::ClassName(named)
                 if self.index.get(&named.namespace, generic_base(&named.name)).next().is_some_and(|def| def.category() != TypeCategory::Delegate) =>
             {
-                Some(self.type_argument(element)?)
+                Some(self.spell(element, false)?)
             }
             Type::Object => {
                 self.brands.insert("IInspectable");
@@ -2069,27 +2073,6 @@ impl Writer<'_> {
             }
             Err(why) => self.refuse(name, &why),
         }
-    }
-
-    /// A type argument of an instantiation, `T` in `IVector<T>`: as a value,
-    /// except that a class is its default interface -- what the ABI passes
-    /// either way, and a `T` a method takes as well as answers. So
-    /// `IVector<ResourceDictionary>.Append` takes an `IResourceDictionary`,
-    /// which a derived class asked as that interface is.
-    fn type_argument(&mut self, ty: &Type) -> Result<String, String> {
-        if let Type::ClassName(named) = ty
-            && named.generics.is_empty()
-            && let Ok(def) = self.find(&named.namespace, &named.name)
-            && def.category() == TypeCategory::Class
-            && let Some(Type::ClassName(interface)) = def
-                .interface_impls()
-                .find(|implemented| implemented.has_attribute("DefaultAttribute"))
-                .map(|implemented| implemented.interface(&[]))
-            && interface.generics.is_empty()
-        {
-            return Ok(self.named(&interface.namespace, &interface.name));
-        }
-        self.spell(ty, false)
     }
 
     /// The IID of an interface or an instantiation of one: the metadata's
@@ -2294,7 +2277,7 @@ impl Writer<'_> {
             };
             return Some(self.then_declaration(alias, Some(then)));
         }
-        let result = self.type_argument(argument).ok()?;
+        let result = self.spell(argument, false).ok()?;
         Some(self.then_declaration(alias, Some(Then::read(result))))
     }
 

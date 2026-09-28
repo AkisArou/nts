@@ -51,14 +51,20 @@
 //   types are `Microsoft.Web.WebView2.Core`'s, and it loads WebView2's two
 //   DLLs from beside the program, which the build ships there; without
 //   them `ensureCoreWebView2Async` rejects with 0x8007007E.
+// - The window's content is a `Column`, a `Panel` of the program's laying
+//   out its children as a C# panel does: `measureOverride` measures each of
+//   `this.children` and answers the sum, `arrangeOverride` puts each below
+//   the one before. `column=true` says XAML laid the window out through both,
+//   and `stacked=true` that the text sits at the button's height.
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
 import type { ByValue, c_int64 } from "c:types";
+import { local } from "c:memory";
 import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
-import { Button, CalendarDatePicker, Frame, MenuFlyout, MenuFlyoutItem, Page, StackPanel, TextBlock, WebView2, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { Button, CalendarDatePicker, Frame, MenuFlyout, MenuFlyoutItem, Page, Panel, StackPanel, TextBlock, WebView2, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
 import { ToggleButton } from "winrt:Microsoft.UI.Xaml.Controls.Primitives";
 import { ContentCoordinateConverter, ContentIsland } from "winrt:Microsoft.UI.Content";
 import { ElementCompositionPreview } from "winrt:Microsoft.UI.Xaml.Hosting";
@@ -88,6 +94,42 @@ class PressPeer extends AutomationPeer {
   }
   getClassNameCore(): string {
     return "PressPeer";
+  }
+}
+
+// A layout of the program's own, as a C# panel writes one: it stacks its
+// children, measuring each against the width it is offered and arranging
+// each below the one before.
+class Column extends Panel {
+  measures = 0;
+  arranges = 0;
+
+  constructor() {
+    super();
+  }
+  measureOverride(available: ByValue<Size>): ByValue<Size> {
+    this.measures += 1;
+    let width = 0;
+    let height = 0;
+    for (const child of this.children) {
+      child.measure({ width: available.width, height: Infinity });
+      width = Math.max(width, child.desiredSize.width);
+      height += child.desiredSize.height;
+    }
+    const size = local<Size>();
+    size.width = width;
+    size.height = height;
+    return size;
+  }
+  arrangeOverride(final: ByValue<Size>): ByValue<Size> {
+    this.arranges += 1;
+    let y = 0;
+    for (const child of this.children) {
+      const height = child.desiredSize.height;
+      child.arrange({ x: 0, y, width: final.width, height });
+      y += height;
+    }
+    return final;
   }
 }
 
@@ -133,7 +175,7 @@ class App extends Application {
   onLaunched(args: ILaunchActivatedEventArgs | null): void {
     super.onLaunched(args);
     this.launched += 1;
-    this.resources.mergedDictionaries.Append(new XamlControlsResources().as_IResourceDictionary());
+    this.resources.mergedDictionaries.Append(new XamlControlsResources());
     const window = new Window();
     window.title = "nts";
     const button = new PressButton("Press");
@@ -150,9 +192,14 @@ class App extends Application {
     };
     button.addEventListener("click", removed);
     button.removeEventListener("click", removed);
-    window.content = button;
+    const column = new Column();
+    const below = new TextBlock();
+    below.text = "below";
+    column.children.Append(button);
+    column.children.Append(below);
+    window.content = column;
     window.activate();
-    setTimeout(() => this.whenLaidOut(window, button), 200);
+    setTimeout(() => this.whenLaidOut(window, button, column, below), 200);
   }
 
   // Buttons made and dropped one after another, each given the same listener
@@ -178,13 +225,19 @@ class App extends Application {
   // program lays a window out later, and a single sample read that as a
   // failure.
   polls = 0;
-  whenLaidOut(window: Window, button: PressButton): void {
+  whenLaidOut(window: Window, button: PressButton, column: Column, below: TextBlock): void {
     this.polls += 1;
-    const laidOut = button.templated > 0 && button.measured > 0 && button.actualWidth > 0;
+    const laidOut = button.templated > 0 && button.measured > 0 && button.actualWidth > 0 && column.arranges > 0;
     if (!laidOut && this.polls < 75) {
-      setTimeout(() => this.whenLaidOut(window, button), 200);
+      setTimeout(() => this.whenLaidOut(window, button, column, below), 200);
       return;
     }
+    // The column's own layout: XAML measured and arranged it through its
+    // overrides, and the text sits where `arrangeOverride` put it -- below
+    // the button, at the button's height -- read before anything below
+    // measures the button again.
+    const layout = "column=" + String(column.measures > 0 && column.arranges > 0) + " stacked=" +
+      String(button.actualSize.y > 0 && below.actualOffset.y === button.actualSize.y);
     // Focus goes to the active window: made so again, since another
     // program may have taken the desktop's focus meanwhile.
     window.activate();
@@ -198,9 +251,9 @@ class App extends Application {
     // Windows Runtime's JavaScript projection read it.
     const shown = button.content;
     const content = typeof shown === "string" ? shown : "object";
-    // The window's content is the button it was given, asked of the
+    // The column's first child is the button it was given, asked of the
     // object itself: `QueryInterface` for `Button`'s interface.
-    const isButton = window.content instanceof Button;
+    const isButton = column.children.getAt(0) instanceof Button;
     // A record written as its fields, where the call takes one by value.
     button.measure({ width: 1000, height: 1000 });
     const desired = button.desiredSize.width > 0;
@@ -290,7 +343,7 @@ class App extends Application {
     const nullable = String(checked) + ":" + (date === null ? "none" : String(date.universalTime)) + ":" + String(set) + ":" + String(cleared) + ":" +
       (dated === null ? "none" : String(dated.universalTime)) + ":" + (colored === null ? "none" : String(colored.r) + String(colored.g) + String(colored.b));
     const line =
-      "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
+      layout + " title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
         " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " back=" + String(back) + " nullable=" + nullable + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt());
     this.browse(window, line);
