@@ -1,0 +1,5 @@
+{
+  "//": "The Journal's twin: a session of the libadwaita Journal (../src/AdwJournal.tsx) played on the probe's typed test host and deterministic scheduler instead of libadwaita, so it has an expected log (expected.log) before the native render runs it on widgets. tools/journal-twin.ts hands it the staged component and runs it under node. It takes the component as an argument, so it is checked without react-gtk, whose own root is typed for its own host.",
+  "extends": "../../../tsconfig.native.json",
+  "include": ["src", "../../../../native/libc.d.ts"]
+}

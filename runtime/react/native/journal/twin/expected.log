@@ -1,0 +1,9 @@
+mount page=write toggles=Write,Read (0) draft= rows= empty=true toasts=0
+type page=write toggles=Write,Read (0) draft=first rows= empty=true toasts=0
+save page=write toggles=Write,Read (1) draft= rows=first empty=false toasts=1
+type page=write toggles=Write,Read (1) draft=second rows=first empty=false toasts=1
+enter page=write toggles=Write,Read (2) draft= rows=first,second empty=false toasts=1
+enter-empty page=write toggles=Write,Read (2) draft= rows=first,second empty=false toasts=1
+read page=read toggles=Write,Read (2) draft= rows=first,second empty=false toasts=1
+delete page=read toggles=Write,Read (1) draft= rows=second empty=false toasts=1
+write page=write toggles=Write,Read (1) draft= rows=second empty=false toasts=1
