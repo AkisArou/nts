@@ -60,8 +60,17 @@ function read(path: string): Diagnostic[] {
   return diagnostics;
 }
 
-// `f` cannot be compiled because it calls `g`, and it calls `h`, and <reason>
+// What a backend's cascade says instead of a reason: the callee it names
+// was refused by the backend, whose own refusals (NTS2xxx) name no function.
+const BY_BACKEND = "refused by the backend (its own refusals are listed below)";
+
+// Lowering: `f` cannot be compiled because it calls `g`, and it calls `h`, and <reason>
+// A backend (NTS2009): `f` cannot be emitted because it calls `g`, which this backend refused above
 function cascade(diagnostic: Diagnostic): Cascade | null {
+  const emitted = /^`([^`]+)` cannot be emitted because it calls `([^`]+)`, which this backend refused above/.exec(diagnostic.message);
+  if (emitted !== null) {
+    return { refused: emitted[1]!, calls: [emitted[2]!], reason: BY_BACKEND, at: diagnostic };
+  }
   const head = /^`([^`]+)` cannot be compiled because it calls `([^`]+)`/.exec(diagnostic.message);
   if (head === null) {
     return null;
@@ -103,6 +112,9 @@ function where(diagnostic: Diagnostic): string {
 
 const diagnostics = read(logPath);
 const roots = diagnostics.filter((d) => d.code === "NTS1001");
+// A backend refuses after lowering: a function that lowered, then was not
+// emitted. Its own refusals are every NTS2xxx but the cascade's NTS2009.
+const backendRoots = diagnostics.filter((d) => d.code.startsWith("NTS2") && d.code !== "NTS2009");
 const cascades = diagnostics.map(cascade).filter((c): c is Cascade => c !== null);
 const refusedBy = new Map(cascades.map((c) => [c.refused, c]));
 const logText = readFileSync(logPath, "utf8");
@@ -141,9 +153,17 @@ function isEntry(name: string): boolean {
   return name === entry || name.startsWith(`${entry}@`);
 }
 
-function printChain(start: Cascade): void {
-  console.log(`\`${start.refused}\` is refused (${where(start.at)}); it calls, in order:`);
-  for (const name of start.calls) {
+function printChain(first: Cascade): void {
+  // A backend's cascade names one callee per line: follow it to the function
+  // the backend refused itself.
+  const calls = [...first.calls];
+  let start = first;
+  for (let next = refusedBy.get(calls.at(-1)!); start.reason === BY_BACKEND && next !== undefined && next !== start; next = refusedBy.get(calls.at(-1)!)) {
+    calls.push(...next.calls);
+    start = next;
+  }
+  console.log(`\`${first.refused}\` is refused (${where(first.at)}); it calls, in order:`);
+  for (const name of calls) {
     const own = refusedBy.get(name);
     console.log(`  ${normalise(name)}${own === undefined ? "" : `  ${where(own.at)}`}`);
   }
@@ -204,6 +224,16 @@ if (ownRefused.length > 0) {
   }
   if (ownRefused.length > 8) {
     console.log(`  and ${ownRefused.length - 8} more`);
+  }
+}
+
+// The backend's own refusals: behind every backend cascade.
+if (backendRoots.length > 0) {
+  console.log();
+  const own = unique(backendRoots, (d) => `${where(d)} ${d.code} ${d.message}`);
+  console.log(`the backend's own refusals (${own.length}):`);
+  for (const d of own) {
+    console.log(`  ${where(d)}  ${d.code} ${normalise(d.message).slice(0, 120)}`);
   }
 }
 
