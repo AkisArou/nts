@@ -28,7 +28,7 @@ import { spawn } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "../conformance/outcomes-project.mjs";
 import { bodyOf, materialise as materialiseCase, workspace } from "./project.mjs";
 import { describe, provenanceOf } from "../conformance/pin.mjs";
@@ -229,156 +229,159 @@ function selfTest() {
   return null;
 }
 
-const argv = process.argv.slice(2);
-const broken = selfTest();
-if (broken) {
-  console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
-}
-if (argv.includes("--self-test")) {
-  console.log("  self-test: sites through an unerase counted, one through a param not; signatures and slots read; origins matched, mismatched, unmade and outside each told apart");
-  process.exit(0);
-}
-
-const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
-if (!existsSync(SOURCE)) {
-  console.log(`  NOT MEASURED: no compiler at ${SOURCE}; set NTS_BIN`);
-  process.exit(2);
-}
-const base = join(homedir(), ".cache/nts-erased-calls");
-mkdirSync(base, { recursive: true });
-const scratch = mkdtempSync(join(base, "run-"));
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-const NTS = join(scratch, "nts");
-copyFileSync(SOURCE, NTS);
-chmodSync(NTS, 0o755);
-const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"), NTS_SNAPSHOT_CACHE: join(scratch, "snapshots") };
-delete env.NTS_NO_SNAPSHOT_CACHE;
-
-const under = (dir) =>
-  readdirSync(join(ROOT, dir), { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(join(ROOT, dir, e.name, "tsconfig.json")))
-    .map((e) => ({ corpus: dir.split("/")[0] === "runtime" ? "runtime" : dir, label: `${dir}/${e.name}`, at: join(dir, e.name) }));
-/** Every project under runtime/react, at any depth its tsconfigs sit. */
-function react(dir = "runtime/react", depth = 0) {
-  const out = existsSync(join(ROOT, dir, "tsconfig.json")) ? [{ corpus: "react", label: dir, at: dir }] : [];
-  if (depth >= 3) return out;
-  for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
-    if (e.isDirectory() && e.name !== "node_modules" && !e.name.startsWith(".")) out.push(...react(join(dir, e.name), depth + 1));
+// Importable for its functions (erasedCalls, origins); runs only as a command.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const argv = process.argv.slice(2);
+  const broken = selfTest();
+  if (broken) {
+    console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
+    process.exit(2);
   }
-  return out;
-}
+  if (argv.includes("--self-test")) {
+    console.log("  self-test: sites through an unerase counted, one through a param not; signatures and slots read; origins matched, mismatched, unmade and outside each told apart");
+    process.exit(0);
+  }
 
-/**
- * test262's files that reached lowering in a census run, each materialised
- * the way the census builds a case (project.mjs is the one definition): the
- * `--rows` files name them and their buckets, and a file that never
- * typechecked has no prepared program to read.
- */
-function test262(rowsFiles) {
-  const reached = new Set(["strict-pass", "threw", "fail", "invalid-hir"]);
-  const cases = [];
-  for (const file of rowsFiles) {
-    for (const line of readFileSync(file, "utf8").split("\n")) {
-      if (!line.startsWith("{\"path\"")) continue;
-      const r = JSON.parse(line);
-      if (reached.has(r.bucket) || r.why === "lowering") cases.push(r.path);
+  const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
+  if (!existsSync(SOURCE)) {
+    console.log(`  NOT MEASURED: no compiler at ${SOURCE}; set NTS_BIN`);
+    process.exit(2);
+  }
+  const base = join(homedir(), ".cache/nts-erased-calls");
+  mkdirSync(base, { recursive: true });
+  const scratch = mkdtempSync(join(base, "run-"));
+  process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
+  const NTS = join(scratch, "nts");
+  copyFileSync(SOURCE, NTS);
+  chmodSync(NTS, 0o755);
+  const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"), NTS_SNAPSHOT_CACHE: join(scratch, "snapshots") };
+  delete env.NTS_NO_SNAPSHOT_CACHE;
+
+  const under = (dir) =>
+    readdirSync(join(ROOT, dir), { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(ROOT, dir, e.name, "tsconfig.json")))
+      .map((e) => ({ corpus: dir.split("/")[0] === "runtime" ? "runtime" : dir, label: `${dir}/${e.name}`, at: join(dir, e.name) }));
+  /** Every project under runtime/react, at any depth its tsconfigs sit. */
+  function react(dir = "runtime/react", depth = 0) {
+    const out = existsSync(join(ROOT, dir, "tsconfig.json")) ? [{ corpus: "react", label: dir, at: dir }] : [];
+    if (depth >= 3) return out;
+    for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+      if (e.isDirectory() && e.name !== "node_modules" && !e.name.startsWith(".")) out.push(...react(join(dir, e.name), depth + 1));
     }
+    return out;
   }
-  return cases.map((path, i) => {
-    const dir = workspace(join(scratch, "t262", String(i)));
-    materialiseCase(dir, bodyOf(readFileSync(join(ROOT, "third_party/test262", path), "utf8")));
-    return { corpus: "test262", label: path, at: dir };
-  });
-}
 
-const flag = (name) => {
-  const at = argv.indexOf(name);
-  if (at < 0) return [];
-  const values = [];
-  for (let i = at + 1; i < argv.length && !argv[i].startsWith("--"); i++) values.push(argv[i]);
-  return values;
-};
-const rowsFiles = flag("--test262");
-const named = argv.filter((a, i) => !a.startsWith("--") && !rowsFiles.includes(a));
-const projects = named.length > 0
-  ? named.map((p) => ({ corpus: "named", label: p, at: p }))
-  : [
-    ...under("runtime/node"),
-    { corpus: "runtime", label: "runtime/web-platform", at: "runtime/web-platform" },
-    ...react(),
-    ...under("examples"),
-    ...outcomeFixtures().map((n) => ({ corpus: "outcomes", label: `outcomes/${n}`, at: materialise(scratch, n, join(OUTCOMES, n, "src"), runMode(n)) })),
-    ...test262(rowsFiles),
-  ];
-
-const run = (args) =>
-  new Promise((done) => {
-    const child = spawn(NTS, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", () => {});
-    const timer = setTimeout(() => child.kill("SIGKILL"), 600_000);
-    child.on("close", (status) => { clearTimeout(timer); done({ status, out }); });
-  });
-
-const found = [];
-const traced = [];
-const unmeasured = [];
-let next = 0;
-await Promise.all(Array.from({ length: WORKERS }, async () => {
-  while (next < projects.length) {
-    const p = projects[next++];
-    const r = await run(["hir", "--prepared", p.at]);
-    if (!/^\d+ function\(s\)/m.test(r.out)) {
-      unmeasured.push(p.label);
-      continue;
+  /**
+   * test262's files that reached lowering in a census run, each materialised
+   * the way the census builds a case (project.mjs is the one definition): the
+   * `--rows` files name them and their buckets, and a file that never
+   * typechecked has no prepared program to read.
+   */
+  function test262(rowsFiles) {
+    const reached = new Set(["strict-pass", "threw", "fail", "invalid-hir"]);
+    const cases = [];
+    for (const file of rowsFiles) {
+      for (const line of readFileSync(file, "utf8").split("\n")) {
+        if (!line.startsWith("{\"path\"")) continue;
+        const r = JSON.parse(line);
+        if (reached.has(r.bucket) || r.why === "lowering") cases.push(r.path);
+      }
     }
-    for (const s of erasedCalls(r.out)) found.push({ ...p, ...s });
-    if (argv.includes("--origins")) for (const o of origins(r.out)) traced.push({ ...p, ...o });
+    return cases.map((path, i) => {
+      const dir = workspace(join(scratch, "t262", String(i)));
+      materialiseCase(dir, bodyOf(readFileSync(join(ROOT, "third_party/test262", path), "utf8")));
+      return { corpus: "test262", label: path, at: dir };
+    });
   }
-}));
 
-console.log(`  compiler ${SOURCE} -- ${describe(provenanceOf(SOURCE))}`);
-console.log(`  ${projects.length - unmeasured.length} of ${projects.length} project(s) listed; ${unmeasured.length} printed no prepared program (does not typecheck, or refused whole)`);
-for (const corpus of [...new Set(projects.map((p) => p.corpus))]) {
-  const sites = found.filter((f) => f.corpus === corpus);
-  const signatures = new Map();
-  for (const s of sites) {
-    const row = signatures.get(s.signature) ?? { sites: 0, projects: new Set(), slots: new Set() };
-    row.sites += 1;
-    row.projects.add(s.label);
-    row.slots.add(s.slot);
-    signatures.set(s.signature, row);
-  }
-  const arities = new Map();
-  for (const s of sites) arities.set(s.arity, (arities.get(s.arity) ?? 0) + 1);
-  console.log(`\n  ${corpus}: ${sites.length} site(s) in ${new Set(sites.map((s) => s.label)).size} project(s), ${signatures.size} distinct call signature(s); arities ${[...arities].sort((a, b) => a[0] - b[0]).map(([a, n]) => `${a}:${n}`).join(" ") || "-"}`);
-  // The table a per-signature thunk needs is per *program*: its width is the
-  // distinct signatures one program calls an erased value at.
-  const perProject = new Map();
-  for (const s of sites) perProject.set(s.label, (perProject.get(s.label) ?? new Set()).add(s.signature));
-  const widest = [...perProject].sort((a, b) => b[1].size - a[1].size).slice(0, 3);
-  if (widest.length > 0) console.log(`    widest program(s): ${widest.map(([l, set]) => `${l} ${set.size}`).join(", ")}`);
-  for (const [sig, row] of [...signatures].sort((a, b) => b[1].sites - a[1].sites).slice(0, 15)) {
-    console.log(`    ${String(row.sites).padStart(4)} site(s) ${String(row.projects.size).padStart(3)} project(s) slot ${[...row.slots].join(",")}  ${sig}`);
-  }
-  if (signatures.size > 15) console.log(`    ... ${signatures.size - 15} more`);
-}
+  const flag = (name) => {
+    const at = argv.indexOf(name);
+    if (at < 0) return [];
+    const values = [];
+    for (let i = at + 1; i < argv.length && !argv[i].startsWith("--"); i++) values.push(argv[i]);
+    return values;
+  };
+  const rowsFiles = flag("--test262");
+  const named = argv.filter((a, i) => !a.startsWith("--") && !rowsFiles.includes(a));
+  const projects = named.length > 0
+    ? named.map((p) => ({ corpus: "named", label: p, at: p }))
+    : [
+      ...under("runtime/node"),
+      { corpus: "runtime", label: "runtime/web-platform", at: "runtime/web-platform" },
+      ...react(),
+      ...under("examples"),
+      ...outcomeFixtures().map((n) => ({ corpus: "outcomes", label: `outcomes/${n}`, at: materialise(scratch, n, join(OUTCOMES, n, "src"), runMode(n)) })),
+      ...test262(rowsFiles),
+    ];
 
-// Where each site's value was erased: a mismatched site calls through a
-// signature that is not the value's own -- a candidate misread.
-if (argv.includes("--origins")) {
-  console.log(`\n  origins of ${traced.length} site(s):`);
-  for (const verdict of ["mismatched", "unresolved", "unmade", "outside", "matched"]) {
-    const sites = traced.filter((t) => t.verdict === verdict);
-    console.log(`    ${verdict}: ${sites.length}`);
-    if (verdict === "matched") continue;
-    const byField = new Map();
-    for (const t of sites) {
-      const k = plain(`${t.function.replace(/<\d+>|\d+$/g, "")} -- called as ${t.layout ?? "?"}${t.layouts?.length ? `, stored as ${t.layouts.join(" | ")}` : ""}${t.why?.length ? `; ${t.why.slice(0, 2).join("; ")}` : ""}`).replace(/Closure\d+/g, "ClosureN");
-        byField.set(k, [...(byField.get(k) ?? []), t.label]);
+  const run = (args) =>
+    new Promise((done) => {
+      const child = spawn(NTS, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      child.stdout.on("data", (d) => (out += d));
+      child.stderr.on("data", () => {});
+      const timer = setTimeout(() => child.kill("SIGKILL"), 600_000);
+      child.on("close", (status) => { clearTimeout(timer); done({ status, out }); });
+    });
+
+  const found = [];
+  const traced = [];
+  const unmeasured = [];
+  let next = 0;
+  await Promise.all(Array.from({ length: WORKERS }, async () => {
+    while (next < projects.length) {
+      const p = projects[next++];
+      const r = await run(["hir", "--prepared", p.at]);
+      if (!/^\d+ function\(s\)/m.test(r.out)) {
+        unmeasured.push(p.label);
+        continue;
+      }
+      for (const s of erasedCalls(r.out)) found.push({ ...p, ...s });
+      if (argv.includes("--origins")) for (const o of origins(r.out)) traced.push({ ...p, ...o });
     }
-    for (const [k, labels] of [...byField].sort((a, b) => b[1].length - a[1].length).slice(0, 20)) console.log(`      ${String(labels.length).padStart(3)}  ${k}`);
+  }));
+
+  console.log(`  compiler ${SOURCE} -- ${describe(provenanceOf(SOURCE))}`);
+  console.log(`  ${projects.length - unmeasured.length} of ${projects.length} project(s) listed; ${unmeasured.length} printed no prepared program (does not typecheck, or refused whole)`);
+  for (const corpus of [...new Set(projects.map((p) => p.corpus))]) {
+    const sites = found.filter((f) => f.corpus === corpus);
+    const signatures = new Map();
+    for (const s of sites) {
+      const row = signatures.get(s.signature) ?? { sites: 0, projects: new Set(), slots: new Set() };
+      row.sites += 1;
+      row.projects.add(s.label);
+      row.slots.add(s.slot);
+      signatures.set(s.signature, row);
+    }
+    const arities = new Map();
+    for (const s of sites) arities.set(s.arity, (arities.get(s.arity) ?? 0) + 1);
+    console.log(`\n  ${corpus}: ${sites.length} site(s) in ${new Set(sites.map((s) => s.label)).size} project(s), ${signatures.size} distinct call signature(s); arities ${[...arities].sort((a, b) => a[0] - b[0]).map(([a, n]) => `${a}:${n}`).join(" ") || "-"}`);
+    // The table a per-signature thunk needs is per *program*: its width is the
+    // distinct signatures one program calls an erased value at.
+    const perProject = new Map();
+    for (const s of sites) perProject.set(s.label, (perProject.get(s.label) ?? new Set()).add(s.signature));
+    const widest = [...perProject].sort((a, b) => b[1].size - a[1].size).slice(0, 3);
+    if (widest.length > 0) console.log(`    widest program(s): ${widest.map(([l, set]) => `${l} ${set.size}`).join(", ")}`);
+    for (const [sig, row] of [...signatures].sort((a, b) => b[1].sites - a[1].sites).slice(0, 15)) {
+      console.log(`    ${String(row.sites).padStart(4)} site(s) ${String(row.projects.size).padStart(3)} project(s) slot ${[...row.slots].join(",")}  ${sig}`);
+    }
+    if (signatures.size > 15) console.log(`    ... ${signatures.size - 15} more`);
+  }
+
+  // Where each site's value was erased: a mismatched site calls through a
+  // signature that is not the value's own -- a candidate misread.
+  if (argv.includes("--origins")) {
+    console.log(`\n  origins of ${traced.length} site(s):`);
+    for (const verdict of ["mismatched", "unresolved", "unmade", "outside", "matched"]) {
+      const sites = traced.filter((t) => t.verdict === verdict);
+      console.log(`    ${verdict}: ${sites.length}`);
+      if (verdict === "matched") continue;
+      const byField = new Map();
+      for (const t of sites) {
+        const k = plain(`${t.function.replace(/<\d+>|\d+$/g, "")} -- called as ${t.layout ?? "?"}${t.layouts?.length ? `, stored as ${t.layouts.join(" | ")}` : ""}${t.why?.length ? `; ${t.why.slice(0, 2).join("; ")}` : ""}`).replace(/Closure\d+/g, "ClosureN");
+          byField.set(k, [...(byField.get(k) ?? []), t.label]);
+      }
+      for (const [k, labels] of [...byField].sort((a, b) => b[1].length - a[1].length).slice(0, 20)) console.log(`      ${String(labels.length).padStart(3)}  ${k}`);
+    }
   }
 }
