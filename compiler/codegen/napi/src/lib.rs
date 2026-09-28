@@ -1636,6 +1636,62 @@ fn publish_functions(program: &hir::Program, wrapped: &[(&str, &str)]) -> String
 /// Returns the `NAPI_MODULE_INIT` fragments that define them and the names they
 /// publish under, the second so `report_unrepresentable_exports` stops calling
 /// a class "not a function this backend can name" once it is one.
+/// The `public_api` entries that name a class this addon defines.
+///
+/// A class has a **layout**; a specialized function does not, and `#` separates
+/// a class from its member *and* a function from its specialization -- so
+/// `digits#whole` made the ordinary function `digits` look like a class and it
+/// was refused as one. The layout is the test, and it is the one thing here the
+/// `#` cannot fake.
+///
+/// Extracted because the declaration pass needs this same answer and had no way
+/// to ask for it: it derived what to declare from `published`, which matches an
+/// exported *name*. A method is not one -- `Entry` is exported and
+/// `Entry#toJSON` is not -- so a member returning a plain object got a wrapper
+/// calling `nts_to_napi_obj_EntryJSON` while nothing declared either the struct
+/// or the helper. Eighteen lines reproduce it, and `perf_hooks` could not be
+/// compiled at all, which made it a permanent hole in the compiled axis rather
+/// than one module's addon failing.
+///
+/// A `Vec` rather than an iterator because the two callers hold `program` and
+/// `classes` for different lifetimes, and a module has a handful of classes.
+fn defined_classes<'a>(
+    program: &'a hir::Program,
+    classes: &FxHashSet<String>,
+) -> Vec<(&'a str, &'a str)> {
+    program
+        .public_api
+        .iter()
+        .filter(|(emitted, _)| {
+            classes.contains(emitted) && program.layouts.iter().any(|layout| layout.name == *emitted)
+        })
+        .map(|(emitted, publish)| (emitted.as_str(), publish.as_str()))
+        .collect()
+}
+
+/// The members of `class` a wrapper is attempted for, each with its member name.
+///
+/// Neither the constructor nor a specialization variant: `#` separates a class
+/// from its member *and* a function from its specialization, so
+/// `Holder#constructor#whole` is neither and was once published as a prototype
+/// method under that literal name.
+///
+/// **One collection, so the emitter and the declaration pass cannot disagree
+/// about which members exist.** Whether each *crosses* is then
+/// [`member_crossings`]' single answer, asked by both -- the emitter to write
+/// the wrapper, the declaration pass to declare what that wrapper calls.
+fn declared_members<'a>(program: &'a hir::Program, class: &str) -> Vec<(&'a hir::Func, &'a str)> {
+    let prefix = format!("{class}#");
+    program
+        .funcs
+        .iter()
+        .filter_map(|func| {
+            let member = func.name.strip_prefix(&prefix)?;
+            (member != "constructor" && !member.contains('#')).then_some((func, member))
+        })
+        .collect()
+}
+
 fn emit_classes<'a>(
     program: &'a hir::Program,
     classes: &FxHashSet<String>,
@@ -1646,20 +1702,7 @@ fn emit_classes<'a>(
 ) -> (String, Vec<&'a str>) {
     let mut class_inits = String::new();
     let mut published_classes: Vec<&str> = Vec::new();
-    for (emitted, publish) in &program.public_api {
-        // `classes` is every name before a `#`, which includes the owner of a
-        // *specialization* -- `digits#whole` made the ordinary function
-        // `digits` look like a class, and it was refused as one with "is a
-        // class whose constructor was not compiled". A regression the fixtures
-        // caught on the first run.
-        //
-        // A class has a **layout**; a specialized function does not. That is
-        // the test, and it is the one thing here the `#` cannot fake.
-        if !classes.contains(emitted)
-            || !program.layouts.iter().any(|layout| layout.name == *emitted)
-        {
-            continue;
-        }
+    for (emitted, publish) in defined_classes(program, classes) {
         if let Some((code, init)) = class_definition(
             emitted,
             publish,
@@ -1671,7 +1714,7 @@ fn emit_classes<'a>(
         ) {
             out.push_str(&code);
             class_inits.push_str(&init);
-            published_classes.push(publish.as_str());
+            published_classes.push(publish);
         }
     }
     (class_inits, published_classes)
@@ -1934,7 +1977,6 @@ fn class_definition(
     skipped: &mut Vec<Skipped>,
 ) -> Option<(String, String)> {
     let layouts = &program.layouts;
-    let prefix = format!("{class}#");
     let Some(constructor) = program
         .funcs
         .iter()
@@ -1988,24 +2030,7 @@ fn class_definition(
     // The members, in declaration order, so the emitted file reads like the
     // class does.
     let mut descriptors: Vec<String> = Vec::new();
-    for func in &program.funcs {
-        let Some(member) = func.name.strip_prefix(&prefix) else {
-            continue;
-        };
-        if member == "constructor" {
-            continue;
-        }
-        // `#` separates a class from its member *and* a function from its
-        // specialization variant, so `Holder#constructor#whole` splits to the
-        // member `constructor#whole` and sailed past the test above. It was
-        // published as a prototype method under that literal name.
-        //
-        // A specialization is an internal shape, never a published one: the
-        // surface is what the class declares. Skipped by the `#`, which is the
-        // only thing that distinguishes the two here.
-        if member.contains('#') {
-            continue;
-        }
+    for (func, member) in declared_members(program, class) {
         match member_callback(
             func,
             &instance,
@@ -3925,20 +3950,30 @@ fn totals_banner(
     )
 }
 
-#[must_use]
-pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
-    let mut out = preamble(program);
-
-    let classes = class_names(program);
-    let ownership = hir::own::summarize(program, &program.layouts);
-    let release_managed = program.provider == hir::Provider::ReferenceCounting;
-
+/// The layouts whose `nts_to_napi_obj_` helper this addon's wrappers call.
+///
+/// `program.c` defines these structs too, and both derive them from the same
+/// `Layout` -- which is what that type is for: "the compiler's answer to where
+/// is this field, decided once and consumed by every backend". A header emitted
+/// by `codegen/c` would be better still and would remove the repetition.
+///
+/// Extracted from `emit_with` when it grew past a hundred lines, and the concept
+/// deserves the name: **everything a wrapper converts must be declared here, and
+/// a wrapper this list cannot see names a helper nothing defines.** That has now
+/// happened twice -- `os.cpus()`' nested `CpuTimes` reached through an object
+/// field, and a class member's return, which no `published` lookup could ever
+/// have answered for.
+fn converted_layouts(
+    program: &hir::Program,
+    classes: &FxHashSet<String>,
+    refused: &[String],
+) -> Vec<usize> {
     // The structs the wrappers read fields out of. `program.c` defines these
     // too, and both derive them from the same `Layout` -- which is what that
     // type is for: "the compiler's answer to where is this field, decided once
     // and consumed by every backend". A header emitted by `codegen/c` would be
     // better still, and would remove this repetition entirely.
-    let needed: Vec<usize> = program
+    program
         .funcs
         .iter()
         .filter(|f| !published(program, f).is_empty())
@@ -3948,7 +3983,25 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
         // its helper was never emitted and the publication named a function
         // nothing declared.
         .chain(value_exports(program, refused).into_iter().map(|(global, _, _)| &global.ty))
-        .filter_map(|ty| match cross(ty, &program.layouts, &classes) {
+        // And the returns of every wrapped class *member*, which the class
+        // emitter's wrappers convert and which nothing here could see. The
+        // filter above is `published`, which matches an exported name: `Entry`
+        // is one and `Entry#toJSON` is not, so a member returning a plain
+        // object had its helper called and never declared.
+        //
+        // Asked of `member_crossings` -- the function the emitter itself
+        // decides with -- rather than of a second eligibility test written
+        // beside it, because a second derivation of this fact is how the gap
+        // arose. Returns only: an object *parameter* is refused there as
+        // crossing outward only, so a member's parameters need no helper.
+        .chain(
+            defined_classes(program, classes)
+                .into_iter()
+                .flat_map(|(emitted, _)| declared_members(program, emitted))
+                .filter(|(func, _)| member_crossings(func, &program.layouts, classes).is_ok())
+                .map(|(func, _)| &func.return_type),
+        )
+        .filter_map(|ty| match cross(ty, &program.layouts, classes) {
             Some(Cross::Object(at)) => Some(at),
             // An `object[]` needs the struct *and* the helper the element loop
             // calls, and without this the array named a type nothing declared.
@@ -3958,7 +4011,18 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
             },
             _ => None,
         })
-        .collect();
+        .collect()
+}
+
+#[must_use]
+pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
+    let mut out = preamble(program);
+
+    let classes = class_names(program);
+    let ownership = hir::own::summarize(program, &program.layouts);
+    let release_managed = program.provider == hir::Provider::ReferenceCounting;
+
+    let needed = converted_layouts(program, &classes, refused);
     // Every class this addon defines, by the layout its constructor receives.
     // Taken from the receiver rather than from the name for the reason the class
     // emitter takes `instance` that way: the struct the factory allocates and

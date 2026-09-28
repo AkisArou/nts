@@ -44,9 +44,7 @@ cd "$(dirname "$0")/../.."
 # undefined `nts_*` symbol. Building is all it does yet on this lane: every
 # public function cascades from five compiler gaps reported the same day, so
 # `compiled-axis.floor` holds it at 0.
-FLOOR="assert async_hooks buffer child_process console crypto dgram
-diagnostics_channel dns events fs http net os path process punycode querystring
-readline stream string_decoder timers tty url util zlib"
+FLOOR="assert async_hooks buffer child_process console crypto dgram diagnostics_channel dns events fs http net os path perf_hooks process punycode querystring readline stream string_decoder timers tty url util zlib"
 
 # And the ones that do not, which is the half that rots.
 #
@@ -143,15 +141,16 @@ readline stream string_decoder timers tty url util zlib"
 # something that cannot run", which a floor measuring only `bytes$` would have
 # called a pass -- and did not, because the undefined-symbol check exists.
 #
-# **`perf_hooks` joined on 2026-09-28, as a new module that does not build yet.**
-# Its C is emitted and fails to compile in `addon.c`: the N-API wrapper for
-# `PerformanceEntry#toJSON` names `NtsObj_PerformanceEntryJSON`, a struct the
-# addon never declares. The addon declares the structs its exported functions
-# cross, and a record that only a class method returns is not among them --
-# add an exported function returning the same interface and it compiles. Fifteen
-# lines reproduce it with that one-thing control (reported to the compiler lane
-# 2026-09-28). The TypeScript half is complete and green on the interpreted lane.
-BLOCKED="cluster perf_hooks"
+# **`perf_hooks` left on 2026-09-28**, and the entry's own diagnosis was right to
+# the line: the addon declared the structs its *exported functions* cross, and a
+# record that only a class method returns was not among them -- with the control
+# that says so, "add an exported function returning the same interface and it
+# compiles". That is what it was: `emit_with` derived the list from `published`,
+# which matches an exported **name**, and `PerformanceEntry#toJSON` is not one
+# while `PerformanceEntry` is. The declaration pass now asks `member_crossings`,
+# the same function the class emitter decides with. `perf_hooks` builds and its
+# symbols resolve; it is in `FLOOR` below.
+BLOCKED="cluster"
 
 # **Empty, and it held `fs` and `process` an hour ago.**
 #
@@ -284,7 +283,17 @@ unpinned_of() {
 # refusals are compiler gaps reported with reductions (an overloaded function
 # lowered at its first overload's return type, `instanceof SharedArrayBuffer`, a
 # call through a function value inside `try`), not the port's.
-PUBLISHES_NOTHING="assert child_process console crypto events timers"
+#
+# `perf_hooks` joined 2026-09-28, and it joined the same hour its addon first
+# compiled -- so this is a fact that became *measurable*, not one that changed.
+# Raw 3 (`PerformanceEntry`, `PerformanceMeasure`, `constants`), shaped **0**,
+# and its shim says exactly why in its own guard: `if (exports.performance ===
+# undefined || exports.PerformanceEntry === undefined) return {}`. The compiled
+# module publishes `PerformanceEntry` and not `performance`, the singleton every
+# test reaches the module through. So the remaining step is publishing that
+# instance, which is the port's (node lane), not the napi codegen gap that kept
+# the addon from compiling at all.
+PUBLISHES_NOTHING="assert child_process console crypto events perf_hooks timers"
 
 # What `shape.mjs` publishes for an addon: the names a test can reach.
 #
