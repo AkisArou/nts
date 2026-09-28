@@ -623,6 +623,37 @@ globalThis.nts_crypto_key_from_raw_ec = (curve, raw, privateKey) => {
 
 globalThis.nts_crypto_key_status = () => keyStatus;
 globalThis.nts_crypto_curve_names = () => crypto.getCurves();
+/** The order of each curve Web Crypto has, the bound on a private scalar, as `openssl ecparam -text` prints it. */
+const CURVE_ORDERS = {
+  "P-256": 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n,
+  "P-384": 0xffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973n,
+  "P-521": 0x01fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffa51868783bf2f966b7fcc0148f709a5d03bb5c9b8899c47aebb6fb71e91386409n,
+};
+
+/**
+ * `keys.c`'s `nts_crypto_key_check`, which node does only inside its
+ * unpublished `KeyObjectHandle`: OpenSSL's check fails a private scalar
+ * outside [1, n-1], which node's parser accepts; a public point off its
+ * curve the parser has already refused.
+ */
+globalThis.nts_crypto_key_check = (handle, privateKey) => {
+  const key = keyAt(handle);
+  if (key === undefined) return false;
+  if (!privateKey || key.asymmetricKeyType !== "ec") return true;
+  let jwk;
+  try {
+    jwk = key.export({ format: "jwk" });
+  } catch {
+    // A key OpenSSL cannot even write -- its public point at infinity -- fails.
+    return false;
+  }
+  const { crv, d } = jwk;
+  const order = CURVE_ORDERS[crv];
+  if (order === undefined) return true;
+  const scalar = BigInt(`0x${bufferFrom(d, "base64url").toString("hex")}`);
+  return scalar > 0n && scalar < order;
+};
+
 globalThis.nts_crypto_key_type = (handle) => keyAt(handle)?.asymmetricKeyType ?? "";
 
 globalThis.nts_crypto_key_details = (handle) => {

@@ -1338,6 +1338,24 @@ static void aes_ciphers(void) {
     expect_true("  but not under another label", !job_ok);
     nts_crypto_take_errors();
 
+    /* Node's `CheckEcKeyData`. test-webcrypto-export-import-ec's P-521 key
+     * whose scalar is the curve's order + 11 is one this OpenSSL refuses
+     * already as it parses -- node's parses it and fails this check -- and
+     * either way Web Crypto answers node's DataError, "Invalid keyData". */
+    double good_ec = nts_crypto_keygen_run(nts_crypto_keygen_ec(text("P-256"), false));
+    expect_true("an EC key's check passes a generated key, private and public",
+                good_ec > 0 && nts_crypto_key_check(good_ec, true) && nts_crypto_key_check(good_ec, false) &&
+                    nts_crypto_take_errors()->header.length == 3);
+    double bad_ec = nts_crypto_key_parse_private(
+        0, 1,
+        hex("3060020100301006072a8648ce3d020106052b81040023044930470201010442"
+            "01fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            "fa51868783bf2f966b7fcc0148f709a5d03bb5c9b8899c47aebb6fb71e9138"
+            "6414"),
+        none, false);
+    expect_true("  a P-521 scalar past the order is no key at all here", bad_ec <= 0);
+    nts_crypto_take_errors();
+
     expect_true("AES's configuration refusals: a short GCM IV, a CTR length of 0, a 16-byte OCB IV, a 20-byte key",
                 nts_crypto_aes_config(2, 16, 8, 16) == -2 && nts_crypto_aes_config(1, 16, 16, 0) == -3 &&
                     nts_crypto_aes_config(4, 16, 16, 16) == -2 && nts_crypto_aes_config(0, 20, 16, 0) == -1 &&

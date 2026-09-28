@@ -1016,3 +1016,17 @@ NtsView *nts_crypto_key_export_seed(double handle) {
     ERR_pop_to_mark();
     return result;
 }
+
+/* Node's `KeyObjectHandle::CheckEcKeyData`: OpenSSL's full check of a private
+ * key, and its quick check of a public one, under a mark the check's errors
+ * are popped to. */
+bool nts_crypto_key_check(double handle, bool private_key) {
+    EVP_PKEY *pkey = nts_crypto_key_at(handle);
+    if (pkey == NULL) return false;
+    ERR_set_mark();
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, NULL);
+    bool valid = ctx != NULL && (private_key ? EVP_PKEY_check(ctx) : EVP_PKEY_public_check_quick(ctx)) == 1;
+    EVP_PKEY_CTX_free(ctx);
+    ERR_pop_to_mark();
+    return valid;
+}

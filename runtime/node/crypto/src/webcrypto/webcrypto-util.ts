@@ -3,7 +3,7 @@
 // importing key material into handles.
 
 import { domException, domExceptionWithCause } from "../../../internal/dom-exception.ts";
-import { asymmetricHandle, importJwk, KeyObjectHandle, type KeyObjectType, parseDerKey } from "../keys.ts";
+import { asymmetricHandle, importJwk, importRawPublicKey, KeyObjectHandle, type KeyObjectType, parseDerKey } from "../keys.ts";
 import { bytesOfBase64 } from "../util.ts";
 import { createCryptoKey, type CryptoKey, type KeyAlgorithm } from "./key.ts";
 import { type Job, nativeJob, numBitsToBytes, truncateToBitLength, validateKeyOps } from "./util.ts";
@@ -270,4 +270,13 @@ export function keyPairJob(
       });
     }),
   );
+}
+
+/** Node's `importRawKey` for a public key: a raw import failure a `DataError` caused by it. */
+export function importRawPublic(keyType: string, namedCurve: string | undefined, keyData: Uint8Array): number {
+  try {
+    return importRawPublicKey(keyType, namedCurve, keyData);
+  } catch (error) {
+    throw domExceptionWithCause("Invalid keyData", "DataError", error);
+  }
 }

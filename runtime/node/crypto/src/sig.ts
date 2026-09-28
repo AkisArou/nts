@@ -137,13 +137,13 @@ function refuseOneShotKey(key: number): void {
 }
 
 /** A DER signature as `r || s`, or null when it is not two integers the key's width. */
-function toP1363(key: number, der: Uint8Array): Uint8Array | null {
+export function toP1363(key: number, der: Uint8Array): Uint8Array | null {
   const size = nts_crypto_key_dsa_size(key);
   return size === 0 ? der : nts_crypto_signature_to_p1363(size, der);
 }
 
 /** `r || s` as DER, or null when it is not two integers' width. */
-function toDer(key: number, p1363: Uint8Array): Uint8Array | null {
+export function toDer(key: number, p1363: Uint8Array): Uint8Array | null {
   const size = nts_crypto_key_dsa_size(key);
   return size === 0 ? p1363 : nts_crypto_signature_to_der(size, p1363);
 }

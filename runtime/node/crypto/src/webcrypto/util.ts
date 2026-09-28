@@ -80,6 +80,33 @@ const kAlgorithmDefinitions: Definitions = {
     decrypt: "AeadParams",
     "get key length": "AesDerivedKeyParams",
   },
+  ECDH: {
+    generateKey: "EcKeyGenParams",
+    exportKey: null,
+    importKey: "EcKeyImportParams",
+    deriveBits: "EcdhKeyDeriveParams",
+  },
+  ECDSA: {
+    generateKey: "EcKeyGenParams",
+    exportKey: null,
+    importKey: "EcKeyImportParams",
+    sign: "EcdsaParams",
+    verify: "EcdsaParams",
+  },
+  Ed25519: {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    sign: null,
+    verify: null,
+  },
+  Ed448: {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    sign: "ContextParams",
+    verify: "ContextParams",
+  },
   HKDF: {
     importKey: null,
     deriveBits: "HkdfParams",
@@ -126,6 +153,18 @@ const kAlgorithmDefinitions: Definitions = {
   "SHA3-256": { digest: null },
   "SHA3-384": { digest: null },
   "SHA3-512": { digest: null },
+  X25519: {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    deriveBits: "EcdhKeyDeriveParams",
+  },
+  X448: {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    deriveBits: "EcdhKeyDeriveParams",
+  },
 };
 
 /** Node's experimental algorithms: looking one up warns, once. */
@@ -299,8 +338,10 @@ export function normalizeAlgorithm(algorithm: unknown, operation: Operation): No
   const dictionary = registeredDictionary(name, operation);
   if (dictionary === null || dictionary === undefined) return { name };
 
+  // `{ __proto__: algorithm, name }`: `name` defined, not assigned -- the
+  // caller's `name` may be an accessor with no setter.
   const derived = Object.create(algorithm as object) as IdlDictionary;
-  derived.name = name;
+  Object.defineProperty(derived, "name", { configurable: true, enumerable: true, writable: true, value: name });
   const normalized = dictionaryConverter(dictionary)(derived, kNormalizeAlgorithmOptions);
   normalized.name = name;
   const members = simpleAlgorithmDictionaries[dictionary];
@@ -490,19 +531,29 @@ export function operationError(cause: unknown): Error {
 }
 
 /**
- * Node's `jobPromise`: a job made as it starts, where a failure to make it --
- * its native configuration refusing -- fails with an `OperationError`.
+ * Node's `jobPromise`: a job made and started, where a failure to do either
+ * -- its native configuration refusing, as a `CryptoJob`'s constructor
+ * throws -- fails with an `OperationError` caused by it. Only a throw before
+ * the job settles; what a settled job's callbacks do is theirs.
  */
 export function jobPromise<T>(make: () => Job<T>): Job<T> {
   return (succeed, fail) => {
-    let job: Job<T>;
+    let settled = false;
     try {
-      job = make();
+      make()(
+        (value) => {
+          settled = true;
+          succeed(value);
+        },
+        (reason) => {
+          settled = true;
+          fail(reason);
+        },
+      );
     } catch (error) {
+      if (settled) throw error;
       fail(operationError(error));
-      return;
     }
-    job(succeed, fail);
   };
 }
 

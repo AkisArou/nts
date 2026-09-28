@@ -126,6 +126,8 @@ double nts_crypto_key_from_raw_ec(NtsString *curve, NtsView *raw, bool private_k
 double nts_crypto_key_from_post_quantum(NtsString *type, NtsView *raw, double form);
 double nts_crypto_key_status(void);
 NtsString *nts_crypto_key_type(double handle);
+/* Node's `CheckEcKeyData`: OpenSSL's check of a private key, its quick check of a public one. */
+bool nts_crypto_key_check(double handle, bool private_key);
 NtsArray *nts_crypto_key_details(double handle);
 NtsArray *nts_crypto_key_detail_names(double handle);
 NtsView *nts_crypto_key_public_exponent(double handle);

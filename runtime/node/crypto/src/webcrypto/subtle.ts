@@ -22,7 +22,9 @@ import { getRandomValues as fillRandomValues, randomUUID as newRandomUUID } from
 import { asymmetricHandle, exportJwkOf, type KeyObjectHandle, type KeyObjectType, webCryptoHooks } from "../keys.ts";
 import { base64urlOf } from "../util.ts";
 import { aesCipher, aesGenerateKey, aesImportKey, getAlgorithmName } from "./aes.ts";
+import { cfrgExportKey, cfrgGenerateKey, cfrgImportKey, ecdhDeriveBits, eddsaSignVerify } from "./cfrg.ts";
 import { asyncDigest } from "./digest.ts";
+import { ecdsaSignVerify, ecExportKey, ecGenerateKey, ecImportKey } from "./ec.ts";
 import { hkdfDeriveBits, pbkdf2DeriveBits, validateDeriveBitsLength } from "./kdf.ts";
 import { rsaExportKey, rsaImportKey, rsaJwkAlgorithm, rsaKeyGenerate, rsaOaepCipher, rsaSignVerify } from "./rsa.ts";
 import {
@@ -99,6 +101,14 @@ function generateKeyFor(algorithm: NormalizedAlgorithm, extractable: boolean, us
     case "RSA-PSS":
     case "RSA-OAEP":
       return rsaKeyGenerate(algorithm, extractable, usages);
+    case "Ed25519":
+    case "Ed448":
+    case "X25519":
+    case "X448":
+      return cfrgGenerateKey(algorithm, extractable, usages);
+    case "ECDSA":
+    case "ECDH":
+      return ecGenerateKey(algorithm, extractable, usages);
     case "HMAC":
       return hmacGenerateKey(algorithm, extractable, usages);
     case "AES-CTR":
@@ -115,6 +125,10 @@ function generateKeyFor(algorithm: NormalizedAlgorithm, extractable: boolean, us
 /** The bits each key-derivation family derives; node's two switches, shared. */
 function deriveBitsFor(algorithm: NormalizedAlgorithm, key: CryptoKey, length: number | null | undefined): Job<ArrayBuffer> {
   switch (algorithm.name) {
+    case "X25519":
+    case "X448":
+    case "ECDH":
+      return ecdhDeriveBits(algorithm, key, length);
     case "HKDF":
       return hkdfDeriveBits(algorithm, key, length);
     case "PBKDF2":
@@ -162,6 +176,14 @@ function exportKeySpki(key: CryptoKey): ArrayBuffer | undefined {
     case "RSA-PSS":
     case "RSA-OAEP":
       return rsaExportKey(key, "spki");
+    case "ECDSA":
+    case "ECDH":
+      return ecExportKey(key, "spki");
+    case "Ed25519":
+    case "Ed448":
+    case "X25519":
+    case "X448":
+      return cfrgExportKey(key, "spki");
     default:
       return undefined;
   }
@@ -173,6 +195,29 @@ function exportKeyPkcs8(key: CryptoKey): ArrayBuffer | undefined {
     case "RSA-PSS":
     case "RSA-OAEP":
       return rsaExportKey(key, "pkcs8");
+    case "ECDSA":
+    case "ECDH":
+      return ecExportKey(key, "pkcs8");
+    case "Ed25519":
+    case "Ed448":
+    case "X25519":
+    case "X448":
+      return cfrgExportKey(key, "pkcs8");
+    default:
+      return undefined;
+  }
+}
+
+function exportKeyRawPublic(key: CryptoKey): ArrayBuffer | undefined {
+  switch (getCryptoKeyAlgorithm(key).name) {
+    case "ECDSA":
+    case "ECDH":
+      return ecExportKey(key, "raw");
+    case "Ed25519":
+    case "Ed448":
+    case "X25519":
+    case "X448":
+      return cfrgExportKey(key, "raw");
     default:
       return undefined;
   }
@@ -209,6 +254,15 @@ function exportKeyJWK(key: CryptoKey): JsonWebKey | undefined {
     case "RSA-PSS":
     case "RSA-OAEP":
       alg = rsaJwkAlgorithm(algorithm.name, algorithm.hash!.name);
+      break;
+    case "ECDSA":
+    case "ECDH":
+    case "X25519":
+    case "X448":
+      break;
+    case "Ed25519":
+    case "Ed448":
+      alg = algorithm.name;
       break;
     case "AES-CTR":
     case "AES-CBC":
@@ -254,8 +308,14 @@ function exportKeySync(format: string, key: CryptoKey): ArrayBuffer | JsonWebKey
       result = exportKeyJWK(key);
       break;
     case "raw-secret":
+      if (type === "secret") result = exportKeyRawSecret(key, format);
+      break;
+    case "raw-public":
+      if (type === "public") result = exportKeyRawPublic(key);
+      break;
     case "raw":
       if (type === "secret") result = exportKeyRawSecret(key, format);
+      else if (type === "public") result = exportKeyRawPublic(key);
       break;
   }
   if (!result) {
@@ -278,6 +338,16 @@ function importKeySync(
     case "RSA-PSS":
     case "RSA-OAEP":
       result = rsaImportKey(format, keyData, algorithm, extractable, usages);
+      break;
+    case "ECDSA":
+    case "ECDH":
+      result = ecImportKey(aliasKeyFormat(format, "raw-public"), keyData, algorithm, extractable, usages);
+      break;
+    case "Ed25519":
+    case "Ed448":
+    case "X25519":
+    case "X448":
+      result = cfrgImportKey(aliasKeyFormat(format, "raw-public"), keyData, algorithm, extractable, usages);
       break;
     case "HMAC":
       result = macImportKey(format, keyData, algorithm, extractable, usages);
@@ -351,6 +421,16 @@ function toCryptoKey(
     case "RSA-OAEP":
       result = rsaImportKey("KeyObjectHandle", keyData, algorithm, extractable, usages);
       break;
+    case "ECDSA":
+    case "ECDH":
+      result = ecImportKey("KeyObjectHandle", keyData, algorithm, extractable, usages);
+      break;
+    case "Ed25519":
+    case "Ed448":
+    case "X25519":
+    case "X448":
+      result = cfrgImportKey("KeyObjectHandle", keyData, algorithm, extractable, usages);
+      break;
     default:
       throw domException("Unrecognized algorithm name", "NotSupportedError");
   }
@@ -394,6 +474,11 @@ function signVerify(
     case "RSA-PSS":
     case "RSASSA-PKCS1-v1_5":
       return rsaSignVerify(key, data, normalized, signature);
+    case "ECDSA":
+      return ecdsaSignVerify(key, data, normalized, signature);
+    case "Ed25519":
+    case "Ed448":
+      return eddsaSignVerify(key, data, normalized, signature);
     case "HMAC":
       return hmacSignVerify(key, data, signature);
     default:

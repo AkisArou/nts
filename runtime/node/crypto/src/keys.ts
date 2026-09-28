@@ -1061,6 +1061,14 @@ function importRaw(prepared: PreparedKey): Imported {
   return { native, privateKey };
 }
 
+/**
+ * Node's `KeyObjectHandle::Init` over a raw public key: an EC point on the
+ * named curve, or an Edwards or Montgomery key of the named type.
+ */
+export function importRawPublicKey(keyType: string, namedCurve: string | undefined, data: Uint8Array): number {
+  return importRaw({ format: KeyFormat.RawPublic, data, asymmetricKeyType: keyType, namedCurve }).native;
+}
+
 /** An asymmetric key's handle, as node's `KeyObjectHandle::Init` makes it. */
 function initAsymmetric(prepared: PreparedKey, wantPublic: boolean): KeyObjectHandle {
   if (prepared.handle !== undefined) return prepared.handle;

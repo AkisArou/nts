@@ -222,6 +222,9 @@ declare function nts_crypto_key_from_post_quantum(type: string, raw: Uint8Array,
 declare function nts_crypto_key_status(): number;
 /** @ntsAbi managed */
 declare function nts_crypto_key_type(handle: number): string;
+/** Node's `CheckEcKeyData`. */
+/** @ntsAbi managed */
+declare function nts_crypto_key_check(handle: number, privateKey: boolean): boolean;
 /** @ntsAbi managed */
 declare function nts_crypto_key_details(handle: number): number[];
 /** @ntsAbi managed */
