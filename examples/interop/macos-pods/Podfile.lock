@@ -2,11 +2,13 @@ PODS:
   - Beep (0.1.0)
   - Chirp (0.1.0)
   - Hum (0.1.0)
+  - Mix (0.1.0)
 
 DEPENDENCIES:
   - Beep (from `Beep`)
   - Chirp (from `Chirp`)
   - Hum (from `Hum`)
+  - Mix (from `Mix`)
 
 EXTERNAL SOURCES:
   Beep:
@@ -15,12 +17,15 @@ EXTERNAL SOURCES:
     :path: Chirp
   Hum:
     :path: Hum
+  Mix:
+    :path: Mix
 
 SPEC CHECKSUMS:
   Beep: 5904530214bcb835a9692273e0d33f9dedd3f3f6
   Chirp: 531a6b7d54b973b1c39c72060f0c3da04cf810c4
   Hum: 2c288dfcda7177cb48e025c013e56573a5b81817
+  Mix: d44d37617168bdd448880c10b42b2af875a134b0
 
-PODFILE CHECKSUM: b027feeafb07b69e27f77ccf50e85c87ffb4bff3
+PODFILE CHECKSUM: c70d91f21e9744cf13525fdd70cca403c2d9a169
 
 COCOAPODS: 1.11.3

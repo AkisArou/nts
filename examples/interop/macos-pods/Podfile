@@ -9,4 +9,5 @@ target 'PodsHost' do
   pod 'Chirp', :path => 'Chirp'
   pod 'Hum', :path => 'Hum'
   pod 'Beep', :path => 'Beep'
+  pod 'Mix', :path => 'Mix'
 end

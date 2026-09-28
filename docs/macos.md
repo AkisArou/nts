@@ -241,8 +241,10 @@ import { Chirp } from "objc:Chirp";
   from the framework's headers.
 - A development pod's files are its podspec's (`Pods/Local Podspecs`), not
   everything in its directory, which CocoaPods does not clean.
-- Not read yet: a pod whose API is both Objective-C headers and Swift, which
-  is refused by name.
+- **A pod of both languages** is one module, as CocoaPods builds it: its
+  Swift is compiled with its Objective-C headers as the module it imports as
+  its own (`-import-underlying-module`), its `.m` against the header Swift
+  writes (`#import "Mix-Swift.h"`), and `objc:Mix` binds both.
 
 ## A Swift package
 

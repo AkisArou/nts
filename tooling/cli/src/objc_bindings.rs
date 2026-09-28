@@ -362,7 +362,7 @@ impl ObjcBindings {
         let (header, runtime_names) = match (headers.as_slice(), swift.as_slice()) {
             ([], []) => return self.library_module(project, module, platform),
             ([header], []) => (header.clone(), BTreeMap::new()),
-            ([], [dir]) => swift_header(project, module, &swift_sources(dir), platform)?,
+            ([], [dir]) => swift_header(project, module, &swift_sources(dir), &[], &[], platform)?,
             _ => anyhow::bail!(
                 "`objc:{module}` is named by more than one `native:` entry in {config}: {}",
                 headers.iter().chain(&swift).map(|path| path.as_str()).collect::<Vec<_>>().join(", ")
@@ -379,8 +379,8 @@ impl ObjcBindings {
 
     /// A library a resolver checked out as source -- a pod -- that is
     /// `module`: bound from an umbrella header importing each of its public
-    /// headers, with its header maps searched, or, where it is Swift, from the
-    /// header Swift writes for it.
+    /// headers, with its header maps searched, and the header Swift writes for
+    /// its Swift, where it has Swift.
     fn library_module(&self, project: &Utf8Path, module: &str, platform: &Platform) -> anyhow::Result<Option<bind_objc::Project>> {
         let Some(library) = self.libraries()?.iter().find(|library| library.name == module) else { return Ok(None) };
         let search: Vec<std::path::PathBuf> = library.include.iter().map(|directory| directory.clone().into_std_path_buf()).collect();
@@ -391,42 +391,33 @@ impl ObjcBindings {
         if library.headers.is_empty() && sources.is_empty() && !library.frameworks.is_empty() {
             return framework_module(project, module, &library.frameworks, platform).map(Some);
         }
-        if !library.headers.is_empty() && !sources.is_empty() {
-            anyhow::bail!(
-                "`objc:{module}` is the library {}, whose API is both Objective-C headers and Swift, \
-                 which is not bound yet: one or the other is",
-                library.sources
-            );
-        }
-        if !library.headers.is_empty() {
-            let umbrella = project.join(".nts").join("libraries").join(format!("{module}.h"));
-            let text = library.headers.iter().fold(String::new(), |mut text, header| {
-                let _ = writeln!(text, "#import \"{header}\"");
-                text
-            });
-            if std::fs::read_to_string(&umbrella).ok().as_deref() != Some(text.as_str()) {
-                std::fs::create_dir_all(umbrella.parent().unwrap_or(project))?;
-                std::fs::write(&umbrella, text)?;
-            }
-            return Ok(Some(bind_objc::Project {
-                header: umbrella.into_std_path_buf(),
-                search,
-                frameworks: Vec::new(),
-                symbols: std::path::PathBuf::new(),
-                runtime_names: BTreeMap::new(),
-            }));
-        }
-        if sources.is_empty() {
+        if library.headers.is_empty() && sources.is_empty() {
             anyhow::bail!("`objc:{module}` is the library {}, which has neither public headers nor Swift to bind", library.sources);
         }
-        let (header, runtime_names) = swift_header(project, module, &sources, platform)?;
-        Ok(Some(bind_objc::Project {
-            search: header.parent().map(|directory| directory.to_path_buf().into_std_path_buf()).into_iter().collect(),
-            header: header.into_std_path_buf(),
-            frameworks: Vec::new(),
-            symbols: std::path::PathBuf::new(),
-            runtime_names,
-        }))
+        // One umbrella: the library's Objective-C headers, then the header
+        // Swift writes for its Swift -- compiled with that Objective-C as the
+        // module Swift imports as its own, where it has both, as Xcode builds
+        // a pod of both languages. The Swift header declares its classes
+        // against the Objective-C ones, so it comes second.
+        let headers: Vec<std::path::PathBuf> = library.headers.iter().map(|header| header.clone().into_std_path_buf()).collect();
+        let mut text = library.headers.iter().fold(String::new(), |mut text, header| {
+            let _ = writeln!(text, "#import \"{header}\"");
+            text
+        });
+        let mut search = search;
+        let mut runtime_names = BTreeMap::new();
+        if !sources.is_empty() {
+            let (header, names) = swift_header(project, module, &sources, &headers, &search, platform)?;
+            let _ = writeln!(text, "#import \"{header}\"");
+            search.extend(header.parent().map(|directory| directory.to_path_buf().into_std_path_buf()));
+            runtime_names = names;
+        }
+        let umbrella = project.join(".nts").join("libraries").join(format!("{module}.h"));
+        if std::fs::read_to_string(&umbrella).ok().as_deref() != Some(text.as_str()) {
+            std::fs::create_dir_all(umbrella.parent().unwrap_or(project))?;
+            std::fs::write(&umbrella, text)?;
+        }
+        Ok(Some(bind_objc::Project { header: umbrella.into_std_path_buf(), search, frameworks: Vec::new(), symbols: std::path::PathBuf::new(), runtime_names }))
     }
 
     /// The SDK and deployment target a module's binding is for: iOS for
@@ -616,9 +607,17 @@ fn framework_module(project: &Utf8Path, module: &str, frameworks: &[Utf8PathBuf]
 /// Objective-C client reads it, under `.nts/swift/<module>/<fingerprint>`:
 /// written again only when a source changes, and the one before it removed.
 /// With the names the runtime has its classes and protocols under.
-fn swift_header(project: &Utf8Path, module: &str, sources: &[std::path::PathBuf], platform: &Platform) -> anyhow::Result<(Utf8PathBuf, BTreeMap<String, String>)> {
+fn swift_header(
+    project: &Utf8Path,
+    module: &str,
+    sources: &[std::path::PathBuf],
+    headers: &[std::path::PathBuf],
+    search: &[std::path::PathBuf],
+    platform: &Platform,
+) -> anyhow::Result<(Utf8PathBuf, BTreeMap<String, String>)> {
     let mut bytes = Vec::new();
-    for source in sources {
+    // The module's Objective-C too, which its Swift is compiled against.
+    for source in sources.iter().chain(headers) {
         bytes.extend(source.to_string_lossy().as_bytes());
         bytes.extend(std::fs::read(source).unwrap_or_default());
     }
@@ -633,7 +632,7 @@ fn swift_header(project: &Utf8Path, module: &str, sources: &[std::path::PathBuf]
         std::fs::create_dir_all(modules.join(&keep))?;
         let written = modules.join(&keep).join(format!("{module}-Swift.written.h"));
         let target = crate::swift::Target { sdk: platform.sdk.as_std_path(), triple: &platform.triple };
-        crate::swift::toolchain()?.objc_header(&crate::swift::Module { name: module, sources }, target, written.as_std_path())?;
+        crate::swift::toolchain()?.objc_header(&crate::swift::Module { name: module, sources, headers, search }, target, written.as_std_path())?;
         std::fs::write(&header, as_objc_client(&std::fs::read_to_string(&written)?))?;
     }
     for entry in std::fs::read_dir(&modules).into_iter().flatten().flatten() {

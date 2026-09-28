@@ -16,9 +16,13 @@
 //   beep ...       a pod that ships only a binary, `objc:Beep`: an
 //                  `.xcframework` whose slice is linked, shipped beside the
 //                  program and bound from the framework's headers
+//   mix ...        a pod of both languages, `objc:Mix`: its Swift counts
+//                  with its Objective-C, and its Objective-C words the count
+//                  through its Swift -- one module, bound as one
 import { Beep } from "objc:Beep";
 import { Chirp } from "objc:Chirp";
 import { Hum } from "objc:Hum";
+import { MXCounter, MXTally } from "objc:Mix";
 
 const chirp = new Chirp({ bird: "wren" });
 console.log(`song ${chirp.song({ withNotes: 3 })}`);
@@ -27,3 +31,8 @@ console.log(`version ${Chirp.version()}`);
 const hum = new Hum({ tune: "la" });
 console.log(`hum ${hum.hummed({ withTimes: 3 })}`);
 console.log(`beep ${Beep.beepTimes(2)}`);
+const tally = new MXTally();
+console.log(`mix ${tally.twice()} ${tally.summary()}`);
+const counter = new MXCounter();
+counter.next();
+console.log(`mix counter ${counter.summary()}`);

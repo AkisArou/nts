@@ -3719,7 +3719,7 @@ fn native_sources(
                     .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
                 if compiled_here(&path, target, &entry.dir)? {
                     let object = Utf8PathBuf::from(format!("{}.o", path.file_name().unwrap_or("native")));
-                    found.push(NativeSource { directory: directory.clone(), path, module: module.clone(), include: Vec::new(), object });
+                    found.push(NativeSource { directory: directory.clone(), path, module: module.clone(), include: Vec::new(), headers: Vec::new(), object });
                 }
             }
         }
@@ -3741,6 +3741,9 @@ struct NativeSource {
     module: String,
     /// Where else its `#import`s are found: a pod's header maps.
     include: Vec<Utf8PathBuf>,
+    /// Its module's public Objective-C headers, where a library has them:
+    /// what the module's Swift, where it has Swift too, sees as its own.
+    headers: Vec<Utf8PathBuf>,
     /// Its object, relative to the product's directory: a package's own
     /// source's is its file's name, and a library's is under the library's
     /// name, at its path in the library, so two pods' `Utils.m` are two
@@ -3777,8 +3780,8 @@ fn module_sources(modules: &[nts_build::dependencies::NativeModule], target: &nt
             if compiled_here(&path, target, &module.name)? {
                 let relative = path.strip_prefix(&module.sources).unwrap_or(&path);
                 let object = Utf8PathBuf::from(&module.name).join(format!("{relative}.o"));
-                let include = module.include.clone();
-                found.push(NativeSource { directory: module.sources.clone(), path, module: module.name.clone(), include, object });
+                let (include, headers) = (module.include.clone(), module.headers.clone());
+                found.push(NativeSource { directory: module.sources.clone(), path, module: module.name.clone(), include, headers, object });
             }
         }
     }
@@ -6499,18 +6502,33 @@ fn compile_native(
 ) -> Result<()> {
 
     // A module's Swift is compiled whole into one object, as a SwiftPM
-    // target is: a directory of it, or a library's.
-    let mut swift: std::collections::BTreeMap<&str, Vec<std::path::PathBuf>> = std::collections::BTreeMap::new();
+    // target is: a directory of it, or a library's -- with the library's
+    // Objective-C as the module it sees as its own, where it has both.
+    let mut swift: std::collections::BTreeMap<&str, (Vec<std::path::PathBuf>, &NativeSource)> = std::collections::BTreeMap::new();
     for source in native.iter().filter(|source| source.path.extension() == Some("swift")) {
-        swift.entry(source.module.as_str()).or_default().push(source.path.clone().into_std_path_buf());
+        swift.entry(source.module.as_str()).or_insert_with(|| (Vec::new(), source)).0.push(source.path.clone().into_std_path_buf());
     }
     if !swift.is_empty() {
         let (sdk, triple) = with.tools.apple_target().ok_or_else(|| anyhow!("`{name}` has Swift to compile and no Apple target to compile it for"))?;
         let toolchain = crate::swift::toolchain()?;
-        for (module, sources) in &swift {
+        let target = crate::swift::Target { sdk: std::path::Path::new(&sdk), triple: &triple };
+        for (module, (sources, first)) in &swift {
+            let headers: Vec<std::path::PathBuf> = first.headers.iter().map(|header| header.clone().into_std_path_buf()).collect();
+            let search: Vec<std::path::PathBuf> = first.include.iter().map(|directory| directory.clone().into_std_path_buf()).collect();
+            let unit = crate::swift::Module { name: module, sources, headers: &headers, search: &search };
+            // Its Objective-C reaches its Swift through the header Swift
+            // writes, `#import "Mix-Swift.h"` or `<Mix/Mix-Swift.h>`, as
+            // Xcode's derived sources have it: both are on the include path
+            // (`out`) before a `.m` of it compiles.
+            if !headers.is_empty() {
+                let nested = out.join(module);
+                std::fs::create_dir_all(&nested).with_context(|| format!("creating {nested}"))?;
+                let header = out.join(format!("{module}-Swift.h"));
+                toolchain.objc_header(&unit, target, header.as_std_path())?;
+                std::fs::copy(&header, nested.join(format!("{module}-Swift.h"))).with_context(|| format!("copying {header}"))?;
+            }
             let object = out.join(format!("{module}.swift.o"));
-            let target = crate::swift::Target { sdk: std::path::Path::new(&sdk), triple: &triple };
-            toolchain.compile(&crate::swift::Module { name: module, sources }, target, object.as_std_path())?;
+            toolchain.compile(&unit, target, object.as_std_path())?;
             objects.push(object);
         }
     }

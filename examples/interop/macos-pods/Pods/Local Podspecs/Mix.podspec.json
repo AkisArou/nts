@@ -1,0 +1,22 @@
+{
+  "name": "Mix",
+  "version": "0.1.0",
+  "summary": "A pod of Objective-C and Swift for examples/interop/macos-pods.",
+  "homepage": "https://example.invalid/mix",
+  "license": {
+    "type": "MIT",
+    "text": "MIT"
+  },
+  "authors": "nts",
+  "source": {
+    "git": "https://example.invalid/mix.git",
+    "tag": "0.1.0"
+  },
+  "platforms": {
+    "osx": "13.0"
+  },
+  "swift_versions": "5.0",
+  "source_files": "Classes/**/*.{h,m,swift}",
+  "public_header_files": "Classes/**/*.h",
+  "swift_version": "5.0"
+}

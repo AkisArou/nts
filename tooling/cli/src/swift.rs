@@ -21,6 +21,7 @@
 //! module cache that outlives the build: the SDK's modules take 30 s to build,
 //! and a compile against them, once they are built, 0.1 s.
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -102,6 +103,13 @@ pub(crate) struct Module<'a> {
     /// The module's name: the directory's, `Greeter`.
     pub(crate) name: &'a str,
     pub(crate) sources: &'a [PathBuf],
+    /// The module's own Objective-C, where it has some -- a pod of both --
+    /// as its public headers: the module Swift imports as its underlying
+    /// one, as Xcode builds a target of both languages, so its Swift sees
+    /// the Objective-C classes beside it without importing anything.
+    pub(crate) headers: &'a [PathBuf],
+    /// Where those headers' own `#import`s are found.
+    pub(crate) search: &'a [PathBuf],
 }
 
 impl Toolchain {
@@ -140,24 +148,40 @@ impl Toolchain {
     /// declarations, `<Module>-Swift.h`: what the program's binding is read
     /// from, as another Objective-C client of the module reads it.
     pub(crate) fn objc_header(&self, module: &Module<'_>, target: Target<'_>, out: &Path) -> Result<()> {
-        let mut command = self.frontend_for(module, target);
+        let mut command = self.frontend_for(module, target, out)?;
         command.arg("-typecheck").arg("-emit-objc-header-path").arg(out);
         run(command, out, &format!("Swift could not typecheck module `{}`", module.name))
     }
 
     /// `module` compiled into one object, as a whole module.
     pub(crate) fn compile(&self, module: &Module<'_>, target: Target<'_>, out: &Path) -> Result<()> {
-        let mut command = self.frontend_for(module, target);
+        let mut command = self.frontend_for(module, target, out)?;
         command.arg("-c").arg("-O").arg("-o").arg(out);
         run(command, out, &format!("Swift could not compile module `{}` for {}", module.name, target.triple))
     }
 
-    fn frontend_for(&self, module: &Module<'_>, target: Target<'_>) -> Command {
+    /// The frontend for `module`, and the module map of its Objective-C
+    /// half beside `out` where it has one.
+    fn frontend_for(&self, module: &Module<'_>, target: Target<'_>, out: &Path) -> Result<Command> {
         let mut command = Command::new(&self.frontend);
         command.arg("-frontend").args(["-module-name", module.name, "-parse-as-library"]);
         self.for_target(&mut command, target);
+        if !module.headers.is_empty() {
+            let map = out.with_extension("modulemap");
+            let mut text = format!("module {} {{\n", module.name);
+            for header in module.headers {
+                let file = std::fs::canonicalize(header).with_context(|| format!("reading {}", header.display()))?;
+                let _ = writeln!(text, "  header {:?}", file.display().to_string());
+            }
+            text.push_str("  export *\n}\n");
+            std::fs::write(&map, text).with_context(|| format!("writing {}", map.display()))?;
+            command.arg("-import-underlying-module").arg("-Xcc").arg(format!("-fmodule-map-file={}", map.display()));
+            for directory in module.search {
+                command.arg("-Xcc").arg(format!("-I{}", directory.display()));
+            }
+        }
         command.args(module.sources);
-        command
+        Ok(command)
     }
 }
 
