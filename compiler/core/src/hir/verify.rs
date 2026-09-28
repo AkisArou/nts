@@ -591,7 +591,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
 /// elements. An array is one pointer too, so that pair could be allowed -- and
 /// is not, because nothing has produced one and a rule with no case behind it
 /// is a guess about which mismatches are safe.
-fn compatible(found: &HirType, want: &HirType) -> bool {
+pub(super) fn compatible(found: &HirType, want: &HirType) -> bool {
     if found == want {
         return true;
     }

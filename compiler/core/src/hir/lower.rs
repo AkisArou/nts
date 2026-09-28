@@ -26,6 +26,148 @@ use super::{Absent,
     OpKind, Param, ParamShape, Program, Terminator, UnOp, ValueId,
 };
 
+/// Closures crossing the type they were written at, recorded where that is known.
+///
+/// **Recorded rather than checked, because the two halves of the question are
+/// knowable at different times.** At a coercion the *target's* parameter and
+/// return representations are in hand (`signature_key` plus `represent`) and the
+/// closure's own are not: its `#call` is not lowered until
+/// `lower_wanted_closures`, which runs later. So the pair is kept and compared
+/// afterwards, rather than a flow analysis being built to recover a pair that was
+/// thrown away.
+///
+/// The alternative was a points-to analysis, and `elements.rs` records why that is
+/// not the answer: *"deciding which array values can reach which reads ... is a
+/// points-to analysis and a much larger thing than the win here."* That judged a
+/// speed win; this is a correctness one, which would justify the larger thing --
+/// except that the repair is **total** where the question is not, so membership
+/// answers what flow would have.
+impl FuncBuilder<'_> {
+    /// Drain what this body produced into the program's collections.
+    ///
+    /// **One method rather than an `extend` per site.** Nine places consume a
+    /// finished builder and each extended `wanted` from `used_closures` alone; a
+    /// second collection beside it would have been a tenth parallel `extend`, and
+    /// two collections of one fact where only some sites write both is the drift
+    /// this file has repaired four times in one day -- a member recorded by name
+    /// and not by node, a call named from the resolved declaration and not the
+    /// implementation, a class member's return declared in one list and converted
+    /// from another. Adding a fifth on the way to fixing one would be a poor
+    /// trade.
+    fn harvest(&mut self, wanted: &mut impl Extend<usize>, arrivals: &mut Arrivals) {
+        wanted.extend(self.used_closures.iter().copied());
+        arrivals.at_signature.append(&mut self.arrivals.at_signature);
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Arrivals {
+    /// Every closure admitted into a signature slot. See [`Arrival`].
+    ///
+    /// `coerce_arm`'s object-to-object arm is the only place this is visible: two
+    /// signature layouts have no fields, so `not_a_prefix` finds nothing to
+    /// disagree about and the pointer passes -- and the one thing that differs is
+    /// the `#call` descriptor, which that predicate does not look at.
+    pub at_signature: Vec<Arrival>,
+}
+
+/// Closures whose `#call` disagrees with a slot they were admitted into.
+///
+/// **The comparison [`coerce_arm`] could not make.** By the time this runs,
+/// `lower_wanted_closures` has given every closure a `#call` with real parameter
+/// and return types, and each [`Arrival`] carries what its slot expected, resolved
+/// where that was known. Neither half is available at the other's time, which is
+/// the whole reason the pair is recorded rather than checked.
+///
+/// **Arity is not a disagreement** and is deliberately not compared. JavaScript
+/// drops extra arguments and fills missing ones with `undefined`, so a closure
+/// written at one arity and called at another is *correct*, and the React lane
+/// measured it: `erased-fn-arity-only` agrees on both arms. Only overlapping
+/// positions are compared -- which is also the mistake this function exists
+/// downstream of, since "arity is free" was read as "parameters are free" and it
+/// is not.
+fn disagreeing_arrivals(program: &Program, arrivals: &Arrivals) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    for arrival in &arrivals.at_signature {
+        let Some(call) = program
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(&arrival.closure))
+            .and_then(Layout::closure_call)
+        else {
+            continue;
+        };
+        let Some(func) = program.funcs.iter().find(|func| func.name == call) else {
+            continue;
+        };
+        // The environment is the closure's own first parameter and the signature
+        // does not name it, so the written parameters start at one.
+        let written = func.params.get(1..).unwrap_or(&[]);
+        for (at, want) in arrival.parameters.iter().enumerate() {
+            let (Some(want), Some(param)) = (want.as_ref(), written.get(at)) else {
+                continue;
+            };
+            // `verify::compatible`, not `!=`: two references are two pointers
+            // however their types relate, so `Object(A)` where `Object(B)` is
+            // passed is one address and no misread. Equality counted 61 in `zlib`
+            // where the ABI disagrees on far fewer, and most of the difference
+            // was that.
+            //
+            // **A rest slot is a shape difference and not a representation one.**
+            // `(...args: unknown[])` passes one array where the closure declares
+            // an element, which the existing rest machinery collects; comparing
+            // position against position sees `Erased` against
+            // `Array(Erased)` and calls it a mismatch. Skipped when the slot's
+            // parameter is an array of something the closure's parameter is
+            // compatible with.
+            let rest = matches!(
+                want,
+                HirType::Managed(ManagedType::Array(element))
+                    if super::verify::compatible(&param.ty, element)
+            );
+            if !rest && !super::verify::compatible(&param.ty, want) {
+                found.push((
+                    call.to_owned(),
+                    format!(
+                        "parameter {at} is {:?} and the slot passes {want:?}",
+                        param.ty
+                    ),
+                ));
+            }
+        }
+        if let Some(want) = arrival.returns.as_ref()
+            && !super::verify::compatible(&func.return_type, want)
+        {
+            found.push((
+                call.to_owned(),
+                format!("returns {:?} and the slot reads {want:?}", func.return_type),
+            ));
+        }
+    }
+    found
+}
+
+/// One closure admitted into one signature slot.
+#[derive(Debug, Clone)]
+pub struct Arrival {
+    /// The closure's own class, which names its `#call` through its layout.
+    pub closure: TypeId,
+    /// Where it was admitted, for the diagnostic.
+    pub origin: Origin,
+    /// What that slot expects, **resolved at the coercion** rather than kept as a
+    /// type id.
+    ///
+    /// The distinction is not cosmetic: a signature type inside a generic copy
+    /// resolves under that copy's substitution, so the same `TypeId` is a
+    /// different representation inside the copy than outside it. Recording the id
+    /// and resolving later would compare the closure against a representation the
+    /// slot never had -- and `representation_of` consulting `subst.instance_of`
+    /// in its first lines is exactly why.
+    pub parameters: Vec<Option<HirType>>,
+    /// As `parameters`, for the result.
+    pub returns: Option<HirType>,
+}
+
 /// What a lowering produced, and what it could not.
 #[derive(Debug, Default)]
 pub struct Lowered {
@@ -57,6 +199,8 @@ pub struct Lowered {
     /// mechanism that did not exist, because the message said the function had
     /// no cause.
     pub refused_at: rustc_hash::FxHashSet<NodeId>,
+    /// See [`Arrivals`].
+    pub arrivals: Arrivals,
 }
 
 impl Lowered {
@@ -6741,7 +6885,7 @@ fn lower_object_literal_members(
                 lowered.diagnostics.push(diagnostic);
             },
         }
-        wanted.extend(builder.used_closures.iter().copied());
+        builder.harvest(wanted, &mut lowered.arrivals);
         collect_layouts(&mut lowered.program, builder.layouts);
     }
 }
@@ -6906,7 +7050,7 @@ fn lower_class(
             if gobject.is_some() && !is_static_member(snapshot, member) {
                 let lowered_member = builder.lower_gobject_member(class, member, instance);
                 keep_foreign_member(snapshot, member, lowered_member, &mut gobject_methods, lowered);
-                wanted.extend(builder.used_closures.iter().copied());
+                builder.harvest(wanted, &mut lowered.arrivals);
                 collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
             }
@@ -6918,7 +7062,7 @@ fn lower_class(
             if super::native::extends_com(snapshot, class) && !is_static_member(snapshot, member) {
                 let lowered_member = builder.lower_com_member(class, member, instance);
                 keep_foreign_member(snapshot, member, lowered_member, &mut com_methods, lowered);
-                wanted.extend(builder.used_closures.iter().copied());
+                builder.harvest(wanted, &mut lowered.arrivals);
                 collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
             }
@@ -6935,7 +7079,7 @@ fn lower_class(
                         lowered.diagnostics.push(diagnostic);
                     }
                 }
-                wanted.extend(builder.used_closures.iter().copied());
+                builder.harvest(wanted, &mut lowered.arrivals);
                 collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
             }
@@ -6953,7 +7097,7 @@ fn lower_class(
                         lowered.diagnostics.push(diagnostic);
                     }
                 }
-                wanted.extend(builder.used_closures.iter().copied());
+                builder.harvest(wanted, &mut lowered.arrivals);
                 collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
             }
@@ -6981,7 +7125,7 @@ fn lower_class(
                     lowered.diagnostics.push(diagnostic);
                 }
             }
-            wanted.extend(builder.used_closures.iter().copied());
+            builder.harvest(wanted, &mut lowered.arrivals);
             collect_layouts(&mut lowered.program, builder.layouts);
         }
     }
@@ -8486,7 +8630,7 @@ fn lower_module_initializer(
             ));
             }
         }
-        wanted.extend(builder.used_closures.iter().copied());
+        builder.harvest(wanted, &mut lowered.arrivals);
         collect_layouts(&mut lowered.program, builder.layouts);
     }
 }
@@ -9595,7 +9739,7 @@ fn lower_wanted_closures(
                 lowered.diagnostics.push(diagnostic);
             }
         }
-        wanted.extend(builder.used_closures.iter().copied());
+        builder.harvest(wanted, &mut lowered.arrivals);
         collect_layouts(&mut lowered.program, builder.layouts);
     }
 }
@@ -9769,7 +9913,7 @@ pub fn lower_with(
                     lowered.diagnostics.push(diagnostic);
                 }
             }
-            wanted.extend(builder.used_closures.iter().copied());
+            builder.harvest(&mut wanted, &mut lowered.arrivals);
             collect_layouts(&mut lowered.program, builder.layouts);
         }
     }
@@ -9787,6 +9931,21 @@ pub fn lower_with(
     lower_wanted_closures(snapshot, foreign, &shared, &closures, &mut lowered, &mut wanted);
 
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
+
+    // Stage 0: count what a fix would have to convert, before anything converts.
+    // `NTS_ARRIVALS` only -- this pass changes nothing yet, and a measurement that
+    // alters the program it measures is not one.
+    if std::env::var_os("NTS_ARRIVALS").is_some() {
+        let disagreeing = disagreeing_arrivals(&lowered.program, &lowered.arrivals);
+        eprintln!(
+            "ARRIVALS {} admitted, {} disagree",
+            lowered.arrivals.at_signature.len(),
+            disagreeing.len()
+        );
+        for (call, why) in &disagreeing {
+            eprintln!("  ARRIVAL {call}: {why}");
+        }
+    }
     declare_unfilled_signatures(&hierarchy, &mut lowered.program);
     declare_interface_methods(&hierarchy, &mut lowered.program);
 
@@ -13673,6 +13832,8 @@ struct FuncBuilder<'a> {
     /// that declares one thing this compiler cannot represent should not be
     /// reported as failing on it unless something reaches it.
     used_closures: Vec<usize>,
+    /// See [`Arrivals`]; drained by [`FuncBuilder::harvest`].
+    arrivals: Arrivals,
 }
 
 /// The empty binding table, for the probe builders below.
@@ -13827,6 +13988,7 @@ impl<'a> FuncBuilder<'a> {
             class_tokens: rustc_hash::FxHashMap::default(),
             written_order: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
+            arrivals: Arrivals::default(),
             substitution: Substitution::default(),
             sources: super::generics::Sources::default(),
             omitting_for: None,
@@ -18557,6 +18719,49 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
+    /// Keep a closure admitted into a signature slot, for the comparison this
+    /// cannot make yet. See [`Arrivals::at_signature`].
+    ///
+    /// Extracted when `coerce_arm` reached 117 lines, and the concept earns the
+    /// name: this is the only place in the compiler where "this closure was let
+    /// into that slot" is visible, and the arm it sits in returns the pointer
+    /// unchanged a line later.
+    fn record_arrival(&mut self, have: &HirType, want: &HirType, id: NodeId) {
+        let (
+            HirType::Managed(ManagedType::Object(from)),
+            HirType::Managed(ManagedType::Object(to)),
+        ) = (have, want)
+        else {
+            return;
+        };
+        if from == to {
+            return;
+        }
+        let Some((params, ret)) = signature_key(self.snapshot, *to) else {
+            return;
+        };
+        let closure = self
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(from))
+            .is_some_and(|layout| {
+                !is_signature_name(&layout.name)
+                    && layout.methods.iter().flatten().any(|m| m.ends_with("#call"))
+            });
+        if !closure {
+            return;
+        }
+        let parameters = params.iter().map(|t| self.represent(*t)).collect();
+        let returns = self.represent(ret);
+        let origin = self.origin(id);
+        self.arrivals.at_signature.push(Arrival {
+            closure: *from,
+            origin,
+            parameters,
+            returns,
+        });
+    }
+
     fn coerce_arm(
         &mut self,
         value: ValueId,
@@ -18734,6 +18939,7 @@ impl<'a> FuncBuilder<'a> {
             if let Some(why) = self.crossing_storage(&have, want) {
                 return Err(self.unsupported(id, &why));
             }
+            self.record_arrival(&have, want, id);
             return Ok(value);
         }
         if !erasable(&have) {
