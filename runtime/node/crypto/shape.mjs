@@ -137,6 +137,7 @@ const ORDER = [
   "hash",
   "encapsulate",
   "decapsulate",
+  "Certificate",
   "Cipheriv",
   "Decipheriv",
   "DiffieHellman",
@@ -161,6 +162,11 @@ function constructorsOf(exports) {
   let constructors = constructorTables.get(exports);
   if (constructors === undefined) {
     constructors = {
+      Certificate: Object.assign(callable(exports.Certificate), {
+        exportChallenge: exports.Certificate.exportChallenge,
+        exportPublicKey: exports.Certificate.exportPublicKey,
+        verifySpkac: exports.Certificate.verifySpkac,
+      }),
       Cipheriv: callable(exports.Cipheriv),
       Decipheriv: callable(exports.Decipheriv),
       Sign: callable(exports.Sign),

@@ -1,5 +1,5 @@
-/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c`, `prime.c`, `argon2.c` and `kem.c`,
- * called directly.
+/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c`, `prime.c`, `argon2.c`, `kem.c` and
+ * `spkac.c`, called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
@@ -808,6 +808,24 @@ static void key_encapsulation(void) {
                 pair_calls == 1 && pair_ok && pair_lengths[0] == 32 && pair_lengths[1] == 1088);
 }
 
+/* ---------------------------------------------------------------- SPKAC */
+
+static void spkac(void) {
+    NtsView *valid = file(KEYS "rsa_spkac.spkac");
+    expect_true("node's SPKAC fixture verifies", nts_crypto_spkac_verify(valid));
+    expect_true("  and its broken twin does not", !nts_crypto_spkac_verify(file(KEYS "rsa_spkac_invalid.spkac")));
+    NtsView *challenge = nts_crypto_spkac_challenge(valid);
+    expect_true("its challenge is the one it was made with",
+                challenge != NULL && nts_view_byte_length(challenge) == 19 &&
+                    memcmp(nts_view_bytes(challenge), "this-is-a-challenge", 19) == 0);
+    double carried = nts_crypto_key_parse_public(1, -1, nts_crypto_spkac_public_key(valid), bytes("", 0), false);
+    double expected = nts_crypto_key_parse_public(1, -1, file(KEYS "rsa_public.pem"), bytes("", 0), false);
+    expect_true("  and its key is the fixture's RSA key", nts_crypto_key_equals(carried, expected));
+    expect_true("garbage is no SPKAC, and leaves nothing on the queue",
+                nts_crypto_spkac_public_key(utf8("garbage")) == NULL &&
+                    nts_crypto_take_errors()->header.length == 3);
+}
+
 int main(void) {
     digests();
     derivations();
@@ -820,6 +838,7 @@ int main(void) {
     primes();
     argon2();
     key_encapsulation();
+    spkac();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

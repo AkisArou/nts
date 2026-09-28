@@ -19,6 +19,8 @@
 //
 // Key encapsulation: `encapsulate` and `decapsulate`.
 //
+// SPKAC: `Certificate`.
+//
 // Not yet:
 // X.509, and Web Crypto's `subtle`. Each is its own part of OpenSSL, and
 // `tooling/conformance/missing-exports` lists the names.
@@ -59,6 +61,7 @@ export {
   getDiffieHellman as createDiffieHellmanGroup,
 } from "./dh.ts";
 export { decapsulate, encapsulate } from "./kem.ts";
+export { Certificate } from "./certificate.ts";
 export { generateKey, generateKeyPair, generateKeyPairSync, generateKeySync } from "./keygen.ts";
 export { argon2, argon2Sync, hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
 export {

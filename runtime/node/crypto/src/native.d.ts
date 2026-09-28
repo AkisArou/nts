@@ -450,3 +450,11 @@ declare function nts_crypto_kem_decapsulate_job(
   ciphertext: Uint8Array,
   done: (ok: boolean, sharedKey: Uint8Array) => void,
 ): void;
+
+/** SPKAC: null is no SPKAC. */
+/** @ntsAbi managed */
+declare function nts_crypto_spkac_verify(input: Uint8Array): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_spkac_public_key(input: Uint8Array): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_spkac_challenge(input: Uint8Array): Uint8Array | null;

@@ -222,6 +222,11 @@ NtsView *nts_crypto_kem_decapsulate(double key, NtsView *ciphertext);
 void nts_crypto_kem_encapsulate_job(double key, NtsHeader *done);
 void nts_crypto_kem_decapsulate_job(double key, NtsView *ciphertext, NtsHeader *done);
 
+/* SPKAC (`spkac.c`), for `Certificate`. NULL is no SPKAC. */
+bool nts_crypto_spkac_verify(NtsView *input);
+NtsView *nts_crypto_spkac_public_key(NtsView *input);
+NtsView *nts_crypto_spkac_challenge(NtsView *input);
+
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */
 bool nts_crypto_fips_enabled(void);

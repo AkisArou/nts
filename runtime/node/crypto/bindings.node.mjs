@@ -1283,3 +1283,13 @@ globalThis.nts_crypto_kem_decapsulate_job = (handle, ciphertext, done) => {
     else done(true, view(sharedKey));
   });
 };
+
+// -- SPKAC --------------------------------------------------------------------
+
+globalThis.nts_crypto_spkac_verify = (input) => crypto.Certificate.verifySpkac(input);
+
+/** Node answers `""` where `spkac.c` answers NULL. */
+const spkacOrNull = (value) => (typeof value === "string" ? null : view(value));
+
+globalThis.nts_crypto_spkac_public_key = (input) => spkacOrNull(crypto.Certificate.exportPublicKey(input));
+globalThis.nts_crypto_spkac_challenge = (input) => spkacOrNull(crypto.Certificate.exportChallenge(input));

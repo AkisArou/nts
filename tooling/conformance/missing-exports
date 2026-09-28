@@ -32,7 +32,6 @@ url.URLPattern: a WHATWG global owned by runtime/web-platform; node re-exports i
 # random numbers and key objects so far.
 # Each group below is its own part of OpenSSL, and none is refused.
 crypto.X509Certificate: certificate parsing, OpenSSL's X509
-crypto.Certificate: SPKAC, OpenSSL's NETSCAPE_SPKI
 crypto.setEngine: OpenSSL engines, deprecated in OpenSSL 3; node throws when its OpenSSL has none
 crypto.webcrypto: Web Crypto, `globalThis.crypto`; its `getRandomValues` is here, `subtle` is not
 crypto.subtle: as crypto.webcrypto
