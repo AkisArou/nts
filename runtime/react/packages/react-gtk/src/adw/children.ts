@@ -44,7 +44,7 @@ import { g_signal_handler_disconnect } from "c:GObject-2.0";
 import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
-import { GroupNode, GroupPlacement, type PackProps } from "../children.ts";
+import { AppendedPageNode, GroupNode, GroupPlacement, type PackProps } from "../children.ts";
 import {
   HostNode,
   insertAt,
@@ -213,10 +213,24 @@ export interface ViewStackChildren {
 /**
  * A page of a ViewStack, as GTK's Stack.Page is of a Stack (../children.ts):
  * added with its name, title and icon, described again in place when they
- * change, and selecting itself when the ViewStack's `visibleChildName`,
- * applied before its pages existed, names it.
+ * change, selecting itself when the ViewStack's `visibleChildName`, applied
+ * before its pages existed, names it, and taking React's order when React
+ * moves it although the ViewStack only appends (AppendedPageNode).
  */
-export class ViewStackPageNode extends PlacedNode {
+export class ViewStackPageNode extends AppendedPageNode {
+  protected appendsTo(parent: WidgetNode): boolean {
+    return parent.widget instanceof AdwViewStack;
+  }
+  protected shownIn(parent: WidgetNode): GtkWidget | null {
+    return parent.widget instanceof AdwViewStack ? parent.widget.get_visible_child() : null;
+  }
+  protected show(parent: WidgetNode, widget: GtkWidget): void {
+    const stack = parent.widget;
+    if (stack instanceof AdwViewStack && widget.get_parent() === stack) {
+      stack.set_visible_child(widget);
+    }
+  }
+
   protected attach(owner: WidgetNode, widget: GtkWidget): void {
     const stack = owner.widget;
     if (!(stack instanceof AdwViewStack)) {

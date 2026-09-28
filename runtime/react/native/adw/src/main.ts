@@ -28,6 +28,10 @@
 //             ViewStack's visibleChildName, applied before its pages existed,
 //             shows the page it names; a title updates in place; switched from
 //             GTK's side, the controlled page goes back to the props' one
+//   viewmove  ViewStack.Pages React moves take React's order although the
+//             ViewStack only appends (c before a, then the shown page b before
+//             c); the shown page stays shown and no move is heard as the user
+//             switching pages
 //   switcher  a ViewSwitcher's `stack` names the ViewStack rendered beside it,
 //             and removing the prop unsets it
 //   split     a NavigationSplitView's Sidebar and Content slot elements fill
@@ -388,6 +392,47 @@ function main(): void {
     viewing += " switched=" + String(views.get_visible_child_name());
   }
   react_gtk_log("viewstack " + viewing);
+
+  let viewSwitchesHeard = 0;
+  const movingViews = createInstance(
+    "AdwViewStack",
+    {
+      onNotifyVisibleChildName: () => {
+        viewSwitchesHeard++;
+      },
+    },
+    root,
+    0,
+    {},
+  );
+  const viewPages: HostNode[] = [];
+  for (const pageName of ["a", "b", "c"]) {
+    const page = createInstance("AdwViewStack.Page", { name: pageName }, root, 0, {});
+    appendInitialChild(page, createInstance("GtkLabel", { label: pageName }, root, 0, {}));
+    appendInitialChild(movingViews, page);
+    viewPages.push(page);
+  }
+  const movingWidget = widget(movingViews);
+  const viewOrder = (): string => {
+    if (!(movingWidget instanceof AdwViewStack)) {
+      return "not a view stack";
+    }
+    let names = "";
+    for (let child = movingWidget.get_first_child(); child !== null; child = child.get_next_sibling()) {
+      names += (names === "" ? "" : ",") + String(movingWidget.get_page(child).get_name());
+    }
+    return names;
+  };
+  const viewShown = (): string => (movingWidget instanceof AdwViewStack ? String(movingWidget.get_visible_child_name()) : "?");
+  if (movingWidget instanceof AdwViewStack) {
+    movingWidget.set_visible_child_name("b");
+  }
+  viewSwitchesHeard = 0;
+  insertBefore(movingViews, viewPages[2]!, viewPages[0]!);
+  let viewMoves = viewOrder() + " shown=" + viewShown() + " heard=" + String(viewSwitchesHeard);
+  insertBefore(movingViews, viewPages[1]!, viewPages[2]!);
+  viewMoves += " > " + viewOrder() + " shown=" + viewShown() + " heard=" + String(viewSwitchesHeard);
+  react_gtk_log("viewmove " + viewMoves);
 
   const switcher = createInstance("AdwViewSwitcher", { stack: stackWidget }, root, 0, {});
   const switcherWidget = widget(switcher);

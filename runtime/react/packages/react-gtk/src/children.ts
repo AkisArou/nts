@@ -90,34 +90,58 @@ export interface StackChildren {
 }
 
 /**
- * GtkStack only appends a page. A page React places before another goes
- * last, and the pages after it in React's order are added again after it, so
- * a switcher lists them in React's order. The page shown stays shown, and
- * none of it is heard as the user switching pages.
+ * A page of a container that only appends its pages (GtkStack,
+ * AdwViewStack). A page React places before another goes last, and the
+ * pages after it in React's order are added again after it, so a switcher
+ * lists them in React's order. The page shown stays shown, and none of it is
+ * heard as the user switching pages.
  */
-export class StackPageNode extends PlacedNode {
+export abstract class AppendedPageNode extends PlacedNode {
   placeIn(parent: WidgetNode, before: HostNode | null): void {
-    const stack = parent.widget instanceof GtkStack ? parent.widget : null;
-    if (stack === null || before === null) {
+    if (before === null || !this.appendsTo(parent)) {
       super.placeIn(parent, before);
       return;
     }
-    writeAsReact(() => this.placeBefore(stack, parent, before));
+    writeAsReact(() => this.placeBefore(parent, before));
   }
 
-  private placeBefore(stack: GtkStack, parent: WidgetNode, before: HostNode): void {
-    const shown = stack.get_visible_child();
+  // A method rather than the `writeAsReact` arrow: nts does not lower
+  // `super` inside an arrow.
+  private placeBefore(parent: WidgetNode, before: HostNode): void {
+    const shown = this.shownIn(parent);
     super.placeIn(parent, before);
     // Placed again with no `before`, a follower does not recur.
     const after = parent.childrenAfter(this);
     for (let i = 0; i < after.length; i++) {
       const follower = after[i]!;
-      if (follower instanceof StackPageNode) {
+      if (follower instanceof AppendedPageNode) {
         follower.placeIn(parent, null);
       }
     }
-    if (shown !== null && shown.get_parent() === stack) {
-      stack.set_visible_child(shown);
+    if (shown !== null) {
+      this.show(parent, shown);
+    }
+  }
+
+  /** Whether `parent` is the container this page is added to. */
+  protected abstract appendsTo(parent: WidgetNode): boolean;
+  /** The page `parent` shows. */
+  protected abstract shownIn(parent: WidgetNode): GtkWidget | null;
+  /** Shows `widget`, a page of `parent`, again. */
+  protected abstract show(parent: WidgetNode, widget: GtkWidget): void;
+}
+
+export class StackPageNode extends AppendedPageNode {
+  protected appendsTo(parent: WidgetNode): boolean {
+    return parent.widget instanceof GtkStack;
+  }
+  protected shownIn(parent: WidgetNode): GtkWidget | null {
+    return parent.widget instanceof GtkStack ? parent.widget.get_visible_child() : null;
+  }
+  protected show(parent: WidgetNode, widget: GtkWidget): void {
+    const stack = parent.widget;
+    if (stack instanceof GtkStack && widget.get_parent() === stack) {
+      stack.set_visible_child(widget);
     }
   }
 

@@ -37,6 +37,7 @@ group A,X,B B,A,X B,X X,B suffix=true
 toolbar true true
 row p1>p2 s1>s2 e1>e2 r1>r2 t1>t2
 viewstack b B>Bee switched=b
+viewmove c,a,b shown=b heard=0 > b,c,a shown=b heard=0
 switcher true true
 split true true true
 tabs A,B,C>A,D,B,C>C,A,D,B selected=true asked=1 kept=4 attached=0121 true selected=A user=B>A heard=B app=B heard=B C,A,B
