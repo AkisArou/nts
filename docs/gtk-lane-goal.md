@@ -1861,6 +1861,19 @@ one in two ways, both core gaps:
 
 ### What the corpus found beyond its blockers
 
+**`Gtk.ClosureExpression` needs a closure that answers C an owned value.**
+Boxed Lists and Drop Down write `new Gtk.ClosureExpression(GObject.TYPE_STRING,
+(item) => item.string, null)`. `gtk_closure_expression_new` takes a
+`GClosure` (refused, "an array"); `gtk_cclosure_expression_new` takes a
+`GCallback` with its user data and destroy function (refused, "a callback
+whose context is not the next parameter"), which is the shape a signal
+handler binds through. But its C signature is known only at run time, from
+`value_type` and the params, and GLib's generic marshaller calls it through
+libffi and takes ownership of what it returns: a string must come back as a
+`g_malloc`ed copy, an object with a reference. So the binding needs a typed
+class value (GJS's three-argument `new`, the callback typed by the program)
+and a bridge that answers an owned value, which no callback does yet.
+
 **An override's out parameters are pointers, where GJS returns them.** GJS
 writes `vfunc_get_section(position) { return [start, end]; }`, and a port
 writes `out_start[0] = start` through the `Ptr<CNumber<"uint">>` the binding
