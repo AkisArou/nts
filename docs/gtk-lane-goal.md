@@ -936,6 +936,42 @@ class Panel extends GtkBox {
   and reading it failed GTK's assertion. Witness: gtk-subclass's `panel from
   the template true`.
 
+**A template known only at run time, and `GTypeName`.** GJS's `Template`
+takes XML, a `resource:///` URI or a `file:///` one, and Workbench's demos
+pass a string the host makes (`Template: workbench.template`). A class
+writes the same, with any string:
+
+```ts
+class Stamp extends GtkBox {
+  static readonly GTypeName = "NtsStamp";            // the template's `class`
+  static readonly template: string = stampTemplate;  // made when the module runs
+  onHit(button: GtkButton): void { ... }             // `<signal handler="onHit">`
+}
+```
+
+- `GTypeName` is the name the type registers under, as GJS's is, and must
+  be a string literal (refused by name otherwise). Without one the name is
+  `Nts_{Class}`. The HIR carries it (`ForeignClass::type_name`), so neither
+  backend spells the prefix.
+- A template whose initialiser is not a literal is read when GTK first sets
+  the class up: `{Class}#template` answers the static's string, and
+  `class_init` lends it to `nts_gtk_class_template_text`, releasing the
+  reader's result where the program counts. Before this, such a class
+  registered with no template and no diagnostic.
+- `nts_gtk.c` tells GJS's three forms apart, for a literal too: `resource:///`
+  is `set_template_from_resource`, `file:///` is the file's bytes, anything
+  else is the XML.
+- A template the compiler cannot read (one known at run time, or a URI) may
+  name any method as a handler. So every method whose parameters and result
+  all have C types gets a handler's entry point, bound by its name, and GTK
+  resolves the template's names when it builds an instance, as it does for
+  GJS. A method it cannot call (`twice(of: number[])`) stays a method. An
+  unknown handler is GTK's error at that point, where for XML the compiler
+  reads it is still refused when the program compiles.
+- Witness: gtk-subclass's `stamp NtsStamp 2 4 filed from a file sourced from
+  a resource`, on all four arms. build.sh compiles the resource with
+  `glib-compile-resources` and names both files to the program.
+
 ### Interfaces a class implements
 
 ```ts

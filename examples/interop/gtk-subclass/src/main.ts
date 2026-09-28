@@ -49,6 +49,12 @@
 //                 its handler still reaches the method
 //   tall head foot true  `Tall`, with a template over `Card`'s: both build,
 //                 the parent's children first
+//   stamp NtsStamp 2 4 filed from a file sourced from a resource  templates
+//                 known only at run time, as GJS's `Template` takes them: XML
+//                 the module makes, whose handler `onHit` GTK finds by name
+//                 (twice), a `file:///` URI and a `resource:///` one; each
+//                 type named by its `GTypeName`, which its template's `class`
+//                 must match
 //   measure 42 17  `Square`, over the *abstract* `GtkWidget`, answers
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
@@ -109,7 +115,10 @@ import {
   type GListModelImplementation,
   g_list_model_get_n_items,
   g_list_model_get_object,
+  g_resource_load,
+  g_resources_register,
 } from "c:Gio-2.0";
+import { g_filename_to_uri, g_getenv } from "c:GLib-2.0";
 import type { CEnum, CNumber, Erased, Owned, Properties, Property, Ptr, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 import { Badge } from "./badge.ts";
@@ -318,6 +327,60 @@ function wide(): string {
   const before = "wide " + (made.title.label ?? "") + " " + String(made.extra);
   made.press.emit("clicked");
   return before + " pressed " + String(made.pressed);
+}
+
+// A template known only at run time, GJS's `Template: workbench.template`:
+// the class holds a string the module makes, and GTK resolves the handler
+// its signal names against the class's methods when it builds one, as it
+// does for GJS. `GTypeName` names the type, which the template's `class`
+// must, as GJS's does.
+const stampTemplate = [
+  `<interface><template class="NtsStamp" parent="GtkBox">`,
+  `<child><object class="GtkButton" id="hit"><property name="label">s</property>`,
+  `<signal name="clicked" handler="onHit"/></object></child>`,
+  `</template></interface>`,
+].join("");
+
+class Stamp extends GtkBox {
+  static readonly GTypeName = "NtsStamp";
+  static readonly template: string = stampTemplate;
+  declare readonly hit: GtkButton;
+  hits = 0;
+
+  onHit(button: GtkButton): void {
+    this.hits += button.label === "s" ? 1 : 100;
+  }
+
+  // Not a handler: a parameter C has no type for, so GTK cannot call it,
+  // and it stays a method.
+  twice(of: number[]): number {
+    return of.length * 2;
+  }
+}
+
+// GJS's two URIs: a `file:///` the program names at run time, and a
+// `resource:///` in a resource it registers first (build.sh makes both).
+class Filed extends GtkBox {
+  static readonly GTypeName = "NtsFiled";
+  static readonly template: string = g_filename_to_uri((g_getenv("NTS_SUBCLASS_SOURCE") ?? ".") + "/filed.ui", null);
+  declare readonly line: GtkLabel;
+}
+
+class Sourced extends GtkBox {
+  static readonly GTypeName = "NtsSourced";
+  static readonly template = "resource:///dev/nts/subclass/sourced.ui";
+  declare readonly line: GtkLabel;
+}
+
+function stamps(): string {
+  const stamp = new Stamp({});
+  stamp.hit.emit("clicked");
+  stamp.hit.emit("clicked");
+  g_resources_register(g_resource_load(g_getenv("NTS_SUBCLASS_RESOURCE") ?? "templates.gresource"));
+  return (
+    "stamp " + g_type_name_from_instance(stamp) + " " + String(stamp.hits) + " " + String(stamp.twice([1, 2])) +
+    " filed " + (new Filed({}).line.label ?? "") + " sourced " + (new Sourced({}).line.label ?? "")
+  );
 }
 
 // Two templates in one chain, each class's children made by its own
@@ -548,6 +611,7 @@ function main(): void {
   console.log(panel());
   console.log(wide());
   console.log(tall());
+  console.log(stamps());
 
   const square = new Square({});
   const width = local<CNumber<"int">>();

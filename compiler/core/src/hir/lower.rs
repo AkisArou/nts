@@ -7100,6 +7100,7 @@ fn register_objc_class(
     lowered.program.foreign_classes.push(super::ForeignClass {
         family: super::native::Family::Objc,
         name,
+        type_name: None,
         superclass,
         methods,
         protocols,
@@ -7253,7 +7254,9 @@ fn lower_class(
     if let Some(parent) = gobject {
         let state = objc_state_function(snapshot, foreign, class, shared, lowered);
         let properties = gobject_properties(snapshot, foreign, class, shared, lowered);
-        register_gobject_class(snapshot, class, parent, (gobject_methods, properties), state, lowered);
+        if template_reader(snapshot, foreign, class, shared, lowered) {
+            register_gobject_class(snapshot, class, parent, (gobject_methods, properties), state, lowered);
+        }
     }
     if let Some(composition) = super::native::composable_base(snapshot, class) {
         let state = objc_state_function(snapshot, foreign, class, shared, lowered);
@@ -7275,13 +7278,26 @@ fn register_gobject_class(
     lowered: &mut Lowered,
 ) {
     let Some(name) = foreign_class_name(snapshot, class) else { return };
+    let refuse = |lowered: &mut Lowered, why: &str| {
+        let diagnostic = FuncBuilder::probe(snapshot).unsupported(class, why);
+        note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+        lowered.diagnostics.push(diagnostic);
+    };
+    let type_name = match static_value(snapshot, class, "GTypeName") {
+        None => format!("Nts_{name}"),
+        Some(StaticValue::Literal(type_name)) => type_name,
+        Some(StaticValue::Computed) => {
+            return refuse(lowered, "a `static GTypeName` that is not a string literal: a class's type name is known when it compiles");
+        }
+    };
     // A template's handlers are reached through the template, not a slot.
     let (callbacks, methods): (Vec<super::ForeignMethod>, Vec<super::ForeignMethod>) =
         methods.into_iter().partition(|method| method.selector().starts_with("callback "));
     let mut template = gobject_template(snapshot, class);
     if let Some(template) = &mut template {
         template.callbacks = callbacks;
-        let missing = template_handlers(&template.xml)
+        let missing = known_handlers(template)
+            .unwrap_or_default()
             .into_iter()
             .find(|handler| !template.callbacks.iter().any(|callback| callback.selector() == format!("callback {handler}")));
         if let Some(handler) = missing {
@@ -7311,6 +7327,7 @@ fn register_gobject_class(
     lowered.program.foreign_classes.push(super::ForeignClass {
         family: super::native::Family::GObject,
         name,
+        type_name: Some(type_name),
         superclass: parent,
         methods,
         protocols: gobject_interfaces(snapshot, class),
@@ -7428,42 +7445,104 @@ fn template_handlers(xml: &str) -> Vec<String> {
     handlers
 }
 
-/// The template a class is built from -- `static readonly template`, whose
-/// type is the literal the checker kept, or whose initialiser is one -- and
-/// the children it names: each
-/// `declare`d field of a `GObject` handle type, by its name as the child's id.
-/// `None` for a class with no template.
-fn gobject_template(snapshot: &SemanticSnapshot, class: NodeId) -> Option<super::Template> {
+/// A class's own `static` field `name`: `None` when it has none.
+fn static_field(snapshot: &SemanticSnapshot, class: NodeId, name: &str) -> Option<NodeId> {
     let probe = FuncBuilder::probe(snapshot);
-    let xml = probe.children(class).into_iter().find_map(|member| {
-        if probe.kind_of(member) != Some(syntax::PROPERTY_DECLARATION) || !is_static_member(snapshot, member) {
-            return None;
-        }
-        let named = probe.children(member).into_iter().any(|child| {
-            probe.kind_of(child) == Some(syntax::IDENTIFIER) && probe.node(child).text.as_deref() == Some("template")
-        });
-        if !named {
-            return None;
-        }
-        if let Some(TypeKind::Literal(LiteralValue::String(text))) =
-            snapshot.node_types.get(&member).and_then(|ty| snapshot.types.get(ty.0 as usize)).map(|record| &record.kind)
-        {
-            return Some(text.clone());
-        }
-        // Written `template: string`, as a class over one with a template
-        // has to, since its literal type would not extend the parent's: the
-        // literal it is initialised with.
-        probe.children(member).into_iter().find_map(|child| {
-            matches!(probe.kind_of(child), Some(syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL | syntax::STRING_LITERAL))
-                .then(|| probe.node(child).text.clone())
-                .flatten()
-        })
-    })?;
+    probe.children(class).into_iter().find(|&member| {
+        probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION)
+            && is_static_member(snapshot, member)
+            && probe.children(member).into_iter().any(|child| {
+                probe.kind_of(child) == Some(syntax::IDENTIFIER) && probe.node(child).text.as_deref() == Some(name)
+            })
+    })
+}
+
+/// What a class's `static` field holds, as GJS's registration reads
+/// `GTypeName` and `Template`.
+enum StaticValue {
+    /// A string literal: the field's type, which the checker keeps for a
+    /// `readonly` one, or its initialiser -- written `template: string`, as a
+    /// class over one with a template has to, since its literal type would
+    /// not extend the parent's.
+    Literal(String),
+    /// Anything else, known only once the module has run.
+    Computed,
+}
+
+/// What a class's own `static` field `name` holds: `None` when it has none.
+fn static_value(snapshot: &SemanticSnapshot, class: NodeId, name: &str) -> Option<StaticValue> {
+    let member = static_field(snapshot, class, name)?;
+    if let Some(TypeKind::Literal(LiteralValue::String(text))) =
+        snapshot.node_types.get(&member).and_then(|ty| snapshot.types.get(ty.0 as usize)).map(|record| &record.kind)
+    {
+        return Some(StaticValue::Literal(text.clone()));
+    }
+    let probe = FuncBuilder::probe(snapshot);
+    let literal = probe.children(member).into_iter().find_map(|child| {
+        matches!(probe.kind_of(child), Some(syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL | syntax::STRING_LITERAL))
+            .then(|| probe.node(child).text.clone())
+            .flatten()
+    });
+    Some(literal.map_or(StaticValue::Computed, StaticValue::Literal))
+}
+
+/// The template a class is built from, `static readonly template`, and the
+/// children it names: each `declare`d field of a `GObject` handle type, by
+/// its name as the child's id. Its text is the literal, or -- a value known
+/// only at run time, GJS's `Template: workbench.template` -- what the class's
+/// reader answers (`template_reader`). `None` for a class with no template.
+fn gobject_template(snapshot: &SemanticSnapshot, class: NodeId) -> Option<super::Template> {
+    let text = match static_value(snapshot, class, "template")? {
+        StaticValue::Literal(text) => super::TemplateText::Literal(text),
+        StaticValue::Computed => super::TemplateText::Read(format!("{}#template", foreign_class_name(snapshot, class)?)),
+    };
     Some(super::Template {
-        xml,
+        text,
         children: template_children(snapshot, class).into_iter().map(|(name, _)| name).collect(),
         callbacks: Vec::new(),
     })
+}
+
+/// The handlers a template names, where the compiler can read them: from XML
+/// written as a literal. `None` for a template known only at run time, or
+/// one loaded from a URI, whose names GTK resolves when it builds an
+/// instance, as it does for GJS.
+fn known_handlers(template: &super::Template) -> Option<Vec<String>> {
+    match &template.text {
+        super::TemplateText::Literal(text) if !text.starts_with("resource:///") && !text.starts_with("file:///") => {
+            Some(template_handlers(text))
+        }
+        _ => None,
+    }
+}
+
+/// For a class whose template is known only at run time, the function
+/// answering it (`{Class}#template`), lowered into the program: `false` when
+/// it is refused, and reported, so the class is not registered with a
+/// template it cannot read. `true` for every other class.
+fn template_reader(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    class: NodeId,
+    shared: &Shared,
+    lowered: &mut Lowered,
+) -> bool {
+    let Some(super::Template { text: super::TemplateText::Read(reader), .. }) = gobject_template(snapshot, class) else {
+        return true;
+    };
+    let Some(member) = static_field(snapshot, class, "template") else { return true };
+    let mut builder = shared.builder(snapshot, foreign, Copy::default());
+    match builder.lower_template_reader(member, &reader) {
+        Ok(func) => {
+            lowered.program.funcs.push(func);
+            true
+        }
+        Err(diagnostic) => {
+            note_uncompiled(snapshot, &mut lowered.program, class, None, &diagnostic);
+            lowered.diagnostics.push(diagnostic);
+            false
+        }
+    }
 }
 
 /// The children a class's template names: its own `declare`d fields of a
@@ -7806,6 +7885,7 @@ fn register_com_class(
     lowered.program.foreign_classes.push(super::ForeignClass {
         family: super::native::Family::Com,
         name,
+        type_name: None,
         superclass: composition.class.clone(),
         methods,
         protocols: Vec::new(),
@@ -16298,9 +16378,26 @@ impl<'a> FuncBuilder<'a> {
         }
         let name = self.member_name(member).ok_or_else(|| self.unsupported(member, "a member whose name the program computes"))?;
         // A handler the class's template names (`<signal handler="...">`):
-        // GTK calls it with the signal's arguments and the instance last.
-        if gobject_template(self.snapshot, class).is_some_and(|template| template_handlers(&template.xml).contains(&name)) {
-            return self.lower_template_callback(class, member, instance, &name);
+        // GTK calls it with the signal's arguments and the instance last. A
+        // template the compiler cannot read may name any method, so each one
+        // a handler could be -- its parameters all C's -- is bound by name,
+        // and GTK resolves the template's names against them, as in GJS.
+        if let Some(template) = gobject_template(self.snapshot, class) {
+            match known_handlers(&template) {
+                Some(handlers) => {
+                    if handlers.contains(&name) {
+                        return self.lower_template_callback(class, member, instance, &name);
+                    }
+                }
+                None => {
+                    if !name.starts_with("vfunc_")
+                        && self.kind_of(member) == Some(syntax::METHOD_DECLARATION)
+                        && let Ok(entry) = self.template_callback_entry(class, member, instance, &name)
+                    {
+                        return self.lower_template_callback_with(class, member, instance, &name, entry);
+                    }
+                }
+            }
         }
         if !name.starts_with("vfunc_") {
             return Ok((self.lower_method_of(class, member, instance)?, None));
@@ -16357,6 +16454,39 @@ impl<'a> FuncBuilder<'a> {
         instance: Option<TypeId>,
         name: &str,
     ) -> Result<(Func, Option<super::ForeignMethod>), Diagnostic> {
+        let entry = self.template_callback_entry(class, member, instance, name)?;
+        self.lower_template_callback_with(class, member, instance, name, entry)
+    }
+
+    /// The method `name` lowered with `entry`, its entry point as a
+    /// template's handler.
+    fn lower_template_callback_with(
+        &mut self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+        name: &str,
+        entry: super::native::FnPointer,
+    ) -> Result<(Func, Option<super::ForeignMethod>), Diagnostic> {
+        let func = self.lower_method_of(class, member, instance)?;
+        let method = super::ForeignMethod {
+            dispatch: super::Dispatch::Selector(format!("callback {name}")),
+            function: func.name.clone(),
+            signature: std::sync::Arc::new(entry),
+        };
+        Ok((func, Some(method)))
+    }
+
+    /// The entry point a method has as a template's handler: the instance,
+    /// then its own parameters, each in C. Refused, by name, for a parameter
+    /// or a result with no C type.
+    fn template_callback_entry(
+        &self,
+        class: NodeId,
+        member: NodeId,
+        instance: Option<TypeId>,
+        name: &str,
+    ) -> Result<super::native::FnPointer, Diagnostic> {
         let receiver = instance
             .or_else(|| instance_type_of(self.snapshot, class))
             .and_then(|ty| super::native::pointer(self.snapshot, ty))
@@ -16372,14 +16502,40 @@ impl<'a> FuncBuilder<'a> {
         }
         let result = super::native::abi_type(self.snapshot, signature.return_type)
             .ok_or_else(|| self.unsupported(member, &format!("a template's handler `{name}` whose result has no C type")))?;
-        let entry = super::native::FnPointer::spell(parameters, result);
-        let func = self.lower_method_of(class, member, instance)?;
-        let method = super::ForeignMethod {
-            dispatch: super::Dispatch::Selector(format!("callback {name}")),
-            function: func.name.clone(),
-            signature: std::sync::Arc::new(entry),
-        };
-        Ok((func, Some(method)))
+        Ok(super::native::FnPointer::spell(parameters, result))
+    }
+
+    /// `{Class}#template`: the string a class's `static template` holds, for
+    /// a template known only at run time. `class_init` calls it when GTK
+    /// first sets the class up, after the module has run the initialiser.
+    fn lower_template_reader(&mut self, member: NodeId, name: &str) -> Result<Func, Diagnostic> {
+        let origin = self.origin(member);
+        // The symbol is the declaration's name's, as a read of it finds it.
+        let symbol = self
+            .children(member)
+            .into_iter()
+            .find(|&child| self.kind_of(child) == Some(syntax::IDENTIFIER))
+            .and_then(|name| self.node(name).symbol)
+            .ok_or_else(|| self.unsupported(member, "a `static template` with no symbol"))?;
+        if let Some(reason) = self.module.unsupported.get(&symbol.0) {
+            let reason = reason.clone();
+            return Err(self.unsupported(member, &reason));
+        }
+        let global = self
+            .module
+            .variables
+            .get(&symbol.0)
+            .copied()
+            .ok_or_else(|| self.unsupported(member, "a `static template` the module does not store"))?;
+        let ty = self.module.types[global as usize].clone();
+        if ty != HirType::Managed(ManagedType::String) {
+            return Err(self.unsupported(member, "a `static template` that is not a `string`: GJS's `Template` as XML or a URI"));
+        }
+        self.this = None;
+        self.returns = ty.clone();
+        let read = self.push(OpKind::GlobalGet(global), ty.clone(), origin.clone());
+        self.terminate(Terminator::Return(Some(read)));
+        Ok(self.finish(name.to_owned(), Vec::new(), ty, origin, false))
     }
 
     /// The virtual function `name` (`vfunc_clicked`) a class whose instances

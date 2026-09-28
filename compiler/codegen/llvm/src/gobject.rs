@@ -9,7 +9,7 @@
 use std::fmt::Write as _;
 
 use nts_core::hir::native::{Family, PROGRAM_GTYPE, Scalar, Type};
-use nts_core::hir::{Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program};
+use nts_core::hir::{Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program, TemplateText};
 use nts_diagnostics::Diagnostic;
 
 use super::{Platform, conversion, is_not_zero, refuse, symbol, text_constant, ty_of};
@@ -101,7 +101,7 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
             let _ = writeln!(out, "@nts_gobject_slots_{name} = internal constant [{} x {{ i64, ptr }}] [{}]", slots.len(), slots.join(", "));
             format!("@nts_gobject_slots_{name}")
         };
-        text_constant(&mut out, &format!("nts_gobject_name_{name}"), &format!("Nts_{name}"));
+        text_constant(&mut out, &format!("nts_gobject_name_{name}"), class.type_name.as_deref().unwrap_or(name.as_str()));
         // The fields' maker, entered and left as an entry point is:
         // `instance_init` runs wherever GTK makes one.
         let make_state = match &class.state {
@@ -198,7 +198,14 @@ fn implementations(
 fn declarations(out: &mut String, classes: &[&ForeignClass]) {
     out.push_str("declare i64 @nts_gobject_register(i64, ptr, ptr, i64, ptr, ptr, ptr)\ndeclare ptr @nts_gobject_new(i64)\n");
     if classes.iter().any(|class| class.template.is_some()) {
-        out.push_str("declare void @nts_gtk_class_template(ptr, ptr, i64, ptr, i64)\ndeclare void @nts_gtk_init_template(ptr)\n");
+        out.push_str("declare void @nts_gtk_class_children(ptr, ptr, i64)\ndeclare void @nts_gtk_init_template(ptr)\n");
+    }
+    let texts = || classes.iter().filter_map(|class| class.template.as_ref()).map(|template| &template.text);
+    if texts().any(|text| matches!(text, TemplateText::Literal(_))) {
+        out.push_str("declare void @nts_gtk_class_template(ptr, ptr, i64)\n");
+    }
+    if texts().any(|text| matches!(text, TemplateText::Read(_))) {
+        out.push_str("declare void @nts_gtk_class_template_text(ptr, ptr)\n");
     }
     if classes.iter().any(|class| class.template.as_ref().is_some_and(|template| !template.callbacks.is_empty())) {
         out.push_str("declare void @nts_gtk_bind_callback(ptr, ptr, ptr)\n");
@@ -221,7 +228,35 @@ fn template(out: &mut String, program: &Program, platform: Platform, class: &For
     let Some(template) = &class.template else { return Ok("ptr null, ptr null".to_owned()) };
     let name = &class.name;
     let binds = callbacks(out, program, platform, class, &template.callbacks)?;
-    bytes_constant(out, &format!("nts_gobject_template_{name}"), &template.xml);
+    let set = match &template.text {
+        TemplateText::Literal(text) => {
+            bytes_constant(out, &format!("nts_gobject_template_{name}"), text);
+            format!("  call void @nts_gtk_class_template(ptr %klass, ptr @nts_gobject_template_{name}, i64 {})\n", text.len())
+        }
+        // The reader's string, lent to GTK for the call, entered and left
+        // as an entry point is; its result is the caller's to release only
+        // where the program counts.
+        TemplateText::Read(reader) => {
+            let Some(compiled) = program.funcs.iter().find(|func| &func.name == reader) else {
+                let missing = "a template whose reader this program does not define";
+                return match program.funcs.first() {
+                    Some(func) => Err(refuse(func, missing)),
+                    None => Ok("ptr null, ptr null".to_owned()),
+                };
+            };
+            let release = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+                "  call void @nts_release(ptr %text)\n"
+            } else {
+                ""
+            };
+            format!(
+                "  call void @nts_callback_enter()\n  %text = call ptr {}()\n  %c = call ptr @nts_string_to_cstring(ptr %text)\n  \
+                 call void @nts_gtk_class_template_text(ptr %klass, ptr %c)\n  call void @nts_cstring_release(ptr %text, ptr %c)\n{release}  \
+                 call void @nts_callback_leave()\n",
+                symbol(&compiled.name)
+            )
+        }
+    };
     let mut names = Vec::new();
     for (at, child) in template.children.iter().enumerate() {
         bytes_constant(out, &format!("nts_gobject_child_name_{name}_{at}"), child);
@@ -235,8 +270,7 @@ fn template(out: &mut String, program: &Program, platform: Platform, class: &For
     };
     let _ = writeln!(
         out,
-        "define internal void @nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n  call void @nts_gtk_class_template(ptr %klass, ptr @nts_gobject_template_{name}, i64 {}, ptr {table}, i64 {})\n{binds}  ret void\n}}",
-        template.xml.len(),
+        "define internal void @nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n{set}  call void @nts_gtk_class_children(ptr %klass, ptr {table}, i64 {})\n{binds}  ret void\n}}",
         names.len()
     );
     Ok(format!("ptr @nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template"))

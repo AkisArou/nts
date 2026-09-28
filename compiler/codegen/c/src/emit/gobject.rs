@@ -25,7 +25,7 @@
 use std::fmt::Write as _;
 
 use nts_core::hir::native::{Family, PROGRAM_GTYPE, Type};
-use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program};
+use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program, TemplateText};
 
 use super::{CodeWriter, Diagnostic, Origin, c_identifier, c_type_of};
 
@@ -111,7 +111,8 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             origin,
             format!(
                 "size_t nts_gobject_type_{name}(void) {{ static size_t type = 0; if (type == 0) {{ \
-                 type = nts_gobject_register({parent}(), \"Nts_{name}\", {table}, {}u, {make_state}, {hooks});{signals} }} return type; }}",
+                 type = nts_gobject_register({parent}(), {}, {table}, {}u, {make_state}, {hooks});{signals} }} return type; }}",
+                c_string(class.type_name.as_deref().unwrap_or(name.as_str())),
                 slots.len()
             ),
         );
@@ -340,8 +341,33 @@ fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
 fn template(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass) -> Result<String, Diagnostic> {
     let Some(template) = &class.template else { return Ok("0, 0".to_owned()) };
     let name = &class.name;
-    writer.line(origin, "void nts_gtk_class_template(void *klass, const char *xml, size_t length, const char *const *children, size_t count);");
+    writer.line(origin, "void nts_gtk_class_children(void *klass, const char *const *children, size_t count);");
     writer.line(origin, "void nts_gtk_init_template(void *instance);");
+    let set = match &template.text {
+        TemplateText::Literal(text) => {
+            writer.line(origin, "void nts_gtk_class_template(void *klass, const char *text, size_t length);");
+            format!("nts_gtk_class_template(klass, {}, {}u);", c_string(text), text.len())
+        }
+        // The reader's string, lent to GTK for the call, entered and left
+        // as an entry point is; its result is the caller's to release only
+        // where the program counts.
+        TemplateText::Read(reader) => {
+            writer.line(origin, "void nts_gtk_class_template_text(void *klass, const char *text);");
+            let compiled = program.funcs.iter().find(|func| &func.name == reader).ok_or_else(|| {
+                Diagnostic::error("NTS2006", "a template whose reader this program does not define".to_owned(), origin.location)
+            })?;
+            let release = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+                " nts_release((NtsHeader *)text);"
+            } else {
+                ""
+            };
+            format!(
+                "nts_callback_enter(); NtsString *text = {}(); const char *c = nts_string_to_cstring(text); \
+                 nts_gtk_class_template_text(klass, c); nts_cstring_release(text, c);{release} nts_callback_leave();",
+                c_identifier(&compiled.name)
+            )
+        }
+    };
     let binds = callbacks(writer, origin, program, class, &template.callbacks)?;
     let children: Vec<String> = template.children.iter().map(|child| c_string(child)).collect();
     let table = if children.is_empty() {
@@ -353,9 +379,7 @@ fn template(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: 
     writer.line(
         origin,
         format!(
-            "static void nts_gobject_class_setup_{name}(void *klass) {{ nts_gtk_class_template(klass, {}, {}u, {table}, {}u);{binds} }}",
-            c_string(&template.xml),
-            template.xml.len(),
+            "static void nts_gobject_class_setup_{name}(void *klass) {{ {set} nts_gtk_class_children(klass, {table}, {}u);{binds} }}",
             children.len()
         ),
     );

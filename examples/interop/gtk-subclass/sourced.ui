@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A template read from a resource: `Sourced`'s, compiled into
+     templates.gresource by build.sh and named by a `resource:///` URI. -->
+<interface>
+  <template class="NtsSourced" parent="GtkBox">
+    <child>
+      <object class="GtkLabel" id="line">
+        <property name="label">from a resource</property>
+      </object>
+    </child>
+  </template>
+</interface>

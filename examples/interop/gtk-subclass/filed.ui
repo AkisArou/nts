@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A template read from a file: `Filed`'s, named by a `file:///` URI. -->
+<interface>
+  <template class="NtsFiled" parent="GtkBox">
+    <child>
+      <object class="GtkLabel" id="line">
+        <property name="label">from a file</property>
+      </object>
+    </child>
+  </template>
+</interface>

@@ -2252,6 +2252,11 @@ pub struct ForeignClass {
     pub family: native::Family,
     /// The runtime's name for it: the TypeScript class name.
     pub name: String,
+    /// The name a `GObject` class registers its `GType` under: its
+    /// `static readonly GTypeName`, as GJS's `GTypeName`, or `Nts_{name}`, as
+    /// GJS's default is `Gjs_{name}`. A template's `class` names it. `None`
+    /// for every other family, whose runtime knows the class by `name`.
+    pub type_name: Option<String>,
     /// The runtime's name for the class it extends.
     pub superclass: String,
     pub methods: Vec<ForeignMethod>,
@@ -2277,7 +2282,7 @@ pub struct ForeignClass {
     /// family.
     pub properties: Vec<ForeignProperty>,
     /// A `GtkWidget` class built from a template (`static readonly template`):
-    /// the XML, and the id of each child the class names with a `declare`d
+    /// its text, and the id of each child the class names with a `declare`d
     /// field, in order -- what `nts_gobject_child_{Class}_{i}` reads.
     pub template: Option<Template>,
 }
@@ -2285,13 +2290,29 @@ pub struct ForeignClass {
 /// A class's template and the children it names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Template {
-    pub xml: String,
+    pub text: TemplateText,
     pub children: Vec<String>,
-    /// The class's methods the template names as signal handlers
+    /// The class's methods GTK may call as a template's signal handlers
     /// (`<signal handler="onClicked">`): each an entry point shaped as a
     /// virtual function's, the instance first, which GTK reaches with it last
-    /// (its user data). The dispatch is `callback {handler}`.
+    /// (its user data). The dispatch is `callback {handler}`. For XML the
+    /// compiler reads, the methods it names; for text it cannot read, every
+    /// method a handler could be, and GTK resolves the names, as in GJS.
     pub callbacks: Vec<ForeignMethod>,
+}
+
+/// A template's text, as GJS's `Template` takes it: the XML, or a
+/// `resource:///` or `file://` URI the support file loads it from
+/// (`nts_gtk.c`), which tells the three apart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TemplateText {
+    /// Written as a literal, the static field's type or its initialiser.
+    Literal(String),
+    /// Held by the class's `static template` and known only once the module
+    /// has run its initialiser (`Template: workbench.template`): the compiled
+    /// function answering it (`{Class}#template`), which `class_init` calls
+    /// when GTK first sets the class up.
+    Read(String),
 }
 
 impl Template {
@@ -2361,6 +2382,12 @@ impl ForeignClass {
             .chain(self.properties.iter().flat_map(|property| [property.getter.as_str(), property.setter.as_str()]))
             // A template's handlers, which its signals call.
             .chain(self.template.iter().flat_map(|template| template.callbacks.iter().map(|callback| callback.function.as_str())))
+            // The reader of a template known only at run time, which
+            // `class_init` calls.
+            .chain(self.template.iter().filter_map(|template| match &template.text {
+                TemplateText::Read(reader) => Some(reader.as_str()),
+                TemplateText::Literal(_) => None,
+            }))
     }
 }
 

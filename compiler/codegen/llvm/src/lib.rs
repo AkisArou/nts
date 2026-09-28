@@ -1880,6 +1880,10 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_string_eq",
     // A string a callback's bridge copies from C (`bridges`), in raw IR.
     "nts_string_from_cstring",
+    // A template read at run time, lent to GTK by `class_init`
+    // (`gobject::template`), in raw IR.
+    "nts_string_to_cstring",
+    "nts_cstring_release",
     "nts_string_truthy",
     "nts_to_int32_fn",
     "nts_to_uint32_fn",
