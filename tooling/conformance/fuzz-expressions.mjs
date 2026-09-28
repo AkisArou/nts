@@ -393,7 +393,7 @@ function measure(exprs, expected, depth = 0) {
     totals.typescript += exprs.length;
     // Counted by code, because "rejected by tsc" is the generator's own waste
     // and the code says which rule it keeps breaking.
-    const code = (verdict.detail.match(/^TS\d+/) ?? ["TS?"])[0];
+    const code = (verdict.detail.match(/^(?:\S+ )?(TS\d+)/) ?? [, "TS?"])[1];
     rejected.set(code, (rejected.get(code) ?? 0) + 1);
     // At size one the expression *is* the cause, so keep one example per code.
     // Counting a rejection says the generator wastes samples; naming it says

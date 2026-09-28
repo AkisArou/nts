@@ -67,7 +67,7 @@ for port in "$root"/examples/gjs-corpus/*/; do
         # The first refusal, or where the program does not typecheck, the
         # first thing the checker said.
         blocker=$(grep -m1 "NTS1001" "$out/$name.$mode.build" | sed 's/^[^ ]* NTS1001 //' || true)
-        [ -n "$blocker" ] || blocker=$(grep -m1 -E "^TS[0-9]+ " "$out/$name.$mode.build" || true)
+        [ -n "$blocker" ] || blocker=$(grep -m1 -E "^([^[:space:]]+ )?TS[0-9]+ " "$out/$name.$mode.build" || true)
         printf '%s\t%s\n' "$name" "${blocker:-the build failed}" >> "$ledger"
       fi
       continue

@@ -218,7 +218,7 @@ function buildAndRun(emit, out) {
 function rawRoots(said) {
   const raw = [];
   for (const line of said.split("\n")) {
-    const m = /^.*?:\d+:\d+:\s+(NTS\d{4})\s+(.*)$/.exec(line.trim()) ?? /^(TS\d{4,5})\s+(.*)$/.exec(line.trim());
+    const m = /^.*?:\d+:\d+:\s+(NTS\d{4})\s+(.*)$/.exec(line.trim()) ?? /^(?:\S+ )?(TS\d{4,5})\s+(.*)$/.exec(line.trim());
     if (m && !CASCADE.has(m[1])) raw.push({ code: m[1], raw: m[2].replace(/ is not supported by this lowering yet$/, "") });
   }
   return raw;

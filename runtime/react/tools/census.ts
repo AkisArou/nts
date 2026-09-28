@@ -123,7 +123,7 @@ const missing = /missing (\d+) refused function/.exec(logText);
 // A build that stopped before lowering has no diagnostics of ours: say so
 // rather than read the silence as a program with nothing refused.
 if (missing === null && diagnostics.length === 0) {
-  const why = logText.split("\n").filter((line) => /^(TS\d+|Error:)/.test(line));
+  const why = logText.split("\n").filter((line) => /^(?:\S+ )?TS\d+|^Error:/.test(line));
   throw new Error(`${logPath} is not a build that reached lowering:\n${why.join("\n") || logText.slice(-500)}`);
 }
 

@@ -150,8 +150,8 @@ export function compileAndRun(dir, source) {
   if (/^thread '.*panicked at/m.test(err)) {
     return { kind: "panic", detail: (err.match(/panicked at[^\n]*/) ?? [""])[0] };
   }
-  if (/^TS\d/m.test(err)) {
-    return { kind: "typescript", detail: (err.match(/^TS\d+[^\n]*/m) ?? [""])[0] };
+  if (/^(?:\S+ )?TS\d/m.test(err)) {
+    return { kind: "typescript", detail: (err.match(/^(?:\S+ )?TS\d+[^\n]*/m) ?? [""])[0] };
   }
   // **`invalid HIR` is its own verdict, not a `cc-failed`.** `emit-c` writes
   // nothing when the verifier rejects the program, so the C step then fails for

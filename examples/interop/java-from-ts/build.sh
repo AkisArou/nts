@@ -84,9 +84,9 @@ emitted="$built"
 # message naming the construct was never shown. The gate step went red for a day
 # with the cause on disk and unprinted: `NTS4001 a bound member wanting \`[I\`
 # from a growable array`, which is one line and says exactly what to do.
-if grep -qE "^TS[0-9]{4}|does not typecheck" "$out/build.log"; then
+if grep -qE "^([^[:space:]]+ )?TS[0-9]{4}|does not typecheck" "$out/build.log"; then
   echo "java-from-ts: the program does not typecheck:"
-  grep -E "^TS[0-9]{4}|does not typecheck" "$out/build.log" | sed 's/^/    /'
+  grep -E "^([^[:space:]]+ )?TS[0-9]{4}|does not typecheck" "$out/build.log" | sed 's/^/    /'
   exit 1
 fi
 if grep -qE "NTS[0-9]{4}" "$out/build.log"; then

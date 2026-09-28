@@ -68,8 +68,11 @@ if grep -q "^thread '.*panicked at" "$D/r.txt"; then
   exit 0
 fi
 # TypeScript first: a program the checker rejects says nothing about lowering.
-if grep -q '^TS[0-9]' "$D/r.txt"; then
-  printf '  %-34s node=%s  TYPESCRIPT %s\n' "$label" "$ns" "$(grep -m1 -o '^TS[0-9]*' "$D/r.txt")"
+# The code is not always at the line's start: a checker diagnostic carries
+# `path:line:col: ` before it. Optional, because a rewritten source whose map
+# cannot place the position prints the bare code.
+if grep -qE '^([^[:space:]]+ )?TS[0-9]' "$D/r.txt"; then
+  printf '  %-34s node=%s  TYPESCRIPT %s\n' "$label" "$ns" "$(grep -m1 -oE '^([^[:space:]]+ )?TS[0-9]*' "$D/r.txt" | grep -oE 'TS[0-9]*')"
   exit 0
 fi
 # `emit-c` exits 0 while refusing, and prints the refusal on **stderr**.

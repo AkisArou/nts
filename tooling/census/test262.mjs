@@ -163,7 +163,10 @@ const NTS_LINE = /^\s*--\s+\S+?:\d+:\d+\s+(NTS\d{4})\s+(.*)$/;
  * a reader bug would have inflated the healthy bucket by 12% and nothing would
  * have said so.
  */
-const TS_LINE = /^(TS\d{4,5})\s+(.*)$/;
+// A checker diagnostic now carries its place, so the code is not always at
+// the line's start: `src/main.ts:12:5: TS2769 ...`. The prefix stays optional
+// because a rewritten source whose map cannot answer prints the bare code.
+const TS_LINE = /^(?:\S+ )?(TS\d{4,5})\s+(.*)$/;
 /** `N function(s), M construct(s) refused` -- the footer this reconciles against. */
 const FOOTER = /^(\d+) function\(s\), (?:(\d+) construct\(s\) refused|nothing refused)$/;
 

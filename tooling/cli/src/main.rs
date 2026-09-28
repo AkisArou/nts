@@ -1125,12 +1125,12 @@ fn write_keeps(root: &Utf8Path, names: &[String], path: &Utf8Path) -> Result<()>
 fn report_snapshot_diagnostics(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<()> {
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            eprintln!("warning: {} {}", diagnostic.code, diagnostic.message);
+            eprintln!("warning: {}", diagnostic_line(snapshot, diagnostic));
         }
     }
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
-            eprintln!("{} {}", diagnostic.code, diagnostic.message);
+            eprintln!("{}", diagnostic_line(snapshot, diagnostic));
         }
         bail!("the program does not typecheck");
     }
@@ -1663,7 +1663,7 @@ fn dump_receivers(args: &[String]) -> Result<()> {
     // answer", so it goes above the table and not in a footnote.
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            println!("warning: {} {}", diagnostic.code, diagnostic.message);
+            println!("warning: {}", diagnostic_line(&snapshot, diagnostic));
         }
     }
 
@@ -2284,12 +2284,12 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // explains the others.
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            println!("warning: {} {}", diagnostic.code, diagnostic.message);
+            println!("warning: {}", diagnostic_line(&snapshot, diagnostic));
         }
     }
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
-            println!("{} {}", diagnostic.code, diagnostic.message);
+            println!("{}", diagnostic_line(&snapshot, diagnostic));
         }
         bail!("the program does not typecheck");
     }
@@ -3019,6 +3019,24 @@ fn where_it_is(snapshot: &nts_semantic_schema::SemanticSnapshot, at: &Location) 
         Some(transform) => format!("{path}:{line}:{} (in code {} generated from it)", column + 1, transform_name(transform)),
         None => format!("{path}:{line}:{}", column + 1),
     }
+}
+
+/// One diagnostic as this tool prints it: `path:line:column: NTS1001 <message>`.
+///
+/// **Six sites formatted this line by hand and two of them left the location
+/// out.** `report_snapshot_diagnostics` and `dump_hir`'s copy of it printed a
+/// checker error as `TS2769 <message>` -- so the family a reader most needs to
+/// click was the one family with nowhere to click, while every NTS refusal
+/// beside it in the same stream carried a place. The location was in the
+/// `Diagnostic` all along; nothing read it.
+///
+/// `fc52c150d` fixed the fourth printer of the same thing (`nts frontend`) and
+/// missed these two, which is the argument for one function rather than a
+/// seventh format string: the shape a reader parses is one fact, and six
+/// derivations of it is how two of them came to disagree about whether it has a
+/// place in it at all.
+fn diagnostic_line(snapshot: &nts_semantic_schema::SemanticSnapshot, diagnostic: &nts_diagnostics::Diagnostic) -> String {
+    format!("{}: {} {}", where_it_is(snapshot, &diagnostic.primary), diagnostic.code, diagnostic.message)
 }
 
 /// A source transform's name, from its identity: `react-compiler` from
@@ -7383,12 +7401,7 @@ fn emit_llvm(tsconfig: &Utf8Path, emission: Emission, platform: nts_codegen_llvm
     // two refusals in it: `emit-c` reported them and this did not, so the
     // module looked like a backend that had rendered everything asked of it.
     for diagnostic in &prepared.diagnostics {
-        eprintln!(
-            "{}: {} {}",
-            where_it_is(&snapshot, &diagnostic.primary),
-            diagnostic.code,
-            diagnostic.message
-        );
+        eprintln!("{}", diagnostic_line(&snapshot, diagnostic));
     }
     let emitted = nts_codegen_llvm::emit(&prepared.program, platform);
     for diagnostic in &emitted.diagnostics {
@@ -7439,12 +7452,7 @@ fn emit_jvm(
         }
     };
     for diagnostic in &prepared.diagnostics {
-        eprintln!(
-            "{}: {} {}",
-            where_it_is(&snapshot, &diagnostic.primary),
-            diagnostic.code,
-            diagnostic.message
-        );
+        eprintln!("{}", diagnostic_line(&snapshot, diagnostic));
     }
     // **The package the product declares, as a binary-name prefix.** A config
     // says `com.acme.sdk` because that is how Java spells a package; the class
@@ -7631,23 +7639,13 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         }
     };
     for diagnostic in &prepared.diagnostics {
-        eprintln!(
-            "{}: {} {}",
-            where_it_is(&snapshot, &diagnostic.primary),
-            diagnostic.code,
-            diagnostic.message
-        );
+        eprintln!("{}", diagnostic_line(&snapshot, diagnostic));
     }
     let program = prepared.program;
 
     let emitted = nts_codegen_c::emit(&program, emission.abi);
     for diagnostic in &emitted.diagnostics {
-        eprintln!(
-            "{}: {} {}",
-            where_it_is(&snapshot, &diagnostic.primary),
-            diagnostic.code,
-            diagnostic.message
-        );
+        eprintln!("{}", diagnostic_line(&snapshot, diagnostic));
     }
     refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
@@ -7707,7 +7705,7 @@ fn write_llvm_program(
 ) -> Result<()> {
     let rendered = nts_codegen_llvm::emit(program, platform);
     for diagnostic in &rendered.diagnostics {
-        eprintln!("{}: {} {}", where_it_is(snapshot, &diagnostic.primary), diagnostic.code, diagnostic.message);
+        eprintln!("{}", diagnostic_line(snapshot, diagnostic));
     }
     if !rendered.diagnostics.is_empty() {
         bail!(

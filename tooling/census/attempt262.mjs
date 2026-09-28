@@ -43,7 +43,10 @@ const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet
  * files naming a hundred different names rank as one shape — single quotes here
  * rather than backticks, because that is how TypeScript quotes them.
  */
-const FIRST_TYPE_ERROR = /^(TS\d{4,5})\s+(.*)$/m;
+// A checker diagnostic now carries its place, so the code is not always at
+// the line's start: `src/main.ts:12:5: TS2769 ...`. The prefix stays optional
+// because a rewritten source whose map cannot answer prints the bare code.
+const FIRST_TYPE_ERROR = /^(?:\S+ )?(TS\d{4,5})\s+(.*)$/m;
 
 /** `nts: uncaught <Class>: <message>` — the class comes from the descriptor. */
 const UNCAUGHT = /^nts: uncaught ([A-Za-z_$][A-Za-z0-9_$]*)(?::|$)/m;
@@ -119,7 +122,7 @@ export function parseDiagnostics(text, bodyFirstLine = BODY_FIRST_LINE) {
         line: Number(row) - bodyFirstLine + 1,
       };
     } else {
-      const checker = /^(TS\d{4,5})\s+(.*)$/.exec(line);
+      const checker = /^(?:\S+ )?(TS\d{4,5})\s+(.*)$/.exec(line);
       if (checker) {
         const [, code, said] = checker;
         entry = {
