@@ -6,8 +6,10 @@ platform :osx, '13.0'
 install! 'cocoapods', :integrate_targets => false
 
 target 'PodsHost' do
-  pod 'Chirp', :path => 'Chirp'
+  # Modular, so a Swift pod can import it: `Echo` does.
+  pod 'Chirp', :path => 'Chirp', :modular_headers => true
   pod 'Hum', :path => 'Hum'
   pod 'Beep', :path => 'Beep'
   pod 'Mix', :path => 'Mix'
+  pod 'Echo', :path => 'Echo'
 end

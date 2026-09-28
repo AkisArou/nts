@@ -27,6 +27,9 @@
 #   in one module: its Swift is compiled with its Objective-C as the module
 #   it imports as its own, as CocoaPods' `-import-underlying-module` does, and
 #   its `.m` against the header Swift writes; bound as one module, from both.
+#   `Echo` is Swift over `Chirp`, which the lockfile says it depends on: its
+#   Swift imports `Chirp` as a module of Chirp's public headers, as the
+#   module map CocoaPods writes for a pod with modular headers is.
 #   Nothing runs `pod`. The build log must say nothing was refused.
 # - **Oracle:** `reference/main.m`, compiled with the pod's sources and run on
 #   the same Mac.
@@ -82,7 +85,7 @@ fi
 for arch in x86_64 aarch64; do
   file -b "$out/chirp/macos-13-$arch/chirp" | grep -q "Mach-O" ||
     { echo "macos-pods: no $arch Mach-O executable" >&2; exit 1; }
-  for object in Chirp/Classes/Chirp.m.o Chirp/Classes/Internal/Tweeter.m.o Hum.swift.o Mix/Classes/MXCounter.m.o Mix.swift.o; do
+  for object in Chirp/Classes/Chirp.m.o Chirp/Classes/Internal/Tweeter.m.o Hum.swift.o Mix/Classes/MXCounter.m.o Mix.swift.o Echo.swift.o; do
     [ -f "$out/chirp/macos-13-$arch/$object" ] ||
       { echo "macos-pods: the pod's $object was not compiled for $arch" >&2; exit 1; }
   done
@@ -135,10 +138,18 @@ printf 'module Mix {\n  header "%s"\n  export *\n}\n' "$source/Mix/Classes/MXCou
   -target x86_64-apple-macos13 -sdk "$sdk" -resource-dir "$resource" -I "$resource/shims" \
   -module-cache-path "$apple/swift-oracle-modules" -import-underlying-module -Xcc -fmodule-map-file="$out/mix-map/module.modulemap" \
   -emit-objc-header-path "$out/Mix-Swift.h" -o "$out/Mix.o"
+# Echo as CocoaPods builds it: Chirp through a module map of the pod's public
+# header, as the one CocoaPods writes for a pod with modular headers is.
+mkdir -p "$out/chirp-map"
+printf 'module Chirp {\n  header "%s"\n  export *\n}\n' "$source/Chirp/Classes/Chirp.h" >"$out/chirp-map/module.modulemap"
+"$swift/usr/bin/swift-frontend" -frontend -c "$source/Echo/Sources/Echo.swift" -module-name Echo -parse-as-library -O \
+  -target x86_64-apple-macos13 -sdk "$sdk" -resource-dir "$resource" -I "$resource/shims" \
+  -module-cache-path "$apple/swift-oracle-modules" -Xcc -fmodule-map-file="$out/chirp-map/module.modulemap" \
+  -emit-objc-header-path "$out/Echo-Swift.h" -o "$out/Echo.o"
 clang -target x86_64-apple-macos13 -isysroot "$sdk" -fuse-ld=lld -x objective-c -fobjc-arc -fblocks -fmodules -Wall -Werror \
   -I "$source/Pods/Headers/Public/Chirp" -I "$source/Pods/Headers/Private/Chirp" -I "$source/Pods/Headers/Public/Mix" -I "$out" \
   "$source/reference/main.m" "$source/Chirp/Classes/Chirp.m" "$source/Chirp/Classes/Internal/Tweeter.m" "$source/Mix/Classes/MXCounter.m" \
-  -x none "$out/Hum.o" "$out/Mix.o" -framework Foundation \
+  -x none "$out/Hum.o" "$out/Mix.o" "$out/Echo.o" -framework Foundation \
   -F "$source/Beep/Beep.xcframework/macos-arm64_x86_64" -framework Beep -Wl,-rpath,@executable_path \
   -L"$sdk/usr/lib/swift" -Wl,-rpath,/usr/lib/swift -o "$out/oracle"
 rm -rf "$out/Beep.framework"
@@ -158,8 +169,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 7 ] ||
-  { echo "macos-pods: the oracle printed $(wc -l <"$out/expected.txt") lines, not 7" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 8 ] ||
+  { echo "macos-pods: the oracle printed $(wc -l <"$out/expected.txt") lines, not 8" >&2; exit 1; }
 
 run_quietly "$out/chirp/macos-13-x86_64/chirp" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"

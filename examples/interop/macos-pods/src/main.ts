@@ -19,8 +19,11 @@
 //   mix ...        a pod of both languages, `objc:Mix`: its Swift counts
 //                  with its Objective-C, and its Objective-C words the count
 //                  through its Swift -- one module, bound as one
+//   echo ...       a Swift pod over another pod, `objc:Echo`, whose Swift
+//                  imports `Chirp` as the module CocoaPods makes of it
 import { Beep } from "objc:Beep";
 import { Chirp } from "objc:Chirp";
+import { Echo } from "objc:Echo";
 import { Hum } from "objc:Hum";
 import { MXCounter, MXTally } from "objc:Mix";
 
@@ -36,3 +39,4 @@ console.log(`mix ${tally.twice()} ${tally.summary()}`);
 const counter = new MXCounter();
 counter.next();
 console.log(`mix counter ${counter.summary()}`);
+console.log(`echo ${new Echo().echoed("jay")}`);

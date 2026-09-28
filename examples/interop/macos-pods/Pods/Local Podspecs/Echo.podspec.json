@@ -1,0 +1,26 @@
+{
+  "name": "Echo",
+  "version": "0.1.0",
+  "summary": "A Swift pod over an Objective-C one, for examples/interop/macos-pods.",
+  "homepage": "https://example.invalid/echo",
+  "license": {
+    "type": "MIT",
+    "text": "MIT"
+  },
+  "authors": "nts",
+  "source": {
+    "git": "https://example.invalid/echo.git",
+    "tag": "0.1.0"
+  },
+  "platforms": {
+    "osx": "13.0"
+  },
+  "swift_versions": "5.0",
+  "source_files": "Sources/**/*.swift",
+  "dependencies": {
+    "Chirp": [
+
+    ]
+  },
+  "swift_version": "5.0"
+}

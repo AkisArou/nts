@@ -6,6 +6,7 @@
 #import "Hum-Swift.h"
 #import "MXCounter.h"
 #import "Mix-Swift.h"
+#import "Echo-Swift.h"
 #import <Beep/Beep.h>
 #include <stdio.h>
 
@@ -23,6 +24,7 @@ int main(void) {
     MXCounter *counter = [[MXCounter alloc] init];
     [counter next];
     printf("mix counter %s\n", [counter summary].UTF8String);
+    printf("echo %s\n", [[[Echo alloc] init] echoed:@"jay"].UTF8String);
   }
   return 0;
 }

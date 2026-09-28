@@ -75,7 +75,8 @@ pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<
         } else {
             (None, frameworks_under(&sources))
         };
-        native.push(NativeModule { name: pod.clone(), headers, sources, files, include, frameworks, depends: Vec::new() });
+        let depends = lock.depends.get(pod).cloned().unwrap_or_default();
+        native.push(NativeModule { name: pod.clone(), headers, sources, files, include, frameworks, depends });
     }
     Ok(Resolution { libs: link_flags(&pods, &lock.pods)?, native, ..Resolution::default() })
 }
@@ -256,6 +257,11 @@ struct Lock {
     pods: Vec<String>,
     /// Where a development pod is, relative to the lockfile (`:path`).
     paths: BTreeMap<String, String>,
+    /// The pods each pod depends on, from its entries at the second indent:
+    /// what a Swift pod imports (`import Chirp`) and an Objective-C one
+    /// searches. A subspec's is its pod's, and a pod's own subspecs are not
+    /// a dependency of it.
+    depends: BTreeMap<String, Vec<String>>,
 }
 
 /// The two sections of the lockfile that say what to build: `PODS`, whose
@@ -269,6 +275,7 @@ fn parse(text: &str, path: &Utf8Path) -> Result<Lock> {
     let mut seen = BTreeSet::new();
     let mut section = "";
     let mut external: Option<String> = None;
+    let mut current: Option<String> = None;
     for (index, line) in text.lines().enumerate() {
         if line.trim().is_empty() || line.trim_start().starts_with('#') {
             continue;
@@ -284,10 +291,20 @@ fn parse(text: &str, path: &Utf8Path) -> Result<Lock> {
                 let name = entry.split(" (").next().filter(|name| !name.is_empty()).ok_or_else(malformed)?;
                 let pod = name.split('/').next().unwrap_or(name).to_owned();
                 if seen.insert(pod.clone()) {
-                    lock.pods.push(pod);
+                    lock.pods.push(pod.clone());
+                }
+                current = Some(pod);
+            }
+            "PODS" if line.starts_with("    - ") => {
+                let pod = current.clone().ok_or_else(malformed)?;
+                let entry = unquote(line.trim_start_matches("    - "));
+                let name = entry.split(" (").next().filter(|name| !name.is_empty()).ok_or_else(malformed)?;
+                let dependency = name.split('/').next().unwrap_or(name).to_owned();
+                let depends = lock.depends.entry(pod.clone()).or_default();
+                if dependency != pod && !depends.contains(&dependency) {
+                    depends.push(dependency);
                 }
             }
-            "PODS" if line.starts_with("    - ") => {}
             "PODS" => return Err(malformed()),
             "EXTERNAL SOURCES" if line.starts_with("    ") => {
                 let pod = external.clone().ok_or_else(malformed)?;
@@ -358,7 +375,7 @@ mod tests {
     /// a quoted name, and a development pod placed by `:path`.
     #[test]
     fn a_lockfile_names_its_pods_and_where_a_development_pod_is() {
-        let text = "PODS:\n  - AFNetworking (4.0.1):\n    - AFNetworking/NSURLSession (= 4.0.1)\n  - AFNetworking/NSURLSession (4.0.1)\n  - \"Greeter (0.1.0)\"\n  - Reachability (3.2)\n\n\
+        let text = "PODS:\n  - AFNetworking (4.0.1):\n    - AFNetworking/NSURLSession (= 4.0.1)\n  - AFNetworking/NSURLSession (4.0.1)\n  - \"Greeter (0.1.0)\":\n    - AFNetworking/NSURLSession\n    - Reachability\n  - Reachability (3.2)\n\n\
                     DEPENDENCIES:\n  - AFNetworking\n  - Greeter (from `../Greeter`)\n\n\
                     EXTERNAL SOURCES:\n  Greeter:\n    :path: \"../Greeter\"\n\n\
                     SPEC CHECKSUMS:\n  Reachability: 33e18b67625424e47b6cde6d202dce689ad9c8a9\n\n\
@@ -366,6 +383,10 @@ mod tests {
         let lock = parse(text, Utf8Path::new("Podfile.lock")).unwrap();
         assert_eq!(lock.pods, ["AFNetworking", "Greeter", "Reachability"]);
         assert_eq!(lock.paths.get("Greeter").map(String::as_str), Some("../Greeter"));
+        // A pod's dependencies are pods: another's subspec is that pod, and
+        // a pod's own subspec is not a dependency of it.
+        assert_eq!(lock.depends.get("Greeter").map(Vec::as_slice), Some(&["AFNetworking".to_owned(), "Reachability".to_owned()][..]));
+        assert_eq!(lock.depends.get("AFNetworking").map(Vec::as_slice), Some(&[][..]));
     }
 
     /// A line in `PODS` of no shape `CocoaPods` writes is an error: read as

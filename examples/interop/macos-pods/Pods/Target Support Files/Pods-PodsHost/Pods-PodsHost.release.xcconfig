@@ -4,14 +4,14 @@ FRAMEWORK_SEARCH_PATHS = $(inherited) "${PODS_ROOT}/../Beep" "${PODS_XCFRAMEWORK
 GCC_PREPROCESSOR_DEFINITIONS = $(inherited) COCOAPODS=1
 HEADER_SEARCH_PATHS = $(inherited) "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/Chirp" "${PODS_ROOT}/Headers/Public/Mix"
 LD_RUNPATH_SEARCH_PATHS = $(inherited) /usr/lib/swift '@executable_path/../Frameworks' '@loader_path/Frameworks' "${DT_TOOLCHAIN_DIR}/usr/lib/swift/${PLATFORM_NAME}"
-LIBRARY_SEARCH_PATHS = $(inherited) "${DT_TOOLCHAIN_DIR}/usr/lib/swift/${PLATFORM_NAME}" "${PODS_CONFIGURATION_BUILD_DIR}/Chirp" "${PODS_CONFIGURATION_BUILD_DIR}/Hum" "${PODS_CONFIGURATION_BUILD_DIR}/Mix" /usr/lib/swift
-OTHER_CFLAGS = $(inherited) -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Hum/Hum.modulemap" -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Mix/Mix.modulemap"
-OTHER_LDFLAGS = $(inherited) -ObjC -l"Chirp" -l"Hum" -l"Mix" -framework "Beep" -framework "Foundation"
-OTHER_SWIFT_FLAGS = $(inherited) -D COCOAPODS -Xcc -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Hum/Hum.modulemap" -Xcc -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Mix/Mix.modulemap"
+LIBRARY_SEARCH_PATHS = $(inherited) "${DT_TOOLCHAIN_DIR}/usr/lib/swift/${PLATFORM_NAME}" "${PODS_CONFIGURATION_BUILD_DIR}/Chirp" "${PODS_CONFIGURATION_BUILD_DIR}/Echo" "${PODS_CONFIGURATION_BUILD_DIR}/Hum" "${PODS_CONFIGURATION_BUILD_DIR}/Mix" /usr/lib/swift
+OTHER_CFLAGS = $(inherited) -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Echo/Echo.modulemap" -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Hum/Hum.modulemap" -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Mix/Mix.modulemap" -fmodule-map-file="${PODS_ROOT}/Headers/Public/Chirp/Chirp.modulemap"
+OTHER_LDFLAGS = $(inherited) -ObjC -l"Chirp" -l"Echo" -l"Hum" -l"Mix" -framework "Beep" -framework "Foundation"
+OTHER_SWIFT_FLAGS = $(inherited) -D COCOAPODS -Xcc -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Echo/Echo.modulemap" -Xcc -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Hum/Hum.modulemap" -Xcc -fmodule-map-file="${PODS_CONFIGURATION_BUILD_DIR}/Mix/Mix.modulemap" -Xcc -fmodule-map-file="${PODS_ROOT}/Headers/Public/Chirp/Chirp.modulemap"
 PODS_BUILD_DIR = ${BUILD_DIR}
 PODS_CONFIGURATION_BUILD_DIR = ${PODS_BUILD_DIR}/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)
 PODS_PODFILE_DIR_PATH = ${SRCROOT}/.
 PODS_ROOT = ${SRCROOT}/Pods
 PODS_XCFRAMEWORKS_BUILD_DIR = $(PODS_CONFIGURATION_BUILD_DIR)/XCFrameworkIntermediates
-SWIFT_INCLUDE_PATHS = $(inherited) "${PODS_CONFIGURATION_BUILD_DIR}/Hum" "${PODS_CONFIGURATION_BUILD_DIR}/Mix"
+SWIFT_INCLUDE_PATHS = $(inherited) "${PODS_CONFIGURATION_BUILD_DIR}/Echo" "${PODS_CONFIGURATION_BUILD_DIR}/Hum" "${PODS_CONFIGURATION_BUILD_DIR}/Mix"
 USE_RECURSIVE_SCRIPT_INPUTS_IN_SCRIPT_PHASES = YES

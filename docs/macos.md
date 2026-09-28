@@ -245,6 +245,10 @@ import { Chirp } from "objc:Chirp";
   Swift is compiled with its Objective-C headers as the module it imports as
   its own (`-import-underlying-module`), its `.m` against the header Swift
   writes (`#import "Mix-Swift.h"`), and `objc:Mix` binds both.
+- **A pod over another pod** -- the lockfile's `PODS` says which -- searches
+  its dependencies' headers, and a Swift one imports each Objective-C one it
+  reaches as a module of its public headers (`import Chirp`), as CocoaPods
+  builds a pod whose dependency has modular headers.
 
 ## A Swift package
 
@@ -287,10 +291,10 @@ import { Tally } from "objc:Tally";
 one over two C targets of its own, and a binary one by `url:`, against the
 same program in Objective-C.
 
-`examples/interop/macos-pods` is the fixture: four development pods -- one
+`examples/interop/macos-pods` is the fixture: five development pods -- one
 Objective-C with a private class in a directory of its own, one Swift, one an
-`.xcframework` Xcode made, one of both languages -- against the same program
-in Objective-C.
+`.xcframework` Xcode made, one of both languages, one Swift over the
+Objective-C one -- against the same program in Objective-C.
 
 ## An application
 
