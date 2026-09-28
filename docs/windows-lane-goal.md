@@ -129,6 +129,13 @@ the same vtable calls on the VM measured the behaviour first.
   namespaces, 26 MB and 4 s to generate once, but every program's check
   0.11 s and 280 MB where its own closure is 0.03 s and 48 MB. A
   `types/winrt` an older `nts` generated is removed, once, with a note.
+  Win32's `c:Windows.Win32.*` modules are still bound into the project's
+  `types/winmd`: their constants are a values file the program imports by
+  path (`../types/winmd/…values.ts`), and a store's values file has no
+  path a program can name -- nothing under `node_modules` is lowered, which
+  is why values files sit beside the packages. Moving Win32 needs its
+  constants importable from the module itself; the Windows Runtime's
+  values files are only ever reached by `@ntsCall`, so it moved first.
 - **bind-winmd for WinRT:**
   - interfaces slot for slot;
   - generics, with instantiation IIDs computed by the pinterface SHA-1;
