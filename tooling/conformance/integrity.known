@@ -9,7 +9,8 @@
 # node's full start used for its token start), so a project names it once.
 # Closure numbers and type ids are normalised (ClosureN, <N>, objN). An entry
 # that no longer occurs is reported for removal; any violation not listed
-# here fails.
+# here fails. Entries are in byte order (LC_ALL=C sort), and integrity.mjs
+# enforces it: insert a new entry where it sorts, never at the end.
 examples/calls	top-level-cut	the initializer of overloadedNumber	a per-global cut: the initializer calls a refused function, and its readers are refused with it (compiler lane)
 examples/calls	top-level-cut	the initializer of overloadedString	a per-global cut: the initializer calls a refused function, and its readers are refused with it (compiler lane)
 examples/module-evaluation	top-level-cut	the initializer of pattern	a per-global cut: the initializer calls a refused function, and its readers are refused with it (compiler lane)

@@ -691,6 +691,9 @@ function selfTest() {
   const through = `${unerase(10)}\nexport func g(y: erased) -> void {\nb0:\n  %0 = param 0 : erased\n  call f(%0)\n}`;
   if (unbuiltUnerases(through, lay).length !== 0) return "a parameter filled only by an export's parameter was judged";
   if (unbuiltUnerases(`${through.replace("export func g", "func g")}`, lay).length !== 1) return "a parameter filled by an unexported caller's parameter was not judged";
+  // The known file's order: a sorted file passes, an appended entry is named.
+  if (firstDisorder(["# h", "a\t1", "b\t2"]) !== null) return "a sorted known file read as out of order";
+  if (firstDisorder(["a\t1", "c\t3", "b\t2"])?.at !== 3) return "an out-of-order known entry was not named";
   const rules = (t) => (judge(t).violations ?? []).map((v) => v.rule);
   if (!rules({ ...clean, prepared: clean.prepared.replace("  %2 = call total(%1) : f64", "  %2 = call nowhere(%1) : f64") }).includes("call-resolves")) return "a direct call to a function nothing defines was not caught";
   if (!rules({ ...clean, prepared: clean.prepared.replace("func total(t: f64) -> f64 {", "func total(t: f64) -> f64 {\n}\nfunc total(t: f64) -> f64 {").replace(summary(5), summary(6)) }).includes("call-resolves")) return "a function defined twice was not caught";
@@ -765,6 +768,23 @@ const projects = (named.length > 0
  */
 const DOES_NOT_TYPECHECK = new Map([["examples/invalid", "does not typecheck on purpose"]]);
 
+/**
+ * The first entry of a known file out of byte order, as `{ at, line, before }`,
+ * or null. The file is sorted (LC_ALL=C), so an addition is inserted where it
+ * sorts: an appended one reorders nothing today and forces a reorder later,
+ * and a large reorder is how a real change hides in a diff. Compared as UTF-8
+ * bytes, which is what `sort` compares.
+ */
+export function firstDisorder(lines) {
+  const entries = lines.map((l, i) => [l, i + 1]).filter(([l]) => l.trim() !== "" && !l.startsWith("#"));
+  for (let i = 1; i < entries.length; i++) {
+    if (Buffer.compare(Buffer.from(entries[i - 1][0]), Buffer.from(entries[i][0])) > 0) {
+      return { at: entries[i][1], line: entries[i][0], before: entries[i - 1][0] };
+    }
+  }
+  return null;
+}
+
 /** Known violations: `project<TAB>rule<TAB>detail` -> why. */
 const known = new Map(
   (existsSync(KNOWN) ? readFileSync(KNOWN, "utf8") : "")
@@ -773,6 +793,15 @@ const known = new Map(
     .map((l) => l.split("\t"))
     .map(([project, rule, subject, why]) => [`${project}\t${rule}\t${stable(subject ?? "")}`, why ?? ""]),
 );
+
+const disorder = firstDisorder(existsSync(KNOWN) ? readFileSync(KNOWN, "utf8").split("\n") : []);
+if (disorder) {
+  console.log(`  integrity.known is out of order at line ${disorder.at}: this entry sorts before the one above it`);
+  console.log(`    ${disorder.line.slice(0, 140)}`);
+  console.log(`    above: ${disorder.before.slice(0, 140)}`);
+  console.log("  insert entries where they sort (LC_ALL=C); the order keeps a reorder out of every later diff");
+  process.exit(1);
+}
 
 const run = (args) =>
   new Promise((resolve) => {
