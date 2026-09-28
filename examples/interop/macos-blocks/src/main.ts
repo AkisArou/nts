@@ -172,11 +172,14 @@ function pair(): Promise<[NSObject, NSObject]> {
 // A console program, with no run loop: the awaited operation is all that
 // keeps it alive until its completion arrives from another thread, 100 ms
 // later (`c:pending`). The control is the same promise without the bracket,
-// and that program ends before the completion.
+// and that program ends before the completion -- which comes 5 s later
+// there, not 100 ms: a program that does not wait is gone long before, and
+// one that did would still print. At 100 ms the control was a race a loaded
+// machine lost, the program's own teardown outlasting the completion.
 function later(held: boolean): Promise<NSObject> {
   return new Promise((resolve) => {
     if (held) nts_pending_begin();
-    complete_later(100 as c_int, (value) => {
+    complete_later((held ? 100 : 5000) as c_int, (value) => {
       if (held) nts_pending_end();
       resolve(value!);
     });
