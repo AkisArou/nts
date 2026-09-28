@@ -6,6 +6,8 @@
 //   node tooling/census/erased-calls.mjs --origins [project ...]  and where each site's value was erased
 //   node tooling/census/erased-calls.mjs --every [project ...]    and every call through a function value,
 //                                                                 by where its callee came from
+//   node tooling/census/erased-calls.mjs --reach [project ...]    and whether each erased site can run, and
+//                                                                 how many closures the program erases
 //   node tooling/census/erased-calls.mjs --self-test
 //   NTS_BIN=<a pin> node tooling/census/erased-calls.mjs
 //
@@ -116,6 +118,65 @@ function readFunctions(text) {
     fns.set(name, { name, chunk, types, defs });
   }
   return fns;
+}
+
+/**
+ * The functions of one prepared listing that something reaches, walking from
+ * the roots the compiler roots -- `module#init`, `main` and every export --
+ * over three kinds of edge: a direct `call`, a `call.virtual` to every
+ * override of the method it names, and an `object.new` of a class or closure
+ * type to every function taking that type as `this` (a closure's `#call`, a
+ * class's methods). A function in the listing and not in the set is a body
+ * nothing can run: a closure's `#call` whose creator was refused is the case
+ * `drop_orphaned_bodies` leaves behind.
+ */
+export function reachability(text) {
+  const fns = readFunctions(text);
+  const byThis = new Map();
+  const byMethod = new Map();
+  for (const f of fns.values()) {
+    const self = /^[^\n]*?\(this: managed<((?:obj|closure)#\d+)>/.exec(f.chunk)?.[1];
+    if (self) byThis.set(self, [...(byThis.get(self) ?? []), f.name]);
+    const method = /#([^#(]+)$/.exec(f.name)?.[1];
+    if (method) byMethod.set(method, [...(byMethod.get(method) ?? []), f.name]);
+  }
+  const edges = (f) => [
+    ...[...f.chunk.matchAll(/^ {2}(?:%\d+ = )?call ([^\s(]+)\(/gm)].map((m) => m[1]),
+    ...[...f.chunk.matchAll(/^ {2}(?:%\d+ = )?call\.virtual\[\d+\] [^\s(#]+#([^\s(]+)\(/gm)].flatMap((m) => byMethod.get(m[1]) ?? []),
+    ...[...f.chunk.matchAll(/^ {2}%\d+ = object\.new .*? : managed<((?:obj|closure)#\d+)>$/gm)].flatMap((m) => byThis.get(m[1]) ?? []),
+  ];
+  const reached = new Set();
+  const queue = [...fns.values()].filter((f) => f.name === "module#init" || f.name === "main" || /^export /.test(f.chunk)).map((f) => f.name);
+  while (queue.length > 0) {
+    const name = queue.pop();
+    if (reached.has(name) || !fns.has(name)) continue;
+    reached.add(name);
+    queue.push(...edges(fns.get(name)));
+  }
+  // A callable type: one with a `#call` -- a closure's body, or a function
+  // type's declared entry (`declare func Fn4__4#call(this: managed<obj#648>...)`).
+  const callable = new Set([...byThis].filter(([, names]) => names.some((n) => /#call$/.test(n))).map(([type]) => type));
+  return { reached, functions: fns, callable };
+}
+
+/**
+ * What an adapter that gives every erased callable one uniform entry would
+ * have to give one to: the callable types `within` erases (a closure type or
+ * a function type, by `walked.callable`), and the closure types it makes --
+ * the bodies a function-typed erased value can turn out to be.
+ */
+export function erasedCallables(walked, within = walked.reached) {
+  const erased = new Set();
+  const made = new Set();
+  for (const name of within) {
+    const f = walked.functions.get(name);
+    for (const m of f.chunk.matchAll(/^ {2}%\d+ = erase(?:\.or\.(?:undefined|null))? (%\d+) : /gm)) {
+      const type = /^managed<((?:obj|closure)#\d+)>$/.exec(f.types.get(m[1]) ?? "")?.[1];
+      if (type && walked.callable.has(type)) erased.add(type);
+    }
+    for (const m of f.chunk.matchAll(/^ {2}%\d+ = object\.new .*? : managed<(closure#\d+)>$/gm)) made.add(m[1]);
+  }
+  return { erased, made };
 }
 
 /**
@@ -250,6 +311,27 @@ function selfTest() {
     "  %3 = call.closure[4] %2(%2) : void",
     "}",
   ].join("\n");
+  const walked = reachability([
+    "export func module#init() -> void {",
+    "b0:",
+    "  %1 = object.new heap : managed<closure#1>",
+    "  %2 = erase %1 : erased",
+    "  %3 = call helper(%2) : void",
+    "}",
+    "func helper(f: erased) -> void {",
+    "b0:",
+    "}",
+    "func Closure1#call(this: managed<closure#1>) -> void {",
+    "b0:",
+    "}",
+    "func Closure2#call(this: managed<closure#2>) -> void {",
+    "b0:",
+    "}",
+  ].join("\n"));
+  const seen = [...walked.reached].sort().join(",");
+  if (seen !== "Closure1#call,helper,module#init") return `reached ${seen}, not the made closure's body and the called helper without the orphan`;
+  const callables = erasedCallables(walked);
+  if ([...callables.erased].join(",") !== "closure#1" || [...callables.made].join(",") !== "closure#1") return `erased ${[...callables.erased]} and made ${[...callables.made]}, not closure#1 once each`;
   const [site] = origins(program);
   if (site?.verdict !== "matched") return `a value stored and called at one layout read as ${site?.verdict}`;
   const [other] = origins(program.replace("%2 = unerase %1 : managed<obj#7>", "%2 = unerase %1 : managed<obj#9>"));
@@ -270,7 +352,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     process.exit(2);
   }
   if (argv.includes("--self-test")) {
-    console.log("  self-test: sites through an unerase counted, one through a param not; every closure call read with its callee's origin and place; signatures and slots read; origins matched, mismatched, unmade and outside each told apart");
+    console.log("  self-test: sites through an unerase counted, one through a param not; every closure call read with its callee's origin and place; a made closure's body reached and an orphan's not; signatures and slots read; origins matched, mismatched, unmade and outside each told apart");
     process.exit(0);
   }
 
@@ -369,6 +451,7 @@ if (!FRONTEND.exists) {
 
   const found = [];
   const every = [];
+  const erasedPerProject = [];
   const traced = [];
   const unmeasured = [];
   let next = 0;
@@ -392,7 +475,12 @@ if (!FRONTEND.exists) {
         unmeasured.push(p.label);
         continue;
       }
-      for (const s of erasedCalls(r.out)) found.push({ ...p, ...s });
+      const walked = argv.includes("--reach") ? reachability(r.out) : null;
+      for (const s of erasedCalls(r.out)) found.push({ ...p, ...s, reached: walked?.reached.has(s.function) });
+      if (walked) {
+        const { erased, made } = erasedCallables(walked);
+        erasedPerProject.push({ ...p, erased: erased.size, made: made.size });
+      }
       if (argv.includes("--origins")) for (const o of origins(r.out)) traced.push({ ...p, ...o });
       if (argv.includes("--every")) for (const c of closureCalls(r.out)) every.push({ ...p, ...c });
     }
@@ -423,6 +511,29 @@ if (!FRONTEND.exists) {
       console.log(`    ${String(row.sites).padStart(4)} site(s) ${String(row.projects.size).padStart(3)} project(s) slot ${[...row.slots].join(",")}  ${sig}`);
     }
     if (signatures.size > 15) console.log(`    ... ${signatures.size - 15} more`);
+  }
+
+  // Whether an erased site can run at all: one in a body nothing reaches costs
+  // nothing and proves nothing. And the adapter's unit of cost, which is not a
+  // site but an erased closure: one uniform entry per closure type erased by
+  // reached code.
+  if (argv.includes("--reach")) {
+    for (const corpus of [...new Set(projects.map((p) => p.corpus))]) {
+      const sites = found.filter((f) => f.corpus === corpus);
+      const reached = sites.filter((s) => s.reached);
+      const orphans = sites.filter((s) => !s.reached && /^Closure\d+#call$/.test(s.function));
+      const closures = erasedPerProject.filter((p) => p.corpus === corpus);
+      const total = closures.reduce((n, p) => n + p.erased, 0);
+      const made = closures.reduce((n, p) => n + p.made, 0);
+      console.log(`\n  ${corpus}, reach of the erased sites: ${reached.length} of ${sites.length} in a function something reaches; ` +
+        `${orphans.length} in a closure body whose closure is never made, ${sites.length - reached.length - orphans.length} in another unreached function`);
+      console.log(`    callable types erased by reached code: ${total}, across ${closures.filter((p) => p.erased > 0).length} project(s)` +
+        `${total > 0 ? ` -- ${(reached.length / total).toFixed(1)} reached site(s) per erased callable` : ""}; closure types reached code makes: ${made}`);
+      for (const p of closures.filter((p) => p.erased > 0).sort((a, b) => b.erased - a.erased).slice(0, 5)) {
+        const own = reached.filter((s) => s.label === p.label).length;
+        console.log(`      ${String(p.erased).padStart(4)} erased callable(s) ${String(p.made).padStart(4)} closure(s) made ${String(own).padStart(5)} reached site(s)  ${p.label}`);
+      }
+    }
   }
 
   // Every call through a function value, erased or not: what a change to how
