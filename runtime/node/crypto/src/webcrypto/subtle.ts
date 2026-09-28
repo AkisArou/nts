@@ -12,13 +12,17 @@
 // functions; that descriptor, like the classes' `toStringTag`s, is metadata
 // `shape.mjs` applies.
 
-import { domException } from "../../../internal/dom-exception.ts";
+import { TextDecoder } from "../../../../web-platform/src/core/encoding.ts";
+import { Buffer } from "../../../buffer/src/main.ts";
+import { domException, domExceptionWithCause } from "../../../internal/dom-exception.ts";
 import { ERR_ILLEGAL_CONSTRUCTOR, ERR_INVALID_THIS } from "../../../internal/errors.ts";
 import { emitExperimentalWarning } from "../../../internal/process-warning.ts";
 import { convertBoolean, convertDOMString, convertUnsignedLong, type ConversionOptions } from "../../../internal/webidl.ts";
 import { getRandomValues as fillRandomValues, randomUUID as newRandomUUID } from "../random.ts";
 import { asBuffer } from "../util.ts";
+import { aesCipher, aesGenerateKey, aesImportKey, getAlgorithmName } from "./aes.ts";
 import { asyncDigest } from "./digest.ts";
+import { hkdfDeriveBits, pbkdf2DeriveBits, validateDeriveBitsLength } from "./kdf.ts";
 import {
   type CryptoKey,
   getCryptoKeyAlgorithm,
@@ -40,8 +44,9 @@ import {
   numBitsToBytes,
   type Operation,
   resolvedJob,
+  validateMaxBufferLength,
 } from "./util.ts";
-import type { JsonWebKey } from "./webcrypto-util.ts";
+import { importGenericSecretKey, type JsonWebKey } from "./webcrypto-util.ts";
 import {
   convertAlgorithmIdentifier,
   convertBufferSource,
@@ -89,14 +94,24 @@ function generateKeyFor(algorithm: NormalizedAlgorithm, extractable: boolean, us
   switch (algorithm.name) {
     case "HMAC":
       return hmacGenerateKey(algorithm, extractable, usages);
+    case "AES-CTR":
+    case "AES-CBC":
+    case "AES-GCM":
+    case "AES-OCB":
+    case "AES-KW":
+      return aesGenerateKey(algorithm, extractable, usages);
     default:
       throw unreachable();
   }
 }
 
 /** The bits each key-derivation family derives; node's two switches, shared. */
-function deriveBitsFor(algorithm: NormalizedAlgorithm, _key: CryptoKey, _length: number | null | undefined): Job<ArrayBuffer> {
+function deriveBitsFor(algorithm: NormalizedAlgorithm, key: CryptoKey, length: number | null | undefined): Job<ArrayBuffer> {
   switch (algorithm.name) {
+    case "HKDF":
+      return hkdfDeriveBits(algorithm, key, length);
+    case "PBKDF2":
+      return pbkdf2DeriveBits(algorithm, key, length);
     default:
       throw unreachable();
   }
@@ -161,6 +176,13 @@ function exportKeyJWK(key: CryptoKey): JsonWebKey | undefined {
   const algorithm = getCryptoKeyAlgorithm(key);
   let alg: string | undefined;
   switch (algorithm.name) {
+    case "AES-CTR":
+    case "AES-CBC":
+    case "AES-GCM":
+    case "AES-OCB":
+    case "AES-KW":
+      alg = getAlgorithmName(algorithm.name, algorithm.length);
+      break;
     case "HMAC":
       alg = hmacJwkAlgorithm(algorithm.hash!.name);
       break;
@@ -217,6 +239,17 @@ function importKeySync(
     case "HMAC":
       result = macImportKey(format, keyData, algorithm, extractable, usages);
       break;
+    case "AES-CTR":
+    case "AES-CBC":
+    case "AES-GCM":
+    case "AES-KW":
+    case "AES-OCB":
+      result = aesImportKey(algorithm, format, keyData, extractable, usages);
+      break;
+    case "HKDF":
+    case "PBKDF2":
+      result = importGenericSecretKey(algorithm, aliasKeyFormat(format, "raw-secret"), keyData as Uint8Array, extractable, usages);
+      break;
   }
   if (!result) throw domException(`Unable to import ${algorithm.name} using ${format} format`, "NotSupportedError");
   const type = getCryptoKeyType(result);
@@ -244,17 +277,68 @@ function signVerify(
   }
 }
 
-/** Node's `cipherOrWrap`. */
-function cipherOrWrap(
-  _mode: "encrypt" | "decrypt",
-  algorithm: NormalizedAlgorithm,
-  _key: CryptoKey,
-  _data: BufferSource,
-): Job<ArrayBuffer> {
+/**
+ * Node's `cipherOrWrap`. Web Crypto allows more, but node's jobs take at
+ * most what a `uint32_t` holds, and so does this.
+ */
+function cipherOrWrap(mode: "encrypt" | "decrypt", algorithm: NormalizedAlgorithm, key: CryptoKey, data: BufferSource): Job<ArrayBuffer> {
+  validateMaxBufferLength(data, "data");
   switch (algorithm.name) {
+    case "AES-CTR":
+    case "AES-CBC":
+    case "AES-GCM":
+    case "AES-OCB":
+    case "AES-KW":
+      return aesCipher(mode, key, data, algorithm);
     default:
       throw unreachable();
   }
+}
+
+/** Node's `aliasKeyFormat`: a format a family also accepts as `raw`. */
+function aliasKeyFormat(format: string, alias: string): string {
+  return format === alias ? "raw" : format;
+}
+
+/**
+ * Node's `detachFromUserPrototypes`: Web Crypto parses and serializes a JWK
+ * in a fresh global object, which node approximates by taking every object
+ * in it off the program's prototypes -- so no `toJSON` or accessor a program
+ * put on `Object.prototype` or `Array.prototype` sees it. An array keeps an
+ * iterator of its own, for the sequence conversion that reads one.
+ */
+function detachFromUserPrototypes(value: unknown): void {
+  if (value === null || typeof value !== "object") return;
+  Object.setPrototypeOf(value, null);
+  if (Array.isArray(value)) {
+    const items = value as unknown[];
+    Object.defineProperty(items, Symbol.iterator, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: function* () {
+        for (let n = 0; n < items.length; n++) yield items[n];
+      },
+    });
+    for (let n = 0; n < items.length; n++) detachFromUserPrototypes(items[n]);
+    return;
+  }
+  for (const key of Object.keys(value)) detachFromUserPrototypes((value as Record<string, unknown>)[key]);
+}
+
+/** Node's `parseJwk`: a wrapped JWK's UTF-8, parsed and converted as Web Crypto's "parse a JWK" says. */
+function parseJwk(data: ArrayBuffer): JsonWebKey {
+  let key: JsonWebKey;
+  try {
+    const json = new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(data));
+    const result: unknown = JSON.parse(json);
+    detachFromUserPrototypes(result);
+    key = convertJsonWebKey(result) as JsonWebKey;
+  } catch (error) {
+    throw domExceptionWithCause("Invalid wrapped JWK key", "DataError", error);
+  }
+  if (!Object.hasOwn(key, "kty")) throw domException("Invalid wrapped JWK key", "DataError");
+  return key;
 }
 
 /** The algorithm for an operation, or for its fallback when the first has no such algorithm. */
@@ -349,6 +433,7 @@ function check(operation: string, algorithm: unknown, length?: number | null): b
     case "wrapKey":
       return true;
     case "deriveBits": {
+      if (normalized.name === "HKDF" || normalized.name === "PBKDF2") validateDeriveBitsLength(length);
       const bits = length ?? 0;
       if (normalized.name === "X25519" && bits > 256) return false;
       if (normalized.name === "X448" && bits > 448) return false;
@@ -624,8 +709,8 @@ export class SubtleCrypto {
     const count = arguments.length;
     return callSubtleCryptoMethod(() => {
       const prefix = prepareSubtleMethod(this, "wrapKey", count, 4);
-      convertKeyFormat(format, argument(prefix, 0));
-      convertCryptoKey(key, argument(prefix, 1));
+      const keyFormat = convertKeyFormat(format, argument(prefix, 0));
+      const cryptoKey = convertCryptoKey(key, argument(prefix, 1));
       const wrapping = convertCryptoKey(wrappingKey, argument(prefix, 2));
       const identifier = convertAlgorithmIdentifier(wrapAlgorithm, argument(prefix, 3));
       const normalized = normalizeEither(identifier, "wrapKey", "encrypt");
@@ -633,7 +718,18 @@ export class SubtleCrypto {
         throw domException("Key algorithm mismatch", "InvalidAccessError");
       }
       if (!hasCryptoKeyUsage(wrapping, "wrapKey")) throw domException("Unable to use this key to wrapKey", "InvalidAccessError");
-      throw unreachable();
+      const exported = exportKeySync(keyFormat, cryptoKey);
+      let bytes: BufferSource;
+      if (keyFormat === "jwk") {
+        detachFromUserPrototypes(exported);
+        const json = JSON.stringify(exported);
+        // Step 13's note: a JWK wrapped with AES-KW is padded to a multiple of 8 bytes.
+        const padded = normalized.name === "AES-KW" && json.length % 8 !== 0 ? json + " ".repeat(8 - (json.length % 8)) : json;
+        bytes = Buffer.from(padded, "utf8");
+      } else {
+        bytes = exported as ArrayBuffer;
+      }
+      return cipherOrWrap("encrypt", normalized, wrapping, bytes);
     });
   }
 
@@ -649,22 +745,25 @@ export class SubtleCrypto {
     const count = arguments.length;
     return callSubtleCryptoMethod(() => {
       const prefix = prepareSubtleMethod(this, "unwrapKey", count, 7);
-      convertKeyFormat(format, argument(prefix, 0));
-      convertBufferSource(wrappedKey, argument(prefix, 1));
+      const keyFormat = convertKeyFormat(format, argument(prefix, 0));
+      const wrapped = convertBufferSource(wrappedKey, argument(prefix, 1));
       const unwrapping = convertCryptoKey(unwrappingKey, argument(prefix, 2));
       const identifier = convertAlgorithmIdentifier(unwrapAlgorithm, argument(prefix, 3));
       const keyIdentifier = convertAlgorithmIdentifier(unwrappedKeyAlgorithm, argument(prefix, 4));
-      convertBoolean(extractable);
-      convertKeyUsages(keyUsages, argument(prefix, 6));
+      const isExtractable = convertBoolean(extractable);
+      const usages = convertKeyUsages(keyUsages, argument(prefix, 6));
       const normalized = normalizeEither(identifier, "unwrapKey", "decrypt");
-      normalizeAlgorithm(keyIdentifier, "importKey");
+      const keyAlgorithm = normalizeAlgorithm(keyIdentifier, "importKey");
       if (normalized.name !== getCryptoKeyAlgorithm(unwrapping).name) {
         throw domException("Key algorithm mismatch", "InvalidAccessError");
       }
       if (!hasCryptoKeyUsage(unwrapping, "unwrapKey")) {
         throw domException("Unable to use this key to unwrapKey", "InvalidAccessError");
       }
-      throw unreachable();
+      const bytes = cipherOrWrap("decrypt", normalized, unwrapping, wrapped);
+      return mapJob(bytes, (data) =>
+        importKeySync(keyFormat, keyFormat === "jwk" ? parseJwk(data) : new Uint8Array(data), keyAlgorithm, isExtractable, usages),
+      );
     });
   }
 

@@ -9,7 +9,7 @@ import { emitExperimentalWarning } from "../../../internal/process-warning.ts";
 import { validateArray } from "../../../internal/validators.ts";
 import type { IdlDictionary } from "../../../internal/webidl.ts";
 import { isDataView } from "../../../util/src/types.ts";
-import { jobError } from "../util.ts";
+import { cipherId, jobError } from "../util.ts";
 import type { CryptoKey } from "./key.ts";
 import { getUsagesMask, usageMask } from "./key.ts";
 import { convertAlgorithm, dictionaryConverter } from "./webidl.ts";
@@ -40,6 +40,51 @@ type Definitions = Record<string, Partial<Record<Operation, string | null>>>;
  * convert through -- null for none beyond `Algorithm`.
  */
 const kAlgorithmDefinitions: Definitions = {
+  "AES-CBC": {
+    generateKey: "AesKeyGenParams",
+    exportKey: null,
+    importKey: null,
+    encrypt: "AesCbcParams",
+    decrypt: "AesCbcParams",
+    "get key length": "AesDerivedKeyParams",
+  },
+  "AES-CTR": {
+    generateKey: "AesKeyGenParams",
+    exportKey: null,
+    importKey: null,
+    encrypt: "AesCtrParams",
+    decrypt: "AesCtrParams",
+    "get key length": "AesDerivedKeyParams",
+  },
+  "AES-GCM": {
+    generateKey: "AesKeyGenParams",
+    exportKey: null,
+    importKey: null,
+    encrypt: "AeadParams",
+    decrypt: "AeadParams",
+    "get key length": "AesDerivedKeyParams",
+  },
+  "AES-KW": {
+    generateKey: "AesKeyGenParams",
+    exportKey: null,
+    importKey: null,
+    "get key length": "AesDerivedKeyParams",
+    wrapKey: null,
+    unwrapKey: null,
+  },
+  "AES-OCB": {
+    generateKey: "AesKeyGenParams",
+    exportKey: null,
+    importKey: null,
+    encrypt: "AeadParams",
+    decrypt: "AeadParams",
+    "get key length": "AesDerivedKeyParams",
+  },
+  HKDF: {
+    importKey: null,
+    deriveBits: "HkdfParams",
+    "get key length": null,
+  },
   HMAC: {
     generateKey: "HmacKeyGenParams",
     exportKey: null,
@@ -47,6 +92,11 @@ const kAlgorithmDefinitions: Definitions = {
     sign: null,
     verify: null,
     "get key length": "HmacImportParams",
+  },
+  PBKDF2: {
+    importKey: null,
+    deriveBits: "Pbkdf2Params",
+    "get key length": null,
   },
   "SHA-1": { digest: null },
   "SHA-256": { digest: null },
@@ -94,6 +144,15 @@ function registeredDictionary(name: string, operation: Operation): string | null
   return dictionary;
 }
 
+/**
+ * Node's `conditionalAlgorithms`, for the names this registry holds: an
+ * algorithm this OpenSSL lacks is left out, as node leaves it out.
+ */
+function isSupported(name: string): boolean {
+  if (name === "AES-OCB") return cipherId("aes-128-ocb") >= 0;
+  return true;
+}
+
 /** The registry's names by their upper case, made on first use. */
 let upperCaseNames: Record<string, string> | null = null;
 
@@ -101,7 +160,9 @@ let upperCaseNames: Record<string, string> | null = null;
 function canonicalName(name: string, operation: Operation): string | undefined {
   if (upperCaseNames === null) {
     const index: Record<string, string> = {};
-    for (const candidate of Object.keys(kAlgorithmDefinitions)) index[candidate.toUpperCase()] = candidate;
+    for (const candidate of Object.keys(kAlgorithmDefinitions)) {
+      if (isSupported(candidate)) index[candidate.toUpperCase()] = candidate;
+    }
     upperCaseNames = index;
   }
   const candidate = Object.hasOwn(upperCaseNames, name.toUpperCase()) ? upperCaseNames[name.toUpperCase()] : undefined;
@@ -115,6 +176,7 @@ function canonicalName(name: string, operation: Operation): string | undefined {
 export function supportedAlgorithms(): Record<string, Record<string, string | null>> {
   const table: Record<string, Record<string, string | null>> = {};
   for (const name of Object.keys(kAlgorithmDefinitions)) {
+    if (!isSupported(name)) continue;
     const operations = kAlgorithmDefinitions[name]!;
     for (const operation of Object.keys(operations) as Operation[]) {
       const dictionary = operations[operation] ?? null;

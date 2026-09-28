@@ -153,3 +153,26 @@ export function secretKeyGen(
     }),
   );
 }
+
+/**
+ * Node's `importGenericSecretKey` (`keys.js`), for the derivation keys --
+ * HKDF, PBKDF2, Argon2: raw bytes only, and never extractable.
+ */
+export function importGenericSecretKey(
+  algorithm: { name: string },
+  format: string,
+  keyData: Uint8Array,
+  extractable: boolean,
+  usages: readonly string[],
+): CryptoKey | undefined {
+  const usageSet = new Set(usages);
+  const { name } = algorithm;
+  if (extractable) throw domException(`${name} keys are not extractable`, "SyntaxError");
+  for (const usage of usageSet) {
+    if (usage !== "deriveKey" && usage !== "deriveBits") {
+      throw domException(`Unsupported key usage for a ${name} key`, "SyntaxError");
+    }
+  }
+  if (format !== "raw-secret" && format !== "raw") return undefined;
+  return createCryptoKey("secret", importSecretKey(keyData), { name }, usageSet, false);
+}

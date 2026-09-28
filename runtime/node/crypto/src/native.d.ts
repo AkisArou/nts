@@ -535,3 +535,19 @@ declare function nts_crypto_x509_legacy_public_key(handle: number): Uint8Array |
 declare function nts_crypto_x509_legacy_bits(handle: number): number;
 /** @ntsAbi managed */
 declare function nts_crypto_x509_legacy_curve(handle: number, nist: boolean): string | null;
+
+/** Web Crypto's AES: node's synchronous refusals, as `AesConfig`. */
+/** @ntsAbi managed */
+declare function nts_crypto_aes_config(mode: number, keyBytes: number, ivBytes: number, length: number): number;
+/** Web Crypto's AES on the thread pool. */
+/** @ntsAbi managed */
+declare function nts_crypto_aes_job(
+  mode: number,
+  encrypt: boolean,
+  key: Uint8Array,
+  data: Uint8Array,
+  iv: Uint8Array,
+  length: number,
+  additional: Uint8Array,
+  done: (ok: boolean, bytes: Uint8Array) => void,
+): void;

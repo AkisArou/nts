@@ -232,6 +232,13 @@ bool nts_crypto_spkac_verify(NtsView *input);
 NtsView *nts_crypto_spkac_public_key(NtsView *input);
 NtsView *nts_crypto_spkac_challenge(NtsView *input);
 
+/* Web Crypto's AES (`aes.c`): `mode` is `AesMode`; `length` is CTR's counter
+ * bits or an AEAD's tag bytes. `config` answers node's synchronous refusals,
+ * the job delivers `done(ok, bytes)`. */
+double nts_crypto_aes_config(double mode, double key_bytes, double iv_bytes, double length);
+void nts_crypto_aes_job(double mode, bool encrypt, NtsView *key, NtsView *data, NtsView *iv, double length,
+                        NtsView *additional, NtsHeader *done);
+
 /* X509Certificate (`x509.c`): a certificate is a handle, 0 a failure to parse
  * with its cause on the error record. A string answer of NULL is node's
  * `undefined`. */

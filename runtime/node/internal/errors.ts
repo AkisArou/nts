@@ -2261,6 +2261,30 @@ export class ERR_CRYPTO_INVALID_IV extends NativeTypeError {
   }
 }
 
+/** `Invalid counter`: an AES-CTR counter block or length node's C++ refuses. */
+export class ERR_CRYPTO_INVALID_COUNTER extends NativeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_COUNTER";
+
+  constructor() {
+    super("Invalid counter");
+  }
+}
+
+/** `Invalid taglength`: an AEAD tag longer than 128 bits, in C++'s own spelling. */
+export class ERR_CRYPTO_INVALID_TAG_LENGTH extends NativeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_TAG_LENGTH";
+
+  constructor() {
+    super("Invalid taglength");
+  }
+}
+
 /** An authentication tag refused, in C++'s own words: `Invalid authentication tag length: 5`. */
 export class ERR_CRYPTO_INVALID_AUTH_TAG extends NativeTypeError {
   override get ["constructor"](): unknown {

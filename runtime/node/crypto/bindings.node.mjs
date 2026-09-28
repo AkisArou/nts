@@ -1427,3 +1427,53 @@ globalThis.nts_crypto_x509_legacy_curve = (handle, nist) => {
   const legacy = legacyOf(handle);
   return orNull(nist ? legacy.nistCurve : legacy.asn1Curve);
 };
+
+// -- Web Crypto's AES -----------------------------------------------------------
+
+/** `aes.c`'s modes, as node's Web Crypto names them. */
+const AES_NAMES = ["AES-CBC", "AES-CTR", "AES-GCM", "AES-KW", "AES-OCB"];
+/** Each mode's IV length, as `EVP_CIPHER_get_iv_length` answers; KW's is its default IV's. */
+const AES_IV_LENGTHS = [16, 16, 12, 8, 12];
+
+/** `aes.c`'s `nts_crypto_aes_config`, whose answer is fixed by its arguments. */
+globalThis.nts_crypto_aes_config = (mode, keyBytes, ivBytes, length) => {
+  if (![16, 24, 32].includes(keyBytes) || AES_NAMES[mode] === undefined) return -1;
+  const ivLength = mode === 3 ? 8 : ivBytes;
+  if (mode === 1 && (ivLength !== 16 || length === 0 || length > 128)) return -3;
+  if ((mode === 2 || mode === 4) && length > 128) return -4;
+  if (mode === 4) return ivLength === 0 || ivLength > 15 ? -2 : 0;
+  return ivLength < AES_IV_LENGTHS[mode] ? -2 : 0;
+};
+
+/** The same work through node's own Web Crypto, or its key wrap cipher for KW, which has no `encrypt`. */
+async function aesCipher(mode, encrypt, key, data, iv, length, additional) {
+  if (mode === 3) {
+    const name = `id-aes${key.byteLength * 8}-wrap`;
+    const wrapIv = Buffer.alloc(8, 0xa6);
+    const cipher = encrypt ? crypto.createCipheriv(name, key, wrapIv) : crypto.createDecipheriv(name, key, wrapIv);
+    return Buffer.concat([cipher.update(data), cipher.final()]);
+  }
+  const { subtle } = crypto.webcrypto;
+  const name = AES_NAMES[mode];
+  const cryptoKey = await subtle.importKey(mode === 4 ? "raw-secret" : "raw", key, name, false, ["encrypt", "decrypt"]);
+  const algorithm =
+    mode === 0
+      ? { name, iv }
+      : mode === 1
+        ? { name, counter: iv, length }
+        : { name, iv, tagLength: length * 8, ...(additional.byteLength > 0 ? { additionalData: additional } : {}) };
+  return encrypt ? subtle.encrypt(algorithm, cryptoKey, data) : subtle.decrypt(algorithm, cryptoKey, data);
+}
+
+/** Awaited rather than chained: a test may have replaced `Promise.prototype.then`. */
+globalThis.nts_crypto_aes_job = async (mode, encrypt, key, data, iv, length, additional, done) => {
+  let bytes;
+  try {
+    bytes = await aesCipher(mode, encrypt, key, data, iv, length, additional);
+  } catch (error) {
+    failed(error?.cause ?? error);
+    done(false, noBytes);
+    return;
+  }
+  done(true, view(bytes));
+};
