@@ -758,6 +758,14 @@ fn composable_classes_are_constructed_as_themselves() {
         .unwrap();
     assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
     let module = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.d.ts")).unwrap();
+    // A name two interfaces give as methods is overloaded, as C# overloads
+    // it: `IFrame.Navigate` and `IFrame2.Navigate`, one argument apart.
+    for overload in [
+        "navigate(sourcePageType: Copied<TypeName>, parameter: Inspectable | null): boolean;",
+        "navigate(sourcePageType: Copied<TypeName>, parameter: Inspectable | null, infoOverride: INavigationTransitionInfo | null): boolean;",
+    ] {
+        assert!(module.contains(overload), "no overload {overload}");
+    }
     let button = &module[module.find("export namespace Button {").expect("no Button namespace")..];
     let button = &button[..button.find("\n  }").unwrap()];
     assert!(

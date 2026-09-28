@@ -717,6 +717,58 @@ export function run(): number {
     windows_syntax(&dir, &emitted);
 }
 
+/// A name two interfaces give as methods, declared as overloads (as
+/// bind-winmd declares `Frame.navigate`): each call goes through the slot of
+/// the overload the checker chose, not the first declared.
+#[test]
+fn an_overloaded_method_calls_the_slot_the_checker_chose() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { ComClass, HString } from "winrt:types";
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 17 Go
+     * @ntsHresult
+     */
+    go(this: IJsonValue, to: HString, with_: HString): boolean;
+    /**
+     * @ntsVtable 23 Go
+     * @ntsHresult
+     */
+    go(this: IJsonValue, to: HString): boolean;
+  }
+  export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
+  /**
+   * @ntsVtable 6 Parse
+   * @ntsHresult
+   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+   */
+  export function Parse(input: HString): IJsonValue;
+}
+"#;
+    let source = r#"import { Parse } from "winrt:Windows.Data.Json";
+export function run(): boolean {
+  const value = Parse("[]");
+  return value.go("a") && value.go("a", "b");
+}
+"#;
+    let Some((dir, prepared)) = prepare("overloads", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    let arguments = |slot: &str| {
+        let call = text.find(&format!("[{slot}])(")).unwrap_or_else(|| panic!("no call through slot {slot}:\n{text}")) + slot.len() + 4;
+        text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1)
+    };
+    assert_eq!(arguments("23"), 3, "the one-argument overload is not slot 23's call (receiver, string, slot):\n{text}");
+    assert_eq!(arguments("17"), 4, "the two-argument overload is not slot 17's call:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
 /// A sealed runtime class (`@ntsRuntimeClass`), declared as a TypeScript
 /// class of its constructors: `new Uri()` activates it (`@ntsActivate`), and
 /// `new Uri(text)` calls the activation factory's method the checker chose,

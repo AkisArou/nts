@@ -207,10 +207,15 @@ class App extends Application {
     // `TypeName` a plain object copied into the struct, its name an HSTRING
     // made for the call, and the frame's page type copied back out.
     const frame = new Frame();
-    const navigated = frame.Navigate({ name: "Microsoft.UI.Xaml.Controls.Page", kind: TypeKind.Metadata }, null);
+    const navigated = frame.navigate({ name: "Microsoft.UI.Xaml.Controls.Page", kind: TypeKind.Metadata }, null);
     const page = frame.sourcePageType;
     const current = frame.currentSourcePageType;
     const onPage = frame.content instanceof Page;
+    // `navigate` is two interfaces' method, one argument fewer on the
+    // other, declared as overloads: the checker's choice is the slot
+    // called. A second navigation leaves the first on the back stack.
+    frame.navigate({ name: "Microsoft.UI.Xaml.Controls.Page", kind: TypeKind.Metadata });
+    const back = frame.backStackDepth;
     // A struct an `[out]` parameter writes, copied out into the field of
     // the call's value: the `Vector2` a property set was given, read back.
     const properties = ElementCompositionPreview.getElementVisual(button).compositor.createPropertySet();
@@ -245,7 +250,7 @@ class App extends Application {
     const line =
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt());
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " back=" + String(back) + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt());
     this.browse(window, line);
   }
 

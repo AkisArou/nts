@@ -685,7 +685,8 @@ impl Writer<'_> {
     /// events of its own.
     ///
     /// Not yet: generic interfaces (`IVector<T>`). A name two interfaces give
-    /// is left out and reported, not given to whichever came first.
+    /// as methods is overloaded; one either gives as a property is left out
+    /// and reported, not given to whichever came first.
     fn members(&mut self, class: &str, def: TypeDef, default: Option<&Type>) -> String {
         let mut declared: BTreeMap<String, usize> = BTreeMap::new();
         let mut texts: Vec<(String, String)> = Vec::new();
@@ -750,9 +751,20 @@ impl Writer<'_> {
         let (members_base, events_base) = base.unzip();
         let extends = members_base.map(|base| format!(" extends {base}")).unwrap_or_default();
         let _ = writeln!(out, "  export interface {class}Members{extends} {{");
-        for (name, text) in texts {
-            if declared.get(&name) == Some(&1) {
-                out.push_str(&text);
+        // A name several interfaces give as methods is declared once per
+        // interface, as overloads, as C#'s projection overloads it
+        // (`frame.navigate(type, parameter)` beside `navigate(type,
+        // parameter, transition)`): the checker chooses one, and the call is
+        // made through the interface whose tags that declaration carries.
+        // A property cannot be overloaded, so a name any of them gives as
+        // one stays out.
+        let overloadable = |name: &str| texts.iter().filter(|(given, _)| given == name).all(|(_, text)| text.contains("@ntsVtable"));
+        let mut kept: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (name, text) in &texts {
+            let count = declared.get(name).copied().unwrap_or_default();
+            if count == 1 || (count > 1 && overloadable(name)) {
+                out.push_str(text);
+                kept.insert(name.clone());
             }
         }
         // `addEventListener` over the events the class raises and those its
@@ -768,8 +780,8 @@ impl Writer<'_> {
         }
         let _ = writeln!(out, "  }}");
         for (name, count) in declared {
-            if count > 1 {
-                self.refuse(&format!("{class}.{name}"), "an idiomatic name two of the class's interfaces give; each is reached through its interface");
+            if count > 1 && !kept.contains(&name) {
+                self.refuse(&format!("{class}.{name}"), "an idiomatic name two of the class's interfaces give, one of them a property; each is reached through its interface");
             }
         }
         // The events, by the name `addEventListener` takes -- the metadata's,
