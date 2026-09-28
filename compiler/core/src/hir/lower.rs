@@ -11452,10 +11452,34 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
             &format!("a structured type (flags {flags:#x})"),
         ),
         TypeKind::Unsupported { rendered, .. } => format!("`{rendered}`"),
-        TypeKind::Void
-        | TypeKind::Undefined
-        | TypeKind::Never
-        | TypeKind::Boolean
+        // **`never` and `undefined` are not in the group below**, and putting
+        // them there made this function contradict itself. `describe` is read
+        // inside "X of unrepresentable type (Y)", so a `never[]` property came
+        // out as
+        //
+        // ```text
+        // a property `s0` of unrepresentable type (an array of a representable type)
+        // ```
+        //
+        // which tells a reader the element is fine and the property is not, with
+        // nothing to act on. The React lane reported exactly that from a stage
+        // slot typed `never[]` -- and `settled`'s own doc records the same
+        // sentence one construct over, about an array *literal*, calling it "the
+        // exact failure the `empty` flag beside this exists to avoid".
+        //
+        // Both are genuinely unrepresentable *as an element*, and for different
+        // reasons worth telling apart. `representation_within`'s filter refuses
+        // `Array(Never)` and `Array(Void)` in one arm, and the comment there is
+        // about `undefined`: "the C backend writes the element type into every
+        // access: `NTS_ITEMS(v, void)[i]` is not C". `never` is the other case --
+        // nothing inhabits it, so there is no width to write, and what is
+        // missing is a type for the empty array to take rather than a
+        // representation for one that exists.
+        TypeKind::Never => "`never`, which no value inhabits".to_owned(),
+        TypeKind::Void | TypeKind::Undefined => {
+            "`undefined`, which has no storage of its own".to_owned()
+        }
+        TypeKind::Boolean
         | TypeKind::Number
         | TypeKind::String
         | TypeKind::Literal(_) => "a representable type".to_owned(),
